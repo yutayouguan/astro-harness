@@ -12,10 +12,11 @@ use std::path::Path;
 use std::time::Duration;
 
 use common::message::Role;
+use chrono::Utc;
 use futures::StreamExt;
 use memory::{
-    default_memory_dir, AgentRuntimeConfig, OrchestrationDb, OrchestrationRow, OrchestrationSpawnRequest,
-    OrchestrationStatus, StepRow,
+    default_memory_dir, AgentRuntimeConfig, NewUsageEvent, OrchestrationDb, OrchestrationRow,
+    OrchestrationSpawnRequest, OrchestrationStatus, StepRow, UsageDb,
 };
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
@@ -45,6 +46,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
 
     for step in steps {
         db.set_step_running(&step.id)?;
+        record_orchestration_edge(&req, &orch, &step, "start", None);
 
         let prompt = if prev_output.is_empty() {
             step.prompt.clone()
@@ -65,6 +67,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
         match result {
             Ok(Ok(output)) => {
                 db.set_step_done(&step.id, &output)?;
+                record_orchestration_edge(&req, &orch, &step, "end", Some(true));
                 summaries.push(format!(
                     "### {}\n{}",
                     step.role,
@@ -75,6 +78,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
             Ok(Err(e)) => {
                 let msg = e.to_string();
                 db.set_step_failed(&step.id, &msg)?;
+                record_orchestration_edge(&req, &orch, &step, "end", Some(false));
                 db.set_orchestration_status(
                     &req.orchestration_id,
                     OrchestrationStatus::Failed,
@@ -86,6 +90,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
             Err(_) => {
                 let msg = format!("step timeout ({STEP_TIMEOUT_SECS}s)");
                 db.set_step_failed(&step.id, &msg)?;
+                record_orchestration_edge(&req, &orch, &step, "end", Some(false));
                 db.set_orchestration_status(
                     &req.orchestration_id,
                     OrchestrationStatus::Failed,
@@ -325,4 +330,46 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
         out.push('…');
     }
     out
+}
+
+/// 写入 handoff 遥测边；`kind=orchestration` 不计入 Insights calls KPI。
+fn record_orchestration_edge(
+    req: &OrchestrationSpawnRequest,
+    orch: &OrchestrationRow,
+    step: &StepRow,
+    phase: &str,
+    ok: Option<bool>,
+) {
+    let to = step
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("role:{}", step.role));
+
+    let mut meta = serde_json::json!({
+        "orchestration_id": req.orchestration_id,
+        "step_id": step.id,
+        "seq": step.seq,
+        "from": orch.parent_agent_id,
+        "to": to,
+        "phase": phase,
+    });
+    if let Some(ok) = ok {
+        meta["ok"] = serde_json::Value::Bool(ok);
+    }
+
+    UsageDb::try_record(NewUsageEvent {
+        ts: Utc::now().to_rfc3339(),
+        kind: "orchestration".into(),
+        name: "orchestration_step".into(),
+        agent_id: orch.parent_agent_id.clone(),
+        session_id: orch.session_id.clone(),
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        meta_json: Some(meta.to_string()),
+    });
 }

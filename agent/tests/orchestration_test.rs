@@ -5,9 +5,13 @@ use memory::{
     OrchestrationStatus,
 };
 use tempfile::TempDir;
+use tokio::sync::Mutex;
+
+static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn second_claim_is_noop_without_llm() {
+    let _guard = ENV_LOCK.lock().await;
     let dir = TempDir::new().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -25,7 +29,6 @@ async fn second_claim_is_noop_without_llm() {
         })
         .unwrap();
 
-    // 先手动 claim，模拟已有执行器在跑
     assert!(db.try_claim_running(&id).unwrap());
 
     let req = OrchestrationSpawnRequest {
@@ -39,12 +42,13 @@ async fn second_claim_is_noop_without_llm() {
     agent::orchestration::run_orchestration(req).await.unwrap();
 
     let orch = db.get(&id).unwrap().unwrap();
-    // 仍为 running（未重新执行），未变成 failed/done
     assert_eq!(orch.status, OrchestrationStatus::Running.as_str());
+    std::env::remove_var("ASTRO_MEMORY_DIR");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn empty_api_key_marks_failed() {
+async fn empty_api_key_marks_failed_and_emits_telemetry() {
+    let _guard = ENV_LOCK.lock().await;
     let dir = TempDir::new().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -81,4 +85,27 @@ async fn empty_api_key_marks_failed() {
         .as_deref()
         .unwrap_or("")
         .contains("API Key"));
+
+    let usage = memory::UsageDb::open_default().unwrap();
+    let insights = usage
+        .query_insights(memory::UsageInsightsQuery {
+            period: memory::UsagePeriod::Year,
+            as_of: None,
+            agent_id: None,
+        })
+        .unwrap();
+    assert_eq!(
+        insights.kpis.calls, 0,
+        "orchestration kind must not inflate calls KPI"
+    );
+    let conn = rusqlite::Connection::open(memory::usage_db_path()).unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM usage_events WHERE kind = 'orchestration'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(count >= 2, "expected start+end edges, got {count}");
+    std::env::remove_var("ASTRO_MEMORY_DIR");
 }
