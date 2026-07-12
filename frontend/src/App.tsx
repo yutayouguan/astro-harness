@@ -60,6 +60,7 @@ import {
   loadModelCandidates,
   selectAutoModel,
 } from "./lib/autoModelSelect";
+import { shouldShowThinkingControls } from "./lib/shouldShowThinkingControls";
 import {
   chatModeHint,
   loadChatMode,
@@ -187,6 +188,9 @@ export default function App() {
     saveChatMode(mode);
   }, []);
   const [nav, setNav] = useState<NavId>("skills");
+  const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(
+    null,
+  );
   const [sidebarPinned, setSidebarPinned] = useState(() => {
     try {
       return localStorage.getItem("astro.sidebarPinned") !== "0";
@@ -740,6 +744,12 @@ export default function App() {
   const activeProvider =
     providers.find((p) => p.id === activeProviderId) ?? providers[0];
 
+  // caps 未知时回退 deepseek 白名单（有列表命中再传 capabilities）
+  const showThinking = shouldShowThinkingControls({
+    capabilities: null,
+    backendId: activeProvider?.backend_id,
+  });
+
   const onThinkingLevelChange = useCallback(
     (level: ThinkingLevel) => {
       setThinkingLevel(level);
@@ -1073,13 +1083,16 @@ export default function App() {
         }
       }
 
-      const modelApi =
-        chatProvider.backend_id === "deepseek"
-          ? modelPrefsToApi(
-              loadModelPrefs(chatProvider.id, chatModel),
-              globals,
-            )
-          : { thinkingEnabled: false, reasoningEffort: "high" as const };
+      const sendSupportsThinking = shouldShowThinkingControls({
+        capabilities: null,
+        backendId: chatProvider.backend_id,
+      });
+      const modelApi = sendSupportsThinking
+        ? modelPrefsToApi(
+            loadModelPrefs(chatProvider.id, chatModel),
+            globals,
+          )
+        : { thinkingEnabled: false, reasoningEffort: "high" as const };
 
       await invoke<string>("start_chat", {
         content: contentForModel,
@@ -1668,10 +1681,14 @@ export default function App() {
                       onNewChat={startNewChat}
                       onSkipAgentCreate={skipAgentCreate}
                       onPickWelcomePrompt={(prompt) => setInput(prompt)}
-                      showThinkingControls={activeProvider?.backend_id === "deepseek"}
+                      showThinkingControls={showThinking}
                       thinkingPrefs={thinkingPrefs}
                       onToggleThinking={onToggleThinking}
                       onThinkingLevelChange={onThinkingLevelChange}
+                      onOpenMcpSettings={() => {
+                        setToolsInitialTab("mcp");
+                        setNav("tools");
+                      }}
                       chatMode={chatMode}
                       onChatModeChange={onChatModeChange}
                       onOpenContext={() => {
@@ -1746,7 +1763,11 @@ export default function App() {
                 />
               )}
               {nav === "tools" && (
-                <ToolsPanel active={nav === "tools"} />
+                <ToolsPanel
+                  active={nav === "tools"}
+                  initialTab={toolsInitialTab}
+                  onInitialTabConsumed={() => setToolsInitialTab(null)}
+                />
               )}
               {nav === "insights" && (
                 <InsightsPanel active={nav === "insights"} />

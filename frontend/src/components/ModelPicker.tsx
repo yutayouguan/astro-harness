@@ -16,7 +16,6 @@ import {
   loadModelPrefs,
   loadPickerGlobals,
   modelPrefsKey,
-  savePickerGlobals,
   upsertModelPrefs,
   type ModelContextSize,
   type ModelEffort,
@@ -127,9 +126,7 @@ export default function ModelPicker({
   const [editPrefs, setEditPrefs] = useState<ModelRuntimePrefs>({
     ...DEFAULT_MODEL_PREFS,
   });
-  const [globals, setGlobals] = useState<ModelPickerGlobals>(() =>
-    loadPickerGlobals(),
-  );
+  const [globals] = useState<ModelPickerGlobals>(() => loadPickerGlobals());
   const [, setPrefsTick] = useState(0);
   const ref = useRef<HTMLDivElement | null>(null);
   const activeProvider =
@@ -268,14 +265,6 @@ export default function ModelPicker({
     }
   };
 
-  const setGlobal = (patch: Partial<ModelPickerGlobals>) => {
-    const next = { ...globals, ...patch };
-    setGlobals(next);
-    savePickerGlobals(next);
-    if (next.auto) setEditing(null);
-    notifyActive(next);
-  };
-
   const effortLabel = (e: ModelEffort) => {
     switch (e) {
       case "low":
@@ -310,16 +299,7 @@ export default function ModelPicker({
         aria-label={t("chat.selectModel")}
         onClick={() => setOpen((v) => !v)}
       >
-        {globals.auto ? (
-          <>
-            <span className="model-picker-icon is-auto" aria-hidden>
-              <ModelBrandIcon modelId={activeModelId || "auto"} />
-            </span>
-            <span className="model-picker-label" title={t("modelEdit.auto")}>
-              {t("modelEdit.auto")}
-            </span>
-          </>
-        ) : activeProvider ? (
+        {activeProvider ? (
           <>
             <span className="model-picker-icon" aria-hidden>
               <ModelBrandIcon modelId={activeModelId} />
@@ -336,30 +316,9 @@ export default function ModelPicker({
 
       {open && (
         <div
-          className={`model-picker-flyout ${editing && !globals.auto ? "has-edit" : ""}`}
+          className={`model-picker-flyout ${editing ? "has-edit" : ""}`}
         >
           <div className="model-picker-panel model-picker-panel--list">
-            <div className="model-picker-globals">
-              <ToggleSwitch
-                label={t("modelEdit.auto")}
-                checked={globals.auto}
-                onChange={(v) => {
-                  setGlobal({ auto: v });
-                  if (v) setEditing(null);
-                }}
-              />
-              <ToggleSwitch
-                label={t("modelEdit.maxMode")}
-                checked={globals.maxMode}
-                onChange={(v) => setGlobal({ maxMode: v })}
-              />
-            </div>
-
-            {globals.auto ? (
-              <div className="model-picker-auto-hint" role="status">
-                {t("modelEdit.autoHint")}
-              </div>
-            ) : (
               <ul
                 className="model-picker-menu"
                 role="listbox"
@@ -465,10 +424,9 @@ export default function ModelPicker({
                 </li>
               ))}
               </ul>
-            )}
           </div>
 
-          {editing && !globals.auto ? (
+          {editing ? (
             <div
               className="model-picker-panel model-picker-panel--edit"
               role="dialog"

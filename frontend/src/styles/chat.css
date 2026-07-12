@@ -1497,6 +1497,127 @@ html[data-theme="dark"] .composer-palette {
   display: none;
 }
 
+.composer-mcp-wrap {
+  position: relative;
+}
+
+.composer-mcp-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(420px, 55vh);
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  border: 1px solid var(--menu-glass-border, rgba(255, 255, 255, 0.16));
+  background: var(--menu-glass-bg);
+  box-shadow: var(--menu-glass-shadow);
+  backdrop-filter: var(--menu-glass-blur);
+  overflow: hidden;
+}
+
+.composer-mcp-menu-search {
+  padding: 10px 10px 6px;
+}
+
+.composer-mcp-menu-search input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--glass-edge);
+  background: var(--glass-inner, rgba(0, 0, 0, 0.2));
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.composer-mcp-menu-body {
+  overflow: auto;
+  padding: 4px 6px 8px;
+  flex: 1;
+}
+
+.composer-mcp-menu-group {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  padding: 6px 8px 4px;
+}
+
+.composer-mcp-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.composer-mcp-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: 10px;
+}
+
+.composer-mcp-menu-row:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.composer-mcp-menu-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.composer-mcp-menu-empty {
+  margin: 12px 8px;
+  color: var(--ink-mute);
+  font-size: 13px;
+}
+
+.composer-mcp-menu-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--glass-edge);
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 10px 12px;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.composer-mcp-menu-footer:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.composer-icon-btn.has-dot {
+  position: relative;
+}
+
+.composer-icon-btn.has-dot::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone-green, #4ade80);
+}
+
 .composer:focus-within {
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 26%, var(--glass-edge));
   box-shadow:
