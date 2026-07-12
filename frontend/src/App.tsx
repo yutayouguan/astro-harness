@@ -142,9 +142,9 @@ const NAV: { id: NavId; labelKey: MessageKey; Icon: IconComp; tone: Tone }[] = [
   { id: "filespace", labelKey: "nav.filespace", Icon: IconFileSpace, tone: "cyan" },
   { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
   { id: "tools", labelKey: "nav.tools", Icon: IconTools, tone: "orange" },
-  { id: "insights", labelKey: "nav.insights", Icon: IconInsights, tone: "amber" },
   { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "teal" },
   { id: "providers", labelKey: "nav.providers", Icon: IconProviders, tone: "blue" },
+  { id: "insights", labelKey: "nav.insights", Icon: IconInsights, tone: "amber" },
   { id: "settings", labelKey: "nav.settings", Icon: IconSettings, tone: "pink" },
 ];
 
