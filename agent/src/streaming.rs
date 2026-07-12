@@ -713,6 +713,47 @@ pub async fn run_multi_turn_stream(
                 let mut agent = session.lock().await;
                 let _ = agent.record_tool_result_with_id(Some(&call.id), &result);
             }
+
+            // HITL：confirm/clarify 等返回 astro_hitl → Activity + RunFinished(interrupt)
+            if let Some(hitl) = parse_astro_hitl(&result) {
+                let message_id = format!("a2ui-surface-{}", call.id);
+                let content_json = serde_json::json!({ "operations": hitl.operations }).to_string();
+                if !emit(
+                    &tx,
+                    MultiTurnStreamItem::Activity {
+                        message_id,
+                        activity_type: "a2ui-surface".into(),
+                        content_json,
+                        replace: true,
+                    },
+                )
+                .await
+                {
+                    return;
+                }
+
+                let interrupt = crate::interrupt::Interrupt {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    reason: hitl.reason,
+                    message: hitl.message,
+                    tool_call_id: call.id.clone(),
+                    response_schema_json: hitl.response_schema.to_string(),
+                    expires_at: String::new(),
+                    metadata_json: String::new(),
+                };
+                let interrupts_json = serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
+                let _ = emit(
+                    &tx,
+                    MultiTurnStreamItem::RunFinished {
+                        run_id: run_id.clone(),
+                        outcome_type: "interrupt".into(),
+                        interrupts_json,
+                    },
+                )
+                .await;
+                let _ = emit(&tx, MultiTurnStreamItem::Done).await;
+                return;
+            }
         }
 
         if last_round {
@@ -748,4 +789,39 @@ pub fn stream_multi_turn(
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))
+}
+
+struct AstroHitlPayload {
+    reason: String,
+    message: String,
+    operations: serde_json::Value,
+    response_schema: serde_json::Value,
+}
+
+fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
+    let value: serde_json::Value = serde_json::from_str(result).ok()?;
+    if value.get("astro_hitl")?.as_bool() != Some(true) {
+        return None;
+    }
+    let operations = value.get("operations")?.clone();
+    if !operations.is_array() {
+        return None;
+    }
+    Some(AstroHitlPayload {
+        reason: value
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("confirmation")
+            .to_string(),
+        message: value
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        operations,
+        response_schema: value
+            .get("response_schema")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+    })
 }

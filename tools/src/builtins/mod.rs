@@ -11,6 +11,7 @@ pub mod vision;
 pub mod tts;
 pub mod skills_tool;
 pub mod clarify;
+pub mod confirm;
 pub mod delegate;
 pub mod multi_agent;
 pub mod task_plan;

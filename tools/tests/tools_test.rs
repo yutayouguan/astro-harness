@@ -26,6 +26,7 @@ async fn register_all_includes_panel_tools() {
         "tts",
         "skills",
         "clarify",
+        "confirm",
         "delegate",
         "multi_agent",
         "task_plan",
