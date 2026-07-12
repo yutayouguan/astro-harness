@@ -131,6 +131,18 @@ export function IconCron(props: IconProps) {
   );
 }
 
+/** 用量洞察 / 柱状图 */
+export function IconInsights(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 20V10" />
+      <path d="M10 20V4" />
+      <path d="M16 20v-7" />
+      <path d="M22 20V8" />
+    </IconBase>
+  );
+}
+
 /** 模型提供商 */
 export function IconProviders(props: IconProps) {
   return (

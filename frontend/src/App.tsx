@@ -8,6 +8,7 @@ import ChatRightPanel, { type ChatRightTab } from "./components/ChatRightPanel";
 import ChatView from "./components/ChatView";
 import CronPanel from "./components/CronPanel";
 import FileSpacePanel from "./components/FileSpacePanel";
+import InsightsPanel from "./components/InsightsPanel";
 import MemoryPanel from "./components/MemoryPanel";
 import ModelPicker from "./components/ModelPicker";
 import PreferencesPanel from "./components/PreferencesPanel";
@@ -22,6 +23,7 @@ import {
   IconCron,
   IconExpand,
   IconFileSpace,
+  IconInsights,
   IconMemory,
   IconNewSession,
   IconPanelClose,
@@ -122,6 +124,7 @@ type NavId =
   | "filespace"
   | "skills"
   | "tools"
+  | "insights"
   | "cron"
   | "providers"
   | "settings";
@@ -139,6 +142,7 @@ const NAV: { id: NavId; labelKey: MessageKey; Icon: IconComp; tone: Tone }[] = [
   { id: "filespace", labelKey: "nav.filespace", Icon: IconFileSpace, tone: "cyan" },
   { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
   { id: "tools", labelKey: "nav.tools", Icon: IconTools, tone: "orange" },
+  { id: "insights", labelKey: "nav.insights", Icon: IconInsights, tone: "amber" },
   { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "teal" },
   { id: "providers", labelKey: "nav.providers", Icon: IconProviders, tone: "blue" },
   { id: "settings", labelKey: "nav.settings", Icon: IconSettings, tone: "pink" },
@@ -151,6 +155,7 @@ const PAGE_META: Record<NavId, { titleKey: MessageKey; subKey: MessageKey }> = {
   filespace: { titleKey: "page.filespace.title", subKey: "page.filespace.sub" },
   skills: { titleKey: "page.skills.title", subKey: "page.skills.sub" },
   tools: { titleKey: "page.tools.title", subKey: "page.tools.sub" },
+  insights: { titleKey: "page.insights.title", subKey: "page.insights.sub" },
   cron: { titleKey: "page.cron.title", subKey: "page.cron.sub" },
   providers: {
     titleKey: "page.providers.title",
@@ -1742,6 +1747,9 @@ export default function App() {
               )}
               {nav === "tools" && (
                 <ToolsPanel active={nav === "tools"} />
+              )}
+              {nav === "insights" && (
+                <InsightsPanel active={nav === "insights"} />
               )}
               {nav === "cron" && (
                 <CronPanel
