@@ -11,6 +11,7 @@ members = [
     "mcp",
     "permissions",
     "frontend/src-tauri",
+    "a2ui",
 ]
 resolver = "2"
 
