@@ -4840,6 +4840,7 @@ dependencies = [
 name = "tools"
 version = "0.1.0"
 dependencies = [
+ "a2ui",
  "anyhow",
  "async-trait",
  "chrono",
