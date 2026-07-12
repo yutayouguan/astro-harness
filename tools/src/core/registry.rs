@@ -90,6 +90,11 @@ impl ToolRegistry {
         self.tools.retain(|_, e| e.toolset != toolset);
     }
 
+    /// 按名称移除单个工具（不存在则 no-op）。
+    pub fn unregister(&mut self, name: &str) {
+        self.tools.remove(name);
+    }
+
     /// 检查是否已注册指定名称的工具。
     pub fn has_tool(&self, name: &str) -> bool {
         self.tools.contains_key(name)

@@ -115,14 +115,34 @@ impl AgentLoop {
     /// 以指定 session_id 创建 Agent 实例，并注册全部内置工具。
     ///
     /// 初始化时 `tool_rounds` 与 `current_turn` 均为 0，hooks 默认为 `NoopHooks`。
+    /// 记忆侧使用当前活跃 Agent（[`MemoryManager::new`]）。
     pub fn with_session_id(config: AgentConfig, session_id: String) -> anyhow::Result<Self> {
         let memory = MemoryManager::new(config.memory_dir.clone())?;
+        Self::from_memory(config, session_id, memory)
+    }
+
+    /// 以指定 `agent_id` 与 session_id 创建 Agent 实例（不依赖全局活跃 Agent）。
+    pub fn with_session_id_for_agent(
+        config: AgentConfig,
+        session_id: String,
+        agent_id: &str,
+    ) -> anyhow::Result<Self> {
+        let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
+        Self::from_memory(config, session_id, memory)
+    }
+
+    fn from_memory(
+        config: AgentConfig,
+        session_id: String,
+        memory: MemoryManager,
+    ) -> anyhow::Result<Self> {
         let agent_id = memory.agent_id.clone();
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
         let mut mcp_hub = McpHub::new();
         mcp_hub.set_agent_id(Some(agent_id));
+        ensure_orchestration_spawner_registered();
         Ok(AgentLoop {
             config,
             session_id,
@@ -228,6 +248,11 @@ impl AgentLoop {
     /// 内置与 MCP 工具的注册表只读引用。
     pub fn tool_registry(&self) -> &ToolRegistry {
         &self.tool_registry
+    }
+
+    /// 工具注册表可变引用（编排子步剔除 `orchestration_*` 等）。
+    pub fn tool_registry_mut(&mut self) -> &mut ToolRegistry {
+        &mut self.tool_registry
     }
 
     /// MCP Hub 只读引用，用于外部查询或调试。
@@ -602,4 +627,15 @@ pub fn validate_message_order(messages: &[Message]) -> bool {
         }
     }
     true
+}
+
+/// 注册编排 spawner（OnceLock，仅首次生效）。由 tools 落库后回调。
+fn ensure_orchestration_spawner_registered() {
+    memory::set_orchestration_spawner(Arc::new(|req| {
+        tokio::spawn(async move {
+            if let Err(e) = crate::orchestration::run_orchestration(req).await {
+                tracing::warn!(error = %e, "orchestration failed");
+            }
+        });
+    }));
 }

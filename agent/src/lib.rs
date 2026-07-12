@@ -19,6 +19,8 @@ pub mod loop_;
 pub mod messages;
 /// 多子 Agent 并行编排（任务拆分与结果汇总）。
 pub mod multi_agent;
+/// 多 Agent 串行编排执行器（orchestration.db + spawn hook）。
+pub mod orchestration;
 /// 将静态/动态上下文等层叠为完整 system prompt。
 pub mod prompt_builder;
 /// 流式补全与多轮流式迭代抽象。
