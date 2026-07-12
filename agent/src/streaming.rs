@@ -271,11 +271,41 @@ async fn emit(
     tx.send(Ok(item)).await.is_ok()
 }
 
-/// 发送 Error 后立即发送 Done，结束流。
+/// 尽力写入一条 `kind=llm` 事件；失败忽略。
+async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &Usage) {
+    if usage.prompt_tokens == 0 && usage.completion_tokens == 0 && usage.total_tokens == 0 {
+        return;
+    }
+    let agent = session.lock().await;
+    let agent_id = agent.agent_id().to_string();
+    let session_id = Some(agent.session_id().to_string());
+    drop(agent);
+    let cost = memory::estimate_llm_cost(model, usage.prompt_tokens, usage.completion_tokens);
+    memory::UsageDb::try_record(memory::NewUsageEvent {
+        ts: chrono::Utc::now().to_rfc3339(),
+        kind: "llm".into(),
+        name: model.to_string(),
+        agent_id,
+        session_id,
+        prompt_tokens: i64::from(usage.prompt_tokens),
+        completion_tokens: i64::from(usage.completion_tokens),
+        total_tokens: i64::from(usage.total_tokens),
+        cost_usd: cost,
+        meta_json: None,
+    });
+}
+
+/// 发送 Error 后立即发送 Done；若有已累计 usage 则先写入 `usage.db`。
 async fn finish_error(
+    session: &Arc<Mutex<AgentLoop>>,
+    model: &str,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     msg: impl Into<String>,
+    usage: Option<Usage>,
 ) {
+    if let Some(u) = usage.as_ref() {
+        record_llm_usage(session, model, u).await;
+    }
     let _ = emit(tx, MultiTurnStreamItem::Error(msg.into())).await;
     let _ = emit(tx, MultiTurnStreamItem::Done).await;
 }
@@ -293,25 +323,7 @@ async fn finish_usage_and_done(
     usage: Option<Usage>,
 ) {
     if let Some(u) = usage {
-        {
-            let agent = session.lock().await;
-            let agent_id = agent.agent_id().to_string();
-            let session_id = Some(agent.session_id().to_string());
-            drop(agent);
-            let cost = memory::estimate_llm_cost(model, u.prompt_tokens, u.completion_tokens);
-            memory::UsageDb::try_record(memory::NewUsageEvent {
-                ts: chrono::Utc::now().to_rfc3339(),
-                kind: "llm".into(),
-                name: model.to_string(),
-                agent_id,
-                session_id,
-                prompt_tokens: i64::from(u.prompt_tokens),
-                completion_tokens: i64::from(u.completion_tokens),
-                total_tokens: i64::from(u.total_tokens),
-                cost_usd: cost,
-                meta_json: None,
-            });
-        }
+        record_llm_usage(session, model, &u).await;
         let _ = emit(
             tx,
             MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)),
@@ -375,7 +387,14 @@ pub async fn run_multi_turn_stream(
         {
             Ok(s) => s,
             Err(err) => {
-                finish_error(&tx, err.to_string()).await;
+                finish_error(
+                    &session,
+                    &model,
+                    &tx,
+                    err.to_string(),
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
                 return;
             }
         };
@@ -467,7 +486,18 @@ pub async fn run_multi_turn_stream(
                 }
                 Some(Err(err)) => {
                     pause.clear_abort();
-                    finish_error(&tx, err.to_string()).await;
+                    if let Some(u) = round_usage {
+                        total_usage.add_assign(u);
+                        saw_usage = true;
+                    }
+                    finish_error(
+                        &session,
+                        &model,
+                        &tx,
+                        err.to_string(),
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
                     return;
                 }
             }
@@ -493,7 +523,14 @@ pub async fn run_multi_turn_stream(
         let calls = tools::resolve_tool_calls(native_calls, &full_response);
 
         if full_response.is_empty() && calls.is_empty() {
-            finish_error(&tx, "模型返回了空回复。请重试，或换一个模型。").await;
+            finish_error(
+                &session,
+                &model,
+                &tx,
+                "模型返回了空回复。请重试，或换一个模型。",
+                saw_usage.then_some(total_usage),
+            )
+            .await;
             return;
         }
 
@@ -515,7 +552,14 @@ pub async fn run_multi_turn_stream(
                 )
             };
             if let Err(err) = agent.record_assistant_message_with_tools(&full_response, tc) {
-                finish_error(&tx, err.to_string()).await;
+                finish_error(
+                    &session,
+                    &model,
+                    &tx,
+                    err.to_string(),
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
                 return;
             }
         }
@@ -610,8 +654,11 @@ pub async fn run_multi_turn_stream(
 
         if last_round {
             finish_error(
+                &session,
+                &model,
                 &tx,
                 "工具调用轮次已用尽，请简化任务后重试。".to_string(),
+                saw_usage.then_some(total_usage),
             )
             .await;
             return;

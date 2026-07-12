@@ -26,6 +26,7 @@ import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
 
 type Period = "month" | "quarter" | "year";
+type Metric = "calls" | "tokens" | "cost";
 
 type UsageInsights = {
   kpis: { calls: number; tokens: number; cost_usd: number; active_agents: number };
@@ -46,6 +47,30 @@ const PERIOD_TABS: {
   { id: "quarter", labelKey: "insights.period.quarter", Icon: CalendarRange },
   { id: "year", labelKey: "insights.period.year", Icon: CalendarDays },
 ];
+
+const METRIC_TABS: { id: Metric; labelKey: MessageKey }[] = [
+  { id: "calls", labelKey: "insights.metric.calls" },
+  { id: "tokens", labelKey: "insights.metric.tokens" },
+  { id: "cost", labelKey: "insights.metric.cost" },
+];
+
+function seriesValue(
+  s: UsageInsights["series"][number],
+  metric: Metric,
+): number {
+  if (metric === "tokens") return s.tokens;
+  if (metric === "cost") return s.cost_usd;
+  return s.calls;
+}
+
+function formatSeriesTip(
+  s: UsageInsights["series"][number],
+  metric: Metric,
+): string {
+  if (metric === "tokens") return `${s.bucket}: ${formatTokens(s.tokens)}`;
+  if (metric === "cost") return `${s.bucket}: ${formatCost(s.cost_usd)}`;
+  return `${s.bucket}: ${s.calls}`;
+}
 
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -121,6 +146,7 @@ function KindIcon({ kind }: { kind: string }) {
 export default function InsightsPanel({ active }: { active: boolean }) {
   const { t, locale } = useI18n();
   const [period, setPeriod] = useState<Period>("month");
+  const [metric, setMetric] = useState<Metric>("calls");
   const [agentId, setAgentId] = useState("workspace");
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [data, setData] = useState<UsageInsights | null>(null);
@@ -198,7 +224,10 @@ export default function InsightsPanel({ active }: { active: boolean }) {
     };
   }, [active, period, agentId]);
 
-  const maxCalls = Math.max(1, ...(data?.series.map((s) => s.calls) ?? [1]));
+  const maxVal = Math.max(
+    1,
+    ...(data?.series.map((s) => seriesValue(s, metric)) ?? [1]),
+  );
   const empty = data && data.kpis.calls === 0 && data.kpis.tokens === 0;
   const hasUnpriced =
     data &&
@@ -271,19 +300,37 @@ export default function InsightsPanel({ active }: { active: boolean }) {
           {!empty && data.series.length > 0 && (
             <div className="insights-chart-wrap">
               <div className="insights-chart-heading">
-                <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
-                <span>{t("insights.kpi.calls")}</span>
+                <div className="insights-chart-heading-label">
+                  <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
+                  <span>{t(`insights.metric.${metric}`)}</span>
+                </div>
+                <div className="insights-metric-tabs" role="tablist">
+                  {METRIC_TABS.map(({ id, labelKey }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      className={`insights-metric-tab${metric === id ? " active" : ""}`}
+                      aria-selected={metric === id}
+                      onClick={() => setMetric(id)}
+                    >
+                      {t(labelKey)}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="insights-chart" aria-label="calls trend">
+              <div className="insights-chart" aria-label={`${metric} trend`}>
                 {data.series.map((s) => (
                   <div
                     key={s.bucket}
                     className="insights-bar-col"
-                    title={`${s.bucket}: ${s.calls}`}
+                    title={formatSeriesTip(s, metric)}
                   >
                     <div
                       className="insights-bar"
-                      style={{ height: `${(s.calls / maxCalls) * 100}%` }}
+                      style={{
+                        height: `${(seriesValue(s, metric) / maxVal) * 100}%`,
+                      }}
                     />
                     <span className="insights-bar-label">
                       {formatBucketLabel(s.bucket, period, locale)}
