@@ -1,107 +1,110 @@
-# Chat MCP Toggle & Thinking Controls Implementation Plan
+# Chat MCP + Thinking Controls Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 聊天输入栏增加 MCP 快捷开关弹出层；ModelPicker 隐藏并强制关闭 Auto/MAX；仅当模型支持推理时显示推理按钮。
+**Goal:** 在智能对话 Composer 增加 MCP 快捷开关弹出层，隐藏 ModelPicker 的 Auto/MAX，并仅在支持推理的模型上显示推理控件。
 
-**Architecture:** 新增纯函数 `supportsThinkingControls` + Composer 内独立 `ComposerMcpMenu` 组件复用 `useMcpTools`；`ToolsPanel` 通过一次性 focus 标记切到 MCP tab；`loadPickerGlobals` 静默规范化 `auto/maxMode=false`。
+**Architecture:** 纯函数 `shouldShowThinkingControls` 统一推理可见性；`loadPickerGlobals` 强制关闭 Auto/MAX；新组件 `ComposerMcpMenu` 复用 `useMcpTools`；ToolsPanel 接受一次性 `initialTab`；App 接线导航与发送侧 thinking 门控。
 
-**Tech Stack:** React + TypeScript、现有 `useMcpTools` / `modelPrefs`、`node:test`（与 `autoModelSelect.test.ts` 一致）、CSS 沿用 composer / menu-glass 变量。
+**Tech Stack:** React 18、TypeScript、Vite、现有 `useMcpTools` / `modelPrefs` / i18n、`node:test` 单测
 
 **Spec:** `docs/superpowers/specs/2026-07-13-chat-mcp-thinking-controls-design.md`
 
 ---
 
-## File map
+## File Structure
 
 | File | Responsibility |
 |------|----------------|
-| Create: `frontend/src/lib/thinkingSupport.ts` | 推理控件显示判定 |
-| Create: `frontend/src/lib/thinkingSupport.test.ts` | 判定单测 |
-| Create: `frontend/src/components/ComposerMcpMenu.tsx` | MCP 弹出层 UI |
-| Modify: `frontend/src/lib/modelPrefs.ts` | `loadPickerGlobals` 强制关闭 auto/max；弱化 `syncMaxModeWithThinkingLevel` |
-| Modify: `frontend/src/components/ModelPicker.tsx` | 去掉 Auto/MAX UI；上报当前模型 caps |
-| Modify: `frontend/src/components/ChatView.tsx` | 接入 MCP 按钮与菜单 |
-| Modify: `frontend/src/components/ToolsPanel.tsx` | 支持一次性打开 MCP tab |
-| Modify: `frontend/src/App.tsx` | `showThinkingControls` 新判定；跳转 MCP 设置；发送侧忽略不支持推理的 thinking；去掉 auto 选模死分支 |
-| Modify: `frontend/src/i18n/messages.ts` | MCP 菜单中英文案 |
-| Modify: `frontend/src/styles/chat.css` | MCP 菜单样式 |
+| Create: `frontend/src/lib/shouldShowThinkingControls.ts` | 推理按钮可见性判定 |
+| Create: `frontend/src/lib/shouldShowThinkingControls.test.ts` | 上述纯函数测试 |
+| Modify: `frontend/src/lib/modelPrefs.ts` | 加载 globals 时强制 `auto/maxMode=false` 并写回 |
+| Create: `frontend/src/lib/modelPrefsGlobals.test.ts` | globals 规范化测试 |
+| Modify: `frontend/src/components/ModelPicker.tsx` | 移除 Auto/MAX UI 与 Auto 触发器文案 |
+| Create: `frontend/src/components/ComposerMcpMenu.tsx` | MCP 搜索 + toggle + 打开设置 |
+| Modify: `frontend/src/components/ChatView.tsx` | Composer 接入 MCP 按钮/菜单 |
+| Modify: `frontend/src/components/ToolsPanel.tsx` | `initialTab` 一次性落到 mcp |
+| Modify: `frontend/src/App.tsx` | showThinking、跳转 tools、发送 thinking 门控 |
+| Modify: `frontend/src/i18n/messages.ts` | 中英 i18n |
+| Modify: `frontend/src/styles/chat.css` | MCP 弹出层样式 |
+| Modify: spec 状态 → 已批准 |
 
 ---
 
-### Task 1: `supportsThinkingControls` 纯函数 + 测试
+### Task 1: `shouldShowThinkingControls` 纯函数 + 测试
 
 **Files:**
-- Create: `frontend/src/lib/thinkingSupport.ts`
-- Create: `frontend/src/lib/thinkingSupport.test.ts`
+- Create: `frontend/src/lib/shouldShowThinkingControls.ts`
+- Create: `frontend/src/lib/shouldShowThinkingControls.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { supportsThinkingControls } from "./thinkingSupport.ts";
+import { shouldShowThinkingControls } from "./shouldShowThinkingControls.ts";
 
-test("reasoning true shows controls", () => {
+test("uses explicit capabilities.reasoning when present", () => {
   assert.equal(
-    supportsThinkingControls("openai", { vision: false, web: false, reasoning: true, tools: true }),
+    shouldShowThinkingControls({
+      capabilities: { vision: false, web: false, reasoning: true, tools: true },
+      backendId: "openai",
+    }),
     true,
   );
-});
-
-test("reasoning false hides even for deepseek", () => {
   assert.equal(
-    supportsThinkingControls("deepseek", { vision: false, web: false, reasoning: false, tools: true }),
+    shouldShowThinkingControls({
+      capabilities: { vision: false, web: false, reasoning: false, tools: true },
+      backendId: "deepseek",
+    }),
     false,
   );
 });
 
-test("unknown caps falls back to deepseek whitelist", () => {
-  assert.equal(supportsThinkingControls("deepseek", null), true);
-  assert.equal(supportsThinkingControls("openai", null), false);
-  assert.equal(supportsThinkingControls("deepseek", undefined), true);
+test("falls back to deepseek whitelist when capabilities unknown", () => {
+  assert.equal(
+    shouldShowThinkingControls({ capabilities: null, backendId: "deepseek" }),
+    true,
+  );
+  assert.equal(
+    shouldShowThinkingControls({ capabilities: undefined, backendId: "openai" }),
+    false,
+  );
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend && node --experimental-strip-types --test src/lib/thinkingSupport.test.ts`
-
+Run: `cd frontend && node --test src/lib/shouldShowThinkingControls.test.ts`  
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-/** 是否在 Composer 显示推理强度控件。 */
 import type { ModelCapabilities } from "../types";
 
-const REASONING_BACKEND_FALLBACK = new Set(["deepseek"]);
-
-/**
- * caps 已知时只看 reasoning；
- * caps 未知（null/undefined）时回退 provider backend 白名单。
- */
-export function supportsThinkingControls(
-  backendId: string | null | undefined,
-  caps: ModelCapabilities | null | undefined,
-): boolean {
-  if (caps != null) return caps.reasoning === true;
-  return !!backendId && REASONING_BACKEND_FALLBACK.has(backendId);
+export function shouldShowThinkingControls(input: {
+  capabilities?: ModelCapabilities | null;
+  backendId?: string | null;
+}): boolean {
+  if (input.capabilities != null) {
+    return Boolean(input.capabilities.reasoning);
+  }
+  return input.backendId === "deepseek";
 }
 ```
 
-- [ ] **Step 4: Run tests and make sure they pass**
+- [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend && node --experimental-strip-types --test src/lib/thinkingSupport.test.ts`
-
-Expected: PASS (3 tests)
+Run: `cd frontend && node --test src/lib/shouldShowThinkingControls.test.ts`  
+Expected: PASS (2 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/thinkingSupport.ts frontend/src/lib/thinkingSupport.test.ts
+git add frontend/src/lib/shouldShowThinkingControls.ts frontend/src/lib/shouldShowThinkingControls.test.ts
 git commit -m "$(cat <<'EOF'
-feat: add thinking controls capability helper
+feat(chat): add shouldShowThinkingControls helper
 
 EOF
 )"
@@ -109,91 +112,127 @@ EOF
 
 ---
 
-### Task 2: 强制关闭 Auto / MAX 偏好
+### Task 2: 强制关闭 Auto / MAX globals
 
 **Files:**
-- Modify: `frontend/src/lib/modelPrefs.ts`
-- Test: extend with `frontend/src/lib/modelPrefs.globals.test.ts`（仅测规范化逻辑；可用直接调用 `loadPickerGlobals` + mock localStorage）
+- Modify: `frontend/src/lib/modelPrefs.ts` (`loadPickerGlobals`, optionally no-op `syncMaxModeWithThinkingLevel` max writes)
+- Create: `frontend/src/lib/modelPrefsGlobals.test.ts`
 
-- [ ] **Step 1: Write failing test for normalize-on-load**
-
-Create `frontend/src/lib/modelPrefs.globals.test.ts`:
+- [ ] **Step 1: Write the failing test**
 
 ```ts
-import { test, beforeEach } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadPickerGlobals, savePickerGlobals } from "./modelPrefs.ts";
-
-beforeEach(() => {
-  // node 环境无 localStorage 时用简易 polyfill
-  const store = new Map<string, string>();
-  (globalThis as any).localStorage = {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => { store.set(k, v); },
-    removeItem: (k: string) => { store.delete(k); },
-  };
-});
+import {
+  loadPickerGlobals,
+  savePickerGlobals,
+} from "./modelPrefs.ts";
 
 test("loadPickerGlobals forces auto and maxMode off and persists", () => {
-  savePickerGlobals({ auto: true, maxMode: true });
-  const g = loadPickerGlobals();
-  assert.deepEqual(g, { auto: false, maxMode: false });
-  assert.deepEqual(loadPickerGlobals(), { auto: false, maxMode: false });
+  const key = "astro.model.pickerGlobals";
+  const prev = globalThis.localStorage?.getItem(key) ?? null;
+  try {
+    // jsdom/node: use a minimal localStorage stub if needed — project tests
+    // that touch localStorage should set:
+    const store = new Map<string, string>();
+    (globalThis as { localStorage: Storage }).localStorage = {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => { store.set(k, String(v)); },
+      removeItem: (k) => { store.delete(k); },
+      clear: () => store.clear(),
+      key: () => null,
+      length: 0,
+    };
+    savePickerGlobals({ auto: true, maxMode: true });
+    const g = loadPickerGlobals();
+    assert.equal(g.auto, false);
+    assert.equal(g.maxMode, false);
+    const raw = store.get(key);
+    assert.ok(raw);
+    const parsed = JSON.parse(raw!) as { auto: boolean; maxMode: boolean };
+    assert.equal(parsed.auto, false);
+    assert.equal(parsed.maxMode, false);
+  } finally {
+    if (prev != null) globalThis.localStorage?.setItem(key, prev);
+  }
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend && node --experimental-strip-types --test src/lib/modelPrefs.globals.test.ts`
+Run: `cd frontend && node --test src/lib/modelPrefsGlobals.test.ts`  
+Expected: FAIL (`auto` still true)
 
-Expected: FAIL（仍返回 auto/maxMode true）
+- [ ] **Step 3: Update `loadPickerGlobals`**
 
-- [ ] **Step 3: Update `loadPickerGlobals` and neutralize maxMode sync**
-
-Replace `loadPickerGlobals` body so that after parse:
+Replace body of `loadPickerGlobals` in `frontend/src/lib/modelPrefs.ts` with:
 
 ```ts
 export function loadPickerGlobals(): ModelPickerGlobals {
+  const forced: ModelPickerGlobals = { auto: false, maxMode: false };
   try {
     const raw = localStorage.getItem(GLOBALS_KEY);
-    if (!raw) return { ...DEFAULT_PICKER_GLOBALS };
-    const parsed = JSON.parse(raw) as Partial<ModelPickerGlobals>;
-    const normalized: ModelPickerGlobals = {
-      auto: false,
-      maxMode: false,
-    };
-    // 若旧值曾为 true，写回关闭状态
-    if (parsed.auto || parsed.maxMode) {
-      savePickerGlobals(normalized);
+    if (!raw) {
+      savePickerGlobals(forced);
+      return { ...forced };
     }
-    return normalized;
+    const parsed = JSON.parse(raw) as Partial<ModelPickerGlobals>;
+    const needsWrite = parsed.auto === true || parsed.maxMode === true || raw.includes("true");
+    // Always persist normalized shape so old Auto/MAX users recover.
+    if (needsWrite || parsed.auto !== false || parsed.maxMode !== false) {
+      savePickerGlobals(forced);
+    }
+    return { ...forced };
   } catch {
-    return { ...DEFAULT_PICKER_GLOBALS };
+    try {
+      savePickerGlobals(forced);
+    } catch {
+      /* ignore */
+    }
+    return { ...forced };
   }
 }
 ```
 
-Replace `syncMaxModeWithThinkingLevel` to no longer flip maxMode（思考 max 只走 model prefs effort）：
+Simpler equivalent (prefer this in implementation):
 
 ```ts
-/** Auto/MAX UI 已移除：保留 API，避免调用方报错，始终返回规范化 globals */
+export function loadPickerGlobals(): ModelPickerGlobals {
+  const forced: ModelPickerGlobals = { auto: false, maxMode: false };
+  try {
+    const raw = localStorage.getItem(GLOBALS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ModelPickerGlobals>;
+      if (parsed.auto || parsed.maxMode) {
+        savePickerGlobals(forced);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return { ...forced };
+}
+```
+
+Also change `syncMaxModeWithThinkingLevel` to **not** set `maxMode: true` anymore (keep signature, return forced globals):
+
+```ts
 export function syncMaxModeWithThinkingLevel(_level: ThinkingLevel): ModelPickerGlobals {
   return loadPickerGlobals();
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd frontend && node --experimental-strip-types --test src/lib/modelPrefs.globals.test.ts src/lib/thinkingSupport.test.ts`
-
+Run: `cd frontend && node --test src/lib/modelPrefsGlobals.test.ts`  
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/modelPrefs.ts frontend/src/lib/modelPrefs.globals.test.ts
+git add frontend/src/lib/modelPrefs.ts frontend/src/lib/modelPrefsGlobals.test.ts
 git commit -m "$(cat <<'EOF'
-fix: force-disable model picker auto and max mode
+fix(chat): force Auto/MAX picker globals off on load
 
 EOF
 )"
@@ -201,64 +240,32 @@ EOF
 
 ---
 
-### Task 3: ModelPicker 去掉 Auto/MAX UI，并上报当前模型 caps
+### Task 3: ModelPicker 隐藏 Auto / MAX UI
 
 **Files:**
 - Modify: `frontend/src/components/ModelPicker.tsx`
 
-- [ ] **Step 1: Extend Props**
+- [ ] **Step 1: Remove globals toggles and Auto trigger branch**
 
-```ts
-type Props = {
-  // ...existing
-  /** 当前选中模型的 capabilities；未知时传 null */
-  onActiveModelCapsChange?: (caps: ModelCapabilities | null) => void;
-};
-```
+In `ModelPicker.tsx`:
+1. Delete the entire `<div className="model-picker-globals">…</div>` block (Auto + MAX Mode `ToggleSwitch`).
+2. Delete the `{globals.auto ? (…autoHint…) : (…menu…)}` split — always render the model `<ul className="model-picker-menu">…`.
+3. In the trigger button, remove `globals.auto ? … : …` branch; always show `activeProvider` / model id (same as current non-auto branch).
+4. Change flyout class from `` `model-picker-flyout ${editing && !globals.auto ? "has-edit" : ""}` `` to `` `model-picker-flyout ${editing ? "has-edit" : ""}` ``.
+5. Change `{editing && !globals.auto ? (` edit panel to `{editing ? (`.
+6. Leave `setGlobal` / globals state if still used by edit panel effort sync; if `globals` becomes unused except load, keep `loadPickerGlobals()` call sites that normalize storage.
 
-Import `ModelCapabilities` from `../types`.
+- [ ] **Step 2: Typecheck**
 
-- [ ] **Step 2: Remove globals toggles from JSX**
+Run: `cd frontend && npx tsc -b --pretty false 2>&1 | head -40`  
+Expected: no errors in ModelPicker
 
-删除 `model-picker-globals` 整块（Auto / MAX ToggleSwitch）以及 `globals.auto` 分支的 auto-hint / trigger「Auto」展示。
-
-触发器始终走 `activeProvider` 模型名分支。
-
-面板始终渲染模型列表（不再 `globals.auto ? hint : list`）。
-
-编辑侧栏条件从 `editing && !globals.auto` 改为 `editing`。
-
-- [ ] **Step 3: Notify caps when options / selection change**
-
-在加载完 `options` / `modelsByProvider` 后，用 `useEffect`：
-
-```ts
-useEffect(() => {
-  if (!onActiveModelCapsChange) return;
-  if (!activeProvider) {
-    onActiveModelCapsChange(null);
-    return;
-  }
-  const list = modelsByProvider.get(activeProvider.id); // 按现有 state 名调整
-  const info = list?.find((m) => m.id === activeProvider.model);
-  onActiveModelCapsChange(info?.capabilities ?? null);
-}, [activeProvider, modelsByProvider, onActiveModelCapsChange]);
-```
-
-（实现时对照 ModelPicker 现有 state 变量名；若模型列表存在于 `options`/`cache`，用等价结构。）
-
-- [ ] **Step 4: Manual smoke**
-
-Run: `cd frontend && npx tsc -b --pretty false`
-
-Expected: 无 ModelPicker 相关类型错误
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add frontend/src/components/ModelPicker.tsx
 git commit -m "$(cat <<'EOF'
-feat: drop Auto/MAX from model picker and report model caps
+refactor(chat): remove Auto and MAX Mode from ModelPicker UI
 
 EOF
 )"
@@ -266,49 +273,70 @@ EOF
 
 ---
 
-### Task 4: i18n + ComposerMcpMenu 组件
+### Task 4: i18n 文案
 
 **Files:**
 - Modify: `frontend/src/i18n/messages.ts`
-- Create: `frontend/src/components/ComposerMcpMenu.tsx`
-- Modify: `frontend/src/styles/chat.css`
 
-- [ ] **Step 1: Add i18n keys (zh + en)**
+- [ ] **Step 1: Add zh + en keys**
 
-中文（插在 chat.* 附近）：
+Add to Chinese map (near other `chat.*` / `mcpTools.*` keys):
 
 ```ts
 "chat.mcpMenu": "MCP 服务",
 "chat.mcpMenuSearch": "搜索 MCP 服务…",
-"chat.mcpMenuEmpty": "还没有 MCP 服务",
+"chat.mcpMenuEmpty": "还没有配置 MCP 服务",
 "chat.mcpMenuOpenSettings": "打开 MCP 设置",
-"chat.mcpMenuUser": "用户",
+"chat.mcpMenuUserGroup": "用户",
 ```
 
-英文：
+Add English counterparts:
 
 ```ts
-"chat.mcpMenu": "MCP servers",
+"chat.mcpMenu": "MCP Servers",
 "chat.mcpMenuSearch": "Search MCP servers…",
-"chat.mcpMenuEmpty": "No MCP servers yet",
-"chat.mcpMenuOpenSettings": "Open MCP settings",
-"chat.mcpMenuUser": "User",
+"chat.mcpMenuEmpty": "No MCP servers configured",
+"chat.mcpMenuOpenSettings": "Open MCP Settings",
+"chat.mcpMenuUserGroup": "User",
 ```
 
-- [ ] **Step 2: Create `ComposerMcpMenu.tsx`**
+Ensure `MessageKey` type (if derived from the zh object) still compiles.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add frontend/src/i18n/messages.ts
+git commit -m "$(cat <<'EOF'
+feat(i18n): add chat MCP menu strings
+
+EOF
+)"
+```
+
+---
+
+### Task 5: `ComposerMcpMenu` 组件 + CSS
+
+**Files:**
+- Create: `frontend/src/components/ComposerMcpMenu.tsx`
+- Modify: `frontend/src/styles/chat.css`
+
+- [ ] **Step 1: Create component**
+
+先核对 `AnimatedSwitch` 现有 props（见 `ToolsPanel` 用法），再创建 `ComposerMcpMenu.tsx`：
 
 ```tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PlugZap, Settings2 } from "lucide-react";
+import { useMcpTools } from "../hooks/useMcpTools";
 import { useI18n } from "../i18n/LocaleContext";
-import { useMcpTools, type McpServer } from "../hooks/useMcpTools";
+import AnimatedSwitch from "./AnimatedSwitch";
 
 type Props = {
   open: boolean;
   agentId?: string | null;
   onClose: () => void;
   onOpenSettings: () => void;
-  /** 锚定到触发按钮，用于定位（可选；也可用 CSS 相对 composer） */
-  anchorRef?: React.RefObject<HTMLElement | null>;
 };
 
 export default function ComposerMcpMenu({
@@ -318,33 +346,35 @@ export default function ComposerMcpMenu({
   onOpenSettings,
 }: Props) {
   const { t } = useI18n();
-  const { servers, toggleServer, ready } = useMcpTools(agentId);
-  const [q, setQ] = useState("");
+  const { servers, toggleServer } = useMcpTools(agentId);
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return servers;
+    const q = query.trim().toLowerCase();
+    if (!q) return servers;
     return servers.filter(
       (s) =>
-        s.name.toLowerCase().includes(needle) ||
-        s.id.toLowerCase().includes(needle),
+        s.name.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q),
     );
-  }, [servers, q]);
+  }, [servers, query]);
 
   useEffect(() => {
     if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) onClose();
-    };
+    inputRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    document.addEventListener("mousedown", onDoc);
+    const onPointer = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) onClose();
+    };
     document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onPointer);
     return () => {
-      document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onPointer);
     };
   }, [open, onClose]);
 
@@ -352,40 +382,49 @@ export default function ComposerMcpMenu({
 
   return (
     <div className="composer-mcp-menu" ref={rootRef} role="dialog" aria-label={t("chat.mcpMenu")}>
-      <input
-        className="composer-mcp-search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder={t("chat.mcpMenuSearch")}
-        autoFocus
-      />
-      <div className="composer-mcp-section-label">{t("chat.mcpMenuUser")}</div>
-      <ul className="composer-mcp-list">
-        {!ready ? null : filtered.length === 0 ? (
-          <li className="composer-mcp-empty">{t("chat.mcpMenuEmpty")}</li>
+      <div className="composer-mcp-menu-search">
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("chat.mcpMenuSearch")}
+          aria-label={t("chat.mcpMenuSearch")}
+        />
+      </div>
+      <div className="composer-mcp-menu-body">
+        {filtered.length === 0 ? (
+          <p className="composer-mcp-menu-empty">{t("chat.mcpMenuEmpty")}</p>
         ) : (
-          filtered.map((s: McpServer) => (
-            <li key={s.id} className="composer-mcp-row">
-              <span className="composer-mcp-name" title={s.name}>{s.name}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={s.enabled}
-                className={`composer-mcp-switch ${s.enabled ? "is-on" : ""}`}
-                onClick={() => toggleServer(s.id)}
-              />
-            </li>
-          ))
+          <>
+            <div className="composer-mcp-menu-group">{t("chat.mcpMenuUserGroup")}</div>
+            <ul className="composer-mcp-menu-list">
+              {filtered.map((s) => (
+                <li key={s.id} className="composer-mcp-menu-row">
+                  <span className="composer-mcp-menu-name" title={s.name}>
+                    <PlugZap size={14} strokeWidth={2} aria-hidden />
+                    {s.name}
+                  </span>
+                  {/* AnimatedSwitch: match ToolsPanel prop names exactly */}
+                  <AnimatedSwitch
+                    checked={s.enabled}
+                    onChange={() => toggleServer(s.id)}
+                    ariaLabel={s.name}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
-      </ul>
+      </div>
       <button
         type="button"
-        className="composer-mcp-settings"
+        className="composer-mcp-menu-footer"
         onClick={() => {
           onOpenSettings();
           onClose();
         }}
       >
+        <Settings2 size={14} strokeWidth={2} aria-hidden />
         {t("chat.mcpMenuOpenSettings")}
       </button>
     </div>
@@ -393,98 +432,120 @@ export default function ComposerMcpMenu({
 }
 ```
 
-- [ ] **Step 3: Add CSS in `chat.css`（靠近 `.composer-mode-menu`）**
-
-使用现有 `--menu-glass-*` 变量，约：
+- [ ] **Step 2: Add CSS** near `.composer-palette` in `chat.css`
 
 ```css
 .composer-mcp-menu {
   position: absolute;
   left: 0;
   bottom: calc(100% + 8px);
-  width: min(320px, 82vw);
-  max-height: min(420px, 60vh);
+  z-index: 40;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(420px, 55vh);
   display: flex;
   flex-direction: column;
-  z-index: 40;
   border-radius: 14px;
+  border: 1px solid var(--menu-glass-border, rgba(255, 255, 255, 0.16));
   background: var(--menu-glass-bg);
-  border: 1px solid var(--menu-glass-border);
   box-shadow: var(--menu-glass-shadow);
   backdrop-filter: var(--menu-glass-blur);
   overflow: hidden;
 }
-.composer-mcp-search { /* padding, border-bottom, transparent bg */ }
-.composer-mcp-list { overflow: auto; flex: 1; margin: 0; padding: 4px 0; list-style: none; }
-.composer-mcp-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; gap: 12px; }
-.composer-mcp-switch { /* 与 mp-switch / 现有 toggle 尺寸接近的圆角开关 */ }
-.composer-mcp-settings { /* 底栏全宽按钮 */ }
-```
-
-（实现时对照 `.composer-mode-menu` / `.mp-switch` 抄配色，保证亮暗主题可读。）
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add frontend/src/components/ComposerMcpMenu.tsx frontend/src/i18n/messages.ts frontend/src/styles/chat.css
-git commit -m "$(cat <<'EOF'
-feat: add composer MCP servers popup menu
-
-EOF
-)"
-```
-
----
-
-### Task 5: ToolsPanel 一次性打开 MCP tab
-
-**Files:**
-- Modify: `frontend/src/components/ToolsPanel.tsx`
-- Modify: `frontend/src/App.tsx`（仅加 focus helper；ChatView 接线在 Task 6）
-
-- [ ] **Step 1: Add focus helper module inline in ToolsPanel file top**
-
-```ts
-const TOOLS_FOCUS_KEY = "astro.tools.focusTab";
-
-export function requestToolsMcpFocus() {
-  try {
-    sessionStorage.setItem(TOOLS_FOCUS_KEY, "mcp");
-  } catch {
-    /* ignore */
-  }
+.composer-mcp-menu-search {
+  padding: 10px 10px 6px;
 }
-
-function consumeToolsFocusTab(): ToolTab | null {
-  try {
-    const v = sessionStorage.getItem(TOOLS_FOCUS_KEY);
-    sessionStorage.removeItem(TOOLS_FOCUS_KEY);
-    if (v === "mcp" || v === "builtin") return v;
-  } catch {
-    /* ignore */
-  }
-  return null;
+.composer-mcp-menu-search input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--glass-edge);
+  background: var(--glass-inner, rgba(0, 0, 0, 0.2));
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
 }
-```
-
-- [ ] **Step 2: Consume on active**
-
-在 `ToolsPanel` 内：
-
-```ts
-useEffect(() => {
-  if (!active) return;
-  const focus = consumeToolsFocusTab();
-  if (focus) setTab(focus);
-}, [active]);
+.composer-mcp-menu-body {
+  overflow: auto;
+  padding: 4px 6px 8px;
+  flex: 1;
+}
+.composer-mcp-menu-group {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  padding: 6px 8px 4px;
+}
+.composer-mcp-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.composer-mcp-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: 10px;
+}
+.composer-mcp-menu-row:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.composer-mcp-menu-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 13px;
+}
+.composer-mcp-menu-empty {
+  margin: 12px 8px;
+  color: var(--ink-mute);
+  font-size: 13px;
+}
+.composer-mcp-menu-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--glass-edge);
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 10px 12px;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.composer-mcp-menu-footer:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.composer-mcp-wrap {
+  position: relative;
+}
+.composer-icon-btn.has-dot::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone-green, #4ade80);
+}
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/components/ToolsPanel.tsx
+git add frontend/src/components/ComposerMcpMenu.tsx frontend/src/styles/chat.css
 git commit -m "$(cat <<'EOF'
-feat: allow focusing Tools MCP tab via session flag
+feat(chat): add ComposerMcpMenu popup
 
 EOF
 )"
@@ -492,119 +553,72 @@ EOF
 
 ---
 
-### Task 6: ChatView 接入 MCP 按钮；App 接线判定与发送
+### Task 6: ChatView 接入 MCP 按钮
 
 **Files:**
 - Modify: `frontend/src/components/ChatView.tsx`
-- Modify: `frontend/src/App.tsx`
 
-- [ ] **Step 1: ChatView props**
+- [ ] **Step 1: Extend props**
 
-```ts
-  onOpenMcpSettings?: () => void;
-  /** 当前会话 / workspace agent id，供 MCP 菜单作用域 */
-  mcpAgentId?: string | null;
-```
-
-- [ ] **Step 2: Composer 状态与按钮**
-
-在 `ChatView` 内：
+Add to ChatView props:
 
 ```ts
-const [mcpMenuOpen, setMcpMenuOpen] = useState(false);
-const mcpWrapRef = useRef<HTMLDivElement>(null);
+agentId?: string | null;
+onOpenMcpSettings?: () => void;
 ```
 
-打开 MCP 时关闭其它 palette / mode menu：
+- [ ] **Step 2: Wire button + menu in composer-bar-left**
 
-```ts
-const openMcpMenu = () => {
-  setPaletteKind(null);
-  setModeMenuOpen(false);
-  setMcpMenuOpen((v) => !v);
-};
-```
-
-在推理 pill 与 `@` 按钮之间插入：
+After thinking pill block, before `@` button:
 
 ```tsx
-<div className="composer-mcp-wrap" ref={mcpWrapRef}>
+const [mcpOpen, setMcpOpen] = useState(false);
+// close mcp when opening other palettes / mode menu
+```
+
+When opening thinking / mention / slash / mode menu, set `mcpOpen` false. When opening mcp, set `paletteKind` null and `modeMenuOpen` false.
+
+```tsx
+<div className="composer-mcp-wrap">
   <button
     type="button"
-    className={`composer-icon-btn ${mcpMenuOpen ? "is-open" : ""}`}
+    className={`composer-icon-btn ${mcpOpen ? "is-open" : ""} ${/* has enabled */ ""}`}
+    disabled={streaming}
     title={t("chat.mcpMenu")}
     aria-label={t("chat.mcpMenu")}
-    aria-expanded={mcpMenuOpen}
-    disabled={false}
-    onClick={openMcpMenu}
+    aria-expanded={mcpOpen}
+    onClick={() => {
+      setModeMenuOpen(false);
+      setPaletteKind(null);
+      setMcpOpen((v) => !v);
+    }}
   >
-    {/* 使用 lucide Cable / Plug / Server；项目已用 lucide-react */}
-    <Cable size={17} strokeWidth={2} />
+    <PlugZap size={16} strokeWidth={2} />
   </button>
   <ComposerMcpMenu
-    open={mcpMenuOpen}
-    agentId={mcpAgentId}
-    onClose={() => setMcpMenuOpen(false)}
+    open={mcpOpen}
+    agentId={agentId}
+    onClose={() => setMcpOpen(false)}
     onOpenSettings={() => onOpenMcpSettings?.()}
   />
 </div>
 ```
 
-`.composer-mcp-wrap { position: relative; }`
+For the green dot: either lift a tiny `useMcpTools(agentId)` in ChatView only for `servers.some(s => s.enabled)`, or pass `mcpEnabledCount` from App. Prefer calling `useMcpTools` once in ChatView and pass servers into menu **or** keep menu owning the hook (two hook instances share persistence via backend — OK for this app). Spec: 小圆点 when any enabled — add `has-dot` class when `useMcpTools` reports any enabled.
 
-打开 thinking/mention/slash 时 `setMcpMenuOpen(false)`。
+Import `PlugZap` from `lucide-react`.
 
-- [ ] **Step 3: App state for caps + showThinking**
+- [ ] **Step 3: Typecheck**
 
-```ts
-const [activeModelCaps, setActiveModelCaps] = useState<ModelCapabilities | null>(null);
+Run: `cd frontend && npx tsc -b --pretty false 2>&1 | head -50`  
+Expected: only missing App props until Task 8, or fix ChatView optional props so tsc passes.
 
-// ModelPicker:
-onActiveModelCapsChange={setActiveModelCaps}
-
-showThinkingControls={supportsThinkingControls(
-  activeProvider?.backend_id,
-  activeModelCaps,
-)}
-
-onOpenMcpSettings={() => {
-  requestToolsMcpFocus();
-  setNav("tools");
-}}
-mcpAgentId={/* 与聊天当前 agent 一致；若 App 已有 currentAgentId / workspace 则传入，否则 "workspace" */}
-```
-
-- [ ] **Step 4: 发送侧忽略不支持推理的 thinking；删除 auto 分支**
-
-在 `send` 内：
-
-删除 `if (globals.auto) { ... }` 整块。
-
-替换 modelApi 计算：
-
-```ts
-const globals = loadPickerGlobals();
-const caps = activeModelCaps; // 或发送前再读；与当前 UI 一致即可
-const thinkingOk = supportsThinkingControls(chatProvider.backend_id, caps);
-const modelApi = thinkingOk
-  ? modelPrefsToApi(loadModelPrefs(chatProvider.id, chatModel), globals)
-  : { thinkingEnabled: false, reasoningEffort: "high" as const };
-```
-
-注意：原先仅 `deepseek` 才 `modelPrefsToApi`；现改为凡 `thinkingOk` 即传 thinking 参数（与「有推理能力才显示控件」一致）。
-
-- [ ] **Step 5: Typecheck**
-
-Run: `cd frontend && npx tsc -b --pretty false`
-
-Expected: exit 0
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/components/ChatView.tsx frontend/src/App.tsx
+git add frontend/src/components/ChatView.tsx
 git commit -m "$(cat <<'EOF'
-feat: wire MCP menu and capability-based thinking controls
+feat(chat): wire MCP menu button in composer
 
 EOF
 )"
@@ -612,46 +626,227 @@ EOF
 
 ---
 
-### Task 7: 手测验收 + 收尾
+### Task 7: ToolsPanel `initialTab`
 
-- [ ] **Step 1: Run unit tests**
+**Files:**
+- Modify: `frontend/src/components/ToolsPanel.tsx`
+- Modify: `frontend/src/App.tsx` (minimal: state + pass prop; full ChatView wiring in Task 8)
 
-Run: `cd frontend && node --experimental-strip-types --test src/lib/thinkingSupport.test.ts src/lib/modelPrefs.globals.test.ts src/lib/autoModelSelect.test.ts`
+- [ ] **Step 1: Extend ToolsPanel props**
 
-Expected: all PASS
+```ts
+type Props = {
+  active?: boolean;
+  /** 打开时落到该 tab；消费后通知父级清空 */
+  initialTab?: ToolTab | null;
+  onInitialTabConsumed?: () => void;
+};
+```
 
-- [ ] **Step 2: Manual checklist（`npm run tauri dev`）**
+Export `ToolTab` if needed, or keep internal and type App as `"builtin" | "mcp"`.
 
-1. Composer 有 MCP 按钮；弹出可搜索、开关；底栏进 Tools→MCP
-2. ModelPicker 无 Auto/MAX；旧 localStorage 打开后不再显示 Auto
-3. deepseek / reasoning=true 模型显示推理 pill；reasoning=false 隐藏
-4. 关 MCP 后新对话不再带该服务（与 Tools 面板状态一致）
+```ts
+export default function ToolsPanel({
+  active = true,
+  initialTab = null,
+  onInitialTabConsumed,
+}: Props) {
+  const [tab, setTab] = useState<ToolTab>("builtin");
 
-- [ ] **Step 3: Commit any style/i18n polish if needed**
+  useEffect(() => {
+    if (!initialTab) return;
+    setTab(initialTab);
+    onInitialTabConsumed?.();
+  }, [initialTab, onInitialTabConsumed]);
+  // ...
+}
+```
+
+- [ ] **Step 2: In App, add state**
+
+```ts
+const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
+```
+
+```tsx
+{nav === "tools" && (
+  <ToolsPanel
+    active={nav === "tools"}
+    initialTab={toolsInitialTab}
+    onInitialTabConsumed={() => setToolsInitialTab(null)}
+  />
+)}
+```
+
+- [ ] **Step 3: Commit**
 
 ```bash
-git add -u frontend/src
+git add frontend/src/components/ToolsPanel.tsx frontend/src/App.tsx
 git commit -m "$(cat <<'EOF'
-chore: polish chat MCP menu after manual QA
+feat(tools): support initialTab for MCP deep-link
 
 EOF
 )"
 ```
 
-（无改动则跳过）
+---
+
+### Task 8: App 接线 — showThinking、MCP 跳转、发送门控
+
+**Files:**
+- Modify: `frontend/src/App.tsx`
+
+- [ ] **Step 1: Resolve capabilities for active model**
+
+Near `activeProvider`:
+
+```ts
+import { shouldShowThinkingControls } from "./lib/shouldShowThinkingControls";
+import { inferModelCapabilities } from "./lib/modelCaps";
+
+// Prefer explicit model list entry if App already caches models; else null.
+// If providers carry no ModelInfo list in App state, pass capabilities: null
+// so deepseek whitelist applies. Optional enhancement: look up from a
+// models-by-provider cache if one exists in App.
+const activeModelCaps = null as import("./types").ModelCapabilities | null;
+// If ModelPicker/Providers already expose listed models on provider objects,
+// resolve here. Otherwise leave null.
+
+const showThinking = shouldShowThinkingControls({
+  capabilities: activeModelCaps,
+  backendId: activeProvider?.backend_id,
+});
+```
+
+**增强（推荐一并做）：** 若 App / providers 状态里能拿到当前 `model` 的 `ModelInfo`，传入其 `capabilities`；否则：
+
+```ts
+const showThinking = shouldShowThinkingControls({
+  capabilities: activeProvider
+    ? inferModelCapabilities(activeProvider.model, activeProvider.kind)
+    : null,
+  backendId: activeProvider?.backend_id,
+});
+```
+
+注意：用 `inferModelCapabilities` 时 caps **不再是 unknown**，deepseek-chat 可能 `reasoning:false`。为贴合 spec「未知才回退」：
+
+```ts
+function resolveActiveCapabilities(
+  provider: ProviderConfig | undefined,
+  listed: ModelInfo | undefined,
+): ModelCapabilities | null {
+  if (listed?.capabilities) return listed.capabilities;
+  return null; // unknown → deepseek fallback
+}
+```
+
+实现时：有列表命中用列表；否则 `null`（不要用 infer 填满，以免吃掉 deepseek 回退）。
+
+- [ ] **Step 2: Pass props to ChatView**
+
+```tsx
+showThinkingControls={showThinking}
+agentId={/* active agent id already used elsewhere, e.g. normalizeAgentId */}
+onOpenMcpSettings={() => {
+  setToolsInitialTab("mcp");
+  setNav("tools");
+}}
+```
+
+查找 App 中现有 `activeAgentId` / session agent；若没有，传 `null`（`useMcpTools` 默认 workspace 作用域）。
+
+- [ ] **Step 3: Gate send-path thinking**
+
+Replace:
+
+```ts
+const modelApi =
+  chatProvider.backend_id === "deepseek"
+    ? modelPrefsToApi(loadModelPrefs(chatProvider.id, chatModel), globals)
+    : { thinkingEnabled: false, reasoningEffort: "high" as const };
+```
+
+With:
+
+```ts
+const sendSupportsThinking = shouldShowThinkingControls({
+  capabilities: /* same resolve for chatProvider+chatModel */,
+  backendId: chatProvider.backend_id,
+});
+const modelApi = sendSupportsThinking
+  ? modelPrefsToApi(loadModelPrefs(chatProvider.id, chatModel), loadPickerGlobals())
+  : { thinkingEnabled: false, reasoningEffort: "high" as const };
+```
+
+若 UI thinking prefs 与 modelPrefs 双轨：保持现有 `thinkingPrefs` → API 映射路径，但仅当 `sendSupportsThinking` 为真时启用。
+
+- [ ] **Step 4: Typecheck + unit tests**
+
+Run:
+
+```bash
+cd frontend && node --test src/lib/shouldShowThinkingControls.test.ts src/lib/modelPrefsGlobals.test.ts
+cd frontend && npx tsc -b --pretty false
+```
+
+Expected: all PASS / no tsc errors
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/App.tsx
+git commit -m "$(cat <<'EOF'
+feat(chat): gate thinking UI/send and deep-link MCP settings
+
+EOF
+)"
+```
+
+---
+
+### Task 9: Spec 状态 + 手工验收清单
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-07-13-chat-mcp-thinking-controls-design.md`
+
+- [ ] **Step 1: Update status line to `已批准 / 已实现计划`**
+
+- [ ] **Step 2: Manual smoke (dev)**
+
+Run: `cd frontend && npm run tauri dev`（或 `npm run dev` + 已有壳）
+
+Checklist:
+1. Composer 出现 MCP 按钮；弹出可搜索、开关；底栏进 Tools→MCP
+2. ModelPicker 无 Auto/MAX；旧 localStorage 被清掉后显示具体模型
+3. deepseek 或 caps.reasoning 模型显示推理 pill；普通模型隐藏
+4. 关 MCP 后下一轮对话不再带该服务（与 Tools 页一致）
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add docs/superpowers/specs/2026-07-13-chat-mcp-thinking-controls-design.md
+git commit -m "$(cat <<'EOF'
+docs: mark chat MCP/thinking controls spec approved
+
+EOF
+)"
+```
 
 ---
 
 ## Spec coverage self-check
 
-| Spec 项 | Task |
-|---------|------|
-| MCP 弹出开关 + 搜索 | Task 4–6 |
-| 打开 MCP 设置 | Task 5–6 |
-| 隐藏 Auto/MAX + 强制关闭 | Task 2–3 |
-| caps.reasoning 优先 + deepseek 回退 | Task 1, 6 |
-| 不支持时发送忽略 thinking | Task 6 |
-| i18n | Task 4 |
-| 验收清单 | Task 7 |
+| Spec item | Task |
+|-----------|------|
+| MCP 弹出开关 + 搜索 + 空态 | 5, 6 |
+| 打开 MCP 设置 → tools/mcp | 7, 8 |
+| 互斥关闭 / Esc / 外点 | 5, 6 |
+| 隐藏 Auto/MAX UI | 3 |
+| 加载强制关闭并写回 | 2 |
+| showThinking caps \|\| deepseek | 1, 8 |
+| 发送忽略不支持推理 | 8 |
+| i18n | 4 |
+| 验收项 | 9 |
 
-无 TBD / 占位步骤。
+无 TBD 占位；类型名 `shouldShowThinkingControls` / `ComposerMcpMenu` / `initialTab` 前后一致。
