@@ -14,6 +14,7 @@ use memory::{
     cron_db_path, cron_dir, default_memory_dir, CronJob, CronRunDb, NewCronRun, SessionDb,
 };
 use providers::registry::ProviderRegistry;
+use providers::streaming::Usage;
 use providers::trait_::{ChatMessage as ProviderMessage, ProviderConfig};
 use uuid::Uuid;
 
@@ -132,14 +133,22 @@ pub async fn execute_job_with_roots(
             .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"));
     }
 
+    let model_for_usage = if creds.model.trim().is_empty() {
+        "unknown".to_string()
+    } else {
+        creds.model.clone()
+    };
+
     let exec_result = tokio::time::timeout(
         Duration::from_secs(600),
         run_agent_job(job, creds, session_id.as_deref()),
     )
     .await;
 
+    let mut llm_usage = Usage::default();
     match exec_result {
-        Ok(Ok(output)) => {
+        Ok(Ok((output, usage))) => {
+            llm_usage = usage;
             let summary = summary_from_output(&output);
             db.finish_success(&run_id, &summary, &output, &now_rfc3339())?;
         }
@@ -172,6 +181,33 @@ pub async fn execute_job_with_roots(
         });
     }
 
+    // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
+    if llm_usage.prompt_tokens > 0
+        || llm_usage.completion_tokens > 0
+        || llm_usage.total_tokens > 0
+    {
+        let cost = memory::estimate_llm_cost(
+            &model_for_usage,
+            llm_usage.prompt_tokens,
+            llm_usage.completion_tokens,
+        );
+        memory::UsageDb::try_record(memory::NewUsageEvent {
+            ts: Utc::now().to_rfc3339(),
+            kind: "llm".into(),
+            name: model_for_usage,
+            agent_id: job.agent_id.clone(),
+            session_id: row.session_id.clone(),
+            prompt_tokens: i64::from(llm_usage.prompt_tokens),
+            completion_tokens: i64::from(llm_usage.completion_tokens),
+            total_tokens: i64::from(llm_usage.total_tokens),
+            cost_usd: cost,
+            meta_json: Some(
+                serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
+                    .to_string(),
+            ),
+        });
+    }
+
     Ok(row)
 }
 
@@ -186,7 +222,7 @@ async fn run_agent_job(
     job: &CronJob,
     creds: CronExecCredentials,
     session_id: Option<&str>,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, Usage)> {
     let memory_dir = default_memory_dir();
     let sid = session_id
         .map(str::to_string)
@@ -203,7 +239,7 @@ async fn run_agent_job(
 
     let turn_result = agent.run_turn(&job.task, "cron").await?;
     match turn_result {
-        TurnResult::Finished(message) => return Ok(message),
+        TurnResult::Finished(message) => return Ok((message, Usage::default())),
         TurnResult::Continue { system_prompt, .. } => {
             run_provider_loop(&mut agent, &creds, &system_prompt).await
         }
@@ -227,7 +263,7 @@ async fn run_provider_loop(
     agent: &mut AgentLoop,
     creds: &CronExecCredentials,
     initial_system_prompt: &str,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
     let provider_name = if creds.provider.trim().is_empty() {
         "openai".to_string()
@@ -256,6 +292,7 @@ async fn run_provider_loop(
 
     let mut system_prompt = initial_system_prompt.to_string();
     let mut last_response = String::new();
+    let mut total_usage = Usage::default();
 
     for _round in 0..5 {
         agent.reload_tools_and_mcp().await;
@@ -268,11 +305,19 @@ async fn run_provider_loop(
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let mut full_response = String::new();
+        // 与 streaming.rs 一致：同轮内覆盖取最后一次 usage，跨轮累加
+        let mut round_usage: Option<Usage> = None;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result.map_err(|e| anyhow::anyhow!("{e}"))?;
             if let Some(token) = chunk.token {
                 full_response.push_str(&token);
             }
+            if let Some(u) = chunk.usage {
+                round_usage = Some(u);
+            }
+        }
+        if let Some(u) = round_usage {
+            total_usage.add_assign(u);
         }
 
         if full_response.is_empty() {
@@ -284,7 +329,7 @@ async fn run_provider_loop(
 
         let calls = tools::extract_tool_calls(&full_response);
         if calls.is_empty() {
-            return Ok(last_response);
+            return Ok((last_response, total_usage));
         }
 
         for call in calls {
@@ -305,7 +350,7 @@ async fn run_provider_loop(
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         system_prompt = match turn_result {
             TurnResult::Continue { system_prompt, .. } => system_prompt,
-            TurnResult::Finished(message) => return Ok(message),
+            TurnResult::Finished(message) => return Ok((message, total_usage)),
             TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
             TurnResult::MaxDepth => anyhow::bail!("工具调用轮次已达上限"),
             TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
@@ -317,7 +362,7 @@ async fn run_provider_loop(
     if last_response.is_empty() {
         anyhow::bail!("模型未返回有效回复");
     }
-    Ok(last_response)
+    Ok((last_response, total_usage))
 }
 
 /// 将会话消息序列转换为 Provider 层 [`ProviderMessage`] 列表。
