@@ -71,6 +71,7 @@ import {
   type PaletteKind,
 } from "./ComposerPalette";
 import ComposerMcpMenu from "./ComposerMcpMenu";
+import MsgActivity from "./MsgActivity";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
 
@@ -419,27 +420,16 @@ function ActivityCards({
 }) {
   const visible = items.filter((a) => isActivityVisible(a.kind, prefs));
   if (!visible.length) return null;
+  const defaultOpen = prefs.verbosity === "detailed";
   return (
     <div className="msg-activities">
       {visible.map((a) => (
-        <div
+        <MsgActivity
           key={a.id}
-          className={`msg-activity ${a.status ? `is-${a.status}` : ""}`}
-          data-kind={a.kind}
-        >
-          <span className="msg-activity-kind">{a.kind}</span>
-          <div className="msg-activity-body">
-            <span className="msg-activity-title">{a.title}</span>
-            {prefs.verbosity === "detailed" && a.detail ? (
-              <pre className="msg-activity-detail">{a.detail}</pre>
-            ) : null}
-            {showTimestamps && a.at ? (
-              <span className="msg-activity-time">
-                {new Date(a.at).toLocaleTimeString()}
-              </span>
-            ) : null}
-          </div>
-        </div>
+          activity={a}
+          defaultOpen={defaultOpen}
+          showTimestamp={showTimestamps}
+        />
       ))}
     </div>
   );

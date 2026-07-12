@@ -377,6 +377,36 @@ html[data-theme="light"] .msg-actions {
   color: var(--ink);
 }
 
+.msg-activity-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.msg-activity-toggle:hover .msg-activity-title {
+  color: var(--ink-soft, var(--ink));
+}
+
+.msg-activity-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--ink-mute);
+  transition: transform 0.15s ease;
+}
+
+.msg-activity.is-open .msg-activity-chevron {
+  transform: rotate(180deg);
+}
+
 .msg-activity-detail {
   margin: 0;
   padding: 6px 8px;
