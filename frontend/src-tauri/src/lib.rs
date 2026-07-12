@@ -277,6 +277,7 @@ pub fn run() {
             config_commands::set_mcp_servers,
             config_commands::refresh_mcp_tools,
             config_commands::get_agent_usage_stats,
+            config_commands::get_usage_insights,
             providers_commands::get_providers_state,
             providers_commands::list_providers,
             providers_commands::add_provider,
