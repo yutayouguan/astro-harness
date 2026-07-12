@@ -3,13 +3,19 @@
 use memory::usage_db::{
     usage_db_path, NewUsageEvent, UsageDb, UsageInsightsQuery, UsagePeriod,
 };
+use std::sync::Mutex;
 use tempfile::TempDir;
+
+/// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn usage_db_path_under_memory_dir() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = TempDir::new().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
     assert_eq!(usage_db_path(), dir.path().join("usage.db"));
+    std::env::remove_var("ASTRO_MEMORY_DIR");
 }
 
 #[test]
@@ -174,6 +180,7 @@ fn offset_timestamp_normalized_and_counted_in_month() {
 
 #[test]
 fn estimate_cost_from_litellm_fixture() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = TempDir::new().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
     std::fs::write(
@@ -191,4 +198,5 @@ fn estimate_cost_from_litellm_fixture() {
     // 0.15 + 0.6 = 0.75
     assert!((cost - 0.75).abs() < 1e-9);
     assert_eq!(memory::estimate_llm_cost("unknown-model", 100, 100), 0.0);
+    std::env::remove_var("ASTRO_MEMORY_DIR");
 }
