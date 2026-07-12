@@ -145,6 +145,34 @@ fn skill_events_do_not_inflate_kpi_calls() {
 }
 
 #[test]
+fn offset_timestamp_normalized_and_counted_in_month() {
+    let dir = TempDir::new().unwrap();
+    let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+    // `+00:00` 若不规范化为 `…Z`，会因字典序落在 `2026-07-01T00:00:00Z` 之前而被排除
+    db.insert(NewUsageEvent {
+        ts: "2026-07-01T00:00:00+00:00".into(),
+        kind: "tool".into(),
+        name: "terminal".into(),
+        agent_id: "workspace".into(),
+        session_id: None,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        meta_json: None,
+    })
+    .unwrap();
+    let insights = db
+        .query_insights(UsageInsightsQuery {
+            period: UsagePeriod::Month,
+            as_of: Some("2026-07-15T00:00:00Z".into()),
+            agent_id: None,
+        })
+        .unwrap();
+    assert_eq!(insights.kpis.calls, 1);
+}
+
+#[test]
 fn estimate_cost_from_litellm_fixture() {
     let dir = TempDir::new().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
