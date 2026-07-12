@@ -39,7 +39,7 @@ export default function MsgActivity({
             type="button"
             className="msg-activity-toggle"
             aria-expanded={open}
-            aria-label={open ? t("chat.activityCollapse") : t("chat.activityExpand")}
+            aria-label={`${activity.title}，${open ? t("chat.activityCollapse") : t("chat.activityExpand")}`}
             onClick={() => setOpen((v) => !v)}
           >
             <span className="msg-activity-title">{activity.title}</span>

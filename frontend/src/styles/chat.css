@@ -392,6 +392,13 @@ html[data-theme="light"] .msg-actions {
   color: inherit;
 }
 
+.msg-activity-toggle .msg-activity-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .msg-activity-toggle:hover .msg-activity-title {
   color: var(--ink-soft, var(--ink));
 }
