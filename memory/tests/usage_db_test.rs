@@ -143,3 +143,24 @@ fn skill_events_do_not_inflate_kpi_calls() {
         .iter()
         .any(|r| r.kind == "skill" && r.name == "demo"));
 }
+
+#[test]
+fn estimate_cost_from_litellm_fixture() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+    std::fs::write(
+        dir.path().join("litellm-model-meta.json"),
+        r#"{
+          "gpt-4o-mini": {
+            "input_cost_per_token": 0.00000015,
+            "output_cost_per_token": 0.0000006,
+            "max_input_tokens": 128000
+          }
+        }"#,
+    )
+    .unwrap();
+    let cost = memory::estimate_llm_cost("gpt-4o-mini", 1_000_000, 1_000_000);
+    // 0.15 + 0.6 = 0.75
+    assert!((cost - 0.75).abs() < 1e-9);
+    assert_eq!(memory::estimate_llm_cost("unknown-model", 100, 100), 0.0);
+}

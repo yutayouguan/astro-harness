@@ -19,6 +19,7 @@ pub mod tool_calls;
 pub mod dreaming;
 pub mod usage_stats;
 pub mod usage_db;
+pub mod usage_pricing;
 
 pub use artifact_db::{
     artifacts_db_path, category_from_name, is_junk_artifact_name, open_default, ArtifactDb,
@@ -69,3 +70,4 @@ pub use usage_db::{
     usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery, UsagePeriod,
     UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
 };
+pub use usage_pricing::estimate_llm_cost;

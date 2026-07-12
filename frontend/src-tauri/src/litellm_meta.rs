@@ -25,6 +25,8 @@ pub struct LiteLlmEntry {
     pub supports_web_search: bool,
     pub mode: Option<String>,
     pub litellm_provider: Option<String>,
+    pub input_cost_per_token: Option<f64>,
+    pub output_cost_per_token: Option<f64>,
     /// 命中的 LiteLLM 键名（调试 / 单测用）
     #[allow(dead_code)]
     pub matched_key: String,
@@ -50,6 +52,10 @@ struct RawEntry {
     mode: Option<String>,
     #[serde(default)]
     litellm_provider: Option<String>,
+    #[serde(default)]
+    input_cost_per_token: Option<f64>,
+    #[serde(default)]
+    output_cost_per_token: Option<f64>,
 }
 
 impl RawEntry {
@@ -64,6 +70,8 @@ impl RawEntry {
             supports_web_search: self.supports_web_search.unwrap_or(false),
             mode: self.mode,
             litellm_provider: self.litellm_provider,
+            input_cost_per_token: self.input_cost_per_token,
+            output_cost_per_token: self.output_cost_per_token,
             matched_key: key.to_string(),
         }
     }
@@ -111,12 +119,14 @@ fn parse_map(value: serde_json::Value) -> HashMap<String, LiteLlmEntry> {
         }
         if let Ok(entry) = serde_json::from_value::<RawEntry>(raw.clone()) {
             let e = entry.into_entry(key);
-            // 只保留有上下文或能力标记的条目，跳过纯定价占位
+            // 保留有上下文、能力标记或单价的条目（跳过无信息占位）
             if e.max_input_tokens.is_some()
                 || e.supports_vision
                 || e.supports_function_calling
                 || e.supports_reasoning
                 || e.supports_web_search
+                || e.input_cost_per_token.is_some()
+                || e.output_cost_per_token.is_some()
             {
                 out.insert(key.to_lowercase(), e);
             }
