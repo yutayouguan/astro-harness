@@ -219,6 +219,11 @@ impl AgentLoop {
         &self.session_id
     }
 
+    /// 当前 Agent 标识（来自 MemoryManager）。
+    pub fn agent_id(&self) -> &str {
+        &self.memory.agent_id
+    }
+
     /// 内置与 MCP 工具的注册表只读引用。
     pub fn tool_registry(&self) -> &ToolRegistry {
         &self.tool_registry
@@ -359,6 +364,18 @@ impl AgentLoop {
             let agent_id = self.memory.agent_id.clone();
             let _ = memory::record_tool_call(&agent_id, name, args);
             let _ = memory::record_usage_tool_call(&agent_id, name, args);
+            memory::UsageDb::try_record(memory::NewUsageEvent {
+                ts: chrono::Utc::now().to_rfc3339(),
+                kind: "mcp".into(),
+                name: name.to_string(),
+                agent_id,
+                session_id: Some(self.session_id.clone()),
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+                cost_usd: 0.0,
+                meta_json: None,
+            });
             return self.mcp_hub.call_tool(name, args).await;
         }
 

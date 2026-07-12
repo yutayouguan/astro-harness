@@ -9,8 +9,9 @@
 //! - 时间窗为半开区间 `[start, end)`（UTC RFC3339）
 //! - 使用 WAL 模式；`id` 为主键 UUID
 
-use chrono::{Datelike, TimeZone, Utc};
+use chrono::{Datelike, SecondsFormat, TimeZone, Utc};
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 

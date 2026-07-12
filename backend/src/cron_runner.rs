@@ -64,14 +64,30 @@ pub async fn tick_and_execute() {
     for job in jobs {
         let creds = resolve_cron_credentials(&job);
         match cron_exec::execute_job(&job, creds, "due").await {
-            Ok(row) => tracing::info!(
-                job_id = %job.id,
-                run_id = %row.id,
-                status = %row.status,
-                schedule = %job.schedule,
-                task = %job.task,
-                "cron job executed"
-            ),
+            Ok(row) => {
+                memory::UsageDb::try_record(memory::NewUsageEvent {
+                    ts: chrono::Utc::now().to_rfc3339(),
+                    kind: "cron".into(),
+                    name: job.id.clone(),
+                    agent_id: job.agent_id.clone(),
+                    session_id: row.session_id.clone(),
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                    cost_usd: 0.0,
+                    meta_json: Some(
+                        serde_json::json!({ "title": job.title, "trigger": "due" }).to_string(),
+                    ),
+                });
+                tracing::info!(
+                    job_id = %job.id,
+                    run_id = %row.id,
+                    status = %row.status,
+                    schedule = %job.schedule,
+                    task = %job.task,
+                    "cron job executed"
+                );
+            }
             Err(err) => tracing::warn!(
                 job_id = %job.id,
                 schedule = %job.schedule,
