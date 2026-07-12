@@ -119,6 +119,9 @@ pub fn get_usage_summary(agent_id: Option<&str>) -> AgentUsageSummary {
 ///
 /// 工具名归并为工具集后 `tools` 计数 +1；若为 `skills` 且 `args.skill_id` 非空，
 /// 则对应 `skills` 条目亦 +1。
+///
+/// 成功写 JSON 后双写 `usage.db`：`kind=tool`（工具集 id）；skills 再写 `kind=skill`。
+/// MCP 工具（`mcp__` 前缀）只更新 JSON，事件由 Agent loop 写 `kind=mcp`。
 pub fn record_tool_call(
     agent_id: &str,
     tool_name: &str,
@@ -131,7 +134,7 @@ pub fn record_tool_call(
     let id = normalize_key(Some(agent_id));
     let mut stats = load_usage_stats(Some(&id));
     let toolset = tool_name_to_toolset(tool_name).to_string();
-    *stats.tools.entry(toolset).or_insert(0) += 1;
+    *stats.tools.entry(toolset.clone()).or_insert(0) += 1;
 
     if tool_name == "skills" {
         if let Some(skill_id) = args
@@ -144,7 +147,49 @@ pub fn record_tool_call(
         }
     }
 
-    save_usage_stats(Some(&id), &stats)
+    save_usage_stats(Some(&id), &stats)?;
+
+    let is_mcp = tool_name.starts_with("mcp__");
+    if !is_mcp {
+        use crate::usage_db::{NewUsageEvent, UsageDb};
+
+        let ts = chrono::Utc::now().to_rfc3339();
+        UsageDb::try_record(NewUsageEvent {
+            ts: ts.clone(),
+            kind: "tool".into(),
+            name: toolset,
+            agent_id: id.clone(),
+            session_id: None,
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            meta_json: Some(serde_json::json!({ "tool": tool_name }).to_string()),
+        });
+        if tool_name == "skills" {
+            if let Some(skill_id) = args
+                .get("skill_id")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                UsageDb::try_record(NewUsageEvent {
+                    ts,
+                    kind: "skill".into(),
+                    name: skill_id.to_string(),
+                    agent_id: id,
+                    session_id: None,
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                    cost_usd: 0.0,
+                    meta_json: None,
+                });
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -177,6 +222,31 @@ mod tests {
         assert_eq!(summary.skills.get("demo-skill").copied().unwrap_or(0), 2);
         assert_eq!(summary.skill_total, 2);
         assert_eq!(summary.tool_total, 3);
+
+        let insights = crate::UsageDb::open_default()
+            .unwrap()
+            .query_insights(crate::UsageInsightsQuery {
+                period: crate::UsagePeriod::Month,
+                as_of: None,
+                agent_id: Some("workspace".into()),
+            })
+            .unwrap();
+        assert!(insights.kpis.calls >= 3);
+        assert!(insights
+            .rankings
+            .by_kind
+            .iter()
+            .any(|r| r.kind == "tool" && r.name == "skills"));
+        assert!(insights
+            .rankings
+            .by_kind
+            .iter()
+            .any(|r| r.kind == "skill" && r.name == "demo-skill"));
+        assert!(insights
+            .rankings
+            .by_kind
+            .iter()
+            .any(|r| r.kind == "tool" && r.name == "web_search"));
 
         std::env::remove_var("ASTRO_MEMORY_DIR");
     }
