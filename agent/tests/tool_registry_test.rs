@@ -1,6 +1,9 @@
 //! 工具注册表启用过滤与 schema 导出测试。
 
+use std::collections::HashMap;
+
 use agent::{ToolEntry, ToolRegistry};
+use tempfile::TempDir;
 
 #[test]
 fn test_tool_registration_and_dispatch() {
@@ -62,4 +65,85 @@ fn test_enabled_map_filters_toolset() {
     assert_eq!(tools[0].name, "cron_list");
     assert!(!registry.is_tool_allowed("memory_add"));
     assert!(registry.is_tool_allowed("cron_list"));
+}
+
+#[test]
+fn mcp_disabled_tools_not_in_schemas_for_api() {
+    // 对齐 attach_mcp_tools：仅注册 Hub 过滤后的条目
+    let mut server = mcp::McpServerConfig {
+        id: "demo".into(),
+        name: "demo".into(),
+        description: String::new(),
+        r#type: mcp::McpTransportType::Stdio,
+        command: "npx".into(),
+        args: vec![],
+        env: HashMap::new(),
+        url: String::new(),
+        headers: HashMap::new(),
+        enabled: true,
+        tools: HashMap::from([("keep".into(), true), ("drop".into(), false)]),
+        discovered: vec![],
+    };
+    let discovered = vec!["keep".into(), "drop".into(), "unset".into()];
+    let qualified = mcp::filter_enabled_tool_names(&server, &discovered);
+
+    let mut reg = ToolRegistry::new();
+    for name in &qualified {
+        reg.register(ToolEntry {
+            name: name.clone(),
+            toolset: mcp::MCP_TOOLSET.to_string(),
+            description: "mcp".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "plug",
+        });
+    }
+
+    let names: Vec<_> = reg
+        .schemas_for_api()
+        .iter()
+        .filter_map(|s| {
+            s.pointer("/function/name")
+                .and_then(|n| n.as_str())
+                .map(str::to_string)
+        })
+        .collect();
+    assert!(names.iter().any(|n| n == "mcp__demo__keep"));
+    assert!(names.iter().any(|n| n == "mcp__demo__unset"));
+    assert!(!names.iter().any(|n| n == "mcp__demo__drop"));
+    assert!(!reg.is_tool_allowed("mcp__demo__drop"));
+
+    server.enabled = false;
+    assert!(mcp::filter_enabled_tool_names(&server, &discovered).is_empty());
+}
+
+#[test]
+fn reload_uses_agent_specific_tools_enabled() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+    let mut global = HashMap::new();
+    global.insert("memory".into(), true);
+    memory::save_tools_enabled(&global).unwrap();
+
+    let mut custom = HashMap::new();
+    custom.insert("memory".into(), false);
+    custom.insert("scheduled".into(), true);
+    memory::save_tools_enabled_for_agent(Some("custom-bot"), &custom).unwrap();
+
+    let mut reg = ToolRegistry::new();
+    reg.register(ToolEntry {
+        name: "memory_add".into(),
+        toolset: "memory".into(),
+        description: "add".into(),
+        schema: serde_json::json!({"type": "object"}),
+        check_fn: None,
+        icon: "brain",
+    });
+    reg.reload_enabled_from_disk(Some("custom-bot"));
+    assert!(!reg.is_tool_allowed("memory_add"));
+    assert!(reg
+        .schemas_for_api()
+        .iter()
+        .all(|s| s.pointer("/function/name").and_then(|n| n.as_str()) != Some("memory_add")));
 }

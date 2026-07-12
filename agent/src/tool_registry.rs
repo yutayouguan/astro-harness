@@ -44,9 +44,10 @@ impl ToolRegistry {
         self.enabled = enabled;
     }
 
-    /// 从磁盘（`~/.astro/tools-enabled.json`）重新加载启用表；读失败时清空为默认全启用语义。
-    pub fn reload_enabled_from_disk(&mut self) {
-        self.enabled = memory::sync_tools_enabled_defaults().unwrap_or_default();
+    /// 从磁盘（按 Agent 或全局）重新加载启用表；读失败时清空为默认全启用语义。
+    pub fn reload_enabled_from_disk(&mut self, agent_id: Option<&str>) {
+        self.enabled =
+            memory::sync_tools_enabled_defaults_for_agent(agent_id).unwrap_or_default();
     }
 
     /// 查询工具集是否启用；未出现在映射中则视为 `true`。

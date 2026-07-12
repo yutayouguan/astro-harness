@@ -117,11 +117,12 @@ impl AgentLoop {
     /// 初始化时 `tool_rounds` 与 `current_turn` 均为 0，hooks 默认为 `NoopHooks`。
     pub fn with_session_id(config: AgentConfig, session_id: String) -> anyhow::Result<Self> {
         let memory = MemoryManager::new(config.memory_dir.clone())?;
+        let agent_id = memory.agent_id.clone();
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
-        tool_registry.reload_enabled_from_disk();
+        tool_registry.reload_enabled_from_disk(Some(&agent_id));
         let mut mcp_hub = McpHub::new();
-        mcp_hub.set_agent_id(Some(memory.agent_id.clone()));
+        mcp_hub.set_agent_id(Some(agent_id));
         Ok(AgentLoop {
             config,
             session_id,
@@ -234,9 +235,11 @@ impl AgentLoop {
         &self.mcp_hub
     }
 
-    /// 从磁盘重载工具启用开关（gate 配置）。
+    /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
     pub fn reload_tool_gates(&mut self) {
-        self.tool_registry.reload_enabled_from_disk();
+        let agent_id = self.memory.agent_id.clone();
+        self.tool_registry
+            .reload_enabled_from_disk(Some(&agent_id));
     }
 
     /// 从磁盘重载 MCP 配置，并将启用工具挂接到 [`ToolRegistry`]。
@@ -353,7 +356,9 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
     ) -> anyhow::Result<String> {
-        self.tool_registry.reload_enabled_from_disk();
+        let agent_id = self.memory.agent_id.clone();
+        self.tool_registry
+            .reload_enabled_from_disk(Some(&agent_id));
 
         if is_mcp_tool_name(name) {
             let _ = self.mcp_hub.sync_enablement_from_disk();
