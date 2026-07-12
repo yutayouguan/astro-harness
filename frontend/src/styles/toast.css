@@ -1,0 +1,40 @@
+.astro-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 9999;
+  max-width: min(360px, calc(100vw - 40px));
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    color-mix(in srgb, var(--glass-bg, var(--glass-panel)) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glass-border, var(--glass-edge)) 80%, transparent);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  animation: astro-toast-in 180ms ease-out;
+}
+
+html[data-theme="dark"] .astro-toast {
+  color: var(--ink);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    color-mix(in srgb, var(--glass-bg, rgba(28, 20, 48, 0.92)) 90%, transparent);
+  border-color: var(--glass-border, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes astro-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

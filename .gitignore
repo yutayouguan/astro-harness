@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Cargo / Rust
+/target/
+**/target/
+debug/
+**/*.rs.bk
+*.pdb
+
+# Editor / IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Env & local secrets
+.env
+.env.*
+!.env.example
+
+# Frontend (Tauri)
+frontend/node_modules/
+frontend/dist/
+frontend/*.local
+frontend/*.tsbuildinfo
+
+# Logs & temp
+*.log
+*.tmp
+.cache/
+
+# Brainstorm visual companion
+.superpowers/
+
+# Git worktrees
+.worktrees/

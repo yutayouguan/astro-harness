@@ -1,0 +1,46 @@
+[package]
+name = "astro-agent"
+version = "0.1.0"
+description = "Astro Agent Tauri frontend"
+authors = ["Astro Agent"]
+edition = "2021"
+
+[lib]
+name = "astro_agent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "astro-agent"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tonic = "0.11"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+proto = { path = "../../proto" }
+memory = { path = "../../memory" }
+agent = { path = "../../agent" }
+tools = { path = "../../tools" }
+mcp = { path = "../../mcp" }
+providers = { path = "../../providers" }
+skills = { path = "../../skills" }
+chrono = { version = "0.4", features = ["clock"] }
+url = "2"
+keyring = "3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+futures = "0.3"
+base64 = "0.22"
+trash = "5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"

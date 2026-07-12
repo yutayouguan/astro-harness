@@ -1,0 +1,105 @@
+/* 面板 / Tab 内容切换：短促自然，尊重 reduced-motion */
+
+.anim-switch {
+  --anim-exit-ms: 140ms;
+  --anim-enter-ms: 220ms;
+  --anim-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.anim-switch--fill {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 文件空间：横排布局里列表区占满剩余宽度 */
+.fs-body > .anim-switch {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fs-body > .anim-switch > .fs-list-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+.page-body > .anim-switch {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 右栏 tab：随 body 滚动，不必强占 flex */
+.chat-right-body > .anim-switch {
+  min-height: 100%;
+}
+
+.anim-switch.is-enter {
+  animation: anim-switch-enter var(--anim-enter-ms) var(--anim-ease) both;
+}
+
+.anim-switch.is-exit {
+  animation: anim-switch-exit var(--anim-exit-ms) ease-in both;
+  pointer-events: none;
+}
+
+.anim-switch--fade.is-enter {
+  animation-name: anim-switch-enter-fade;
+}
+
+.anim-switch--fade.is-exit {
+  animation-name: anim-switch-exit-fade;
+}
+
+@keyframes anim-switch-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes anim-switch-exit {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.995);
+  }
+}
+
+@keyframes anim-switch-enter-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes anim-switch-exit-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-switch.is-enter,
+  .anim-switch.is-exit {
+    animation: none !important;
+  }
+}

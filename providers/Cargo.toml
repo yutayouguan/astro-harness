@@ -1,0 +1,16 @@
+[package]
+name = "providers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+schemars = { workspace = true }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
+futures = "0.3"
+base64 = "0.22"

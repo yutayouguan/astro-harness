@@ -1,0 +1,20 @@
+[package]
+name = "memory"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+tokio = { workspace = true }
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { version = "0.4", features = ["clock", "serde"] }
+uuid = { version = "1", features = ["v4"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+schemars = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

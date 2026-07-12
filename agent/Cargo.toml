@@ -1,0 +1,24 @@
+[package]
+name = "agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../common" }
+memory = { path = "../memory" }
+skills = { path = "../skills" }
+providers = { path = "../providers" }
+tools = { path = "../tools" }
+mcp = { path = "../mcp" }
+tracing = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
+futures = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

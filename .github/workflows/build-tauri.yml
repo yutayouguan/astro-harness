@@ -1,0 +1,109 @@
+# 不创建 Release，仅构建并上传产物（用于验证 Windows / Linux / macOS 打包）。
+
+name: build-tauri
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "agent/**"
+      - "memory/**"
+      - "providers/**"
+      - "tools/**"
+      - "mcp/**"
+      - "skills/**"
+      - "permissions/**"
+      - "common/**"
+      - "proto/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/build-tauri.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-tauri-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust_targets: aarch64-apple-darwin
+            artifact: macos-aarch64
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust_targets: x86_64-apple-darwin
+            artifact: macos-x86_64
+          - platform: ubuntu-22.04
+            args: ""
+            rust_targets: ""
+            artifact: linux-x64
+          - platform: windows-latest
+            args: ""
+            rust_targets: ""
+            artifact: windows-x64
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Install protobuf compiler
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          shared-key: build-${{ matrix.artifact }}
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Tauri app
+        working-directory: frontend
+        run: npm run tauri build -- ${{ matrix.args }}
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: astro-agent-${{ matrix.artifact }}
+          path: |
+            target/release/bundle/**
+            target/*/release/bundle/**
+          if-no-files-found: warn
+          retention-days: 14

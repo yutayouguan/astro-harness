@@ -1,0 +1,530 @@
+/* Overlay 标题栏拖拽区：系统红绿灯 + 自定义双击缩放动画 */
+.native-drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  height: var(--titlebar-h);
+  padding-left: var(--titlebar-traffic-w);
+  background: transparent;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.app-shell {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* 圆角交给系统窗；CSS 再裁会与系统半径错位，四角露缝 */
+  border-radius: 0;
+  background: var(--shell-bg);
+  border: none;
+  box-shadow: none;
+  /* 多层渐变无法平滑插值，勿对 background 做 transition，否则 tab 切换会「慢半拍」 */
+}
+
+/* Tab 主题色驱动背景渐变（暗色） */
+html[data-theme="dark"] .app-shell[data-tone="blue"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(59, 130, 246, 0.32), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(96, 165, 250, 0.14), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(37, 99, 235, 0.1), transparent 55%),
+    linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="green"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(34, 197, 94, 0.26), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(52, 211, 153, 0.12), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(16, 185, 129, 0.08), transparent 55%),
+    linear-gradient(160deg, #07140f 0%, #0f2a1c 45%, #060f0a 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="purple"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(139, 92, 246, 0.3), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(167, 139, 250, 0.14), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(192, 132, 252, 0.1), transparent 55%),
+    linear-gradient(160deg, #100816 0%, #1a1028 45%, #0e0a18 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="orange"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(245, 158, 11, 0.2), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(251, 146, 60, 0.1), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(234, 88, 12, 0.08), transparent 55%),
+    linear-gradient(160deg, #100e0a 0%, #241810 45%, #0c0a08 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="pink"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(236, 72, 153, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(244, 114, 182, 0.12), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(219, 39, 119, 0.08), transparent 55%),
+    linear-gradient(160deg, #120810 0%, #2a1420 45%, #0e060c 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="cyan"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(6, 182, 212, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(34, 211, 238, 0.12), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(8, 145, 178, 0.08), transparent 55%),
+    linear-gradient(160deg, #071012 0%, #0e2a32 45%, #060c0e 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="indigo"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(99, 102, 241, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(129, 140, 248, 0.14), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(79, 70, 229, 0.1), transparent 55%),
+    linear-gradient(160deg, #0c0c1a 0%, #1c1a42 45%, #0a0a16 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="amber"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(245, 158, 11, 0.38), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(251, 191, 36, 0.22), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(217, 119, 6, 0.14), transparent 55%),
+    linear-gradient(160deg, #1a1408 0%, #78350f 45%, #120e08 100%);
+}
+
+html[data-theme="dark"] .app-shell[data-tone="teal"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(45, 212, 191, 0.4), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(94, 234, 212, 0.22), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(13, 148, 136, 0.16), transparent 55%),
+    linear-gradient(160deg, #0a1a18 0%, #134e4a 45%, #071412 100%);
+}
+
+/* Tab 主题色驱动背景渐变（亮色） */
+html[data-theme="light"] .app-shell[data-tone="blue"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(96, 165, 250, 0.65), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(147, 197, 253, 0.45), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(191, 219, 254, 0.4), transparent 55%),
+    linear-gradient(165deg, #f0f7ff 0%, #dbeafe 48%, #e8f1fc 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="green"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(74, 222, 128, 0.5), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(110, 231, 183, 0.4), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(167, 243, 208, 0.38), transparent 55%),
+    linear-gradient(165deg, #f0fdf6 0%, #dcfce7 48%, #e8f8ef 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="purple"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(167, 139, 250, 0.55), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(196, 181, 253, 0.45), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(221, 214, 254, 0.4), transparent 55%),
+    linear-gradient(165deg, #f5f3ff 0%, #ede9fe 48%, #f0ecff 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="orange"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(251, 146, 60, 0.5), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(253, 186, 116, 0.42), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(254, 215, 170, 0.38), transparent 55%),
+    linear-gradient(165deg, #fff7ed 0%, #ffedd5 48%, #fff4e8 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="pink"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(244, 114, 182, 0.5), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(249, 168, 212, 0.42), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(251, 207, 232, 0.4), transparent 55%),
+    linear-gradient(165deg, #fdf2f8 0%, #fce7f3 48%, #fdf0f7 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="cyan"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(34, 211, 238, 0.48), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(103, 232, 249, 0.38), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(165, 243, 252, 0.36), transparent 55%),
+    linear-gradient(165deg, #f0fdff 0%, #cffafe 48%, #e8fafc 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="indigo"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(129, 140, 248, 0.55), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(165, 180, 252, 0.42), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(199, 210, 254, 0.4), transparent 55%),
+    linear-gradient(165deg, #eef2ff 0%, #e0e7ff 48%, #eef0ff 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="amber"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(251, 191, 36, 0.5), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(252, 211, 77, 0.4), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(253, 230, 138, 0.38), transparent 55%),
+    linear-gradient(165deg, #fffbeb 0%, #fef3c7 48%, #fff8e8 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="teal"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(45, 212, 191, 0.48), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(94, 234, 212, 0.38), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(153, 246, 228, 0.36), transparent 55%),
+    linear-gradient(165deg, #f0fdfa 0%, #ccfbf1 48%, #e8faf6 100%);
+}
+
+.body-row {
+  --sidebar-w: 72px;
+  --sidebar-w-wide: 228px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 0;
+  gap: 0;
+  position: relative;
+}
+
+/* 左缘热区：收起时鼠标靠近即可展开 */
+.sidebar-hotzone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  z-index: 35;
+}
+
+.sidebar {
+  --sidebar-collapsed: 0px;
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 48px 8px 16px;
+  border-radius: 0;
+  background: var(--sidebar-bg);
+  border: none;
+  border-right: 1px solid var(--glass-edge);
+  backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+  overflow: hidden;
+  transform: translateX(calc(-1 * 100% + var(--sidebar-collapsed)));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
+  box-shadow:
+    8px 0 32px rgba(15, 23, 42, 0.08),
+    inset -1px 0 0 rgba(255, 255, 255, 0.35);
+}
+
+.sidebar.is-labels {
+  width: var(--sidebar-w-wide);
+  padding: 48px 10px 16px;
+}
+
+/* 侧栏透出壳层渐变；叠加一层极淡主题色，与 tab 同步即时变色 */
+.sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(ellipse 120% 80% at 0% 0%,
+      var(--tone-soft, transparent) 0%,
+      transparent 70%);
+  opacity: 0.85;
+}
+
+.app-shell[data-tone="blue"] .sidebar {
+  --tone-soft: var(--tone-blue-soft);
+}
+
+.app-shell[data-tone="green"] .sidebar {
+  --tone-soft: var(--tone-green-soft);
+}
+
+.app-shell[data-tone="purple"] .sidebar {
+  --tone-soft: var(--tone-purple-soft);
+}
+
+.app-shell[data-tone="orange"] .sidebar {
+  --tone-soft: var(--tone-orange-soft);
+}
+
+.app-shell[data-tone="pink"] .sidebar {
+  --tone-soft: var(--tone-pink-soft);
+}
+
+.app-shell[data-tone="cyan"] .sidebar {
+  --tone-soft: var(--tone-cyan-soft);
+}
+
+.app-shell[data-tone="indigo"] .sidebar {
+  --tone-soft: var(--tone-indigo-soft);
+}
+
+.app-shell[data-tone="amber"] .sidebar {
+  --tone-soft: var(--tone-amber-soft);
+}
+
+.app-shell[data-tone="teal"] .sidebar {
+  --tone-soft: var(--tone-teal-soft);
+}
+
+/* 内容区卡片继承当前 tab 主题色，与侧栏同色调 */
+.app-shell[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+  --shell-tone-soft: var(--tone-blue-soft);
+}
+
+.app-shell[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+  --shell-tone-soft: var(--tone-green-soft);
+}
+
+.app-shell[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+  --shell-tone-soft: var(--tone-purple-soft);
+}
+
+.app-shell[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+  --shell-tone-soft: var(--tone-orange-soft);
+}
+
+.app-shell[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-soft: var(--tone-pink-soft);
+  --shell-tone-soft: var(--tone-pink-soft);
+}
+
+.app-shell[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+  --shell-tone-soft: var(--tone-cyan-soft);
+}
+
+.app-shell[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+  --shell-tone-soft: var(--tone-indigo-soft);
+}
+
+.app-shell[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+  --shell-tone-soft: var(--tone-amber-soft);
+}
+
+.app-shell[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+  --shell-tone-soft: var(--tone-teal-soft);
+}
+
+.sidebar>* {
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar.is-open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 固定：参与布局占位，不再浮层遮挡内容 */
+.sidebar.is-pinned {
+  position: relative;
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: none;
+  background: var(--sidebar-pinned-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 14px;
+  white-space: nowrap;
+}
+
+.sidebar-brand-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar.is-labels .sidebar-brand {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 16px;
+}
+
+.sidebar.is-labels .sidebar-brand-text {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar.is-labels .sidebar-brand-actions {
+  flex-direction: row;
+  margin-left: auto;
+  gap: 4px;
+}
+
+.sidebar-pin-btn {
+  margin-left: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-soft, var(--chip-bg));
+  border: 1px solid color-mix(in srgb, var(--tone, var(--ink)) 22%, transparent);
+  color: var(--tone, var(--ink-soft));
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.sidebar-pin-btn[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+}
+
+.sidebar-pin-btn[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+}
+
+.sidebar-pin-btn[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+}
+
+.sidebar-pin-btn[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+}
+
+.sidebar-pin-btn[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-soft: var(--tone-pink-soft);
+}
+
+.sidebar-pin-btn[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+}
+
+.sidebar-pin-btn[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+}
+
+.sidebar-pin-btn[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+}
+
+.sidebar-pin-btn[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+}
+
+.sidebar-pin-btn:hover {
+  background: color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent);
+  color: var(--tone, var(--ink));
+}
+
+.sidebar-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.45), transparent 50%),
+    linear-gradient(145deg, var(--tone, #c084fc), color-mix(in srgb, var(--tone, #6366f1) 70%, #312e81));
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 8px 20px var(--tone-glow, rgba(124, 58, 237, 0.35));
+  flex-shrink: 0;
+}
+
+.sidebar-logo[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-glow: var(--tone-blue-glow);
+}
+
+.sidebar-logo[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-glow: var(--tone-green-glow);
+}
+
+.sidebar-logo[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-glow: var(--tone-purple-glow);
+}
+
+.sidebar-logo[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-glow: var(--tone-orange-glow);
+}
+
+.sidebar-logo[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-glow: var(--tone-pink-glow);
+}
+
+.sidebar-logo[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-glow: var(--tone-cyan-glow);
+}
+
+.sidebar-logo[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-glow: var(--tone-indigo-glow);
+}
+
+.sidebar-logo[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-glow: var(--tone-amber-glow);
+}
+
+.sidebar-logo[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-glow: var(--tone-teal-glow);
+}
+
+.sidebar-brand-text {
+  display: none;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

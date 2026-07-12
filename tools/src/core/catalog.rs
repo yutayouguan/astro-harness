@@ -1,0 +1,261 @@
+//! 工具目录：按 toolset 聚合，供 UI / Tauri 展示 schema 参数
+//!
+//! `icon` 字段存 Lucide 图标 id（kebab-case，如 `calendar-check`），
+//! 由前端渲染成对应 Lucide 图标，不是 Unicode emoji。
+
+use serde::Serialize;
+use serde_json::Value;
+
+use crate::registry::ToolRegistry;
+
+/// 单个工具参数的 UI 展示信息，从 JSON Schema `properties` 提取。
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolParamInfo {
+    /// 参数名，与 schema `properties` 键名一致。
+    pub name: String,
+    /// JSON Schema 类型字符串，如 `"string"`、`"integer"`、`"any"`。
+    #[serde(rename = "type")]
+    pub type_name: String,
+    /// 是否可选；不在 `required` 数组中则为 `true`。
+    pub optional: bool,
+    /// 参数说明，来自 schema `description` 字段。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// 单个可调用函数的 UI 展示信息；`icon` 为 Lucide 图标 id（如 `calendar-check`）。
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolFunctionInfo {
+    /// 工具函数名。
+    pub name: String,
+    /// 面向用户的工具说明。
+    pub description: String,
+    /// Lucide 图标 id（kebab-case），例如 `"calendar-check"` / `"folder-kanban"`。
+    pub icon: String,
+    /// 该函数的全部参数列表。
+    pub params: Vec<ToolParamInfo>,
+}
+
+/// 按 toolset 聚合的工具目录项，供前端设置面板与工具列表展示。
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolCatalogItem {
+    /// 与前端开关对齐的 toolset id。
+    pub id: String,
+    /// 代表性工具名（通常与 id 相同）。
+    pub name: String,
+    /// 代表性工具的说明文本。
+    pub description: String,
+    /// Lucide 图标 id（kebab-case）。
+    pub icon: String,
+    /// 代表性工具的参数列表（与 `functions[0]` 可能不同，取决于 id 匹配）。
+    pub params: Vec<ToolParamInfo>,
+    /// 该 toolset 下全部工具名（兼容旧前端）。
+    pub tools: Vec<String>,
+    /// 每个函数的完整说明与参数。
+    pub functions: Vec<ToolFunctionInfo>,
+}
+
+/// 从 JSON Schema object 提取参数列表。
+///
+/// 读取 `properties` 与 `required`；结果按名称排序，必填项排在可选项之前。
+/// 非 object 类型或缺少 `properties` 时返回空列表。
+pub fn params_from_schema(schema: &Value) -> Vec<ToolParamInfo> {
+    let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
+        return Vec::new();
+    };
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
+    let mut params: Vec<ToolParamInfo> = props
+        .iter()
+        .map(|(name, prop)| {
+            let type_name = json_schema_type(prop);
+            let description = prop
+                .get("description")
+                .and_then(|d| d.as_str())
+                .map(str::to_string);
+            ToolParamInfo {
+                name: name.clone(),
+                type_name,
+                optional: !required.contains(&name.as_str()),
+                description,
+            }
+        })
+        .collect();
+    params.sort_by(|a, b| a.name.cmp(&b.name));
+    params.sort_by_key(|p| p.optional);
+    params
+}
+
+/// 从单个 schema 属性节点推断类型字符串。
+///
+/// 支持 `type` 字符串/数组（忽略 `"null"`）、`anyOf`/`oneOf`、`enum`、`$ref` 等常见形态。
+fn json_schema_type(prop: &Value) -> String {
+    match prop.get("type") {
+        Some(Value::String(t)) => t.clone(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|t| t.as_str())
+            .find(|t| *t != "null")
+            .unwrap_or("any")
+            .to_string(),
+        _ => {
+            if prop.get("anyOf").is_some() || prop.get("oneOf").is_some() {
+                "any".to_string()
+            } else if prop.get("enum").is_some() {
+                "string".to_string()
+            } else if prop.get("$ref").is_some() {
+                "object".to_string()
+            } else {
+                "any".to_string()
+            }
+        }
+    }
+}
+
+/// 将同一 toolset 下的多个 [`ToolEntry`] 聚合为一个 [`ToolCatalogItem`]。
+///
+/// 优先选取 `name == id` 的条目作为代表性工具（决定顶层 `params` 与 `description`）。
+fn entries_to_item(id: String, mut entries: Vec<&crate::registry::ToolEntry>) -> ToolCatalogItem {
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    let primary = entries
+        .iter()
+        .find(|e| e.name == id)
+        .or_else(|| entries.first())
+        .copied()
+        .expect("entries non-empty");
+
+    let functions: Vec<ToolFunctionInfo> = entries
+        .iter()
+        .map(|e| ToolFunctionInfo {
+            name: e.name.clone(),
+            description: e.description.clone(),
+            icon: e.icon.to_string(),
+            params: params_from_schema(&e.schema),
+        })
+        .collect();
+    let tools: Vec<String> = functions.iter().map(|f| f.name.clone()).collect();
+
+    ToolCatalogItem {
+        id,
+        name: primary.name.clone(),
+        description: primary.description.clone(),
+        icon: primary.icon.to_string(),
+        params: params_from_schema(&primary.schema),
+        tools,
+        functions,
+    }
+}
+
+/// 按已知 toolset 顺序输出目录；顶层 `params` 取代表性工具的 schema。
+///
+/// 先输出 `memory::KNOWN_TOOLSET_IDS` 中定义的顺序，其余未知 toolset 追加在后。
+pub fn catalog_for_ui(registry: &ToolRegistry) -> Vec<ToolCatalogItem> {
+    use std::collections::BTreeMap;
+
+    let mut by_set: BTreeMap<String, Vec<&crate::registry::ToolEntry>> = BTreeMap::new();
+    for entry in registry.all_tools() {
+        by_set
+            .entry(entry.toolset.clone())
+            .or_default()
+            .push(entry);
+    }
+
+    let mut out = Vec::new();
+    for &id in memory::KNOWN_TOOLSET_IDS {
+        let Some(entries) = by_set.remove(id) else {
+            continue;
+        };
+        out.push(entries_to_item(id.to_string(), entries));
+    }
+
+    for (id, entries) in by_set {
+        out.push(entries_to_item(id, entries));
+    }
+
+    out
+}
+
+/// 构建并返回完整内置工具目录（无需外部注册表，内部临时注册全部内置工具）。
+pub fn builtin_catalog() -> Vec<ToolCatalogItem> {
+    let mut reg = ToolRegistry::new();
+    crate::register_all(&mut reg);
+    catalog_for_ui(&reg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_required_and_optional() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "q" },
+                "limit": { "type": "integer" }
+            },
+            "required": ["query"]
+        });
+        let params = params_from_schema(&schema);
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].name, "query");
+        assert!(!params[0].optional);
+        assert!(params.iter().any(|p| p.name == "limit" && p.optional));
+    }
+
+    #[test]
+    fn builtin_catalog_covers_known_toolsets() {
+        let cat = builtin_catalog();
+        assert!(cat.len() >= memory::KNOWN_TOOLSET_IDS.len());
+        let file_ops = cat.iter().find(|c| c.id == "file_ops").expect("file_ops");
+        assert_eq!(file_ops.icon, "folder-kanban");
+        assert!(file_ops.params.iter().any(|p| p.name == "path"));
+        assert!(!file_ops.functions.is_empty());
+        assert_eq!(file_ops.functions[0].icon, "folder-kanban");
+    }
+
+    #[test]
+    fn memory_has_per_function_params() {
+        let cat = builtin_catalog();
+        let memory = cat.iter().find(|c| c.id == "memory").expect("memory");
+        assert!(memory.functions.len() >= 3);
+        let add = memory
+            .functions
+            .iter()
+            .find(|f| f.name == "memory_add")
+            .expect("memory_add");
+        assert!(add.params.iter().any(|p| p.name == "entry"));
+        // Lucide kebab-case id，不是 Unicode emoji
+        assert_eq!(add.icon, "brain");
+        assert!(add.icon.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()));
+    }
+
+    #[test]
+    fn scheduled_uses_calendar_check_icon() {
+        let cat = builtin_catalog();
+        let scheduled = cat.iter().find(|c| c.id == "scheduled").expect("scheduled");
+        assert_eq!(scheduled.icon, "calendar-check");
+    }
+
+    #[test]
+    fn all_builtin_icons_are_lucide_kebab() {
+        let mut reg = crate::registry::ToolRegistry::new();
+        crate::register_all(&mut reg);
+        for e in reg.all_tools() {
+            assert!(
+                !e.icon.is_empty()
+                    && e.icon
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()),
+                "tool `{}` icon `{}` 应为 Lucide kebab-case id",
+                e.name,
+                e.icon
+            );
+        }
+    }
+}

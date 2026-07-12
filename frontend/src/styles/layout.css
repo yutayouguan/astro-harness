@@ -1,0 +1,463 @@
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: 14px;
+  padding: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
+.nav-item:hover:not(.active) .nav-icon {
+  color: var(--tone, var(--ink));
+  opacity: 1;
+}
+
+.nav-item.active {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
+  color: var(--tone, var(--ink));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone, transparent) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+
+.nav-item.active::before {
+  display: none;
+}
+
+.nav-label {
+  display: none;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.sidebar.is-labels .nav-item {
+  justify-content: flex-start;
+  padding: 11px 12px;
+  gap: 10px;
+}
+
+.sidebar.is-labels .nav-label {
+  display: inline;
+}
+
+.sidebar.is-labels .nav-item.active::before {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tone, var(--pink));
+  box-shadow: 0 0 8px var(--tone-glow, rgba(244, 114, 182, 0.9));
+}
+
+.sidebar.is-labels .nav-item.active {
+  padding-left: 16px;
+}
+
+.nav-item[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-glow: var(--tone-blue-glow);
+  --tone-soft: var(--tone-blue-soft);
+}
+
+.nav-item[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-glow: var(--tone-green-glow);
+  --tone-soft: var(--tone-green-soft);
+}
+
+.nav-item[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-glow: var(--tone-purple-glow);
+  --tone-soft: var(--tone-purple-soft);
+}
+
+.nav-item[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-glow: var(--tone-orange-glow);
+  --tone-soft: var(--tone-orange-soft);
+}
+
+.nav-item[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-glow: var(--tone-pink-glow);
+  --tone-soft: var(--tone-pink-soft);
+}
+
+.nav-item[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-glow: var(--tone-cyan-glow);
+  --tone-soft: var(--tone-cyan-soft);
+}
+
+.nav-item[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-glow: var(--tone-indigo-glow);
+  --tone-soft: var(--tone-indigo-soft);
+}
+
+.nav-item[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-glow: var(--tone-amber-glow);
+  --tone-soft: var(--tone-amber-soft);
+}
+
+.nav-item[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-glow: var(--tone-teal-glow);
+  --tone-soft: var(--tone-teal-soft);
+}
+
+.nav-item.active[data-tone] {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--tone-soft) 60%, transparent);
+}
+
+html[data-theme="dark"] .nav-item.active,
+html[data-theme="dark"] .nav-item.active[data-tone] {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 48%, rgba(8, 6, 18, 0.4));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  opacity: 0.78;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  /* 默认不上色：中性描边 */
+  color: var(--ink-mute, var(--ink-soft));
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.nav-item.active .nav-icon {
+  color: var(--tone, var(--accent));
+  opacity: 1;
+  /* 内部镂空用高对比色，避免填实后只剩一个色块 */
+  --nav-icon-cutout: #fff;
+}
+
+html[data-theme="dark"] .nav-item.active .nav-icon {
+  --nav-icon-cutout: color-mix(in srgb, var(--tone-soft) 30%, #0b1220);
+}
+
+.nav-icon svg {
+  display: block;
+  transition: fill 0.15s ease, stroke 0.15s ease;
+}
+
+/* 选中：主体填充上色 */
+.nav-item.active .nav-icon svg {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* 复杂线稿：浅填充，保留描边细节 */
+.nav-item.active .nav-icon svg[data-nav-fill="soft"] {
+  fill: currentColor;
+  fill-opacity: 0.22;
+  stroke: currentColor;
+}
+
+/* 内部线条：对比色描边，避免填实后看不清 */
+.nav-item.active .nav-icon svg .nav-icon-cutout {
+  fill: none;
+  stroke: var(--nav-icon-cutout, #fff);
+  stroke-width: 2.25;
+}
+
+/* 内部圆孔：对比色实心，形成镂空 */
+.nav-item.active .nav-icon svg .nav-icon-hole {
+  fill: var(--nav-icon-cutout, #fff);
+  stroke: none;
+}
+
+.nav-label {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.page-title-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.page-title-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--tone, var(--accent));
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  box-shadow: var(--badge-shadow);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+}
+
+html[data-theme="dark"] .page-title-icon {
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.12) 0%, transparent 55%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft, transparent) 75%, rgba(8, 6, 18, 0.55));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 28%, rgba(255, 255, 255, 0.1));
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.35),
+    0 0 12px color-mix(in srgb, var(--tone-glow, transparent) 35%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: var(--tone, var(--accent));
+}
+
+.page-title-icon[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+  --tone-glow: var(--tone-blue-glow);
+}
+
+.page-title-icon[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+  --tone-glow: var(--tone-green-glow);
+}
+
+.page-title-icon[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+  --tone-glow: var(--tone-purple-glow);
+}
+
+.page-title-icon[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+  --tone-glow: var(--tone-orange-glow);
+}
+
+.page-title-icon[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-soft: var(--tone-pink-soft);
+  --tone-glow: var(--tone-pink-glow);
+}
+
+.page-title-icon[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+  --tone-glow: var(--tone-cyan-glow);
+}
+
+.page-title-icon[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+  --tone-glow: var(--tone-indigo-glow);
+}
+
+.page-title-icon[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+  --tone-glow: var(--tone-amber-glow);
+}
+
+.page-title-icon[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+  --tone-glow: var(--tone-teal-glow);
+}
+
+.content-title[data-tone="blue"] {
+  color: var(--tone-blue);
+}
+
+.content-title[data-tone="green"] {
+  color: var(--tone-green);
+}
+
+.content-title[data-tone="purple"] {
+  color: var(--tone-purple);
+}
+
+.content-title[data-tone="orange"] {
+  color: var(--tone-orange);
+}
+
+.content-title[data-tone="pink"] {
+  color: var(--tone-pink);
+}
+
+.content-title[data-tone="cyan"] {
+  color: var(--tone-cyan);
+}
+
+.content-title[data-tone="indigo"] {
+  color: var(--tone-indigo);
+}
+
+.content-title[data-tone="amber"] {
+  color: var(--tone-amber);
+}
+
+.content-title[data-tone="teal"] {
+  color: var(--tone-teal);
+}
+
+.content-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  /* 与侧栏 brand 区顶对齐，仅保留标题栏安全区 */
+  padding: 28px 28px 8px;
+}
+
+.content-search-row {
+  padding: 0 28px 12px;
+}
+
+.content-search-row .search-pill {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+}
+
+.content-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  border: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-soft, var(--chip-bg));
+  border: 1px solid color-mix(in srgb, var(--tone, var(--ink)) 22%, transparent);
+  color: var(--tone, var(--ink-soft));
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.sidebar-toggle[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+}
+
+.sidebar-toggle[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+}
+
+.sidebar-toggle[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+}
+
+.sidebar-toggle[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+}
+
+.sidebar-toggle[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-soft: var(--tone-pink-soft);
+}
+
+.sidebar-toggle[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+}
+
+.sidebar-toggle[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+}
+
+.sidebar-toggle[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+}
+
+.sidebar-toggle[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+}
+
+.sidebar-toggle:hover {
+  background: color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent);
+  color: var(--tone, var(--ink));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 40%, transparent);
+}
+
+.sidebar-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--tone, var(--accent)) 24%, transparent);
+  color: var(--tone, var(--accent));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 45%, transparent);
+}
+
+.sidebar-toggle svg {
+  display: block;
+}
+
+.content-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.content-sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-mute);
+}

@@ -1,0 +1,239 @@
+/* 浮层下拉统一毛玻璃（portal 到 body 时模糊才生效） */
+.glass-menu {
+  border-radius: 16px;
+  border: 1px solid var(--menu-glass-border);
+  background: var(--menu-glass-bg);
+  box-shadow: var(--menu-glass-shadow);
+  backdrop-filter: var(--menu-glass-blur);
+  -webkit-backdrop-filter: var(--menu-glass-blur);
+  isolation: isolate;
+}
+
+/* 表单用自定义下拉 — 全宽可点 + 单箭头 chevron；亮/暗液态玻璃 */
+.select-menu {
+  --select-tone: var(--tone, var(--tone-orange, #f59e0b));
+  --select-tone-soft: var(--tone-soft, var(--tone-orange-soft, rgba(245, 158, 11, 0.14)));
+  --select-glass-fill:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--select-tone-soft) 45%, rgba(255, 255, 255, 0.18));
+  --select-glass-fill-hover:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
+    color-mix(in srgb, var(--select-tone-soft) 58%, rgba(255, 255, 255, 0.22));
+  --select-glass-edge: color-mix(in srgb, var(--select-tone) 16%, rgba(255, 255, 255, 0.5));
+  --select-glass-rim:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28);
+  --select-glass-shadow:
+    0 6px 16px color-mix(in srgb, var(--select-tone) 8%, rgba(15, 23, 42, 0.05)),
+    0 1px 3px rgba(15, 23, 42, 0.03);
+  --select-glass-blur: blur(16px) saturate(1.2);
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.select-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 9px 10px 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--select-glass-edge);
+  background: var(--select-glass-fill);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--select-glass-shadow), var(--select-glass-rim);
+  backdrop-filter: var(--select-glass-blur);
+  -webkit-backdrop-filter: var(--select-glass-blur);
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    box-shadow 0.14s ease,
+    color 0.14s ease;
+}
+
+.select-menu-trigger:hover:not(:disabled),
+.select-menu.is-open .select-menu-trigger {
+  background: var(--select-glass-fill-hover);
+  border-color: color-mix(in srgb, var(--select-tone) 32%, rgba(255, 255, 255, 0.75));
+  color: color-mix(in srgb, var(--select-tone) 55%, var(--ink));
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--select-tone) 14%, transparent),
+    0 2px 6px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+}
+
+.select-menu-trigger:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--select-tone) 45%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 3px color-mix(in srgb, var(--select-tone) 16%, transparent);
+}
+
+.select-menu-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.select-menu-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.select-menu-chevron {
+  flex-shrink: 0;
+  color: var(--ink-mute);
+  opacity: 0.75;
+  transition: transform 0.16s ease, color 0.14s ease, opacity 0.14s ease;
+}
+
+.select-menu.is-open .select-menu-chevron,
+.select-menu-chevron.is-open,
+.select-menu-trigger:hover:not(:disabled) .select-menu-chevron {
+  color: var(--select-tone);
+  opacity: 1;
+}
+
+.select-menu.is-open .select-menu-chevron,
+.select-menu-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.select-menu-list {
+  position: fixed;
+  z-index: 120;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow: auto;
+  max-height: min(260px, 42vh);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--select-tone) 14%, var(--menu-glass-border));
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--select-tone-soft) 35%, transparent) 0%,
+      transparent 55%
+    ),
+    var(--menu-glass-bg);
+  box-shadow:
+    var(--menu-glass-shadow),
+    0 0 0 1px color-mix(in srgb, var(--select-tone) 6%, transparent);
+  backdrop-filter: var(--menu-glass-blur);
+  -webkit-backdrop-filter: var(--menu-glass-blur);
+  isolation: isolate;
+}
+
+.select-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.select-menu-option:hover {
+  background: color-mix(in srgb, var(--select-tone) 10%, transparent);
+}
+
+.select-menu-option.is-active {
+  color: var(--select-tone);
+  background: var(--select-tone-soft);
+  font-weight: 650;
+}
+
+.select-menu-option-label {
+  flex: 1 1 auto;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.select-menu-check {
+  flex-shrink: 0;
+  color: var(--select-tone);
+}
+
+.select-menu--sm .select-menu-trigger {
+  min-height: 36px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 8px 8px 10px;
+  font-size: 13px;
+}
+
+.select-menu--sm .select-menu-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-menu--sm {
+  /* 约三个汉字 + 箭头 */
+  width: 5.75rem;
+  min-width: 5.75rem;
+  max-width: 5.75rem;
+  flex: 0 0 auto;
+}
+
+html[data-theme="dark"] .select-menu {
+  --select-glass-fill:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    color-mix(in srgb, var(--select-tone-soft) 28%, rgba(8, 6, 18, 0.55));
+  --select-glass-fill-hover:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
+    color-mix(in srgb, var(--select-tone-soft) 42%, rgba(8, 6, 18, 0.52));
+  --select-glass-edge: color-mix(in srgb, var(--select-tone) 22%, rgba(255, 255, 255, 0.08));
+  --select-glass-rim:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  --select-glass-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.24);
+}
+
+html[data-theme="dark"] .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"] .select-menu.is-open .select-menu-trigger {
+  border-color: color-mix(in srgb, var(--select-tone) 40%, rgba(255, 255, 255, 0.16));
+  color: color-mix(in srgb, #fff 18%, var(--select-tone));
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--select-tone) 18%, rgba(0, 0, 0, 0.4)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+html[data-theme="dark"] .select-menu-list {
+  border-color: color-mix(in srgb, var(--select-tone) 22%, var(--menu-glass-border));
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--select-tone-soft) 40%, transparent) 0%,
+      transparent 55%
+    ),
+    var(--menu-glass-bg);
+  box-shadow: var(--menu-glass-shadow);
+}

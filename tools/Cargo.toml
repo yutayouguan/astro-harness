@@ -1,0 +1,24 @@
+[package]
+name = "tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../common" }
+memory = { path = "../memory" }
+providers = { path = "../providers" }
+skills = { path = "../skills" }
+tokio = { workspace = true, features = ["process", "time", "rt", "macros"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+urlencoding = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

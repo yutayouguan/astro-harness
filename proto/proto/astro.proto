@@ -1,0 +1,146 @@
+// Astro Agent gRPC 协议：桌面壳 / 独立 backend 共用的服务与消息定义。
+//
+syntax = "proto3";
+package astro;
+
+// 核心 RPC：聊天流、控制、图片、技能、MCP、记忆与沙箱文件。
+service AstroService {
+  // 多轮流式对话：token / reasoning / tool_call / usage / done 等事件。
+  rpc Chat(ChatRequest) returns (stream ChatEvent);
+  // 对进行中的 Chat 流执行暂停 / 继续 / 取消。
+  rpc ChatControl(ChatControlRequest) returns (Empty);
+  // 文生图流：进度、图片字节或错误。
+  rpc GenerateImage(ImageRequest) returns (stream ImageEvent);
+  // 列出已安装且可用于提示的技能。
+  rpc ListSkills(Empty) returns (SkillList);
+  // 执行指定技能，流式返回输出。
+  rpc ExecuteSkill(SkillRequest) returns (stream SkillEvent);
+  // 列出 MCP 服务器连接状态与工具名。
+  rpc ListMcpServers(Empty) returns (McpServerList);
+  // 按查询召回 MEMORY / USER 与近期会话摘要。
+  rpc QueryMemory(MemoryQuery) returns (MemoryResult);
+  // 在记忆沙箱内列举文件（受根目录约束）。
+  rpc ListFiles(FileListRequest) returns (FileListResponse);
+}
+
+// 空请求/响应占位。
+message Empty {}
+
+// 发起一轮聊天所需的会话、模型与工具/图片凭证。
+message ChatRequest {
+  string session_id = 1;   // 空则服务端生成新 UUID
+  string content = 2;      // 用户输入
+  string provider = 3;     // 供应商 id，空则 ollama
+  string model = 4;
+  repeated string tool_names = 5; // 允许的工具名列表（可空=默认）
+  bool use_memory = 6;
+  // 由前端从 keyring / providers.json 注入；空则后端回退环境变量
+  string api_key = 7;
+  string base_url = 8;
+  // 图片生成主提供商凭证（Tauri 从已开启的 Google/OpenAI 解析）
+  string image_gen_provider = 9;
+  string image_gen_model = 10;
+  string image_gen_api_key = 11;
+  string image_gen_base_url = 12;
+  // 备用图片生成凭证
+  string image_gen_fallback_provider = 13;
+  string image_gen_fallback_model = 14;
+  string image_gen_fallback_api_key = 15;
+  string image_gen_fallback_base_url = 16;
+  // DeepSeek V4 thinking 控制（前端输入框）
+  bool thinking_enabled = 17;
+  string reasoning_effort = 18;
+}
+
+// Chat 流控制动作。
+enum ChatControlAction {
+  CHAT_CONTROL_UNSPECIFIED = 0;
+  CHAT_CONTROL_PAUSE = 1;
+  CHAT_CONTROL_RESUME = 2;
+  CHAT_CONTROL_CANCEL = 3;
+}
+
+message ChatControlRequest {
+  string session_id = 1;
+  ChatControlAction action = 2;
+}
+
+// Token 用量（OpenAI 风格字段）。
+message UsageEvent {
+  uint32 prompt_tokens = 1;
+  uint32 completion_tokens = 2;
+  uint32 total_tokens = 3;
+}
+
+// Chat 流的单条事件（oneof 互斥）。
+message ChatEvent {
+  oneof payload {
+    string token = 1;
+    ToolCallEvent tool_call = 2;
+    MemoryUpdateEvent memory_update = 3;
+    string error = 4;
+    bool done = 5;
+    // DeepSeek 等模型的 thinking / reasoning_content 流
+    string reasoning = 6;
+    UsageEvent usage = 7;
+    // 原生 function calling 流式片段
+    ToolCallDeltaEvent tool_call_delta = 8;
+  }
+}
+
+// 完整工具调用结果（含执行输出）。
+message ToolCallEvent {
+  string id = 1;
+  string name = 2;
+  string arguments_json = 3;
+  string result = 4;
+}
+
+// 工具调用参数的流式增量。
+message ToolCallDeltaEvent {
+  uint32 index = 1;
+  string id = 2;
+  string name = 3;
+  // 参数 JSON 增量片段（可能不完整）
+  string arguments = 4;
+}
+
+message MemoryUpdateEvent {
+  string operation = 1;
+  string content = 2;
+}
+
+message ImageRequest {
+  string prompt = 1;
+  string provider = 2;
+  string model = 3;
+  int32 width = 4;
+  int32 height = 5;
+  int32 count = 6;
+  string api_key = 7;
+  string base_url = 8;
+}
+
+message ImageEvent {
+  oneof payload {
+    string progress = 1;
+    bytes image_data = 2;
+    string error = 3;
+  }
+}
+
+message SkillRequest { string name = 1; string params_json = 2; }
+message SkillEvent { oneof payload { string output = 1; string error = 2; bool done = 3; } }
+message SkillList { repeated SkillInfo skills = 1; }
+message SkillInfo { string name = 1; string description = 2; string category = 3; }
+
+message McpServerList { repeated McpServerInfo servers = 1; }
+message McpServerInfo { string name = 1; string status = 2; repeated string tools = 3; }
+
+message MemoryQuery { string query = 1; int32 limit = 2; }
+message MemoryResult { string memory_content = 1; string user_content = 2; repeated SessionSnippet sessions = 3; }
+message SessionSnippet { string session_id = 1; string summary = 2; }
+
+message FileListRequest { string path = 1; int32 depth = 2; }
+message FileListResponse { repeated FileEntry entries = 1; }
+message FileEntry { string path = 1; bool is_dir = 2; int64 size = 3; }
