@@ -151,8 +151,28 @@ pub async fn execute_job_with_roots(
         }
     }
 
-    db.get(&run_id)?
-        .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))
+    let row = db
+        .get(&run_id)?
+        .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))?;
+
+    if row.status == "success" {
+        memory::UsageDb::try_record(memory::NewUsageEvent {
+            ts: Utc::now().to_rfc3339(),
+            kind: "cron".into(),
+            name: job.id.clone(),
+            agent_id: job.agent_id.clone(),
+            session_id: row.session_id.clone(),
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            meta_json: Some(
+                serde_json::json!({ "title": job.title, "trigger": trigger }).to_string(),
+            ),
+        });
+    }
+
+    Ok(row)
 }
 
 /// 以 Agent 主循环执行 `job.task`，必要时进入 Provider 工具多轮循环。

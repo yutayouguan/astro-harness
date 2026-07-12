@@ -12,7 +12,7 @@ fn cache_path() -> std::path::PathBuf {
 /// 估算：`prompt * input_cost_per_token + completion * output_cost_per_token`。
 /// 未知模型或缺字段返回 `0.0`。
 pub fn estimate_llm_cost(model: &str, prompt_tokens: u32, completion_tokens: u32) -> f64 {
-    let model = model.trim();
+    let model = model.trim().to_ascii_lowercase();
     if model.is_empty() {
         return 0.0;
     }
@@ -25,12 +25,17 @@ pub fn estimate_llm_cost(model: &str, prompt_tokens: u32, completion_tokens: u32
     let Some(obj) = v.as_object() else {
         return 0.0;
     };
-    // 精确键或后缀匹配（provider/model）
-    let entry = obj.get(model).or_else(|| {
-        obj.iter()
-            .find(|(k, _)| k.ends_with(&format!("/{model}")) || *k == model)
-            .map(|(_, v)| v)
-    });
+    // 精确键或后缀匹配（provider/model）；比较时统一小写
+    let entry = obj
+        .get(&model)
+        .or_else(|| {
+            obj.iter()
+                .find(|(k, _)| {
+                    let k = k.to_ascii_lowercase();
+                    k == model || k.ends_with(&format!("/{model}"))
+                })
+                .map(|(_, v)| v)
+        });
     let Some(entry) = entry else {
         return 0.0;
     };
