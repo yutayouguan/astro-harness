@@ -20,6 +20,7 @@ pub mod dreaming;
 pub mod usage_stats;
 pub mod usage_db;
 pub mod usage_pricing;
+pub mod orchestration_db;
 
 pub use artifact_db::{
     artifacts_db_path, category_from_name, is_junk_artifact_name, open_default, ArtifactDb,
@@ -71,3 +72,7 @@ pub use usage_db::{
     UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
 };
 pub use usage_pricing::estimate_llm_cost;
+pub use orchestration_db::{
+    orchestration_db_path, NewOrchestration, NewOrchestrationStep, OrchestrationDb,
+    OrchestrationRow, OrchestrationStatus, StepRow, StepStatus,
+};
