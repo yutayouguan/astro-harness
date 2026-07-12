@@ -62,6 +62,25 @@ pub enum MultiTurnStreamItem {
         /// 结果预览（最长 240 字符）。
         content: String,
     },
+    /// AG-UI `RUN_STARTED`：一次用户发送对应一个 run。
+    RunStarted {
+        thread_id: String,
+        run_id: String,
+    },
+    /// AG-UI `ACTIVITY_SNAPSHOT`（如 A2UI surface）。
+    Activity {
+        message_id: String,
+        activity_type: String,
+        content_json: String,
+        replace: bool,
+    },
+    /// AG-UI `RUN_FINISHED`：`outcome_type` 为 `success` 或 `interrupt`。
+    RunFinished {
+        run_id: String,
+        outcome_type: String,
+        /// JSON array of Interrupt；success 时为空数组 `[]`。
+        interrupts_json: String,
+    },
     /// 不可恢复错误，之后必跟 `Done`。
     Error(String),
     /// 流正常或异常结束标记。
@@ -315,12 +334,30 @@ async fn finish_done(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>) {
     let _ = emit(tx, MultiTurnStreamItem::Done).await;
 }
 
+/// 发送 RunFinished(success) 后 Done。
+async fn finish_success(
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+) {
+    let _ = emit(
+        tx,
+        MultiTurnStreamItem::RunFinished {
+            run_id: run_id.to_string(),
+            outcome_type: "success".into(),
+            interrupts_json: "[]".into(),
+        },
+    )
+    .await;
+    finish_done(tx).await;
+}
+
 /// 可选发送累计 usage 后发送 Done；若有 usage 则旁路写入 `usage.db`（kind=llm）。
 async fn finish_usage_and_done(
     session: &Arc<Mutex<AgentLoop>>,
     model: &str,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     usage: Option<Usage>,
+    run_id: &str,
 ) {
     if let Some(u) = usage {
         record_llm_usage(session, model, &u).await;
@@ -330,7 +367,7 @@ async fn finish_usage_and_done(
         )
         .await;
     }
-    finish_done(tx).await;
+    finish_success(tx, run_id).await;
 }
 
 /// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
@@ -353,6 +390,19 @@ pub async fn run_multi_turn_stream(
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
 
+    let (thread_id, run_id) = {
+        let agent = session.lock().await;
+        (agent.session_id().to_string(), uuid::Uuid::new_v4().to_string())
+    };
+    let _ = emit(
+        &tx,
+        MultiTurnStreamItem::RunStarted {
+            thread_id,
+            run_id: run_id.clone(),
+        },
+    )
+    .await;
+
     let max_rounds = {
         let agent = session.lock().await;
         let n = agent.multi_turn();
@@ -365,11 +415,11 @@ pub async fn run_multi_turn_stream(
 
     for round in 0..max_rounds {
         if pause.is_cancelled() {
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
         if !pause.wait_if_paused().await {
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
 
@@ -412,13 +462,19 @@ pub async fn run_multi_turn_stream(
             // Rig 语义：先确认未 pause，再 poll 上游
             if !pause.wait_if_paused().await {
                 pause.clear_abort();
-                finish_usage_and_done(&session, &model, &tx, {
-                    if let Some(u) = round_usage {
-                        total_usage.add_assign(u);
-                        saw_usage = true;
-                    }
-                    saw_usage.then_some(total_usage)
-                })
+                finish_usage_and_done(
+                    &session,
+                    &model,
+                    &tx,
+                    {
+                        if let Some(u) = round_usage {
+                            total_usage.add_assign(u);
+                            saw_usage = true;
+                        }
+                        saw_usage.then_some(total_usage)
+                    },
+                    &run_id,
+                )
                 .await;
                 return;
             }
@@ -427,13 +483,20 @@ pub async fn run_multi_turn_stream(
                 biased;
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
-                    finish_usage_and_done(&session, &model, &tx, {
-                        if let Some(u) = round_usage {
-                            total_usage.add_assign(u);
-                            saw_usage = true;
-                        }
-                        saw_usage.then_some(total_usage)
-                    }).await;
+                    finish_usage_and_done(
+                        &session,
+                        &model,
+                        &tx,
+                        {
+                            if let Some(u) = round_usage {
+                                total_usage.add_assign(u);
+                                saw_usage = true;
+                            }
+                            saw_usage.then_some(total_usage)
+                        },
+                        &run_id,
+                    )
+                    .await;
                     return;
                 }
                 item = stream.next() => item,
@@ -510,7 +573,7 @@ pub async fn run_multi_turn_stream(
                 total_usage.add_assign(u);
                 saw_usage = true;
             }
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
 
@@ -573,11 +636,11 @@ pub async fn run_multi_turn_stream(
 
         for call in calls {
             if pause.is_cancelled() {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
                 return;
             }
             if !pause.wait_if_paused().await {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
                 return;
             }
 
@@ -599,7 +662,7 @@ pub async fn run_multi_turn_stream(
             };
 
             if pause.is_cancelled() {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
                 return;
             }
 
@@ -665,7 +728,7 @@ pub async fn run_multi_turn_stream(
         }
     }
 
-    finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+    finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
 }
 
 /// 在后台 task 启动 [`run_multi_turn_stream`]，并返回可消费的 [`MultiTurnStream`]。

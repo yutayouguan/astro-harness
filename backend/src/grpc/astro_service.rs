@@ -92,6 +92,53 @@ impl AstroServiceImpl {
     }
 }
 
+/// 解析 RunFinished.interrupts_json 为 proto Interrupt 列表。
+fn parse_interrupts_json(raw: &str) -> Vec<proto::Interrupt> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return Vec::new();
+    };
+    let Some(arr) = value.as_array() else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|item| {
+            Some(proto::Interrupt {
+                id: item.get("id")?.as_str()?.to_string(),
+                reason: item
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                message: item
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                tool_call_id: item
+                    .get("tool_call_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                response_schema_json: item
+                    .get("response_schema_json")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                expires_at: item
+                    .get("expires_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                metadata_json: item
+                    .get("metadata_json")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            })
+        })
+        .collect()
+}
+
 /// 将 agent 多轮流事件映射为 proto [`ChatEvent`]；无对应项时返回 `None`（当前均有映射）。
 fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
     match item {
@@ -141,6 +188,40 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                 },
             )),
         }),
+        MultiTurnStreamItem::RunStarted { thread_id, run_id } => Some(ChatEvent {
+            payload: Some(proto::chat_event::Payload::RunStarted(
+                proto::RunStartedEvent { thread_id, run_id },
+            )),
+        }),
+        MultiTurnStreamItem::Activity {
+            message_id,
+            activity_type,
+            content_json,
+            replace,
+        } => Some(ChatEvent {
+            payload: Some(proto::chat_event::Payload::Activity(proto::ActivityEvent {
+                message_id,
+                activity_type,
+                content_json,
+                replace,
+            })),
+        }),
+        MultiTurnStreamItem::RunFinished {
+            run_id,
+            outcome_type,
+            interrupts_json,
+        } => {
+            let interrupts = parse_interrupts_json(&interrupts_json);
+            Some(ChatEvent {
+                payload: Some(proto::chat_event::Payload::RunFinished(
+                    proto::RunFinishedEvent {
+                        run_id,
+                        outcome_type,
+                        interrupts,
+                    },
+                )),
+            })
+        }
         MultiTurnStreamItem::Error(err) => Some(ChatEvent {
             payload: Some(proto::chat_event::Payload::Error(err)),
         }),
@@ -187,7 +268,8 @@ impl AstroService for AstroServiceImpl {
         };
         match action {
             ChatControlAction::ChatControlPause => pause.pause(),
-            ChatControlAction::ChatControlResume => pause.resume(),
+            ChatControlAction::ChatControlResume
+            | ChatControlAction::ChatControlStreamResume => pause.resume(),
             ChatControlAction::ChatControlCancel => {
                 pause.cancel();
                 drop(map);
@@ -197,6 +279,20 @@ impl AstroService for AstroServiceImpl {
             }
             ChatControlAction::ChatControlUnspecified => {}
         }
+        Ok(Response::new(Empty {}))
+    }
+
+    /// 登记 interrupt resume（完整实现见后续 Task）；MVP stub 接受请求不改状态。
+    async fn interrupt_resume(
+        &self,
+        request: Request<proto::InterruptResumeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        if req.session_id.is_empty() {
+            return Err(Status::invalid_argument("session_id 不能为空"));
+        }
+        // Task 7 将接入 InterruptPending store；此处仅保证 trait 可编译。
+        let _ = req.resume;
         Ok(Response::new(Empty {}))
     }
 
