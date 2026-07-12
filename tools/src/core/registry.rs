@@ -1,8 +1,9 @@
 //! 工具注册表：集中管理内置与 MCP 工具的元数据、schema 与启用状态。
 //!
 //! `ToolRegistry` 是 Agent 与 LLM API 之间的桥梁，持有所有可调用工具的
-//! [`ToolEntry`]，并按 `~/.astro/tools-enabled.json` 与运行时 `check_fn`
-//! 过滤出当前会话实际可用的工具列表，供 `schemas_for_api` 下发给模型。
+//! [`ToolEntry`]，并按当前 Agent 的 `tools_enabled`（或全局
+//! `~/.astro/tools-enabled.json`）与运行时 `check_fn` 过滤出当前会话实际可用的
+//! 工具列表，供 `schemas_for_api` 下发给模型。
 
 use std::collections::HashMap;
 
@@ -32,7 +33,7 @@ pub struct ToolEntry {
 pub struct ToolRegistry {
     /// 已注册的全部工具条目。
     tools: HashMap<String, ToolEntry>,
-    /// 与 `~/.astro/tools-enabled.json` 对齐的 toolset 开关；缺失键视为启用。
+    /// 与当前 Agent / 全局 `tools-enabled` 对齐的 toolset 开关；缺失键视为启用。
     enabled: HashMap<String, bool>,
 }
 
@@ -50,9 +51,14 @@ impl ToolRegistry {
         self.enabled = enabled;
     }
 
-    /// 从磁盘重新加载 `tools-enabled.json` 默认值并覆盖 `enabled` 映射。
-    pub fn reload_enabled_from_disk(&mut self) {
-        self.enabled = memory::sync_tools_enabled_defaults().unwrap_or_default();
+    /// 从磁盘重新加载指定 Agent 的 toolset 启用表并覆盖 `enabled` 映射。
+    ///
+    /// `agent_id` 为 `None` 时读全局 `~/.astro/tools-enabled.json`；否则读
+    /// `AgentRuntimeConfig.tools_enabled`（缺失时回退全局），与前端
+    /// `save_tools_enabled_for_agent` 对齐。
+    pub fn reload_enabled_from_disk(&mut self, agent_id: Option<&str>) {
+        self.enabled =
+            memory::sync_tools_enabled_defaults_for_agent(agent_id).unwrap_or_default();
     }
 
     /// 判断指定 toolset 是否启用；未在映射中出现时默认返回 `true`。
@@ -135,6 +141,19 @@ impl ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    fn schema_names(reg: &ToolRegistry) -> Vec<String> {
+        reg.schemas_for_api()
+            .iter()
+            .filter_map(|s| {
+                s.pointer("/function/name")
+                    .and_then(|n| n.as_str())
+                    .map(str::to_string)
+            })
+            .collect()
+    }
 
     /// 断言所有内置工具的 parameters schema 不含厂商不友好结构。
     #[test]
@@ -160,6 +179,83 @@ mod tests {
                 panic!("tool `{name}` 仍含厂商不友好结构 `{hazard}`: {params}");
             }
         }
+    }
+
+    #[test]
+    fn disabled_toolset_excluded_from_schemas_for_api() {
+        let mut reg = ToolRegistry::new();
+        reg.register(ToolEntry {
+            name: "memory_add".into(),
+            toolset: "memory".into(),
+            description: "add".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "brain",
+        });
+        reg.register(ToolEntry {
+            name: "cron_list".into(),
+            toolset: "scheduled".into(),
+            description: "list".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "clock",
+        });
+        let mut enabled = HashMap::new();
+        enabled.insert("memory".into(), false);
+        enabled.insert("scheduled".into(), true);
+        reg.set_enabled_map(enabled);
+
+        let names = schema_names(&reg);
+        assert!(!names.iter().any(|n| n == "memory_add"));
+        assert!(names.iter().any(|n| n == "cron_list"));
+        assert!(!reg.is_tool_allowed("memory_add"));
+        assert!(reg.is_tool_allowed("cron_list"));
+    }
+
+    #[test]
+    fn reload_reads_non_default_agent_tools_enabled() {
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let mut global = HashMap::new();
+        global.insert("memory".into(), true);
+        global.insert("scheduled".into(), true);
+        memory::save_tools_enabled(&global).unwrap();
+
+        let mut alice = HashMap::new();
+        alice.insert("memory".into(), false);
+        alice.insert("scheduled".into(), true);
+        memory::save_tools_enabled_for_agent(Some("alice"), &alice).unwrap();
+
+        let mut reg = ToolRegistry::new();
+        reg.register(ToolEntry {
+            name: "memory_add".into(),
+            toolset: "memory".into(),
+            description: "add".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "brain",
+        });
+        reg.register(ToolEntry {
+            name: "cron_list".into(),
+            toolset: "scheduled".into(),
+            description: "list".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "clock",
+        });
+
+        // 全局仍启用 memory
+        reg.reload_enabled_from_disk(None);
+        assert!(reg.is_tool_allowed("memory_add"));
+
+        // 非默认 agent 读取专属配置
+        reg.reload_enabled_from_disk(Some("alice"));
+        assert!(!reg.is_tool_allowed("memory_add"));
+        assert!(reg.is_tool_allowed("cron_list"));
+        let names = schema_names(&reg);
+        assert!(!names.iter().any(|n| n == "memory_add"));
+        assert!(names.iter().any(|n| n == "cron_list"));
     }
 }
 
