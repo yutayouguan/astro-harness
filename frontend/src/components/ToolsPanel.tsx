@@ -113,6 +113,9 @@ const MCP_TYPE_LABEL: Record<McpTransportType, MessageKey> = {
 type Props = {
   /** 面板是否可见（用于刷新统计） */
   active?: boolean;
+  /** 打开时落到该 tab；消费后通知父级清空 */
+  initialTab?: ToolTab | null;
+  onInitialTabConsumed?: () => void;
 };
 
 /** 是否运行在 Tauri 壳内 */
@@ -582,6 +585,8 @@ function McpServerCard({
 
 export default function ToolsPanel({
   active = true,
+  initialTab = null,
+  onInitialTabConsumed,
 }: Props) {
   const { t } = useI18n();
   const [tab, setTab] = useState<ToolTab>("builtin");
@@ -597,6 +602,12 @@ export default function ToolsPanel({
   const { servers, addServers, toggleServer, toggleTool, removeServer, refreshTools, refreshing } =
     useMcpTools(agentId);
   const query = search.trim().toLowerCase();
+
+  useEffect(() => {
+    if (!initialTab) return;
+    setTab(initialTab);
+    onInitialTabConsumed?.();
+  }, [initialTab, onInitialTabConsumed]);
 
   useEffect(() => {
     try {

@@ -85,17 +85,19 @@ export function upsertModelPrefs(
 }
 
 export function loadPickerGlobals(): ModelPickerGlobals {
+  const forced: ModelPickerGlobals = { auto: false, maxMode: false };
   try {
     const raw = localStorage.getItem(GLOBALS_KEY);
-    if (!raw) return { ...DEFAULT_PICKER_GLOBALS };
-    const parsed = JSON.parse(raw) as Partial<ModelPickerGlobals>;
-    return {
-      auto: Boolean(parsed.auto),
-      maxMode: Boolean(parsed.maxMode),
-    };
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ModelPickerGlobals>;
+      if (parsed.auto || parsed.maxMode) {
+        savePickerGlobals(forced);
+      }
+    }
   } catch {
-    return { ...DEFAULT_PICKER_GLOBALS };
+    /* ignore */
   }
+  return { ...forced };
 }
 
 export function savePickerGlobals(g: ModelPickerGlobals) {
@@ -106,17 +108,9 @@ export function savePickerGlobals(g: ModelPickerGlobals) {
   }
 }
 
-/** 输入栏改思考级别时，与 MAX Mode 对齐，避免 UI Off 仍强制 max 发送 */
-export function syncMaxModeWithThinkingLevel(level: ThinkingLevel): ModelPickerGlobals {
-  const g = loadPickerGlobals();
-  const next =
-    level === "max"
-      ? { ...g, maxMode: true }
-      : g.maxMode
-        ? { ...g, maxMode: false }
-        : g;
-  if (next.maxMode !== g.maxMode) savePickerGlobals(next);
-  return next;
+/** MAX Mode 已下线：仅规范化 globals，不再写回 maxMode。 */
+export function syncMaxModeWithThinkingLevel(_level: ThinkingLevel): ModelPickerGlobals {
+  return loadPickerGlobals();
 }
 
 function normalizeEffort(v: unknown): ModelEffort {

@@ -29,6 +29,7 @@ import {
   Paperclip,
   Pause,
   Play,
+  PlugZap,
   RefreshCw,
   SendHorizontal,
   Slash,
@@ -69,7 +70,9 @@ import {
   type PaletteItem,
   type PaletteKind,
 } from "./ComposerPalette";
+import ComposerMcpMenu from "./ComposerMcpMenu";
 import MsgReasoning from "./MsgReasoning";
+import { useMcpTools } from "../hooks/useMcpTools";
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {
@@ -154,6 +157,10 @@ type Props = {
   thinkingPrefs: ChatThinkingPrefs;
   onToggleThinking: () => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
+  /** MCP 菜单作用域 Agent；缺省走 workspace */
+  agentId?: string | null;
+  /** 打开 Tools 面板 MCP tab */
+  onOpenMcpSettings?: () => void;
   /** Agent / Plan / Ask / MultiTask */
   chatMode: ChatInteractionMode;
   onChatModeChange: (mode: ChatInteractionMode) => void;
@@ -461,6 +468,8 @@ export default function ChatView({
   thinkingPrefs,
   onToggleThinking: _onToggleThinking,
   onThinkingLevelChange,
+  agentId = null,
+  onOpenMcpSettings,
   chatMode,
   onChatModeChange,
   onOpenContext,
@@ -476,12 +485,15 @@ export default function ChatView({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [mcpOpen, setMcpOpen] = useState(false);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [triggerStart, setTriggerStart] = useState(0);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
+  const { servers: mcpServers } = useMcpTools(agentId);
+  const mcpHasEnabled = mcpServers.some((s) => s.enabled);
 
   const loadMentionSources = useCallback(async () => {
     try {
@@ -637,6 +649,8 @@ export default function ChatView({
   }, []);
 
   const openThinkingPalette = useCallback(() => {
+    setMcpOpen(false);
+    setModeMenuOpen(false);
     setPaletteKind((k) => (k === "thinking" ? null : "thinking"));
     setPaletteQuery("");
     setPaletteIndex(
@@ -1130,7 +1144,10 @@ export default function ChatView({
                   aria-expanded={modeMenuOpen}
                   aria-label={t("chat.modeMenu")}
                   title={t("chat.modeMenu")}
-                  onClick={() => setModeMenuOpen((o) => !o)}
+                  onClick={() => {
+                    setMcpOpen(false);
+                    setModeMenuOpen((o) => !o);
+                  }}
                 >
                   {(() => {
                     const Meta = modeMeta[chatMode];
@@ -1197,6 +1214,32 @@ export default function ChatView({
                 </button>
               ) : null}
 
+              <div className="composer-mcp-wrap">
+                <button
+                  type="button"
+                  className={`composer-icon-btn ${mcpOpen ? "is-open" : ""} ${
+                    mcpHasEnabled ? "has-dot" : ""
+                  }`}
+                  disabled={streaming}
+                  title={t("chat.mcpMenu")}
+                  aria-label={t("chat.mcpMenu")}
+                  aria-expanded={mcpOpen}
+                  onClick={() => {
+                    setModeMenuOpen(false);
+                    setPaletteKind(null);
+                    setMcpOpen((v) => !v);
+                  }}
+                >
+                  <PlugZap size={16} strokeWidth={2} />
+                </button>
+                <ComposerMcpMenu
+                  open={mcpOpen}
+                  agentId={agentId}
+                  onClose={() => setMcpOpen(false)}
+                  onOpenSettings={() => onOpenMcpSettings?.()}
+                />
+              </div>
+
               <button
                 type="button"
                 className={`composer-icon-btn ${paletteKind === "mention" ? "is-open" : ""
@@ -1205,6 +1248,7 @@ export default function ChatView({
                 title={t("chat.mentionTitle")}
                 aria-label={t("chat.mentionTitle")}
                 onClick={() => {
+                  setMcpOpen(false);
                   const el = textareaRef.current;
                   const caret = el?.selectionStart ?? input.length;
                   const next = `${input.slice(0, caret)}@${input.slice(caret)}`;
@@ -1229,6 +1273,7 @@ export default function ChatView({
                 title={t("chat.slashTitle")}
                 aria-label={t("chat.slashTitle")}
                 onClick={() => {
+                  setMcpOpen(false);
                   const el = textareaRef.current;
                   const caret = el?.selectionStart ?? input.length;
                   const next = `${input.slice(0, caret)}/${input.slice(caret)}`;
