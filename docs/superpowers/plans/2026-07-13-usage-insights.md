@@ -974,16 +974,29 @@ EOF
 
 **Files:**
 - Modify: `agent/src/streaming.rs`
+- Modify: `agent/src/loop_.rs`（新增 `agent_id()`）
 
-- [ ] **Step 1: 在 `finish_usage_and_done` 调用前记录**
+- [ ] **Step 1: 在 `AgentLoop` 增加只读访问器（`memory` / `session_id` 均为私有）**
+
+在 `agent/src/loop_.rs`：
+
+```rust
+pub fn agent_id(&self) -> &str {
+    &self.memory.agent_id
+}
+```
+
+（已有 `session_id(&self) -> &str`。）
+
+- [ ] **Step 2: 在 `finish_usage_and_done` 调用前记录**
 
 在 `run_multi_turn_stream` 中，每次准备 `finish_usage_and_done(&tx, saw_usage.then_some(total_usage))` 之前（含正常结束与取消路径），若 `saw_usage`：
 
 ```rust
 {
     let agent = session.lock().await;
-    let agent_id = agent.memory.agent_id.clone();
-    let session_id = agent.session_id.clone();
+    let agent_id = agent.agent_id().to_string();
+    let session_id = Some(agent.session_id().to_string());
     drop(agent);
     let model = config.model.clone();
     let prompt = total_usage.prompt_tokens;
@@ -1005,16 +1018,16 @@ EOF
 }
 ```
 
-确认 `AgentLoop` 上可访问 `memory.agent_id` 与 `session_id`；`ProviderConfig` 含 `model`。若字段路径不同，按编译器修正。只在流真正结束时记**一次累计** usage（不要每轮 round_usage 都记）。
+`ProviderConfig.model` 已存在。只在流真正结束时记**一次累计** usage（不要每轮 `round_usage` 都记）。
 
-- [ ] **Step 2: `cargo test -p agent --test streaming_test`**
+- [ ] **Step 3: `cargo test -p agent --test streaming_test`**
 
 Expected: PASS（行为不变，仅旁路记账）
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add agent/src/streaming.rs
+git add agent/src/streaming.rs agent/src/loop_.rs
 git commit -m "$(cat <<'EOF'
 feat(agent): record llm usage events with estimated cost
 
