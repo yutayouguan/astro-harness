@@ -1,7 +1,7 @@
 # 智能对话：MCP 快捷开关与推理 / Auto·MAX 控件收敛
 
 **日期:** 2026-07-13  
-**状态:** 已批准（待用户审阅 spec 文件）  
+**状态:** 待用户审阅  
 **范围:** 聊天 Composer MCP 弹出层；ModelPicker 隐藏 Auto / MAX；推理按钮按模型能力显示
 
 ## 目标
@@ -17,7 +17,7 @@
 
 ## 方案选择
 
-采用 **Composer 独立 MCP 弹出层 + 复用 `useMcpTools`**，而非塞进现有 Palette（Palette 不适配多开关），亦非仅跳转入口。
+采用 **Composer 独立 MCP 弹出层 + 复用 `useMcpTools`**（方案 A），而非塞进现有 Palette（Palette 不适配多开关），亦非仅跳转入口，也不做 Cursor 式「+」总菜单重构。
 
 ## UI 与交互
 
@@ -46,7 +46,7 @@
 
 ### MCP
 
-- 弹出层与 ToolsPanel 共用同一 agent 作用域下的 MCP 状态
+- 弹出层与 ToolsPanel 共用同一 agent 作用域下的 MCP 状态（`useMcpTools(agentId)`）
 - 不改变后端协议；发送仍只带 enabled 服务
 - ToolsPanel 增加可选初始 tab（如 `initialTab` / 一次性 focus），保证从聊天跳入时落在 MCP
 
@@ -64,7 +64,7 @@ showThinking =
 ### Auto / MAX
 
 - 读全局偏好时强制关闭并持久化
-- 发送路径中 `globals.auto` 分支实际不可达；可保留一版或顺手移除调用（实现阶段二选一，优先小改：保留死分支亦可）
+- 发送路径中 `globals.auto` 分支实际不可达；实现阶段优先小改（可保留死分支）
 
 ## 错误处理
 

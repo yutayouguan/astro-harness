@@ -19,7 +19,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
+import type { Locale, MessageKey } from "../i18n/messages";
 import { useAgentsChanged } from "../lib/agentsChanged";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
@@ -63,6 +63,41 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+const EN_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** 按 period / locale 格式化桶标签（后端：月=YYYY-MM-DD，季/年=YYYY-MM） */
+function formatBucketLabel(bucket: string, period: Period, locale: Locale): string {
+  if (period === "month") {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bucket);
+    if (m) {
+      const month = Number(m[2]);
+      const day = Number(m[3]);
+      return locale === "zh" ? `${day}日` : `${month}/${day}`;
+    }
+  } else {
+    const m = /^(\d{4})-(\d{2})$/.exec(bucket);
+    if (m) {
+      const month = Number(m[2]);
+      if (locale === "zh") return `${month}月`;
+      return EN_MONTHS[month - 1] ?? bucket;
+    }
+  }
+  return bucket;
+}
+
 function KindIcon({ kind }: { kind: string }) {
   const props = { size: 13, strokeWidth: 2.25, "aria-hidden": true as const };
   switch (kind) {
@@ -84,7 +119,7 @@ function KindIcon({ kind }: { kind: string }) {
 }
 
 export default function InsightsPanel({ active }: { active: boolean }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [period, setPeriod] = useState<Period>("month");
   const [agentId, setAgentId] = useState("workspace");
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -250,7 +285,9 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                       className="insights-bar"
                       style={{ height: `${(s.calls / maxCalls) * 100}%` }}
                     />
-                    <span className="insights-bar-label">{s.bucket.slice(-5)}</span>
+                    <span className="insights-bar-label">
+                      {formatBucketLabel(s.bucket, period, locale)}
+                    </span>
                   </div>
                 ))}
               </div>

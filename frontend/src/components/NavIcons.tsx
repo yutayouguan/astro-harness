@@ -23,11 +23,14 @@ function IconBase({ children, ...props }: IconProps) {
   );
 }
 
-/** 智能对话 */
+/** 智能对话 — lucide message-circle-more（三点用 cutout，选中填实后仍可见） */
 export function IconChat(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092a10 10 0 1 0-4.777-4.719" />
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+      <path className="nav-icon-cutout" d="M8 12h.01" />
+      <path className="nav-icon-cutout" d="M12 12h.01" />
+      <path className="nav-icon-cutout" d="M16 12h.01" />
     </IconBase>
   );
 }
