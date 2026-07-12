@@ -25,7 +25,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "delegate".to_string(),
         toolset: "delegate".to_string(),
-        description: "Delegate a subtask to a specialized agent type. Records the task for follow-up."
+        description: "Delegate a subtask to a specialized agent type (records queued JSON only). Prefer orchestration_run for real execution."
             .to_string(),
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,

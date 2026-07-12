@@ -203,7 +203,9 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "skills" => "skills",
         "clarify" => "clarify",
         "delegate" => "delegate",
-        "multi_agent" | "create_agent" => "multi_agent",
+        "multi_agent" | "create_agent" | "orchestration_run" | "orchestration_status" => {
+            "multi_agent"
+        }
         "task_plan" => "task_plan",
         other => other,
     }

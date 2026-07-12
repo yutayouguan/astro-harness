@@ -53,6 +53,8 @@ pub async fn dispatch_tool(
         "clarify" => crate::clarify::dispatch(ctx, args),
         "delegate" => crate::delegate::dispatch(ctx, args),
         "multi_agent" => crate::multi_agent::dispatch(ctx, args),
+        "orchestration_run" => crate::orchestration::dispatch_run(ctx, args),
+        "orchestration_status" => crate::orchestration::dispatch_status(args),
         "create_agent" => crate::create_agent::dispatch(ctx, args),
         "task_plan" => crate::task_plan::dispatch(ctx, args),
         "browser" => crate::browser::dispatch(ctx, args).await,

@@ -16,7 +16,8 @@ pub use core::{catalog, context, dispatch, parse, registry, schema};
 pub(crate) use core::path_safe;
 pub(crate) use builtins::{
     browser, clarify, code_exec, create_agent, delegate, file_ops, image_gen, memory_tools,
-    multi_agent, scheduled, skills_tool, task_plan, terminal, tts, vision, web_search,
+    multi_agent, orchestration, scheduled, skills_tool, task_plan, terminal, tts, vision,
+    web_search,
 };
 
 pub use catalog::{
@@ -54,6 +55,7 @@ pub fn register_all(registry: &mut ToolRegistry) {
     clarify::register(registry);
     delegate::register(registry);
     multi_agent::register(registry);
+    orchestration::register(registry);
     create_agent::register(registry);
     task_plan::register(registry);
     browser::register(registry);

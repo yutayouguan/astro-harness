@@ -13,6 +13,7 @@ pub mod skills_tool;
 pub mod clarify;
 pub mod delegate;
 pub mod multi_agent;
+pub mod orchestration;
 pub mod task_plan;
 pub mod browser;
 pub mod create_agent;
