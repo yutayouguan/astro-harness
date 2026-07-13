@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Result};
 
-use crate::http_stream::default_base_for;
+use crate::profile::{self, normalize_provider_id};
 use crate::trait_::AuthKind;
 
 /// 已解析凭证的客户端；对话/探测时再配 model 等运行参数。
@@ -23,7 +23,7 @@ pub struct ProviderClient {
 impl ProviderClient {
     /// 从 provider id、密钥与基址显式构造客户端。
     pub fn from_config(provider_id: &str, api_key: String, base_url: Option<String>) -> Self {
-        let id = normalize_provider_id(provider_id);
+        let id = normalize_provider_id(provider_id).to_string();
         Self {
             http: reqwest::Client::new(),
             provider_id: id.clone(),
@@ -35,7 +35,7 @@ impl ProviderClient {
 
     /// 从进程环境变量构造；Ollama 允许无 key。
     pub fn from_env(provider_id: &str) -> Result<Self> {
-        let id = normalize_provider_id(provider_id);
+        let id = normalize_provider_id(provider_id).to_string();
         let auth = AuthKind::for_provider(&id);
         let api_key = if auth == AuthKind::None {
             String::new()
@@ -48,7 +48,7 @@ impl ProviderClient {
                 )
             })?
         };
-        let base_url = Some(default_base_for(&id).to_string()).filter(|s| !s.is_empty());
+        let base_url = Some(profile::default_base_for(&id).to_string()).filter(|s| !s.is_empty());
         Ok(Self::from_config(&id, api_key, base_url))
     }
 
@@ -84,34 +84,9 @@ impl ProviderClient {
     }
 }
 
-/// 将常见别名规范化为注册表 id。
-fn normalize_provider_id(provider_id: &str) -> String {
-    match provider_id {
-        "minmax" => "minimax".to_string(),
-        "anthropic" => "claude".to_string(),
-        other => other.to_string(),
-    }
-}
-
 /// 返回某供应商依次尝试的环境变量名列表。
 pub fn env_api_key_names(provider_id: &str) -> &'static [&'static str] {
-    match provider_id {
-        "openai" => &["OPENAI_API_KEY"],
-        "claude" | "anthropic" => &["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
-        "deepseek" => &["DEEPSEEK_API_KEY"],
-        "ollama" => &[],
-        "google" => &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
-        "azure" => &["AZURE_OPENAI_API_KEY", "AZURE_API_KEY"],
-        "zhipu" => &["ZHIPU_API_KEY", "BIGMODEL_API_KEY"],
-        "openrouter" => &["OPENROUTER_API_KEY"],
-        "bailian" => &["DASHSCOPE_API_KEY", "BAILIAN_API_KEY"],
-        "nvidia" => &["NVIDIA_API_KEY"],
-        "moonshot" => &["MOONSHOT_API_KEY", "KIMI_API_KEY"],
-        "volcengine" => &["ARK_API_KEY", "VOLCENGINE_API_KEY"],
-        "minimax" | "minmax" => &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
-        "mimo" => &["MIMO_API_KEY"],
-        _ => &["OPENAI_API_KEY"],
-    }
+    profile::env_api_key_names(provider_id)
 }
 
 /// 从环境变量读取第一个非空的 API Key。

@@ -5,24 +5,27 @@
 //!
 //! 模块分层：
 //! - [`api`]：对外契约（trait / client / registry / streaming）
-//! - [`protocol`]：协议与传输实现
-//! - [`vendors`]：各供应商薄封装
+//! - [`profile`]：Hermes 风格 ProviderProfile / ApiMode 表
+//! - [`protocol`]：协议与传输实现（Chat Completions / Anthropic Messages / Responses）
+//! - [`vendors`]：各供应商薄封装（ProfileBackedProvider）
 
 pub mod api;
+pub mod profile;
 pub mod protocol;
 pub mod vendors;
 
 // 保持原有顶层路径，避免破坏下游 crate 的 `providers::trait_` 等引用。
 pub use api::{client, registry, streaming, trait_};
-pub use protocol::{extractor, http_stream, image_gen, image_http, tool_format, verify};
+pub use protocol::{extractor, http_stream, image_gen, image_http, responses, tool_format, verify};
 pub use vendors::{
     azure, bailian, claude, deepseek, google, mimo, minimax, moonshot, nvidia, ollama, openai,
-    openrouter, volcengine, zhipu,
+    openrouter, profile_backed, volcengine, zhipu,
 };
 
 pub use client::ProviderClient;
 pub use extractor::{parse_submit_payload, ExtractionError, Extractor, ExtractorBuilder};
 pub use http_stream::merge_additional_params;
+pub use profile::{ApiMode, ProviderProfile, PROFILES};
 pub use streaming::{PauseControl, Usage};
 pub use trait_::{
     AiProvider, AuthKind, ChatChunk, ChatMessage, ChatProvider, ChatStream, ChatToolCall,

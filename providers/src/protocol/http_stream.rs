@@ -1,4 +1,6 @@
-//! 真实 HTTP 流式聊天：OpenAI 兼容 / Anthropic / Google / Ollama / Azure
+//! 真实 HTTP 流式聊天：Chat Completions / Anthropic Messages / Azure quirk。
+//!
+//! 按 [`crate::profile::ApiMode`] 分发；不再保留 Google native / Ollama NDJSON。
 
 use anyhow::{anyhow, Context, Result};
 use futures::StreamExt;
@@ -6,8 +8,9 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+use crate::profile::{self, ApiMode};
 use crate::streaming::Usage;
-use crate::tool_format::{openai_tools_to_anthropic, openai_tools_to_google};
+use crate::tool_format::openai_tools_to_anthropic;
 use crate::trait_::{
     ChatChunk, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
 };
@@ -59,12 +62,16 @@ fn trim_slash(endpoint: &str) -> String {
 }
 
 /// 规范化 OpenAI 兼容 API 基址（自动补 `/v1` 等后缀）。
+///
+/// Gemini OpenAI 兼容基址以 `/openai` 结尾，不得再追加 `/v1`。
 pub fn openai_compatible_base(endpoint: &str) -> String {
     let base = trim_slash(endpoint);
     if base.ends_with("/v1")
         || base.ends_with("/v3")
         || base.ends_with("/v4")
+        || base.ends_with("/openai")
         || base.contains("/paas/v4")
+        || base.contains("/v1beta/openai")
     {
         base
     } else if base.is_empty() {
@@ -82,24 +89,39 @@ pub fn azure_base(endpoint: &str) -> String {
         .to_string()
 }
 
-/// 返回各内置供应商的默认 API 基址。
+/// 返回各内置供应商的默认 API 基址（表驱动）。
 pub fn default_base_for(provider: &str) -> &'static str {
-    match provider {
-        "openai" => "https://api.openai.com/v1",
-        "deepseek" => "https://api.deepseek.com/v1",
-        "zhipu" => "https://open.bigmodel.cn/api/paas/v4",
-        "minimax" | "minmax" => "https://api.minimax.chat/v1",
-        "openrouter" => "https://openrouter.ai/api/v1",
-        "bailian" => "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "nvidia" => "https://integrate.api.nvidia.com/v1",
-        "moonshot" => "https://api.moonshot.cn/v1",
-        "volcengine" => "https://ark.cn-beijing.volces.com/api/v3",
-        "mimo" => "https://api.xiaomimimo.com/v1",
-        "claude" => "https://api.anthropic.com",
-        "google" => "https://generativelanguage.googleapis.com",
-        "azure" => "",
-        "ollama" => "http://localhost:11434",
-        _ => "https://api.openai.com/v1",
+    profile::default_base_for(provider)
+}
+
+/// 按 [`ApiMode`] 分发流式聊天（Azure quirk 走专用 URL）。
+pub async fn chat_stream_for_provider(
+    client: &Client,
+    provider: &str,
+    messages: Vec<ChatMessage>,
+    tools: Vec<Value>,
+    config: &ProviderConfig,
+) -> Result<ChatStream> {
+    let p = profile::resolve_or_openai_compat(provider);
+    // 未知 id 仍用调用方传入的 provider 字符串拼 URL / 日志
+    let id = if profile::resolve(provider).is_some() {
+        p.id
+    } else {
+        provider
+    };
+    match p.api_mode {
+        ApiMode::ChatCompletions if p.azure_deployment_style => {
+            azure_chat_stream(client, messages, tools, config).await
+        }
+        ApiMode::ChatCompletions => {
+            openai_compatible_chat_stream(client, id, messages, tools, config).await
+        }
+        ApiMode::AnthropicMessages => {
+            anthropic_chat_stream(client, messages, tools, config).await
+        }
+        ApiMode::Responses => {
+            crate::responses::responses_chat_stream(client, id, messages, tools, config).await
+        }
     }
 }
 
@@ -373,7 +395,15 @@ fn supports_stream_include_usage(provider: &str) -> bool {
     // 部分兼容网关会拒 stream_options；仅对确认支持的上游开启
     matches!(
         provider,
-        "openai" | "azure" | "deepseek" | "openrouter" | "nvidia" | "moonshot" | "mimo" | "ollama"
+        "openai"
+            | "azure"
+            | "deepseek"
+            | "openrouter"
+            | "nvidia"
+            | "moonshot"
+            | "mimo"
+            | "ollama"
+            | "google"
     )
 }
 
@@ -651,341 +681,10 @@ pub async fn anthropic_chat_stream(
     sse_chat_stream(response, Arc::new(extract_anthropic_delta)).await
 }
 
-/// Google Gemini `streamGenerateContent` SSE 流式聊天。
-pub async fn google_chat_stream(
-    client: &Client,
-    messages: Vec<ChatMessage>,
-    tools: Vec<Value>,
-    config: &ProviderConfig,
-) -> Result<ChatStream> {
-    if config.api_key.is_empty() {
-        return Err(anyhow!("缺少 Google API Key"));
-    }
-    let base = trim_slash(&resolve_base(config, "google"));
-    let model = config.model.strip_prefix("models/").unwrap_or(&config.model);
-    let url = if base.contains("/v1beta") {
-        format!("{base}/models/{model}:streamGenerateContent?alt=sse&key={}", config.api_key)
-    } else {
-        format!(
-            "{base}/v1beta/models/{model}:streamGenerateContent?alt=sse&key={}",
-            config.api_key
-        )
-    };
-
-    let mut system_instruction = None;
-    let mut contents = Vec::new();
-    for m in &messages {
-        match m.role.as_str() {
-            "system" => {
-                system_instruction = Some(json!({
-                    "parts": [{"text": m.content}]
-                }));
-            }
-            "tool" => {
-                let fname = m
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| "tool".to_string());
-                contents.push(json!({
-                    "role": "user",
-                    "parts": [{
-                        "functionResponse": {
-                            "name": fname,
-                            "response": { "result": m.content },
-                        }
-                    }]
-                }));
-            }
-            "assistant" => {
-                let mut parts = Vec::new();
-                if !m.content.is_empty() {
-                    parts.push(json!({ "text": m.content }));
-                }
-                if let Some(ref calls) = m.tool_calls {
-                    for c in calls {
-                        parts.push(json!({
-                            "functionCall": {
-                                "name": c.name,
-                                "args": if c.arguments.is_object() {
-                                    c.arguments.clone()
-                                } else {
-                                    serde_json::from_str(c.arguments.as_str().unwrap_or("{}"))
-                                        .unwrap_or(json!({}))
-                                }
-                            }
-                        }));
-                    }
-                }
-                if parts.is_empty() {
-                    parts.push(json!({ "text": "" }));
-                }
-                contents.push(json!({
-                    "role": "model",
-                    "parts": parts,
-                }));
-            }
-            _ => {
-                contents.push(json!({
-                    "role": "user",
-                    "parts": [{"text": m.content}]
-                }));
-            }
-        }
-    }
-
-    let mut body = json!({
-        "contents": contents,
-        "generationConfig": {
-            "temperature": config.temperature,
-            "maxOutputTokens": config.max_tokens,
-        }
-    });
-    if let Some(sys) = system_instruction {
-        body["systemInstruction"] = sys;
-    }
-    if let Some(gtools) = openai_tools_to_google(&tools) {
-        body["tools"] = gtools;
-    }
-
-    merge_additional_params(&mut body, &config.additional_params);
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("连接 Google 失败: {url}"))?;
-
-    sse_chat_stream(
-        response,
-        Arc::new(|data| {
-            let v: Value = serde_json::from_str(data).ok()?;
-            if let Some(err) = v.get("error") {
-                let msg = err
-                    .get("message")
-                    .and_then(|m| m.as_str())
-                    .unwrap_or("Google API 错误");
-                return Some(ChatChunk {
-                    finish_reason: Some(format!("error:{msg}")),
-                    ..Default::default()
-                });
-            }
-            let parts = v
-                .pointer("/candidates/0/content/parts")
-                .and_then(|p| p.as_array())?;
-            let mut token = None;
-            let mut tool_call_deltas = Vec::new();
-            for (i, part) in parts.iter().enumerate() {
-                if let Some(text) = part.get("text").and_then(|t| t.as_str()).filter(|s| !s.is_empty())
-                {
-                    token = Some(match token {
-                        Some(prev) => format!("{prev}{text}"),
-                        None => text.to_string(),
-                    });
-                }
-                if let Some(fc) = part.get("functionCall") {
-                    let name = fc
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let args = fc.get("args").cloned().unwrap_or(json!({}));
-                    tool_call_deltas.push(ToolCallDeltaChunk {
-                        index: i as u32,
-                        id: Some(format!("google_call_{i}")),
-                        name: Some(name),
-                        arguments: Some(args.to_string()),
-                    });
-                }
-            }
-            let finish = v
-                .pointer("/candidates/0/finishReason")
-                .and_then(|f| f.as_str())
-                .map(str::to_string);
-            let usage = v.get("usageMetadata").and_then(|u| {
-                let prompt = u
-                    .get("promptTokenCount")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or(0) as u32;
-                let completion = u
-                    .get("candidatesTokenCount")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or(0) as u32;
-                if prompt == 0 && completion == 0 {
-                    None
-                } else {
-                    Some(Usage::from_parts(prompt, completion))
-                }
-            });
-            if token.is_none()
-                && tool_call_deltas.is_empty()
-                && finish.is_none()
-                && usage.is_none()
-            {
-                return None;
-            }
-            Some(ChatChunk {
-                token,
-                finish_reason: finish,
-                tool_call_deltas,
-                usage,
-                ..Default::default()
-            })
-        }),
-    )
-    .await
-}
-
-/// Ollama `/api/chat` NDJSON 流
-pub async fn ollama_chat_stream(
-    client: &Client,
-    messages: Vec<ChatMessage>,
-    tools: Vec<Value>,
-    config: &ProviderConfig,
-) -> Result<ChatStream> {
-    let base = trim_slash(&resolve_base(config, "ollama"));
-    // 若用户配的是 OpenAI 兼容地址，走兼容协议
-    if base.contains("/v1") {
-        return openai_compatible_chat_stream(client, "ollama", messages, tools, config).await;
-    }
-
-    let url = format!("{base}/api/chat");
-    let mut body = json!({
-        "model": config.model,
-        "stream": true,
-        "messages": to_openai_messages(&messages),
-        "options": {
-            "temperature": config.temperature,
-            "num_predict": config.max_tokens,
-        }
-    });
-    if !tools.is_empty() {
-        body["tools"] = Value::Array(tools);
-    }
-
-    merge_additional_params(&mut body, &config.additional_params);
-    let response = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("连接 Ollama 失败: {url}"))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(anyhow!("Ollama HTTP {status}: {body}"));
-    }
-
-    let byte_stream = response.bytes_stream();
-    let stream = futures::stream::unfold(
-        (byte_stream, String::new(), false),
-        |(mut byte_stream, mut buf, done)| async move {
-            if done {
-                return None;
-            }
-            loop {
-                if let Some(nl) = buf.find('\n') {
-                    let line = buf[..nl].trim().to_string();
-                    buf = buf[nl + 1..].to_string();
-                    if line.is_empty() {
-                        continue;
-                    }
-                    let v: Value = match serde_json::from_str(&line) {
-                        Ok(v) => v,
-                        Err(err) => {
-                            return Some((Err(err.into()), (byte_stream, buf, true)));
-                        }
-                    };
-                    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
-                        return Some((
-                            Err(anyhow!(err.to_string())),
-                            (byte_stream, buf, true),
-                        ));
-                    }
-                    let token = v
-                        .pointer("/message/content")
-                        .and_then(|c| c.as_str())
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string);
-                    let mut tool_call_deltas = Vec::new();
-                    if let Some(arr) = v
-                        .pointer("/message/tool_calls")
-                        .and_then(|t| t.as_array())
-                    {
-                        for (i, tc) in arr.iter().enumerate() {
-                            tool_call_deltas.push(ToolCallDeltaChunk {
-                                index: i as u32,
-                                id: tc
-                                    .get("id")
-                                    .and_then(|s| s.as_str())
-                                    .map(str::to_string)
-                                    .or_else(|| Some(format!("ollama_call_{i}"))),
-                                name: tc
-                                    .pointer("/function/name")
-                                    .and_then(|s| s.as_str())
-                                    .map(str::to_string),
-                                arguments: tc
-                                    .pointer("/function/arguments")
-                                    .map(|a| {
-                                        if a.is_string() {
-                                            a.as_str().unwrap_or("{}").to_string()
-                                        } else {
-                                            a.to_string()
-                                        }
-                                    }),
-                            });
-                        }
-                    }
-                    let finished = v.get("done").and_then(|d| d.as_bool()).unwrap_or(false);
-                    let usage = if finished {
-                        let prompt = v
-                            .get("prompt_eval_count")
-                            .and_then(|x| x.as_u64())
-                            .unwrap_or(0) as u32;
-                        let completion = v
-                            .get("eval_count")
-                            .and_then(|x| x.as_u64())
-                            .unwrap_or(0) as u32;
-                        if prompt > 0 || completion > 0 {
-                            Some(Usage::from_parts(prompt, completion))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-                    if token.is_some() || finished || !tool_call_deltas.is_empty() || usage.is_some()
-                    {
-                        return Some((
-                            Ok(ChatChunk {
-                                token,
-                                finish_reason: finished.then(|| "stop".into()),
-                                tool_call_deltas,
-                                usage,
-                                ..Default::default()
-                            }),
-                            (byte_stream, buf, finished),
-                        ));
-                    }
-                    continue;
-                }
-                match byte_stream.next().await {
-                    Some(Ok(bytes)) => buf.push_str(&String::from_utf8_lossy(&bytes)),
-                    Some(Err(err)) => return Some((Err(err.into()), (byte_stream, buf, true))),
-                    None => return None,
-                }
-            }
-        },
-    );
-
-    Ok(Box::pin(stream))
-}
-
 /// Azure OpenAI REST API 版本号。
 pub const AZURE_API_VERSION: &str = "2024-06-01";
 
-/// Azure OpenAI 流式 chat completions
+/// Azure OpenAI 流式 chat completions（ChatCompletions + URL/Auth quirk）。
 pub async fn azure_chat_stream(
     client: &Client,
     messages: Vec<ChatMessage>,
@@ -1069,9 +768,22 @@ mod tests {
         assert!(supports_stream_include_usage("openai"));
         assert!(supports_stream_include_usage("deepseek"));
         assert!(supports_stream_include_usage("azure"));
+        assert!(supports_stream_include_usage("google"));
         assert!(!supports_stream_include_usage("zhipu"));
         assert!(!supports_stream_include_usage("bailian"));
         assert!(!supports_stream_include_usage("volcengine"));
         assert!(!supports_stream_include_usage("minimax"));
+    }
+
+    #[test]
+    fn gemini_openai_base_not_suffixed_with_v1() {
+        let base = openai_compatible_base(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+        );
+        assert_eq!(
+            base,
+            "https://generativelanguage.googleapis.com/v1beta/openai"
+        );
+        assert!(!base.ends_with("/openai/v1"));
     }
 }

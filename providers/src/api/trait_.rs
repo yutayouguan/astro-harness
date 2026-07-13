@@ -127,7 +127,7 @@ pub enum AuthKind {
     Bearer,
     /// Anthropic `x-api-key`
     AnthropicKey,
-    /// Google `?key=`
+    /// Google 原生 `?key=`（出图等仍可能使用；chat 已改 Bearer）
     GoogleQuery,
     /// Azure `api-key` header
     AzureHeader,
@@ -136,15 +136,11 @@ pub enum AuthKind {
 }
 
 impl AuthKind {
-    /// 根据 provider id 推断认证方式。
+    /// 根据 provider id 推断认证方式（表驱动）。
     pub fn for_provider(provider_id: &str) -> Self {
-        match provider_id {
-            "ollama" => Self::None,
-            "claude" | "anthropic" => Self::AnthropicKey,
-            "google" => Self::GoogleQuery,
-            "azure" => Self::AzureHeader,
-            _ => Self::Bearer,
-        }
+        crate::profile::resolve(provider_id)
+            .map(|p| p.auth)
+            .unwrap_or(Self::Bearer)
     }
 }
 

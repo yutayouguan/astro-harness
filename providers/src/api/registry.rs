@@ -1,15 +1,11 @@
-//! 供应商注册表：按 id 查找并路由到具体 [`AiProvider`] 实现。
+//! 供应商注册表：按 id 查找并路由到 [`ProfileBackedProvider`]。
 
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use crate::profile::PROFILES;
 use crate::trait_::{AiProvider, ProviderConfig, VerifyResult};
-use crate::vendors::{
-    azure::AzureProvider, bailian::BailianProvider, claude::ClaudeProvider,
-    deepseek::DeepSeekProvider, google::GoogleProvider, mimo::MimoProvider,
-    minimax::MiniMaxProvider, moonshot::MoonshotProvider, nvidia::NvidiaProvider,
-    ollama::OllamaProvider, openai::OpenAiProvider, openrouter::OpenRouterProvider,
-    volcengine::VolcengineProvider, zhipu::ZhipuProvider,
-};
+use crate::vendors::profile_backed::ProfileBackedProvider;
 
 /// 内置供应商实例的注册表。
 #[derive(Clone)]
@@ -19,23 +15,15 @@ pub struct ProviderRegistry {
 }
 
 impl ProviderRegistry {
-    /// 构造并注册所有内置供应商。
+    /// 构造并注册所有内置 profile。
     pub fn new() -> Self {
         let mut map: HashMap<String, Arc<dyn AiProvider>> = HashMap::new();
-        map.insert("google".to_string(), Arc::new(GoogleProvider::new()));
-        map.insert("openai".to_string(), Arc::new(OpenAiProvider::new()));
-        map.insert("claude".to_string(), Arc::new(ClaudeProvider::new()));
-        map.insert("deepseek".to_string(), Arc::new(DeepSeekProvider::new()));
-        map.insert("minimax".to_string(), Arc::new(MiniMaxProvider::new()));
-        map.insert("openrouter".to_string(), Arc::new(OpenRouterProvider::new()));
-        map.insert("bailian".to_string(), Arc::new(BailianProvider::new()));
-        map.insert("nvidia".to_string(), Arc::new(NvidiaProvider::new()));
-        map.insert("moonshot".to_string(), Arc::new(MoonshotProvider::new()));
-        map.insert("volcengine".to_string(), Arc::new(VolcengineProvider::new()));
-        map.insert("zhipu".to_string(), Arc::new(ZhipuProvider::new()));
-        map.insert("azure".to_string(), Arc::new(AzureProvider::new()));
-        map.insert("mimo".to_string(), Arc::new(MimoProvider::new()));
-        map.insert("ollama".to_string(), Arc::new(OllamaProvider::new()));
+        for profile in PROFILES {
+            map.insert(
+                profile.id.to_string(),
+                Arc::new(ProfileBackedProvider::new(profile)),
+            );
+        }
         ProviderRegistry { providers: map }
     }
 
@@ -70,7 +58,6 @@ impl ProviderRegistry {
         if let Some(provider) = self.get(name) {
             return provider.verify(model, config).await;
         }
-        // custom / 未知 id：走 OpenAI 兼容探测
         let client = reqwest::Client::new();
         crate::verify::probe(&client, name, model, config).await
     }

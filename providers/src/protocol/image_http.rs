@@ -13,15 +13,22 @@ fn trim_slash(endpoint: &str) -> String {
     endpoint.trim_end_matches('/').to_string()
 }
 
-/// 解析 Google API 基址（配置优先，否则官方默认）。
+/// 解析 Google 原生 API 基址（配置优先；自动去掉 OpenAI 兼容 `/v1beta/openai` 后缀）。
 fn google_base(config: &ProviderConfig) -> String {
-    config
+    let raw = config
         .base_url
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("https://generativelanguage.googleapis.com")
-        .to_string()
+        .unwrap_or("https://generativelanguage.googleapis.com");
+    let base = trim_slash(raw);
+    if base.ends_with("/openai") {
+        return base
+            .trim_end_matches("/openai")
+            .trim_end_matches("/v1beta")
+            .to_string();
+    }
+    base
 }
 
 /// 解析 OpenAI 兼容 API 基址。
