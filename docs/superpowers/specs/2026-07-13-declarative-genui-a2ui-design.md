@@ -1,6 +1,6 @@
 # Declarative GenUI（A2UI via AG-UI）Design
 
-> **Status:** Draft for review  
+> **Status:** Implemented  
 > **Date:** 2026-07-13  
 > **Related:** [Astro ↔ AG-UI ↔ A2UI 映射表](./2026-07-13-agui-a2ui-astro-mapping.md)
 
