@@ -709,9 +709,36 @@ pub async fn run_multi_turn_stream(
                 }
             }
 
+            // 先解析声明式 UI：信息卡只发 Activity；HITL 另走 interrupt
+            let info_ui = parse_astro_ui(&result);
+            let result_for_history = if let Some(ref ui) = info_ui {
+                format!("Presented info card: {}", ui.summary)
+            } else {
+                result.clone()
+            };
+
+            if let Some(ref ui) = info_ui {
+                let message_id = format!("a2ui-surface-{}", call.id);
+                let content_json =
+                    serde_json::json!({ "operations": ui.operations }).to_string();
+                if !emit(
+                    &tx,
+                    MultiTurnStreamItem::Activity {
+                        message_id,
+                        activity_type: "a2ui-surface".into(),
+                        content_json,
+                        replace: true,
+                    },
+                )
+                .await
+                {
+                    return;
+                }
+            }
+
             {
                 let mut agent = session.lock().await;
-                let _ = agent.record_tool_result_with_id(Some(&call.id), &result);
+                let _ = agent.record_tool_result_with_id(Some(&call.id), &result_for_history);
             }
 
             // HITL：confirm/clarify 等返回 astro_hitl → Activity + RunFinished(interrupt)
@@ -798,6 +825,11 @@ struct AstroHitlPayload {
     response_schema: serde_json::Value,
 }
 
+struct AstroUiPayload {
+    summary: String,
+    operations: serde_json::Value,
+}
+
 fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
     let value: serde_json::Value = serde_json::from_str(result).ok()?;
     if value.get("astro_hitl")?.as_bool() != Some(true) {
@@ -823,5 +855,28 @@ fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
             .get("response_schema")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({})),
+    })
+}
+
+fn parse_astro_ui(result: &str) -> Option<AstroUiPayload> {
+    let value: serde_json::Value = serde_json::from_str(result).ok()?;
+    if value.get("astro_ui")?.as_bool() != Some(true) {
+        return None;
+    }
+    // HITL 优先：同结果不应既 hitl 又 ui
+    if value.get("astro_hitl").and_then(|v| v.as_bool()) == Some(true) {
+        return None;
+    }
+    let operations = value.get("operations")?.clone();
+    if !operations.is_array() {
+        return None;
+    }
+    Some(AstroUiPayload {
+        summary: value
+            .get("summary")
+            .and_then(|v| v.as_str())
+            .unwrap_or("info")
+            .to_string(),
+        operations,
     })
 }

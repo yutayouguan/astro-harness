@@ -52,6 +52,7 @@ pub async fn dispatch_tool(
         "skills" => crate::skills_tool::dispatch(ctx, args),
         "clarify" => crate::clarify::dispatch(ctx, args),
         "confirm" => crate::confirm::dispatch(ctx, args),
+        "present_ui" => crate::present_ui::dispatch(ctx, args),
         "delegate" => crate::delegate::dispatch(ctx, args),
         "multi_agent" => crate::multi_agent::dispatch(ctx, args),
         "create_agent" => crate::create_agent::dispatch(ctx, args),

@@ -135,3 +135,59 @@ pub fn build_clarify_surface(
         }),
     ]
 }
+
+/// Build a read-only info card surface (title + body + optional image).
+pub fn build_info_surface(
+    surface_id: &str,
+    title: &str,
+    body: &str,
+    image_url: Option<&str>,
+) -> Vec<Value> {
+    let mut children = vec!["title".to_string(), "body".to_string()];
+    let mut components = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({
+            "id": "title",
+            "component": "Text",
+            "text": title,
+            "variant": "h2"
+        }),
+        json!({
+            "id": "body",
+            "component": "Text",
+            "text": body
+        }),
+    ];
+    if let Some(url) = image_url.map(str::trim).filter(|u| !u.is_empty()) {
+        children.push("img".into());
+        components.push(json!({
+            "id": "img",
+            "component": "Image",
+            "url": url
+        }));
+    }
+    components.insert(
+        1,
+        json!({
+            "id": "col",
+            "component": "Column",
+            "children": children
+        }),
+    );
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": {
+                "surfaceId": surface_id,
+                "catalogId": ASTRO_CATALOG_ID
+            }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": {
+                "surfaceId": surface_id,
+                "components": components
+            }
+        }),
+    ]
+}

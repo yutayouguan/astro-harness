@@ -92,6 +92,44 @@ async fn clarify_emits_valid_a2ui_hitl() {
 }
 
 #[tokio::test]
+async fn present_ui_emits_valid_astro_ui() {
+    let dir = TempDir::new().unwrap();
+    let (mut memory, providers, targets, workspace) = make_ctx(&dir);
+    let mut ctx = ToolContext {
+        memory: &mut memory,
+        memory_dir: dir.path().to_path_buf(),
+        workspace_dir: workspace,
+        image_gen_targets: &targets,
+        providers: &providers,
+        session_id: "test".into(),
+        chat_api_key: String::new(),
+        chat_base_url: String::new(),
+        chat_provider: String::new(),
+        chat_model: String::new(),
+    };
+
+    let raw = tools::dispatch_tool(
+        |_| true,
+        &mut ctx,
+        "present_ui",
+        &serde_json::json!({
+            "title": "Weather",
+            "body": "Sunny, 26°C",
+            "image_url": "https://example.com/wx.png"
+        }),
+    )
+    .await
+    .unwrap();
+
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(v["astro_ui"], true);
+    assert!(v.get("astro_hitl").is_none());
+    assert_eq!(v["summary"], "Weather");
+    let ops = v["operations"].as_array().expect("operations array");
+    a2ui::validate_operations(ops).unwrap();
+}
+
+#[tokio::test]
 async fn register_all_includes_confirm() {
     let mut registry = ToolRegistry::new();
     register_all(&mut registry);
@@ -102,4 +140,5 @@ async fn register_all_includes_confirm() {
         .collect();
     assert!(names.contains(&"confirm"));
     assert!(names.contains(&"clarify"));
+    assert!(names.contains(&"present_ui"));
 }
