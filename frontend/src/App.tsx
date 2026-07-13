@@ -1161,10 +1161,20 @@ export default function App() {
             }),
           );
         } else if (payload.type === "memory_update") {
+          // 兼容旧通道：若 operation 以钩子名或 hook: 开头，归为 hook
+          const operation = payload.operation || "memory";
+          const lower = operation.toLowerCase();
+          const isHook =
+            lower.startsWith("hook:") ||
+            lower.startsWith("pre_") ||
+            lower.startsWith("post_") ||
+            lower.startsWith("on_session") ||
+            lower === "subagent_stop" ||
+            lower === "pre_gateway_dispatch";
           const activity: ChatActivity = {
-            id: `mem-${Date.now()}`,
-            kind: "memory",
-            title: payload.operation || "memory",
+            id: `${isHook ? "hook" : "mem"}-${Date.now()}`,
+            kind: isHook ? "hook" : "memory",
+            title: operation,
             output: payload.content,
             detail: payload.content,
             status: "done",
@@ -1636,6 +1646,12 @@ export default function App() {
   ]);
 
   const resetChatSurface = () => {
+    const sid = sessionId;
+    if (sid && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      void invoke("chat_control", { sessionId: sid, action: "new_chat" }).catch(
+        (e) => console.warn("chat_control new_chat failed", e),
+      );
+    }
     unlistenRef.current?.();
     unlistenRef.current = null;
     clearStreamBuffers();

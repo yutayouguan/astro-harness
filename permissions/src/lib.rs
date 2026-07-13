@@ -1,14 +1,12 @@
-//! 权限与 Hook 总线。
+//! 权限裁决：危险命令检测与放行判断。
 //!
-//! 提供危险命令检测、命令放行判断，以及工具/技能/记忆生命周期上的钩子。
+//! 生命周期钩子已迁至独立 crate [`hooks`]（`PluginHookBus` / Gateway / Shell）。
 
 pub mod dangerous;
 pub mod engine;
-pub mod hooks;
 
 pub use dangerous::DangerousCommandDetector;
 pub use engine::PermissionEngine;
-pub use hooks::{HookAction, HookBus, HookEvent};
 
 use serde::{Deserialize, Serialize};
 

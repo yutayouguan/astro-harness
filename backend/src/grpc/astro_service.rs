@@ -117,6 +117,45 @@ impl AstroServiceImpl {
         }
         pause
     }
+
+    /// UI「新建对话」：Gateway `command:new_chat` + Plugin reset/finalize，并卸内存会话。
+    async fn release_session_for_new_chat(&self, session_id: &str) {
+        let payload = ::hooks::HookPayload {
+            session_id: session_id.to_string(),
+            detail: "new_chat".into(),
+            ..Default::default()
+        };
+        self.hook_runtime
+            .fire_gateway(::hooks::COMMAND_NEW_CHAT, &payload);
+        let _ = self
+            .hook_runtime
+            .fire_plugin(::hooks::ON_SESSION_RESET, &payload);
+        let _ = self
+            .hook_runtime
+            .fire_plugin(::hooks::ON_SESSION_FINALIZE, &payload);
+
+        {
+            let mut map = self.pause_controls.write().await;
+            if let Some(pause) = map.remove(session_id) {
+                pause.cancel();
+            }
+        }
+        self.hitl_registry.cancel_and_remove(session_id).await;
+        clear_interrupt_file(&self.memory_dir, session_id);
+
+        let removed = {
+            let mut sessions = self.sessions.write().await;
+            sessions.remove(session_id)
+        };
+        if let Some(handle) = removed {
+            let agent = handle.lock().await;
+            agent.cancel_signal().cancel();
+            let hooks = agent.prompt_hooks();
+            let cancel = agent.cancel_signal();
+            hooks.on_session_reset(session_id, &cancel).await;
+            hooks.on_session_finalize(session_id, &cancel).await;
+        }
+    }
 }
 
 /// 解析 RunFinished.interrupts_json 为 proto Interrupt 列表。
@@ -286,6 +325,13 @@ impl AstroService for AstroServiceImpl {
             return Err(Status::invalid_argument("session_id 不能为空"));
         }
         let action = ChatControlAction::try_from(req.action).unwrap_or_default();
+
+        // 新建对话不依赖进行中的流；无内存会话时仍触发 Gateway 事件。
+        if matches!(action, ChatControlAction::ChatControlNewChat) {
+            self.release_session_for_new_chat(&req.session_id).await;
+            return Ok(Response::new(Empty {}));
+        }
+
         let map = self.pause_controls.read().await;
         let Some(pause) = map.get(&req.session_id) else {
             return Err(Status::not_found(format!(
@@ -306,7 +352,8 @@ impl AstroService for AstroServiceImpl {
                     session.lock().await.cancel_signal().cancel();
                 }
             }
-            ChatControlAction::ChatControlUnspecified => {}
+            ChatControlAction::ChatControlNewChat
+            | ChatControlAction::ChatControlUnspecified => {}
         }
         Ok(Response::new(Empty {}))
     }
@@ -466,6 +513,7 @@ impl AstroService for AstroServiceImpl {
         let hitl_registry = self.hitl_registry.clone();
         let memory_dir = self.memory_dir.clone();
         let sid_cleanup = session_id.clone();
+        let hook_runtime = Arc::clone(&self.hook_runtime);
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
         let hook_out = tx.clone();
@@ -659,6 +707,13 @@ impl AstroService for AstroServiceImpl {
                 }
             }
             clear_interrupt_file(&memory_dir, &sid_cleanup);
+            hook_runtime.fire_gateway(
+                ::hooks::AGENT_END,
+                &::hooks::HookPayload {
+                    session_id: sid_cleanup.clone(),
+                    ..Default::default()
+                },
+            );
             cleanup().await;
         });
 

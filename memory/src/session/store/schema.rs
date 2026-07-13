@@ -1,16 +1,12 @@
-//! Schema 版本、DDL 与迁移/自愈。
+//! Schema 版本、DDL 与 FTS 自愈（不做旧数据迁移）。
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
-use std::collections::HashSet;
-use std::path::Path;
+use rusqlite::{params, OptionalExtension};
 
-use super::{insert_legacy_session, now_epoch_secs, truncate_chars, SessionStore};
-use crate::workspace::default_memory_dir;
+use super::SessionStore;
 
 pub const SCHEMA_VERSION: i32 = 13;
 
-/// 空库直接建到 v11 的完整 DDL（含 FTS inline 模式与触发器）。
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
@@ -118,112 +114,19 @@ CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
 END;
 "#;
 
-/// `messages` 表在 v11 需要补齐的列（声明式 ADD COLUMN）。
-const MESSAGES_V11_COLUMNS: &[(&str, &str)] = &[
-    ("tool_call_id", "TEXT"),
-    ("tool_calls", "TEXT"),
-    ("tool_name", "TEXT"),
-    ("token_count", "INTEGER"),
-    ("finish_reason", "TEXT"),
-    ("reasoning", "TEXT"),
-    ("reasoning_content", "TEXT"),
-    ("reasoning_details", "TEXT"),
-    ("codex_reasoning_items", "TEXT"),
-    ("codex_message_items", "TEXT"),
-];
-
 impl SessionStore {
+    /// 空库建表并 stamp；旧库由 [`SessionStore::open`] 删文件重建，此处不做数据迁移。
     pub(crate) fn migrate_schema(&self) -> Result<()> {
         let current = self.read_schema_version_or_zero()?;
         if current >= SCHEMA_VERSION {
             return Ok(());
         }
-
-        let has_messages = self.table_exists("messages")?;
-        if current == 0 && !has_messages {
-            // 空库：直接落到最新 schema。
+        if !self.table_exists("messages")? {
             self.conn.execute_batch(SCHEMA_V11_DDL)?;
             self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
-        } else if current < 11 {
-            // 旧 MessageDb 风格（有 messages、无 schema_version）或中间版本：声明式补列 + FTS 重建。
-            self.conn.execute_batch(SCHEMA_V11_DDL)?;
-            self.ensure_messages_v11_columns()?;
-            self.convert_legacy_message_timestamps()?;
-            self.ensure_messages_content_nullable()?;
-            self.rebuild_messages_fts_v11()?;
         }
-
-        if current < 12 {
-            self.migrate_v12_billing_reset()?;
-        }
-
-        // v13+：不兼容旧聊天时由 `SessionStore::open` 删库重建；此处仅 stamp。
-
         self.stamp_schema_version()?;
         Ok(())
-    }
-
-    /// v12：清零历史 sessions 账单列（选项 C 重建观测数据）。
-    pub(crate) fn migrate_v12_billing_reset(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "UPDATE sessions SET
-                input_tokens = 0,
-                output_tokens = 0,
-                cache_read_tokens = 0,
-                cache_write_tokens = 0,
-                reasoning_tokens = 0,
-                estimated_cost_usd = NULL,
-                actual_cost_usd = NULL,
-                cost_status = NULL,
-                cost_source = NULL,
-                pricing_version = NULL,
-                billing_provider = NULL,
-                billing_base_url = NULL,
-                billing_mode = NULL,
-                api_call_count = 0;",
-        )?;
-        self.conn.execute(
-            "INSERT OR REPLACE INTO state_meta (key, value) VALUES ('billing_reset_v12', '1')",
-            [],
-        )?;
-        self.clear_legacy_usage_stats_once()?;
-        Ok(())
-    }
-
-    /// 一次性删除各 Agent 的 `usage-stats.json`（meta 门控，幂等）。
-    pub(crate) fn clear_legacy_usage_stats_once(&self) -> Result<()> {
-        let already: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM state_meta WHERE key = 'usage_stats_cleared_v12'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if already.as_deref() == Some("1") {
-            return Ok(());
-        }
-
-        let agents_dir = default_memory_dir().join("agents");
-        if agents_dir.is_dir() {
-            for entry in std::fs::read_dir(&agents_dir)? {
-                let path = entry?.path().join("usage-stats.json");
-                if path.is_file() {
-                    let _ = std::fs::remove_file(path);
-                }
-            }
-        }
-
-        self.conn.execute(
-            "INSERT OR REPLACE INTO state_meta (key, value) VALUES ('usage_stats_cleared_v12', '1')",
-            [],
-        )?;
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn migrate_to_v11(&self) -> Result<()> {
-        self.migrate_schema()
     }
 
     pub(crate) fn stamp_schema_version(&self) -> Result<()> {
@@ -244,124 +147,6 @@ impl SessionStore {
         Ok(exists)
     }
 
-    pub(crate) fn table_columns(&self, table: &str) -> Result<HashSet<String>> {
-        let mut stmt = self
-            .conn
-            .prepare(&format!("PRAGMA table_info({table})"))?;
-        let cols = stmt
-            .query_map([], |row| row.get::<_, String>(1))?
-            .collect::<Result<HashSet<_>, _>>()?;
-        Ok(cols)
-    }
-
-    pub(crate) fn ensure_messages_v11_columns(&self) -> Result<()> {
-        let existing = self.table_columns("messages")?;
-        for (name, ty) in MESSAGES_V11_COLUMNS {
-            if !existing.contains(*name) {
-                self.conn
-                    .execute(
-                        &format!("ALTER TABLE messages ADD COLUMN {name} {ty}"),
-                        [],
-                    )
-                    .with_context(|| format!("add messages.{name}"))?;
-            }
-        }
-        Ok(())
-    }
-
-    /// SQLite 无法 `ALTER` 去掉 NOT NULL；旧 MessageDb 的 `content TEXT NOT NULL` 需整表重建。
-    pub(crate) fn ensure_messages_content_nullable(&self) -> Result<()> {
-        if !self.table_exists("messages")? {
-            return Ok(());
-        }
-        if !self.column_is_not_null("messages", "content")? {
-            return Ok(());
-        }
-
-        // 先拆掉 FTS / 触发器，避免 DROP TABLE messages 被依赖挡住。
-        self.drop_messages_fts_objects()?;
-
-        // 复制期关闭 FK：遗留 messages 可能尚未有对应 sessions 行。
-        self.conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
-        self.conn.execute_batch(
-            r#"
-            CREATE TABLE messages_v11_rebuild (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL REFERENCES sessions(id),
-                role TEXT NOT NULL,
-                content TEXT,
-                tool_call_id TEXT,
-                tool_calls TEXT,
-                tool_name TEXT,
-                timestamp REAL NOT NULL,
-                token_count INTEGER,
-                finish_reason TEXT,
-                reasoning TEXT,
-                reasoning_content TEXT,
-                reasoning_details TEXT,
-                codex_reasoning_items TEXT,
-                codex_message_items TEXT
-            );
-
-            INSERT INTO messages_v11_rebuild (
-                id, session_id, role, content, tool_call_id, tool_calls, tool_name,
-                timestamp, token_count, finish_reason,
-                reasoning, reasoning_content, reasoning_details,
-                codex_reasoning_items, codex_message_items
-            )
-            SELECT
-                id, session_id, role, content, tool_call_id, tool_calls, tool_name,
-                timestamp, token_count, finish_reason,
-                reasoning, reasoning_content, reasoning_details,
-                codex_reasoning_items, codex_message_items
-            FROM messages;
-
-            DROP TABLE messages;
-            ALTER TABLE messages_v11_rebuild RENAME TO messages;
-            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
-            "#,
-        )?;
-        // 恢复 AUTOINCREMENT 序列，避免后续 id 冲突。
-        self.conn.execute_batch(
-            "DELETE FROM sqlite_sequence WHERE name IN ('messages', 'messages_v11_rebuild');
-             INSERT INTO sqlite_sequence(name, seq)
-             SELECT 'messages', IFNULL(MAX(id), 0) FROM messages;",
-        )?;
-        self.conn.execute_batch("PRAGMA foreign_keys=ON;")?;
-        // 上面 drop 过 FTS；此处重建，避免半成品库无索引。
-        self.rebuild_messages_fts_v11()?;
-        Ok(())
-    }
-
-    pub(crate) fn column_is_not_null(&self, table: &str, column: &str) -> Result<bool> {
-        let mut stmt = self
-            .conn
-            .prepare(&format!("PRAGMA table_info({table})"))?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(1)?, row.get::<_, i64>(3)?))
-        })?;
-        for row in rows {
-            let (name, notnull) = row?;
-            if name == column {
-                return Ok(notnull != 0);
-            }
-        }
-        Ok(false)
-    }
-
-    /// 将旧 MessageDb 的 DATETIME 文本时间戳转为 Unix epoch REAL，供 `get_messages` 读取。
-    pub(crate) fn convert_legacy_message_timestamps(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "UPDATE messages
-             SET timestamp = CAST(strftime('%s', timestamp) AS REAL)
-             WHERE typeof(timestamp) = 'text';
-             UPDATE messages
-             SET timestamp = CAST(strftime('%s', 'now') AS REAL)
-             WHERE timestamp IS NULL;",
-        )?;
-        Ok(())
-    }
-
     pub(crate) fn drop_messages_fts_objects(&self) -> Result<()> {
         self.conn.execute_batch(
             "DROP TRIGGER IF EXISTS sync_messages_to_fts;
@@ -377,7 +162,6 @@ impl SessionStore {
     }
 
     pub(crate) fn rebuild_messages_fts_v11(&self) -> Result<()> {
-        // 旧 MessageDb 触发器 / external-content FTS，以及任何半成品 v11 FTS。
         self.drop_messages_fts_objects()?;
         self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
         self.conn.execute_batch(
@@ -395,7 +179,7 @@ impl SessionStore {
             "INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
              SELECT
                  m.session_id,
-                 'legacy',
+                 'tauri',
                  MIN(m.timestamp),
                  COUNT(*),
                  COALESCE(SUM(CASE WHEN m.role = 'tool' THEN 1 ELSE 0 END), 0)
@@ -407,9 +191,7 @@ impl SessionStore {
         Ok(())
     }
 
-    /// 检测并重建失效的 `messages_fts` 触发器：
-    /// - 旧 MessageDb 的 `sync_messages_*`（引用已删除的 `message_id`）
-    /// - 使用 FTS5 `VALUES('delete', …)` 的 contentful 触发器（SQLite 3.43+ 会 SQL logic error）
+    /// 检测并重建失效的 `messages_fts` 触发器（坏触发器 / 错误 delete 语法）。
     pub(crate) fn repair_messages_fts_if_needed(&self) -> Result<()> {
         if !self.needs_messages_fts_repair()? {
             return Ok(());
@@ -420,7 +202,7 @@ impl SessionStore {
     }
 
     pub(crate) fn needs_messages_fts_repair(&self) -> Result<bool> {
-        let legacy: i64 = self.conn.query_row(
+        let broken: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM sqlite_master
              WHERE type = 'trigger'
                AND name IN (
@@ -431,11 +213,10 @@ impl SessionStore {
             [],
             |row| row.get(0),
         )?;
-        if legacy > 0 {
+        if broken > 0 {
             return Ok(true);
         }
 
-        // 旧 v11 DDL 用 INSERT … ('delete', …)，在较新 SQLite 上无法 DELETE/UPDATE 消息。
         let delete_sql: Option<String> = self
             .conn
             .query_row(
@@ -448,65 +229,6 @@ impl SessionStore {
         Ok(delete_sql
             .as_deref()
             .is_some_and(|sql| sql.contains("'delete'")))
-    }
-
-    /// 若 `state_meta.migrated_from_sessions_db` 未设，从旁路 `sessions.db` 导入会话行（幂等）。
-    ///
-    /// 自 schema v13 起不再调用：旧聊天直接丢弃。
-    #[allow(dead_code)]
-    pub(crate) fn import_legacy_sessions_db_once(&self, sessions_dir: &Path) -> Result<()> {
-        let already: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM state_meta WHERE key = 'migrated_from_sessions_db'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if already.as_deref() == Some("1") {
-            return Ok(());
-        }
-
-        let tx = self.conn.unchecked_transaction()?;
-
-        let legacy_path = sessions_dir.join("sessions.db");
-        if legacy_path.is_file() {
-            let legacy = Connection::open(&legacy_path)
-                .with_context(|| format!("open legacy {}", legacy_path.display()))?;
-            let has_sessions: bool = legacy.query_row(
-                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='sessions'",
-                [],
-                |row| row.get(0),
-            )?;
-            if has_sessions {
-                let mut stmt = legacy.prepare(
-                    "SELECT session_id, summary,
-                            CAST(strftime('%s', created_at) AS REAL) AS started_at
-                     FROM sessions",
-                )?;
-                let rows = stmt.query_map([], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, Option<f64>>(2)?,
-                    ))
-                })?;
-                for row in rows {
-                    let (session_id, summary, started_at) = row?;
-                    let title = truncate_chars(&summary, 80);
-                    let started = started_at.unwrap_or_else(|| now_epoch_secs().unwrap_or(0.0));
-                    insert_legacy_session(&tx, &session_id, &title, started)?;
-                }
-            }
-        }
-
-        tx.execute(
-            "INSERT INTO state_meta (key, value) VALUES ('migrated_from_sessions_db', '1')
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [],
-        )?;
-        tx.commit()?;
-        Ok(())
     }
 
     pub(crate) fn read_schema_version_or_zero(&self) -> Result<i32> {

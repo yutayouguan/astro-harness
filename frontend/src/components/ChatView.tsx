@@ -76,6 +76,12 @@ import MsgActivity from "./MsgActivity";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
+import {
+  buildMentionCandidates,
+  buildSlashPaletteEntries,
+  parseSlashInput,
+  type SlashAction,
+} from "../lib/composerCommands";
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {
@@ -188,6 +194,8 @@ type Props = {
    * 产品尚未实现分支会话时可不传；按钮仍展示，点击为 no-op 占位。
    */
   onBranchMessage?: (messageId: string) => void;
+  /** Hermes 风格斜杠命令执行（不含 insert_skill / help 本地处理） */
+  onSlashAction?: (action: SlashAction, args?: string) => void;
 };
 
 /** 输入框 `/` 或 `@` 触发的补全状态 */
@@ -478,6 +486,7 @@ export default function ChatView({
   onRegenerateMessage,
   onDeleteMessage,
   onBranchMessage,
+  onSlashAction,
 }: Props) {
   const { t } = useI18n();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -572,57 +581,49 @@ export default function ChatView({
   );
 
   const slashItems: PaletteItem[] = useMemo(() => {
-    const base: PaletteItem[] = [
-      {
-        id: "clear",
-        title: "/clear",
-        description: t("chat.slashClear"),
-        action: "clear",
-        icon: "⌫",
-      },
-      {
-        id: "new",
-        title: "/new",
-        description: t("chat.slashNew"),
-        action: "clear",
-        icon: "+",
-      },
-      {
-        id: "help",
-        title: "/help",
-        description: t("chat.slashHelp"),
-        action: "help",
-        icon: "?",
-      },
-    ];
-    const skillCmds = skills.map((s) => ({
-      id: `skill-${s.id}`,
-      title: `/${s.name}`,
-      description: s.description || t("chat.slashSkill"),
-      action: "insert" as const,
-      insert: `请使用技能「${s.name}」：`,
-      icon: "✦",
+    return buildSlashPaletteEntries(skills).map((e) => ({
+      id: e.id,
+      title: e.title,
+      description: e.description ?? t(e.descKey),
+      action: e.action,
+      icon: e.icon,
+      skillName: e.skillName,
+      insert:
+        e.action === "insert_skill" && e.skillName
+          ? `请使用技能「${e.skillName}」：`
+          : undefined,
     }));
-    return [...base, ...skillCmds];
   }, [skills, t]);
 
   const mentionItems: PaletteItem[] = useMemo(() => {
-    const agentItems = agents.map((a) => ({
-      id: `agent-${a.id}`,
-      title: `@${a.name}`,
-      description: t("chat.mentionAgent"),
-      insert: `@${a.name} `,
-      icon: "◎",
-    }));
-    const skillItems = skills.map((s) => ({
-      id: `mskill-${s.id}`,
-      title: `@${s.name}`,
-      description: s.description || t("chat.mentionSkill"),
-      insert: `@${s.name} `,
-      icon: "✦",
-    }));
-    return [...agentItems, ...skillItems];
-  }, [agents, skills, t]);
+    const candidates = buildMentionCandidates({
+      agents,
+      skills,
+      mcpServers: mcpServers.map((s) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+      })),
+    });
+    return candidates.map((c) => {
+      const descKey =
+        c.kind === "agent"
+          ? "chat.mentionAgent"
+          : c.kind === "skill"
+            ? "chat.mentionSkill"
+            : "chat.mentionMcp";
+      const icon = c.kind === "agent" ? "◎" : c.kind === "skill" ? "✦" : "⬡";
+      return {
+        id: `mention-${c.kind}-${c.id}`,
+        title: `@${c.name}`,
+        description: c.description || t(descKey),
+        insert: `@${c.name} `,
+        icon,
+        mentionKind: c.kind,
+        action: "insert" as const,
+      };
+    });
+  }, [agents, skills, mcpServers, t]);
 
   const activePaletteItems = useMemo(() => {
     if (paletteKind === "thinking") return thinkingItems;
@@ -678,6 +679,62 @@ export default function ChatView({
     [input, onInputChange, closePalette],
   );
 
+  const runSlashAction = useCallback(
+    (action: SlashAction, args?: string, skillName?: string) => {
+      if (action === "help") {
+        onInputChange(t("chat.slashHelpInsert"));
+        closePalette();
+        return;
+      }
+      if (action === "insert_skill") {
+        const name = skillName ?? args?.trim() ?? "";
+        if (!name) return;
+        const suffix = args && skillName ? ` ${args}` : "";
+        onInputChange(`请使用技能「${name}」：${suffix}`.replace(/：\s*$/, "："));
+        closePalette();
+        return;
+      }
+      if (action === "new_chat") {
+        closePalette();
+        onNewChat();
+        return;
+      }
+      closePalette();
+      onSlashAction?.(action, args);
+    },
+    [closePalette, onInputChange, onNewChat, onSlashAction, t],
+  );
+
+  const tryHandleSlashSubmit = useCallback((): boolean => {
+    const skillNames = skills.map((s) => s.name);
+    const parsed = parseSlashInput(input, skillNames);
+    if (!parsed) {
+      // 以 / 开头但无法识别：提示而非发给模型
+      if (input.trim().startsWith("/")) {
+        const cmd = input.trim().slice(1).split(/\s/)[0] ?? "";
+        onInputChange(t("chat.slashUnknown", { cmd }));
+        return true;
+      }
+      return false;
+    }
+    if (parsed.action === "insert_skill" && parsed.skillName) {
+      const text = parsed.args
+        ? `请使用技能「${parsed.skillName}」：${parsed.args}`
+        : `请使用技能「${parsed.skillName}」：`;
+      onInputChange(text);
+      // 下一拍再发送，避免读到旧 input
+      queueMicrotask(() => onSend());
+      return true;
+    }
+    if (parsed.action === "help") {
+      onInputChange(t("chat.slashHelpInsert"));
+      return true;
+    }
+    onInputChange("");
+    onSlashAction?.(parsed.action, parsed.args);
+    return true;
+  }, [input, skills, onInputChange, onSend, onSlashAction, t]);
+
   const applyPaletteItem = useCallback(
     (item: PaletteItem) => {
       if (paletteKind === "thinking" && item.level) {
@@ -685,16 +742,11 @@ export default function ChatView({
         closePalette();
         return;
       }
-      if (item.action === "clear") {
-        closePalette();
-        onNewChat();
-        return;
-      }
-      if (item.action === "help") {
-        insertAtTrigger(
-          t("chat.slashHelpInsert"),
-          triggerStart,
-          textareaRef.current?.selectionStart ?? input.length,
+      if (paletteKind === "slash" && item.action && item.action !== "insert") {
+        runSlashAction(
+          item.action === "clear" ? "new_chat" : (item.action as SlashAction),
+          undefined,
+          item.skillName,
         );
         return;
       }
@@ -706,11 +758,10 @@ export default function ChatView({
       paletteKind,
       onThinkingLevelChange,
       closePalette,
-      onNewChat,
+      runSlashAction,
       insertAtTrigger,
       triggerStart,
       input.length,
-      t,
     ],
   );
 
@@ -779,6 +830,7 @@ export default function ChatView({
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      if (tryHandleSlashSubmit()) return;
       if (canSend) onSend();
     }
   };
@@ -1103,6 +1155,7 @@ export default function ChatView({
         className="composer-shell"
         onSubmit={(e) => {
           e.preventDefault();
+          if (tryHandleSlashSubmit()) return;
           if (canSend) onSend();
         }}
       >

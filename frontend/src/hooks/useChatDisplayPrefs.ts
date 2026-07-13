@@ -22,7 +22,7 @@ export type ChatDisplayPrefs = {
   showTimestamps: boolean;
 };
 
-const STORAGE_KEY = "astro.chat.displayPrefs";
+const STORAGE_KEY = "astro.chat.displayPrefs.v2";
 
 const PRESETS: Record<ChatVerbosity, Omit<ChatDisplayPrefs, "verbosity">> = {
   compact: {
@@ -38,7 +38,7 @@ const PRESETS: Record<ChatVerbosity, Omit<ChatDisplayPrefs, "verbosity">> = {
     showTools: true,
     showSkills: true,
     showMcp: false,
-    showHooks: false,
+    showHooks: true,
     showMemory: true,
     showStatus: true,
     showTimestamps: false,

@@ -1,6 +1,7 @@
 /** 输入框模式 / 附件调色板。 */
 import { useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../i18n/LocaleContext";
+import type { SlashAction } from "../lib/composerCommands";
 
 /** 调色板种类：斜杠命令 / @提及 / 思考档位 */
 export type PaletteKind = "slash" | "mention" | "thinking";
@@ -13,7 +14,11 @@ export type PaletteItem = {
   icon?: string;
   insert?: string;
   /** slash 命令动作 */
-  action?: "clear" | "help" | "insert";
+  action?: SlashAction | "insert" | "help" | "clear";
+  /** insert_skill 时的技能名 */
+  skillName?: string;
+  /** @ 提及类别 */
+  mentionKind?: "agent" | "skill" | "mcp";
   /** thinking 等级 */
   level?: "off" | "low" | "high" | "max";
 };

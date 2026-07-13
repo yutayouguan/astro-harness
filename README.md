@@ -147,7 +147,10 @@ astro/
 | `memory` | 记忆、工作区、日志 |
 | `skills` / `tools` / `mcp` | 扩展能力 |
 | `permissions` | 访问控制 |
+| `hooks` | Plugin / Gateway / Shell 三套生命周期钩子 |
 | `proto` / `common` | 协议与公共库 |
+
+钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
 
 ## 常用命令
 

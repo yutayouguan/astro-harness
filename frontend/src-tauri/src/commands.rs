@@ -518,9 +518,10 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
         "pause" => ChatControlAction::ChatControlPause,
         "resume" | "stream_resume" => ChatControlAction::ChatControlStreamResume,
         "cancel" | "stop" => ChatControlAction::ChatControlCancel,
+        "new_chat" | "new-chat" => ChatControlAction::ChatControlNewChat,
         other => {
             return Err(format!(
-                "未知控制动作: {other}（pause|resume|stream_resume|cancel）"
+                "未知控制动作: {other}（pause|resume|stream_resume|cancel|new_chat）"
             ))
         }
     };

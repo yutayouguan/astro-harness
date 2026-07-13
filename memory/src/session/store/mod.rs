@@ -224,18 +224,18 @@ impl SessionStore {
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let store = Self { conn };
         store.migrate_schema()?;
-        // 已 stamp 的库也可能残留旧触发器 / 失效的 FTS delete 语法，每次打开自愈。
+        // FTS 触发器自愈。
         store.repair_messages_fts_if_needed()?;
-        // 旧 MessageDb 可能留下「有 messages、无 sessions 行」的孤儿会话。
+        // 补齐「有 messages、无 sessions 行」的孤儿会话。
         store.backfill_sessions_from_messages()?;
         Ok(store)
     }
 
-    /// 打开 `sessions_dir/state.db`；丢弃旁路旧 `sessions.db`，不导入历史。
-    pub fn open_with_legacy_migration(sessions_dir: &Path) -> Result<Self> {
+    /// 打开 `sessions_dir/state.db`；若存在旁路旧 `sessions.db` 则删除（不导入）。
+    pub fn open_sessions_dir(sessions_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(sessions_dir)
             .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
-        discard_legacy_sessions_db(sessions_dir);
+        discard_sidecar_sessions_db(sessions_dir);
         let store = Self::open(&sessions_dir.join("state.db"))?;
         store.backfill_sessions_from_messages()?;
         Ok(store)
@@ -289,44 +289,10 @@ fn peek_schema_version(path: &Path) -> Result<i32> {
     Ok(version.unwrap_or(0))
 }
 
-/// 删除遗留的旁路 `sessions.db`（不再导入）。
-fn discard_legacy_sessions_db(sessions_dir: &Path) {
+/// 删除旁路旧 `sessions.db`（不再导入）。
+fn discard_sidecar_sessions_db(sessions_dir: &Path) {
     let base = sessions_dir.join("sessions.db");
     delete_sqlite_files(&base);
-}
-
-/// 导入遗留会话：先带 title；若撞上 `idx_sessions_title_unique` 则降级为 title=NULL。
-///
-/// 若该 id 已由 messages 回填（无 title），则用导入的 title 补齐。
-#[allow(dead_code)]
-pub(crate) fn insert_legacy_session(
-    conn: &Connection,
-    session_id: &str,
-    title: &str,
-    started_at: f64,
-) -> Result<()> {
-    let with_title = conn.execute(
-        "INSERT INTO sessions (id, source, title, started_at)
-         VALUES (?1, 'tauri', ?2, ?3)
-         ON CONFLICT(id) DO UPDATE SET
-             title = COALESCE(sessions.title, excluded.title),
-             source = CASE WHEN sessions.source = 'legacy' THEN excluded.source ELSE sessions.source END",
-        params![session_id, title, started_at],
-    );
-    match with_title {
-        Ok(_) => Ok(()),
-        Err(err) if is_unique_constraint(&err) => {
-            conn.execute(
-                "INSERT INTO sessions (id, source, title, started_at)
-                 VALUES (?1, 'tauri', NULL, ?2)
-                 ON CONFLICT(id) DO UPDATE SET
-                     source = CASE WHEN sessions.source = 'legacy' THEN 'tauri' ELSE sessions.source END",
-                params![session_id, started_at],
-            )?;
-            Ok(())
-        }
-        Err(err) => Err(err.into()),
-    }
 }
 
 pub(crate) fn is_unique_constraint(err: &rusqlite::Error) -> bool {
