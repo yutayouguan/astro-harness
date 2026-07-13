@@ -104,6 +104,10 @@ pub struct AgentLoop {
     chat_provider: String,
     chat_model: String,
     hooks: Arc<dyn PromptHooks>,
+    /// 进程内插件钩子总线（Block / Modify / Inject）。
+    hook_bus: Arc<::hooks::PluginHookBus>,
+    /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
+    pending_inject_context: Option<String>,
     cancel: CancelSignal,
 }
 
@@ -164,6 +168,8 @@ impl AgentLoop {
             chat_provider: String::new(),
             chat_model: String::new(),
             hooks: Arc::new(NoopHooks),
+            hook_bus: Arc::new(::hooks::PluginHookBus::new()),
+            pending_inject_context: None,
             cancel: CancelSignal::new(),
         })
     }
@@ -171,6 +177,20 @@ impl AgentLoop {
     /// 注入生命周期 hooks（工具调用、prompt 构建、轮次结束等回调）。
     pub fn set_hooks(&mut self, hooks: Arc<dyn PromptHooks>) {
         self.hooks = hooks;
+    }
+
+    /// 设置插件钩子总线（可与 [`set_hooks`] 并存）。
+    pub fn set_hook_bus(&mut self, bus: Arc<::hooks::PluginHookBus>) {
+        self.hook_bus = bus;
+    }
+
+    pub fn hook_bus(&self) -> Arc<::hooks::PluginHookBus> {
+        Arc::clone(&self.hook_bus)
+    }
+
+    /// 取出并清空本轮 `pre_llm_call` 注入上下文。
+    pub fn take_inject_context(&mut self) -> Option<String> {
+        self.pending_inject_context.take()
     }
 
     /// 克隆当前 hooks，供 streaming 在不持有 `AgentLoop` 借用时触发回调。
@@ -523,14 +543,54 @@ impl AgentLoop {
             anyhow::bail!("prompt cancelled");
         }
         self.increment_tool_round()?;
-        self.hooks.on_tool_call(name, args, &self.cancel).await;
+        // 可拦截：PluginHookBus 优先
+        let bus_out = self.hook_bus.fire(
+            ::hooks::PRE_TOOL_CALL,
+            &::hooks::HookPayload {
+                session_id: self.session_id.clone(),
+                tool_name: Some(name.into()),
+                tool_args: Some(args.clone()),
+                detail: format!("{name} {args}"),
+                ..Default::default()
+            },
+        );
+        let mut args_owned = args.clone();
+        match bus_out {
+            ::hooks::HookOutcome::Block(reason) => {
+                let msg = format!("[blocked by hook] {reason}");
+                self.hooks
+                    .post_tool_call(name, &msg, &self.cancel)
+                    .await;
+                return Ok(msg);
+            }
+            ::hooks::HookOutcome::Modify(v) => {
+                args_owned = v;
+            }
+            _ => {}
+        }
+        self.hooks
+            .pre_tool_call(name, &args_owned, &self.cancel)
+            .await;
         if self.cancel.is_cancelled() {
             anyhow::bail!("prompt cancelled");
         }
-        let result = self.dispatch_named_tool(name, args).await?;
+        let result = self.dispatch_named_tool(name, &args_owned).await?;
         self.hooks
-            .on_tool_result(name, &result, &self.cancel)
+            .post_tool_call(name, &result, &self.cancel)
             .await;
+        let _ = self.hook_bus.fire(
+            ::hooks::POST_TOOL_CALL,
+            &::hooks::HookPayload {
+                session_id: self.session_id.clone(),
+                tool_name: Some(name.into()),
+                tool_result: Some(result.clone()),
+                detail: {
+                    let preview: String = result.chars().take(200).collect();
+                    format!("{name} → {preview}")
+                },
+                ..Default::default()
+            },
+        );
         Ok(result)
     }
 
@@ -648,14 +708,26 @@ impl AgentLoop {
         self.increment_turn();
         let system_prompt = self.build_system_prompt();
         self.hooks
-            .on_prompt_build(&system_prompt, &self.cancel)
+            .on_session_start(&self.session_id, &self.cancel)
+            .await;
+        let inject = self.hook_bus.fire(
+            ::hooks::PRE_LLM_CALL,
+            &::hooks::HookPayload {
+                session_id: self.session_id.clone(),
+                system_prompt_chars: Some(system_prompt.len()),
+                detail: format!("system_prompt_chars={}", system_prompt.len()),
+                ..Default::default()
+            },
+        );
+        if let ::hooks::HookOutcome::InjectContext(ctx) = inject {
+            self.pending_inject_context = Some(ctx);
+        }
+        self.hooks
+            .pre_llm_call(&system_prompt, &self.cancel)
             .await;
         if self.cancel.is_cancelled() {
             return Ok(TurnResult::Interrupted);
         }
-        self.hooks
-            .on_turn_end(self.current_turn, &self.cancel)
-            .await;
         Ok(TurnResult::Continue {
             turn: self.current_turn,
             system_prompt,

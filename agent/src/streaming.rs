@@ -685,7 +685,7 @@ async fn run_multi_turn_stream_inner(
                 let agent = session.lock().await;
                 (agent.prompt_hooks(), agent.cancel_signal())
             };
-            hooks.on_completion(&full_response, &cancel).await;
+            hooks.post_llm_call(&full_response, &cancel).await;
             if cancel.is_cancelled() {
                 finish_usage_and_done(
                     &session,

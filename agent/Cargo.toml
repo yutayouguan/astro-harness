@@ -11,6 +11,7 @@ providers = { path = "../providers" }
 tools = { path = "../tools" }
 mcp = { path = "../mcp" }
 a2ui = { path = "../a2ui" }
+hooks = { path = "../hooks" }
 tracing = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
