@@ -33,6 +33,10 @@ export type ChatActivity = {
   kind: ChatActivityKind;
   title: string;
   detail?: string;
+  /** 工具 arguments / 调用入参 */
+  input?: string;
+  /** 工具 result / 记忆 content */
+  output?: string;
   status?: "running" | "done" | "error";
   at?: number;
 };
