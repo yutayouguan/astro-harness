@@ -548,7 +548,9 @@ export default function InsightsPanel({ active }: { active: boolean }) {
       )}
 
       {view === "collab" && collab && (
-        collab.orchestrations.length === 0 ? (
+        collab.orchestrations.length === 0 &&
+        collab.graph.nodes.length === 0 &&
+        collab.graph.edges.length === 0 ? (
           <div className="insights-empty">
             <span className="insights-empty-icon" aria-hidden>
               <GitBranch size={28} strokeWidth={1.75} />
@@ -563,25 +565,29 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                   <GitBranch size={14} strokeWidth={2.25} aria-hidden />
                   {t("insights.collab.listTitle")}
                 </h3>
-                <ul className="insights-collab-list">
-                  {collab.orchestrations.map((o) => (
-                    <li key={o.id}>
-                      <button
-                        type="button"
-                        className={`insights-collab-list-item${selectedId === o.id ? " active" : ""} ${statusClass(o.status)}`}
-                        onClick={() => setSelectedId(o.id)}
-                      >
-                        <span className="insights-collab-list-goal">{o.goal || o.id}</span>
-                        <span className="insights-collab-list-meta">
-                          <span className={`insights-collab-status ${statusClass(o.status)}`}>
-                            {o.status}
+                {collab.orchestrations.length === 0 ? (
+                  <p className="insights-collab-hint">{t("insights.collab.listEmpty")}</p>
+                ) : (
+                  <ul className="insights-collab-list">
+                    {collab.orchestrations.map((o) => (
+                      <li key={o.id}>
+                        <button
+                          type="button"
+                          className={`insights-collab-list-item${selectedId === o.id ? " active" : ""} ${statusClass(o.status)}`}
+                          onClick={() => setSelectedId(o.id)}
+                        >
+                          <span className="insights-collab-list-goal">{o.goal || o.id}</span>
+                          <span className="insights-collab-list-meta">
+                            <span className={`insights-collab-status ${statusClass(o.status)}`}>
+                              {o.status}
+                            </span>
+                            <span className="insights-collab-list-agent">{o.parent_agent_id}</span>
                           </span>
-                          <span className="insights-collab-list-agent">{o.parent_agent_id}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
 
               <section className="insights-collab-steps-panel">
@@ -623,7 +629,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                 <Network size={14} strokeWidth={2.25} aria-hidden />
                 {t("insights.collab.graphTitle")}
               </h3>
-              {collab.graph.nodes.length === 0 ? (
+              {collab.graph.nodes.length === 0 && collab.graph.edges.length === 0 ? (
                 <p className="insights-collab-hint">{t("insights.collab.empty")}</p>
               ) : (
                 <CollabGraphSvg
