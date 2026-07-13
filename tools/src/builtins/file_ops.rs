@@ -4,7 +4,7 @@
 //! 禁止访问 workspace 之外的文件系统。
 
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -305,6 +305,7 @@ fn reaffirm_within(path: &Path, workspace: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     fn write_ws_file(dir: &TempDir, name: &str, bytes: &[u8]) -> PathBuf {
