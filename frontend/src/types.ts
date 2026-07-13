@@ -41,6 +41,33 @@ export type ChatActivity = {
   at?: number;
 };
 
+/** A2UI surface 生命周期 */
+export type UiSurfaceStatus = "active" | "resolved" | "cancelled";
+
+/** 聊天气泡内的声明式 UI 表面（AG-UI activity / A2UI） */
+export type UiSurface = {
+  messageId: string;
+  activityType: string;
+  operations: unknown[];
+  status: UiSurfaceStatus;
+  interrupts?: Array<{
+    id: string;
+    reason: string;
+    message?: string;
+    responseSchema?: unknown;
+  }>;
+};
+
+/** 会话级未决 HITL interrupt */
+export type PendingInterrupt = {
+  id: string;
+  reason: string;
+  message?: string;
+  responseSchema?: unknown;
+  /** 所属助手消息 id */
+  assistantMessageId?: string;
+};
+
 /** 单条助手回复的 token 用量（来自流式 usage 事件） */
 export type MessageTokenUsage = {
   promptTokens: number;
@@ -67,6 +94,8 @@ export type ChatMessage = {
   error?: boolean;
   attachments?: ChatAttachment[];
   activities?: ChatActivity[];
+  /** A2UI / AG-UI activity 表面 */
+  uiSurfaces?: UiSurface[];
   createdAt?: number;
 };
 

@@ -9,6 +9,8 @@ service AstroService {
   rpc Chat(ChatRequest) returns (stream ChatEvent);
   // 对进行中的 Chat 流执行暂停 / 继续 / 取消。
   rpc ChatControl(ChatControlRequest) returns (Empty);
+  // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
+  rpc InterruptResume(InterruptResumeRequest) returns (Empty);
   // 文生图流：进度、图片字节或错误。
   rpc GenerateImage(ImageRequest) returns (stream ImageEvent);
   // 列出已安装且可用于提示的技能。
@@ -50,6 +52,8 @@ message ChatRequest {
   // DeepSeek V4 thinking 控制（前端输入框）
   bool thinking_enabled = 17;
   string reasoning_effort = 18;
+  // JSON array of InterruptResumeItem；session 有 pending interrupt 时必填
+  string resume_json = 19;
 }
 
 // Chat 流控制动作。
@@ -58,6 +62,8 @@ enum ChatControlAction {
   CHAT_CONTROL_PAUSE = 1;
   CHAT_CONTROL_RESUME = 2;
   CHAT_CONTROL_CANCEL = 3;
+  // 与 RESUME 同义：仅恢复流式生成，不可用于回答 interrupt
+  CHAT_CONTROL_STREAM_RESUME = 4;
 }
 
 message ChatControlRequest {
@@ -85,7 +91,55 @@ message ChatEvent {
     UsageEvent usage = 7;
     // 原生 function calling 流式片段
     ToolCallDeltaEvent tool_call_delta = 8;
+    // AG-UI ACTIVITY_SNAPSHOT（A2UI 等）
+    ActivityEvent activity = 9;
+    RunStartedEvent run_started = 10;
+    RunFinishedEvent run_finished = 11;
   }
+}
+
+// 结构化活动快照（如 activity_type = "a2ui-surface"）。
+message ActivityEvent {
+  string message_id = 1;
+  string activity_type = 2;
+  // 通常为 {"operations":[...]} JSON
+  string content_json = 3;
+  bool replace = 4;
+}
+
+message RunStartedEvent {
+  string thread_id = 1;
+  string run_id = 2;
+}
+
+message Interrupt {
+  string id = 1;
+  // tool_call | input_required | confirmation
+  string reason = 2;
+  string message = 3;
+  string tool_call_id = 4;
+  string response_schema_json = 5;
+  string expires_at = 6;
+  string metadata_json = 7;
+}
+
+message RunFinishedEvent {
+  string run_id = 1;
+  // "success" | "interrupt"
+  string outcome_type = 2;
+  repeated Interrupt interrupts = 3;
+}
+
+message InterruptResumeItem {
+  string interrupt_id = 1;
+  // resolved | cancelled
+  string status = 2;
+  string payload_json = 3;
+}
+
+message InterruptResumeRequest {
+  string session_id = 1;
+  repeated InterruptResumeItem resume = 2;
 }
 
 // 完整工具调用结果（含执行输出）。

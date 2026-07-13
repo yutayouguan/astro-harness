@@ -60,6 +60,7 @@ import type {
   ChatMessage,
   InstalledSkill,
   MessageTokenUsage,
+  PendingInterrupt,
 } from "../types";
 import { AgentCreateGuide } from "./AgentCreateGuide";
 import ChatMessageNav from "./ChatMessageNav";
@@ -74,6 +75,7 @@ import ComposerMcpMenu from "./ComposerMcpMenu";
 import ActivityGroup from "./ActivityGroup";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
+import A2UIRenderer from "../a2ui/A2UIRenderer";
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {
@@ -144,6 +146,14 @@ type Props = {
   onAttachmentsChange: (next: ChatAttachment[]) => void;
   /** 发送当前输入 */
   onSend: () => void;
+  /** 会话级未决 interrupt（有则禁用普通发送） */
+  pendingInterrupts?: PendingInterrupt[];
+  /** A2UI 卡片动作（approve / deny / choose） */
+  onUiAction?: (
+    messageId: string,
+    name: string,
+    context: Record<string, unknown>,
+  ) => void;
   onPauseStream?: () => void;
   onResumeStream?: () => void;
   onStopStream?: () => void;
@@ -442,6 +452,8 @@ export default function ChatView({
   onInputChange,
   onAttachmentsChange,
   onSend,
+  pendingInterrupts = [],
+  onUiAction,
   onPauseStream,
   onResumeStream,
   onStopStream,
@@ -879,7 +891,11 @@ export default function ChatView({
     }
   };
 
-  const canSend = !streaming && (input.trim().length > 0 || attachments.length > 0);
+  const interruptBlocked = pendingInterrupts.length > 0;
+  const canSend =
+    !streaming &&
+    !interruptBlocked &&
+    (input.trim().length > 0 || attachments.length > 0);
 
   return (
     <section
@@ -928,6 +944,7 @@ export default function ChatView({
                         !m.reasoning &&
                         !m.attachments?.length &&
                         !m.activities?.length &&
+                        !m.uiSurfaces?.length &&
                         streaming
                           ? "typing"
                           : ""
@@ -943,6 +960,18 @@ export default function ChatView({
                           showTimestamps={displayPrefs.showTimestamps}
                         />
                       )}
+                      {m.uiSurfaces && m.uiSurfaces.length > 0
+                        ? m.uiSurfaces.map((surface) => (
+                            <A2UIRenderer
+                              key={surface.messageId}
+                              operations={surface.operations}
+                              disabled={surface.status !== "active"}
+                              onAction={(name, context) =>
+                                onUiAction?.(m.id, name, context)
+                              }
+                            />
+                          ))
+                        : null}
                       {displayPrefs.showTimestamps && m.createdAt ? (
                         <div className="msg-timestamp">
                           {new Date(m.createdAt).toLocaleTimeString()}
@@ -958,6 +987,7 @@ export default function ChatView({
                       {!m.content &&
                       !m.reasoning &&
                       !m.attachments?.length &&
+                      !m.uiSurfaces?.length &&
                       !(
                         m.activities?.length &&
                         displayPrefs.verbosity !== "compact"
@@ -1108,13 +1138,15 @@ export default function ChatView({
             placeholder={
               streaming
                 ? t("chat.placeholderStreaming")
-                : emptyMode === "chat"
-                  ? t("chat.welcomePlaceholder")
-                  : attachments.length
-                    ? t("chat.placeholderWithAttach")
-                    : t("chat.placeholder")
+                : interruptBlocked
+                  ? t("chat.interrupt.pending")
+                  : emptyMode === "chat"
+                    ? t("chat.welcomePlaceholder")
+                    : attachments.length
+                      ? t("chat.placeholderWithAttach")
+                      : t("chat.placeholder")
             }
-            disabled={streaming}
+            disabled={streaming || interruptBlocked}
             autoFocus
           />
           <div className="composer-bar">

@@ -51,6 +51,8 @@ pub async fn dispatch_tool(
         "tts" => crate::tts::dispatch(ctx, args).await,
         "skills" => crate::skills_tool::dispatch(ctx, args),
         "clarify" => crate::clarify::dispatch(ctx, args),
+        "confirm" => crate::confirm::dispatch(ctx, args),
+        "present_ui" => crate::present_ui::dispatch(ctx, args),
         "delegate" => crate::delegate::dispatch(ctx, args),
         "multi_agent" => crate::multi_agent::dispatch(ctx, args),
         "orchestration_run" => crate::orchestration::dispatch_run(ctx, args),

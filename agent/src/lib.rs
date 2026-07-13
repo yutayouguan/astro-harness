@@ -13,6 +13,8 @@ pub mod cron_exec;
 pub mod event_bus;
 /// 提示词生命周期钩子（取消、录制、渠道回调等）。
 pub mod hooks;
+/// AG-UI 风格 interrupt 挂起与 resume 校验。
+pub mod interrupt;
 /// 多轮对话主循环：工具调用、深度限制与回合结果。
 pub mod loop_;
 /// 会话消息到 Provider API 消息的格式转换。
@@ -35,6 +37,8 @@ pub use context::{DynamicContext, StaticContext};
 pub use hooks::{
     CancelSignal, ChannelHooks, HookEvent, NoopHooks, PromptCancelled, PromptHooks, RecordingHooks,
 };
+/// Interrupt 状态机 re-export。
+pub use interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
 pub use loop_::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
 /// 消息转换入口 re-export。

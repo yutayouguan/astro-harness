@@ -11,6 +11,7 @@ use agent::loop_::{AgentLoop, TurnResult};
 use agent::streaming::{
     stream_multi_turn, MultiTurnStreamItem, StreamedAssistantContent,
 };
+use agent::InterruptPending;
 use futures::StreamExt;
 use memory::{AgentRuntimeConfig, MemoryManager};
 use proto::astro_service_server::AstroService;
@@ -28,6 +29,11 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
+use super::interrupt_store::{
+    format_resume_user_message, parse_pending_interrupts, parse_resume_items_json,
+    resume_items_from_proto, InterruptStore,
+};
+
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Mutex<AgentLoop>>;
 /// Chat RPC 返回的事件流类型别名。
@@ -39,6 +45,8 @@ pub struct AstroServiceImpl {
     sessions: Arc<RwLock<HashMap<String, SessionHandle>>>,
     /// session_id → 暂停控制器。
     pause_controls: Arc<RwLock<HashMap<String, Arc<PauseControl>>>>,
+    /// session_id → 未决 HITL interrupt。
+    interrupt_store: InterruptStore,
     /// 模型供应商注册表。
     providers: Arc<ProviderRegistry>,
     /// 记忆根目录。
@@ -51,6 +59,7 @@ impl AstroServiceImpl {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             pause_controls: Arc::new(RwLock::new(HashMap::new())),
+            interrupt_store: InterruptStore::new(memory_dir.clone()),
             providers: Arc::new(ProviderRegistry::new()),
             memory_dir,
         }
@@ -90,6 +99,53 @@ impl AstroServiceImpl {
         }
         pause
     }
+}
+
+/// 解析 RunFinished.interrupts_json 为 proto Interrupt 列表。
+fn parse_interrupts_json(raw: &str) -> Vec<proto::Interrupt> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return Vec::new();
+    };
+    let Some(arr) = value.as_array() else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|item| {
+            Some(proto::Interrupt {
+                id: item.get("id")?.as_str()?.to_string(),
+                reason: item
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                message: item
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                tool_call_id: item
+                    .get("tool_call_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                response_schema_json: item
+                    .get("response_schema_json")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                expires_at: item
+                    .get("expires_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                metadata_json: item
+                    .get("metadata_json")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            })
+        })
+        .collect()
 }
 
 /// 将 agent 多轮流事件映射为 proto [`ChatEvent`]；无对应项时返回 `None`（当前均有映射）。
@@ -141,6 +197,40 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                 },
             )),
         }),
+        MultiTurnStreamItem::RunStarted { thread_id, run_id } => Some(ChatEvent {
+            payload: Some(proto::chat_event::Payload::RunStarted(
+                proto::RunStartedEvent { thread_id, run_id },
+            )),
+        }),
+        MultiTurnStreamItem::Activity {
+            message_id,
+            activity_type,
+            content_json,
+            replace,
+        } => Some(ChatEvent {
+            payload: Some(proto::chat_event::Payload::Activity(proto::ActivityEvent {
+                message_id,
+                activity_type,
+                content_json,
+                replace,
+            })),
+        }),
+        MultiTurnStreamItem::RunFinished {
+            run_id,
+            outcome_type,
+            interrupts_json,
+        } => {
+            let interrupts = parse_interrupts_json(&interrupts_json);
+            Some(ChatEvent {
+                payload: Some(proto::chat_event::Payload::RunFinished(
+                    proto::RunFinishedEvent {
+                        run_id,
+                        outcome_type,
+                        interrupts,
+                    },
+                )),
+            })
+        }
         MultiTurnStreamItem::Error(err) => Some(ChatEvent {
             payload: Some(proto::chat_event::Payload::Error(err)),
         }),
@@ -187,15 +277,47 @@ impl AstroService for AstroServiceImpl {
         };
         match action {
             ChatControlAction::ChatControlPause => pause.pause(),
-            ChatControlAction::ChatControlResume => pause.resume(),
+            ChatControlAction::ChatControlResume
+            | ChatControlAction::ChatControlStreamResume => pause.resume(),
             ChatControlAction::ChatControlCancel => {
                 pause.cancel();
                 drop(map);
+                self.interrupt_store.cancel_pending(&req.session_id).await;
                 if let Ok(session) = self.get_session(&req.session_id).await {
                     session.lock().await.cancel_signal().cancel();
                 }
             }
             ChatControlAction::ChatControlUnspecified => {}
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    /// 校验并应用 interrupt resume：注入用户消息并清除 pending。
+    ///
+    /// 随后客户端应再调 `Chat` 继续生成（可带补充 `content`）。
+    async fn interrupt_resume(
+        &self,
+        request: Request<proto::InterruptResumeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        if req.session_id.is_empty() {
+            return Err(Status::invalid_argument("session_id 不能为空"));
+        }
+        let Some(mut pending) = self.interrupt_store.get(&req.session_id).await else {
+            return Err(Status::failed_precondition("当前会话没有未决 interrupt"));
+        };
+        let items = resume_items_from_proto(&req.resume);
+        pending.apply_resume(&items).map_err(|e| {
+            Status::invalid_argument(format!("interrupt resume 无效: {e}"))
+        })?;
+        self.interrupt_store.clear(&req.session_id).await;
+        let session = self.get_session(&req.session_id).await?;
+        {
+            let mut agent = session.lock().await;
+            let msg = format_resume_user_message(pending.resolutions());
+            agent
+                .session_messages
+                .push(common::message::Message::user(&msg));
         }
         Ok(Response::new(Empty {}))
     }
@@ -228,6 +350,7 @@ impl AstroService for AstroServiceImpl {
         };
         let model = req.model;
         let content = req.content;
+        let resume_json = req.resume_json;
         let _use_memory = req.use_memory;
         let api_key = req.api_key;
         let base_url = req.base_url;
@@ -259,6 +382,7 @@ impl AstroService for AstroServiceImpl {
         let providers = self.providers.clone();
         let pause = self.register_pause(&session_id).await;
         let pause_controls = self.pause_controls.clone();
+        let interrupt_store = self.interrupt_store.clone();
         let sid_cleanup = session_id.clone();
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
@@ -284,9 +408,70 @@ impl AstroService for AstroServiceImpl {
                 map.remove(&sid_cleanup);
             };
 
+            // HITL 闸门：有 pending 时必须带 resume_json
+            let mut turn_content = content;
+            if let Some(mut pending) = interrupt_store.get(&sid_cleanup).await {
+                if resume_json.trim().is_empty() {
+                    let _ = tx
+                        .send(Ok(ChatEvent {
+                            payload: Some(proto::chat_event::Payload::Error(
+                                "请先完成上方确认或澄清卡片（interrupt pending）".into(),
+                            )),
+                        }))
+                        .await;
+                    let _ = tx
+                        .send(Ok(ChatEvent {
+                            payload: Some(proto::chat_event::Payload::Done(true)),
+                        }))
+                        .await;
+                    cleanup().await;
+                    return;
+                }
+                let items = match parse_resume_items_json(&resume_json) {
+                    Ok(items) => items,
+                    Err(err) => {
+                        let _ = tx
+                            .send(Ok(ChatEvent {
+                                payload: Some(proto::chat_event::Payload::Error(err)),
+                            }))
+                            .await;
+                        let _ = tx
+                            .send(Ok(ChatEvent {
+                                payload: Some(proto::chat_event::Payload::Done(true)),
+                            }))
+                            .await;
+                        cleanup().await;
+                        return;
+                    }
+                };
+                if let Err(err) = pending.apply_resume(&items) {
+                    let _ = tx
+                        .send(Ok(ChatEvent {
+                            payload: Some(proto::chat_event::Payload::Error(format!(
+                                "interrupt resume 无效: {err}"
+                            ))),
+                        }))
+                        .await;
+                    let _ = tx
+                        .send(Ok(ChatEvent {
+                            payload: Some(proto::chat_event::Payload::Done(true)),
+                        }))
+                        .await;
+                    cleanup().await;
+                    return;
+                }
+                interrupt_store.clear(&sid_cleanup).await;
+                let resume_msg = format_resume_user_message(pending.resolutions());
+                turn_content = if turn_content.trim().is_empty() {
+                    resume_msg
+                } else {
+                    format!("{resume_msg}\n\n{turn_content}")
+                };
+            }
+
             let run_result = {
                 let mut agent = session.lock().await;
-                agent.run_turn(&content, "grpc-chat").await
+                agent.run_turn(&turn_content, "grpc-chat").await
             };
 
             let turn_result = match run_result {
@@ -403,6 +588,21 @@ impl AstroService for AstroServiceImpl {
                 match item {
                     Ok(mt) => {
                         let is_done = matches!(mt, MultiTurnStreamItem::Done);
+                        if let MultiTurnStreamItem::RunFinished {
+                            ref outcome_type,
+                            ref interrupts_json,
+                            ..
+                        } = mt
+                        {
+                            if outcome_type == "interrupt" {
+                                let interrupts = parse_pending_interrupts(interrupts_json);
+                                if !interrupts.is_empty() {
+                                    interrupt_store
+                                        .insert(&sid_cleanup, InterruptPending::new(interrupts))
+                                        .await;
+                                }
+                            }
+                        }
                         if let Some(event) = multi_turn_to_chat_event(mt) {
                             if tx.send(Ok(event)).await.is_err() {
                                 break;

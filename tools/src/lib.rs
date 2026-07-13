@@ -15,9 +15,9 @@ pub mod builtins;
 pub use core::{catalog, context, dispatch, parse, registry, schema};
 pub(crate) use core::path_safe;
 pub(crate) use builtins::{
-    browser, clarify, code_exec, create_agent, delegate, file_ops, image_gen, memory_tools,
-    multi_agent, orchestration, scheduled, skills_tool, task_plan, terminal, tts, vision,
-    web_search,
+    browser, clarify, code_exec, confirm, create_agent, delegate, file_ops, image_gen, memory_tools,
+    multi_agent, orchestration, present_ui, scheduled, skills_tool, task_plan, terminal, tts,
+    vision, web_search,
 };
 
 pub use catalog::{
@@ -53,6 +53,8 @@ pub fn register_all(registry: &mut ToolRegistry) {
     tts::register(registry);
     skills_tool::register(registry);
     clarify::register(registry);
+    confirm::register(registry);
+    present_ui::register(registry);
     delegate::register(registry);
     multi_agent::register(registry);
     orchestration::register(registry);

@@ -62,6 +62,25 @@ pub enum MultiTurnStreamItem {
         /// 结果预览（最长 240 字符）。
         content: String,
     },
+    /// AG-UI `RUN_STARTED`：一次用户发送对应一个 run。
+    RunStarted {
+        thread_id: String,
+        run_id: String,
+    },
+    /// AG-UI `ACTIVITY_SNAPSHOT`（如 A2UI surface）。
+    Activity {
+        message_id: String,
+        activity_type: String,
+        content_json: String,
+        replace: bool,
+    },
+    /// AG-UI `RUN_FINISHED`：`outcome_type` 为 `success` 或 `interrupt`。
+    RunFinished {
+        run_id: String,
+        outcome_type: String,
+        /// JSON array of Interrupt；success 时为空数组 `[]`。
+        interrupts_json: String,
+    },
     /// 不可恢复错误，之后必跟 `Done`。
     Error(String),
     /// 流正常或异常结束标记。
@@ -315,12 +334,30 @@ async fn finish_done(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>) {
     let _ = emit(tx, MultiTurnStreamItem::Done).await;
 }
 
+/// 发送 RunFinished(success) 后 Done。
+async fn finish_success(
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+) {
+    let _ = emit(
+        tx,
+        MultiTurnStreamItem::RunFinished {
+            run_id: run_id.to_string(),
+            outcome_type: "success".into(),
+            interrupts_json: "[]".into(),
+        },
+    )
+    .await;
+    finish_done(tx).await;
+}
+
 /// 可选发送累计 usage 后发送 Done；若有 usage 则旁路写入 `usage.db`（kind=llm）。
 async fn finish_usage_and_done(
     session: &Arc<Mutex<AgentLoop>>,
     model: &str,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     usage: Option<Usage>,
+    run_id: &str,
 ) {
     if let Some(u) = usage {
         record_llm_usage(session, model, &u).await;
@@ -330,7 +367,7 @@ async fn finish_usage_and_done(
         )
         .await;
     }
-    finish_done(tx).await;
+    finish_success(tx, run_id).await;
 }
 
 /// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
@@ -353,6 +390,19 @@ pub async fn run_multi_turn_stream(
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
 
+    let (thread_id, run_id) = {
+        let agent = session.lock().await;
+        (agent.session_id().to_string(), uuid::Uuid::new_v4().to_string())
+    };
+    let _ = emit(
+        &tx,
+        MultiTurnStreamItem::RunStarted {
+            thread_id,
+            run_id: run_id.clone(),
+        },
+    )
+    .await;
+
     let max_rounds = {
         let agent = session.lock().await;
         let n = agent.multi_turn();
@@ -365,11 +415,11 @@ pub async fn run_multi_turn_stream(
 
     for round in 0..max_rounds {
         if pause.is_cancelled() {
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
         if !pause.wait_if_paused().await {
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
 
@@ -412,13 +462,19 @@ pub async fn run_multi_turn_stream(
             // Rig 语义：先确认未 pause，再 poll 上游
             if !pause.wait_if_paused().await {
                 pause.clear_abort();
-                finish_usage_and_done(&session, &model, &tx, {
-                    if let Some(u) = round_usage {
-                        total_usage.add_assign(u);
-                        saw_usage = true;
-                    }
-                    saw_usage.then_some(total_usage)
-                })
+                finish_usage_and_done(
+                    &session,
+                    &model,
+                    &tx,
+                    {
+                        if let Some(u) = round_usage {
+                            total_usage.add_assign(u);
+                            saw_usage = true;
+                        }
+                        saw_usage.then_some(total_usage)
+                    },
+                    &run_id,
+                )
                 .await;
                 return;
             }
@@ -427,13 +483,20 @@ pub async fn run_multi_turn_stream(
                 biased;
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
-                    finish_usage_and_done(&session, &model, &tx, {
-                        if let Some(u) = round_usage {
-                            total_usage.add_assign(u);
-                            saw_usage = true;
-                        }
-                        saw_usage.then_some(total_usage)
-                    }).await;
+                    finish_usage_and_done(
+                        &session,
+                        &model,
+                        &tx,
+                        {
+                            if let Some(u) = round_usage {
+                                total_usage.add_assign(u);
+                                saw_usage = true;
+                            }
+                            saw_usage.then_some(total_usage)
+                        },
+                        &run_id,
+                    )
+                    .await;
                     return;
                 }
                 item = stream.next() => item,
@@ -510,7 +573,7 @@ pub async fn run_multi_turn_stream(
                 total_usage.add_assign(u);
                 saw_usage = true;
             }
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
 
@@ -573,11 +636,11 @@ pub async fn run_multi_turn_stream(
 
         for call in calls {
             if pause.is_cancelled() {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
                 return;
             }
             if !pause.wait_if_paused().await {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
                 return;
             }
 
@@ -599,7 +662,7 @@ pub async fn run_multi_turn_stream(
             };
 
             if pause.is_cancelled() {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
                 return;
             }
 
@@ -646,9 +709,77 @@ pub async fn run_multi_turn_stream(
                 }
             }
 
+            // 先解析声明式 UI：信息卡只发 Activity；HITL 另走 interrupt
+            let info_ui = parse_astro_ui(&result);
+            let result_for_history = if let Some(ref ui) = info_ui {
+                format!("Presented info card: {}", ui.summary)
+            } else {
+                result.clone()
+            };
+
+            if let Some(ref ui) = info_ui {
+                let message_id = format!("a2ui-surface-{}", call.id);
+                let content_json =
+                    serde_json::json!({ "operations": ui.operations }).to_string();
+                if !emit(
+                    &tx,
+                    MultiTurnStreamItem::Activity {
+                        message_id,
+                        activity_type: "a2ui-surface".into(),
+                        content_json,
+                        replace: true,
+                    },
+                )
+                .await
+                {
+                    return;
+                }
+            }
+
             {
                 let mut agent = session.lock().await;
-                let _ = agent.record_tool_result_with_id(Some(&call.id), &result);
+                let _ = agent.record_tool_result_with_id(Some(&call.id), &result_for_history);
+            }
+
+            // HITL：confirm/clarify 等返回 astro_hitl → Activity + RunFinished(interrupt)
+            if let Some(hitl) = parse_astro_hitl(&result) {
+                let message_id = format!("a2ui-surface-{}", call.id);
+                let content_json = serde_json::json!({ "operations": hitl.operations }).to_string();
+                if !emit(
+                    &tx,
+                    MultiTurnStreamItem::Activity {
+                        message_id,
+                        activity_type: "a2ui-surface".into(),
+                        content_json,
+                        replace: true,
+                    },
+                )
+                .await
+                {
+                    return;
+                }
+
+                let interrupt = crate::interrupt::Interrupt {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    reason: hitl.reason,
+                    message: hitl.message,
+                    tool_call_id: call.id.clone(),
+                    response_schema_json: hitl.response_schema.to_string(),
+                    expires_at: String::new(),
+                    metadata_json: String::new(),
+                };
+                let interrupts_json = serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
+                let _ = emit(
+                    &tx,
+                    MultiTurnStreamItem::RunFinished {
+                        run_id: run_id.clone(),
+                        outcome_type: "interrupt".into(),
+                        interrupts_json,
+                    },
+                )
+                .await;
+                let _ = emit(&tx, MultiTurnStreamItem::Done).await;
+                return;
             }
         }
 
@@ -665,7 +796,7 @@ pub async fn run_multi_turn_stream(
         }
     }
 
-    finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage)).await;
+    finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
 }
 
 /// 在后台 task 启动 [`run_multi_turn_stream`]，并返回可消费的 [`MultiTurnStream`]。
@@ -685,4 +816,67 @@ pub fn stream_multi_turn(
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))
+}
+
+struct AstroHitlPayload {
+    reason: String,
+    message: String,
+    operations: serde_json::Value,
+    response_schema: serde_json::Value,
+}
+
+struct AstroUiPayload {
+    summary: String,
+    operations: serde_json::Value,
+}
+
+fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
+    let value: serde_json::Value = serde_json::from_str(result).ok()?;
+    if value.get("astro_hitl")?.as_bool() != Some(true) {
+        return None;
+    }
+    let operations = value.get("operations")?.clone();
+    if !operations.is_array() {
+        return None;
+    }
+    Some(AstroHitlPayload {
+        reason: value
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("confirmation")
+            .to_string(),
+        message: value
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        operations,
+        response_schema: value
+            .get("response_schema")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+    })
+}
+
+fn parse_astro_ui(result: &str) -> Option<AstroUiPayload> {
+    let value: serde_json::Value = serde_json::from_str(result).ok()?;
+    if value.get("astro_ui")?.as_bool() != Some(true) {
+        return None;
+    }
+    // HITL 优先：同结果不应既 hitl 又 ui
+    if value.get("astro_hitl").and_then(|v| v.as_bool()) == Some(true) {
+        return None;
+    }
+    let operations = value.get("operations")?.clone();
+    if !operations.is_array() {
+        return None;
+    }
+    Some(AstroUiPayload {
+        summary: value
+            .get("summary")
+            .and_then(|v| v.as_str())
+            .unwrap_or("info")
+            .to_string(),
+        operations,
+    })
 }

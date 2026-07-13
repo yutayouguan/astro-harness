@@ -132,6 +132,10 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
         items.push(item.unwrap());
     }
 
+    assert!(matches!(
+        items.first(),
+        Some(MultiTurnStreamItem::RunStarted { .. })
+    ));
     assert!(items.iter().any(|i| matches!(
         i,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "thinking…"
@@ -143,6 +147,13 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
         i,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
         if u.prompt_tokens == 22 && u.completion_tokens == 8
+    )));
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::RunFinished {
+            outcome_type,
+            ..
+        } if outcome_type == "success"
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
@@ -274,7 +285,13 @@ async fn error_is_followed_by_done() {
     while let Some(item) = rx.recv().await {
         items.push(item.unwrap());
     }
-    assert!(matches!(items.first(), Some(MultiTurnStreamItem::Error(_))));
+    assert!(matches!(
+        items.first(),
+        Some(MultiTurnStreamItem::RunStarted { .. })
+    ));
+    assert!(items
+        .iter()
+        .any(|i| matches!(i, MultiTurnStreamItem::Error(_))));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
 

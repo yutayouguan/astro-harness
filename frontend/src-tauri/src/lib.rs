@@ -235,6 +235,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::start_chat,
             commands::chat_control,
+            commands::interrupt_resume,
             commands::generate_image,
             commands::query_memory,
             commands::get_chat_history,

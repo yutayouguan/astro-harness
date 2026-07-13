@@ -29,6 +29,8 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "memory",
     "session_search",
     "clarify",
+    "confirm",
+    "present_ui",
     "delegate",
     "scheduled",
     "multi_agent",
@@ -202,6 +204,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "tts" => "tts",
         "skills" => "skills",
         "clarify" => "clarify",
+        "confirm" => "confirm",
+        "present_ui" => "present_ui",
         "delegate" => "delegate",
         "multi_agent" | "create_agent" | "orchestration_run" | "orchestration_status" => {
             "multi_agent"
