@@ -39,6 +39,7 @@ type UsageInsights = {
     by_agent: { kind: string; name: string; calls: number; tokens: number; cost_usd: number }[];
     by_model: { kind: string; name: string; calls: number; tokens: number; cost_usd: number }[];
   };
+  unpriced_llm_events?: number;
 };
 
 type CollaborationStep = {
@@ -388,9 +389,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
     ...(data?.series.map((s) => seriesValue(s, metric)) ?? [1]),
   );
   const empty = data && data.kpis.calls === 0 && data.kpis.tokens === 0;
-  const hasUnpriced =
-    data &&
-    data.rankings.by_model.some((m) => m.calls > 0 && m.cost_usd <= 0);
+  const hasUnpriced = (data?.unpriced_llm_events ?? 0) > 0;
   const selected =
     collab?.orchestrations.find((o) => o.id === selectedId) ?? null;
 
