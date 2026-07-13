@@ -271,7 +271,7 @@ pub fn build_callout_surface(
     variant: &str,
 ) -> Vec<Value> {
     let v = match variant {
-        "warn" | "danger" | "success" | "info" => variant,
+        "warn" | "info" => variant,
         _ => "info",
     };
     vec![

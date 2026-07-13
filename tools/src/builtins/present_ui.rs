@@ -31,7 +31,11 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "present_ui".to_string(),
         toolset: "present_ui".to_string(),
-        description: "Present a read-only informational UI card in chat (no interrupt). Prefer shortcut fields title/body/image_url, or pass full A2UI v0.9 operations[] with catalogId astro://a2ui/catalog/v2. Allowed components: Text Icon Divider Card Column Row Button TextField ChoicePicker CheckBox Image List Badge Chip Metric Avatar Callout Spacer. Root should be Card. Use variant for semantics; never put hex colors in JSON. Example metric row: Metric{label,value,hint} inside Column inside Card."
+        description: "Present a read-only informational UI card in chat (no interrupt). Prefer shortcut fields title/body/image_url, or pass full A2UI v0.9 operations[] with catalogId astro://a2ui/catalog/v2. Allowed components: Text Icon Divider Card Column Row Button TextField ChoicePicker CheckBox Image List Badge Chip Metric Avatar Callout Spacer. Root should be Card. Use variant for semantics; never put hex colors in JSON.\n\
+Examples:\n\
+1) Metrics Card: components=[{id:root,component:Card,child:col},{id:col,component:Column,children:[title,m0]},{id:title,component:Text,text:Stats,variant:h2},{id:m0,component:Metric,label:CPU,value:42%,hint:avg}]\n\
+2) Callout Card: components=[{id:root,component:Card,child:col},{id:col,component:Column,children:[title,c0]},{id:title,component:Text,text:Notice,variant:h2},{id:c0,component:Callout,text:Maintenance tonight,variant:warn}]\n\
+3) Form Card: components=[{id:root,component:Card,child:col},{id:col,component:Column,children:[f0,btn]},{id:f0,component:TextField,id:email,label:Email},{id:btn,component:Button,child:lbl,action:{event:{name:submit}}},{id:lbl,component:Text,text:Send}]"
             .to_string(),
         schema: schema_for_args::<PresentUiArgs>(),
         check_fn: None,

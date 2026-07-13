@@ -201,7 +201,13 @@ function CatalogNode({
             className="a2ui-chip"
             disabled={ctx.disabled}
             onClick={() =>
-              ctx.onAction(eventName, node.action?.event?.context ?? {})
+              ctx.onAction(
+                eventName,
+                mergeActionContext(
+                  node.action?.event?.context ?? {},
+                  ctx.fieldValues,
+                ),
+              )
             }
           >
             {text}
