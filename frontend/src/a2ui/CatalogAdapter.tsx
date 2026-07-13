@@ -9,6 +9,8 @@ type RenderCtx = {
   disabled: boolean;
   onAction: (name: string, context: Record<string, unknown>) => void;
   unknownLabel: string;
+  fieldValues: Record<string, unknown>;
+  setFieldValue: (id: string, value: unknown) => void;
 };
 
 function renderChild(
@@ -110,6 +112,69 @@ function CatalogNode({
           {typeof node.text === "string" ? node.text : node.component}
         </div>
       );
+    case "Badge": {
+      const text = typeof node.text === "string" ? node.text : "";
+      const variant = typeof node.variant === "string" ? node.variant : "info";
+      return (
+        <span className={`a2ui-badge is-${variant}`}>{text}</span>
+      );
+    }
+    case "Chip": {
+      const text = typeof node.text === "string" ? node.text : "";
+      const eventName = node.action?.event?.name;
+      if (eventName) {
+        return (
+          <button
+            type="button"
+            className="a2ui-chip"
+            disabled={ctx.disabled}
+            onClick={() =>
+              ctx.onAction(eventName, node.action?.event?.context ?? {})
+            }
+          >
+            {text}
+          </button>
+        );
+      }
+      return <span className="a2ui-chip">{text}</span>;
+    }
+    case "Metric": {
+      const label = typeof node.label === "string" ? node.label : "";
+      const value = node.value != null ? String(node.value) : "";
+      const hint = typeof node.hint === "string" ? node.hint : "";
+      return (
+        <div className="a2ui-metric">
+          <div className="a2ui-metric-label">{label}</div>
+          <div className="a2ui-metric-value">{value}</div>
+          {hint ? <div className="a2ui-metric-hint">{hint}</div> : null}
+        </div>
+      );
+    }
+    case "Avatar": {
+      const src =
+        (typeof node.src === "string" && node.src) ||
+        (typeof node.url === "string" && node.url) ||
+        "";
+      const text = typeof node.text === "string" ? node.text : "";
+      const name = typeof node.name === "string" ? node.name : "";
+      return (
+        <div className="a2ui-avatar" aria-hidden>
+          {src ? <img src={src} alt="" /> : text || name || "•"}
+        </div>
+      );
+    }
+    case "Callout": {
+      const text = typeof node.text === "string" ? node.text : "";
+      const variant = node.variant === "warn" ? "warn" : "info";
+      return (
+        <div className={`a2ui-callout is-${variant}`}>{text}</div>
+      );
+    }
+    case "Spacer": {
+      const size =
+        node.size === "sm" || node.size === "lg" ? node.size : "md";
+      return <div className={`a2ui-spacer-${size}`} />;
+    }
     default:
       return null;
   }
@@ -137,6 +202,8 @@ export function renderCatalogTree(
     disabled: opts.disabled,
     onAction: opts.onAction,
     unknownLabel: opts.unknownLabel,
+    fieldValues: {},
+    setFieldValue: () => {},
   };
   return <CatalogNode node={root} ctx={ctx} />;
 }
