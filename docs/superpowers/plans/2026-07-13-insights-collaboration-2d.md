@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-13-insights-collaboration-2d-design.md`
 
+> **Plan status:** Completed on `main`（2026-07-13）。实现已落地；勿再按本计划重复开工。
+
 ---
 
 ## File map

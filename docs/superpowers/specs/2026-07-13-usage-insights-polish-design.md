@@ -1,7 +1,7 @@
 # 洞察近期补强设计
 
 **日期:** 2026-07-13  
-**状态:** 已批准  
+**状态:** 已批准 / 已实现  
 **范围:** Usage Insights MVP 三处缺口（错误路径 LLM 记账、Cron LLM 用量、趋势图指标切换）  
 **前置:** `docs/superpowers/specs/2026-07-13-usage-insights-design.md`
 
