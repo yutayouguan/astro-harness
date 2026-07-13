@@ -31,7 +31,7 @@ Astro 的会话真相源改为：
 |------|------|------|----------|
 | **P0（本期）** | 单库 `state.db`、富 messages、FTS、UI/Agent 完整恢复 | **做** | — |
 | **P1（后续）** | 自动 **compaction + session split** | 只预留 `parent_session_id`、compaction 相关 API 形状 | 压缩旧上下文为持久化摘要、新 session 挂 `parent_session_id`、lineage 查询 |
-| **P1（后续）** | **会话计费实算流水** | **列全量对齐**，数值可空；轮次结束可可选回填累计字段 | 写入 / 查询 `billing_*`、`estimated_cost_usd`、`actual_cost_usd`、`cost_status`、`pricing_version`；与洞察面板收敛另开 spec |
+| **P1（后续）** | **会话计费实算流水** | **列全量对齐**，数值可空；轮次结束可可选回填累计字段 | → **P1a 独立 spec：** [`2026-07-13-session-store-p1a-billing-design.md`](./2026-07-13-session-store-p1a-billing-design.md)（sessions 权威 + Insights 分流；已批准，待实现） |
 | **P2（更后）** | **多通道 Gateway 路由** | 不做 | 路由索引（如 `sessions.json`）、source 平台过滤、跨通道 sessionKey 解析 |
 
 本期明确 **不做**：
