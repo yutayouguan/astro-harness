@@ -3,3 +3,4 @@
 pub mod db;
 pub mod pricing;
 pub mod stats;
+pub mod trace_insights;

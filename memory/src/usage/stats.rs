@@ -122,10 +122,13 @@ pub fn get_usage_summary(agent_id: Option<&str>) -> AgentUsageSummary {
 ///
 /// 成功写 JSON 后双写 `usage.db`：`kind=tool`（工具集 id）；skills 再写 `kind=skill`。
 /// MCP 工具（`mcp__` 前缀）只更新 JSON，事件由 Agent loop 写 `kind=mcp`。
+///
+/// `session_id` 写入 usage 事件，便于 Tracing 按会话串联工具调用。
 pub fn record_tool_call(
     agent_id: &str,
     tool_name: &str,
     args: &serde_json::Value,
+    session_id: Option<&str>,
 ) -> anyhow::Result<()> {
     // 串行化写盘，避免并发丢计数
     static LOCK: Mutex<()> = Mutex::new(());
@@ -153,13 +156,17 @@ pub fn record_tool_call(
     if !is_mcp {
         use crate::usage_db::{NewUsageEvent, UsageDb};
 
+        let sid = session_id
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
         let ts = chrono::Utc::now().to_rfc3339();
         UsageDb::try_record(NewUsageEvent {
             ts: ts.clone(),
             kind: "tool".into(),
             name: toolset,
             agent_id: id.clone(),
-            session_id: None,
+            session_id: sid.clone(),
             prompt_tokens: 0,
             completion_tokens: 0,
             total_tokens: 0,
@@ -178,7 +185,7 @@ pub fn record_tool_call(
                     kind: "skill".into(),
                     name: skill_id.to_string(),
                     agent_id: id,
-                    session_id: None,
+                    session_id: sid,
                     prompt_tokens: 0,
                     completion_tokens: 0,
                     total_tokens: 0,
@@ -211,10 +218,23 @@ mod tests {
             "workspace",
             "skills",
             &json!({ "skill_id": "demo-skill", "input": {} }),
+            Some("sess-1"),
         )
         .unwrap();
-        record_tool_call("workspace", "skills", &json!({ "skill_id": "demo-skill" })).unwrap();
-        record_tool_call("workspace", "web_search", &json!({ "query": "hi" })).unwrap();
+        record_tool_call(
+            "workspace",
+            "skills",
+            &json!({ "skill_id": "demo-skill" }),
+            Some("sess-1"),
+        )
+        .unwrap();
+        record_tool_call(
+            "workspace",
+            "web_search",
+            &json!({ "query": "hi" }),
+            Some("sess-1"),
+        )
+        .unwrap();
 
         let summary = get_usage_summary(Some("workspace"));
         assert_eq!(summary.tools.get("skills").copied().unwrap_or(0), 2);
@@ -257,7 +277,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
-        record_tool_call("workspace", "skills", &json!({ "skill_id": "  " })).unwrap();
+        record_tool_call("workspace", "skills", &json!({ "skill_id": "  " }), None).unwrap();
         let summary = get_usage_summary(Some("workspace"));
         assert_eq!(summary.tools.get("skills").copied().unwrap_or(0), 1);
         assert!(summary.skills.is_empty());

@@ -1,0 +1,548 @@
+//! Agent 调用链 Tracing：按 `session_id` 聚合，并尽量用会话消息补全 I/O。
+//!
+//! 一次对话会话 = 一条 Trace。优先从 `state.db` 的 chat history 展开
+//! user → tool/skill/mcp → llm 调用链（含 input/output），再合并 `usage.db` 的 token/费用。
+
+use chrono::{SecondsFormat, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
+
+use crate::session_store::SessionStore;
+use crate::usage_db::{period_window, UsageDb, UsagePeriod};
+use crate::workspace::default_memory_dir;
+
+/// 列表默认条数
+pub const TRACE_LIST_LIMIT: usize = 50;
+/// 单条 Trace 事件上限
+pub const TRACE_EVENTS_LIMIT: usize = 500;
+/// 单字段 I/O 截断（字符）
+const IO_TRUNCATE_CHARS: usize = 12_000;
+
+/// Tracing 洞察完整结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceInsights {
+    pub kpis: TraceKpis,
+    pub traces: Vec<TraceSummary>,
+}
+
+/// Tracing KPI
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TraceKpis {
+    pub traces: i64,
+    pub events: i64,
+    pub llm: i64,
+    pub tools: i64,
+    pub skills: i64,
+}
+
+/// 单条会话 Trace 摘要（含事件链）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceSummary {
+    pub session_id: String,
+    pub agent_id: String,
+    /// 首条用户消息预览（便于列表识别）
+    #[serde(default)]
+    pub title: String,
+    pub started_at: String,
+    pub ended_at: String,
+    pub event_count: i64,
+    pub tokens: i64,
+    pub cost_usd: f64,
+    pub kinds: Vec<String>,
+    pub events: Vec<TraceEvent>,
+}
+
+/// Trace 上的单个事件（LangSmith 风格 span）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceEvent {
+    pub id: String,
+    pub ts: String,
+    pub kind: String,
+    pub name: String,
+    pub agent_id: String,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub total_tokens: i64,
+    pub cost_usd: f64,
+    /// 父 span id（工具挂在同轮 assistant 下）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// ok / error / running / …
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+}
+
+/// Tracing 查询参数
+#[derive(Debug, Clone)]
+pub struct TraceInsightsQuery {
+    pub period: UsagePeriod,
+    pub as_of: Option<String>,
+    pub agent_id: Option<String>,
+}
+
+/// 查询 Tracing 洞察（会话列表 + 含 I/O 的调用链）
+pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsights> {
+    let (start, end) = period_window(q.period, q.as_of.as_deref())?;
+    let agent = q.agent_id.filter(|s| !s.is_empty());
+    let db = UsageDb::open_default()?;
+    let summaries = db.list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)?;
+
+    let sessions_dir = default_memory_dir().join("sessions");
+    let store = SessionStore::open_with_legacy_migration(&sessions_dir).ok();
+
+    let mut traces = Vec::with_capacity(summaries.len());
+    let mut kpi = TraceKpis::default();
+    kpi.traces = summaries.len() as i64;
+
+    for s in summaries {
+        let usage_rows = db.list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)?;
+        let (mut events, title) = if let Some(store) = store.as_ref() {
+            match spans_from_chat_history(store, &s.session_id, &s.agent_id) {
+                Ok(built) if !built.0.is_empty() => built,
+                _ => (usage_rows_to_events(&usage_rows, &s.agent_id), String::new()),
+            }
+        } else {
+            (usage_rows_to_events(&usage_rows, &s.agent_id), String::new())
+        };
+
+        merge_usage_into_spans(&mut events, &usage_rows);
+
+        for e in &events {
+            kpi.events += 1;
+            match e.kind.as_str() {
+                "llm" => kpi.llm += 1,
+                "tool" | "mcp" | "cron" => kpi.tools += 1,
+                "skill" => kpi.skills += 1,
+                _ => {}
+            }
+        }
+        let kinds = unique_kinds(&events);
+        let event_count = events.len() as i64;
+        traces.push(TraceSummary {
+            session_id: s.session_id,
+            agent_id: s.agent_id,
+            title,
+            started_at: s.started_at,
+            ended_at: s.ended_at,
+            event_count,
+            tokens: s.tokens,
+            cost_usd: s.cost_usd,
+            kinds,
+            events,
+        });
+    }
+
+    Ok(TraceInsights {
+        kpis: kpi,
+        traces,
+    })
+}
+
+fn usage_rows_to_events(
+    rows: &[crate::usage_db::TraceEventRow],
+    fallback_agent: &str,
+) -> Vec<TraceEvent> {
+    rows.iter()
+        .map(|e| TraceEvent {
+            id: e.id.clone(),
+            ts: e.ts.clone(),
+            kind: e.kind.clone(),
+            name: e.name.clone(),
+            agent_id: if e.agent_id.is_empty() {
+                fallback_agent.to_string()
+            } else {
+                e.agent_id.clone()
+            },
+            prompt_tokens: e.prompt_tokens,
+            completion_tokens: e.completion_tokens,
+            total_tokens: e.total_tokens,
+            cost_usd: e.cost_usd,
+            parent_id: None,
+            status: None,
+            input: None,
+            output: None,
+        })
+        .collect()
+}
+
+/// 从会话 chat history 构建 LangSmith 风格 span 链；返回 (events, title)。
+fn spans_from_chat_history(
+    store: &SessionStore,
+    session_id: &str,
+    agent_id: &str,
+) -> anyhow::Result<(Vec<TraceEvent>, String)> {
+    let history = store.build_chat_history(session_id, TRACE_EVENTS_LIMIT)?;
+    if history.is_empty() {
+        return Ok((Vec::new(), String::new()));
+    }
+
+    let messages = store.get_messages(session_id)?;
+    let mut ts_by_id = std::collections::HashMap::new();
+    for m in &messages {
+        ts_by_id.insert(m.id.to_string(), epoch_to_rfc3339(m.timestamp));
+    }
+
+    let mut events = Vec::new();
+    let mut title = String::new();
+
+    for msg in &history {
+        let ts = ts_by_id
+            .get(&msg.id)
+            .cloned()
+            .unwrap_or_else(|| Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
+
+        match msg.role.as_str() {
+            "user" => {
+                if title.is_empty() && !msg.content.trim().is_empty() {
+                    title = truncate_chars(&msg.content, 80);
+                }
+                events.push(TraceEvent {
+                    id: format!("user-{}", msg.id),
+                    ts,
+                    kind: "user".into(),
+                    name: "user".into(),
+                    agent_id: agent_id.to_string(),
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                    cost_usd: 0.0,
+                    parent_id: None,
+                    status: Some("ok".into()),
+                    input: None,
+                    output: nonempty_truncated(&msg.content),
+                });
+            }
+            "assistant" => {
+                let parent = format!("llm-{}", msg.id);
+                for act in &msg.activities {
+                    let (kind, name) = classify_activity(&act.title, act.input.as_deref());
+                    events.push(TraceEvent {
+                        id: format!("act-{}", act.id),
+                        ts: ts.clone(),
+                        kind: kind.into(),
+                        name,
+                        agent_id: agent_id.to_string(),
+                        prompt_tokens: 0,
+                        completion_tokens: 0,
+                        total_tokens: 0,
+                        cost_usd: 0.0,
+                        parent_id: Some(parent.clone()),
+                        status: act.status.clone(),
+                        input: act.input.as_ref().and_then(|s| nonempty_truncated(s)),
+                        output: act.output.as_ref().and_then(|s| nonempty_truncated(s)),
+                    });
+                }
+
+                let mut input = None;
+                if let Some(r) = msg.reasoning.as_ref().filter(|s| !s.trim().is_empty()) {
+                    input = nonempty_truncated(r);
+                }
+                let output = nonempty_truncated(&msg.content);
+                // 有工具或有正文/推理时才记 llm span
+                if !msg.activities.is_empty() || output.is_some() || input.is_some() {
+                    events.push(TraceEvent {
+                        id: parent,
+                        ts,
+                        kind: "llm".into(),
+                        name: "assistant".into(),
+                        agent_id: agent_id.to_string(),
+                        prompt_tokens: 0,
+                        completion_tokens: 0,
+                        total_tokens: 0,
+                        cost_usd: 0.0,
+                        parent_id: None,
+                        status: Some("ok".into()),
+                        input,
+                        output,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok((events, title))
+}
+
+fn classify_activity(title: &str, input: Option<&str>) -> (&'static str, String) {
+    if title.starts_with("mcp__") {
+        return ("mcp", title.to_string());
+    }
+    if title == "skills" {
+        if let Some(skill_id) = extract_skill_id(input) {
+            return ("skill", skill_id);
+        }
+        return ("skill", "skills".into());
+    }
+    ("tool", title.to_string())
+}
+
+fn extract_skill_id(input: Option<&str>) -> Option<String> {
+    let raw = input?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    v.get("skill_id")
+        .and_then(|x| x.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// 将 usage 中的 llm token/费用按顺序合并到 chat history 的 llm span；
+/// 若 history 无 llm 名，用 usage 的模型名覆盖。
+fn merge_usage_into_spans(
+    events: &mut [TraceEvent],
+    usage_rows: &[crate::usage_db::TraceEventRow],
+) {
+    let llm_usage: Vec<_> = usage_rows.iter().filter(|e| e.kind == "llm").collect();
+    let mut i = 0usize;
+    for ev in events.iter_mut() {
+        if ev.kind != "llm" {
+            continue;
+        }
+        let Some(u) = llm_usage.get(i) else {
+            break;
+        };
+        ev.prompt_tokens = u.prompt_tokens;
+        ev.completion_tokens = u.completion_tokens;
+        ev.total_tokens = u.total_tokens;
+        ev.cost_usd = u.cost_usd;
+        if ev.name == "assistant" && !u.name.is_empty() {
+            ev.name = u.name.clone();
+        }
+        if !u.agent_id.is_empty() {
+            ev.agent_id = u.agent_id.clone();
+        }
+        i += 1;
+    }
+}
+
+fn epoch_to_rfc3339(epoch_secs: f64) -> String {
+    let secs = epoch_secs.floor() as i64;
+    let nsecs = ((epoch_secs - secs as f64) * 1_000_000_000.0).round() as u32;
+    match Utc.timestamp_opt(secs, nsecs) {
+        chrono::LocalResult::Single(dt) => dt.to_rfc3339_opts(SecondsFormat::Secs, true),
+        _ => Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+fn nonempty_truncated(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        None
+    } else {
+        Some(truncate_chars(t, IO_TRUNCATE_CHARS))
+    }
+}
+
+fn truncate_chars(s: &str, max_chars: usize) -> String {
+    let count = s.chars().count();
+    if count <= max_chars {
+        return s.to_string();
+    }
+    let truncated: String = s.chars().take(max_chars).collect();
+    format!("{truncated}…")
+}
+
+fn unique_kinds(events: &[TraceEvent]) -> Vec<String> {
+    let mut out = Vec::new();
+    for e in events {
+        if !out.iter().any(|k| k == &e.kind) {
+            out.push(e.kind.clone());
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session_store::{NewMessage, SessionStore};
+    use crate::usage_db::{NewUsageEvent, UsageDb};
+    use serde_json::json;
+    use std::sync::Mutex;
+    use tempfile::TempDir;
+
+    /// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn traces_group_by_session_and_order_events() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        db.insert(NewUsageEvent {
+            ts: "2026-07-13T10:00:00Z".into(),
+            kind: "llm".into(),
+            name: "gpt-5.6".into(),
+            agent_id: "workspace".into(),
+            session_id: Some("s1".into()),
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+            cost_usd: 0.01,
+            meta_json: None,
+        })
+        .unwrap();
+        db.insert(NewUsageEvent {
+            ts: "2026-07-13T10:00:01Z".into(),
+            kind: "tool".into(),
+            name: "terminal".into(),
+            agent_id: "workspace".into(),
+            session_id: Some("s1".into()),
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            meta_json: None,
+        })
+        .unwrap();
+        db.insert(NewUsageEvent {
+            ts: "2026-07-13T11:00:00Z".into(),
+            kind: "llm".into(),
+            name: "gpt-5.6".into(),
+            agent_id: "other".into(),
+            session_id: Some("s2".into()),
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            total_tokens: 2,
+            cost_usd: 0.0,
+            meta_json: None,
+        })
+        .unwrap();
+
+        let insights = query_trace_insights(TraceInsightsQuery {
+            period: UsagePeriod::Month,
+            as_of: Some("2026-07-13T12:00:00Z".into()),
+            agent_id: None,
+        })
+        .unwrap();
+        assert_eq!(insights.kpis.traces, 2);
+        assert_eq!(insights.kpis.events, 3);
+        assert_eq!(insights.kpis.llm, 2);
+        assert_eq!(insights.kpis.tools, 1);
+        let s1 = insights
+            .traces
+            .iter()
+            .find(|t| t.session_id == "s1")
+            .expect("s1");
+        assert_eq!(s1.events.len(), 2);
+        assert_eq!(s1.events[0].kind, "llm");
+        assert_eq!(s1.events[1].kind, "tool");
+
+        std::env::remove_var("ASTRO_MEMORY_DIR");
+    }
+
+    #[test]
+    fn chat_history_builds_io_chain_and_merges_llm_usage() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let sessions = dir.path().join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        let store = SessionStore::open(&sessions.join("state.db")).unwrap();
+        store.ensure_session("s-io", "test").unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("帮我查天气"),
+                ..NewMessage::empty("s-io", "user")
+            })
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("好的"),
+                tool_calls: Some(json!([{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "arguments": "{\"query\":\"weather\"}"
+                    }
+                }])),
+                ..NewMessage::empty("s-io", "assistant")
+            })
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("晴天 25°C"),
+                tool_call_id: Some("call_1"),
+                tool_name: Some("web_search"),
+                ..NewMessage::empty("s-io", "tool")
+            })
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("今天晴，约 25°C。"),
+                reasoning: Some("先搜索再回答"),
+                ..NewMessage::empty("s-io", "assistant")
+            })
+            .unwrap();
+
+        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        db.insert(NewUsageEvent {
+            ts: "2026-07-13T10:00:00Z".into(),
+            kind: "llm".into(),
+            name: "gpt-test".into(),
+            agent_id: "workspace".into(),
+            session_id: Some("s-io".into()),
+            prompt_tokens: 100,
+            completion_tokens: 40,
+            total_tokens: 140,
+            cost_usd: 0.02,
+            meta_json: None,
+        })
+        .unwrap();
+        // 第二轮 assistant 也对应一条 llm usage
+        db.insert(NewUsageEvent {
+            ts: "2026-07-13T10:00:05Z".into(),
+            kind: "llm".into(),
+            name: "gpt-test".into(),
+            agent_id: "workspace".into(),
+            session_id: Some("s-io".into()),
+            prompt_tokens: 50,
+            completion_tokens: 20,
+            total_tokens: 70,
+            cost_usd: 0.01,
+            meta_json: None,
+        })
+        .unwrap();
+
+        let insights = query_trace_insights(TraceInsightsQuery {
+            period: UsagePeriod::Month,
+            as_of: Some("2026-07-13T12:00:00Z".into()),
+            agent_id: None,
+        })
+        .unwrap();
+        let tr = insights
+            .traces
+            .iter()
+            .find(|t| t.session_id == "s-io")
+            .expect("s-io");
+        assert!(tr.title.contains("天气"));
+        let kinds: Vec<_> = tr.events.iter().map(|e| e.kind.as_str()).collect();
+        assert!(kinds.contains(&"user"));
+        assert!(kinds.contains(&"tool"));
+        assert!(kinds.contains(&"llm"));
+
+        let tool = tr.events.iter().find(|e| e.kind == "tool").unwrap();
+        assert_eq!(tool.name, "web_search");
+        assert!(tool.input.as_ref().unwrap().contains("weather"));
+        assert_eq!(tool.output.as_deref(), Some("晴天 25°C"));
+
+        let llms: Vec<_> = tr.events.iter().filter(|e| e.kind == "llm").collect();
+        assert_eq!(llms.len(), 2);
+        assert_eq!(llms[0].name, "gpt-test");
+        assert_eq!(llms[0].total_tokens, 140);
+        assert_eq!(llms[1].output.as_deref(), Some("今天晴，约 25°C。"));
+        assert_eq!(llms[1].input.as_deref(), Some("先搜索再回答"));
+
+        std::env::remove_var("ASTRO_MEMORY_DIR");
+    }
+}

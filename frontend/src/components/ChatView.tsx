@@ -72,7 +72,7 @@ import {
   type PaletteKind,
 } from "./ComposerPalette";
 import ComposerMcpMenu from "./ComposerMcpMenu";
-import ActivityGroup from "./ActivityGroup";
+import MsgActivity from "./MsgActivity";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
@@ -418,7 +418,7 @@ function MessageActions({
   );
 }
 
-/** 工具/技能等活动卡片列表 */
+/** 工具/技能等活动卡片列表（直接展示，无外层折叠包裹） */
 function ActivityCards({
   items,
   prefs,
@@ -431,11 +431,16 @@ function ActivityCards({
   const visible = items.filter((a) => isActivityVisible(a.kind, prefs));
   if (!visible.length) return null;
   return (
-    <ActivityGroup
-      items={visible}
-      defaultOpen={prefs.verbosity === "detailed"}
-      showTimestamp={showTimestamps}
-    />
+    <div className="msg-activities">
+      {visible.map((a) => (
+        <MsgActivity
+          key={a.id}
+          activity={a}
+          defaultOpen={false}
+          showTimestamp={showTimestamps}
+        />
+      ))}
+    </div>
   );
 }
 

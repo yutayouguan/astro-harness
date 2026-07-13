@@ -102,6 +102,32 @@ pub struct UsageRankings {
     pub by_model: Vec<UsageRankItem>,
 }
 
+/// Tracing：会话级聚合行
+#[derive(Debug, Clone)]
+pub struct TraceSessionRow {
+    pub session_id: String,
+    pub agent_id: String,
+    pub started_at: String,
+    pub ended_at: String,
+    pub event_count: i64,
+    pub tokens: i64,
+    pub cost_usd: f64,
+}
+
+/// Tracing：单事件行
+#[derive(Debug, Clone)]
+pub struct TraceEventRow {
+    pub id: String,
+    pub ts: String,
+    pub kind: String,
+    pub name: String,
+    pub agent_id: String,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub total_tokens: i64,
+    pub cost_usd: f64,
+}
+
 /// 洞察查询完整结果
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UsageInsights {
@@ -466,7 +492,7 @@ impl UsageDb {
         self.query_rank_items(&sql, start, end, agent_id)
     }
 
-    /// 按 Agent 排行（仅 `tool`/`mcp`/`cron`/`llm`，排除 `skill`）
+    /// 按 Agent 排行（仅 `kind = llm`，用于模型用量洞察）
     fn query_rank_by_agent(
         &self,
         start: &str,
@@ -481,7 +507,7 @@ impl UsageDb {
                 COALESCE(SUM(cost_usd), 0.0)
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2
-               AND kind IN ('tool','mcp','cron','llm')
+               AND kind = 'llm'
                {agent_clause}
              GROUP BY agent_id
              ORDER BY calls DESC, name
@@ -512,6 +538,92 @@ impl UsageDb {
              LIMIT 50"
         );
         self.query_rank_items(&sql, start, end, agent_id)
+    }
+
+    /// 按 session 聚合近期 Trace 摘要
+    pub fn list_trace_sessions(
+        &self,
+        start: &str,
+        end: &str,
+        agent_id: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<TraceSessionRow>> {
+        let agent_clause = if agent_id.is_some() {
+            " AND agent_id = ?3"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT
+                session_id,
+                MIN(agent_id) AS agent_id,
+                MIN(ts) AS started_at,
+                MAX(ts) AS ended_at,
+                COUNT(*) AS event_count,
+                COALESCE(SUM(total_tokens), 0) AS tokens,
+                COALESCE(SUM(cost_usd), 0.0) AS cost_usd
+             FROM usage_events
+             WHERE ts >= ?1 AND ts < ?2
+               AND session_id IS NOT NULL
+               AND TRIM(session_id) != ''
+               {agent_clause}
+             GROUP BY session_id
+             ORDER BY MAX(ts) DESC
+             LIMIT {limit}"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let map = |r: &rusqlite::Row<'_>| {
+            Ok(TraceSessionRow {
+                session_id: r.get(0)?,
+                agent_id: r.get(1)?,
+                started_at: r.get(2)?,
+                ended_at: r.get(3)?,
+                event_count: r.get(4)?,
+                tokens: r.get(5)?,
+                cost_usd: r.get(6)?,
+            })
+        };
+        let rows = if let Some(aid) = agent_id {
+            stmt.query_map(params![start, end, aid], map)?
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            stmt.query_map(params![start, end], map)?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        Ok(rows)
+    }
+
+    /// 单会话事件时间线
+    pub fn list_trace_events(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<TraceEventRow>> {
+        let sql = format!(
+            "SELECT id, ts, kind, name, agent_id,
+                    prompt_tokens, completion_tokens, total_tokens, cost_usd
+             FROM usage_events
+             WHERE session_id = ?1
+             ORDER BY ts ASC, rowid ASC
+             LIMIT {limit}"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(params![session_id], |r| {
+                Ok(TraceEventRow {
+                    id: r.get(0)?,
+                    ts: r.get(1)?,
+                    kind: r.get(2)?,
+                    name: r.get(3)?,
+                    agent_id: r.get(4)?,
+                    prompt_tokens: r.get(5)?,
+                    completion_tokens: r.get(6)?,
+                    total_tokens: r.get(7)?,
+                    cost_usd: r.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     fn query_rank_items(
@@ -597,9 +709,8 @@ mod tests {
             .unwrap();
         assert_eq!(insights.kpis.calls, 1);
         assert_eq!(insights.rankings.by_kind.len(), 2);
-        // skill 不进入 by_agent 分组
-        assert_eq!(insights.rankings.by_agent.len(), 1);
-        assert_eq!(insights.rankings.by_agent[0].calls, 1);
+        // 仅 llm 进入 by_agent；此处只有 tool/skill
+        assert!(insights.rankings.by_agent.is_empty());
     }
 
     #[test]
@@ -634,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    fn by_agent_excludes_skill_only_agents() {
+    fn by_agent_only_counts_llm() {
         let dir = TempDir::new().unwrap();
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
         db.insert(NewUsageEvent {
@@ -663,6 +774,19 @@ mod tests {
             meta_json: None,
         })
         .unwrap();
+        db.insert(NewUsageEvent {
+            ts: "2026-07-13T02:00:02Z".into(),
+            kind: "llm".into(),
+            name: "gpt-5.6".into(),
+            agent_id: "workspace".into(),
+            session_id: None,
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+            cost_usd: 0.01,
+            meta_json: None,
+        })
+        .unwrap();
         let insights = db
             .query_insights(UsageInsightsQuery {
                 period: UsagePeriod::Month,
@@ -672,5 +796,7 @@ mod tests {
             .unwrap();
         assert_eq!(insights.rankings.by_agent.len(), 1);
         assert_eq!(insights.rankings.by_agent[0].name, "workspace");
+        assert_eq!(insights.rankings.by_agent[0].calls, 1);
+        assert_eq!(insights.rankings.by_agent[0].tokens, 15);
     }
 }

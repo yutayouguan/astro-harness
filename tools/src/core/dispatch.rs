@@ -33,7 +33,7 @@ pub async fn dispatch_tool(
     // 先记账再执行：即使失败也计入一次「发起调用」
     let agent_id = ctx.memory.agent_id.clone();
     let _ = memory::record_tool_call(&agent_id, name, args);
-    let _ = memory::record_usage_tool_call(&agent_id, name, args);
+    let _ = memory::record_usage_tool_call(&agent_id, name, args, Some(ctx.session_id.as_str()));
 
     match name {
         "memory_add" | "memory_replace" | "memory_remove" | "session_search" => {

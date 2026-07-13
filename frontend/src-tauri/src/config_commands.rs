@@ -252,3 +252,34 @@ pub async fn get_collaboration_insights(
     })
     .map_err(|e| e.to_string())
 }
+
+/// `get_trace_insights` 请求参数。
+#[derive(Debug, Deserialize)]
+pub struct TraceInsightsArgs {
+    /// `month` | `quarter` | `year`
+    pub period: String,
+    /// 可选截止时间（ISO8601）；默认 now
+    pub as_of: Option<String>,
+    /// 可选 Agent 筛选；`None` 表示全部
+    pub agent_id: Option<String>,
+}
+
+/// Tauri 命令：按 period / agent 聚合 Agent 调用链 Tracing。
+#[tauri::command]
+pub async fn get_trace_insights(
+    args: TraceInsightsArgs,
+) -> Result<memory::TraceInsights, String> {
+    let period = match args.period.to_lowercase().as_str() {
+        "month" => memory::UsagePeriod::Month,
+        "quarter" => memory::UsagePeriod::Quarter,
+        "year" => memory::UsagePeriod::Year,
+        other => return Err(format!("invalid period: {other}")),
+    };
+    let agent_id = normalize_agent_id(args.agent_id);
+    memory::query_trace_insights(memory::TraceInsightsQuery {
+        period,
+        as_of: args.as_of,
+        agent_id,
+    })
+    .map_err(|e| e.to_string())
+}

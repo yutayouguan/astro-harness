@@ -280,6 +280,7 @@ pub fn run() {
             config_commands::get_agent_usage_stats,
             config_commands::get_usage_insights,
             config_commands::get_collaboration_insights,
+            config_commands::get_trace_insights,
             providers_commands::get_providers_state,
             providers_commands::list_providers,
             providers_commands::add_provider,

@@ -31,6 +31,7 @@ pub use cron::run_db as cron_run_db;
 pub use usage::db as usage_db;
 pub use usage::pricing as usage_pricing;
 pub use usage::stats as usage_stats;
+pub use usage::trace_insights;
 
 pub use orchestration::collab_insights;
 pub use orchestration::db as orchestration_db;
@@ -119,4 +120,8 @@ pub use collab_insights::{
     query_collaboration_insights, CollaborationEdge, CollaborationGraph,
     CollaborationInsights, CollaborationInsightsQuery, CollaborationNode,
     CollaborationOrchestration, CollaborationStep, COLLAB_LIST_LIMIT, COLLAB_OUTPUT_MAX_BYTES,
+};
+pub use trace_insights::{
+    query_trace_insights, TraceEvent, TraceInsights, TraceInsightsQuery, TraceKpis, TraceSummary,
+    TRACE_EVENTS_LIMIT, TRACE_LIST_LIMIT,
 };

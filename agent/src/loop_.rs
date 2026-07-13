@@ -437,7 +437,12 @@ impl AgentLoop {
             }
             let agent_id = self.memory.agent_id.clone();
             let _ = memory::record_tool_call(&agent_id, name, args);
-            let _ = memory::record_usage_tool_call(&agent_id, name, args);
+            let _ = memory::record_usage_tool_call(
+                &agent_id,
+                name,
+                args,
+                Some(self.session_id.as_str()),
+            );
             memory::UsageDb::try_record(memory::NewUsageEvent {
                 ts: chrono::Utc::now().to_rfc3339(),
                 kind: "mcp".into(),
