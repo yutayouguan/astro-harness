@@ -59,8 +59,8 @@ pub struct TraceEvent {
     pub kind: String,
     pub name: String,
     pub agent_id: String,
-    pub prompt_tokens: i64,
-    pub completion_tokens: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
     pub total_tokens: i64,
     pub cost_usd: f64,
     /// 父 span id（工具挂在同轮 assistant 下）
@@ -156,8 +156,8 @@ fn usage_rows_to_events(
             } else {
                 e.agent_id.clone()
             },
-            prompt_tokens: e.prompt_tokens,
-            completion_tokens: e.completion_tokens,
+            input_tokens: e.input_tokens,
+            output_tokens: e.output_tokens,
             total_tokens: e.total_tokens,
             cost_usd: e.cost_usd,
             parent_id: None,
@@ -205,8 +205,8 @@ fn spans_from_chat_history(
                     kind: "user".into(),
                     name: "user".into(),
                     agent_id: agent_id.to_string(),
-                    prompt_tokens: 0,
-                    completion_tokens: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
                     total_tokens: 0,
                     cost_usd: 0.0,
                     parent_id: None,
@@ -225,8 +225,8 @@ fn spans_from_chat_history(
                         kind: kind.into(),
                         name,
                         agent_id: agent_id.to_string(),
-                        prompt_tokens: 0,
-                        completion_tokens: 0,
+                        input_tokens: 0,
+                        output_tokens: 0,
                         total_tokens: 0,
                         cost_usd: 0.0,
                         parent_id: Some(parent.clone()),
@@ -249,8 +249,8 @@ fn spans_from_chat_history(
                         kind: "llm".into(),
                         name: "assistant".into(),
                         agent_id: agent_id.to_string(),
-                        prompt_tokens: 0,
-                        completion_tokens: 0,
+                        input_tokens: 0,
+                        output_tokens: 0,
                         total_tokens: 0,
                         cost_usd: 0.0,
                         parent_id: None,
@@ -308,8 +308,8 @@ fn merge_usage_into_spans(
         let Some(u) = llm_usage.get(i) else {
             break;
         };
-        ev.prompt_tokens = u.prompt_tokens;
-        ev.completion_tokens = u.completion_tokens;
+        ev.input_tokens = u.input_tokens;
+        ev.output_tokens = u.output_tokens;
         ev.total_tokens = u.total_tokens;
         ev.cost_usd = u.cost_usd;
         if ev.name == "assistant" && !u.name.is_empty() {
@@ -365,56 +365,85 @@ mod tests {
     use crate::session_store::{NewMessage, SessionStore};
     use crate::usage_db::{NewUsageEvent, UsageDb};
     use serde_json::json;
-    use std::sync::Mutex;
     use tempfile::TempDir;
 
-    /// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use crate::usage::test_env::lock_astro_memory_dir;
+
+    fn evt(
+        ts: &str,
+        kind: &str,
+        name: &str,
+        agent_id: &str,
+        session_id: &str,
+        input_tokens: i64,
+        output_tokens: i64,
+        total_tokens: i64,
+        cost_usd: f64,
+    ) -> NewUsageEvent {
+        NewUsageEvent {
+            ts: ts.into(),
+            kind: kind.into(),
+            name: name.into(),
+            agent_id: agent_id.into(),
+            session_id: Some(session_id.into()),
+            input_tokens,
+            output_tokens,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
+            total_tokens,
+            cost_usd,
+            cost_status: None,
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
+            meta_json: None,
+        }
+    }
 
     #[test]
     fn traces_group_by_session_and_order_events() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = lock_astro_memory_dir();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T10:00:00Z".into(),
-            kind: "llm".into(),
-            name: "gpt-5.6".into(),
-            agent_id: "workspace".into(),
-            session_id: Some("s1".into()),
-            prompt_tokens: 10,
-            completion_tokens: 5,
-            total_tokens: 15,
-            cost_usd: 0.01,
-            meta_json: None,
-        })
+        db.insert(evt(
+            "2026-07-13T10:00:00Z",
+            "llm",
+            "gpt-5.6",
+            "workspace",
+            "s1",
+            10,
+            5,
+            15,
+            0.01,
+        ))
         .unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T10:00:01Z".into(),
-            kind: "tool".into(),
-            name: "terminal".into(),
-            agent_id: "workspace".into(),
-            session_id: Some("s1".into()),
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(evt(
+            "2026-07-13T10:00:01Z",
+            "tool",
+            "terminal",
+            "workspace",
+            "s1",
+            0,
+            0,
+            0,
+            0.0,
+        ))
         .unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T11:00:00Z".into(),
-            kind: "llm".into(),
-            name: "gpt-5.6".into(),
-            agent_id: "other".into(),
-            session_id: Some("s2".into()),
-            prompt_tokens: 1,
-            completion_tokens: 1,
-            total_tokens: 2,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(evt(
+            "2026-07-13T11:00:00Z",
+            "llm",
+            "gpt-5.6",
+            "other",
+            "s2",
+            1,
+            1,
+            2,
+            0.0,
+        ))
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {
@@ -441,7 +470,7 @@ mod tests {
 
     #[test]
     fn chat_history_builds_io_chain_and_merges_llm_usage() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = lock_astro_memory_dir();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -486,32 +515,30 @@ mod tests {
             .unwrap();
 
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T10:00:00Z".into(),
-            kind: "llm".into(),
-            name: "gpt-test".into(),
-            agent_id: "workspace".into(),
-            session_id: Some("s-io".into()),
-            prompt_tokens: 100,
-            completion_tokens: 40,
-            total_tokens: 140,
-            cost_usd: 0.02,
-            meta_json: None,
-        })
+        db.insert(evt(
+            "2026-07-13T10:00:00Z",
+            "llm",
+            "gpt-test",
+            "workspace",
+            "s-io",
+            100,
+            40,
+            140,
+            0.02,
+        ))
         .unwrap();
         // 第二轮 assistant 也对应一条 llm usage
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T10:00:05Z".into(),
-            kind: "llm".into(),
-            name: "gpt-test".into(),
-            agent_id: "workspace".into(),
-            session_id: Some("s-io".into()),
-            prompt_tokens: 50,
-            completion_tokens: 20,
-            total_tokens: 70,
-            cost_usd: 0.01,
-            meta_json: None,
-        })
+        db.insert(evt(
+            "2026-07-13T10:00:05Z",
+            "llm",
+            "gpt-test",
+            "workspace",
+            "s-io",
+            50,
+            20,
+            70,
+            0.01,
+        ))
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {

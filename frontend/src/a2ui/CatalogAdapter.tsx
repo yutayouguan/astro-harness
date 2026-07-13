@@ -1,9 +1,27 @@
 /** CatalogAdapter：将 A2UI 组件映射为 React 节点。 */
 
+import type { LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  HelpCircle,
+  Info,
+  Shield,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { mergeActionContext } from "./formState";
 import type { A2uiComponent } from "./types";
 import { isKnownComponent } from "./validate";
+
+const AVATAR_ICONS: Record<string, LucideIcon> = {
+  shield: Shield,
+  info: Info,
+  help: HelpCircle,
+  warn: AlertTriangle,
+  warning: AlertTriangle,
+  check: Check,
+  success: Check,
+};
 
 type RenderCtx = {
   byId: Map<string, A2uiComponent>;
@@ -50,12 +68,15 @@ function CatalogNode({
         return <p className="a2ui-text a2ui-caption">{text}</p>;
       return <p className="a2ui-text">{text}</p>;
     }
-    case "Icon":
+    case "Icon": {
+      const name = typeof node.name === "string" ? node.name : "";
+      const Icon = name ? AVATAR_ICONS[name.toLowerCase()] : undefined;
       return (
         <span className="a2ui-icon" aria-hidden>
-          {typeof node.name === "string" ? node.name : "•"}
+          {Icon ? <Icon size={16} strokeWidth={2} /> : name || "•"}
         </span>
       );
+    }
     case "Divider":
       return <hr className="a2ui-divider" />;
     case "Card":
@@ -235,9 +256,16 @@ function CatalogNode({
         "";
       const text = typeof node.text === "string" ? node.text : "";
       const name = typeof node.name === "string" ? node.name : "";
+      const Icon = name ? AVATAR_ICONS[name.toLowerCase()] : undefined;
       return (
         <div className="a2ui-avatar" aria-hidden>
-          {src ? <img src={src} alt="" /> : text || name || "•"}
+          {src ? (
+            <img src={src} alt="" />
+          ) : Icon ? (
+            <Icon size={18} strokeWidth={2} />
+          ) : (
+            text || name || "•"
+          )}
         </div>
       );
     }
