@@ -75,6 +75,7 @@ import {
   type ChatInteractionMode,
 } from "./lib/chatMode";
 import type { SlashAction } from "./lib/composerCommands";
+import { resolveComposerTurn } from "./lib/composerResolve";
 import { zoomOrRestore } from "./lib/windowZoom";
 import { syncWindowUnderlay } from "./lib/windowUnderlay";
 import {
@@ -896,6 +897,118 @@ export default function App() {
       return;
     }
 
+    // Hermes 对齐：解析 /技能 与 @提及，注入 SKILL.md / 切 Agent / 启用 MCP
+    let displayText = text;
+    let modelBody = text;
+    if (text && !resumeJson) {
+      try {
+        const cfg = await invoke<{
+          agents: { id: string; name: string }[];
+          active_agent_id?: string;
+        }>("get_config");
+        const skillList = await invoke<
+          { id: string; name: string; enabled?: boolean }[]
+        >("list_installed_skills").catch(() => []);
+        const mcpList = await invoke<
+          { id: string; name: string; enabled?: boolean }[]
+        >("get_mcp_servers", { agentId: null }).catch(() => []);
+
+        const resolved = await resolveComposerTurn(text, {
+          agents: cfg.agents ?? [],
+          skills: (skillList ?? [])
+            .filter((s) => s.enabled !== false)
+            .map((s) => ({ id: s.id, name: s.name })),
+          mcpServers: (mcpList ?? []).map((s) => ({
+            id: s.id,
+            name: s.name,
+          })),
+        });
+
+        if (resolved === null) {
+          // 内置斜杠应由 ChatView 拦截；此处兜底不发
+          return;
+        }
+
+        displayText = resolved.displayText || text;
+        modelBody = resolved.modelText || text;
+
+        if (resolved.switchAgentId) {
+          try {
+            await invoke("set_active_agent", {
+              agentId: resolved.switchAgentId,
+            });
+            const hasHistory = messages.some(
+              (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
+            );
+            setToastMsg(
+              t(
+                hasHistory
+                  ? "chat.mentionAgentSwitchedLater"
+                  : "chat.mentionAgentSwitched",
+                { name: resolved.switchAgentName ?? resolved.switchAgentId },
+              ),
+            );
+            setToastVisible(true);
+            if (hideTimerRef.current != null) {
+              window.clearTimeout(hideTimerRef.current);
+            }
+            hideTimerRef.current = window.setTimeout(
+              () => setToastVisible(false),
+              4000,
+            );
+          } catch (e) {
+            console.warn("set_active_agent failed", e);
+          }
+        }
+
+        if (resolved.enableMcpIds.length > 0) {
+          try {
+            const servers = await invoke<
+              {
+                id: string;
+                name: string;
+                enabled: boolean;
+                [k: string]: unknown;
+              }[]
+            >("get_mcp_servers", { agentId: null });
+            const want = new Set(resolved.enableMcpIds);
+            const next = (servers ?? []).map((s) =>
+              want.has(s.id) ? { ...s, enabled: true } : s,
+            );
+            await invoke("set_mcp_servers", {
+              servers: next,
+              agentId: null,
+            });
+            setToastMsg(
+              t("chat.mentionMcpEnabled", {
+                names: resolved.enableMcpNames.join(", "),
+              }),
+            );
+            setToastVisible(true);
+            if (hideTimerRef.current != null) {
+              window.clearTimeout(hideTimerRef.current);
+            }
+            hideTimerRef.current = window.setTimeout(
+              () => setToastVisible(false),
+              4000,
+            );
+          } catch (e) {
+            console.warn("enable mcp failed", e);
+          }
+        }
+
+        if (resolved.loadedSkills.length > 0) {
+          // 轻量提示，避免打断
+          console.info(
+            "skills injected:",
+            resolved.loadedSkills.join(", "),
+          );
+        }
+      } catch (e) {
+        console.warn("resolveComposerTurn failed", e);
+      }
+    }
+
     const isCreatingAgent = emptyMode === "agent" && !opts?.skipUserAppend;
     const userId = opts?.reuseUserId ?? `u-${Date.now()}`;
     const assistantId = `a-${Date.now()}`;
@@ -911,7 +1024,7 @@ export default function App() {
         next.push({
           id: userId,
           role: "user",
-          content: text,
+          content: displayText,
           attachments: pending.map((a) => ({ ...a })),
           createdAt: Date.now(),
         });
@@ -944,8 +1057,8 @@ export default function App() {
 
     const contentForModel = `${
       isCreatingAgent
-        ? `${text}\n\n---\n${t("chat.agentCreateHint")}`
-        : text
+        ? `${modelBody}\n\n---\n${t("chat.agentCreateHint")}`
+        : modelBody
     }${chatModeHint(chatMode)}`;
 
     try {

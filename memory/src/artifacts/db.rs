@@ -564,9 +564,13 @@ mod tests {
 
         let db = ArtifactDb::new(db_path).unwrap();
         assert!(db.get_by_path("/tmp/old.txt").unwrap().is_none());
+        let uploads = root.path().join("uploads");
+        fs::create_dir_all(&uploads).unwrap();
+        let file = uploads.join("a.txt");
+        fs::write(&file, b"hi").unwrap();
         let row = db
             .register(
-                root.path().join("uploads").join("a.txt").to_str().unwrap(),
+                file.to_str().unwrap(),
                 ArtifactSource::Reconcile,
                 None,
                 None,

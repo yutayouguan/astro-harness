@@ -1,6 +1,6 @@
 # Route-Aware Usage Pricing Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 LLM 用量归一为四桶 token，按路由官方快照 / models API 估算费用，双写 `usage_events` 与 `sessions` billing，并摧毁旧观测数据后从零累计。
 
@@ -47,7 +47,7 @@
 - Modify: `providers/src/protocol/http_stream.rs`
 - Test: `providers/src/protocol/http_stream.rs` 内既有 `#[cfg(test)]` 或追加
 
-- [ ] **Step 1: 写失败测试（cache 拆分）**
+- [x] **Step 1: 写失败测试（cache 拆分）**
 
 在 `http_stream.rs` 测试模块追加：
 
@@ -72,12 +72,12 @@ fn parse_openai_usage_splits_cached_prompt_tokens() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p providers parse_openai_usage_splits_cached_prompt_tokens -- --nocapture`  
 Expected: FAIL（字段不存在或断言失败）
 
-- [ ] **Step 3: 实现 `Usage` 四桶**
+- [x] **Step 3: 实现 `Usage` 四桶**
 
 将 `providers/src/api/streaming.rs` 中 `Usage` 改为：
 
@@ -175,12 +175,12 @@ pub fn parse_openai_usage(v: &Value) -> Option<Usage> {
 
 更新同文件旧测试构造体字段。
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cargo test -p providers -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add providers/src/api/streaming.rs providers/src/protocol/http_stream.rs
@@ -201,7 +201,7 @@ EOF
 - Modify: `memory/src/lib.rs`
 - Modify: `memory/tests/usage_db_test.rs`（替换 `estimate_llm_cost` 测试）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `memory/tests/usage_db_test.rs` 将 LiteLLM 测试改为：
 
@@ -239,11 +239,11 @@ fn estimate_usage_cost_official_snapshot_and_unknown() {
 
 （`UsageTokens` / `CostStatus` 为 memory 侧类型，避免 memory→providers 依赖。）
 
-- [ ] **Step 2: Run test — expect FAIL**
+- [x] **Step 2: Run test — expect FAIL**
 
 Run: `cargo test -p memory estimate_usage_cost_official_snapshot_and_unknown -- --nocapture`
 
-- [ ] **Step 3: 实现 pricing 模块**
+- [x] **Step 3: 实现 pricing 模块**
 
 `memory/src/usage/pricing.rs` 核心类型与 API：
 
@@ -302,12 +302,12 @@ pub fn estimate_llm_cost(model: &str, prompt: u32, completion: u32) -> f64 {
 
 本 Task 结束前删除 deprecated，并修所有调用。
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cargo test -p memory estimate_usage_cost_official_snapshot_and_unknown -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/usage/pricing.rs memory/src/lib.rs memory/tests/usage_db_test.rs
@@ -327,7 +327,7 @@ EOF
 - Modify: `memory/src/usage/pricing.rs`
 - Test: `memory/tests/usage_db_test.rs`（文件系统缓存，不打真网）
 
-- [ ] **Step 1: 写失败测试（读缓存文件）**
+- [x] **Step 1: 写失败测试（读缓存文件）**
 
 ```rust
 #[test]
@@ -360,18 +360,18 @@ fn estimate_usage_cost_reads_openrouter_cache_file() {
 
 （`prompt`/`completion` 按 **每 token USD** 存，估价时 × tokens；与 OpenRouter models API 一致。）
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
-- [ ] **Step 3: 实现缓存读写**
+- [x] **Step 3: 实现缓存读写**
 
 - 路径：`default_memory_dir().join("openrouter-model-pricing.json")`  
 - `get_pricing_entry`：openrouter 路由先读缓存；过期（>24h）且提供 `api_key` 时 `blocking` GET `{base}/models`，解析 `data[].id` + `pricing`，写回缓存  
 - 无缓存且无网 → `Unknown`  
 - `source = "provider_models_api"`
 
-- [ ] **Step 4: Run test — PASS**
+- [x] **Step 4: Run test — PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/Cargo.toml memory/src/usage/pricing.rs memory/tests/usage_db_test.rs
@@ -394,7 +394,7 @@ EOF
 
 **常量：** `USAGE_SCHEMA_VERSION: i32 = 2`（或 `PRAGMA user_version=2`）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 #[test]
@@ -475,9 +475,9 @@ fn usage_db_rebuilds_incompatible_schema_and_ignores_unknown_cost() {
 }
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
-- [ ] **Step 3: 实现新 DDL 与打开逻辑**
+- [x] **Step 3: 实现新 DDL 与打开逻辑**
 
 `UsageDb::new`：
 
@@ -504,9 +504,9 @@ pub unpriced_llm_events: i64,
 
 更新所有构造 `NewUsageEvent` 的测试与 `stats.rs`。
 
-- [ ] **Step 4: Run `cargo test -p memory -- --nocapture` — PASS**
+- [x] **Step 4: Run `cargo test -p memory -- --nocapture` — PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/usage/db.rs memory/src/usage/stats.rs memory/tests/
@@ -527,7 +527,7 @@ EOF
 - Modify: `memory/src/session/store/schema.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 #[test]
@@ -579,9 +579,9 @@ fn update_session_billing_accumulates_and_unknown_skips_cost() {
 
 另测：打开已有 v11 DB 升到 v12 后 billing 列为 0（在 test 里手工插入非零再 migrate）。
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `BillingDelta` 放 `session/store/mod.rs` 并 `pub use`。
 
@@ -603,9 +603,9 @@ UPDATE sessions SET
 
 启动时若存在 `usage-stats.json`：`UsageDb::open` 旁路或 `SessionStore::open` 同次调用 `std::fs::remove_file`（幂等）；可放在 `memory` 的 `reset_usage_observability_files()`，由 backend/tauri 启动或 `UsageDb::open_default` 调用一次（meta 门控）。
 
-- [ ] **Step 4: tests PASS**
+- [x] **Step 4: tests PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -625,7 +625,7 @@ EOF
 - Modify: `agent/src/orchestration.rs`（若有 `NewUsageEvent`）
 - Test: 优先单测 hook；若无现成 mock，加 `agent` 内对 `apply_llm_usage_record` 的纯函数测
 
-- [ ] **Step 1: 提取可测函数并写测**
+- [x] **Step 1: 提取可测函数并写测**
 
 在 `streaming.rs`（或 `agent/src/usage_record.rs`）：
 
@@ -662,7 +662,7 @@ pub(crate) fn build_llm_usage_event(
 
 单测：已知快照模型 → status estimated；空 usage 不调用方提前 return。
 
-- [ ] **Step 2: `record_llm_usage` 改为**
+- [x] **Step 2: `record_llm_usage` 改为**
 
 1. `usage.is_empty()` → return  
 2. `build_llm_usage_event(...)`  
@@ -670,11 +670,11 @@ pub(crate) fn build_llm_usage_event(
 4. `SessionStore::open_default()?.update_session_billing(session_id, delta)`（失败 warn）  
 5. 需要 `AgentLoop` 的 `chat_provider` / `chat_base_url` / `chat_api_key`
 
-- [ ] **Step 3: cron_exec 同样传入 provider/base_url**
+- [x] **Step 3: cron_exec 同样传入 provider/base_url**
 
-- [ ] **Step 4: `cargo test -p agent -p memory -- --nocapture`**
+- [x] **Step 4: `cargo test -p agent -p memory -- --nocapture`**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -692,7 +692,7 @@ EOF
 - Modify: `frontend/src/components/InsightsPanel.tsx`
 - Modify: `frontend/src-tauri` 若 DTO 透传需改（serde 字段 `unpriced_llm_events`）
 
-- [ ] **Step 1: 扩展 TS 类型**
+- [x] **Step 1: 扩展 TS 类型**
 
 ```ts
 type UsageInsights = {
@@ -702,7 +702,7 @@ type UsageInsights = {
 };
 ```
 
-- [ ] **Step 2: 替换启发式**
+- [x] **Step 2: 替换启发式**
 
 ```ts
 const hasUnpriced =
@@ -716,11 +716,11 @@ const hasUnpriced =
 const hasUnpriced = (data.unpriced_llm_events ?? 0) > 0;
 ```
 
-- [ ] **Step 3: 手动或既有前端构建确认类型通过**
+- [x] **Step 3: 手动或既有前端构建确认类型通过**
 
 Run: `cd frontend && npm run build`（若仓库惯用）或跳过若无 CI 前端
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -738,9 +738,9 @@ EOF
 - Modify: `docs/superpowers/specs/2026-07-13-route-aware-usage-pricing-design.md` → **状态: 已实现**
 - Modify: `docs/superpowers/specs/2026-07-13-usage-insights-design.md` 费用来源备注改为路由定价（一句）
 
-- [ ] **Step 1: 更新状态与交叉引用**
+- [x] **Step 1: 更新状态与交叉引用**
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
