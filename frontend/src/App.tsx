@@ -44,6 +44,12 @@ import { useTheme } from "./hooks/useTheme";
 import { useI18n } from "./i18n/LocaleContext";
 import type { MessageKey } from "./i18n/messages";
 import { templateForLocale } from "./lib/agentCreateTemplate";
+import {
+  applyActivityUpsert,
+  applyReasoningDelta,
+  applySurfaceUpsert,
+  sealOpenReasoning,
+} from "./lib/chatTimeline";
 import { type ThinkingLevel } from "./lib/thinkingPrefs";
 import {
   loadModelPrefs,
@@ -353,12 +359,16 @@ export default function App() {
         const extra = batch.get(m.id);
         const reasoningExtra = reasoningBatch.get(m.id);
         if (!extra && !reasoningExtra) return m;
-        let reasoningDurationSec = m.reasoningDurationSec;
+        let next = m;
+        if (reasoningExtra) {
+          next = applyReasoningDelta(next, reasoningExtra, now);
+        }
+        let reasoningDurationSec = next.reasoningDurationSec;
         // 正文开始出现时结算思考耗时
         if (
           extra &&
-          !m.content &&
-          (m.reasoning || reasoningExtra) &&
+          !next.content &&
+          next.reasoning &&
           reasoningDurationSec == null
         ) {
           const start = reasoningStartRef.current.get(m.id);
@@ -370,11 +380,8 @@ export default function App() {
           }
         }
         return {
-          ...m,
-          content: extra ? m.content + extra : m.content,
-          reasoning: reasoningExtra
-            ? (m.reasoning ?? "") + reasoningExtra
-            : m.reasoning,
+          ...next,
+          content: extra ? next.content + extra : next.content,
           reasoningDurationSec,
         };
       }),
@@ -390,20 +397,22 @@ export default function App() {
       prev.map((m) => {
         const mine = batch.filter((d) => d.messageId === m.id);
         if (mine.length === 0) return m;
-        const activities = [...(m.activities ?? [])];
+        let next = m;
         for (const d of mine) {
           const mapKey = `${m.id}:${d.index}`;
           let actId = toolDeltaIdsRef.current.get(mapKey);
+          const activities = next.activities ?? [];
           let idx = actId
             ? activities.findIndex((a) => a.id === actId)
             : -1;
           if (idx < 0 && d.id) {
             idx = activities.findIndex((a) => a.id === d.id);
           }
+          let activity: ChatActivity;
           if (idx < 0) {
             actId = d.id || `tc-${d.index}-${Date.now()}`;
             toolDeltaIdsRef.current.set(mapKey, actId);
-            activities.push({
+            activity = {
               id: actId,
               kind: "tool",
               title: d.name || `tool#${d.index}`,
@@ -411,14 +420,14 @@ export default function App() {
               detail: d.args || undefined,
               status: "running",
               at: Date.now(),
-            });
+            };
           } else {
-            const cur = activities[idx];
+            const cur = activities[idx]!;
             if (d.id) toolDeltaIdsRef.current.set(mapKey, d.id);
             const argsSoFar =
               cur.status === "running" ? (cur.input ?? cur.detail ?? "") : "";
             const nextArgs = d.args ? argsSoFar + d.args : cur.input ?? cur.detail;
-            activities[idx] = {
+            activity = {
               ...cur,
               id: d.id || cur.id,
               title: d.name || cur.title,
@@ -427,8 +436,9 @@ export default function App() {
               status: "running",
             };
           }
+          next = applyActivityUpsert(next, activity);
         }
-        return { ...m, activities };
+        return next;
       }),
     );
   }, []);
@@ -984,17 +994,7 @@ export default function App() {
           setMessages((prev) =>
             prev.map((m) => {
               if (m.id !== assistantId) return m;
-              const surfaces = [...(m.uiSurfaces ?? [])];
-              if (payload.replace) {
-                const idx = surfaces.findIndex(
-                  (s) => s.messageId === surface.messageId,
-                );
-                if (idx >= 0) surfaces[idx] = surface;
-                else surfaces.push(surface);
-              } else {
-                surfaces.push(surface);
-              }
-              return { ...m, uiSurfaces: surfaces };
+              return applySurfaceUpsert(m, surface);
             }),
           );
           setStatusPhase("generating");
@@ -1034,10 +1034,11 @@ export default function App() {
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
+                let next = m;
                 const surfaces = [...(m.uiSurfaces ?? [])];
                 if (surfaces.length > 0) {
                   const last = surfaces[surfaces.length - 1]!;
-                  surfaces[surfaces.length - 1] = {
+                  next = applySurfaceUpsert(next, {
                     ...last,
                     interrupts: interrupts.map(
                       ({ id, reason, message, responseSchema }) => ({
@@ -1047,9 +1048,24 @@ export default function App() {
                         responseSchema,
                       }),
                     ),
-                  };
+                  });
                 }
-                return { ...m, uiSurfaces: surfaces };
+                let reasoningDurationSec = next.reasoningDurationSec;
+                if (next.reasoning && reasoningDurationSec == null) {
+                  const start = reasoningStartRef.current.get(assistantId);
+                  if (start != null) {
+                    reasoningDurationSec = Math.max(
+                      0.1,
+                      Math.round(((Date.now() - start) / 1000) * 10) / 10,
+                    );
+                  }
+                }
+                next = {
+                  ...next,
+                  reasoningDurationSec:
+                    reasoningDurationSec ?? next.reasoningDurationSec,
+                };
+                return sealOpenReasoning(next, reasoningDurationSec);
               }),
             );
             setStreaming(false);
@@ -1099,7 +1115,8 @@ export default function App() {
           setMessages((prev) =>
             prev.map((m) => {
               if (m.id !== assistantId) return m;
-              const activities = [...(m.activities ?? [])];
+              const activities = m.activities ?? [];
+              let merged = activity;
               let idx = activities.findIndex((a) => a.id === activity.id);
               if (idx < 0) {
                 idx = activities.findIndex(
@@ -1108,9 +1125,10 @@ export default function App() {
                     (a.title === name || a.title.startsWith("tool#")),
                 );
               }
-              if (idx >= 0) activities[idx] = { ...activities[idx], ...activity };
-              else activities.push(activity);
-              return { ...m, activities };
+              if (idx >= 0) {
+                merged = { ...activities[idx], ...activity, id: activities[idx]!.id };
+              }
+              return applyActivityUpsert(m, merged);
             }),
           );
         } else if (payload.type === "memory_update") {
@@ -1125,9 +1143,7 @@ export default function App() {
           };
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, activities: [...(m.activities ?? []), activity] }
-                : m,
+              m.id === assistantId ? applyActivityUpsert(m, activity) : m,
             ),
           );
         } else if (payload.type === "done") {
@@ -1164,12 +1180,15 @@ export default function App() {
                   );
                 }
               }
-              const withUsage = {
-                ...m,
+              let withUsage = sealOpenReasoning(
+                {
+                  ...m,
+                  reasoningDurationSec,
+                  usage: usage ?? m.usage,
+                  tokensPerSec: tokensPerSec ?? m.tokensPerSec,
+                },
                 reasoningDurationSec,
-                usage: usage ?? m.usage,
-                tokensPerSec: tokensPerSec ?? m.tokensPerSec,
-              };
+              );
               if (
                 !content &&
                 !(m.activities && m.activities.length > 0) &&
@@ -1214,11 +1233,25 @@ export default function App() {
               if (m.id !== assistantId) return m;
               // 保留已流式正文，仅追加错误提示
               const base = (m.content ?? "").trim();
-              return {
-                ...m,
-                content: base ? `${base}\n\n⚠️ ${errMsg}` : errMsg,
-                error: true,
-              };
+              let reasoningDurationSec = m.reasoningDurationSec;
+              if (m.reasoning && reasoningDurationSec == null) {
+                const start = reasoningStartRef.current.get(assistantId);
+                if (start != null) {
+                  reasoningDurationSec = Math.max(
+                    0.1,
+                    Math.round(((Date.now() - start) / 1000) * 10) / 10,
+                  );
+                }
+              }
+              return sealOpenReasoning(
+                {
+                  ...m,
+                  content: base ? `${base}\n\n⚠️ ${errMsg}` : errMsg,
+                  error: true,
+                  reasoningDurationSec,
+                },
+                reasoningDurationSec,
+              );
             }),
           );
           setStreaming(false);
@@ -1508,7 +1541,28 @@ export default function App() {
       console.warn("chat_control cancel failed", e);
     }
     const aid = activeAssistantIdRef.current;
-    if (aid) settleMessageUsage(aid);
+    if (aid) {
+      settleMessageUsage(aid);
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== aid) return m;
+          let reasoningDurationSec = m.reasoningDurationSec;
+          if (m.reasoning && reasoningDurationSec == null) {
+            const start = reasoningStartRef.current.get(aid);
+            if (start != null) {
+              reasoningDurationSec = Math.max(
+                0.1,
+                Math.round(((Date.now() - start) / 1000) * 10) / 10,
+              );
+            }
+          }
+          return sealOpenReasoning(
+            { ...m, reasoningDurationSec },
+            reasoningDurationSec,
+          );
+        }),
+      );
+    }
     activeAssistantIdRef.current = null;
     clearStreamBuffers();
     setStreaming(false);
