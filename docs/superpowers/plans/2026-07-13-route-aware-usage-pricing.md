@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-13-route-aware-usage-pricing-design.md`
 
+**状态:** Task 1–8 已全部完成并合入 `main`（见 `ec64d76` 等）。
+
 **执行注意:** 在干净 worktree 实现；勿把上游品牌字样写进代码/路径/文案。废弃计划 `docs/superpowers/plans/2026-07-13-session-store-p1a-billing.md` 勿执行。
 
 ---
