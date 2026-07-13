@@ -209,40 +209,6 @@ fn read_agent_display_name(ws: &Path, fallback: &str) -> String {
     fallback.to_string()
 }
 
-/// 将旧版 `agents/{id}/` 工作区迁移到 `workspace-{id}/`，配置留在 `agents/{id}/`
-fn migrate_legacy_agent_workspaces(base: &Path) -> anyhow::Result<()> {
-    let agents_root = base.join("agents");
-    if !agents_root.is_dir() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(&agents_root)?.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let id = entry.file_name().to_string_lossy().to_string();
-        if id == DEFAULT_AGENT_ID {
-            continue;
-        }
-        // 旧布局：agents/{id} 里直接放 MEMORY.md / IDENTITY.md
-        let looks_like_workspace = path.join("MEMORY.md").is_file()
-            || path.join("IDENTITY.md").is_file()
-            || path.join("SOUL.md").is_file();
-        if !looks_like_workspace {
-            continue;
-        }
-        let new_ws = agent_workspace_dir(base, &id);
-        if !new_ws.exists() {
-            fs::rename(&path, &new_ws)?;
-            // 重建空的 agents/{id} 放配置
-            fs::create_dir_all(agent_config_dir(base, &id))?;
-            let name = read_agent_display_name(&new_ws, &id);
-            let _ = write_agent_config(base, &id, &name, true);
-        }
-    }
-    Ok(())
-}
-
 /// Agent 记忆空间元信息（`workspace` / `workspace-*`），供 UI 列举与切换
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AgentInfo {
@@ -269,7 +235,6 @@ pub struct AgentInfo {
 
 /// 列出所有记忆空间（默认 workspace + workspace-*）
 pub fn list_agents(base: &Path) -> Vec<AgentInfo> {
-    let _ = migrate_legacy_agent_workspaces(base);
     let active = active_agent_id(base);
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -576,16 +541,9 @@ pub fn ensure_agent_space(
 
     for (filename, template) in CORE_FILES {
         let dest = workspace.join(filename);
-        let legacy = base.join(filename);
         if !dest.exists() {
-            if id == DEFAULT_AGENT_ID && legacy.is_file() {
-                fs::rename(&legacy, &dest)?;
-            } else {
-                let content = render_template(template, &id, &name);
-                fs::write(&dest, content)?;
-            }
-        } else if id == DEFAULT_AGENT_ID && legacy.is_file() {
-            let _ = fs::remove_file(&legacy);
+            let content = render_template(template, &id, &name);
+            fs::write(&dest, content)?;
         }
     }
 
@@ -610,7 +568,6 @@ pub fn ensure_agent_space(
 /// ```
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     fs::create_dir_all(base)?;
-    let _ = migrate_legacy_agent_workspaces(base);
 
     let mut ensured_dirs = Vec::new();
     for rel in ENSURED_DIRS {
@@ -625,19 +582,14 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     let workspace = agent_workspace_dir(base, DEFAULT_AGENT_ID);
     for (name, _) in CORE_FILES {
         let dest = workspace.join(name);
-        let legacy = base.join(name);
         if !dest.exists() {
-            if legacy.is_file() {
-                created_files.push(format!("workspace/{name} (migrated)"));
-            } else {
-                created_files.push(format!("workspace/{name}"));
-            }
+            created_files.push(format!("workspace/{name}"));
         }
     }
     let _ = ensure_agent_space(base, DEFAULT_AGENT_ID, Some("Astro"))?;
 
-    // 初始化会话数据库（含旧 state.db / sessions.db 迁移）
-    let _ = SessionStore::open_with_legacy_migration(&base.join("sessions"))?;
+    // 初始化会话数据库
+    let _ = SessionStore::open_sessions_dir(&base.join("sessions"))?;
 
     for (rel, content) in STATE_JSON_FILES {
         let path = base.join(rel);
@@ -723,10 +675,8 @@ mod tests {
             assert!(dir.path().join(rel).is_dir(), "missing dir {rel}");
         }
         assert!(dir.path().join("sessions").join("state.db").is_file());
-        // sessions.db 为旧库；新布局仅权威 state.db（旁路文件可保留备份）
         for (name, _) in CORE_FILES {
             assert!(ws.join(name).is_file(), "missing workspace/{name}");
-            assert!(!dir.path().join(name).exists(), "{name} should not be at root");
         }
         assert!(dir.path().join("active-agent.json").is_file());
         assert_eq!(

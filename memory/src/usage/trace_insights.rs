@@ -91,7 +91,7 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
     let summaries = db.list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)?;
 
     let sessions_dir = default_memory_dir().join("sessions");
-    let store = SessionStore::open_with_legacy_migration(&sessions_dir).ok();
+    let store = SessionStore::open_sessions_dir(&sessions_dir).ok();
 
     let mut traces = Vec::with_capacity(summaries.len());
     let mut kpi = TraceKpis::default();

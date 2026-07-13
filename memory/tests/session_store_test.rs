@@ -246,7 +246,7 @@ fn discards_legacy_messages_and_sessions_db() {
         .unwrap();
     }
 
-    let store = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+    let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
     assert_eq!(store.schema_version().unwrap(), 13);
     assert!(
         !legacy_path.exists(),
@@ -275,7 +275,7 @@ fn discards_legacy_messages_and_sessions_db() {
     let msgs = store.get_messages("fresh").unwrap();
     assert!(msgs.last().unwrap().content.is_none());
 
-    let _ = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+    let _ = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
     assert_eq!(store.get_messages("fresh").unwrap().len(), 1);
 }
 
@@ -302,7 +302,7 @@ fn discards_legacy_sessions_db_without_importing_titles() {
         .unwrap();
     }
 
-    let store = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+    let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
     assert!(!legacy_path.exists());
     assert!(store.get_session("dup-a").unwrap().is_none());
     assert!(store.get_session("dup-b").unwrap().is_none());
@@ -350,7 +350,7 @@ fn open_repairs_legacy_fts_triggers_on_v11_db() {
             })
             .unwrap();
     }
-    // 模拟旧 MessageDb 触发器在已 stamp v11 的库上被重新挂上。
+    // 模拟失效 FTS 触发器被重新挂上。
     {
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.execute_batch(
@@ -475,7 +475,7 @@ fn open_backfills_sessions_from_orphan_messages() {
     }
     let store = SessionStore::open(&path).unwrap();
     let s = store.get_session("orphan").unwrap().expect("backfilled");
-    assert_eq!(s.source, "legacy");
+    assert_eq!(s.source, "tauri");
     assert_eq!(s.message_count, 2);
     assert_eq!(s.started_at, 100.0);
 }

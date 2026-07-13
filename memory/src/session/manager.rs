@@ -72,7 +72,7 @@ impl MemoryManager {
             workspace_dir: workspace.clone(),
             memory: MemoryFile::new(workspace.join("MEMORY.md"), 8000),
             user: MemoryFile::new(workspace.join("USER.md"), 4000),
-            session_store: SessionStore::open_with_legacy_migration(&sessions_dir)?,
+            session_store: SessionStore::open_sessions_dir(&sessions_dir)?,
         })
     }
 

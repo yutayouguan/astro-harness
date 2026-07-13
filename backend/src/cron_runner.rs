@@ -1,9 +1,9 @@
-//! 后台 cron ticker：迁移遗留输出、认领到期任务并调用 `agent::cron_exec`。
+//! 后台 cron ticker：认领到期任务并调用 `agent::cron_exec`。
 //!
 //! 注意：`rusqlite::Connection` 不可跨 `.await`，故先同步 `claim_due` 再异步执行。
 
 use agent::cron_exec::{self, CronExecCredentials};
-use memory::{cron_dir, CronJob, CronRunDb, CronStore};
+use memory::{CronJob, CronStore};
 
 /// 从任务字段与环境变量解析执行凭据；缺省 provider 为 `ollama`。
 fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
@@ -20,23 +20,6 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
         model,
         api_key,
         base_url,
-    }
-}
-
-/// 将 `cron/output` 目录下遗留 JSON 迁入 [`CronRunDb`]（失败仅打日志）。
-pub fn migrate_legacy_output() {
-    match CronRunDb::open_default() {
-        Ok(db) => {
-            let output_dir = cron_dir().join("output");
-            match db.migrate_output_dir(&output_dir) {
-                Ok(count) if count > 0 => {
-                    tracing::info!(count, "migrated legacy cron output JSON to SQLite");
-                }
-                Ok(_) => {}
-                Err(err) => tracing::warn!(error = %err, "cron output migration failed"),
-            }
-        }
-        Err(err) => tracing::warn!(error = %err, "failed to open cron run db for migration"),
     }
 }
 

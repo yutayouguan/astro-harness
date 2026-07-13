@@ -34,9 +34,8 @@ pub async fn run() -> anyhow::Result<()> {
     }
     let service = AstroServiceImpl::new(memory_dir.clone());
 
-    // 后台 cron ticker：启动迁移遗留 output JSON，之后每 30s claim_due + execute_job
+    // 后台 cron ticker：每 30s claim_due + execute_job
     tokio::spawn(async move {
-        cron_runner::migrate_legacy_output();
         let mut interval = tokio::time::interval(Duration::from_secs(30));
         loop {
             interval.tick().await;

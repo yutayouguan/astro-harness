@@ -151,7 +151,7 @@ type Props = {
   onInputChange: (v: string) => void;
   onAttachmentsChange: (next: ChatAttachment[]) => void;
   /** 发送当前输入 */
-  onSend: () => void;
+  onSend: (opts?: { text?: string }) => void;
   /** 会话级未决 interrupt（有则禁用普通发送） */
   pendingInterrupts?: PendingInterrupt[];
   /** A2UI 卡片动作（approve / deny / choose） */
@@ -721,9 +721,8 @@ export default function ChatView({
       const text = parsed.args
         ? `请使用技能「${parsed.skillName}」：${parsed.args}`
         : `请使用技能「${parsed.skillName}」：`;
-      onInputChange(text);
-      // 下一拍再发送，避免读到旧 input
-      queueMicrotask(() => onSend());
+      onInputChange("");
+      onSend({ text });
       return true;
     }
     if (parsed.action === "help") {

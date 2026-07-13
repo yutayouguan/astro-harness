@@ -139,7 +139,7 @@ pub(crate) fn apply_llm_usage_dual_write(
 
 fn open_default_session_store() -> anyhow::Result<SessionStore> {
     let sessions_dir = default_memory_dir().join("sessions");
-    SessionStore::open_with_legacy_migration(&sessions_dir)
+    SessionStore::open_sessions_dir(&sessions_dir)
 }
 
 #[cfg(test)]
