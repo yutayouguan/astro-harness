@@ -8,17 +8,17 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
-use common::message::Role;
 use futures::StreamExt;
 use memory::{
     cron_db_path, cron_dir, default_memory_dir, CronJob, CronRunDb, MemoryManager, NewCronRun,
 };
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
-use providers::trait_::{ChatMessage as ProviderMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
 use uuid::Uuid;
 
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
+use crate::messages::to_provider_messages;
 
 /// 执行定时任务所需的 LLM 凭据与路由信息。
 ///
@@ -324,9 +324,23 @@ async fn run_provider_loop(
         }
 
         last_response = full_response.clone();
-        agent.record_assistant_message(&full_response)?;
-
         let calls = tools::extract_tool_calls(&full_response);
+        let tc = if calls.is_empty() {
+            None
+        } else {
+            Some(
+                calls
+                    .iter()
+                    .map(|c| common::message::ToolCall {
+                        id: c.id.clone(),
+                        name: c.name.clone(),
+                        arguments: c.arguments.clone(),
+                    })
+                    .collect(),
+            )
+        };
+        agent.record_assistant_message_with_tools(&full_response, tc, None)?;
+
         if calls.is_empty() {
             return Ok((last_response, total_usage));
         }
@@ -337,10 +351,14 @@ async fn run_provider_loop(
             })
             .unwrap_or_else(|e| format!("工具错误: {e}"));
 
-            agent.record_tool_result(&format!(
-                "tool={} args={} result={}",
-                call.name, call.arguments, result
-            ))?;
+            agent.record_tool_result_with_id(
+                Some(&call.id),
+                Some(&call.name),
+                &format!(
+                    "tool={} args={} result={}",
+                    call.name, call.arguments, result
+                ),
+            )?;
         }
 
         let turn_result = agent
@@ -362,28 +380,6 @@ async fn run_provider_loop(
         anyhow::bail!("模型未返回有效回复");
     }
     Ok((last_response, total_usage))
-}
-
-/// 将会话消息序列转换为 Provider 层 [`ProviderMessage`] 列表。
-///
-/// 首条固定为 `system` 角色，其余按 [`Role`] 映射为 OpenAI 风格角色字符串。
-fn to_provider_messages(
-    system_prompt: &str,
-    session: &[common::message::Message],
-) -> Vec<ProviderMessage> {
-    let mut messages = vec![ProviderMessage::text("system", system_prompt)];
-
-    for message in session {
-        let role = match message.role {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::System => "system",
-            Role::Tool => "tool",
-        };
-        messages.push(ProviderMessage::text(role, message.content_str()));
-    }
-
-    messages
 }
 
 /// 返回当前 UTC 时间的 RFC3339 字符串（秒精度，含时区偏移）。

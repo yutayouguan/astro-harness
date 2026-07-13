@@ -19,8 +19,8 @@ use futures::stream::{AbortHandle, Abortable};
 use futures::{Stream, StreamExt};
 use providers::streaming::{PauseControl, Usage};
 use providers::trait_::{
-    AiProvider, ChatChunk, ChatMessage as ProviderMessage, ChatStream, ChatToolCall,
-    ProviderConfig, ToolCallDeltaChunk,
+    AiProvider, ChatChunk, ChatMessage as ProviderMessage, ChatStream, ProviderConfig,
+    ToolCallDeltaChunk,
 };
 use tokio::sync::{mpsc, Mutex};
 
@@ -119,55 +119,10 @@ fn chunk_to_contents(chunk: ChatChunk) -> Vec<StreamedAssistantContent> {
     out
 }
 
-/// 将会话消息转为 Provider 消息序列，首条固定为 system prompt。
+/// 将会话消息转为 Provider 消息序列。
 ///
-/// tool 角色消息会回溯 assistant 中的 `tool_calls` 以填充 `name` 字段。
-pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<ProviderMessage> {
-    use common::message::Role;
-
-    let mut messages = vec![ProviderMessage::text("system", system_prompt)];
-
-    for message in session {
-        let role = match message.role {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::System => "system",
-            Role::Tool => "tool",
-        };
-        let tool_calls = message.tool_calls.as_ref().map(|calls| {
-            calls
-                .iter()
-                .map(|c| ChatToolCall {
-                    id: c.id.clone(),
-                    name: c.name.clone(),
-                    arguments: c.arguments.clone(),
-                })
-                .collect()
-        });
-        let tool_name = if message.role == Role::Tool {
-            message.tool_call_id.as_ref().and_then(|id| {
-                session.iter().rev().find_map(|m| {
-                    m.tool_calls
-                        .as_ref()?
-                        .iter()
-                        .find(|c| &c.id == id)
-                        .map(|c| c.name.clone())
-                })
-            })
-        } else {
-            None
-        };
-        messages.push(ProviderMessage {
-            role: role.to_string(),
-            content: message.content_str().to_string(),
-            tool_calls,
-            tool_call_id: message.tool_call_id.clone(),
-            name: tool_name,
-        });
-    }
-
-    messages
-}
+/// 实现见 [`crate::messages::to_provider_messages`]（缺 `tool_call_id` 的 tool 消息会跳过）。
+pub use crate::messages::to_provider_messages;
 
 /// 将 Provider 原始 [`ChatStream`] 映射为 [`AssistantContentStream`]。
 ///

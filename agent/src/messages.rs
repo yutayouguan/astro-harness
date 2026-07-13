@@ -9,19 +9,24 @@ use providers::trait_::{ChatMessage as ProviderMessage, ChatToolCall};
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
 /// 首条固定为 `system` 角色；tool 消息会从历史中反向查找对应 `tool_call_id` 以填充 `name`。
-///
-/// # 参数
-///
-/// - `system_prompt`：已组装的 system 指令全文。
-/// - `session`：按时间顺序排列的会话消息切片。
-///
-/// # 返回
-///
-/// 可直接传入 Provider `chat` / `stream` API 的消息向量。
+/// 缺少 `tool_call_id` 的 tool 消息会被跳过（上游 OpenAI 兼容接口会因此 400）。
 pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<ProviderMessage> {
     let mut messages = vec![ProviderMessage::text("system", system_prompt)];
 
     for message in session {
+        if message.role == Role::Tool {
+            let ok = message
+                .tool_call_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .is_some();
+            if !ok {
+                tracing::warn!("skip tool message without tool_call_id");
+                continue;
+            }
+        }
+
         let role = match message.role {
             Role::User => "user",
             Role::Assistant => "assistant",
@@ -61,4 +66,31 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
     }
 
     messages
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use common::message::ToolCall;
+    use serde_json::json;
+
+    #[test]
+    fn tool_without_id_is_skipped() {
+        let session = vec![
+            Message::assistant_with_tools(
+                "",
+                vec![ToolCall {
+                    id: "c1".into(),
+                    name: "a".into(),
+                    arguments: json!({}),
+                }],
+            ),
+            Message::tool("orphan"),
+            Message::tool_with_id("c1", "ok"),
+        ];
+        let msgs = to_provider_messages("sys", &session);
+        let tools: Vec<_> = msgs.iter().filter(|m| m.role == "tool").collect();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].tool_call_id.as_deref(), Some("c1"));
+    }
 }

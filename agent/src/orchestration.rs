@@ -11,7 +11,6 @@
 use std::path::Path;
 use std::time::Duration;
 
-use common::message::Role;
 use chrono::Utc;
 use futures::StreamExt;
 use memory::{
@@ -20,10 +19,11 @@ use memory::{
 };
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
-use providers::trait_::{ChatMessage as ProviderMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
 use uuid::Uuid;
 
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
+use crate::messages::to_provider_messages;
 
 /// 单步执行超时（秒）
 const STEP_TIMEOUT_SECS: u64 = 120;
@@ -269,9 +269,23 @@ async fn run_provider_loop(
         }
 
         last_response = full_response.clone();
-        agent.record_assistant_message(&full_response)?;
-
         let calls = tools::extract_tool_calls(&full_response);
+        let tc = if calls.is_empty() {
+            None
+        } else {
+            Some(
+                calls
+                    .iter()
+                    .map(|c| common::message::ToolCall {
+                        id: c.id.clone(),
+                        name: c.name.clone(),
+                        arguments: c.arguments.clone(),
+                    })
+                    .collect(),
+            )
+        };
+        agent.record_assistant_message_with_tools(&full_response, tc, None)?;
+
         if calls.is_empty() {
             return Ok((last_response, total_usage));
         }
@@ -282,10 +296,14 @@ async fn run_provider_loop(
             })
             .unwrap_or_else(|e| format!("工具错误: {e}"));
 
-            agent.record_tool_result(&format!(
-                "tool={} args={} result={}",
-                call.name, call.arguments, result
-            ))?;
+            agent.record_tool_result_with_id(
+                Some(&call.id),
+                Some(&call.name),
+                &format!(
+                    "tool={} args={} result={}",
+                    call.name, call.arguments, result
+                ),
+            )?;
         }
 
         let turn_result = agent
@@ -307,23 +325,6 @@ async fn run_provider_loop(
         anyhow::bail!("模型未返回有效回复");
     }
     Ok((last_response, total_usage))
-}
-
-fn to_provider_messages(
-    system_prompt: &str,
-    session: &[common::message::Message],
-) -> Vec<ProviderMessage> {
-    let mut messages = vec![ProviderMessage::text("system", system_prompt)];
-    for message in session {
-        let role = match message.role {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::System => "system",
-            Role::Tool => "tool",
-        };
-        messages.push(ProviderMessage::text(role, message.content_str()));
-    }
-    messages
 }
 
 fn truncate_chars(s: &str, max_chars: usize) -> String {

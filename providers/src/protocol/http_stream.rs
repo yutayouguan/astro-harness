@@ -126,9 +126,25 @@ fn args_to_openai_string(args: &Value) -> String {
 fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
     messages
         .iter()
-        .map(|m| {
+        .filter_map(|m| {
             let mut obj = serde_json::Map::new();
             obj.insert("role".into(), json!(m.role));
+
+            if m.role == "tool" {
+                let id = m
+                    .tool_call_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())?;
+                obj.insert("tool_call_id".into(), json!(id));
+                if let Some(ref name) = m.name {
+                    if !name.is_empty() {
+                        obj.insert("name".into(), json!(name));
+                    }
+                }
+                obj.insert("content".into(), json!(m.content));
+                return Some(Value::Object(obj));
+            }
 
             if let Some(ref calls) = m.tool_calls {
                 // 纯 tool_calls 时 content 可为 null（DeepSeek / OpenAI 惯例）
@@ -155,11 +171,7 @@ fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
                 obj.insert("content".into(), json!(m.content));
             }
 
-            if let Some(ref id) = m.tool_call_id {
-                obj.insert("tool_call_id".into(), json!(id));
-            }
-
-            Value::Object(obj)
+            Some(Value::Object(obj))
         })
         .collect()
 }
