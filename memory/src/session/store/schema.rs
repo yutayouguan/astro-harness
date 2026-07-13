@@ -6,8 +6,9 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use super::{insert_legacy_session, now_epoch_secs, truncate_chars, SessionStore};
+use crate::workspace::default_memory_dir;
 
-pub const SCHEMA_VERSION: i32 = 11;
+pub const SCHEMA_VERSION: i32 = 12;
 
 /// 空库直接建到 v11 的完整 DDL（含 FTS inline 模式与触发器）。
 const SCHEMA_V11_DDL: &str = r#"
@@ -132,7 +133,7 @@ const MESSAGES_V11_COLUMNS: &[(&str, &str)] = &[
 ];
 
 impl SessionStore {
-    pub(crate) fn migrate_to_v11(&self) -> Result<()> {
+    pub(crate) fn migrate_schema(&self) -> Result<()> {
         let current = self.read_schema_version_or_zero()?;
         if current >= SCHEMA_VERSION {
             return Ok(());
@@ -143,18 +144,84 @@ impl SessionStore {
             // 空库：直接落到最新 schema。
             self.conn.execute_batch(SCHEMA_V11_DDL)?;
             self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
-            self.stamp_schema_version()?;
+        } else if current < 11 {
+            // 旧 MessageDb 风格（有 messages、无 schema_version）或中间版本：声明式补列 + FTS 重建。
+            self.conn.execute_batch(SCHEMA_V11_DDL)?;
+            self.ensure_messages_v11_columns()?;
+            self.convert_legacy_message_timestamps()?;
+            self.ensure_messages_content_nullable()?;
+            self.rebuild_messages_fts_v11()?;
+        }
+
+        if current < 12 {
+            self.migrate_v12_billing_reset()?;
+        }
+
+        self.stamp_schema_version()?;
+        Ok(())
+    }
+
+    /// v12：清零历史 sessions 账单列（选项 C 重建观测数据）。
+    pub(crate) fn migrate_v12_billing_reset(&self) -> Result<()> {
+        self.conn.execute_batch(
+            "UPDATE sessions SET
+                input_tokens = 0,
+                output_tokens = 0,
+                cache_read_tokens = 0,
+                cache_write_tokens = 0,
+                reasoning_tokens = 0,
+                estimated_cost_usd = NULL,
+                actual_cost_usd = NULL,
+                cost_status = NULL,
+                cost_source = NULL,
+                pricing_version = NULL,
+                billing_provider = NULL,
+                billing_base_url = NULL,
+                billing_mode = NULL,
+                api_call_count = 0;",
+        )?;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO state_meta (key, value) VALUES ('billing_reset_v12', '1')",
+            [],
+        )?;
+        self.clear_legacy_usage_stats_once()?;
+        Ok(())
+    }
+
+    /// 一次性删除各 Agent 的 `usage-stats.json`（meta 门控，幂等）。
+    pub(crate) fn clear_legacy_usage_stats_once(&self) -> Result<()> {
+        let already: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM state_meta WHERE key = 'usage_stats_cleared_v12'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if already.as_deref() == Some("1") {
             return Ok(());
         }
 
-        // 旧 MessageDb 风格（有 messages、无 schema_version）或中间版本：声明式补列 + FTS 重建。
-        self.conn.execute_batch(SCHEMA_V11_DDL)?;
-        self.ensure_messages_v11_columns()?;
-        self.convert_legacy_message_timestamps()?;
-        self.ensure_messages_content_nullable()?;
-        self.rebuild_messages_fts_v11()?;
-        self.stamp_schema_version()?;
+        let agents_dir = default_memory_dir().join("agents");
+        if agents_dir.is_dir() {
+            for entry in std::fs::read_dir(&agents_dir)? {
+                let path = entry?.path().join("usage-stats.json");
+                if path.is_file() {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+        }
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO state_meta (key, value) VALUES ('usage_stats_cleared_v12', '1')",
+            [],
+        )?;
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn migrate_to_v11(&self) -> Result<()> {
+        self.migrate_schema()
     }
 
     pub(crate) fn stamp_schema_version(&self) -> Result<()> {

@@ -3,7 +3,7 @@
 use anyhow::Result;
 use rusqlite::{params, OptionalExtension};
 
-use super::{is_unique_constraint, now_epoch_secs, truncate_chars, SessionStore, StoredSession};
+use super::{is_unique_constraint, now_epoch_secs, truncate_chars, BillingDelta, SessionBillingRow, SessionStore, StoredSession};
 
 impl SessionStore {
     /// 按 id 读取会话元数据。
@@ -91,5 +91,94 @@ impl SessionStore {
             }
             Err(err) => Err(err.into()),
         }
+    }
+
+    /// 累加会话账单列；`cost_status=unknown` 的 delta 不抬高 `estimated_cost_usd`。
+    pub fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
+        let skip_cost = d.cost_status.as_deref() == Some("unknown");
+        let cost_add = if skip_cost {
+            0.0
+        } else {
+            d.estimated_cost_usd
+        };
+        self.conn.execute(
+            "UPDATE sessions SET
+                input_tokens = COALESCE(input_tokens, 0) + ?1,
+                output_tokens = COALESCE(output_tokens, 0) + ?2,
+                cache_read_tokens = COALESCE(cache_read_tokens, 0) + ?3,
+                cache_write_tokens = COALESCE(cache_write_tokens, 0) + ?4,
+                reasoning_tokens = COALESCE(reasoning_tokens, 0) + ?5,
+                estimated_cost_usd = CASE
+                    WHEN ?6 = 1 THEN estimated_cost_usd
+                    ELSE COALESCE(estimated_cost_usd, 0) + ?7
+                END,
+                api_call_count = COALESCE(api_call_count, 0) + ?8,
+                billing_provider = COALESCE(?9, billing_provider),
+                billing_base_url = COALESCE(?10, billing_base_url),
+                billing_mode = COALESCE(?11, billing_mode),
+                cost_status = CASE
+                    WHEN cost_status = 'unknown' OR ?12 = 'unknown' THEN 'unknown'
+                    ELSE COALESCE(?12, cost_status)
+                END,
+                cost_source = COALESCE(?13, cost_source),
+                pricing_version = COALESCE(?14, pricing_version),
+                model = COALESCE(?15, model)
+             WHERE id = ?16",
+            params![
+                d.input_tokens,
+                d.output_tokens,
+                d.cache_read_tokens,
+                d.cache_write_tokens,
+                d.reasoning_tokens,
+                if skip_cost { 1i64 } else { 0i64 },
+                cost_add,
+                d.api_call_count,
+                d.billing_provider,
+                d.billing_base_url,
+                d.billing_mode,
+                d.cost_status,
+                d.cost_source,
+                d.pricing_version,
+                d.model,
+                id,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// 读取会话账单列；无此 session 时返回 `None`。
+    pub fn get_session_billing(&self, id: &str) -> Result<Option<SessionBillingRow>> {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(input_tokens, 0), COALESCE(output_tokens, 0),
+                        COALESCE(cache_read_tokens, 0), COALESCE(cache_write_tokens, 0),
+                        COALESCE(reasoning_tokens, 0), COALESCE(api_call_count, 0),
+                        COALESCE(estimated_cost_usd, 0), actual_cost_usd,
+                        cost_status, cost_source, pricing_version,
+                        billing_provider, billing_base_url, billing_mode, model
+                 FROM sessions WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(SessionBillingRow {
+                        input_tokens: row.get(0)?,
+                        output_tokens: row.get(1)?,
+                        cache_read_tokens: row.get(2)?,
+                        cache_write_tokens: row.get(3)?,
+                        reasoning_tokens: row.get(4)?,
+                        api_call_count: row.get(5)?,
+                        estimated_cost_usd: row.get(6)?,
+                        actual_cost_usd: row.get(7)?,
+                        cost_status: row.get(8)?,
+                        cost_source: row.get(9)?,
+                        pricing_version: row.get(10)?,
+                        billing_provider: row.get(11)?,
+                        billing_base_url: row.get(12)?,
+                        billing_mode: row.get(13)?,
+                        model: row.get(14)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
     }
 }

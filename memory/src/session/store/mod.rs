@@ -1,4 +1,4 @@
-//! 单库会话存储（schema v11）：sessions、富 messages、FTS5 与迁移门控。
+//! 单库会话存储（schema v12）：sessions、富 messages、FTS5 与迁移门控。
 
 mod schema;
 mod sessions;
@@ -12,6 +12,45 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use schema::SCHEMA_VERSION;
+
+/// 单次 LLM 调用的账单增量（累加到 sessions 行）。
+#[derive(Debug, Clone, Default)]
+pub struct BillingDelta {
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub reasoning_tokens: i64,
+    pub estimated_cost_usd: f64,
+    pub api_call_count: i64,
+    pub billing_provider: Option<String>,
+    pub billing_base_url: Option<String>,
+    pub billing_mode: Option<String>,
+    pub cost_status: Option<String>,
+    pub cost_source: Option<String>,
+    pub pricing_version: Option<String>,
+    pub model: Option<String>,
+}
+
+/// 从 sessions 读出的账单列快照。
+#[derive(Debug, Clone)]
+pub struct SessionBillingRow {
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub reasoning_tokens: i64,
+    pub api_call_count: i64,
+    pub estimated_cost_usd: f64,
+    pub actual_cost_usd: Option<f64>,
+    pub cost_status: Option<String>,
+    pub cost_source: Option<String>,
+    pub pricing_version: Option<String>,
+    pub billing_provider: Option<String>,
+    pub billing_base_url: Option<String>,
+    pub billing_mode: Option<String>,
+    pub model: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub struct NewMessage<'a> {
@@ -162,7 +201,7 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
-    /// 打开或创建 `state.db`，启用 WAL，并将 schema 迁移到 v11。
+    /// 打开或创建 `state.db`，启用 WAL，并将 schema 迁移到 v12。
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
@@ -173,7 +212,7 @@ impl SessionStore {
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let store = Self { conn };
-        store.migrate_to_v11()?;
+        store.migrate_schema()?;
         // 已 stamp v11 的库也可能残留旧触发器 / 失效的 FTS delete 语法，每次打开自愈。
         store.repair_messages_fts_if_needed()?;
         // 旧 MessageDb 可能留下「有 messages、无 sessions 行」的孤儿会话。
@@ -181,7 +220,7 @@ impl SessionStore {
         Ok(store)
     }
 
-    /// 打开 `sessions_dir/state.db` 并迁移到 v11；若尚未导入，则从旁路 `sessions.db` 迁入会话元数据。
+    /// 打开 `sessions_dir/state.db` 并迁移到 v12；若尚未导入，则从旁路 `sessions.db` 迁入会话元数据。
     pub fn open_with_legacy_migration(sessions_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(sessions_dir)
             .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
