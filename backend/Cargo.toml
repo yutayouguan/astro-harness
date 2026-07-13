@@ -11,6 +11,7 @@ providers = { path = "../providers" }
 memory = { path = "../memory" }
 skills = { path = "../skills" }
 permissions = { path = "../permissions" }
+hooks = { path = "../hooks" }
 tools = { path = "../tools" }
 mcp = { path = "../mcp" }
 tonic = "0.11"

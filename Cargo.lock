@@ -271,6 +271,7 @@ dependencies = [
  "chrono",
  "common",
  "futures",
+ "hooks",
  "mcp",
  "memory",
  "permissions",
