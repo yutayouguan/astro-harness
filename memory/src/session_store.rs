@@ -290,6 +290,8 @@ impl SessionStore {
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let store = Self { conn };
         store.migrate_to_v11()?;
+        // 已 stamp v11 的库也可能残留旧 MessageDb 触发器（写 message_id），每次打开自愈。
+        store.repair_legacy_messages_fts_if_needed()?;
         Ok(store)
     }
 
@@ -1075,6 +1077,8 @@ impl SessionStore {
              SELECT 'messages', IFNULL(MAX(id), 0) FROM messages;",
         )?;
         self.conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        // 上面 drop 过 FTS；此处重建，避免半成品库无索引。
+        self.rebuild_messages_fts_v11()?;
         Ok(())
     }
 
@@ -1132,6 +1136,31 @@ impl SessionStore {
              SELECT id, content, tool_name, tool_calls FROM messages;",
         )?;
         Ok(())
+    }
+
+    /// 检测并清除旧 MessageDb 的 `sync_messages_*` 触发器（引用已删除的 `message_id` 列）。
+    fn repair_legacy_messages_fts_if_needed(&self) -> Result<()> {
+        if !self.has_legacy_messages_fts_triggers()? {
+            return Ok(());
+        }
+        self.rebuild_messages_fts_v11()
+            .context("repair legacy messages_fts triggers")?;
+        Ok(())
+    }
+
+    fn has_legacy_messages_fts_triggers(&self) -> Result<bool> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'trigger'
+               AND name IN (
+                 'sync_messages_to_fts',
+                 'sync_messages_fts_update',
+                 'sync_messages_fts_delete'
+               )",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
     }
 
     /// 若 `state_meta.migrated_from_sessions_db` 未设，从旁路 `sessions.db` 导入会话行（幂等）。

@@ -274,3 +274,50 @@ fn memory_manager_record_message_uses_session_store() {
     assert!(hits.contains("相关历史消息"));
     assert!(hits.contains("hi"));
 }
+
+#[test]
+fn open_repairs_legacy_fts_triggers_on_v11_db() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    {
+        let store = SessionStore::open(&path).unwrap();
+        store.create_session("s1", "test", None, None, None).unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("hello"),
+                ..NewMessage::empty("s1", "user")
+            })
+            .unwrap();
+    }
+    // 模拟旧 MessageDb 触发器在已 stamp v11 的库上被重新挂上。
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TRIGGER sync_messages_to_fts AFTER INSERT ON messages
+            BEGIN
+                INSERT INTO messages_fts(message_id, content) VALUES (new.id, new.content);
+            END;
+            CREATE TRIGGER sync_messages_fts_update AFTER UPDATE ON messages
+            BEGIN
+                UPDATE messages_fts SET content = new.content WHERE message_id = old.id;
+            END;
+            CREATE TRIGGER sync_messages_fts_delete AFTER DELETE ON messages
+            BEGIN
+                DELETE FROM messages_fts WHERE message_id = old.id;
+            END;
+            "#,
+        )
+        .unwrap();
+    }
+
+    let store = SessionStore::open(&path).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("world"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    assert_eq!(store.get_messages("s1").unwrap().len(), 2);
+}
+
