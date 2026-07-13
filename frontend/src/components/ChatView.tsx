@@ -588,9 +588,10 @@ export default function ChatView({
       action: e.action,
       icon: e.icon,
       skillName: e.skillName,
+      // Hermes：技能斜杠插入 /name，发送时再注入 SKILL.md
       insert:
         e.action === "insert_skill" && e.skillName
-          ? `请使用技能「${e.skillName}」：`
+          ? `/${e.skillName} `
           : undefined,
     }));
   }, [skills, t]);
@@ -689,9 +690,16 @@ export default function ChatView({
       if (action === "insert_skill") {
         const name = skillName ?? args?.trim() ?? "";
         if (!name) return;
-        const suffix = args && skillName ? ` ${args}` : "";
-        onInputChange(`请使用技能「${name}」：${suffix}`.replace(/：\s*$/, "："));
+        // 调色板选技能：插入 /name 待用户补全任务；对齐 Hermes
+        onInputChange(`/${name} `);
         closePalette();
+        requestAnimationFrame(() => {
+          const el = textareaRef.current;
+          if (!el) return;
+          const caret = el.value.length;
+          el.focus();
+          el.setSelectionRange(caret, caret);
+        });
         return;
       }
       if (action === "new_chat") {
@@ -709,21 +717,24 @@ export default function ChatView({
     const skillNames = skills.map((s) => s.name);
     const parsed = parseSlashInput(input, skillNames);
     if (!parsed) {
-      // 以 / 开头但无法识别：提示而非发给模型
       if (input.trim().startsWith("/")) {
-        const cmd = input.trim().slice(1).split(/\s/)[0] ?? "";
+        // 可能是链式 /skill /skill2 task — 交给 send 解析
+        const first = input.trim().slice(1).split(/\s/)[0] ?? "";
+        const isSkill = skillNames.some(
+          (n) => n.toLowerCase() === first.toLowerCase(),
+        );
+        if (isSkill || first.includes("/")) {
+          return false;
+        }
+        const cmd = first;
         onInputChange(t("chat.slashUnknown", { cmd }));
         return true;
       }
       return false;
     }
-    if (parsed.action === "insert_skill" && parsed.skillName) {
-      const text = parsed.args
-        ? `请使用技能「${parsed.skillName}」：${parsed.args}`
-        : `请使用技能「${parsed.skillName}」：`;
-      onInputChange("");
-      onSend({ text });
-      return true;
+    if (parsed.action === "insert_skill") {
+      // 保持 /skill args 原样发送，由 App.resolveComposerTurn 注入 SKILL.md
+      return false;
     }
     if (parsed.action === "help") {
       onInputChange(t("chat.slashHelpInsert"));
@@ -732,7 +743,7 @@ export default function ChatView({
     onInputChange("");
     onSlashAction?.(parsed.action, parsed.args);
     return true;
-  }, [input, skills, onInputChange, onSend, onSlashAction, t]);
+  }, [input, skills, onInputChange, onSlashAction, t]);
 
   const applyPaletteItem = useCallback(
     (item: PaletteItem) => {
