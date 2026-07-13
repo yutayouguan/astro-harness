@@ -27,6 +27,8 @@ pub mod orchestration;
 pub mod prompt_builder;
 /// 流式补全与多轮流式迭代抽象。
 pub mod streaming;
+/// 助手回合时间线（astro_timeline_v1）。
+pub mod timeline;
 
 // 兼容旧路径：ToolRegistry 现位于 tools crate
 /// 链式构建可运行的 Agent 实例及其规格。

@@ -490,10 +490,10 @@ impl AgentLoop {
 
     /// 将 assistant 纯文本回复写入记忆与会话镜像。
     pub fn record_assistant_message(&mut self, content: &str) -> anyhow::Result<()> {
-        self.record_assistant_message_with_tools(content, None, None)
+        self.record_assistant_message_with_tools(content, None, None, None)
     }
 
-    /// 将 assistant 回复（可含 tool_calls / reasoning）写入记忆与会话镜像。
+    /// 将 assistant 回复（可含 tool_calls / reasoning / reasoning_details）写入记忆与会话镜像。
     ///
     /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息；
     /// 落盘通过 [`MemoryManager::record_message_ex`] 写入富字段。
@@ -502,6 +502,7 @@ impl AgentLoop {
         content: &str,
         tool_calls: Option<Vec<common::message::ToolCall>>,
         reasoning: Option<&str>,
+        reasoning_details: Option<serde_json::Value>,
     ) -> anyhow::Result<()> {
         let tool_calls_json = match &tool_calls {
             Some(calls) if !calls.is_empty() => Some(serde_json::to_value(calls)?),
@@ -515,6 +516,7 @@ impl AgentLoop {
                 content: Some(content),
                 tool_calls: tool_calls_json,
                 reasoning,
+                reasoning_details,
                 ..NewMessage::empty(&self.session_id, "assistant")
             },
         )?;

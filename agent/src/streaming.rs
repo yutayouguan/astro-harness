@@ -370,6 +370,10 @@ pub async fn run_multi_turn_stream(
         }
     };
 
+    // 整次 run 累积时间线，供每轮 assistant 落盘写入 reasoning_details
+    let mut timeline = crate::timeline::TimelineBuilder::new();
+    let now_ms = || chrono::Utc::now().timestamp_millis();
+
     for round in 0..max_rounds {
         if pause.is_cancelled() {
             finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
@@ -476,6 +480,7 @@ pub async fn run_multi_turn_stream(
                 }
                 Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
                     full_reasoning.push_str(&r);
+                    timeline.push_reasoning_delta(&r, now_ms());
                     if !emit(
                         &tx,
                         MultiTurnStreamItem::Assistant(StreamedAssistantContent::Reasoning(r)),
@@ -592,10 +597,15 @@ pub async fn run_multi_turn_stream(
                         .collect(),
                 )
             };
+            for c in &calls {
+                timeline.upsert_activity(&c.id, now_ms());
+            }
+            let details = Some(timeline.reasoning_details_snapshot());
             if let Err(err) = agent.record_assistant_message_with_tools(
                 &full_response,
                 tc,
                 (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                details,
             ) {
                 drop(agent);
                 finish_error(
@@ -704,6 +714,15 @@ pub async fn run_multi_turn_stream(
                 let message_id = format!("a2ui-surface-{}", call.id);
                 let content_json =
                     serde_json::json!({ "operations": ui.operations }).to_string();
+                timeline.upsert_surface(
+                    serde_json::json!({
+                        "messageId": message_id,
+                        "activityType": "a2ui-surface",
+                        "operations": ui.operations,
+                        "status": "active",
+                    }),
+                    now_ms(),
+                );
                 if !emit(
                     &tx,
                     MultiTurnStreamItem::Activity {
@@ -732,6 +751,15 @@ pub async fn run_multi_turn_stream(
             if let Some(hitl) = parse_astro_hitl(&result) {
                 let message_id = format!("a2ui-surface-{}", call.id);
                 let content_json = serde_json::json!({ "operations": hitl.operations }).to_string();
+                timeline.upsert_surface(
+                    serde_json::json!({
+                        "messageId": message_id,
+                        "activityType": "a2ui-surface",
+                        "operations": hitl.operations,
+                        "status": "active",
+                    }),
+                    now_ms(),
+                );
                 if !emit(
                     &tx,
                     MultiTurnStreamItem::Activity {

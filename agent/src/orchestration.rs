@@ -284,7 +284,7 @@ async fn run_provider_loop(
                     .collect(),
             )
         };
-        agent.record_assistant_message_with_tools(&full_response, tc, None)?;
+        agent.record_assistant_message_with_tools(&full_response, tc, None, None)?;
 
         if calls.is_empty() {
             return Ok((last_response, total_usage));
