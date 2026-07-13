@@ -89,3 +89,53 @@ fn try_claim_running_cas_only_queued() {
     let orch = db.get(&id).unwrap().unwrap();
     assert_eq!(orch.status, OrchestrationStatus::Running.as_str());
 }
+
+#[test]
+fn list_in_period_filters_by_created_at_and_agent() {
+    let dir = TempDir::new().unwrap();
+    let db = OrchestrationDb::new(dir.path().join("orchestration.db")).unwrap();
+
+    let id_in = db
+        .create(NewOrchestration {
+            parent_agent_id: "alice".into(),
+            session_id: None,
+            goal: "in-window".into(),
+            steps: vec![NewOrchestrationStep {
+                role: "r".into(),
+                agent_id: None,
+                prompt: "p".into(),
+            }],
+        })
+        .unwrap();
+    let id_out = db
+        .create(NewOrchestration {
+            parent_agent_id: "bob".into(),
+            session_id: None,
+            goal: "out".into(),
+            steps: vec![NewOrchestrationStep {
+                role: "r".into(),
+                agent_id: None,
+                prompt: "p".into(),
+            }],
+        })
+        .unwrap();
+
+    // 将 id_in 钉在窗内、id_out 钉在窗外
+    db.set_created_at_for_test(&id_in, "2026-07-10T12:00:00.000Z")
+        .unwrap();
+    db.set_created_at_for_test(&id_out, "2026-05-01T12:00:00.000Z")
+        .unwrap();
+
+    let rows = db
+        .list_in_period(
+            "2026-07-01T00:00:00Z",
+            "2026-08-01T00:00:00Z",
+            Some("alice"),
+            50,
+        )
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, id_in);
+    let steps = db.list_steps(&rows[0].id).unwrap();
+    assert_eq!(steps.len(), 1);
+}

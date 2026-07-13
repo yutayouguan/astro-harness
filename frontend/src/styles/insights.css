@@ -386,7 +386,9 @@
 html[data-theme="dark"] .insights-period-tabs,
 html.dark .insights-period-tabs,
 html[data-theme="dark"] .insights-metric-tabs,
-html.dark .insights-metric-tabs {
+html.dark .insights-metric-tabs,
+html[data-theme="dark"] .insights-view-tabs,
+html.dark .insights-view-tabs {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
     color-mix(in srgb, var(--glass-panel, rgba(20, 20, 24, 0.7)) 80%, transparent);
@@ -395,8 +397,334 @@ html.dark .insights-metric-tabs {
 html[data-theme="dark"] .insights-period-tab.active,
 html.dark .insights-period-tab.active,
 html[data-theme="dark"] .insights-metric-tab.active,
-html.dark .insights-metric-tab.active {
+html.dark .insights-metric-tab.active,
+html[data-theme="dark"] .insights-view-tab.active,
+html.dark .insights-view-tab.active {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
     var(--tone-soft);
+}
+
+/* —— View mode tabs (用量 | 协作) —— */
+.insights-view-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.insights-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  color: var(--ink-mute);
+  background: transparent;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.insights-view-tab > svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.insights-view-tab.active > svg {
+  opacity: 1;
+}
+
+.insights-view-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+}
+
+.insights-view-tab.active {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    var(--tone-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent);
+}
+
+/* —— Collaboration layout —— */
+.insights-collab-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+  align-items: start;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .insights-collab-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.insights-collab-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.insights-collab-list-panel,
+.insights-collab-steps-panel,
+.insights-collab-graph-panel {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 80%, transparent);
+}
+
+.insights-collab-section-title {
+  margin: 0 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  letter-spacing: 0.02em;
+}
+
+.insights-collab-section-title > svg {
+  color: var(--tone);
+  flex-shrink: 0;
+}
+
+.insights-collab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.insights-collab-list-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.insights-collab-list-item:hover {
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+}
+
+.insights-collab-list-item.active {
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
+.insights-collab-list-goal {
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.insights-collab-list-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink-mute);
+}
+
+.insights-collab-list-agent {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insights-collab-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  background: color-mix(in srgb, var(--ink-mute) 14%, transparent);
+  color: var(--ink-mute);
+}
+
+.insights-collab-status.status-done {
+  background: color-mix(in srgb, #16a34a 16%, transparent);
+  color: #15803d;
+}
+
+.insights-collab-status.status-failed {
+  background: color-mix(in srgb, #dc2626 16%, transparent);
+  color: #b91c1c;
+}
+
+.insights-collab-status.status-running {
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+  color: var(--tone);
+}
+
+.insights-collab-status.status-pending {
+  background: color-mix(in srgb, #ca8a04 16%, transparent);
+  color: #a16207;
+}
+
+.insights-collab-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-mute);
+  line-height: 1.45;
+}
+
+.insights-collab-steps-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 2px;
+}
+
+.insights-collab-step-wrap {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.insights-collab-step-arrow {
+  margin-top: 8px;
+  color: var(--ink-mute);
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.insights-collab-step {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 70%, transparent);
+  padding: 0;
+  max-width: 200px;
+}
+
+.insights-collab-step > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+}
+
+.insights-collab-step > summary::-webkit-details-marker {
+  display: none;
+}
+
+.insights-collab-step-role {
+  font-weight: 650;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insights-collab-step-detail {
+  padding: 0 10px 8px;
+  font-size: 11.5px;
+  color: var(--ink-mute);
+}
+
+.insights-collab-step-detail > p {
+  margin: 0 0 4px;
+}
+
+.insights-collab-step-detail > pre {
+  margin: 0;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.insights-collab-step-error {
+  color: #b91c1c;
+}
+
+.insights-collab-graph {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  display: block;
+}
+
+.insights-collab-edge {
+  stroke: color-mix(in srgb, var(--tone) 55%, var(--ink-mute));
+  stroke-opacity: 0.75;
+  fill: none;
+}
+
+.insights-collab-node {
+  fill: color-mix(in srgb, var(--tone-soft) 80%, white);
+  stroke: color-mix(in srgb, var(--tone) 55%, transparent);
+  stroke-width: 1.5;
+}
+
+.insights-collab-node.kind-agent {
+  fill: color-mix(in srgb, var(--tone) 22%, white);
+  stroke: var(--tone);
+}
+
+.insights-collab-node.kind-role {
+  fill: color-mix(in srgb, var(--ink-mute) 12%, white);
+  stroke: color-mix(in srgb, var(--ink-mute) 45%, transparent);
+}
+
+.insights-collab-label {
+  fill: var(--ink);
+  font-size: 9px;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+html[data-theme="dark"] .insights-collab-node.kind-agent,
+html.dark .insights-collab-node.kind-agent {
+  fill: color-mix(in srgb, var(--tone) 35%, rgba(20, 20, 24, 0.9));
+}
+
+html[data-theme="dark"] .insights-collab-node.kind-role,
+html.dark .insights-collab-node.kind-role {
+  fill: color-mix(in srgb, var(--ink-mute) 25%, rgba(20, 20, 24, 0.9));
+}
+
+html[data-theme="dark"] .insights-collab-label,
+html.dark .insights-collab-label {
+  fill: var(--ink);
 }

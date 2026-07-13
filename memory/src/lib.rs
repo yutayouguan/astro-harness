@@ -22,6 +22,7 @@ pub mod usage_db;
 pub mod usage_pricing;
 pub mod orchestration_db;
 pub mod orchestration_spawn;
+pub mod collab_insights;
 
 pub use artifact_db::{
     artifacts_db_path, category_from_name, is_junk_artifact_name, open_default, ArtifactDb,
@@ -69,8 +70,8 @@ pub use usage_stats::{
     save_usage_stats, AgentUsageStats, AgentUsageSummary,
 };
 pub use usage_db::{
-    usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery, UsagePeriod,
-    UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
+    period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
+    UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
 };
 pub use usage_pricing::estimate_llm_cost;
 pub use orchestration_db::{
@@ -80,4 +81,9 @@ pub use orchestration_db::{
 pub use orchestration_spawn::{
     request_orchestration_spawn, set_orchestration_spawner, OrchestrationSpawnRequest,
     OrchestrationSpawner,
+};
+pub use collab_insights::{
+    query_collaboration_insights, CollaborationEdge, CollaborationGraph,
+    CollaborationInsights, CollaborationInsightsQuery, CollaborationNode,
+    CollaborationOrchestration, CollaborationStep, COLLAB_LIST_LIMIT, COLLAB_OUTPUT_MAX_BYTES,
 };

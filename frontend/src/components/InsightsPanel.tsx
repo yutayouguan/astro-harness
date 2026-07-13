@@ -1,4 +1,4 @@
-/** 用量洞察面板：KPI、趋势柱状图与排行。 */
+/** 用量洞察面板：KPI、趋势柱状图与排行；协作 Tab：编排列表 + SVG 图。 */
 import { useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -11,8 +11,10 @@ import {
   Coins,
   Cpu,
   DollarSign,
+  GitBranch,
   Layers,
   MousePointerClick,
+  Network,
   Plug,
   Puzzle,
   Timer,
@@ -27,6 +29,7 @@ import AgentPicker from "./AgentPicker";
 
 type Period = "month" | "quarter" | "year";
 type Metric = "calls" | "tokens" | "cost";
+type ViewMode = "usage" | "collab";
 
 type UsageInsights = {
   kpis: { calls: number; tokens: number; cost_usd: number; active_agents: number };
@@ -35,6 +38,49 @@ type UsageInsights = {
     by_kind: { kind: string; name: string; calls: number; tokens: number; cost_usd: number }[];
     by_agent: { kind: string; name: string; calls: number; tokens: number; cost_usd: number }[];
     by_model: { kind: string; name: string; calls: number; tokens: number; cost_usd: number }[];
+  };
+};
+
+type CollaborationStep = {
+  seq: number;
+  role: string;
+  agent_id: string | null;
+  status: string;
+  output: string | null;
+  error: string | null;
+};
+
+type CollaborationOrchestration = {
+  id: string;
+  goal: string;
+  status: string;
+  parent_agent_id: string;
+  session_id: string | null;
+  created_at: string;
+  updated_at: string;
+  finished_at: string | null;
+  error: string | null;
+  result_summary: string | null;
+  steps: CollaborationStep[];
+};
+
+type CollaborationNode = {
+  id: string;
+  label: string;
+  kind: string;
+};
+
+type CollaborationEdge = {
+  from: string;
+  to: string;
+  weight: number;
+};
+
+type CollaborationInsights = {
+  orchestrations: CollaborationOrchestration[];
+  graph: {
+    nodes: CollaborationNode[];
+    edges: CollaborationEdge[];
   };
 };
 
@@ -52,6 +98,11 @@ const METRIC_TABS: { id: Metric; labelKey: MessageKey }[] = [
   { id: "calls", labelKey: "insights.metric.calls" },
   { id: "tokens", labelKey: "insights.metric.tokens" },
   { id: "cost", labelKey: "insights.metric.cost" },
+];
+
+const VIEW_TABS: { id: ViewMode; labelKey: MessageKey; Icon: typeof BarChart3 }[] = [
+  { id: "usage", labelKey: "insights.view.usage", Icon: BarChart3 },
+  { id: "collab", labelKey: "insights.view.collab", Icon: Network },
 ];
 
 function seriesValue(
@@ -123,6 +174,15 @@ function formatBucketLabel(bucket: string, period: Period, locale: Locale): stri
   return bucket;
 }
 
+function statusClass(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "done" || s === "completed" || s === "success") return "status-done";
+  if (s === "failed" || s === "error") return "status-failed";
+  if (s === "running" || s === "in_progress") return "status-running";
+  if (s === "pending" || s === "queued") return "status-pending";
+  return "status-other";
+}
+
 function KindIcon({ kind }: { kind: string }) {
   const props = { size: 13, strokeWidth: 2.25, "aria-hidden": true as const };
   switch (kind) {
@@ -143,13 +203,83 @@ function KindIcon({ kind }: { kind: string }) {
   }
 }
 
+function CollabGraphSvg({
+  nodes,
+  edges,
+}: {
+  nodes: CollaborationNode[];
+  edges: CollaborationEdge[];
+}) {
+  const w = 320;
+  const h = 240;
+  const cx = w / 2;
+  const cy = h / 2;
+  const R = 80;
+  const pos = new Map(
+    nodes.map((n, i) => {
+      const a = (2 * Math.PI * i) / Math.max(nodes.length, 1) - Math.PI / 2;
+      return [n.id, { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) }] as const;
+    }),
+  );
+  const maxW = Math.max(1, ...edges.map((e) => e.weight));
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="insights-collab-graph">
+      {edges.map((e) => {
+        const a = pos.get(e.from);
+        const b = pos.get(e.to);
+        if (!a || !b) return null;
+        const sw = 1 + (3 * e.weight) / maxW;
+        return (
+          <g key={`${e.from}->${e.to}`}>
+            <line
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              strokeWidth={sw}
+              className="insights-collab-edge"
+            />
+            <title>{`${e.from} → ${e.to}: ${e.weight}`}</title>
+          </g>
+        );
+      })}
+      {nodes.map((n) => {
+        const p = pos.get(n.id)!;
+        const label = n.label.length > 8 ? `${n.label.slice(0, 7)}…` : n.label;
+        return (
+          <g key={n.id}>
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={18}
+              className={`insights-collab-node kind-${n.kind}`}
+            />
+            <title>{n.label}</title>
+            <text
+              x={p.x}
+              y={p.y + 4}
+              textAnchor="middle"
+              className="insights-collab-label"
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function InsightsPanel({ active }: { active: boolean }) {
   const { t, locale } = useI18n();
+  const [view, setView] = useState<ViewMode>("usage");
   const [period, setPeriod] = useState<Period>("month");
   const [metric, setMetric] = useState<Metric>("calls");
   const [agentId, setAgentId] = useState("workspace");
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [data, setData] = useState<UsageInsights | null>(null);
+  const [collab, setCollab] = useState<CollaborationInsights | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -200,7 +330,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   };
 
   useEffect(() => {
-    if (!active || !isTauri()) return;
+    if (!active || !isTauri() || view !== "usage") return;
     let cancelled = false;
     void (async () => {
       try {
@@ -222,7 +352,36 @@ export default function InsightsPanel({ active }: { active: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [active, period, agentId]);
+  }, [active, period, agentId, view]);
+
+  useEffect(() => {
+    if (!active || !isTauri() || view !== "collab") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await invoke<CollaborationInsights>("get_collaboration_insights", {
+          args: {
+            period,
+            as_of: null,
+            agent_id: agentId,
+          },
+        });
+        if (!cancelled) {
+          setCollab(res);
+          setSelectedId((prev) => {
+            if (prev && res.orchestrations.some((o) => o.id === prev)) return prev;
+            return res.orchestrations[0]?.id ?? null;
+          });
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, period, agentId, view]);
 
   const maxVal = Math.max(
     1,
@@ -232,6 +391,8 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   const hasUnpriced =
     data &&
     data.rankings.by_model.some((m) => m.calls > 0 && m.cost_usd <= 0);
+  const selected =
+    collab?.orchestrations.find((o) => o.id === selectedId) ?? null;
 
   return (
     <div className="insights-panel">
@@ -243,6 +404,21 @@ export default function InsightsPanel({ active }: { active: boolean }) {
             onChange={(id) => void switchAgent(id)}
             labelKey="filespace.agentFilter"
           />
+          <div className="insights-view-tabs" role="tablist" aria-label="insights view">
+            {VIEW_TABS.map(({ id, labelKey, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                className={`insights-view-tab${view === id ? " active" : ""}`}
+                aria-selected={view === id}
+                onClick={() => setView(id)}
+              >
+                <Icon size={15} strokeWidth={2.25} aria-hidden />
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="panel-agent-toolbar-end">
           <div className="insights-period-tabs" role="tablist">
@@ -265,7 +441,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
 
       {error && <p className="insights-error">{error}</p>}
 
-      {data && (
+      {view === "usage" && data && (
         <>
           <div className="insights-kpis">
             <KpiCard
@@ -369,6 +545,95 @@ export default function InsightsPanel({ active }: { active: boolean }) {
             </div>
           )}
         </>
+      )}
+
+      {view === "collab" && collab && (
+        collab.orchestrations.length === 0 ? (
+          <div className="insights-empty">
+            <span className="insights-empty-icon" aria-hidden>
+              <GitBranch size={28} strokeWidth={1.75} />
+            </span>
+            <p>{t("insights.collab.empty")}</p>
+          </div>
+        ) : (
+          <div className="insights-collab-layout">
+            <div className="insights-collab-left">
+              <section className="insights-collab-list-panel">
+                <h3 className="insights-collab-section-title">
+                  <GitBranch size={14} strokeWidth={2.25} aria-hidden />
+                  {t("insights.collab.listTitle")}
+                </h3>
+                <ul className="insights-collab-list">
+                  {collab.orchestrations.map((o) => (
+                    <li key={o.id}>
+                      <button
+                        type="button"
+                        className={`insights-collab-list-item${selectedId === o.id ? " active" : ""} ${statusClass(o.status)}`}
+                        onClick={() => setSelectedId(o.id)}
+                      >
+                        <span className="insights-collab-list-goal">{o.goal || o.id}</span>
+                        <span className="insights-collab-list-meta">
+                          <span className={`insights-collab-status ${statusClass(o.status)}`}>
+                            {o.status}
+                          </span>
+                          <span className="insights-collab-list-agent">{o.parent_agent_id}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="insights-collab-steps-panel">
+                <h3 className="insights-collab-section-title">
+                  <Layers size={14} strokeWidth={2.25} aria-hidden />
+                  {t("insights.collab.steps")}
+                </h3>
+                {!selected ? (
+                  <p className="insights-collab-hint">{t("insights.collab.noSelection")}</p>
+                ) : (
+                  <div className="insights-collab-steps-strip">
+                    {selected.steps.map((step, i) => (
+                      <div key={`${step.seq}-${step.role}`} className="insights-collab-step-wrap">
+                        {i > 0 && <span className="insights-collab-step-arrow" aria-hidden>→</span>}
+                        <details className={`insights-collab-step ${statusClass(step.status)}`}>
+                          <summary>
+                            <span className="insights-collab-step-role">{step.role}</span>
+                            <span className={`insights-collab-status ${statusClass(step.status)}`}>
+                              {step.status}
+                            </span>
+                          </summary>
+                          {(step.output || step.error || step.agent_id) && (
+                            <div className="insights-collab-step-detail">
+                              {step.agent_id && <p>agent: {step.agent_id}</p>}
+                              {step.output && <pre>{step.output}</pre>}
+                              {step.error && <pre className="insights-collab-step-error">{step.error}</pre>}
+                            </div>
+                          )}
+                        </details>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <section className="insights-collab-graph-panel">
+              <h3 className="insights-collab-section-title">
+                <Network size={14} strokeWidth={2.25} aria-hidden />
+                {t("insights.collab.graphTitle")}
+              </h3>
+              {collab.graph.nodes.length === 0 ? (
+                <p className="insights-collab-hint">{t("insights.collab.empty")}</p>
+              ) : (
+                <CollabGraphSvg
+                  nodes={collab.graph.nodes}
+                  edges={collab.graph.edges}
+                />
+              )}
+            </section>
+          </div>
+        )
       )}
     </div>
   );
