@@ -24,7 +24,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "skills".to_string(),
         toolset: "skills".to_string(),
-        description: "Load an installed skill by name and return its SKILL.md instructions."
+        description: "Load an installed skill by name (skill_id matches skill name) and return its SKILL.md text. Does not execute the skill—only returns instructions. Body capped at 64KiB."
             .to_string(),
         schema: schema_for_args::<SkillsArgs>(),
         check_fn: None,
@@ -32,7 +32,7 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-/// 加载 Skill 内容，并附上调用输入 JSON。
+/// 加载 Skill 内容，并附上调用输入 JSON（输入过长时截断）。
 ///
 /// # 错误
 /// 参数无效、`skill_id` 为空，或 Skill 不存在 / 读取失败。
@@ -46,10 +46,18 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
 
     let loaded = skills::load_skill_by_name(skill_id)?;
     let input = parsed.input.unwrap_or(serde_json::json!({}));
-    Ok(format!(
+    let input_str = serde_json::to_string_pretty(&input).unwrap_or_default();
+    let input_capped = if input_str.len() > 4 * 1024 {
+        common::truncate_tool_result(&input_str, 4 * 1024)
+    } else {
+        input_str
+    };
+    let body = format!(
         "# Skill: {}\n\n{}\n\n## 调用输入\n{}",
-        loaded.metadata.name,
-        loaded.content,
-        serde_json::to_string_pretty(&input).unwrap_or_default()
+        loaded.metadata.name, loaded.content, input_capped
+    );
+    Ok(common::truncate_tool_result(
+        &body,
+        common::MAX_TOOL_RESULT_BYTES,
     ))
 }

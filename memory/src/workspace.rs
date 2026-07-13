@@ -1076,7 +1076,7 @@ description: 根据用户填写的助手模板，创建新的 Agent 工作区（
 1. **解析**模板里「」中的字段；空字段可追问，或先用合理默认再写入。
 2. **调用工具** `create_agent`，传入：
    - `name`：名称
-   - `activate`: true（创建后切换到新 Agent）
+   - `activate`: false（默认不切换；需要立刻用新 Agent 时再传 true）
    - `inherit_config`: true（默认继承全局工具/MCP，可再改）
    - `profile`：background / style / focus / avoid / call_me / preferences
 3. 工具会创建 `workspace-{id}/` 与 `agents/{id}/config.json`，并按 profile 填充各 md。

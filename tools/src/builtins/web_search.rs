@@ -25,7 +25,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "web_search".to_string(),
         toolset: "web_search".to_string(),
-        description: "Search the web. Uses Brave Search API if BRAVE_API_KEY is set, otherwise DuckDuckGo Instant Answer."
+        description: "Search the web. Prefer Brave Search when BRAVE_API_KEY is set; otherwise DuckDuckGo Instant Answer (often sparse/empty—not a full web crawl)."
             .to_string(),
         schema: schema_for_args::<WebSearchArgs>(),
         check_fn: None,

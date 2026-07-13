@@ -244,6 +244,7 @@ impl MemoryManager {
     ///
     /// 最多展示 `limit` 条；日期取 `created_at` 前 10 字符（`YYYY-MM-DD`）。
     pub fn handle_session_search(&self, query: &str, limit: usize) -> anyhow::Result<String> {
+        let limit = limit.clamp(1, 10);
         let snippets = self.session_db.search(query)?;
         if snippets.is_empty() {
             return Ok("未找到相关历史会话".to_string());
@@ -259,6 +260,15 @@ impl MemoryManager {
                     .map(|d| &d[..d.len().min(10)])
                     .unwrap_or("unknown");
                 let text = s.highlight.as_deref().unwrap_or(&s.summary);
+                let text = if text.len() > 500 {
+                    let mut end = 500;
+                    while end > 0 && !text.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    format!("{}…", &text[..end])
+                } else {
+                    text.to_string()
+                };
                 format!("- [{date}] {text}")
             })
             .collect::<Vec<_>>()
@@ -335,7 +345,7 @@ pub fn dispatch_memory_tool(
             let query = args["query"]
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("缺少 query 参数"))?;
-            let limit = args["limit"].as_u64().unwrap_or(5) as usize;
+            let limit = args["limit"].as_u64().unwrap_or(5).clamp(1, 10) as usize;
             memory.handle_session_search(query, limit)
         }
         _ => anyhow::bail!("未知记忆工具: {name}"),

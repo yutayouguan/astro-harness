@@ -44,7 +44,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "task_plan".to_string(),
         toolset: "task_plan".to_string(),
-        description: "Create or update a structured task plan with checklist items."
+        description: "Always creates a NEW structured task plan checklist (does not update an existing plan). Writes Markdown+JSON under workspace/plans/."
             .to_string(),
         schema: schema_for_args::<TaskPlanArgs>(),
         check_fn: None,

@@ -2,4 +2,7 @@
 
 pub mod error;
 pub mod message;
+pub mod text;
 pub mod tool;
+
+pub use text::{truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};

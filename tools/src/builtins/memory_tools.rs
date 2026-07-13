@@ -66,7 +66,7 @@ pub struct MemoryRemoveArgs {
 pub struct SessionSearchArgs {
     /// FTS5 全文检索关键词。
     pub query: String,
-    /// 返回条数上限，默认 5，最大 20。
+    /// 返回条数上限，默认 5，最大 10（与数据库 LIMIT 一致）。
     #[serde(default)]
     pub limit: Option<u32>,
 }
@@ -103,7 +103,8 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "session_search".to_string(),
         toolset: "session_search".to_string(),
-        description: "Search past conversation sessions with FTS5 full-text search.".to_string(),
+        description: "Search past conversation sessions with FTS5. Empty query lists recent sessions (summaries). limit defaults to 5, max 10."
+            .to_string(),
         schema: schema_for_args::<SessionSearchArgs>(),
         check_fn: None,
         icon: "file-search",

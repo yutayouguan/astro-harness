@@ -9,6 +9,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+common = { path = "../common" }
 memory = { path = "../memory" }
 rmcp = { version = "2", default-features = false, features = [
     "client",

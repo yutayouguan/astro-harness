@@ -24,7 +24,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "multi_agent".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Coordinate multiple sub-agents toward a goal (writes a planned JSON checklist only). Prefer orchestration_run for real async serial execution."
+        description: "PLAN ONLY: write a multi-agent checklist JSON under workspace/multi_agent/ (status=planned). Does NOT run sub-agents. For real execution use orchestration_run."
             .to_string(),
         schema: schema_for_args::<MultiAgentArgs>(),
         check_fn: None,

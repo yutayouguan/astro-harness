@@ -41,7 +41,7 @@ pub struct CreateAgentArgs {
     /// 可选 ASCII slug（`workspace-{id}`）；缺省由 name 生成。
     #[serde(default)]
     pub id: Option<String>,
-    /// 创建后是否切换为当前 Agent；缺省 `true`。
+    /// 创建后是否切换为当前 Agent（会改 ASTRO_WORKSPACE / MEMORY）；缺省 `false`，需显式 true。
     #[serde(default)]
     pub activate: Option<bool>,
     /// 是否把全局 tools/MCP 拷入 `agents/{id}/config.json` 作起点；缺省 `true`。
@@ -57,7 +57,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "create_agent".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Create a new Agent memory space at ~/.astro/workspace-{id}/ with agents/{id}/config.json, and optionally fill AGENT/IDENTITY/SOUL/USER/MEMORY from a profile. Use after loading the create-agent skill.".to_string(),
+        description: "Create a new Agent memory space at ~/.astro/workspace-{id}/ with agents/{id}/config.json, and optionally fill AGENT/IDENTITY/SOUL/USER/MEMORY from a profile. activate defaults to false (set true only when you intentionally switch the current workspace). Use after loading the create-agent skill.".to_string(),
         schema: schema_for_args::<CreateAgentArgs>(),
         check_fn: None,
         icon: "bot",
@@ -87,7 +87,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    let activate = parsed.activate.unwrap_or(true);
+    let activate = parsed.activate.unwrap_or(false);
     let inherit_config = parsed.inherit_config.unwrap_or(true);
 
     let profile = parsed.profile.as_ref().map(|p| memory::AgentProfile {

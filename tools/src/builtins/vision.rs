@@ -25,7 +25,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "vision".to_string(),
         toolset: "vision".to_string(),
-        description: "Describe or answer questions about an image given a local path or URL."
+        description: "STUB ONLY: validates an image path/URL exists and returns a notice. Does NOT call a vision model—attach images in chat or wait for native vision API. Prefer not calling this for real image Q&A."
             .to_string(),
         schema: schema_for_args::<VisionArgs>(),
         check_fn: None,

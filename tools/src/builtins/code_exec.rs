@@ -1,6 +1,7 @@
 //! 代码执行工具：在工作区临时目录运行短片段（python / node / shell）。
 //!
 //! 脚本写入 `.code_exec/`，子进程超时 30s；stdout/stderr 一并返回后删除临时文件。
+//! 输出有 64KiB 截断。注意：同语言并行调用会争用固定临时文件名。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ use crate::schema::schema_for_args;
 pub struct CodeExecArgs {
     /// 要执行的源代码。
     pub code: String,
-    /// 语言：`python`（默认）/ `javascript`|`js` / `shell`|`bash`。
+    /// 语言：必须是 `python`（默认）/ `javascript`|`js` / `shell`|`bash`。未知语言会报错。
     #[serde(default)]
     pub language: Option<String>,
 }
@@ -24,7 +25,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "code_exec".to_string(),
         toolset: "code_exec".to_string(),
-        description: "Execute a short code snippet. language: python|javascript|shell (default python)."
+        description: "Execute a short code snippet. language must be python|javascript|shell (default python). Not a sandbox—same privileges as the host process. stdout/stderr capped at 64KiB."
             .to_string(),
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,
@@ -35,7 +36,7 @@ pub fn register(registry: &mut ToolRegistry) {
 /// 按语言选择解释器执行代码，返回 exit code 与输出。
 ///
 /// # 错误
-/// 参数无效、spawn 失败，或超过 30 秒超时。
+/// 参数无效、未知 language、spawn 失败，或超过 30 秒超时。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     use std::process::Stdio;
     use std::time::Duration;
@@ -46,17 +47,21 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .language
         .as_deref()
         .unwrap_or("python")
+        .trim()
         .to_lowercase();
+
+    let (program, script_args, filename): (&str, Vec<&str>, &str) = match lang.as_str() {
+        "python" | "python3" | "py" => ("python3", vec![], "snippet.py"),
+        "javascript" | "js" => ("node", vec![], "snippet.js"),
+        "shell" | "bash" | "sh" => ("sh", vec![], "snippet.sh"),
+        other => anyhow::bail!(
+            "code_exec 不支持 language={other}；请使用 python、javascript 或 shell"
+        ),
+    };
 
     ctx.ensure_workspace()?;
     let tmp = ctx.workspace_dir.join(".code_exec");
     std::fs::create_dir_all(&tmp)?;
-
-    let (program, script_args, filename): (&str, Vec<&str>, &str) = match lang.as_str() {
-        "javascript" | "js" => ("node", vec![], "snippet.js"),
-        "shell" | "bash" => ("sh", vec![], "snippet.sh"),
-        _ => ("python3", vec![], "snippet.py"),
-    };
 
     let path = tmp.join(filename);
     std::fs::write(&path, &parsed.code)?;
@@ -79,7 +84,74 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let stderr = String::from_utf8_lossy(&output.stderr);
     let code_status = output.status.code().unwrap_or(-1);
     let _ = std::fs::remove_file(&path);
-    Ok(format!(
-        "exit={code_status}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    let body = format!("exit={code_status}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+    Ok(common::truncate_tool_result(
+        &body,
+        common::MAX_TOOL_RESULT_BYTES,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::{ImageGenTargets, ToolContext};
+
+    fn test_ctx<'a>(
+        dir: &'a tempfile::TempDir,
+        memory: &'a mut memory::MemoryManager,
+        providers: &'a providers::registry::ProviderRegistry,
+        targets: &'a ImageGenTargets,
+    ) -> ToolContext<'a> {
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        ToolContext {
+            memory,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: ws,
+            image_gen_targets: targets,
+            providers,
+            session_id: "test".into(),
+            chat_api_key: String::new(),
+            chat_base_url: String::new(),
+            chat_provider: String::new(),
+            chat_model: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_unknown_language() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let providers = providers::registry::ProviderRegistry::new();
+        let targets = ImageGenTargets::default();
+        let ctx = test_ctx(&dir, &mut memory, &providers, &targets);
+        let err = dispatch(
+            &ctx,
+            &serde_json::json!({"code": "1", "language": "ruby"}),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("不支持"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn large_stdout_is_truncated() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let providers = providers::registry::ProviderRegistry::new();
+        let targets = ImageGenTargets::default();
+        let ctx = test_ctx(&dir, &mut memory, &providers, &targets);
+        let n = common::MAX_TOOL_RESULT_BYTES + 4096;
+        let out = dispatch(
+            &ctx,
+            &serde_json::json!({
+                "language": "python",
+                "code": format!("print('b'*{n})"),
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(out.contains("[truncated]"), "{out}");
+    }
 }

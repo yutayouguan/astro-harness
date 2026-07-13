@@ -2,6 +2,9 @@
 //!
 //! 通过 `sh -c` 运行命令，默认工作目录为 workspace；可选 `cwd` 指定
 //! workspace 内的相对子目录。超时 60 秒。
+//!
+//! **注意**：仅默认 cwd 落在 workspace，命令本身可访问整机路径；stdout/stderr
+//! 有 64KiB 截断以防撑爆上下文。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -25,7 +28,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "terminal".to_string(),
         toolset: "terminal".to_string(),
-        description: "Run a shell command with cwd defaulting to the agent workspace. Timeout 60s."
+        description: "Run a shell command. Default cwd is the agent workspace (not a jail—commands can still touch paths outside it). Timeout 60s. stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
             .to_string(),
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,
@@ -35,7 +38,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 /// 在 workspace（或指定子目录）下执行 Shell 命令并返回退出码、stdout、stderr。
 ///
-/// `cwd` 经 `resolve_safe` 校验；命令为空时立即报错。
+/// `cwd` 经 `resolve_safe` 校验；命令为空时立即报错。输出经统一截断。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     use std::process::Stdio;
     use std::time::Duration;
@@ -71,7 +74,45 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let code = output.status.code().unwrap_or(-1);
-    Ok(format!(
-        "exit={code}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    let body = format!("exit={code}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+    Ok(common::truncate_tool_result(
+        &body,
+        common::MAX_TOOL_RESULT_BYTES,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::{ImageGenTargets, ToolContext};
+
+    #[tokio::test]
+    async fn large_stdout_is_truncated() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let providers = providers::registry::ProviderRegistry::new();
+        let targets = ImageGenTargets::default();
+        let ctx = ToolContext {
+            memory: &mut memory,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: ws,
+            image_gen_targets: &targets,
+            providers: &providers,
+            session_id: "test".into(),
+            chat_api_key: String::new(),
+            chat_base_url: String::new(),
+            chat_provider: String::new(),
+            chat_model: String::new(),
+        };
+
+        let n = common::MAX_TOOL_RESULT_BYTES + 8 * 1024;
+        let args = serde_json::json!({
+            "command": format!("awk 'BEGIN{{for(i=0;i<{n};i++)printf \"a\"}}'"),
+        });
+        let out = dispatch(&ctx, &args).await.unwrap();
+        assert!(out.contains("[truncated]"), "{out}");
+        assert!(out.len() < n + 200);
+    }
 }

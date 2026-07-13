@@ -6,12 +6,14 @@ import {
   IconBrowser,
   IconClarify,
   IconCodeExec,
+  IconConfirm,
   IconDelegate,
   IconEye,
   IconFileOps,
   IconImageGen,
   IconMemoryTool,
   IconMultiAgent,
+  IconPresentUi,
   IconScheduled,
   IconSessionSearch,
   IconSkillsTool,
@@ -35,6 +37,8 @@ export type AgentToolId =
   | "memory"
   | "session_search"
   | "clarify"
+  | "confirm"
+  | "present_ui"
   | "delegate"
   | "scheduled"
   | "multi_agent"
@@ -112,8 +116,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     tone: "cyan",
     params: [
       { name: "url", type: "string" },
-      { name: "action", type: "string", optional: true },
-      { name: "selector", type: "string", optional: true },
     ],
   },
   {
@@ -172,7 +174,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     tone: "indigo",
     params: [
       { name: "prompt", type: "string" },
-      { name: "size", type: "string", optional: true },
     ],
   },
   {
@@ -226,6 +227,30 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     Icon: IconClarify,
     tone: "red",
     params: [{ name: "question", type: "string" }],
+  },
+  {
+    id: "confirm",
+    titleKey: "agentTools.confirm.title",
+    descKey: "agentTools.confirm.desc",
+    Icon: IconConfirm,
+    tone: "amber",
+    params: [
+      { name: "title", type: "string" },
+      { name: "body", type: "string" },
+    ],
+  },
+  {
+    id: "present_ui",
+    titleKey: "agentTools.presentUi.title",
+    descKey: "agentTools.presentUi.desc",
+    Icon: IconPresentUi,
+    tone: "cyan",
+    params: [
+      { name: "title", type: "string", optional: true },
+      { name: "body", type: "string", optional: true },
+      { name: "image_url", type: "string", optional: true },
+      { name: "operations", type: "object", optional: true },
+    ],
   },
   {
     id: "delegate",

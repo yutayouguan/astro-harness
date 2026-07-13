@@ -140,12 +140,19 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
     let step_json: Vec<_> = steps
         .into_iter()
         .map(|s| {
+            let output = s.output.map(|o| {
+                if o.len() > 8 * 1024 {
+                    common::truncate_tool_result(&o, 8 * 1024)
+                } else {
+                    o
+                }
+            });
             serde_json::json!({
                 "seq": s.seq,
                 "role": s.role,
                 "agent_id": s.agent_id,
                 "status": s.status,
-                "output": s.output,
+                "output": output,
                 "error": s.error,
             })
         })

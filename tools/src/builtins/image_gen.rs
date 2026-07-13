@@ -16,9 +16,6 @@ use crate::schema::schema_for_args;
 pub struct ImageGenArgs {
     /// 图片的详细文字描述（不可为空）。
     pub prompt: String,
-    /// 可选尺寸：`1024x1024` / `1024x1536` / `1536x1024` / `512x512`。
-    #[serde(default)]
-    pub size: Option<String>,
 }
 
 /// 向注册表登记 `image_gen` 工具。

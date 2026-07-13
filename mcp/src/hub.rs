@@ -361,13 +361,22 @@ impl McpHub {
 
         if result.is_error == Some(true) {
             let msg = format_content(&result.content);
-            anyhow::bail!("MCP tool error: {msg}");
+            anyhow::bail!(
+                "MCP tool error: {}",
+                common::truncate_tool_result(&msg, common::MAX_TOOL_RESULT_BYTES)
+            );
         }
 
         if let Some(structured) = result.structured_content {
-            return Ok(structured.to_string());
+            return Ok(common::truncate_tool_result(
+                &structured.to_string(),
+                common::MAX_TOOL_RESULT_BYTES,
+            ));
         }
-        Ok(format_content(&result.content))
+        Ok(common::truncate_tool_result(
+            &format_content(&result.content),
+            common::MAX_TOOL_RESULT_BYTES,
+        ))
     }
 
     /// 短连刷新某 server 的 discovered（供 UI refresh_mcp_tools）
