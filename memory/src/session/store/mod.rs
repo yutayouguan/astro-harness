@@ -241,6 +241,11 @@ impl SessionStore {
         Ok(store)
     }
 
+    /// 兼容旧调用名：等同于 [`Self::open_sessions_dir`]（旁路库丢弃，不导入历史）。
+    pub fn open_with_legacy_migration(sessions_dir: &Path) -> Result<Self> {
+        Self::open_sessions_dir(sessions_dir)
+    }
+
     /// 读取当前 `schema_version` 表中的版本号。
     pub fn schema_version(&self) -> Result<i32> {
         let version: Option<i32> = self

@@ -283,7 +283,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn multi_turn_fires_on_completion_after_model_stream() {
+async fn multi_turn_fires_post_llm_call_after_model_stream() {
     use agent::hooks::RecordingHooks;
 
     let dir = tempfile::tempdir().unwrap();

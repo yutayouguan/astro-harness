@@ -251,6 +251,7 @@ export function buildSlashPaletteEntries(skills: { id: string; name: string; des
     id: `slash-${c.name}`,
     title: `/${c.name}`,
     descKey: c.descKey,
+    description: undefined as string | undefined,
     action: c.action,
     icon: c.icon,
     skillName: undefined as string | undefined,
@@ -260,10 +261,10 @@ export function buildSlashPaletteEntries(skills: { id: string; name: string; des
     id: `slash-skill-${s.id}`,
     title: `/${s.name}`,
     descKey: "chat.slashSkill" as MessageKey,
+    description: s.description,
     action: "insert_skill" as SlashAction,
     icon: "✦",
     skillName: s.name,
-    description: s.description,
   }));
 
   return [...builtins, ...skillEntries];

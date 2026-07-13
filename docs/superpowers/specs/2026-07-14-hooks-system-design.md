@@ -132,7 +132,7 @@ on_session_start（仅首轮）
 
 ### `InjectContext` 语义
 
-- 仅影响**当前 turn** 送给模型的消息视图：在最新 user 消息后追加一段明确标记的上下文（实现时固定前缀，如 `[hook:context]`）。  
+- 仅影响**当前 turn** 送给模型的消息视图：在最新 user 消息后追加一段明确标记的上下文（实现时固定前缀 `[astro:hook-context]`）。  
 - **不**回写篡改 DB 中用户原文；持久化仍为用户原输入。
 
 ### `pre_tool_call` 阻断
@@ -180,8 +180,7 @@ hooks:
 
 1. `ChatEvent` 增加 `HookEvent { name, detail, outcome }`（或等价字段），**禁止**再把 hook 塞进 `MemoryUpdate`。  
 2. Tauri / 前端：`kind: "hook"`，`title` = 钩子名（如 `pre_llm_call`）。  
-3. `showHooks` 过滤 `kind === "hook"`。  
-4. 历史映射：若旧数据 title 以 `hook:` 开头，展示层仍可归为 hook（兼容）。
+3. `showHooks` 过滤 `kind === "hook"`。
 
 ## 错误处理
 

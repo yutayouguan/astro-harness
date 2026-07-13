@@ -74,7 +74,7 @@ ctx.register_hook("pre_llm_call", |_| {
 });
 ```
 
-`InjectContext` 只影响**本轮**送给模型的消息视图（追加 `[hook:context]`），不改写数据库里的用户原文。
+`InjectContext` 只影响**本轮**送给模型的消息视图（追加 `[astro:hook-context]`），不改写数据库里的用户原文。
 
 ---
 
@@ -107,7 +107,7 @@ ctx.register_gateway_handler("audit", |event, payload| {
 | `gateway:startup` | backend 启动完成 |
 | `session:start` | 新 session 首次 chat |
 | `agent:end` | 一次 chat run 收尾 |
-| `command:new_chat` | 新建对话（接入点随 UI/RPC 扩展） |
+| `command:new_chat` | UI 新建对话（`ChatControl` / `new_chat`）→ 卸内存会话，并触发 `on_session_reset` / `on_session_finalize` |
 
 ---
 
@@ -152,6 +152,6 @@ hooks:
 
 ```bash
 cargo test -p hooks
-cargo test -p agent --test streaming_test multi_turn_fires_on_completion
+cargo test -p agent --test streaming_test multi_turn_fires_post_llm_call
 cargo test -p agent --test rig_agent_test test_prompt_hooks_on_run_turn
 ```

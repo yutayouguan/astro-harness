@@ -68,11 +68,13 @@ import {
 } from "./lib/autoModelSelect";
 import { shouldShowThinkingControls } from "./lib/shouldShowThinkingControls";
 import {
+  CHAT_MODES,
   chatModeHint,
   loadChatMode,
   saveChatMode,
   type ChatInteractionMode,
 } from "./lib/chatMode";
+import type { SlashAction } from "./lib/composerCommands";
 import { zoomOrRestore } from "./lib/windowZoom";
 import { syncWindowUnderlay } from "./lib/windowUnderlay";
 import {
@@ -1161,20 +1163,10 @@ export default function App() {
             }),
           );
         } else if (payload.type === "memory_update") {
-          // 兼容旧通道：若 operation 以钩子名或 hook: 开头，归为 hook
-          const operation = payload.operation || "memory";
-          const lower = operation.toLowerCase();
-          const isHook =
-            lower.startsWith("hook:") ||
-            lower.startsWith("pre_") ||
-            lower.startsWith("post_") ||
-            lower.startsWith("on_session") ||
-            lower === "subagent_stop" ||
-            lower === "pre_gateway_dispatch";
           const activity: ChatActivity = {
-            id: `${isHook ? "hook" : "mem"}-${Date.now()}`,
-            kind: isHook ? "hook" : "memory",
-            title: operation,
+            id: `mem-${Date.now()}`,
+            kind: "memory",
+            title: payload.operation || "memory",
             output: payload.content,
             detail: payload.content,
             status: "done",
@@ -1525,6 +1517,54 @@ export default function App() {
     [streaming],
   );
 
+  const showTransientToast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    if (hideTimerRef.current != null) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
+  }, []);
+
+  /** 撤销最近一轮 user + 紧随的 assistant */
+  const undoLastExchange = useCallback(() => {
+    if (streaming) return;
+    setMessages((prev) => {
+      let lastUser = -1;
+      for (let i = prev.length - 1; i >= 0; i -= 1) {
+        if (prev[i].role === "user" && prev[i].id !== "welcome") {
+          lastUser = i;
+          break;
+        }
+      }
+      if (lastUser < 0) {
+        queueMicrotask(() => showTransientToast(t("chat.slashUndoEmpty")));
+        return prev;
+      }
+      let end = lastUser + 1;
+      while (end < prev.length && prev[end].role === "assistant") end += 1;
+      const next = [...prev.slice(0, lastUser), ...prev.slice(end)];
+      if (next.length === 0) {
+        queueMicrotask(() => setEmptyMode("chat"));
+      }
+      return next;
+    });
+  }, [streaming, showTransientToast, t]);
+
+  const retryLastAssistant = useCallback(() => {
+    if (streaming) return;
+    let lastAssistantId: string | null = null;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "assistant") {
+        lastAssistantId = messages[i].id;
+        break;
+      }
+    }
+    if (!lastAssistantId) {
+      showTransientToast(t("chat.slashRetryEmpty"));
+      return;
+    }
+    regenerateMessage(lastAssistantId);
+  }, [messages, streaming, regenerateMessage, showTransientToast, t]);
+
   const onChatModelChange = async (providerId: string, model: string) => {
     const provider = providers.find((p) => p.id === providerId);
     if (!provider) return;
@@ -1688,6 +1728,143 @@ export default function App() {
     setInput("");
     setEmptyMode("chat");
   };
+
+  const handleSlashAction = useCallback(
+    (action: SlashAction, _args?: string) => {
+      const contextUsageFallback = (): number => {
+        const chars = messages.reduce(
+          (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
+          0,
+        );
+        return Math.min(99, Math.round((Math.ceil(chars / 4) / 128_000) * 100));
+      };
+
+      switch (action) {
+        case "new_chat":
+          startNewChat();
+          break;
+        case "undo":
+          undoLastExchange();
+          break;
+        case "retry":
+          retryLastAssistant();
+          break;
+        case "stop":
+          void stopStream();
+          break;
+        case "status": {
+          const ctx =
+            tokenUsage && tokenUsage.totalTokens > 0
+              ? Math.min(99, Math.round((tokenUsage.totalTokens / 128_000) * 100))
+              : contextUsageFallback();
+          showTransientToast(
+            t("chat.slashStatusMsg", {
+              session: sessionId ? sessionId.slice(0, 8) : "—",
+              provider: activeProvider?.display_name ?? "—",
+              model: activeProvider?.model ?? "—",
+              mode: chatMode,
+              thinking: thinkingPrefs.level,
+              verbosity: chatDisplayPrefs.verbosity,
+              ctx: String(ctx),
+            }),
+          );
+          break;
+        }
+        case "usage": {
+          if (!tokenUsage || tokenUsage.totalTokens <= 0) {
+            showTransientToast(t("chat.slashUsageEmpty"));
+          } else {
+            showTransientToast(
+              t("chat.slashUsageMsg", {
+                total: String(tokenUsage.totalTokens),
+                prompt: String(tokenUsage.promptTokens),
+                completion: String(tokenUsage.completionTokens),
+              }),
+            );
+          }
+          break;
+        }
+        case "model":
+          showTransientToast(
+            t("chat.slashModelMsg", {
+              provider: activeProvider?.display_name ?? "—",
+              model: activeProvider?.model ?? "—",
+            }),
+          );
+          break;
+        case "verbose": {
+          const order = ["compact", "normal", "detailed"] as const;
+          const i = order.indexOf(chatDisplayPrefs.verbosity);
+          const next = order[(i + 1) % order.length];
+          setVerbosity(next);
+          showTransientToast(t("chat.slashVerboseMsg", { level: next }));
+          break;
+        }
+        case "reasoning": {
+          const order = ["off", "low", "high", "max"] as const;
+          const i = order.indexOf(thinkingPrefs.level);
+          const next = order[(i + 1) % order.length];
+          setThinkingLevel(next);
+          showTransientToast(t("chat.slashReasoningMsg", { level: next }));
+          break;
+        }
+        case "mode": {
+          const i = CHAT_MODES.indexOf(chatMode);
+          const next = CHAT_MODES[(i + 1) % CHAT_MODES.length];
+          onChatModeChange(next);
+          showTransientToast(t("chat.slashModeMsg", { mode: next }));
+          break;
+        }
+        case "nav_tools":
+          setToolsInitialTab("builtin");
+          setNav("tools");
+          break;
+        case "nav_skills":
+          setNav("skills");
+          break;
+        case "nav_mcp":
+          setToolsInitialTab("mcp");
+          setNav("tools");
+          break;
+        case "nav_memory":
+          setNav("memory");
+          break;
+        case "nav_insights":
+          setNav("insights");
+          break;
+        case "nav_providers":
+          setNav("providers");
+          break;
+        case "nav_settings":
+          setNav("settings");
+          break;
+        case "open_context":
+          setChatRightTab("context");
+          setChatRightOpen(true);
+          setNav("chat");
+          break;
+        default:
+          break;
+      }
+    },
+    [
+      messages,
+      undoLastExchange,
+      retryLastAssistant,
+      stopStream,
+      tokenUsage,
+      sessionId,
+      activeProvider,
+      chatMode,
+      thinkingPrefs.level,
+      chatDisplayPrefs.verbosity,
+      showTransientToast,
+      t,
+      setVerbosity,
+      setThinkingLevel,
+      onChatModeChange,
+    ],
+  );
 
   const attachArtifactsToChat = async (
     files: ArtifactDto[],
@@ -2058,8 +2235,8 @@ export default function App() {
                       }}
                       onRegenerateMessage={regenerateMessage}
                       onDeleteMessage={deleteMessage}
-                      // 分支会话能力尚未落地：仅保留可接线回调位，按钮点击暂为 no-op
                       onBranchMessage={undefined}
+                      onSlashAction={handleSlashAction}
                       contextUsagePercent={(() => {
                         if (tokenUsage && tokenUsage.totalTokens > 0) {
                           return Math.min(

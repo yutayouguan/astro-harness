@@ -3,7 +3,7 @@
 //! 本模块是 Astro Agent 的核心编排层，负责：
 //! - 维护单次会话的消息历史与轮次预算（`max_turns` / `multi_turn`）
 //! - 在每轮用户输入时召回记忆、组装静态/动态上下文并生成 system prompt
-//! - 统一路由内置工具与 MCP 工具，并在调用前后触发 hooks；流式主循环在模型回复聚合后触发 `on_completion`
+//! - 统一路由内置工具与 MCP 工具，并在调用前后触发 hooks；流式主循环在模型回复聚合后触发 `post_llm_call`
 //!
 //! **关键不变量**
 //! - 每条用户消息开始时 `tool_rounds` 归零；工具调用次数不得超过 `multi_turn`

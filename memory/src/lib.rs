@@ -50,7 +50,7 @@ pub use artifact_db::{
 pub use manager::{
     dispatch_memory_tool, format_recalled_context, MemoryManager, MemoryTarget,
 };
-pub use message_db::{build_conversation_context, MessageDb, ScrolledMessage};
+pub use message_db::{build_conversation_context, ScrolledMessage};
 pub use session_store::{
     BillingDelta, ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit,
     SessionBillingRow, SessionStore, StoredMessage, StoredSession,

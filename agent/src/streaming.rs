@@ -509,7 +509,7 @@ async fn run_multi_turn_stream_inner(
             let mut messages = agent.session_messages.clone();
             if let Some(ctx) = agent.take_inject_context() {
                 messages.push(common::message::Message::user(&format!(
-                    "[hook:context]\n{ctx}"
+                    "[astro:hook-context]\n{ctx}"
                 )));
             }
             let tools = agent.tool_registry().schemas_for_api();
