@@ -2,6 +2,19 @@
 //!
 //! 费用路径 **禁止** 读取 `litellm-model-meta.json`。
 
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::workspace::default_memory_dir;
+
+const OPENROUTER_PRICING_CACHE_FILE: &str = "openrouter-model-pricing.json";
+const PRICING_CACHE_MAX_AGE: Duration = Duration::hours(24);
+
 /// 四桶 token 用量（memory 侧类型，避免 memory→providers 依赖）。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct UsageTokens {
@@ -182,6 +195,191 @@ fn unknown_result() -> CostResult {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CachedModelPricing {
+    prompt: f64,
+    completion: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cache_read: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cache_write: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    request: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PricingCacheFile {
+    fetched_at: String,
+    models: HashMap<String, CachedModelPricing>,
+}
+
+fn openrouter_pricing_cache_path() -> PathBuf {
+    default_memory_dir().join(OPENROUTER_PRICING_CACHE_FILE)
+}
+
+fn is_cache_fetched_at_valid(fetched_at: DateTime<Utc>) -> bool {
+    let now = Utc::now();
+    if fetched_at > now {
+        return true;
+    }
+    now - fetched_at < PRICING_CACHE_MAX_AGE
+}
+
+fn parse_price_value(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.parse().ok(),
+        _ => None,
+    }
+}
+
+fn cached_model_to_entry(pricing: &CachedModelPricing) -> PricingEntry {
+    PricingEntry {
+        input_per_million: pricing.prompt * 1_000_000.0,
+        output_per_million: pricing.completion * 1_000_000.0,
+        cache_read_per_million: pricing.cache_read.map(|rate| rate * 1_000_000.0),
+        cache_write_per_million: pricing.cache_write.map(|rate| rate * 1_000_000.0),
+        request_fee: pricing.request,
+        pricing_version: "provider_models_api",
+    }
+}
+
+fn lookup_model_in_cache<'a>(
+    models: &'a HashMap<String, CachedModelPricing>,
+    model: &str,
+) -> Option<&'a CachedModelPricing> {
+    let model = model.trim();
+    if let Some(pricing) = models.get(model) {
+        return Some(pricing);
+    }
+    let lower = model.to_ascii_lowercase();
+    if let Some(pricing) = models.get(&lower) {
+        return Some(pricing);
+    }
+    let norm = normalize_model_key(model);
+    models
+        .iter()
+        .find(|(id, _)| normalize_model_key(id) == norm)
+        .map(|(_, pricing)| pricing)
+}
+
+fn read_pricing_cache_file() -> Option<PricingCacheFile> {
+    let path = openrouter_pricing_cache_path();
+    let content = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn load_valid_pricing_cache() -> Option<PricingCacheFile> {
+    let cache = read_pricing_cache_file()?;
+    let fetched_at = DateTime::parse_from_rfc3339(&cache.fetched_at)
+        .ok()?
+        .with_timezone(&Utc);
+    if !is_cache_fetched_at_valid(fetched_at) {
+        return None;
+    }
+    Some(cache)
+}
+
+fn write_pricing_cache(cache: &PricingCacheFile) {
+    let path = openrouter_pricing_cache_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(cache) {
+        let _ = fs::write(path, json);
+    }
+}
+
+fn parse_models_api_response(json: Value) -> Option<PricingCacheFile> {
+    let data = json.get("data")?.as_array()?;
+    let mut models = HashMap::new();
+    for item in data {
+        let id = item.get("id")?.as_str()?.to_string();
+        let pricing = item.get("pricing")?;
+        let prompt = parse_price_value(pricing.get("prompt")?)?;
+        let completion = parse_price_value(pricing.get("completion")?)?;
+        models.insert(
+            id,
+            CachedModelPricing {
+                prompt,
+                completion,
+                cache_read: pricing
+                    .get("cache_read")
+                    .and_then(parse_price_value),
+                cache_write: pricing
+                    .get("cache_write")
+                    .and_then(parse_price_value),
+                request: pricing.get("request").and_then(parse_price_value),
+            },
+        );
+    }
+    Some(PricingCacheFile {
+        fetched_at: Utc::now().to_rfc3339(),
+        models,
+    })
+}
+
+fn fetch_models_pricing_cache(base_url: &str, api_key: &str) -> Option<PricingCacheFile> {
+    let base = base_url.trim().trim_end_matches('/');
+    let url = format!("{base}/models");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .ok()?;
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .send()
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let json: Value = response.json().ok()?;
+    parse_models_api_response(json)
+}
+
+fn estimate_from_provider_models_api(
+    model: &str,
+    usage: &UsageTokens,
+    base_url: &str,
+    api_key: Option<&str>,
+) -> CostResult {
+    if let Some(cache) = load_valid_pricing_cache() {
+        if let Some(pricing) = lookup_model_in_cache(&cache.models, model) {
+            return cost_from_cached_pricing(usage, pricing, &cache.fetched_at);
+        }
+    }
+
+    if let Some(key) = api_key.map(str::trim).filter(|k| !k.is_empty()) {
+        if let Some(cache) = fetch_models_pricing_cache(base_url, key) {
+            write_pricing_cache(&cache);
+            if let Some(pricing) = lookup_model_in_cache(&cache.models, model) {
+                return cost_from_cached_pricing(usage, pricing, &cache.fetched_at);
+            }
+        }
+    }
+
+    unknown_result()
+}
+
+fn cost_from_cached_pricing(
+    usage: &UsageTokens,
+    pricing: &CachedModelPricing,
+    fetched_at: &str,
+) -> CostResult {
+    let entry = cached_model_to_entry(pricing);
+    match compute_cost(usage, &entry) {
+        Ok(amount) => CostResult {
+            amount_usd: Some(amount),
+            status: CostStatus::Estimated,
+            source: "provider_models_api".to_string(),
+            pricing_version: Some(fetched_at.to_string()),
+            label: format_label(CostStatus::Estimated, Some(amount)),
+        },
+        Err(()) => unknown_result(),
+    }
+}
+
 /// 根据 model / provider / base_url 判定计费路由。
 pub fn resolve_billing_route(
     _model: &str,
@@ -241,7 +439,7 @@ pub fn estimate_usage_cost(
     usage: &UsageTokens,
     provider: Option<&str>,
     base_url: Option<&str>,
-    _api_key: Option<&str>,
+    api_key: Option<&str>,
 ) -> CostResult {
     let route = resolve_billing_route(model, provider, base_url);
 
@@ -268,9 +466,8 @@ pub fn estimate_usage_cost(
                 Err(()) => unknown_result(),
             }
         }
-        BillingRoute::ProviderModelsApi { .. } => {
-            // Task 3: OpenRouter /models API + 本地缓存
-            unknown_result()
+        BillingRoute::ProviderModelsApi { base_url, .. } => {
+            estimate_from_provider_models_api(model, usage, &base_url, api_key)
         }
         BillingRoute::Unknown => unknown_result(),
     }

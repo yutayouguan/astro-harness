@@ -207,3 +207,33 @@ fn estimate_usage_cost_official_snapshot_and_unknown() {
     assert_eq!(unk.status, CostStatus::Unknown);
     assert!(unk.amount_usd.is_none() || unk.amount_usd == Some(0.0));
 }
+
+#[test]
+fn estimate_usage_cost_reads_openrouter_cache_file() {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    use memory::{estimate_usage_cost, CostStatus, UsageTokens};
+    let dir = tempfile::tempdir().unwrap();
+    std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+    let cache = dir.path().join("openrouter-model-pricing.json");
+    std::fs::write(
+        &cache,
+        r#"{"fetched_at":"2099-01-01T00:00:00Z","models":{"test/or-model":{"prompt":0.000001,"completion":0.000002}}}"#,
+    )
+    .unwrap();
+    let usage = UsageTokens {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        request_count: 1,
+        ..Default::default()
+    };
+    let r = estimate_usage_cost(
+        "test/or-model",
+        &usage,
+        Some("openrouter"),
+        Some("https://openrouter.ai/api/v1"),
+        None,
+    );
+    assert_eq!(r.status, CostStatus::Estimated);
+    assert!((r.amount_usd.unwrap() - 3.0).abs() < 1e-6); // 1.0 + 2.0 per 1M
+    std::env::remove_var("ASTRO_MEMORY_DIR");
+}
