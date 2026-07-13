@@ -84,8 +84,10 @@ import type {
   ChatEmptyMode,
   ChatMessage,
   MessageTokenUsage,
+  PendingInterrupt,
   ProviderDto,
   ProvidersStateDto,
+  UiSurface,
 } from "./types";
 
 /** 单次最多附件数 */
@@ -252,9 +254,15 @@ export default function App() {
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  /** 会话级未决 HITL interrupt（有则拒发普通消息） */
+  const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<
+    PendingInterrupt[]
+  >([]);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   /** 流式世代：stop / 新发送时递增，忽略迟到事件 */
   const streamGenRef = useRef(0);
+  /** 当前 AG-UI run id（run_started） */
+  const currentRunIdRef = useRef<string | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const zoomingRef = useRef(false);
   /** 避免恢复过程中把空欢迎页写回覆盖已存会话 */
@@ -780,10 +788,31 @@ export default function App() {
     skipUserAppend?: boolean;
     /** 重新生成时沿用已有 user id，便于附件关联 */
     reuseUserId?: string;
+    /** HITL resume 载荷（JSON 数组字符串） */
+    resumeJson?: string;
+    /** 允许空正文（仅 resume） */
+    allowEmpty?: boolean;
   }) => {
     const text = (opts?.text ?? input).trim();
     const pending = opts?.attachments ?? attachments;
-    if ((!text && pending.length === 0) || streaming || !activeProvider) return;
+    const resumeJson = opts?.resumeJson?.trim() ?? "";
+    if (
+      sessionPendingInterrupts.length > 0 &&
+      !resumeJson
+    ) {
+      setToastMsg(t("chat.interrupt.pending"));
+      setToastVisible(true);
+      if (hideTimerRef.current != null) window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
+      return;
+    }
+    if (
+      (!text && pending.length === 0 && !opts?.allowEmpty && !resumeJson) ||
+      streaming ||
+      !activeProvider
+    ) {
+      return;
+    }
 
     const isCreatingAgent = emptyMode === "agent" && !opts?.skipUserAppend;
     const userId = opts?.reuseUserId ?? `u-${Date.now()}`;
@@ -857,6 +886,14 @@ export default function App() {
         prompt_tokens?: number;
         completion_tokens?: number;
         total_tokens?: number;
+        thread_id?: string;
+        run_id?: string;
+        message_id?: string;
+        activity_type?: string;
+        content_json?: string;
+        replace?: boolean;
+        outcome_type?: string;
+        interrupts_json?: string;
       }>(eventName, (event) => {
         if (streamGenRef.current !== gen) return;
         const payload = event.payload;
@@ -876,6 +913,104 @@ export default function App() {
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantId ? { ...m, usage } : m)),
           );
+        } else if (payload.type === "run_started") {
+          currentRunIdRef.current = payload.run_id ?? null;
+        } else if (payload.type === "activity") {
+          let operations: unknown[] = [];
+          try {
+            const parsed = JSON.parse(payload.content_json || "{}") as {
+              operations?: unknown;
+            };
+            if (Array.isArray(parsed.operations)) {
+              operations = parsed.operations;
+            }
+          } catch {
+            /* ignore malformed activity */
+          }
+          const surface: UiSurface = {
+            messageId: payload.message_id || `surf-${Date.now()}`,
+            activityType: payload.activity_type || "a2ui-surface",
+            operations,
+            status: "active",
+          };
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantId) return m;
+              const surfaces = [...(m.uiSurfaces ?? [])];
+              if (payload.replace) {
+                const idx = surfaces.findIndex(
+                  (s) => s.messageId === surface.messageId,
+                );
+                if (idx >= 0) surfaces[idx] = surface;
+                else surfaces.push(surface);
+              } else {
+                surfaces.push(surface);
+              }
+              return { ...m, uiSurfaces: surfaces };
+            }),
+          );
+          setStatusPhase("generating");
+        } else if (payload.type === "run_finished") {
+          if (payload.outcome_type === "interrupt") {
+            let interrupts: PendingInterrupt[] = [];
+            try {
+              const arr = JSON.parse(payload.interrupts_json || "[]") as unknown;
+              if (Array.isArray(arr)) {
+                interrupts = arr
+                  .map((raw) => {
+                    const i = raw as Record<string, unknown>;
+                    let responseSchema: unknown;
+                    const schemaRaw = i.response_schema_json;
+                    if (typeof schemaRaw === "string" && schemaRaw.trim()) {
+                      try {
+                        responseSchema = JSON.parse(schemaRaw);
+                      } catch {
+                        responseSchema = undefined;
+                      }
+                    }
+                    return {
+                      id: String(i.id ?? ""),
+                      reason: String(i.reason ?? ""),
+                      message:
+                        typeof i.message === "string" ? i.message : undefined,
+                      responseSchema,
+                      assistantMessageId: assistantId,
+                    } satisfies PendingInterrupt;
+                  })
+                  .filter((i) => i.id);
+              }
+            } catch {
+              interrupts = [];
+            }
+            setSessionPendingInterrupts(interrupts);
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantId) return m;
+                const surfaces = [...(m.uiSurfaces ?? [])];
+                if (surfaces.length > 0) {
+                  const last = surfaces[surfaces.length - 1]!;
+                  surfaces[surfaces.length - 1] = {
+                    ...last,
+                    interrupts: interrupts.map(
+                      ({ id, reason, message, responseSchema }) => ({
+                        id,
+                        reason,
+                        message,
+                        responseSchema,
+                      }),
+                    ),
+                  };
+                }
+                return { ...m, uiSurfaces: surfaces };
+              }),
+            );
+            setStreaming(false);
+            setStreamPaused(false);
+            setStatus("ready");
+            setStatusPhase("ready");
+          } else if (payload.outcome_type === "success") {
+            setSessionPendingInterrupts([]);
+          }
         } else if (payload.type === "tool_call_delta") {
           enqueueToolDelta(assistantId, {
             index: payload.index ?? 0,
@@ -987,6 +1122,7 @@ export default function App() {
               if (
                 !content &&
                 !(m.activities && m.activities.length > 0) &&
+                !(m.uiSurfaces && m.uiSurfaces.length > 0) &&
                 !(m.attachments && m.attachments.length > 0)
               ) {
                 return {
@@ -1103,6 +1239,7 @@ export default function App() {
         useMemory: true,
         thinkingEnabled: modelApi.thinkingEnabled,
         reasoningEffort: modelApi.reasoningEffort,
+        resumeJson: resumeJson || undefined,
         attachments: pending.map((a) => ({
           name: a.name,
           mime: a.mime,
@@ -1135,6 +1272,7 @@ export default function App() {
     providers,
     sessionId,
     emptyMode,
+    sessionPendingInterrupts,
     t,
     chatMode,
     clearStreamBuffers,
@@ -1145,6 +1283,57 @@ export default function App() {
     flushToolDeltas,
     settleMessageUsage,
   ]);
+
+  const onUiAction = useCallback(
+    async (
+      messageId: string,
+      name: string,
+      context: Record<string, unknown>,
+    ) => {
+      if (streaming || !activeProvider || sessionPendingInterrupts.length === 0) {
+        return;
+      }
+      let payload: Record<string, unknown>;
+      if (name === "approve") {
+        payload = { approved: true };
+      } else if (name === "deny") {
+        payload = { approved: false };
+      } else if (name === "choose") {
+        const value = context.value;
+        if (typeof value !== "string" || !value.trim()) return;
+        payload = { value };
+      } else {
+        payload = { ...context };
+      }
+      const resumeJson = JSON.stringify(
+        sessionPendingInterrupts.map((p) => ({
+          interrupt_id: p.id,
+          status: "resolved",
+          payload,
+        })),
+      );
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          return {
+            ...m,
+            uiSurfaces: m.uiSurfaces?.map((s) => ({
+              ...s,
+              status: "resolved" as const,
+            })),
+          };
+        }),
+      );
+      setSessionPendingInterrupts([]);
+      await send({
+        text: "",
+        skipUserAppend: true,
+        resumeJson,
+        allowEmpty: true,
+      });
+    },
+    [streaming, activeProvider, sessionPendingInterrupts, send],
+  );
 
   const regenerateMessage = useCallback(
     (assistantId: string) => {
@@ -1305,6 +1494,8 @@ export default function App() {
     setStatusDetail(null);
     setFocusMessageId(null);
     setMessages([]);
+    setSessionPendingInterrupts([]);
+    currentRunIdRef.current = null;
     setNav("chat");
   };
 
@@ -1675,6 +1866,8 @@ export default function App() {
                       onInputChange={setInput}
                       onAttachmentsChange={setAttachments}
                       onSend={send}
+                      pendingInterrupts={sessionPendingInterrupts}
+                      onUiAction={onUiAction}
                       onPauseStream={pauseStream}
                       onResumeStream={resumeStream}
                       onStopStream={stopStream}
