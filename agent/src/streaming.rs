@@ -392,7 +392,9 @@ pub async fn run_multi_turn_stream(
 
     let (thread_id, run_id) = {
         let agent = session.lock().await;
-        (agent.session_id().to_string(), uuid::Uuid::new_v4().to_string())
+        let sid = agent.session_id().to_string();
+        let _ = agent.ensure_session("tauri");
+        (sid, uuid::Uuid::new_v4().to_string())
     };
     let _ = emit(
         &tx,
@@ -454,6 +456,7 @@ pub async fn run_multi_turn_stream(
         let mut stream = Abortable::new(raw_stream, abort_reg);
 
         let mut full_response = String::new();
+        let mut full_reasoning = String::new();
         let mut tool_acc = tools::ToolCallAccumulator::new();
         // Google 等会在每个 chunk 带累计 usage：本轮覆盖式取最后一次
         let mut round_usage: Option<Usage> = None;
@@ -517,6 +520,7 @@ pub async fn run_multi_turn_stream(
                     }
                 }
                 Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
+                    full_reasoning.push_str(&r);
                     if !emit(
                         &tx,
                         MultiTurnStreamItem::Assistant(StreamedAssistantContent::Reasoning(r)),
@@ -633,7 +637,11 @@ pub async fn run_multi_turn_stream(
                         .collect(),
                 )
             };
-            if let Err(err) = agent.record_assistant_message_with_tools(&full_response, tc) {
+            if let Err(err) = agent.record_assistant_message_with_tools(
+                &full_response,
+                tc,
+                (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+            ) {
                 drop(agent);
                 finish_error(
                     &session,
@@ -758,7 +766,11 @@ pub async fn run_multi_turn_stream(
 
             {
                 let mut agent = session.lock().await;
-                let _ = agent.record_tool_result_with_id(Some(&call.id), &result_for_history);
+                let _ = agent.record_tool_result_with_id(
+                    Some(&call.id),
+                    Some(&call.name),
+                    &result_for_history,
+                );
             }
 
             // HITL：confirm/clarify 等返回 astro_hitl → Activity + RunFinished(interrupt)

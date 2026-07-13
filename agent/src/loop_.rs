@@ -16,6 +16,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use common::message::Message;
+use memory::session_store::NewMessage;
 use memory::{format_recalled_context, MemoryManager};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use providers::registry::ProviderRegistry;
@@ -481,21 +482,41 @@ impl AgentLoop {
         Ok(result)
     }
 
-    /// 将 assistant 纯文本回复写入记忆与会话镜像。
-    pub fn record_assistant_message(&mut self, content: &str) -> anyhow::Result<()> {
-        self.record_assistant_message_with_tools(content, None)
+    /// 确保会话行存在（不存在则按 `source` 创建）。
+    pub fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
+        self.memory.ensure_session(&self.session_id, source)
     }
 
-    /// 将 assistant 回复（可含 tool_calls）写入记忆与会话镜像。
+    /// 将 assistant 纯文本回复写入记忆与会话镜像。
+    pub fn record_assistant_message(&mut self, content: &str) -> anyhow::Result<()> {
+        self.record_assistant_message_with_tools(content, None, None)
+    }
+
+    /// 将 assistant 回复（可含 tool_calls / reasoning）写入记忆与会话镜像。
     ///
-    /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息。
+    /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息；
+    /// 落盘通过 [`MemoryManager::record_message_ex`] 写入富字段。
     pub fn record_assistant_message_with_tools(
         &mut self,
         content: &str,
         tool_calls: Option<Vec<common::message::ToolCall>>,
+        reasoning: Option<&str>,
     ) -> anyhow::Result<()> {
-        self.memory
-            .record_message(&self.session_id, "assistant", content)?;
+        let tool_calls_json = match &tool_calls {
+            Some(calls) if !calls.is_empty() => Some(serde_json::to_value(calls)?),
+            _ => None,
+        };
+        let reasoning = reasoning.filter(|r| !r.is_empty());
+        self.memory.ensure_session(&self.session_id, "tauri")?;
+        self.memory.record_message_ex(
+            &self.session_id,
+            NewMessage {
+                content: Some(content),
+                tool_calls: tool_calls_json,
+                reasoning,
+                ..NewMessage::empty(&self.session_id, "assistant")
+            },
+        )?;
         let msg = match tool_calls {
             Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
             _ => Message::assistant(content),
@@ -504,19 +525,28 @@ impl AgentLoop {
         Ok(())
     }
 
-    /// 将 tool 角色结果写入记忆与会话镜像（无 tool_call_id）。
+    /// 将 tool 角色结果写入记忆与会话镜像（无 tool_call_id / tool_name）。
     pub fn record_tool_result(&mut self, content: &str) -> anyhow::Result<()> {
-        self.record_tool_result_with_id(None, content)
+        self.record_tool_result_with_id(None, None, content)
     }
 
-    /// 将 tool 角色结果写入记忆与会话镜像，并关联 `tool_call_id`。
+    /// 将 tool 角色结果写入记忆与会话镜像，并关联 `tool_call_id` / `tool_name`。
     pub fn record_tool_result_with_id(
         &mut self,
         tool_call_id: Option<&str>,
+        tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
-        self.memory
-            .record_message(&self.session_id, "tool", content)?;
+        self.memory.ensure_session(&self.session_id, "tauri")?;
+        self.memory.record_message_ex(
+            &self.session_id,
+            NewMessage {
+                content: Some(content),
+                tool_call_id,
+                tool_name,
+                ..NewMessage::empty(&self.session_id, "tool")
+            },
+        )?;
         let msg = match tool_call_id {
             Some(id) if !id.is_empty() => Message::tool_with_id(id, content),
             _ => Message::tool(content),
@@ -544,6 +574,7 @@ impl AgentLoop {
         self.begin_user_turn();
         self.reload_tools_and_mcp().await;
 
+        self.memory.ensure_session(&self.session_id, "tauri")?;
         self.memory
             .record_message(&self.session_id, "user", user_message)?;
 

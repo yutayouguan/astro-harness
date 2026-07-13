@@ -2,6 +2,7 @@
 //!
 //! 将 `memory_add` / `memory_replace` / `memory_remove` / `session_search`
 //! 注册到 `memory` 与 `session_search` toolset，实际逻辑委托给 `memory` crate。
+//! `session_search` 检索历史消息（FTS），而非会话摘要表。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -64,7 +65,7 @@ pub struct MemoryRemoveArgs {
 /// `session_search` 工具的参数结构。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SessionSearchArgs {
-    /// FTS5 全文检索关键词。
+    /// FTS5 全文检索关键词（匹配历史消息正文 / 工具名等）。
     pub query: String,
     /// 返回条数上限，默认 5，最大 10（与数据库 LIMIT 一致）。
     #[serde(default)]
@@ -103,7 +104,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "session_search".to_string(),
         toolset: "session_search".to_string(),
-        description: "Search past conversation sessions with FTS5. Empty query lists recent sessions (summaries). limit defaults to 5, max 10."
+        description: "Search historical conversation messages with FTS5 (content, tool names, tool calls). Empty query may return nothing; limit defaults to 5, max 10."
             .to_string(),
         schema: schema_for_args::<SessionSearchArgs>(),
         check_fn: None,

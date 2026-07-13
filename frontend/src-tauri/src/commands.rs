@@ -77,10 +77,23 @@ pub struct SessionSnippetDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatHistoryActivityDto {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub input: Option<String>,
+    pub output: Option<String>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatHistoryMessageDto {
     pub id: String,
     pub role: String,
     pub content: String,
+    pub reasoning: Option<String>,
+    pub activities: Vec<ChatHistoryActivityDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -946,7 +959,7 @@ pub async fn get_chat_history(
     let sid = match session_id.filter(|s| !s.is_empty()) {
         Some(s) => s,
         None => match mgr
-            .message_db
+            .session_store
             .latest_session_id()
             .map_err(|e| e.to_string())?
         {
@@ -961,15 +974,27 @@ pub async fn get_chat_history(
     };
 
     let messages = mgr
-        .message_db
-        .recent_messages(&sid, limit)
+        .session_store
+        .build_chat_history(&sid, limit)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .filter(|m| m.role == "user" || m.role == "assistant")
         .map(|m| ChatHistoryMessageDto {
             id: format!("db-{}", m.id),
             role: m.role,
             content: m.content,
+            reasoning: m.reasoning,
+            activities: m
+                .activities
+                .into_iter()
+                .map(|a| ChatHistoryActivityDto {
+                    id: a.id,
+                    kind: a.kind,
+                    title: a.title,
+                    input: a.input,
+                    output: a.output,
+                    status: a.status,
+                })
+                .collect(),
         })
         .collect();
 
@@ -979,22 +1004,29 @@ pub async fn get_chat_history(
     })
 }
 
-/// 列出近期会话摘要供侧栏展示。
+/// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    let path = memory::default_memory_dir()
-        .join("sessions")
-        .join("sessions.db");
-    let db = memory::SessionDb::new(path).map_err(|e| e.to_string())?;
+    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+        .map_err(|e| e.to_string())?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
-    Ok(db
-        .list_recent(limit)
+    Ok(mgr
+        .list_recent_sessions(limit)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|s| RecentSessionDto {
-            session_id: s.session_id,
-            summary: s.summary,
-            created_at: s.created_at,
+        .map(|s| {
+            let summary = s
+                .title
+                .filter(|t| !t.trim().is_empty())
+                .or(s.preview)
+                .unwrap_or_default();
+            let created_at = chrono::DateTime::from_timestamp(s.started_at as i64, 0)
+                .map(|dt| dt.to_rfc3339());
+            RecentSessionDto {
+                session_id: s.id,
+                summary,
+                created_at,
+            }
         })
         .collect())
 }

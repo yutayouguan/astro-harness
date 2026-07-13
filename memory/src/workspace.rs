@@ -14,8 +14,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::message_db::MessageDb;
-use crate::session_db::SessionDb;
+use crate::session_store::SessionStore;
 
 /// 默认 Agent 的 id / 目录名：`~/.astro/workspace`
 pub const DEFAULT_AGENT_ID: &str = "workspace";
@@ -1011,9 +1010,8 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     }
     let _ = ensure_agent_space(base, DEFAULT_AGENT_ID, Some("Astro"))?;
 
-    // 初始化会话数据库
-    let _ = MessageDb::new(base.join("sessions").join("state.db"))?;
-    let _ = SessionDb::new(base.join("sessions").join("sessions.db"))?;
+    // 初始化会话数据库（含旧 state.db / sessions.db 迁移）
+    let _ = SessionStore::open_with_legacy_migration(&base.join("sessions"))?;
 
     for (rel, content) in STATE_JSON_FILES {
         let path = base.join(rel);
@@ -1138,7 +1136,7 @@ mod tests {
             assert!(dir.path().join(rel).is_dir(), "missing dir {rel}");
         }
         assert!(dir.path().join("sessions").join("state.db").is_file());
-        assert!(dir.path().join("sessions").join("sessions.db").is_file());
+        // sessions.db 为旧库；新布局仅权威 state.db（旁路文件可保留备份）
         for (name, _) in CORE_FILES {
             assert!(ws.join(name).is_file(), "missing workspace/{name}");
             assert!(!dir.path().join(name).exists(), "{name} should not be at root");

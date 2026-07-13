@@ -41,7 +41,7 @@
 - Modify: `memory/src/lib.rs`
 - Modify: `memory/Cargo.toml`（若需 `[[test]]`；默认 `tests/` 即可）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 // memory/tests/session_store_test.rs
@@ -61,12 +61,12 @@ fn opens_fresh_db_at_schema_v11() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p memory --test session_store_test opens_fresh_db_at_schema_v11 -- --nocapture`  
 Expected: FAIL（模块/类型不存在）
 
-- [ ] **Step 3: Implement minimal `SessionStore::open` + schema**
+- [x] **Step 3: Implement minimal `SessionStore::open` + schema**
 
 在 `session_store.rs` 实现：
 
@@ -78,7 +78,7 @@ Expected: FAIL（模块/类型不存在）
 
 禁止任何标识符含 `hermes`。
 
-- [ ] **Step 4: Export from `lib.rs`**
+- [x] **Step 4: Export from `lib.rs`**
 
 ```rust
 pub mod session_store;
@@ -87,12 +87,12 @@ pub use session_store::{SessionStore, StoredMessage, SearchHit, ChatHistoryMessa
 
 （类型可在后续 task 再补全；本步至少导出 `SessionStore`。）
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `cargo test -p memory --test session_store_test opens_fresh_db_at_schema_v11 -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add memory/src/session_store.rs memory/src/lib.rs memory/tests/session_store_test.rs
@@ -111,7 +111,7 @@ EOF
 - Modify: `memory/src/session_store.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -172,24 +172,24 @@ fn append_and_reload_tool_calls_and_reasoning() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p memory --test session_store_test append_and_reload -- --nocapture`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement `NewMessage`, `StoredMessage`, append/get APIs**
+- [x] **Step 3: Implement `NewMessage`, `StoredMessage`, append/get APIs**
 
 - `append_message`：插入 messages；递增 sessions.`message_count`（tool 行同时 `tool_call_count++`）
 - JSON 字段 `serde_json::to_string`
 - `timestamp`：`SystemTime` → f64 epoch seconds
 - `get_messages_as_conversation`：OpenAI 形状；assistant 带 `tool_calls`/`reasoning*`
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cargo test -p memory --test session_store_test append_and_reload -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/session_store.rs memory/tests/session_store_test.rs
@@ -208,7 +208,7 @@ EOF
 - Modify: `memory/src/session_store.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
@@ -288,24 +288,24 @@ fn build_chat_history_folds_tools_into_activities() {
 
 （按需实现 `NewMessage::empty` helper。）
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p memory --test session_store_test search_messages_hits -- --nocapture`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement `search_messages` + `build_chat_history`**
+- [x] **Step 3: Implement `search_messages` + `build_chat_history`**
 
 - `SearchHit`：id/session_id/role/snippet/context/…  
 - FTS：优先 `messages_fts`；CJK 可回退/并用 `messages_fts_trigram`  
 - `ChatHistoryMessage`：`id, role, content, reasoning, activities: Vec<ChatActivityStored { id, kind, title, input, output, status }>`  
 - 组装规则见 spec
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p memory --test session_store_test -- --nocapture`  
 Expected: 相关测试 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/session_store.rs memory/tests/session_store_test.rs
@@ -325,7 +325,7 @@ EOF
 - Modify: `memory/tests/session_store_test.rs`
 - Modify: `memory/src/workspace.rs`（bootstrap 调用 migrate）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -375,23 +375,23 @@ fn migrates_legacy_messages_and_sessions_db() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p memory --test session_store_test migrates_legacy -- --nocapture`  
 Expected: FAIL
 
-- [ ] **Step 3: Implement migration**
+- [x] **Step 3: Implement migration**
 
 - `open(path)`：对已有 messages 声明式 `ADD COLUMN`；重建 FTS 到 v11  
 - `open_with_legacy_migration(sessions_dir)`：打开 `state.db`；若 `state_meta.migrated_from_sessions_db` 未设，从旁路 `sessions.db` 导入 sessions 行（title=summary 截断 80）；写 meta 标记  
 - `workspace` bootstrap：`SessionStore::open_with_legacy_migration(base.join("sessions"))`
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cargo test -p memory --test session_store_test migrates_legacy -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/session_store.rs memory/tests/session_store_test.rs memory/src/workspace.rs
@@ -411,7 +411,7 @@ EOF
 - Modify: `memory/src/lib.rs`
 - Modify: `memory/src/message_db.rs`（兼容：`MessageDb` 改为 type alias / 包装，或更新所有引用）
 
-- [ ] **Step 1: Write/adjust failing compile or unit test**
+- [x] **Step 1: Write/adjust failing compile or unit test**
 
 在 `manager` 相关测试或 `session_store_test` 旁加：
 
@@ -438,23 +438,23 @@ fn memory_manager_record_message_uses_session_store() {
 
 保留旧 `record_message(session, role, content)` 为委托到 `NewMessage` 的薄封装。
 
-- [ ] **Step 2: Run to verify fail/compile errors**
+- [x] **Step 2: Run to verify fail/compile errors**
 
 Run: `cargo test -p memory memory_manager_record_message -- --nocapture`
 
-- [ ] **Step 3: Wire manager**
+- [x] **Step 3: Wire manager**
 
 - 字段：`pub session_store: SessionStore`（可暂时保留 `message_db` 作为 `session_store` 的别名访问器，避免大爆炸；优先一次切完）
 - `build_session_context` / `recent_messages` / `latest_session_id` 改走 store
 - `handle_session_search` 改用 `search_messages`，Markdown 标题改为「相关历史消息」
 - `list_recent` 类 API：`session_store.list_recent_sessions(limit)`（preview SQL）
 
-- [ ] **Step 4: Fix all crate compile + tests**
+- [x] **Step 4: Fix all crate compile + tests**
 
 Run: `cargo test -p memory -- --nocapture`  
 Expected: PASS（更新任何仍引用旧 API 的测试）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/manager.rs memory/src/lib.rs memory/src/message_db.rs memory/src/session_db.rs
@@ -474,7 +474,7 @@ EOF
 - Modify: `agent/src/streaming.rs`
 - Modify: `agent/tests/streaming_test.rs`（或新建 persistence 断言）
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 扩展 streaming 测试：挂真实 `MemoryManager` temp dir，跑一轮带 reasoning chunk + tool_call 的 ScriptedProvider，然后：
 
@@ -487,12 +487,12 @@ assert!(hist.iter().any(|m| !m.activities.is_empty()));
 
 （按现有 workspace 布局调整路径。）
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p agent --test streaming_test <new_test_name> -- --nocapture`  
 Expected: FAIL（reasoning/activities 未落盘）
 
-- [ ] **Step 3: Implement wiring**
+- [x] **Step 3: Implement wiring**
 
 - `run_turn` / 开聊：`ensure_session(session_id, "tauri")`
 - `record_assistant_message_with_tools`：改为 `append_message`，传入 `tool_calls` JSON、可选 `reasoning`
@@ -500,12 +500,12 @@ Expected: FAIL（reasoning/activities 未落盘）
 - `record_tool_result_with_id`：写 `tool_call_id` + `tool_name`（从 call 传入）
 - 工具执行处把 `call.name` 传入 record
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cargo test -p agent --test streaming_test -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/src/loop_.rs agent/src/streaming.rs agent/tests/streaming_test.rs
@@ -525,7 +525,7 @@ EOF
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/types.ts`（如需要）
 
-- [ ] **Step 1: Expand DTOs**
+- [x] **Step 1: Expand DTOs**
 
 ```rust
 #[derive(Debug, Clone, Serialize)]
@@ -552,7 +552,7 @@ pub struct ChatHistoryMessageDto {
 
 `get_chat_history`：调用 `mgr.session_store.build_chat_history`；**去掉** `filter user|assistant` 纯文本逻辑（组装已折叠）。
 
-- [ ] **Step 2: Frontend restore**
+- [x] **Step 2: Frontend restore**
 
 `App.tsx` `restoreChatHistory`：
 
@@ -573,12 +573,12 @@ const restored: ChatMessage[] = history.messages.map((m) => ({
 }));
 ```
 
-- [ ] **Step 3: Manual/compile check**
+- [x] **Step 3: Manual/compile check**
 
 Run: `cargo check -p astro-agent`（或 workspace tauri crate 名）  
 Run: `cd frontend && npx tsc --noEmit`（若项目惯用）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src-tauri/src/commands.rs frontend/src/App.tsx frontend/src/types.ts
@@ -600,34 +600,34 @@ EOF
 - Modify: `tools/src/builtins/memory_tools.rs`
 - Modify: `memory/src/session_db.rs`（删除或标 deprecated；无调用后可删）
 
-- [ ] **Step 1: Update `list_recent_sessions`**
+- [x] **Step 1: Update `list_recent_sessions`**
 
 改用 `MemoryManager` / `SessionStore::list_recent_sessions`：
 
 DTO 可保持 `sessionId` + 用 `preview` 填原 `summary` 字段（避免前端大改），或扩展 `title`/`preview`——优先 **兼容字段**：`summary` ← `title.or(preview)`。
 
-- [ ] **Step 2: Update tool description**
+- [x] **Step 2: Update tool description**
 
 `session_search` description → 搜索历史**消息**（非会话摘要）。
 
-- [ ] **Step 3: Replace cron `SessionDb::save_session`**
+- [x] **Step 3: Replace cron `SessionDb::save_session`**
 
 ```rust
 store.ensure_session(sid, "cron")?;
 store.set_session_title(sid, &summary)?; // 或 create + title
 ```
 
-- [ ] **Step 4: Grep cleanup**
+- [x] **Step 4: Grep cleanup**
 
 Run: `rg 'SessionDb|sessions\\.db|message_db::MessageDb' --glob '*.rs'`  
 Expected: 无生产写路径（测试迁移除外）
 
-- [ ] **Step 5: Full test**
+- [x] **Step 5: Full test**
 
 Run: `cargo test -p memory -p agent -p tools -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -u memory agent tools frontend/src-tauri
@@ -642,26 +642,26 @@ EOF
 
 ### Task 9: Spec 覆盖自检 + 命名扫描
 
-- [ ] **Step 1: Spec coverage checklist**
+- [x] **Step 1: Spec coverage checklist**
 
 对照 `docs/superpowers/specs/2026-07-13-session-store-design.md`：
 
-- [ ] 单库 state.db  
-- [ ] 富 messages 列  
-- [ ] FTS + trigram  
-- [ ] schema_version  
-- [ ] UI activities + reasoning 恢复  
-- [ ] session_search 消息级  
-- [ ] 旧库迁移  
-- [ ] P1 列预留（parent_session_id / billing）存在  
-- [ ] 无 Gateway / compaction 实现（仅预留）
+- [x] 单库 state.db  
+- [x] 富 messages 列  
+- [x] FTS + trigram  
+- [x] schema_version  
+- [x] UI activities + reasoning 恢复  
+- [x] session_search 消息级  
+- [x] 旧库迁移  
+- [x] P1 列预留（parent_session_id / billing）存在  
+- [x] 无 Gateway / compaction 实现（仅预留）
 
-- [ ] **Step 2: Naming scan**
+- [x] **Step 2: Naming scan**
 
 Run: `rg -i hermes --glob '!docs/superpowers/specs/**' --glob '!.git/**'`  
 Expected: 代码与用户文案无匹配（spec 外部参考句可保留一处）
 
-- [ ] **Step 3: Final commit if docs tweaks**
+- [x] **Step 3: Final commit if docs tweaks**
 
 ```bash
 git add docs/superpowers/specs/2026-07-13-session-store-design.md

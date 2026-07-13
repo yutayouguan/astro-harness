@@ -159,6 +159,101 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn multi_turn_persists_reasoning_and_tool_activities() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "persist-session".into()).unwrap();
+    let session = Arc::new(Mutex::new(agent));
+    {
+        let mut a = session.lock().await;
+        a.ensure_session("test").unwrap();
+        a.session_messages
+            .push(common::message::Message::user("call a tool"));
+    }
+
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![
+            vec![
+                ChatChunk {
+                    reasoning: Some("deep ".into()),
+                    ..Default::default()
+                },
+                ChatChunk {
+                    reasoning: Some("thought".into()),
+                    ..Default::default()
+                },
+                ChatChunk {
+                    token: Some("calling…".into()),
+                    ..Default::default()
+                },
+                ChatChunk {
+                    tool_call_deltas: vec![ToolCallDeltaChunk {
+                        index: 0,
+                        id: Some("call_persist".into()),
+                        name: Some("echo".into()),
+                        arguments: Some(r#"{"text":"hi"}"#.into()),
+                    }],
+                    finish_reason: Some("tool_calls".into()),
+                    usage: Some(Usage::from_parts(10, 5)),
+                    ..Default::default()
+                },
+            ],
+            vec![ChatChunk {
+                token: Some("ok".into()),
+                finish_reason: Some("stop".into()),
+                usage: Some(Usage::from_parts(4, 2)),
+                ..Default::default()
+            }],
+        ]),
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    let cfg = ProviderConfig {
+        model: "test".into(),
+        ..Default::default()
+    };
+
+    tokio::spawn(async move {
+        run_multi_turn_stream(
+            session,
+            provider,
+            cfg,
+            "You are a test agent".into(),
+            pause,
+            tx,
+        )
+        .await;
+    });
+
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+
+    let store = memory::SessionStore::open(&dir.path().join("sessions/state.db")).unwrap();
+    let hist = store.build_chat_history("persist-session", 50).unwrap();
+    assert!(
+        hist.iter()
+            .any(|m| m.reasoning.as_deref() == Some("deep thought")),
+        "expected persisted reasoning; hist={hist:?}"
+    );
+    assert!(
+        hist.iter().any(|m| !m.activities.is_empty()),
+        "expected tool activities; hist={hist:?}"
+    );
+    let activity = hist
+        .iter()
+        .find(|m| !m.activities.is_empty())
+        .unwrap()
+        .activities
+        .first()
+        .unwrap();
+    assert_eq!(activity.id, "call_persist");
+    assert_eq!(activity.title, "echo");
+    assert!(activity.output.is_some(), "expected tool result output");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_fires_on_completion_after_model_stream() {
     use agent::hooks::RecordingHooks;
 

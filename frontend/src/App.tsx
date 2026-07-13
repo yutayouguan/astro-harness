@@ -79,9 +79,12 @@ import {
 import type {
   ArtifactDto,
   ChatActivity,
+  ChatActivityKind,
   ChatAttachment,
   ChatAttachmentKind,
   ChatEmptyMode,
+  ChatHistoryDto,
+  ChatHistoryMessageDto,
   ChatMessage,
   MessageTokenUsage,
   PendingInterrupt,
@@ -94,6 +97,52 @@ import type {
 const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
+
+const ACTIVITY_KINDS = new Set<ChatActivityKind>([
+  "tool",
+  "skill",
+  "mcp",
+  "hook",
+  "memory",
+  "status",
+]);
+
+/** 将 `get_chat_history` 富 DTO 映射为前端 ChatMessage（含 reasoning / activities） */
+function mapHistoryMessages(messages: ChatHistoryMessageDto[]): ChatMessage[] {
+  return messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => {
+      const activities: ChatActivity[] | undefined =
+        m.activities && m.activities.length > 0
+          ? m.activities.map((a) => {
+              const kind = ACTIVITY_KINDS.has(a.kind as ChatActivityKind)
+                ? (a.kind as ChatActivityKind)
+                : "tool";
+              const status =
+                a.status === "running" ||
+                a.status === "done" ||
+                a.status === "error"
+                  ? a.status
+                  : undefined;
+              return {
+                id: a.id,
+                kind,
+                title: a.title,
+                input: a.input ?? undefined,
+                output: a.output ?? undefined,
+                status,
+              };
+            })
+          : undefined;
+      return {
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        reasoning: m.reasoning ?? undefined,
+        activities,
+      };
+    });
+}
 
 /** completion_tokens / 生成秒数，保留一位小数 */
 function calcTokensPerSec(
@@ -568,22 +617,12 @@ export default function App() {
     }
 
     try {
-      type HistoryDto = {
-        sessionId: string | null;
-        messages: { id: string; role: string; content: string }[];
-      };
-      const history = await invoke<HistoryDto>("get_chat_history", {
+      const history = await invoke<ChatHistoryDto>("get_chat_history", {
         sessionId: sessionId ?? stored?.sessionId ?? null,
         limit: 200,
       });
       if (!history.messages?.length) return;
-      const restored: ChatMessage[] = history.messages
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        }));
+      const restored = mapHistoryMessages(history.messages);
       if (restored.length === 0) return;
       applyRestoredHistory(history.sessionId, restored);
     } catch {
@@ -1651,21 +1690,11 @@ export default function App() {
     messageId?: string | null,
   ) => {
     try {
-      type HistoryDto = {
-        sessionId: string | null;
-        messages: { id: string; role: string; content: string }[];
-      };
-      const hist = await invoke<HistoryDto>("get_chat_history", {
+      const hist = await invoke<ChatHistoryDto>("get_chat_history", {
         sessionId: targetSessionId,
         limit: 200,
       });
-      const restored: ChatMessage[] = (hist.messages ?? [])
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        }));
+      const restored = mapHistoryMessages(hist.messages ?? []);
       if (restored.length > 0) {
         applyRestoredHistory(hist.sessionId ?? targetSessionId, restored);
       } else {
