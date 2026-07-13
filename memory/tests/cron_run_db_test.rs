@@ -39,30 +39,3 @@ fn insert_finish_and_filter_by_job() {
     assert_eq!(rows[0].status, "success");
     assert!(rows[0].summary.contains("删了"));
 }
-
-#[test]
-fn migrate_due_json_into_db() {
-    let dir = TempDir::new().unwrap();
-    let out = dir.path().join("output");
-    std::fs::create_dir_all(&out).unwrap();
-    std::fs::write(
-        out.join("abcd1234-20260711-110000.json"),
-        r#"{"job_id":"abcd1234-xxxx","schedule":"every:1d","task":"t","fired_at":"2026-07-11T11:00:00+08:00","status":"due"}"#,
-    )
-    .unwrap();
-    let db = CronRunDb::new(dir.path().join("cron.db")).unwrap();
-    let n = db.migrate_output_dir(&out).unwrap();
-    assert_eq!(n, 1);
-    assert_eq!(
-        db.list_filtered(CronRunFilters {
-            job_id: None,
-            agent_id: None,
-            date_from: None,
-            date_to: None,
-            limit: 10,
-        })
-        .unwrap()
-        .len(),
-        1
-    );
-}

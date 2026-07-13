@@ -6,7 +6,7 @@ mod messages;
 mod search;
 
 use anyhow::{anyhow, Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -239,11 +239,6 @@ impl SessionStore {
         let store = Self::open(&sessions_dir.join("state.db"))?;
         store.backfill_sessions_from_messages()?;
         Ok(store)
-    }
-
-    /// 兼容旧调用名：等同于 [`Self::open_sessions_dir`]（旁路库丢弃，不导入历史）。
-    pub fn open_with_legacy_migration(sessions_dir: &Path) -> Result<Self> {
-        Self::open_sessions_dir(sessions_dir)
     }
 
     /// 读取当前 `schema_version` 表中的版本号。

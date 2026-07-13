@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
 CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_artifacts_category ON artifacts(category, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_artifacts_name ON artifacts(name);
+CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON artifacts(agent_id, created_at DESC);
 "#;
 
 /// Agent 工作区内不参与 reconcile 的核心模板文件名
@@ -105,6 +106,24 @@ pub fn artifacts_db_path(memory_dir: &Path) -> PathBuf {
     memory_dir.join("sessions").join("artifacts.db")
 }
 
+fn db_has_agent_id_column(path: &Path) -> anyhow::Result<bool> {
+    let conn = Connection::open(path)?;
+    let has_table: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='artifacts'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_table {
+        return Ok(true);
+    }
+    let has_col = conn
+        .prepare("PRAGMA table_info(artifacts)")?
+        .query_map([], |r| r.get::<_, String>(1))?
+        .filter_map(|c| c.ok())
+        .any(|name| name == "agent_id");
+    Ok(has_col)
+}
+
 /// 打开默认 artifacts 数据库
 pub fn open_default(memory_dir: &Path) -> anyhow::Result<ArtifactDb> {
     ArtifactDb::new(artifacts_db_path(memory_dir))
@@ -169,37 +188,20 @@ const JUNK_NAME_SQL: &str = " AND lower(name) NOT IN (
 ) AND name NOT LIKE '._%'";
 
 impl ArtifactDb {
-    /// 打开或创建数据库，执行 DDL 并迁移旧版无 `agent_id` 列的库
+    /// 打开或创建数据库并执行 DDL；缺 `agent_id` 的旧库直接丢弃重建。
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        if path.exists() && !db_has_agent_id_column(&path)? {
+            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::remove_file(format!("{}-wal", path.display()));
+            let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+        }
         let conn = Connection::open(&path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.execute_batch(DDL)?;
-        let db = Self { conn };
-        db.migrate_agent_id()?;
-        Ok(db)
-    }
-
-    /// 为旧库添加 `agent_id` 列并建索引（幂等）
-    fn migrate_agent_id(&self) -> anyhow::Result<()> {
-        let has_col: bool = self
-            .conn
-            .prepare("PRAGMA table_info(artifacts)")?
-            .query_map([], |r| r.get::<_, String>(1))?
-            .filter_map(|c| c.ok())
-            .any(|name| name == "agent_id");
-        if !has_col {
-            // 旧库：先加列，再建索引（不可与 CREATE TABLE 同批抢跑）
-            self.conn.execute_batch(
-                "ALTER TABLE artifacts ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'workspace';",
-            )?;
-        }
-        self.conn.execute_batch(
-            "CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON artifacts(agent_id, created_at DESC);",
-        )?;
-        Ok(())
+        Ok(Self { conn })
     }
 
     /// 登记或更新文件索引；垃圾文件名会拒绝；同 path UPSERT
@@ -528,7 +530,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn migrate_adds_agent_id_before_index() {
+    fn discards_db_without_agent_id_column() {
         let root = TempDir::new().unwrap();
         let sessions = root.path().join("sessions");
         fs::create_dir_all(&sessions).unwrap();
@@ -553,12 +555,15 @@ mod tests {
                     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                     missing INTEGER NOT NULL DEFAULT 0
                 );
+                INSERT INTO artifacts (id, path, name, category, size, source)
+                VALUES ('old', '/tmp/old.txt', 'old.txt', 'doc', 1, 'reconcile');
                 "#,
             )
             .unwrap();
         }
 
         let db = ArtifactDb::new(db_path).unwrap();
+        assert!(db.get_by_path("/tmp/old.txt").unwrap().is_none());
         let row = db
             .register(
                 root.path().join("uploads").join("a.txt").to_str().unwrap(),

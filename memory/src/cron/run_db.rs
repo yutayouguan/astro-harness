@@ -1,9 +1,8 @@
-//! 定时任务执行记录：SQLite 持久化与遗留 JSON 迁移。
+//! 定时任务执行记录：SQLite 持久化。
 //!
 //! 职责：
 //! - 在 `~/.astro/cron/cron.db` 记录每次触发的运行状态（running / success / failure）
 //! - 提供插入、完成、查询与按 job/agent/日期过滤列表
-//! - 将旧版 `cron/output/*.json` 迁入数据库并移至 `migrated/`
 //!
 //! 不变量：
 //! - `summary` 最长 2KB、`output` 最长 512KB（UTF-8 安全截断）
@@ -11,8 +10,6 @@
 //! - 使用 WAL 模式；`id` 为主键 UUID
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Deserialize;
-use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -284,138 +281,12 @@ impl CronRunDb {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
-
-    /// 迁移用插入：`INSERT OR IGNORE`，重复 id 跳过
-    pub fn insert_migrated(&self, row: CronRunRow) -> anyhow::Result<bool> {
-        let summary = truncate_utf8(&row.summary, MAX_SUMMARY_BYTES);
-        let output = truncate_utf8(&row.output, MAX_OUTPUT_BYTES);
-        let changed = self.conn.execute(
-            "INSERT OR IGNORE INTO cron_runs (
-                id, job_id, title, agent_id, schedule, task, fired_at, finished_at,
-                status, summary, output, error, session_id, trigger
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-            params![
-                row.id,
-                row.job_id,
-                row.title,
-                row.agent_id,
-                row.schedule,
-                row.task,
-                row.fired_at,
-                row.finished_at,
-                row.status,
-                summary,
-                output,
-                row.error,
-                row.session_id,
-                row.trigger,
-            ],
-        )?;
-        Ok(changed > 0)
-    }
-
-    /// 将 `output/` 下遗留的 due JSON 迁入 SQLite，成功后移至 `output/migrated/`
-    pub fn migrate_output_dir(&self, output_dir: &Path) -> anyhow::Result<usize> {
-        if !output_dir.is_dir() {
-            return Ok(0);
-        }
-        let migrated_dir = output_dir.join("migrated");
-        fs::create_dir_all(&migrated_dir)?;
-
-        let mut count = 0usize;
-        for entry in fs::read_dir(output_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let ext = path.extension().and_then(|e| e.to_str());
-            if ext != Some("json") {
-                continue;
-            }
-            let id = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| anyhow::anyhow!("无效迁移文件名: {}", path.display()))?
-                .to_string();
-
-            let raw = fs::read_to_string(&path)?;
-            let legacy: LegacyCronRunRecord = serde_json::from_str(&raw)?;
-
-            let (status, summary) = match legacy.status.as_str() {
-                "due" | "manual" => ("success", truncate_utf8(&legacy.task, MAX_SUMMARY_BYTES)),
-                other => (other, String::new()),
-            };
-
-            let row = CronRunRow {
-                id,
-                job_id: legacy.job_id,
-                title: String::new(),
-                agent_id: "default".into(),
-                schedule: legacy.schedule,
-                task: legacy.task,
-                fired_at: legacy.fired_at.clone(),
-                finished_at: Some(legacy.fired_at),
-                status: status.into(),
-                summary,
-                output: String::new(),
-                error: None,
-                session_id: None,
-                trigger: legacy.status,
-            };
-
-            if self.insert_migrated(row)? {
-                let dest = migrated_dir.join(path.file_name().unwrap());
-                fs::rename(&path, &dest)?;
-                count += 1;
-            }
-        }
-        Ok(count)
-    }
-}
-
-/// 旧版 `output/*.json` 反序列化结构
-#[derive(Debug, Deserialize)]
-struct LegacyCronRunRecord {
-    job_id: String,
-    schedule: String,
-    task: String,
-    fired_at: String,
-    status: String,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
-
-    #[test]
-    fn insert_migrated_skips_duplicate_id() {
-        let dir = TempDir::new().unwrap();
-        let db = CronRunDb::new(dir.path().join("cron.db")).unwrap();
-        let row = CronRunRow {
-            id: "run-1".into(),
-            job_id: "job-1".into(),
-            title: "t".into(),
-            agent_id: "workspace".into(),
-            schedule: "every:1d".into(),
-            task: "task".into(),
-            fired_at: "2026-07-11T11:00:00+08:00".into(),
-            finished_at: Some("2026-07-11T11:01:00+08:00".into()),
-            status: "success".into(),
-            summary: "done".into(),
-            output: "".into(),
-            error: None,
-            session_id: None,
-            trigger: "due".into(),
-        };
-        db.insert_migrated(row.clone()).unwrap();
-        let mut dup = row;
-        dup.summary = "other".into();
-        db.insert_migrated(dup).unwrap();
-        let got = db.get("run-1").unwrap().unwrap();
-        assert_eq!(got.summary, "done");
-    }
 
     #[test]
     fn finish_truncates_summary_and_output() {

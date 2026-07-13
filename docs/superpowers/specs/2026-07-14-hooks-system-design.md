@@ -1,7 +1,7 @@
 # Astro 三套 Hook 体系（对齐 Hermes 生命周期语义）
 
 **日期:** 2026-07-14  
-**状态:** 已批准 / 实现中  
+**状态:** 已完成  
 **范围:** Plugin Hooks（Agent 生命周期）+ Gateway Event Hooks + Shell Hooks；Hermes 同款钩子名；进程内 Rust `register_hook`；UI 事件与 memory 分流；用户文档 `docs/hooks.md`  
 **非目标:** 动态加载第三方 `.so`/Python 插件；Telegram 等 messaging 平台适配器（Gateway 事件先挂 gRPC/Tauri）；把 `EventBus` broadcast 复活为第三套 UI 通道
 

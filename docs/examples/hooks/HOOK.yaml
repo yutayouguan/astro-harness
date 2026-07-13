@@ -1,0 +1,7 @@
+name: audit
+description: 会话与网关生命周期审计（默认挂 tracing 日志）
+events:
+  - gateway:startup
+  - session:start
+  - agent:end
+  - command:new_chat

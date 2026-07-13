@@ -222,30 +222,40 @@ fn step_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<StepRow> {
 const ORCH_SELECT_COLS: &str = "id, parent_agent_id, session_id, goal, status, created_at, updated_at, finished_at, error, result_summary, provider, model, api_key, base_url";
 const STEP_SELECT_COLS: &str = "id, orchestration_id, seq, role, agent_id, prompt, status, output, error, started_at, finished_at";
 
-fn migrate_spawn_creds(conn: &Connection) -> anyhow::Result<()> {
-    for col in ["provider", "model", "api_key", "base_url"] {
-        let sql = format!(
-            "ALTER TABLE orchestrations ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"
-        );
-        match conn.execute(&sql, []) {
-            Ok(_) => {}
-            Err(e) if e.to_string().contains("duplicate column") => {}
-            Err(e) => return Err(e.into()),
-        }
+fn db_has_spawn_creds(path: &std::path::Path) -> anyhow::Result<bool> {
+    let conn = Connection::open(path)?;
+    let has_table: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='orchestrations'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_table {
+        return Ok(true);
     }
-    Ok(())
+    let cols: Vec<String> = conn
+        .prepare("PRAGMA table_info(orchestrations)")?
+        .query_map([], |r| r.get::<_, String>(1))?
+        .filter_map(|c| c.ok())
+        .collect();
+    Ok(["provider", "model", "api_key", "base_url"]
+        .iter()
+        .all(|c| cols.iter().any(|name| name == c)))
 }
 
 impl OrchestrationDb {
-    /// 打开或创建数据库并执行 DDL（WAL 模式）
+    /// 打开或创建数据库并执行 DDL（WAL 模式）；缺凭据列的旧库直接丢弃重建。
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        if path.exists() && !db_has_spawn_creds(&path)? {
+            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::remove_file(format!("{}-wal", path.display()));
+            let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+        }
         let conn = Connection::open(&path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.execute_batch(DDL)?;
-        migrate_spawn_creds(&conn)?;
         Ok(Self { conn })
     }
 

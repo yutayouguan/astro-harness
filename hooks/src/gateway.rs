@@ -124,6 +124,32 @@ impl GatewayHookRegistry {
             .map(|g| g.clone())
             .unwrap_or_default()
     }
+
+    /// 为尚未绑定自定义 handler 的清单安装默认 tracing 日志 handler，
+    /// 使仅放置 `HOOK.yaml` 即可在启动后观察到 Gateway 事件。
+    pub fn install_logging_fallbacks(&self) {
+        let discovered = self.discovered();
+        let existing = self
+            .handlers
+            .lock()
+            .map(|g| g.keys().cloned().collect::<std::collections::HashSet<_>>())
+            .unwrap_or_default();
+        for d in discovered {
+            if existing.contains(&d.manifest.name) {
+                continue;
+            }
+            let name = d.manifest.name.clone();
+            self.register_handler(name.clone(), move |event, payload| {
+                tracing::info!(
+                    gateway_hook = %name,
+                    %event,
+                    session = %payload.session_id,
+                    detail = %payload.detail,
+                    "gateway hook"
+                );
+            });
+        }
+    }
 }
 
 #[cfg(test)]

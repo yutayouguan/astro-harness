@@ -1710,13 +1710,6 @@ fn resolve_creds_for_job(job: &memory::CronJob) -> Result<agent::cron_exec::Cron
     })
 }
 
-/// 静默迁移遗留 cron 输出到 SQLite。
-fn migrate_cron_runs_quietly() {
-    if let Ok(db) = memory::CronRunDb::open_default() {
-        let _ = db.migrate_output_dir(&memory::cron_dir().join("output"));
-    }
-}
-
 /// 列出定时任务。
 #[tauri::command]
 pub async fn list_cron_jobs() -> Result<Vec<CronJobDto>, String> {
@@ -1859,7 +1852,6 @@ pub async fn set_cron_job_enabled(id: String, enabled: bool) -> Result<bool, Str
 #[tauri::command]
 pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
     bootstrap_workspace()?;
-    migrate_cron_runs_quietly();
     let store = memory::CronStore::open_default().map_err(|e| e.to_string())?;
     let job = store
         .list()
@@ -1879,7 +1871,6 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
 #[tauri::command]
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {
     bootstrap_workspace()?;
-    migrate_cron_runs_quietly();
     let db = memory::CronRunDb::open_default().map_err(|e| e.to_string())?;
     let rows = db
         .list_filtered(memory::cron_run_db::CronRunFilters {

@@ -8,7 +8,8 @@ Astro 提供与常见 Agent 生命周期对齐的 **三套 Hook**：
 
 进程内用 Rust 注册：`ctx.register_hook("post_tool_call", callback)`。不加载第三方动态库。
 
-设计规格见 [`docs/superpowers/specs/2026-07-14-hooks-system-design.md`](./superpowers/specs/2026-07-14-hooks-system-design.md)。
+设计规格见 [`docs/superpowers/specs/2026-07-14-hooks-system-design.md`](./superpowers/specs/2026-07-14-hooks-system-design.md)。  
+可复制的配置样例：[docs/examples/hooks/](./examples/hooks/)。
 
 ---
 
@@ -92,7 +93,7 @@ events:
   - command:new_chat
 ```
 
-Handler 必须在进程内绑定（按清单 `name`）：
+Handler 可在进程内绑定（按清单 `name`）：
 
 ```rust
 ctx.register_gateway_handler("audit", |event, payload| {
@@ -100,7 +101,7 @@ ctx.register_gateway_handler("audit", |event, payload| {
 });
 ```
 
-未绑定 handler 的清单会跳过并打 warn，不拖垮主循环。
+若未自定义绑定，启动时会为已发现清单自动安装 **tracing 日志 fallback**（仅放置 `HOOK.yaml` 即可生效）。
 
 | 事件 | 触发点 |
 |------|--------|
@@ -132,8 +133,9 @@ hooks:
 ## 4. UI
 
 - 流事件：`ChatEvent.hook`（`name` / `detail` / `outcome`），**不再**经 `memory_update` 伪装  
-- 前端活动卡 `kind: "hook"`，受设置「Hook 事件」开关控制  
-- 标题为钩子名，例如 `pre_llm_call`
+- 前端活动卡 `kind: "hook"`，受设置「Hook 事件」开关控制（`normal` / `detailed` 预设默认开启）  
+- 标题为钩子名，例如 `pre_llm_call`  
+- UI「新建对话」会经 `chat_control(new_chat)` 触发 Gateway `command:new_chat` 并卸内存会话
 
 ---
 

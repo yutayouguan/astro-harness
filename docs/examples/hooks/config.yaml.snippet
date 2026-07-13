@@ -1,0 +1,4 @@
+# 复制到 ~/.astro/config.yaml（可与其它配置合并）
+hooks:
+  post_tool_call: 'mkdir -p "$HOME/.astro/logs" && echo "$(date -Iseconds) tool=$ASTRO_HOOK_TOOL session=$ASTRO_HOOK_SESSION" >> "$HOME/.astro/logs/tool-audit.log"'
+  agent:end: 'true'
