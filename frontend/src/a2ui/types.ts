@@ -30,6 +30,11 @@ export type A2uiComponent = {
   name?: string;
   src?: string;
   url?: string;
+  label?: string;
+  value?: string | boolean;
+  hint?: string;
+  size?: string;
+  options?: Array<string | { label?: string; value?: string }>;
   action?: {
     event?: {
       name?: string;
@@ -39,7 +44,7 @@ export type A2uiComponent = {
   [key: string]: unknown;
 };
 
-export const ASTRO_CATALOG_ID = "astro://a2ui/catalog/v1";
+export const ASTRO_CATALOG_ID = "astro://a2ui/catalog/v2";
 
 export const ALLOWED_COMPONENTS = new Set([
   "Text",
@@ -54,4 +59,10 @@ export const ALLOWED_COMPONENTS = new Set([
   "CheckBox",
   "Image",
   "List",
+  "Badge",
+  "Chip",
+  "Metric",
+  "Avatar",
+  "Callout",
+  "Spacer",
 ]);

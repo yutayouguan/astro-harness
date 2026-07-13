@@ -1,6 +1,7 @@
 /** CatalogAdapter：将 A2UI 组件映射为 React 节点。 */
 
 import type { ReactNode } from "react";
+import { mergeActionContext } from "./formState";
 import type { A2uiComponent } from "./types";
 import { isKnownComponent } from "./validate";
 
@@ -9,6 +10,8 @@ type RenderCtx = {
   disabled: boolean;
   onAction: (name: string, context: Record<string, unknown>) => void;
   unknownLabel: string;
+  fieldValues: Record<string, unknown>;
+  setFieldValue: (id: string, value: unknown) => void;
 };
 
 function renderChild(
@@ -95,21 +98,161 @@ function CatalogNode({
           type="button"
           className={`a2ui-button ${node.variant === "primary" ? "is-primary" : ""}`}
           disabled={ctx.disabled}
-          onClick={() => ctx.onAction(eventName, context)}
+          onClick={() =>
+            ctx.onAction(
+              eventName,
+              mergeActionContext(context, ctx.fieldValues),
+            )
+          }
         >
           {renderChild(node.child, ctx)}
         </button>
       );
     }
-    case "TextField":
-    case "ChoicePicker":
-    case "CheckBox":
-      // MVP：HITL 澄清用 Button 选项；表单控件占位
+    case "TextField": {
+      const label = typeof node.label === "string" ? node.label : typeof node.text === "string" ? node.text : "";
+      const current =
+        ctx.fieldValues[node.id] != null
+          ? String(ctx.fieldValues[node.id])
+          : typeof node.value === "string"
+            ? node.value
+            : "";
       return (
-        <div className="a2ui-field-placeholder" data-component={node.component}>
-          {typeof node.text === "string" ? node.text : node.component}
+        <label className="a2ui-field">
+          {label ? <span className="a2ui-caption">{label}</span> : null}
+          <input
+            type="text"
+            disabled={ctx.disabled}
+            value={current}
+            onChange={(e) => ctx.setFieldValue(node.id, e.target.value)}
+          />
+        </label>
+      );
+    }
+    case "ChoicePicker": {
+      const label = typeof node.label === "string" ? node.label : "";
+      const options = Array.isArray(node.options) ? node.options : [];
+      const current =
+        ctx.fieldValues[node.id] != null
+          ? String(ctx.fieldValues[node.id])
+          : typeof node.value === "string"
+            ? node.value
+            : "";
+      return (
+        <label className="a2ui-choice">
+          {label ? <span className="a2ui-caption">{label}</span> : null}
+          <select
+            disabled={ctx.disabled}
+            value={current}
+            onChange={(e) => ctx.setFieldValue(node.id, e.target.value)}
+          >
+            <option value="">—</option>
+            {options.map((opt, i) => {
+              if (typeof opt === "string") {
+                return (
+                  <option key={i} value={opt}>
+                    {opt}
+                  </option>
+                );
+              }
+              const v = opt.value ?? opt.label ?? "";
+              return (
+                <option key={i} value={v}>
+                  {opt.label ?? v}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+      );
+    }
+    case "CheckBox": {
+      const label = typeof node.label === "string" ? node.label : typeof node.text === "string" ? node.text : "";
+      const checked =
+        typeof ctx.fieldValues[node.id] === "boolean"
+          ? Boolean(ctx.fieldValues[node.id])
+          : Boolean(node.value);
+      return (
+        <label className="a2ui-check">
+          <input
+            type="checkbox"
+            disabled={ctx.disabled}
+            checked={checked}
+            onChange={(e) => ctx.setFieldValue(node.id, e.target.checked)}
+          />
+          <span>{label}</span>
+        </label>
+      );
+    }
+    case "Badge": {
+      const text = typeof node.text === "string" ? node.text : "";
+      const variant = typeof node.variant === "string" ? node.variant : "info";
+      return (
+        <span className={`a2ui-badge is-${variant}`}>{text}</span>
+      );
+    }
+    case "Chip": {
+      const text = typeof node.text === "string" ? node.text : "";
+      const eventName = node.action?.event?.name;
+      if (eventName) {
+        return (
+          <button
+            type="button"
+            className="a2ui-chip"
+            disabled={ctx.disabled}
+            onClick={() =>
+              ctx.onAction(
+                eventName,
+                mergeActionContext(
+                  node.action?.event?.context ?? {},
+                  ctx.fieldValues,
+                ),
+              )
+            }
+          >
+            {text}
+          </button>
+        );
+      }
+      return <span className="a2ui-chip">{text}</span>;
+    }
+    case "Metric": {
+      const label = typeof node.label === "string" ? node.label : "";
+      const value = node.value != null ? String(node.value) : "";
+      const hint = typeof node.hint === "string" ? node.hint : "";
+      return (
+        <div className="a2ui-metric">
+          <div className="a2ui-metric-label">{label}</div>
+          <div className="a2ui-metric-value">{value}</div>
+          {hint ? <div className="a2ui-metric-hint">{hint}</div> : null}
         </div>
       );
+    }
+    case "Avatar": {
+      const src =
+        (typeof node.src === "string" && node.src) ||
+        (typeof node.url === "string" && node.url) ||
+        "";
+      const text = typeof node.text === "string" ? node.text : "";
+      const name = typeof node.name === "string" ? node.name : "";
+      return (
+        <div className="a2ui-avatar" aria-hidden>
+          {src ? <img src={src} alt="" /> : text || name || "•"}
+        </div>
+      );
+    }
+    case "Callout": {
+      const text = typeof node.text === "string" ? node.text : "";
+      const variant = node.variant === "warn" ? "warn" : "info";
+      return (
+        <div className={`a2ui-callout is-${variant}`}>{text}</div>
+      );
+    }
+    case "Spacer": {
+      const size =
+        node.size === "sm" || node.size === "lg" ? node.size : "md";
+      return <div className={`a2ui-spacer-${size}`} />;
+    }
     default:
       return null;
   }
@@ -121,6 +264,8 @@ export function renderCatalogTree(
     disabled: boolean;
     onAction: (name: string, context: Record<string, unknown>) => void;
     unknownLabel: string;
+    fieldValues: Record<string, unknown>;
+    setFieldValue: (id: string, value: unknown) => void;
   },
 ): ReactNode {
   const byId = new Map(components.map((c) => [c.id, c]));
@@ -137,6 +282,8 @@ export function renderCatalogTree(
     disabled: opts.disabled,
     onAction: opts.onAction,
     unknownLabel: opts.unknownLabel,
+    fieldValues: opts.fieldValues,
+    setFieldValue: opts.setFieldValue,
   };
   return <CatalogNode node={root} ctx={ctx} />;
 }

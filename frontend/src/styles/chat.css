@@ -356,6 +356,27 @@ html[data-theme="light"] .msg-actions {
 
 .a2ui-surface {
   margin: 0 0 10px;
+  --a2ui-glass-bg: color-mix(in srgb, var(--panel, var(--bg)) 72%, transparent);
+  --a2ui-glass-border: color-mix(in srgb, var(--ink) 14%, transparent);
+  --a2ui-glass-blur: 14px;
+  --a2ui-glass-shadow: 0 8px 28px color-mix(in srgb, var(--ink) 12%, transparent);
+  --a2ui-glass-fill: color-mix(in srgb, var(--ink) 5%, transparent);
+  --a2ui-accent-fill: color-mix(in srgb, var(--accent, #3b82f6) 22%, transparent);
+  --a2ui-accent-border: color-mix(in srgb, var(--accent, #3b82f6) 42%, transparent);
+}
+
+html[data-theme="dark"] .a2ui-surface {
+  --a2ui-glass-bg: rgba(255, 255, 255, 0.08);
+  --a2ui-glass-border: rgba(255, 255, 255, 0.18);
+  --a2ui-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --a2ui-glass-fill: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="light"] .a2ui-surface {
+  --a2ui-glass-bg: rgba(255, 255, 255, 0.55);
+  --a2ui-glass-border: rgba(255, 255, 255, 0.72);
+  --a2ui-glass-shadow: 0 10px 36px rgba(15, 23, 42, 0.1);
+  --a2ui-glass-fill: rgba(15, 23, 42, 0.04);
 }
 
 .a2ui-surface.is-disabled {
@@ -363,10 +384,13 @@ html[data-theme="light"] .msg-actions {
 }
 
 .a2ui-card {
-  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-  background: color-mix(in srgb, var(--panel, var(--bg)) 92%, var(--ink) 8%);
-  border-radius: 14px;
-  padding: 12px 14px;
+  border: 1px solid var(--a2ui-glass-border);
+  background: var(--a2ui-glass-bg);
+  backdrop-filter: blur(var(--a2ui-glass-blur)) saturate(1.35);
+  -webkit-backdrop-filter: blur(var(--a2ui-glass-blur)) saturate(1.35);
+  box-shadow: var(--a2ui-glass-shadow);
+  border-radius: 16px;
+  padding: 14px 16px;
 }
 
 .a2ui-column {
@@ -410,8 +434,8 @@ html[data-theme="light"] .msg-actions {
 
 .a2ui-button {
   appearance: none;
-  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid var(--a2ui-glass-border);
+  background: var(--a2ui-glass-fill);
   color: var(--ink);
   border-radius: 10px;
   padding: 7px 12px;
@@ -420,8 +444,8 @@ html[data-theme="light"] .msg-actions {
 }
 
 .a2ui-button.is-primary {
-  background: color-mix(in srgb, var(--accent, #3b82f6) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent, #3b82f6) 40%, transparent);
+  background: var(--a2ui-accent-fill);
+  border-color: var(--a2ui-accent-border);
 }
 
 .a2ui-button:disabled {
@@ -437,7 +461,7 @@ html[data-theme="light"] .msg-actions {
 
 .a2ui-divider {
   border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-top: 1px solid var(--a2ui-glass-border);
   margin: 4px 0;
 }
 
@@ -447,11 +471,123 @@ html[data-theme="light"] .msg-actions {
   color: var(--ink-mute);
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px dashed color-mix(in srgb, var(--ink) 16%, transparent);
+  border: 1px dashed var(--a2ui-glass-border);
 }
 
 .a2ui-icon {
   opacity: 0.7;
+}
+
+.a2ui-badge,
+.a2ui-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--a2ui-glass-border);
+  background: var(--a2ui-glass-fill);
+  color: var(--ink);
+}
+
+.a2ui-badge.is-success {
+  border-color: color-mix(in srgb, #34d399 45%, transparent);
+  background: color-mix(in srgb, #34d399 18%, transparent);
+}
+.a2ui-badge.is-warn {
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+  background: color-mix(in srgb, #fbbf24 18%, transparent);
+}
+.a2ui-badge.is-danger {
+  border-color: color-mix(in srgb, #f87171 45%, transparent);
+  background: color-mix(in srgb, #f87171 18%, transparent);
+}
+.a2ui-badge.is-info {
+  border-color: var(--a2ui-accent-border);
+  background: var(--a2ui-accent-fill);
+}
+
+.a2ui-metric {
+  background: var(--a2ui-glass-fill);
+  border: 1px solid var(--a2ui-glass-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 88px;
+  text-align: center;
+}
+.a2ui-metric-label {
+  font-size: 0.75rem;
+  color: var(--ink-mute);
+}
+.a2ui-metric-value {
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.a2ui-metric-hint {
+  font-size: 0.72rem;
+  color: var(--ink-mute);
+}
+
+.a2ui-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--a2ui-glass-fill);
+  border: 1px solid var(--a2ui-glass-border);
+  font-size: 0.85rem;
+  font-weight: 650;
+  overflow: hidden;
+}
+.a2ui-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.a2ui-callout {
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  border: 1px solid var(--a2ui-accent-border);
+  background: var(--a2ui-accent-fill);
+  color: var(--ink);
+}
+.a2ui-callout.is-warn {
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+  background: color-mix(in srgb, #fbbf24 16%, transparent);
+}
+
+.a2ui-spacer-sm { height: 6px; }
+.a2ui-spacer-md { height: 12px; }
+.a2ui-spacer-lg { height: 20px; }
+
+.a2ui-field,
+.a2ui-choice,
+.a2ui-check {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.a2ui-field input,
+.a2ui-choice select {
+  appearance: none;
+  border: 1px solid var(--a2ui-glass-border);
+  background: var(--a2ui-glass-fill);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+}
+.a2ui-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 .msg-activity {
