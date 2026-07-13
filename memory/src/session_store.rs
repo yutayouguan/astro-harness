@@ -3,6 +3,7 @@
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -24,6 +25,27 @@ pub struct NewMessage<'a> {
     pub codex_message_items: Option<Value>,
 }
 
+impl<'a> NewMessage<'a> {
+    /// 仅填 `session_id` / `role`，其余 Option 字段为 `None`（便于 struct update）。
+    pub fn empty(session_id: &'a str, role: &'a str) -> Self {
+        Self {
+            session_id,
+            role,
+            content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            tool_name: None,
+            token_count: None,
+            finish_reason: None,
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            codex_reasoning_items: None,
+            codex_message_items: None,
+        }
+    }
+}
+
 /// 从库中读出的富消息行。
 #[derive(Debug, Clone)]
 pub struct StoredMessage {
@@ -42,6 +64,39 @@ pub struct StoredMessage {
     pub reasoning_details: Option<Value>,
     pub codex_reasoning_items: Option<Value>,
     pub codex_message_items: Option<Value>,
+}
+
+/// FTS 搜索命中。
+#[derive(Debug, Clone)]
+pub struct SearchHit {
+    pub id: i64,
+    pub session_id: String,
+    pub role: String,
+    pub snippet: String,
+    /// 邻接上下文（同会话前后消息摘要）；无则空串。
+    pub context: String,
+    pub tool_name: Option<String>,
+}
+
+/// UI 恢复用的折叠后聊天气泡。
+#[derive(Debug, Clone)]
+pub struct ChatHistoryMessage {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    pub reasoning: Option<String>,
+    pub activities: Vec<ChatActivityStored>,
+}
+
+/// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。
+#[derive(Debug, Clone)]
+pub struct ChatActivityStored {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub input: Option<String>,
+    pub output: Option<String>,
+    pub status: Option<String>,
 }
 
 fn now_epoch_secs() -> Result<f64> {
@@ -402,6 +457,200 @@ impl SessionStore {
         Ok(out)
     }
 
+    /// 跨会话消息 FTS：优先 `messages_fts`，再合并 `messages_fts_trigram`（CJK / 子串）。
+    pub fn search_messages(
+        &self,
+        query: &str,
+        source_filter: Option<&str>,
+        role_filter: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<SearchHit>> {
+        let q = query.trim();
+        if q.is_empty() || limit <= 0 {
+            return Ok(Vec::new());
+        }
+        let fts_query = escape_fts5_query(q);
+        let mut hits = Vec::new();
+        let mut seen = HashSet::new();
+
+        self.collect_fts_hits(
+            "messages_fts",
+            &fts_query,
+            source_filter,
+            role_filter,
+            limit,
+            &mut hits,
+            &mut seen,
+        )?;
+        if (hits.len() as i64) < limit {
+            self.collect_fts_hits(
+                "messages_fts_trigram",
+                &fts_query,
+                source_filter,
+                role_filter,
+                limit,
+                &mut hits,
+                &mut seen,
+            )?;
+        }
+
+        for hit in &mut hits {
+            hit.context = self.neighbor_context(hit.session_id.as_str(), hit.id)?;
+        }
+        Ok(hits)
+    }
+
+    /// 按时间扫描并折叠为 UI 气泡：user / assistant（含 activities）；tool 不单独成泡。
+    pub fn build_chat_history(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ChatHistoryMessage>> {
+        let messages = self.get_messages(session_id)?;
+        let mut out: Vec<ChatHistoryMessage> = Vec::new();
+
+        for m in messages {
+            match m.role.as_str() {
+                "user" => {
+                    out.push(ChatHistoryMessage {
+                        id: m.id.to_string(),
+                        role: "user".into(),
+                        content: m.content.unwrap_or_default(),
+                        reasoning: None,
+                        activities: Vec::new(),
+                    });
+                }
+                "assistant" => {
+                    let activities = activities_from_tool_calls(m.tool_calls.as_ref());
+                    out.push(ChatHistoryMessage {
+                        id: m.id.to_string(),
+                        role: "assistant".into(),
+                        content: m.content.unwrap_or_default(),
+                        reasoning: m.reasoning.or(m.reasoning_content),
+                        activities,
+                    });
+                }
+                "tool" => {
+                    let call_id = m.tool_call_id.as_deref();
+                    let output = m.content.clone();
+                    if let Some(assistant) = out.iter_mut().rev().find(|msg| msg.role == "assistant")
+                    {
+                        attach_tool_output(assistant, call_id, output, m.tool_name.as_deref());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if out.len() > limit {
+            let skip = out.len() - limit;
+            out = out.into_iter().skip(skip).collect();
+        }
+        Ok(out)
+    }
+
+    fn collect_fts_hits(
+        &self,
+        fts_table: &str,
+        fts_query: &str,
+        source_filter: Option<&str>,
+        role_filter: Option<&str>,
+        limit: i64,
+        hits: &mut Vec<SearchHit>,
+        seen: &mut HashSet<i64>,
+    ) -> Result<()> {
+        let remaining = limit - hits.len() as i64;
+        if remaining <= 0 {
+            return Ok(());
+        }
+
+        // fts_table 仅内部常量 "messages_fts" | "messages_fts_trigram"。
+        let sql = format!(
+            "SELECT m.id, m.session_id, m.role,
+                    COALESCE(snippet({fts}, 0, '', '', '…', 32), m.content, ''),
+                    m.tool_name
+             FROM {fts} AS f
+             JOIN messages AS m ON m.id = f.rowid
+             JOIN sessions AS s ON s.id = m.session_id
+             WHERE {fts} MATCH ?1
+               AND (?2 IS NULL OR s.source = ?2)
+               AND (?3 IS NULL OR m.role = ?3)
+             ORDER BY m.timestamp DESC, m.id DESC
+             LIMIT ?4",
+            fts = fts_table
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            params![fts_query, source_filter, role_filter, remaining],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            },
+        )?;
+
+        for row in rows {
+            let (id, session_id, role, snippet, tool_name) = row?;
+            if !seen.insert(id) {
+                continue;
+            }
+            hits.push(SearchHit {
+                id,
+                session_id,
+                role,
+                snippet,
+                context: String::new(),
+                tool_name,
+            });
+            if hits.len() as i64 >= limit {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn neighbor_context(&self, session_id: &str, message_id: i64) -> Result<String> {
+        let mut parts = Vec::new();
+        let prev: Option<(String, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT role, content FROM messages
+                 WHERE session_id = ?1 AND id < ?2
+                 ORDER BY id DESC LIMIT 1",
+                params![session_id, message_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        if let Some((role, content)) = prev {
+            parts.push(format!(
+                "[prev:{role}] {}",
+                truncate_chars(content.as_deref().unwrap_or(""), 80)
+            ));
+        }
+        let next: Option<(String, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT role, content FROM messages
+                 WHERE session_id = ?1 AND id > ?2
+                 ORDER BY id ASC LIMIT 1",
+                params![session_id, message_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        if let Some((role, content)) = next {
+            parts.push(format!(
+                "[next:{role}] {}",
+                truncate_chars(content.as_deref().unwrap_or(""), 80)
+            ));
+        }
+        Ok(parts.join(" | "))
+    }
+
     fn migrate_to_v11(&self) -> Result<()> {
         let current = self.read_schema_version_or_zero()?;
         if current >= SCHEMA_VERSION {
@@ -443,4 +692,112 @@ impl SessionStore {
             .optional()?;
         Ok(version.unwrap_or(0))
     }
+}
+
+/// 将用户查询包成 FTS5 短语（双引号转义），避免运算符注入。
+fn escape_fts5_query(query: &str) -> String {
+    let escaped = query.replace('"', "\"\"");
+    format!("\"{escaped}\"")
+}
+
+fn truncate_chars(s: &str, max_chars: usize) -> String {
+    let count = s.chars().count();
+    if count <= max_chars {
+        return s.to_string();
+    }
+    let truncated: String = s.chars().take(max_chars).collect();
+    format!("{truncated}…")
+}
+
+fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<ChatActivityStored> {
+    let Some(Value::Array(arr)) = tool_calls else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|tc| {
+            let id = tc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if id.is_empty() {
+                return None;
+            }
+            // OpenAI 形状可能是 name 在顶层，或 function.name
+            let title = tc
+                .get("name")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    tc.get("function")
+                        .and_then(|f| f.get("name"))
+                        .and_then(|v| v.as_str())
+                })
+                .unwrap_or("tool")
+                .to_string();
+            let input = tc
+                .get("arguments")
+                .cloned()
+                .or_else(|| {
+                    tc.get("function")
+                        .and_then(|f| f.get("arguments"))
+                        .cloned()
+                })
+                .map(|args| match args {
+                    Value::String(s) => s,
+                    other => other.to_string(),
+                });
+            Some(ChatActivityStored {
+                id,
+                kind: "tool".into(),
+                title,
+                input,
+                output: None,
+                status: Some("running".into()),
+            })
+        })
+        .collect()
+}
+
+fn attach_tool_output(
+    assistant: &mut ChatHistoryMessage,
+    call_id: Option<&str>,
+    output: Option<String>,
+    tool_name: Option<&str>,
+) {
+    if let Some(cid) = call_id {
+        if let Some(act) = assistant.activities.iter_mut().find(|a| a.id == cid) {
+            act.output = output;
+            act.status = Some("done".into());
+            if act.title == "tool" {
+                if let Some(name) = tool_name {
+                    act.title = name.to_string();
+                }
+            }
+            return;
+        }
+    }
+    // 无匹配 skeleton：按顺序挂到第一个尚无 output 的 activity，或追加。
+    if let Some(act) = assistant
+        .activities
+        .iter_mut()
+        .find(|a| a.output.is_none())
+    {
+        if let Some(cid) = call_id {
+            act.id = cid.to_string();
+        }
+        if let Some(name) = tool_name {
+            act.title = name.to_string();
+        }
+        act.output = output;
+        act.status = Some("done".into());
+        return;
+    }
+    assistant.activities.push(ChatActivityStored {
+        id: call_id.unwrap_or("unknown").to_string(),
+        kind: "tool".into(),
+        title: tool_name.unwrap_or("tool").to_string(),
+        input: None,
+        output,
+        status: Some("done".into()),
+    });
 }
