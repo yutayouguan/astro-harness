@@ -966,7 +966,7 @@ export const en: Record<MessageKey, string> = {
   "agentTools.terminal.title": "Terminal",
   "agentTools.terminal.desc": "Run shell commands and scripts",
   "agentTools.fileOps.title": "File Ops",
-  "agentTools.fileOps.desc": "Read, write, list, and manage workspace files"
+  "agentTools.fileOps.desc": "Read, write, list, and manage workspace files",
   "agentTools.codeExec.title": "Code Execution",
   "agentTools.codeExec.desc": "Execute Python and shell code directly",
   "agentTools.vision.title": "Vision",
