@@ -1,4 +1,4 @@
-//! 单库会话存储（schema v12）：sessions、富 messages、FTS5 与迁移门控。
+//! 单库会话存储（schema v13）：sessions、富 messages、FTS5；旧库直接重建不迁数据。
 
 mod schema;
 mod sessions;
@@ -8,7 +8,7 @@ mod search;
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use schema::SCHEMA_VERSION;
@@ -201,11 +201,22 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
-    /// 打开或创建 `state.db`，启用 WAL，并将 schema 迁移到 v12。
+    /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时直接删库重建（不迁移旧聊天）。
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("create parent dir for {}", path.display()))?;
+        }
+        if path.exists() {
+            let version = peek_schema_version(path).unwrap_or(0);
+            if version < SCHEMA_VERSION {
+                tracing::warn!(
+                    version,
+                    target = SCHEMA_VERSION,
+                    "session state.db outdated; discarding prior chat history"
+                );
+                delete_sqlite_files(path);
+            }
         }
         let conn = Connection::open(path)
             .with_context(|| format!("open session store at {}", path.display()))?;
@@ -213,21 +224,19 @@ impl SessionStore {
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let store = Self { conn };
         store.migrate_schema()?;
-        // 已 stamp v11 的库也可能残留旧触发器 / 失效的 FTS delete 语法，每次打开自愈。
+        // 已 stamp 的库也可能残留旧触发器 / 失效的 FTS delete 语法，每次打开自愈。
         store.repair_messages_fts_if_needed()?;
         // 旧 MessageDb 可能留下「有 messages、无 sessions 行」的孤儿会话。
         store.backfill_sessions_from_messages()?;
         Ok(store)
     }
 
-    /// 打开 `sessions_dir/state.db` 并迁移到 v12；若尚未导入，则从旁路 `sessions.db` 迁入会话元数据。
+    /// 打开 `sessions_dir/state.db`；丢弃旁路旧 `sessions.db`，不导入历史。
     pub fn open_with_legacy_migration(sessions_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(sessions_dir)
             .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
-        // 注意：`open` 可能已对孤儿 messages 做过 backfill；导入会补齐 title。
+        discard_legacy_sessions_db(sessions_dir);
         let store = Self::open(&sessions_dir.join("state.db"))?;
-        store.import_legacy_sessions_db_once(sessions_dir)?;
-        // 导入后再扫一遍，覆盖「仅有 messages、无 sessions.db 行」的会话。
         store.backfill_sessions_from_messages()?;
         Ok(store)
     }
@@ -247,9 +256,49 @@ impl SessionStore {
 
 }
 
+/// 删除 SQLite 主库及其 WAL/SHM 旁路文件。
+fn delete_sqlite_files(path: &Path) {
+    let base = path.to_string_lossy();
+    for p in [
+        path.to_path_buf(),
+        PathBuf::from(format!("{base}-wal")),
+        PathBuf::from(format!("{base}-shm")),
+    ] {
+        let _ = std::fs::remove_file(p);
+    }
+}
+
+/// 读取已有库的 schema 版本；无法读取时视为 0。
+fn peek_schema_version(path: &Path) -> Result<i32> {
+    let conn = Connection::open(path)?;
+    let has: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_version'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has {
+        return Ok(0);
+    }
+    let version: Option<i32> = conn
+        .query_row(
+            "SELECT version FROM schema_version LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(version.unwrap_or(0))
+}
+
+/// 删除遗留的旁路 `sessions.db`（不再导入）。
+fn discard_legacy_sessions_db(sessions_dir: &Path) {
+    let base = sessions_dir.join("sessions.db");
+    delete_sqlite_files(&base);
+}
+
 /// 导入遗留会话：先带 title；若撞上 `idx_sessions_title_unique` 则降级为 title=NULL。
 ///
 /// 若该 id 已由 messages 回填（无 title），则用导入的 title 补齐。
+#[allow(dead_code)]
 pub(crate) fn insert_legacy_session(
     conn: &Connection,
     session_id: &str,

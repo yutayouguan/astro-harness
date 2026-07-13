@@ -6,7 +6,7 @@ fn opens_fresh_db_at_schema_v11() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 12);
+    assert_eq!(store.schema_version().unwrap(), 13);
     store
         .create_session("s1", "test", None, None, None)
         .unwrap();
@@ -210,7 +210,7 @@ fn build_chat_history_restores_timeline() {
 }
 
 #[test]
-fn migrates_legacy_messages_and_sessions_db() {
+fn discards_legacy_messages_and_sessions_db() {
     let dir = TempDir::new().unwrap();
     let sessions_dir = dir.path().join("sessions");
     std::fs::create_dir_all(&sessions_dir).unwrap();
@@ -231,8 +231,9 @@ fn migrates_legacy_messages_and_sessions_db() {
         .unwrap();
     }
     // 旧 sessions.db
+    let legacy_path = sessions_dir.join("sessions.db");
     {
-        let conn = rusqlite::Connection::open(sessions_dir.join("sessions.db")).unwrap();
+        let conn = rusqlite::Connection::open(&legacy_path).unwrap();
         conn.execute_batch(
             "CREATE TABLE sessions (
                 session_id TEXT PRIMARY KEY,
@@ -246,16 +247,21 @@ fn migrates_legacy_messages_and_sessions_db() {
     }
 
     let store = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 12);
-    let msgs = store.get_messages("old").unwrap();
-    assert_eq!(msgs[0].content.as_deref(), Some("hello"));
-    let sess = store.get_session("old").unwrap().unwrap();
-    assert!(sess.title.as_deref().unwrap_or("").contains("hello"));
+    assert_eq!(store.schema_version().unwrap(), 13);
+    assert!(
+        !legacy_path.exists(),
+        "legacy sessions.db must be deleted, not imported"
+    );
+    assert!(
+        store.get_messages("old").unwrap().is_empty(),
+        "old chat history must be discarded"
+    );
+    assert!(store.get_session("old").unwrap().is_none());
 
-    // v11：content 必须可空（旧表为 NOT NULL，迁移应整表重建）。
+    store.create_session("fresh", "test", None, None, None).unwrap();
     store
         .append_message(NewMessage {
-            session_id: "old",
+            session_id: "fresh",
             role: "assistant",
             content: None,
             tool_calls: Some(serde_json::json!([{
@@ -263,24 +269,25 @@ fn migrates_legacy_messages_and_sessions_db() {
                 "name": "noop",
                 "arguments": {}
             }])),
-            ..NewMessage::empty("old", "assistant")
+            ..NewMessage::empty("fresh", "assistant")
         })
         .unwrap();
-    let msgs = store.get_messages("old").unwrap();
+    let msgs = store.get_messages("fresh").unwrap();
     assert!(msgs.last().unwrap().content.is_none());
 
-    // 幂等
     let _ = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+    assert_eq!(store.get_messages("fresh").unwrap().len(), 1);
 }
 
 #[test]
-fn legacy_migration_allows_duplicate_session_summaries() {
+fn discards_legacy_sessions_db_without_importing_titles() {
     let dir = TempDir::new().unwrap();
     let sessions_dir = dir.path().join("sessions");
     std::fs::create_dir_all(&sessions_dir).unwrap();
 
+    let legacy_path = sessions_dir.join("sessions.db");
     {
-        let conn = rusqlite::Connection::open(sessions_dir.join("sessions.db")).unwrap();
+        let conn = rusqlite::Connection::open(&legacy_path).unwrap();
         conn.execute_batch(
             "CREATE TABLE sessions (
                 session_id TEXT PRIMARY KEY,
@@ -296,20 +303,9 @@ fn legacy_migration_allows_duplicate_session_summaries() {
     }
 
     let store = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
-    let a = store.get_session("dup-a").unwrap().unwrap();
-    let b = store.get_session("dup-b").unwrap().unwrap();
-    let titled = [a.title.as_deref(), b.title.as_deref()];
-    assert_eq!(
-        titled.iter().filter(|t| t.is_some()).count(),
-        1,
-        "exactly one session keeps the shared title"
-    );
-    assert_eq!(
-        titled.iter().filter(|t| t.is_none()).count(),
-        1,
-        "the other session falls back to NULL title"
-    );
-    assert!(titled.iter().any(|t| *t == Some("shared summary")));
+    assert!(!legacy_path.exists());
+    assert!(store.get_session("dup-a").unwrap().is_none());
+    assert!(store.get_session("dup-b").unwrap().is_none());
 }
 
 #[test]
@@ -541,7 +537,7 @@ fn update_session_billing_accumulates_and_unknown_skips_cost() {
 }
 
 #[test]
-fn migrate_v11_to_v12_resets_billing_columns() {
+fn outdated_schema_discards_prior_chat_and_billing() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     {
@@ -585,20 +581,17 @@ fn migrate_v11_to_v12_resets_billing_columns() {
                 billing_provider
              ) VALUES (
                 's1', 'test', 1.0, 500, 200, 9.99, 8.88, 'estimated', 7, 'openai'
-             );",
+             );
+             INSERT INTO messages (session_id, role, content, timestamp)
+             VALUES ('s1', 'user', 'old chat', 1.0);",
         )
         .unwrap();
     }
 
     let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 12);
-    let row = store.get_session_billing("s1").unwrap().unwrap();
-    assert_eq!(row.input_tokens, 0);
-    assert_eq!(row.output_tokens, 0);
-    assert_eq!(row.estimated_cost_usd, 0.0);
-    assert!(row.actual_cost_usd.is_none());
-    assert!(row.cost_status.is_none());
-    assert_eq!(row.api_call_count, 0);
-    assert!(row.billing_provider.is_none());
+    assert_eq!(store.schema_version().unwrap(), 13);
+    assert!(store.get_session("s1").unwrap().is_none());
+    assert!(store.get_messages("s1").unwrap().is_empty());
 }
+
 

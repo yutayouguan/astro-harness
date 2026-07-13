@@ -8,7 +8,7 @@ use std::path::Path;
 use super::{insert_legacy_session, now_epoch_secs, truncate_chars, SessionStore};
 use crate::workspace::default_memory_dir;
 
-pub const SCHEMA_VERSION: i32 = 12;
+pub const SCHEMA_VERSION: i32 = 13;
 
 /// 空库直接建到 v11 的完整 DDL（含 FTS inline 模式与触发器）。
 const SCHEMA_V11_DDL: &str = r#"
@@ -156,6 +156,8 @@ impl SessionStore {
         if current < 12 {
             self.migrate_v12_billing_reset()?;
         }
+
+        // v13+：不兼容旧聊天时由 `SessionStore::open` 删库重建；此处仅 stamp。
 
         self.stamp_schema_version()?;
         Ok(())
