@@ -1,8 +1,9 @@
 /** Composer MCP 快捷菜单：搜索、开关服务、跳转设置。 */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PlugZap, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { useMcpTools } from "../hooks/useMcpTools";
 import { useI18n } from "../i18n/LocaleContext";
+import McpIcon from "./McpIcon";
 
 type Props = {
   open: boolean;
@@ -78,7 +79,7 @@ export default function ComposerMcpMenu({
               {filtered.map((s) => (
                 <li key={s.id} className="composer-mcp-menu-row">
                   <span className="composer-mcp-menu-name" title={s.name}>
-                    <PlugZap size={14} strokeWidth={2} aria-hidden />
+                    <McpIcon size={14} />
                     {s.name}
                   </span>
                   <button

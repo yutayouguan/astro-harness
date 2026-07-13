@@ -6,10 +6,8 @@ import {
   FileText,
   FormInput,
   Hash,
-  Layers,
   LayoutGrid,
   List,
-  PlugZap,
   Trash2,
   Type,
   Wrench,
@@ -28,6 +26,7 @@ import type { MessageKey } from "../i18n/messages";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agentsChanged";
+import McpIcon from "./McpIcon";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
@@ -491,7 +490,7 @@ function McpServerCard({
     >
       <header className="mcp-server-head">
         <div className="mcp-server-icon" aria-hidden>
-          <Layers size={22} strokeWidth={1.8} aria-hidden />
+          <McpIcon size={22} />
         </div>
         <div className="mcp-server-meta">
           <div className="mcp-server-title-row">
@@ -804,7 +803,7 @@ export default function ToolsPanel({
               title={t("mcpTools.add")}
               aria-label={t("mcpTools.add")}
             >
-              <PlugZap size={17} strokeWidth={2.2} aria-hidden />
+              <McpIcon size={17} />
             </button>
           )}
         </div>
@@ -832,7 +831,7 @@ export default function ToolsPanel({
           className={`tool-main-tab ${tab === "mcp" ? "active" : ""}`}
           onClick={() => setTab("mcp")}
         >
-          <Layers size={15} strokeWidth={2.25} aria-hidden />
+          <McpIcon size={15} />
           {t("tools.tab.mcp")}
           {servers.length > 0 && (
             <span className="tool-main-tab-count">{servers.length}</span>
@@ -1083,7 +1082,7 @@ export default function ToolsPanel({
           {servers.length === 0 ? (
             <div className="mcp-tools-empty">
               <div className="mcp-tools-empty-icon" aria-hidden>
-                <Layers size={48} strokeWidth={1.5} aria-hidden />
+                <McpIcon size={48} />
               </div>
               <p className="mcp-tools-empty-title">{t("mcpTools.empty")}</p>
               <p className="mcp-tools-empty-hint">{t("mcpTools.emptyHint")}</p>

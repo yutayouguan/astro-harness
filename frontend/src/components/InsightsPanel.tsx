@@ -16,7 +16,6 @@ import {
   GitBranch,
   Layers,
   Network,
-  Plug,
   Puzzle,
   Timer,
   Wrench,
@@ -27,6 +26,7 @@ import { useAgentsChanged } from "../lib/agentsChanged";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
+import McpIcon from "./McpIcon";
 
 type Period = "month" | "quarter" | "year";
 type Metric = "calls" | "tokens" | "cost";
@@ -297,7 +297,7 @@ function KindIcon({ kind }: { kind: string }) {
     case "skill":
       return <Puzzle {...props} />;
     case "mcp":
-      return <Plug {...props} />;
+      return <McpIcon size={13} />;
     case "cron":
       return <Timer {...props} />;
     case "llm":
@@ -888,7 +888,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
               value={String(skillCallTotal)}
             />
             <KpiCard
-              icon={<Plug size={16} strokeWidth={2.25} aria-hidden />}
+              icon={<McpIcon size={16} />}
               label={t("insights.kpi.mcp")}
               value={String(mcpCallTotal)}
             />
@@ -974,7 +974,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
             />
             <RankList
               title={t("insights.rank.mcp")}
-              icon={<Plug size={14} strokeWidth={2.25} aria-hidden />}
+              icon={<McpIcon size={14} />}
               items={mcpRanks}
               emptyHint={t("insights.rank.empty")}
             />

@@ -29,7 +29,6 @@ import {
   Paperclip,
   Pause,
   Play,
-  PlugZap,
   RefreshCw,
   SendHorizontal,
   Slash,
@@ -72,6 +71,7 @@ import {
   type PaletteKind,
 } from "./ComposerPalette";
 import ComposerMcpMenu from "./ComposerMcpMenu";
+import McpIcon from "./McpIcon";
 import MsgActivity from "./MsgActivity";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
@@ -1303,7 +1303,7 @@ export default function ChatView({
                     setMcpOpen((v) => !v);
                   }}
                 >
-                  <PlugZap size={16} strokeWidth={2} />
+                  <McpIcon size={16} />
                 </button>
                 <ComposerMcpMenu
                   open={mcpOpen}
