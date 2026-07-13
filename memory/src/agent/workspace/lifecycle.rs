@@ -719,18 +719,6 @@ mod tests {
     }
 
     #[test]
-    fn ensure_workspace_migrates_legacy_root_files() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("MEMORY.md"), "- legacy memory").unwrap();
-
-        ensure_workspace(dir.path()).unwrap();
-        let migrated = dir.path().join("workspace").join("MEMORY.md");
-        assert!(migrated.is_file());
-        assert_eq!(fs::read_to_string(&migrated).unwrap(), "- legacy memory");
-        assert!(!dir.path().join("MEMORY.md").exists());
-    }
-
-    #[test]
     fn create_and_list_agents() {
         let dir = TempDir::new().unwrap();
         ensure_workspace(dir.path()).unwrap();

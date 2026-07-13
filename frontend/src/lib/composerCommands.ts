@@ -295,11 +295,3 @@ export function buildMentionCandidates(opts: {
   }));
   return [...agents, ...skills, ...mcps];
 }
-
-/** 生成 /help 插入正文（中英由调用方传入已翻译行） */
-export function formatSlashHelpLines(
-  lines: { title: string; description: string }[],
-): string {
-  const body = lines.map((l) => `${l.title}  ${l.description}`).join("\n");
-  return `可用命令：\n${body}\n\n也可输入 /技能名；用 @ 提及 Agent / 技能 / MCP。`;
-}
