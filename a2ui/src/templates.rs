@@ -21,13 +21,34 @@ pub fn build_confirm_surface(surface_id: &str, title: &str, body: &str) -> Vec<V
                     {
                         "id": "col",
                         "component": "Column",
-                        "children": ["title", "body", "actions"]
+                        "children": ["header", "body", "actions"]
+                    },
+                    {
+                        "id": "header",
+                        "component": "Row",
+                        "children": ["avatar", "header_text", "badge"]
+                    },
+                    {
+                        "id": "avatar",
+                        "component": "Avatar",
+                        "name": "shield"
+                    },
+                    {
+                        "id": "header_text",
+                        "component": "Column",
+                        "children": ["title"]
                     },
                     {
                         "id": "title",
                         "component": "Text",
                         "text": title,
                         "variant": "h2"
+                    },
+                    {
+                        "id": "badge",
+                        "component": "Badge",
+                        "text": "Confirm",
+                        "variant": "warn"
                     },
                     {
                         "id": "body",
@@ -75,9 +96,15 @@ pub fn build_clarify_surface(
     question: &str,
     options: &[String],
 ) -> Vec<Value> {
-    let mut children: Vec<String> = vec!["question".into()];
+    let mut children: Vec<String> = vec!["badge".into(), "question".into()];
     let mut components = vec![
         json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({
+            "id": "badge",
+            "component": "Badge",
+            "text": "Clarify",
+            "variant": "info"
+        }),
         json!({
             "id": "question",
             "component": "Text",
@@ -143,7 +170,7 @@ pub fn build_info_surface(
     body: &str,
     image_url: Option<&str>,
 ) -> Vec<Value> {
-    let mut children = vec!["title".to_string(), "body".to_string()];
+    let mut children = vec!["title".to_string(), "badge".to_string(), "body".to_string()];
     let mut components = vec![
         json!({ "id": "root", "component": "Card", "child": "col" }),
         json!({
@@ -151,6 +178,12 @@ pub fn build_info_surface(
             "component": "Text",
             "text": title,
             "variant": "h2"
+        }),
+        json!({
+            "id": "badge",
+            "component": "Badge",
+            "text": "Info",
+            "variant": "info"
         }),
         json!({
             "id": "body",
