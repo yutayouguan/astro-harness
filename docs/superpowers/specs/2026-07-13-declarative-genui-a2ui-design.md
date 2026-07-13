@@ -123,8 +123,8 @@ Detailed AG-UI ↔ Astro field mapping: see mapping doc.
 
 ### Catalog subset
 
-- `catalogId`: `astro://a2ui/catalog/v1`
-- Shape aligned with A2UI basic catalog; implement only:
+- `catalogId`: `astro://a2ui/catalog/v2`
+- Shape aligned with A2UI basic catalog plus Astro extension components; see [A2UI Glass Catalog v2](./2026-07-13-a2ui-glass-catalog-v2-design.md) for full allowlist, glass tokens, and templates.
 
 | Components | Use |
 |------------|-----|
@@ -133,8 +133,9 @@ Detailed AG-UI ↔ Astro field mapping: see mapping doc.
 | Button | Submit / choices |
 | TextField, ChoicePicker, CheckBox | Clarify / forms |
 | Image, List | Info cards |
+| Badge, Chip, Metric, Avatar, Callout, Spacer | Astro extensions — status, metrics, avatars, callouts, spacing |
 
-**Out of MVP:** Modal, Tabs, Slider, DateTimeInput, Video, AudioPlayer.  
+**Out of MVP:** Modal, Tabs, Slider, DateTimeInput, Video, AudioPlayer (forward-compat extension points reserved in glass catalog v2 design, v2.1+).  
 **Validation functions MVP:** `required` only; others as needed.
 
 ### Renderer adapter
