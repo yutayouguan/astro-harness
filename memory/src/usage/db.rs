@@ -12,8 +12,11 @@
 use chrono::{Datelike, SecondsFormat, TimeZone, Utc};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+/// `usage.db` schema 版本；不兼容时摧毁重建。
+pub const USAGE_SCHEMA_VERSION: i32 = 2;
 
 /// 建表 DDL（`usage_events` 及 ts / agent / kind 索引）
 const DDL: &str = r#"
@@ -24,10 +27,19 @@ CREATE TABLE IF NOT EXISTS usage_events (
     name TEXT NOT NULL,
     agent_id TEXT NOT NULL,
     session_id TEXT,
-    prompt_tokens INTEGER NOT NULL DEFAULT 0,
-    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    reasoning_tokens INTEGER NOT NULL DEFAULT 0,
     total_tokens INTEGER NOT NULL DEFAULT 0,
     cost_usd REAL NOT NULL DEFAULT 0,
+    cost_status TEXT,
+    cost_source TEXT,
+    pricing_version TEXT,
+    billing_provider TEXT,
+    billing_base_url TEXT,
+    billing_mode TEXT,
     meta_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts);
@@ -38,6 +50,10 @@ CREATE INDEX IF NOT EXISTS idx_usage_kind_name_ts ON usage_events(kind, name, ts
 /// KPI `calls` 计入的 kind 集合（`skill` 除外）
 const CALLS_KIND_SQL: &str =
     "CASE WHEN kind IN ('tool','mcp','cron','llm') THEN 1 ELSE 0 END";
+
+/// KPI `cost_usd` 聚合：排除 `cost_status='unknown'`
+const COST_SUM_SQL: &str =
+    "CASE WHEN cost_status IS NULL OR cost_status IN ('estimated','included') THEN cost_usd ELSE 0 END";
 
 /// 将 ISO8601（含 `T` / `Z`）规范为 SQLite `datetime` 可解析形式
 const TS_NORM_SQL: &str = "replace(replace(ts, 'T', ' '), 'Z', '')";
@@ -59,10 +75,19 @@ pub struct NewUsageEvent {
     pub name: String,
     pub agent_id: String,
     pub session_id: Option<String>,
-    pub prompt_tokens: i64,
-    pub completion_tokens: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub reasoning_tokens: i64,
     pub total_tokens: i64,
     pub cost_usd: f64,
+    pub cost_status: Option<String>,
+    pub cost_source: Option<String>,
+    pub pricing_version: Option<String>,
+    pub billing_provider: Option<String>,
+    pub billing_base_url: Option<String>,
+    pub billing_mode: Option<String>,
     pub meta_json: Option<String>,
 }
 
@@ -122,8 +147,8 @@ pub struct TraceEventRow {
     pub kind: String,
     pub name: String,
     pub agent_id: String,
-    pub prompt_tokens: i64,
-    pub completion_tokens: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
     pub total_tokens: i64,
     pub cost_usd: f64,
 }
@@ -134,6 +159,8 @@ pub struct UsageInsights {
     pub kpis: UsageKpis,
     pub series: Vec<UsageSeriesPoint>,
     pub rankings: UsageRankings,
+    /// `kind=llm` 且 `cost_status='unknown'` 的事件数
+    pub unpriced_llm_events: i64,
 }
 
 /// 洞察查询参数
@@ -279,15 +306,49 @@ fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>>
     Ok(out)
 }
 
+fn delete_usage_db_files(path: &Path) {
+    let base = path.to_string_lossy();
+    for p in [
+        path.to_path_buf(),
+        PathBuf::from(format!("{base}-wal")),
+        PathBuf::from(format!("{base}-shm")),
+    ] {
+        let _ = std::fs::remove_file(p);
+    }
+}
+
+fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
+    let conn = Connection::open(path)?;
+    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    conn.execute_batch(DDL)?;
+    conn.execute_batch(&format!(
+        "PRAGMA user_version = {USAGE_SCHEMA_VERSION};"
+    ))?;
+    Ok(conn)
+}
+
 impl UsageDb {
     /// 打开或创建数据库并执行 DDL（WAL 模式）
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let conn = Connection::open(&path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-        conn.execute_batch(DDL)?;
+        let needs_rebuild = if path.exists() {
+            let conn = Connection::open(&path)?;
+            let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+            version != USAGE_SCHEMA_VERSION
+        } else {
+            true
+        };
+        if needs_rebuild {
+            if path.exists() {
+                tracing::warn!("usage.db rebuilt, prior events discarded");
+            }
+            delete_usage_db_files(&path);
+            let conn = open_and_init(&path)?;
+            return Ok(Self { conn });
+        }
+        let conn = open_and_init(&path)?;
         Ok(Self { conn })
     }
 
@@ -303,8 +364,11 @@ impl UsageDb {
         self.conn.execute(
             "INSERT INTO usage_events (
                 id, ts, kind, name, agent_id, session_id,
-                prompt_tokens, completion_tokens, total_tokens, cost_usd, meta_json
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                reasoning_tokens, total_tokens, cost_usd,
+                cost_status, cost_source, pricing_version,
+                billing_provider, billing_base_url, billing_mode, meta_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
                 id,
                 ts,
@@ -312,10 +376,19 @@ impl UsageDb {
                 row.name,
                 row.agent_id,
                 row.session_id,
-                row.prompt_tokens,
-                row.completion_tokens,
+                row.input_tokens,
+                row.output_tokens,
+                row.cache_read_tokens,
+                row.cache_write_tokens,
+                row.reasoning_tokens,
                 row.total_tokens,
                 row.cost_usd,
+                row.cost_status,
+                row.cost_source,
+                row.pricing_version,
+                row.billing_provider,
+                row.billing_base_url,
+                row.billing_mode,
                 row.meta_json,
             ],
         )?;
@@ -361,6 +434,7 @@ impl UsageDb {
                 by_agent: self.query_rank_by_agent(&start, &end, agent_id.as_deref())?,
                 by_model: self.query_rank_by_model(&start, &end, agent_id.as_deref())?,
             },
+            unpriced_llm_events: self.query_unpriced_llm_events(&start, &end, agent_id.as_deref())?,
         })
     }
 
@@ -383,7 +457,7 @@ impl UsageDb {
             "SELECT
                 COALESCE(SUM({CALLS_KIND_SQL}), 0),
                 COALESCE(SUM(total_tokens), 0),
-                COALESCE(SUM(cost_usd), 0.0),
+                COALESCE(SUM({COST_SUM_SQL}), 0.0),
                 COUNT(DISTINCT agent_id)
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2{agent_clause}"
@@ -424,7 +498,7 @@ impl UsageDb {
                 strftime('{bucket_fmt}', {TS_NORM_SQL}) AS bucket,
                 COALESCE(SUM({CALLS_KIND_SQL}), 0),
                 COALESCE(SUM(total_tokens), 0),
-                COALESCE(SUM(cost_usd), 0.0)
+                COALESCE(SUM({COST_SUM_SQL}), 0.0)
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2{agent_clause}
              GROUP BY bucket
@@ -480,7 +554,7 @@ impl UsageDb {
             "SELECT kind, name,
                 COUNT(*) AS calls,
                 COALESCE(SUM(total_tokens), 0),
-                COALESCE(SUM(cost_usd), 0.0)
+                COALESCE(SUM({COST_SUM_SQL}), 0.0)
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2
                AND kind IN ('tool','skill','mcp','cron')
@@ -504,7 +578,7 @@ impl UsageDb {
             "SELECT 'agent' AS kind, agent_id AS name,
                 COUNT(*) AS calls,
                 COALESCE(SUM(total_tokens), 0),
-                COALESCE(SUM(cost_usd), 0.0)
+                COALESCE(SUM({COST_SUM_SQL}), 0.0)
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2
                AND kind = 'llm'
@@ -528,7 +602,7 @@ impl UsageDb {
             "SELECT kind, name,
                 COUNT(*) AS calls,
                 COALESCE(SUM(total_tokens), 0),
-                COALESCE(SUM(cost_usd), 0.0)
+                COALESCE(SUM({COST_SUM_SQL}), 0.0)
              FROM usage_events
              WHERE ts >= ?1 AND ts < ?2
                AND kind = 'llm'
@@ -538,6 +612,30 @@ impl UsageDb {
              LIMIT 50"
         );
         self.query_rank_items(&sql, start, end, agent_id)
+    }
+
+    fn query_unpriced_llm_events(
+        &self,
+        start: &str,
+        end: &str,
+        agent_id: Option<&str>,
+    ) -> anyhow::Result<i64> {
+        let (agent_clause, _) = Self::agent_filter_sql(agent_id);
+        let sql = format!(
+            "SELECT COUNT(*)
+             FROM usage_events
+             WHERE ts >= ?1 AND ts < ?2
+               AND kind = 'llm'
+               AND cost_status = 'unknown'
+               {agent_clause}"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let count = if let Some(aid) = agent_id {
+            stmt.query_row(params![start, end, aid], |r| r.get(0))?
+        } else {
+            stmt.query_row(params![start, end], |r| r.get(0))?
+        };
+        Ok(count)
     }
 
     /// 按 session 聚合近期 Trace 摘要
@@ -601,7 +699,7 @@ impl UsageDb {
     ) -> anyhow::Result<Vec<TraceEventRow>> {
         let sql = format!(
             "SELECT id, ts, kind, name, agent_id,
-                    prompt_tokens, completion_tokens, total_tokens, cost_usd
+                    input_tokens, output_tokens, total_tokens, cost_usd
              FROM usage_events
              WHERE session_id = ?1
              ORDER BY ts ASC, rowid ASC
@@ -616,8 +714,8 @@ impl UsageDb {
                     kind: r.get(2)?,
                     name: r.get(3)?,
                     agent_id: r.get(4)?,
-                    prompt_tokens: r.get(5)?,
-                    completion_tokens: r.get(6)?,
+                    input_tokens: r.get(5)?,
+                    output_tokens: r.get(6)?,
                     total_tokens: r.get(7)?,
                     cost_usd: r.get(8)?,
                 })
@@ -670,35 +768,55 @@ mod tests {
         assert_eq!(fmt, "%Y-%m-%d");
     }
 
+    fn zero_event(
+        ts: &str,
+        kind: &str,
+        name: &str,
+        agent_id: &str,
+        total_tokens: i64,
+    ) -> NewUsageEvent {
+        NewUsageEvent {
+            ts: ts.into(),
+            kind: kind.into(),
+            name: name.into(),
+            agent_id: agent_id.into(),
+            session_id: None,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
+            total_tokens,
+            cost_usd: 0.0,
+            cost_status: None,
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
+            meta_json: None,
+        }
+    }
+
     #[test]
     fn skill_rows_do_not_inflate_calls() {
         let dir = TempDir::new().unwrap();
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T02:00:00Z".into(),
-            kind: "tool".into(),
-            name: "skills".into(),
-            agent_id: "workspace".into(),
-            session_id: None,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(zero_event(
+            "2026-07-13T02:00:00Z",
+            "tool",
+            "skills",
+            "workspace",
+            0,
+        ))
         .unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T02:00:01Z".into(),
-            kind: "skill".into(),
-            name: "create-agent".into(),
-            agent_id: "workspace".into(),
-            session_id: None,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(zero_event(
+            "2026-07-13T02:00:01Z",
+            "skill",
+            "create-agent",
+            "workspace",
+            0,
+        ))
         .unwrap();
         let insights = db
             .query_insights(UsageInsightsQuery {
@@ -721,18 +839,13 @@ mod tests {
         );
         let dir = TempDir::new().unwrap();
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-01T00:00:00+00:00".into(),
-            kind: "tool".into(),
-            name: "terminal".into(),
-            agent_id: "workspace".into(),
-            session_id: None,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(zero_event(
+            "2026-07-01T00:00:00+00:00",
+            "tool",
+            "terminal",
+            "workspace",
+            0,
+        ))
         .unwrap();
         let insights = db
             .query_insights(UsageInsightsQuery {
@@ -748,31 +861,21 @@ mod tests {
     fn by_agent_only_counts_llm() {
         let dir = TempDir::new().unwrap();
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T02:00:00Z".into(),
-            kind: "skill".into(),
-            name: "only-skill".into(),
-            agent_id: "skill-only".into(),
-            session_id: None,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 10,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(zero_event(
+            "2026-07-13T02:00:00Z",
+            "skill",
+            "only-skill",
+            "skill-only",
+            10,
+        ))
         .unwrap();
-        db.insert(NewUsageEvent {
-            ts: "2026-07-13T02:00:01Z".into(),
-            kind: "tool".into(),
-            name: "terminal".into(),
-            agent_id: "workspace".into(),
-            session_id: None,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(zero_event(
+            "2026-07-13T02:00:01Z",
+            "tool",
+            "terminal",
+            "workspace",
+            0,
+        ))
         .unwrap();
         db.insert(NewUsageEvent {
             ts: "2026-07-13T02:00:02Z".into(),
@@ -780,10 +883,19 @@ mod tests {
             name: "gpt-5.6".into(),
             agent_id: "workspace".into(),
             session_id: None,
-            prompt_tokens: 10,
-            completion_tokens: 5,
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
             total_tokens: 15,
             cost_usd: 0.01,
+            cost_status: Some("estimated".into()),
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
             meta_json: None,
         })
         .unwrap();

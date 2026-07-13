@@ -9,6 +9,41 @@ use tempfile::TempDir;
 /// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+fn zero_billing_event(
+    ts: &str,
+    kind: &str,
+    name: &str,
+    agent_id: &str,
+    session_id: Option<String>,
+    input_tokens: i64,
+    output_tokens: i64,
+    total_tokens: i64,
+    cost_usd: f64,
+    meta_json: Option<String>,
+) -> NewUsageEvent {
+    NewUsageEvent {
+        ts: ts.into(),
+        kind: kind.into(),
+        name: name.into(),
+        agent_id: agent_id.into(),
+        session_id,
+        input_tokens,
+        output_tokens,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens,
+        cost_usd,
+        cost_status: None,
+        cost_source: None,
+        pricing_version: None,
+        billing_provider: None,
+        billing_base_url: None,
+        billing_mode: None,
+        meta_json,
+    }
+}
+
 #[test]
 fn usage_db_path_under_memory_dir() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -22,31 +57,31 @@ fn usage_db_path_under_memory_dir() {
 fn insert_and_count_events() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-    db.insert(NewUsageEvent {
-        ts: "2026-07-13T02:00:00Z".into(),
-        kind: "tool".into(),
-        name: "terminal".into(),
-        agent_id: "workspace".into(),
-        session_id: None,
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-        cost_usd: 0.0,
-        meta_json: None,
-    })
+    db.insert(zero_billing_event(
+        "2026-07-13T02:00:00Z",
+        "tool",
+        "terminal",
+        "workspace",
+        None,
+        0,
+        0,
+        0,
+        0.0,
+        None,
+    ))
     .unwrap();
-    db.insert(NewUsageEvent {
-        ts: "2026-07-13T03:00:00Z".into(),
-        kind: "llm".into(),
-        name: "gpt-4o-mini".into(),
-        agent_id: "workspace".into(),
-        session_id: Some("s1".into()),
-        prompt_tokens: 100,
-        completion_tokens: 50,
-        total_tokens: 150,
-        cost_usd: 0.001,
-        meta_json: None,
-    })
+    db.insert(zero_billing_event(
+        "2026-07-13T03:00:00Z",
+        "llm",
+        "gpt-4o-mini",
+        "workspace",
+        Some("s1".into()),
+        100,
+        50,
+        150,
+        0.001,
+        None,
+    ))
     .unwrap();
     let insights = db
         .query_insights(UsageInsightsQuery {
@@ -70,18 +105,9 @@ fn filters_by_agent_and_excludes_out_of_range() {
         ("2026-07-02T10:00:00Z", "research", "tool", "web_search"),
         ("2026-06-01T10:00:00Z", "workspace", "tool", "terminal"), // 上月
     ] {
-        db.insert(NewUsageEvent {
-            ts: ts.into(),
-            kind: kind.into(),
-            name: name.into(),
-            agent_id: agent.into(),
-            session_id: None,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-            cost_usd: 0.0,
-            meta_json: None,
-        })
+        db.insert(zero_billing_event(
+            ts, kind, name, agent, None, 0, 0, 0, 0.0, None,
+        ))
         .unwrap();
     }
     let all = db
@@ -109,31 +135,31 @@ fn filters_by_agent_and_excludes_out_of_range() {
 fn skill_events_do_not_inflate_kpi_calls() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-    db.insert(NewUsageEvent {
-        ts: "2026-07-13T01:00:00Z".into(),
-        kind: "tool".into(),
-        name: "skills".into(),
-        agent_id: "workspace".into(),
-        session_id: None,
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-        cost_usd: 0.0,
-        meta_json: None,
-    })
+    db.insert(zero_billing_event(
+        "2026-07-13T01:00:00Z",
+        "tool",
+        "skills",
+        "workspace",
+        None,
+        0,
+        0,
+        0,
+        0.0,
+        None,
+    ))
     .unwrap();
-    db.insert(NewUsageEvent {
-        ts: "2026-07-13T01:00:01Z".into(),
-        kind: "skill".into(),
-        name: "demo".into(),
-        agent_id: "workspace".into(),
-        session_id: None,
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-        cost_usd: 0.0,
-        meta_json: None,
-    })
+    db.insert(zero_billing_event(
+        "2026-07-13T01:00:01Z",
+        "skill",
+        "demo",
+        "workspace",
+        None,
+        0,
+        0,
+        0,
+        0.0,
+        None,
+    ))
     .unwrap();
     let insights = db
         .query_insights(UsageInsightsQuery {
@@ -155,18 +181,18 @@ fn offset_timestamp_normalized_and_counted_in_month() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
     // `+00:00` 若不规范化为 `…Z`，会因字典序落在 `2026-07-01T00:00:00Z` 之前而被排除
-    db.insert(NewUsageEvent {
-        ts: "2026-07-01T00:00:00+00:00".into(),
-        kind: "tool".into(),
-        name: "terminal".into(),
-        agent_id: "workspace".into(),
-        session_id: None,
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-        cost_usd: 0.0,
-        meta_json: None,
-    })
+    db.insert(zero_billing_event(
+        "2026-07-01T00:00:00+00:00",
+        "tool",
+        "terminal",
+        "workspace",
+        None,
+        0,
+        0,
+        0,
+        0.0,
+        None,
+    ))
     .unwrap();
     let insights = db
         .query_insights(UsageInsightsQuery {
@@ -179,24 +205,142 @@ fn offset_timestamp_normalized_and_counted_in_month() {
 }
 
 #[test]
-fn estimate_cost_from_litellm_fixture() {
+fn usage_db_rebuilds_incompatible_schema_and_ignores_unknown_cost() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("usage.db");
+    // 写入旧表形状
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE usage_events (
+                id TEXT PRIMARY KEY, ts TEXT, kind TEXT, name TEXT, agent_id TEXT,
+                session_id TEXT, prompt_tokens INTEGER, completion_tokens INTEGER,
+                total_tokens INTEGER, cost_usd REAL, meta_json TEXT
+             );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO usage_events VALUES ('1','2026-07-01T00:00:00Z','llm','m','a',NULL,1,1,2,9.9,NULL)",
+            [],
+        )
+        .unwrap();
+    }
+    let db = memory::UsageDb::new(path.clone()).unwrap();
+    // 旧行应消失
+    let q = memory::UsageInsightsQuery {
+        period: memory::UsagePeriod::Year,
+        as_of: Some("2026-07-13T00:00:00Z".into()),
+        agent_id: None,
+    };
+    let insights = db.query_insights(q.clone()).unwrap();
+    assert_eq!(insights.kpis.calls, 0);
+
+    db.insert(memory::NewUsageEvent {
+        ts: "2026-07-10T12:00:00Z".into(),
+        kind: "llm".into(),
+        name: "m".into(),
+        agent_id: "a".into(),
+        session_id: None,
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 15,
+        cost_usd: 0.0,
+        cost_status: Some("unknown".into()),
+        cost_source: Some("none".into()),
+        pricing_version: None,
+        billing_provider: None,
+        billing_base_url: None,
+        billing_mode: None,
+        meta_json: None,
+    })
+    .unwrap();
+    db.insert(memory::NewUsageEvent {
+        ts: "2026-07-10T13:00:00Z".into(),
+        kind: "llm".into(),
+        name: "m2".into(),
+        agent_id: "a".into(),
+        session_id: None,
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 15,
+        cost_usd: 1.25,
+        cost_status: Some("estimated".into()),
+        cost_source: Some("official_docs_snapshot".into()),
+        pricing_version: Some("test".into()),
+        billing_provider: Some("openai".into()),
+        billing_base_url: None,
+        billing_mode: None,
+        meta_json: None,
+    })
+    .unwrap();
+    let insights = db.query_insights(q).unwrap();
+    assert!((insights.kpis.cost_usd - 1.25).abs() < 1e-9);
+    assert_eq!(insights.kpis.tokens, 30);
+    assert_eq!(insights.unpriced_llm_events, 1);
+}
+
+#[test]
+fn estimate_usage_cost_official_snapshot_and_unknown() {
+    use memory::{estimate_usage_cost, CostStatus, UsageTokens};
+    let usage = UsageTokens {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        request_count: 1,
+    };
+    let r = estimate_usage_cost(
+        "gpt-4o-mini",
+        &usage,
+        Some("openai"),
+        None,
+        None,
+    );
+    assert_eq!(r.status, CostStatus::Estimated);
+    assert!(r.amount_usd.unwrap() > 0.0);
+    let unk = estimate_usage_cost(
+        "totally-unknown-model-xyz",
+        &usage,
+        Some("custom"),
+        Some("http://localhost:9"),
+        None,
+    );
+    assert_eq!(unk.status, CostStatus::Unknown);
+    assert!(unk.amount_usd.is_none() || unk.amount_usd == Some(0.0));
+}
+
+#[test]
+fn estimate_usage_cost_reads_openrouter_cache_file() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let dir = TempDir::new().unwrap();
+    use memory::{estimate_usage_cost, CostStatus, UsageTokens};
+    let dir = tempfile::tempdir().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+    let cache = dir.path().join("openrouter-model-pricing.json");
     std::fs::write(
-        dir.path().join("litellm-model-meta.json"),
-        r#"{
-          "gpt-4o-mini": {
-            "input_cost_per_token": 0.00000015,
-            "output_cost_per_token": 0.0000006,
-            "max_input_tokens": 128000
-          }
-        }"#,
+        &cache,
+        r#"{"fetched_at":"2099-01-01T00:00:00Z","models":{"test/or-model":{"prompt":0.000001,"completion":0.000002}}}"#,
     )
     .unwrap();
-    let cost = memory::estimate_llm_cost("gpt-4o-mini", 1_000_000, 1_000_000);
-    // 0.15 + 0.6 = 0.75
-    assert!((cost - 0.75).abs() < 1e-9);
-    assert_eq!(memory::estimate_llm_cost("unknown-model", 100, 100), 0.0);
+    let usage = UsageTokens {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        request_count: 1,
+        ..Default::default()
+    };
+    let r = estimate_usage_cost(
+        "test/or-model",
+        &usage,
+        Some("openrouter"),
+        Some("https://openrouter.ai/api/v1"),
+        None,
+    );
+    assert_eq!(r.status, CostStatus::Estimated);
+    assert!((r.amount_usd.unwrap() - 3.0).abs() < 1e-6); // 1.0 + 2.0 per 1M
     std::env::remove_var("ASTRO_MEMORY_DIR");
 }

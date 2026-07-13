@@ -147,7 +147,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     assert!(items.iter().any(|i| matches!(
         i,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
-        if u.prompt_tokens == 22 && u.completion_tokens == 8
+        if u.prompt_tokens() == 22 && u.completion_tokens() == 8
     )));
     assert!(items.iter().any(|i| matches!(
         i,
@@ -399,7 +399,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     assert!(items.iter().any(|i| matches!(
         i,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
-        if u.prompt_tokens == 10 && u.completion_tokens == 5
+        if u.prompt_tokens() == 10 && u.completion_tokens() == 5
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }

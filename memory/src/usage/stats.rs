@@ -167,10 +167,19 @@ pub fn record_tool_call(
             name: toolset,
             agent_id: id.clone(),
             session_id: sid.clone(),
-            prompt_tokens: 0,
-            completion_tokens: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
             total_tokens: 0,
             cost_usd: 0.0,
+            cost_status: None,
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
             meta_json: Some(serde_json::json!({ "tool": tool_name }).to_string()),
         });
         if tool_name == "skills" {
@@ -186,10 +195,19 @@ pub fn record_tool_call(
                     name: skill_id.to_string(),
                     agent_id: id,
                     session_id: sid,
-                    prompt_tokens: 0,
-                    completion_tokens: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    cache_read_tokens: 0,
+                    cache_write_tokens: 0,
+                    reasoning_tokens: 0,
                     total_tokens: 0,
                     cost_usd: 0.0,
+                    cost_status: None,
+                    cost_source: None,
+                    pricing_version: None,
+                    billing_provider: None,
+                    billing_base_url: None,
+                    billing_mode: None,
                     meta_json: None,
                 });
             }
@@ -203,14 +221,12 @@ pub fn record_tool_call(
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::sync::Mutex;
 
-    /// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use crate::usage::test_env::lock_astro_memory_dir;
 
     #[test]
     fn records_toolset_and_skill_counts() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = lock_astro_memory_dir();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -273,7 +289,7 @@ mod tests {
 
     #[test]
     fn skills_without_skill_id_only_bumps_toolset() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = lock_astro_memory_dir();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

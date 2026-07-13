@@ -52,8 +52,8 @@ pub use manager::{
 };
 pub use message_db::{build_conversation_context, MessageDb, ScrolledMessage};
 pub use session_store::{
-    ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit, SessionStore,
-    StoredMessage, StoredSession,
+    BillingDelta, ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit,
+    SessionBillingRow, SessionStore, StoredMessage, StoredSession,
 };
 pub use workspace::{
     active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
@@ -95,7 +95,9 @@ pub use usage_db::{
     period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
     UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
 };
-pub use usage_pricing::estimate_llm_cost;
+pub use usage_pricing::{
+    estimate_usage_cost, resolve_billing_route, BillingRoute, CostResult, CostStatus, UsageTokens,
+};
 pub use orchestration_db::{
     orchestration_db_path, NewOrchestration, NewOrchestrationStep, OrchestrationDb,
     OrchestrationRow, OrchestrationStatus, StepRow, StepStatus,

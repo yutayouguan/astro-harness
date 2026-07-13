@@ -30,6 +30,7 @@ use tokio::task::JoinSet;
 use crate::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
 use crate::interrupt::Interrupt;
 use crate::loop_::AgentLoop;
+use crate::usage_record::apply_llm_usage_dual_write;
 
 tokio::task_local! {
     /// 同步 `delegate` 子路径上浮 HITL 时读取；由串行工具执行注入。
@@ -321,28 +322,28 @@ async fn emit(
     tx.send(Ok(item)).await.is_ok()
 }
 
-/// 尽力写入一条 `kind=llm` 事件；失败忽略。
+/// 尽力双写 `kind=llm` 事件与会话账单；失败忽略。
 async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &Usage) {
-    if usage.prompt_tokens == 0 && usage.completion_tokens == 0 && usage.total_tokens == 0 {
+    if usage.is_empty() {
         return;
     }
     let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
-    let session_id = Some(agent.session_id().to_string());
+    let session_id = agent.session_id().to_string();
+    let provider = agent.chat_provider().to_string();
+    let base_url = agent.chat_base_url().to_string();
+    let api_key = agent.chat_api_key().to_string();
     drop(agent);
-    let cost = memory::estimate_llm_cost(model, usage.prompt_tokens, usage.completion_tokens);
-    memory::UsageDb::try_record(memory::NewUsageEvent {
-        ts: chrono::Utc::now().to_rfc3339(),
-        kind: "llm".into(),
-        name: model.to_string(),
-        agent_id,
-        session_id,
-        prompt_tokens: i64::from(usage.prompt_tokens),
-        completion_tokens: i64::from(usage.completion_tokens),
-        total_tokens: i64::from(usage.total_tokens),
-        cost_usd: cost,
-        meta_json: None,
-    });
+    apply_llm_usage_dual_write(
+        &agent_id,
+        Some(&session_id),
+        model,
+        usage,
+        &provider,
+        &base_url,
+        &api_key,
+        None,
+    );
 }
 
 /// 发送 Error 后立即发送 Done；若有已累计 usage 则先写入 `usage.db`。

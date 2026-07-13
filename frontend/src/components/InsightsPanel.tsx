@@ -10,14 +10,11 @@ import {
   Calendar,
   CalendarDays,
   CalendarRange,
-  ChevronDown,
-  ChevronRight,
   Coins,
   Cpu,
   DollarSign,
   GitBranch,
   Layers,
-  MessageSquare,
   Network,
   Plug,
   Puzzle,
@@ -51,6 +48,7 @@ type UsageInsights = {
     by_agent: RankItem[];
     by_model: RankItem[];
   };
+  unpriced_llm_events?: number;
 };
 
 type CollaborationStep = {
@@ -102,8 +100,8 @@ type TraceEvent = {
   kind: string;
   name: string;
   agent_id: string;
-  prompt_tokens: number;
-  completion_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
   total_tokens: number;
   cost_usd: number;
   parent_id?: string | null;
@@ -601,9 +599,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
 
   const modelsEmpty =
     data && data.rankings.by_model.length === 0 && data.kpis.tokens === 0;
-  const hasUnpriced =
-    data &&
-    data.rankings.by_model.some((m) => m.calls > 0 && m.cost_usd <= 0);
+  const hasUnpriced = (data?.unpriced_llm_events ?? 0) > 0;
 
   const collabStats = useMemo(() => {
     const orch = collab?.orchestrations ?? [];

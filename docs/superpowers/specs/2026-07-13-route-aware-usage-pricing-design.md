@@ -1,7 +1,8 @@
 # 路由感知用量与费用估算
 
 **日期:** 2026-07-13  
-**状态:** 已批准（对话确认）  
+**状态:** 已实现  
+**实现分支:** `feat/route-aware-usage-pricing`  
 **取代:** [Session Store P1a billing](./2026-07-13-session-store-p1a-billing-design.md)（该文档标记为已取代；冲突处以本文为准）  
 **关联:** [Usage Insights](./2026-07-13-usage-insights-design.md)、[Session Store](./2026-07-13-session-store-design.md)  
 **外部参考（正文不再重复品牌名）:** NousResearch agent `usage_pricing` / CanonicalUsage 语义

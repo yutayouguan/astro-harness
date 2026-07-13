@@ -31,28 +31,61 @@ pub fn parse_openai_usage(v: &Value) -> Option<Usage> {
     if u.is_null() {
         return None;
     }
-    let prompt = u
+    let prompt_total = u
         .get("prompt_tokens")
         .or_else(|| u.get("input_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
-    let completion = u
+    let output = u
         .get("completion_tokens")
         .or_else(|| u.get("output_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
-    let total = u
-        .get("total_tokens")
+    let details = u.get("prompt_tokens_details");
+    let mut cache_read = details
+        .and_then(|d| d.get("cached_tokens"))
         .and_then(|x| x.as_u64())
-        .map(|t| t as u32)
-        .unwrap_or_else(|| prompt.saturating_add(completion));
-    if prompt == 0 && completion == 0 && total == 0 {
+        .unwrap_or(0) as u32;
+    if cache_read == 0 {
+        cache_read = u
+            .get("cache_read_input_tokens")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0) as u32;
+    }
+    let mut cache_write = details
+        .and_then(|d| d.get("cache_write_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    if cache_write == 0 {
+        cache_write = u
+            .get("cache_creation_input_tokens")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0) as u32;
+    }
+    let input = prompt_total
+        .saturating_sub(cache_read)
+        .saturating_sub(cache_write);
+    let reasoning = u
+        .get("completion_tokens_details")
+        .or_else(|| u.get("output_tokens_details"))
+        .and_then(|d| d.get("reasoning_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    if input == 0
+        && output == 0
+        && cache_read == 0
+        && cache_write == 0
+        && reasoning == 0
+    {
         return None;
     }
     Some(Usage {
-        prompt_tokens: prompt,
-        completion_tokens: completion,
-        total_tokens: total,
+        input_tokens: input,
+        output_tokens: output,
+        cache_read_tokens: cache_read,
+        cache_write_tokens: cache_write,
+        reasoning_tokens: reasoning,
+        request_count: 1,
     })
 }
 
@@ -741,9 +774,10 @@ mod tests {
         assert_eq!(
             chunk.usage,
             Some(Usage {
-                prompt_tokens: 12,
-                completion_tokens: 34,
-                total_tokens: 46,
+                input_tokens: 12,
+                output_tokens: 34,
+                request_count: 1,
+                ..Default::default()
             })
         );
         assert!(chunk.token.is_none());
@@ -754,7 +788,7 @@ mod tests {
         let data = r#"{"choices":[{"delta":{"content":"hi"},"finish_reason":null}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#;
         let chunk = extract_openai_delta(data).expect("token");
         assert_eq!(chunk.token.as_deref(), Some("hi"));
-        assert_eq!(chunk.usage.map(|u| u.total_tokens), Some(2));
+        assert_eq!(chunk.usage.map(|u| u.total_tokens()), Some(2));
     }
 
     #[test]
@@ -776,6 +810,7 @@ mod tests {
     }
 
     #[test]
+    #[test]
     fn gemini_openai_base_not_suffixed_with_v1() {
         let base = openai_compatible_base(
             "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -785,5 +820,24 @@ mod tests {
             "https://generativelanguage.googleapis.com/v1beta/openai"
         );
         assert!(!base.ends_with("/openai/v1"));
+    }
+
+    #[test]
+    fn parse_openai_usage_splits_cached_prompt_tokens() {
+        let v = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+                "prompt_tokens_details": { "cached_tokens": 40, "cache_write_tokens": 10 }
+            }
+        });
+        let u = parse_openai_usage(&v).expect("usage");
+        assert_eq!(u.input_tokens, 50); // 100 - 40 - 10
+        assert_eq!(u.output_tokens, 20);
+        assert_eq!(u.cache_read_tokens, 40);
+        assert_eq!(u.cache_write_tokens, 10);
+        assert_eq!(u.prompt_tokens(), 100);
+        assert_eq!(u.completion_tokens(), 20);
     }
 }

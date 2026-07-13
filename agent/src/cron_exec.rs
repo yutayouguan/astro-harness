@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
 use crate::messages::to_provider_messages;
+use crate::usage_record::apply_llm_usage_dual_write;
 
 /// 执行定时任务所需的 LLM 凭据与路由信息。
 ///
@@ -137,6 +138,21 @@ pub async fn execute_job_with_roots(
     } else {
         creds.model.clone()
     };
+    let billing_provider = if creds.provider.trim().is_empty() {
+        None
+    } else {
+        Some(creds.provider.clone())
+    };
+    let billing_base_url = if creds.base_url.trim().is_empty() {
+        None
+    } else {
+        Some(creds.base_url.clone())
+    };
+    let billing_api_key = if creds.api_key.trim().is_empty() {
+        None
+    } else {
+        Some(creds.api_key.clone())
+    };
 
     let exec_result = tokio::time::timeout(
         Duration::from_secs(600),
@@ -170,10 +186,19 @@ pub async fn execute_job_with_roots(
             name: job.id.clone(),
             agent_id: job.agent_id.clone(),
             session_id: row.session_id.clone(),
-            prompt_tokens: 0,
-            completion_tokens: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
             total_tokens: 0,
             cost_usd: 0.0,
+            cost_status: None,
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
             meta_json: Some(
                 serde_json::json!({ "title": job.title, "trigger": trigger }).to_string(),
             ),
@@ -181,30 +206,20 @@ pub async fn execute_job_with_roots(
     }
 
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
-    if llm_usage.prompt_tokens > 0
-        || llm_usage.completion_tokens > 0
-        || llm_usage.total_tokens > 0
-    {
-        let cost = memory::estimate_llm_cost(
+    if !llm_usage.is_empty() {
+        apply_llm_usage_dual_write(
+            &job.agent_id,
+            row.session_id.as_deref(),
             &model_for_usage,
-            llm_usage.prompt_tokens,
-            llm_usage.completion_tokens,
-        );
-        memory::UsageDb::try_record(memory::NewUsageEvent {
-            ts: Utc::now().to_rfc3339(),
-            kind: "llm".into(),
-            name: model_for_usage,
-            agent_id: job.agent_id.clone(),
-            session_id: row.session_id.clone(),
-            prompt_tokens: i64::from(llm_usage.prompt_tokens),
-            completion_tokens: i64::from(llm_usage.completion_tokens),
-            total_tokens: i64::from(llm_usage.total_tokens),
-            cost_usd: cost,
-            meta_json: Some(
+            &llm_usage,
+            billing_provider.as_deref().unwrap_or(""),
+            billing_base_url.as_deref().unwrap_or(""),
+            billing_api_key.as_deref().unwrap_or(""),
+            Some(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),
             ),
-        });
+        );
     }
 
     Ok(row)
