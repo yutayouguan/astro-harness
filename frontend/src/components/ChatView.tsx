@@ -953,6 +953,14 @@ export default function ChatView({
                       {m.attachments && m.attachments.length > 0 && (
                         <MessageAttachments items={m.attachments} />
                       )}
+                      {/* 顺序对齐常见 Agent UI：先思考，再工具，再 GenUI 卡，最后正文 */}
+                      {m.reasoning ? (
+                        <MsgReasoning
+                          reasoning={m.reasoning}
+                          active={reasoningActive}
+                          durationSec={m.reasoningDurationSec}
+                        />
+                      ) : null}
                       {m.activities && m.activities.length > 0 && (
                         <ActivityCards
                           items={m.activities}
@@ -976,13 +984,6 @@ export default function ChatView({
                         <div className="msg-timestamp">
                           {new Date(m.createdAt).toLocaleTimeString()}
                         </div>
-                      ) : null}
-                      {m.reasoning ? (
-                        <MsgReasoning
-                          reasoning={m.reasoning}
-                          active={reasoningActive}
-                          durationSec={m.reasoningDurationSec}
-                        />
                       ) : null}
                       {!m.content &&
                       !m.reasoning &&

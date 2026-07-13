@@ -51,7 +51,7 @@
 .msg-row {
   display: flex;
   gap: 12px;
-  width: min(100%, 760px);
+  width: min(100%, 860px);
   animation: rise 0.3s ease both;
 }
 
@@ -82,13 +82,17 @@
   align-items: flex-start;
   gap: 6px;
   min-width: 0;
-  max-width: min(78%, 620px);
+  /* 占满 msg-row 可用宽度，避免短回复把气泡缩成细条 */
+  width: 100%;
+  max-width: min(92%, 680px);
   flex: 1;
 }
 
 .msg-row.user .msg-stack {
   align-items: flex-end;
   margin-left: auto;
+  width: fit-content;
+  max-width: min(78%, 620px);
 }
 
 .msg-stack .bubble {
@@ -98,6 +102,9 @@
 .bubble.assistant {
   display: flex;
   flex-direction: column;
+  /* 助手气泡铺满 stack，活动卡 / A2UI / 正文同一列宽 */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* 助手气泡右下角 Tokens / 速度角标：常显，不与下方悬停操作条抢位 */
@@ -266,7 +273,7 @@ html[data-theme="light"] .msg-actions {
 }
 
 .bubble {
-  max-width: min(78%, 620px);
+  max-width: min(92%, 680px);
   padding: 13px 16px;
   border-radius: 18px;
   line-height: 1.62;
@@ -281,6 +288,8 @@ html[data-theme="light"] .msg-actions {
   border-bottom-right-radius: 8px;
   box-shadow: 0 10px 28px rgba(79, 70, 229, 0.28);
   white-space: pre-wrap;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .bubble.assistant {
