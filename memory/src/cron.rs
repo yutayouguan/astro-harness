@@ -839,7 +839,7 @@ mod tests {
     fn claim_due_advances_schedule_without_output_files() {
         let dir = TempDir::new().unwrap();
         let store = CronStore::open(dir.path()).unwrap();
-        let job = store.add("every:1m", "x").unwrap();
+        store.add("every:1m", "x").unwrap();
         let mut file = store.load().unwrap();
         file.jobs[0].next_run_at = Some("2000-01-01T00:00:00+00:00".into());
         store.save(&file).unwrap();
