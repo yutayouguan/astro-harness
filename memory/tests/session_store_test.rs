@@ -378,3 +378,44 @@ fn open_repairs_broken_fts_delete_command_triggers() {
     assert_eq!(store.get_messages("s1").unwrap().len(), 1);
 }
 
+#[test]
+fn ensure_session_is_idempotent() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    let store = SessionStore::open(&path).unwrap();
+    store.ensure_session("s1", "test").unwrap();
+    store.ensure_session("s1", "other").unwrap();
+    let s = store.get_session("s1").unwrap().unwrap();
+    assert_eq!(s.source, "test"); // 冲突时不覆盖
+}
+
+#[test]
+fn open_backfills_sessions_from_orphan_messages() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    {
+        let _ = SessionStore::open(&path).unwrap();
+    }
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
+        conn.execute(
+            "INSERT INTO messages (session_id, role, content, timestamp)
+             VALUES ('orphan', 'user', 'hello orphan', 100.0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages (session_id, role, content, timestamp)
+             VALUES ('orphan', 'assistant', 'hi', 101.0)",
+            [],
+        )
+        .unwrap();
+    }
+    let store = SessionStore::open(&path).unwrap();
+    let s = store.get_session("orphan").unwrap().expect("backfilled");
+    assert_eq!(s.source, "legacy");
+    assert_eq!(s.message_count, 2);
+    assert_eq!(s.started_at, 100.0);
+}
+

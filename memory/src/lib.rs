@@ -4,26 +4,41 @@
 //! 工具启用配置、调用计数、定时任务与图标资源等能力聚合为可被 agent 与前端调用的 API。
 //! 数据根目录默认为 `~/.astro`（可通过环境变量覆盖，见 `workspace` 模块）。
 
-pub mod artifact_db;
-pub mod files;
-pub mod message_db;
-pub mod session_store;
-pub mod manager;
-pub mod workspace;
-pub mod agent_icons;
-pub mod logging;
+pub mod agent;
+pub mod artifacts;
 pub mod cron;
-pub mod cron_run_db;
-pub mod tools_enabled;
-pub mod tool_calls;
 pub mod dreaming;
-pub mod usage_stats;
-pub mod usage_db;
-pub mod usage_pricing;
-pub mod orchestration_db;
-pub mod orchestration_spawn;
-pub mod collab_insights;
+pub mod infra;
+pub mod orchestration;
+pub mod session;
+pub mod usage;
 
+// ── 域内路径（新）──────────────────────────────────────────────
+pub use agent::agent_icons;
+pub use agent::files;
+pub use agent::tools_enabled;
+pub use agent::workspace;
+
+pub use session::manager;
+pub use session::message_db;
+pub use session::store as session_store;
+
+pub use cron::run_db as cron_run_db;
+
+pub use usage::db as usage_db;
+pub use usage::pricing as usage_pricing;
+pub use usage::stats as usage_stats;
+
+pub use orchestration::collab_insights;
+pub use orchestration::db as orchestration_db;
+pub use orchestration::spawn as orchestration_spawn;
+
+pub use artifacts::db as artifact_db;
+
+pub use infra::logging;
+pub use infra::tool_calls;
+
+// ── 根级符号 re-export（保持既有 `memory::Foo` 调用方）──────────
 pub use artifact_db::{
     artifacts_db_path, category_from_name, is_junk_artifact_name, open_default, ArtifactDb,
     ArtifactRow, ArtifactSource, ReconcileReport,

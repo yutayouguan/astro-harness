@@ -138,6 +138,7 @@ impl AgentLoop {
         memory: MemoryManager,
     ) -> anyhow::Result<Self> {
         let agent_id = memory.agent_id.clone();
+        let session_messages = hydrate_session_messages(&memory, &session_id)?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -149,7 +150,7 @@ impl AgentLoop {
             session_id,
             current_turn: 0,
             tool_rounds: 0,
-            session_messages: Vec::new(),
+            session_messages,
             memory,
             tool_registry,
             mcp_hub,
@@ -663,6 +664,50 @@ pub fn validate_message_order(messages: &[Message]) -> bool {
         }
     }
     true
+}
+
+/// 从 `SessionStore` 冷启动重建 `session_messages`（权威以 DB 为准）。
+fn hydrate_session_messages(
+    memory: &MemoryManager,
+    session_id: &str,
+) -> anyhow::Result<Vec<Message>> {
+    let stored = memory.session_store.get_messages(session_id)?;
+    let mut out = Vec::with_capacity(stored.len());
+    for m in stored {
+        if let Some(msg) = stored_message_to_runtime(m)? {
+            out.push(msg);
+        }
+    }
+    Ok(out)
+}
+
+fn stored_message_to_runtime(
+    m: memory::session_store::StoredMessage,
+) -> anyhow::Result<Option<Message>> {
+    let content = m.content.unwrap_or_default();
+    let msg = match m.role.as_str() {
+        "user" => Message::user(&content),
+        "system" => Message::system(&content),
+        "assistant" => {
+            let tool_calls: Option<Vec<common::message::ToolCall>> = match m.tool_calls {
+                Some(v) => Some(serde_json::from_value(v)?),
+                None => None,
+            };
+            match tool_calls {
+                Some(calls) if !calls.is_empty() => Message::assistant_with_tools(&content, calls),
+                _ => Message::assistant(&content),
+            }
+        }
+        "tool" => match m.tool_call_id.as_deref() {
+            Some(id) => Message::tool_with_id(id, &content),
+            None => Message::tool(&content),
+        },
+        other => {
+            tracing::warn!(role = other, "skip unknown role when hydrating session");
+            return Ok(None);
+        }
+    };
+    Ok(Some(msg))
 }
 
 /// 注册编排 spawner（OnceLock，仅首次生效）。由 tools 落库后回调。

@@ -1,133 +1,18 @@
-//! Agent 工作区与 Astro 数据根目录布局。
-//!
-//! 职责：
-//! - 解析 `~/.astro`（或 `ASTRO_MEMORY_DIR`）下的多 Agent 目录约定
-//! - 工作区（`workspace` / `workspace-{id}`）的创建、列举、激活与核心模板
-//! - 日记忆（`mermaid/YYYY-MM-DD.md`）路径与初始化
-//! - 首次启动时创建目录树、状态 JSON、会话库与公共技能
-//!
-//! 不变量：
-//! - 默认 Agent id 恒为 `workspace`；其他 id 对应 `workspace-{id}` 目录
-//! - 工作区 Markdown 在 `workspace-*`，模型/工具/MCP 配置在 `agents/{id}/config.json`
-//! - `ensure_*` / `create_*` 不覆盖已存在的用户文件内容
+//! Agent 工作区生命周期：激活、创建、列举与 ensure。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::session_store::SessionStore;
 
-/// 默认 Agent 的 id / 目录名：`~/.astro/workspace`
-pub const DEFAULT_AGENT_ID: &str = "workspace";
-
-/// 当前激活 Agent 的持久化文件名（位于数据根目录）
-const ACTIVE_AGENT_FILE: &str = "active-agent.json";
-
-/// 默认记忆/工作空间根目录：`$ASTRO_MEMORY_DIR` 或 `~/.astro`
-pub fn default_memory_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("ASTRO_MEMORY_DIR") {
-        return PathBuf::from(dir);
-    }
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map(|home| PathBuf::from(home).join(".astro"))
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
-
-/// 解析 Agent 工作区路径。
-///
-/// - `workspace`（默认）→ `{base}/workspace`
-/// - 其他 id → `{base}/workspace-{id}`
-pub fn agent_workspace_dir(base: &Path, agent_id: &str) -> PathBuf {
-    let id = normalize_agent_id(agent_id);
-    if id == DEFAULT_AGENT_ID {
-        base.join(DEFAULT_AGENT_ID)
-    } else {
-        base.join(format!("workspace-{id}"))
-    }
-}
-
-/// Agent 配置目录：`{base}/agents/{id}/`（模型、工具、MCP 等，不含工作区文件）
-pub fn agent_config_dir(base: &Path, agent_id: &str) -> PathBuf {
-    let id = normalize_agent_id(agent_id);
-    base.join("agents").join(id)
-}
-
-/// 从工作区目录名解析 agent id（`workspace` / `workspace-xxx`）
-pub fn agent_id_from_workspace_dir_name(name: &str) -> Option<String> {
-    if name == DEFAULT_AGENT_ID {
-        return Some(DEFAULT_AGENT_ID.to_string());
-    }
-    name.strip_prefix("workspace-")
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-}
-
-/// 返回当前激活 Agent 的工作区（缺省 `workspace`）
-pub fn default_agent_workspace_dir() -> PathBuf {
-    let base = default_memory_dir();
-    let id = active_agent_id(&base);
-    agent_workspace_dir(&base, &id)
-}
-
-/// 兼容旧单参调用：等价于 `agent_workspace_dir(base, DEFAULT_AGENT_ID)`
-pub fn default_workspace_dir(base: &Path) -> PathBuf {
-    agent_workspace_dir(base, DEFAULT_AGENT_ID)
-}
-
-/// 规范化 agent id：小写、空格转 `-`，仅保留 `[a-z0-9_-]`
-/// 纯非 ASCII 名称（如中文）用 `agent-{hash}` 兜底，避免落到默认 `workspace`
-pub fn normalize_agent_id(raw: &str) -> String {
-    let s = raw.trim().to_lowercase().replace(' ', "-");
-    let cleaned: String = s
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
-    let cleaned = cleaned
-        .trim_matches('-')
-        .trim_matches('_')
-        .to_string();
-    if cleaned.is_empty() {
-        if raw.trim().is_empty() {
-            return DEFAULT_AGENT_ID.to_string();
-        }
-        let mut hash: u32 = 2166136261;
-        for b in raw.trim().bytes() {
-            hash ^= u32::from(b);
-            hash = hash.wrapping_mul(16777619);
-        }
-        return format!("agent-{:x}", hash);
-    }
-    cleaned
-}
-
-/// 读取当前激活的 Agent id（缺省为 `workspace`）
-pub fn active_agent_id(base: &Path) -> String {
-    let path = base.join(ACTIVE_AGENT_FILE);
-    let Ok(text) = fs::read_to_string(&path) else {
-        return DEFAULT_AGENT_ID.to_string();
-    };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return DEFAULT_AGENT_ID.to_string();
-    };
-    v.get("id")
-        .and_then(|x| x.as_str())
-        .map(normalize_agent_id)
-        .filter(|id| agent_workspace_dir(base, id).is_dir())
-        .unwrap_or_else(|| DEFAULT_AGENT_ID.to_string())
-}
-
-/// 设置当前激活的 Agent（目标工作区必须已存在）
-pub fn set_active_agent(base: &Path, agent_id: &str) -> anyhow::Result<String> {
-    let id = normalize_agent_id(agent_id);
-    let dir = agent_workspace_dir(base, &id);
-    if !dir.is_dir() {
-        anyhow::bail!("Agent 工作区不存在: {id}");
-    }
-    let path = base.join(ACTIVE_AGENT_FILE);
-    let json = serde_json::json!({ "id": id });
-    fs::write(&path, format!("{}\n", serde_json::to_string_pretty(&json)?))?;
-    Ok(id)
-}
+use super::paths::{
+    active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
+    daily_memory_path, default_memory_dir, normalize_agent_id, set_active_agent, DEFAULT_AGENT_ID,
+};
+use super::templates::{
+    render_template, AGENT_SUBDIRS, CORE_FILES, CREATE_AGENT_SKILL, ENSURED_DIRS,
+    STATE_JSON_FILES,
+};
 
 /// 单个 Agent 的运行时配置，持久化于 `agents/{id}/config.json`。
 ///
@@ -648,38 +533,6 @@ _(随协作持续更新)_
     Ok(())
 }
 
-/// 某 Agent 工作区内的日记忆路径：`mermaid/YYYY-MM-DD.md`
-pub fn daily_memory_path(workspace: &Path, date: &str) -> PathBuf {
-    workspace.join("mermaid").join(format!("{date}.md"))
-}
-
-/// 今日日期（本地）`YYYY-MM-DD`
-pub fn today_date_string() -> String {
-    chrono::Local::now().format("%Y-%m-%d").to_string()
-}
-
-/// 列出工作区内已有的日记忆文件名（不含扩展名），新→旧
-pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
-    let dir = workspace.join("mermaid");
-    let Ok(entries) = fs::read_dir(&dir) else {
-        return Vec::new();
-    };
-    let mut dates: Vec<String> = entries
-        .flatten()
-        .filter_map(|e| {
-            let path = e.path();
-            if path.extension().and_then(|x| x.to_str()) != Some("md") {
-                return None;
-            }
-            path.file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-        })
-        .filter(|s| s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-'))
-        .collect();
-    dates.sort();
-    dates.reverse();
-    dates
-}
 
 /// 确保日记忆文件存在（不存在则写模板）
 pub fn ensure_daily_memory(workspace: &Path, date: &str) -> anyhow::Result<PathBuf> {
@@ -695,233 +548,6 @@ pub fn ensure_daily_memory(workspace: &Path, date: &str) -> anyhow::Result<PathB
     Ok(path)
 }
 
-/// 工作区核心 Markdown 模板（文件名 → 模板正文，含 `{{ID}}` / `{{NAME}}` 占位符）
-const CORE_FILES: &[(&str, &str)] = &[
-    ("AGENT.md", TEMPLATE_AGENT),
-    ("IDENTITY.md", TEMPLATE_IDENTITY),
-    ("USER.md", TEMPLATE_USER),
-    ("SOUL.md", TEMPLATE_SOUL),
-    ("AGENTS.md", TEMPLATE_AGENTS),
-    ("TOOLS.md", TEMPLATE_TOOLS),
-    ("MEMORY.md", TEMPLATE_MEMORY),
-];
-
-/// Agent 工作区内需要确保存在的子目录
-const AGENT_SUBDIRS: &[&str] = &["mermaid", "skills"];
-
-const TEMPLATE_AGENT: &str = r#"# AGENT.md — 本记忆空间的 Agent
-
-_描述这个 Agent 的定位、擅长领域与边界。新建 Agent 时请改写。_
-
-- **Name:** {{NAME}}
-- **Id:** {{ID}}
-- **Focus:** _(擅长什么？服务哪类任务？)_
-- **Scope:** _(不做什么？)_
-
-## 记忆空间
-
-- **长期精炼：** `MEMORY.md` — 跨会话稳定事实与决策
-- **每日记忆：** `mermaid/YYYY-MM-DD.md` — 当日流水，可再提炼进 MEMORY.md
-- **专属技能：** `skills/` — 仅本 Agent 可用
-- **公共技能：** `~/.astro/skills` — 所有 Agent 共享
-
-## 启动检查
-
-会话开始时优先依赖运行时注入的上下文；需要细节时再读本目录文件。
-"#;
-
-const TEMPLATE_IDENTITY: &str = r#"# IDENTITY.md — Astro Agent 是谁
-
-_首次对话时填写，并随协作一起演化。_
-
-- **Name:** {{NAME}}
-- **Role:** 自我进化的 AI 助手与数字搭档
-- **Vibe:** 干练、有主见、务实
-- **Emoji:** _(可选：上传到 assets/emoji.png)_
-- **Avatar:** _(可选：上传到 assets/avatar.png)_
-
-## 职责
-
-- 理解用户目标，用工具真正落地，而不是口头计划
-- 维护本记忆空间中的记忆与规范文件
-- 在质量与速度之间做清晰取舍，并说明理由
-"#;
-
-const TEMPLATE_USER: &str = r#"# USER.md — 关于用户
-
-_了解你在帮助的人。随协作持续更新。_
-
-- **Name:**
-- **What to call them:**
-- **Timezone:** Asia/Shanghai
-- **Language:** 中文为主
-- **Notes:**
-
-## 协作偏好
-
-- _(喜欢怎样的回复长度？是否偏好先给结论？)_
-- _(常用技术栈 / 项目背景)_
-- _(需要避免的风格或行为)_
-
-## Context
-
-_(他们在做什么项目？关心什么？什么会让他们烦？什么会让他们笑？)_
-"#;
-
-const TEMPLATE_SOUL: &str = r#"# SOUL.md — 表达风格与行为准则
-
-你不是复读机式的客服。你是正在形成稳定人格的协作者。
-
-## 核心原则
-
-**真正有用，而不是表演有用。** 跳过「好问题！」「我很乐意帮忙！」——直接做事。
-
-**有主见。** 允许不同意、有偏好、觉得某事有趣或无聊。没有个性的助手只是多了几步的搜索引擎。
-
-**先自助再提问。** 先读文件、查上下文、搜索；卡住了再问。目标是带着答案回来，而不是带着问题。
-
-**用能力赢得信任。** 对外部动作（发信、公开发布）谨慎；对内部动作（阅读、整理、学习）大胆。
-
-## 边界
-
-- 隐私默认不外泄
-- 不确定时，先问再对外行动
-- 不伪造执行结果、测试报告或 API 响应
-- 破坏性操作前先确认
-
-## 气质
-
-该短则短，该细则细。不是企业话术，不是谄媚，只是靠谱。
-
-## 连续性
-
-每次会话你都是「醒来」的。这些文件就是你的记忆——读它们，更新它们。
-"#;
-
-const TEMPLATE_AGENTS: &str = r#"# AGENTS.md — 本记忆空间的工作方式
-
-本目录是这个 Agent 的家。按家的标准对待它。
-
-## 会话启动
-
-优先使用运行时注入的启动上下文。其中可能已包含：
-
-- `AGENT.md` / `IDENTITY.md` / `SOUL.md` / `USER.md`
-- `MEMORY.md`（长期精炼记忆）
-- 当日 `mermaid/YYYY-MM-DD.md`（每日记忆）
-
-不要重复通读启动文件，除非：
-
-1. 用户明确要求
-2. 注入上下文缺失你需要的信息
-3. 需要比启动上下文更深的跟进阅读
-
-## 记忆空间
-
-- **长期精炼：** `MEMORY.md` — 跨会话稳定事实与决策（提炼后的结论）
-- **每日记忆：** `mermaid/YYYY-MM-DD.md` — 当日流水与事件
-- **用户档案：** `USER.md` — 称呼、背景、协作偏好
-- **会话检索：** `~/.astro/sessions/`（全局会话库）
-
-想记住的事必须写入文件。「心里记一下」撑不过重启。
-
-## 技能
-
-- **专属：** 本目录 `skills/` — 仅本 Agent
-- **公共：** `~/.astro/skills` — 所有 Agent 共享
-
-## 职责范围
-
-**可自由做：**
-
-- 读文件、探索、整理、学习
-- 在本记忆空间内工作
-- 用工具验证后再下结论
-
-**先问再做：**
-
-- 对外发送（邮件、社媒、公开帖）
-- 破坏性命令、不可逆删除
-- 改动系统级配置（crontab、shell rc 等）
-
-## 协作原则
-
-1. 结论先行，细节按需展开
-2. 改文件前先读现有内容
-3. 用绝对路径操作文件
-4. 犯错就记进相关文件，避免未来的自己重蹈覆辙
-"#;
-
-const TEMPLATE_TOOLS: &str = r#"# TOOLS.md — 工具与环境备忘
-
-Skills 定义工具「怎么用」。本文件记录「你这台机器上的具体细节」，避免口头记住却从未写入。
-
-## 写什么
-
-- SSH 主机与别名
-- 常用目录与绝对路径
-- 偏好的模型 / Provider
-- 设备昵称、TTS 音色
-- 任何环境相关、不宜写进共享 Skill 的信息
-
-## 示例
-
-```markdown
-### 路径
-
-- 本记忆空间 → 当前 Agent 工作区
-- 公共技能 → ~/.astro/skills
-- 数据根目录 → ~/.astro
-
-### Provider
-
-- 默认：……
-```
-
-## 为什么单独放
-
-Skills 可共享；你的环境是你的。分开后更新 Skill 不会冲掉本地备忘，分享 Skill 也不会泄露基础设施。
-"#;
-
-const TEMPLATE_MEMORY: &str = r#"# MEMORY.md — 长期精炼记忆
-
-跨会话保留的结构化事实。只写提炼后的结论，日常流水请写入 `mermaid/YYYY-MM-DD.md`。
-
-- Astro 记忆空间已初始化
-"#;
-
-/// 数据根下需要确保存在的目录（相对 `~/.astro`）
-const ENSURED_DIRS: &[&str] = &[
-    "workspace",
-    "agents",
-    "sessions",
-    "skills",
-    "cron",
-    "cron/output",
-    "logs",
-    "uploads",
-    "cache/images",
-    "cache/videos",
-    "cache/audio",
-];
-
-/// 数据根下需要确保存在的空 JSON 状态文件
-const STATE_JSON_FILES: &[(&str, &str)] = &[
-    ("skills-enabled.json", "{\n}\n"),
-    ("tools-enabled.json", "{\n}\n"),
-    ("mcp.json", "{\n  \"servers\": []\n}\n"),
-    ("models.json", "{\n  \"providers\": {}\n}\n"),
-    ("dreaming.json", "{\n  \"enabled\": false\n}\n"),
-    ("cron/jobs.json", "{\n  \"jobs\": []\n}\n"),
-    ("active-agent.json", "{\n  \"id\": \"workspace\"\n}\n"),
-];
-
-/// 将模板占位符替换为实际 id 与显示名
-fn render_template(template: &str, agent_id: &str, display_name: &str) -> String {
-    template
-        .replace("{{ID}}", agent_id)
-        .replace("{{NAME}}", display_name)
-}
 
 /// 确保单个 Agent 记忆空间的核心文件与子目录
 pub fn ensure_agent_space(
@@ -1044,49 +670,6 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     })
 }
 
-const CREATE_AGENT_SKILL: &str = r#"---
-name: create-agent
-description: 根据用户填写的助手模板，创建新的 Agent 工作区（workspace-{id}）、写入 agents/{id}/config.json，并填充 AGENT/IDENTITY/SOUL/USER/MEMORY 等 md 文件。用户说「帮我创建一个助手」或点击「新建 Agent」时使用。
----
-
-# 创建 Agent（记忆空间）
-
-当用户用下面模板（或等价描述）要求新建助手时，执行本技能。
-
-## 用户模板
-
-```
-帮我创建一个助手：名称是「」，背景经历是「」，说话风格是「」，主要帮我做「」，不要做「」，请称呼我为「」，我的偏好是「」
-```
-
-## 目录约定
-
-| 路径 | 用途 |
-|------|------|
-| `~/.astro/workspace/` | 默认 Agent 工作区 |
-| `~/.astro/workspace-{id}/` | 其他 Agent 工作区 |
-| `~/.astro/agents/{id}/config.json` | 该 Agent 的模型 / 工具 / MCP 配置 |
-| `~/.astro/skills/` | 公共技能（本技能所在） |
-| `workspace-{id}/skills/` | 该 Agent 专属技能 |
-
-## 步骤
-
-1. **解析**模板里「」中的字段；空字段可追问，或先用合理默认再写入。
-2. **调用工具** `create_agent`，传入：
-   - `name`：名称
-   - `activate`: false（默认不切换；需要立刻用新 Agent 时再传 true）
-   - `inherit_config`: true（默认继承全局工具/MCP，可再改）
-   - `profile`：background / style / focus / avoid / call_me / preferences
-3. 工具会创建 `workspace-{id}/` 与 `agents/{id}/config.json`，并按 profile 填充各 md。
-4. 若还需微调，用 `file_ops` 编辑对应 md（不要改错工作区）。
-5. 用一两句话告诉用户：新 Agent 的 id、工作区路径、已切换为当前 Agent。
-
-## 注意
-
-- 不要覆盖默认 `workspace`。
-- 配置（模型/工具/MCP）写在 `agents/{id}/`，工作区文件写在 `workspace-{id}/`。
-- 专属技能放 `workspace-{id}/skills/`；公共技能继续用 `~/.astro/skills/`。
-"#;
 
 /// 将 create-agent 技能写入 `~/.astro/skills/`（已存在则不覆盖，便于用户定制）
 pub fn seed_create_agent_skill(base: &Path) -> anyhow::Result<bool> {
@@ -1121,6 +704,10 @@ pub struct EnsureWorkspaceReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::paths::{
+        active_agent_id, agent_workspace_dir, list_daily_memory_dates, set_active_agent,
+    };
+    use super::super::templates::{CORE_FILES, ENSURED_DIRS, STATE_JSON_FILES};
     use tempfile::TempDir;
 
     #[test]
@@ -1287,3 +874,4 @@ mod tests {
         assert_eq!(list_daily_memory_dates(&ws), vec!["2026-07-11".to_string()]);
     }
 }
+

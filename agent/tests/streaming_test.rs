@@ -158,6 +158,33 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
 
+#[test]
+fn cold_start_hydrates_session_messages_from_db() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().to_path_buf();
+    {
+        let mut agent =
+            AgentLoop::with_session_id(AgentConfig::with_defaults(path.clone()), "hydrate-me".into())
+                .unwrap();
+        agent.ensure_session("test").unwrap();
+        // 经公开 API 写入：user 落盘 + assistant 镜像
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            agent.run_turn("hello", "hydrate").await.unwrap();
+        });
+        agent.record_assistant_message("world").unwrap();
+    }
+
+    let agent =
+        AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-me".into()).unwrap();
+    assert_eq!(agent.session_messages.len(), 2);
+    assert_eq!(agent.session_messages[0].content_str(), "hello");
+    assert_eq!(agent.session_messages[1].content_str(), "world");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_persists_reasoning_and_tool_activities() {
     let dir = tempfile::tempdir().unwrap();
