@@ -386,4 +386,52 @@ impl OrchestrationDb {
         )?;
         Ok(changed > 0)
     }
+
+    /// 按 created_at ∈ [start, end) 列出编排，可选 parent_agent_id，按 created_at DESC，limit（0→50）。
+    pub fn list_in_period(
+        &self,
+        start: &str,
+        end: &str,
+        parent_agent_id: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<OrchestrationRow>> {
+        let limit = if limit == 0 { 50usize } else { limit };
+        let limit_i = limit as i64;
+        let parent = parent_agent_id.filter(|s| !s.is_empty());
+
+        if let Some(aid) = parent {
+            let sql = format!(
+                "SELECT {ORCH_SELECT_COLS} FROM orchestrations
+                 WHERE created_at >= ?1 AND created_at < ?2 AND parent_agent_id = ?3
+                 ORDER BY created_at DESC
+                 LIMIT ?4"
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
+            let rows = stmt
+                .query_map(params![start, end, aid, limit_i], orchestration_from_row)?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        } else {
+            let sql = format!(
+                "SELECT {ORCH_SELECT_COLS} FROM orchestrations
+                 WHERE created_at >= ?1 AND created_at < ?2
+                 ORDER BY created_at DESC
+                 LIMIT ?3"
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
+            let rows = stmt
+                .query_map(params![start, end, limit_i], orchestration_from_row)?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        }
+    }
+
+    /// 测试辅助：覆写 created_at / updated_at（集成测试无法使用 `#[cfg(test)]` 库方法）。
+    pub fn set_created_at_for_test(&self, id: &str, created_at: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "UPDATE orchestrations SET created_at = ?2, updated_at = ?2 WHERE id = ?1",
+            params![id, created_at],
+        )?;
+        Ok(())
+    }
 }

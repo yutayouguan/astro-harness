@@ -196,6 +196,16 @@ fn parse_as_of(as_of: Option<&str>) -> anyhow::Result<chrono::DateTime<Utc>> {
     }
 }
 
+/// 返回 period 半开区间 `[start, end)` 的 RFC3339 UTC 字符串（与 query_insights 一致）。
+pub fn period_window(
+    period: UsagePeriod,
+    as_of: Option<&str>,
+) -> anyhow::Result<(String, String)> {
+    let as_of_dt = parse_as_of(as_of)?;
+    let (start, end, _) = period_bounds(period, &as_of_dt);
+    Ok((start, end))
+}
+
 /// 将事件时间戳规范为 `…Z`（秒精度），以便与 `period_bounds` 做字典序比较。
 /// 解析失败时保留原字符串。
 fn normalize_event_ts(ts: &str) -> String {

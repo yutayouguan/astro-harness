@@ -69,8 +69,8 @@ pub use usage_stats::{
     save_usage_stats, AgentUsageStats, AgentUsageSummary,
 };
 pub use usage_db::{
-    usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery, UsagePeriod,
-    UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
+    period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
+    UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
 };
 pub use usage_pricing::estimate_llm_cost;
 pub use orchestration_db::{
