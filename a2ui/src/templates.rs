@@ -96,55 +96,7 @@ pub fn build_clarify_surface(
     question: &str,
     options: &[String],
 ) -> Vec<Value> {
-    let mut children: Vec<String> = vec!["badge".into(), "question".into()];
-    let mut components = vec![
-        json!({ "id": "root", "component": "Card", "child": "col" }),
-        json!({
-            "id": "badge",
-            "component": "Badge",
-            "text": "Clarify",
-            "variant": "info"
-        }),
-        json!({
-            "id": "question",
-            "component": "Text",
-            "text": question,
-            "variant": "h2"
-        }),
-    ];
-
-    for (i, option) in options.iter().enumerate() {
-        let btn_id = format!("opt_{i}");
-        let label_id = format!("opt_{i}_label");
-        children.push(btn_id.clone());
-        components.push(json!({
-            "id": btn_id,
-            "component": "Button",
-            "child": label_id,
-            "action": {
-                "event": {
-                    "name": "choose",
-                    "context": { "value": option }
-                }
-            }
-        }));
-        components.push(json!({
-            "id": label_id,
-            "component": "Text",
-            "text": option
-        }));
-    }
-
-    // Insert Column after root so layout order is Card → Column → children.
-    components.insert(
-        1,
-        json!({
-            "id": "col",
-            "component": "Column",
-            "children": children
-        }),
-    );
-
+    let option_values: Vec<Value> = options.iter().map(|o| json!(o)).collect();
     vec![
         json!({
             "version": "v0.9",
@@ -157,7 +109,45 @@ pub fn build_clarify_surface(
             "version": "v0.9",
             "updateComponents": {
                 "surfaceId": surface_id,
-                "components": components
+                "components": [
+                    { "id": "root", "component": "Card", "child": "col" },
+                    {
+                        "id": "col",
+                        "component": "Column",
+                        "children": ["badge", "question", "value", "submit"]
+                    },
+                    {
+                        "id": "badge",
+                        "component": "Badge",
+                        "text": "Clarify",
+                        "variant": "info"
+                    },
+                    {
+                        "id": "question",
+                        "component": "Text",
+                        "text": question,
+                        "variant": "h2"
+                    },
+                    {
+                        "id": "value",
+                        "component": "ChoicePicker",
+                        "label": "选项",
+                        "options": option_values,
+                        "required": true
+                    },
+                    {
+                        "id": "submit",
+                        "component": "Button",
+                        "child": "submit_label",
+                        "variant": "primary",
+                        "action": { "event": { "name": "choose" } }
+                    },
+                    {
+                        "id": "submit_label",
+                        "component": "Text",
+                        "text": "Submit"
+                    }
+                ]
             }
         }),
     ]

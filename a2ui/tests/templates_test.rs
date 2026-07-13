@@ -48,6 +48,9 @@ fn clarify_template_validates() {
     );
     validate_operations(&ops).unwrap();
     assert_eq!(catalog_ids(&ops), vec![ASTRO_CATALOG_ID]);
+    let names = all_component_names(&ops);
+    assert!(names.iter().any(|n| n == "ChoicePicker"));
+    assert!(names.iter().any(|n| n == "Button"));
 }
 
 #[test]

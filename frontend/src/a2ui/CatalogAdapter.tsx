@@ -9,7 +9,7 @@ import {
   Shield,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { mergeActionContext } from "./formState";
+import { mergeActionContext, missingRequiredFields } from "./formState";
 import type { A2uiComponent } from "./types";
 import { isKnownComponent } from "./validate";
 
@@ -30,6 +30,8 @@ type RenderCtx = {
   unknownLabel: string;
   fieldValues: Record<string, unknown>;
   setFieldValue: (id: string, value: unknown) => void;
+  /** True when any required field is still empty. */
+  requiredBlocked: boolean;
 };
 
 function renderChild(
@@ -114,11 +116,12 @@ function CatalogNode({
     case "Button": {
       const eventName = node.action?.event?.name ?? "click";
       const context = node.action?.event?.context ?? {};
+      const blocked = ctx.disabled || ctx.requiredBlocked;
       return (
         <button
           type="button"
           className={`a2ui-button ${node.variant === "primary" ? "is-primary" : ""}`}
-          disabled={ctx.disabled}
+          disabled={blocked}
           onClick={() =>
             ctx.onAction(
               eventName,
@@ -216,11 +219,12 @@ function CatalogNode({
       const text = typeof node.text === "string" ? node.text : "";
       const eventName = node.action?.event?.name;
       if (eventName) {
+        const blocked = ctx.disabled || ctx.requiredBlocked;
         return (
           <button
             type="button"
             className="a2ui-chip"
-            disabled={ctx.disabled}
+            disabled={blocked}
             onClick={() =>
               ctx.onAction(
                 eventName,
@@ -305,6 +309,8 @@ export function renderCatalogTree(
   const roots = components.filter((c) => !referenced.has(c.id));
   const root = roots.find((c) => c.component === "Card") ?? roots[0] ?? components[0];
   if (!root) return null;
+  const requiredBlocked =
+    missingRequiredFields(components, opts.fieldValues).length > 0;
   const ctx: RenderCtx = {
     byId,
     disabled: opts.disabled,
@@ -312,6 +318,7 @@ export function renderCatalogTree(
     unknownLabel: opts.unknownLabel,
     fieldValues: opts.fieldValues,
     setFieldValue: opts.setFieldValue,
+    requiredBlocked,
   };
   return <CatalogNode node={root} ctx={ctx} />;
 }

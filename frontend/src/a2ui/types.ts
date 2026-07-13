@@ -34,6 +34,7 @@ export type A2uiComponent = {
   value?: string | boolean;
   hint?: string;
   size?: string;
+  required?: boolean;
   options?: Array<string | { label?: string; value?: string }>;
   action?: {
     event?: {
