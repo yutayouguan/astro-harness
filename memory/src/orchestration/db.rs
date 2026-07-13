@@ -370,6 +370,28 @@ impl OrchestrationDb {
         Ok(())
     }
 
+    /// 将 `seq > failed_seq` 且仍为 pending 的步骤标为 skipped（失败/超时后跳过后续步）。
+    pub fn skip_pending_steps_after(
+        &self,
+        orchestration_id: &str,
+        failed_seq: i64,
+    ) -> anyhow::Result<usize> {
+        let now = now_rfc3339();
+        let changed = self.conn.execute(
+            "UPDATE orchestration_steps
+             SET status = ?3, finished_at = ?4
+             WHERE orchestration_id = ?1 AND seq > ?2 AND status = ?5",
+            params![
+                orchestration_id,
+                failed_seq,
+                StepStatus::Skipped.as_str(),
+                now,
+                StepStatus::Pending.as_str(),
+            ],
+        )?;
+        Ok(changed)
+    }
+
     /// CAS：仅当 status 为 `queued` 时改为 `running`，防双 spawn
     pub fn try_claim_running(&self, id: &str) -> anyhow::Result<bool> {
         let now = now_rfc3339();

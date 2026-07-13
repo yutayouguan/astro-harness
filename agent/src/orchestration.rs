@@ -78,6 +78,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
             Ok(Err(e)) => {
                 let msg = e.to_string();
                 db.set_step_failed(&step.id, &msg)?;
+                db.skip_pending_steps_after(&req.orchestration_id, step.seq)?;
                 record_orchestration_edge(&req, &orch, &step, "end", Some(false));
                 db.set_orchestration_status(
                     &req.orchestration_id,
@@ -90,6 +91,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
             Err(_) => {
                 let msg = format!("step timeout ({STEP_TIMEOUT_SECS}s)");
                 db.set_step_failed(&step.id, &msg)?;
+                db.skip_pending_steps_after(&req.orchestration_id, step.seq)?;
                 record_orchestration_edge(&req, &orch, &step, "end", Some(false));
                 db.set_orchestration_status(
                     &req.orchestration_id,

@@ -229,3 +229,41 @@ fn list_in_period_month_boundary_with_second_precision() {
     assert_eq!(aug[0].id, id_first);
 }
 
+#[test]
+fn skip_pending_steps_after_marks_later_pending() {
+    let dir = TempDir::new().unwrap();
+    let db = OrchestrationDb::new(dir.path().join("orchestration.db")).unwrap();
+    let id = db
+        .create(NewOrchestration {
+            parent_agent_id: "workspace".into(),
+            session_id: None,
+            goal: "g".into(),
+            steps: vec![
+                NewOrchestrationStep {
+                    role: "a".into(),
+                    agent_id: None,
+                    prompt: "p0".into(),
+                },
+                NewOrchestrationStep {
+                    role: "b".into(),
+                    agent_id: None,
+                    prompt: "p1".into(),
+                },
+                NewOrchestrationStep {
+                    role: "c".into(),
+                    agent_id: None,
+                    prompt: "p2".into(),
+                },
+            ],
+        })
+        .unwrap();
+    let steps = db.list_steps(&id).unwrap();
+    db.set_step_running(&steps[0].id).unwrap();
+    db.set_step_failed(&steps[0].id, "boom").unwrap();
+    let n = db.skip_pending_steps_after(&id, steps[0].seq).unwrap();
+    assert_eq!(n, 2);
+    let steps = db.list_steps(&id).unwrap();
+    assert_eq!(steps[0].status, StepStatus::Failed.as_str());
+    assert_eq!(steps[1].status, StepStatus::Skipped.as_str());
+    assert_eq!(steps[2].status, StepStatus::Skipped.as_str());
+}

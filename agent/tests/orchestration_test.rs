@@ -58,11 +58,18 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
             parent_agent_id: "workspace".into(),
             session_id: None,
             goal: "g".into(),
-            steps: vec![NewOrchestrationStep {
-                role: "researcher".into(),
-                agent_id: None,
-                prompt: "collect".into(),
-            }],
+            steps: vec![
+                NewOrchestrationStep {
+                    role: "researcher".into(),
+                    agent_id: None,
+                    prompt: "collect".into(),
+                },
+                NewOrchestrationStep {
+                    role: "writer".into(),
+                    agent_id: None,
+                    prompt: "draft".into(),
+                },
+            ],
         })
         .unwrap();
 
@@ -85,6 +92,10 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
         .as_deref()
         .unwrap_or("")
         .contains("API Key"));
+    assert_eq!(
+        steps[1].status, "skipped",
+        "remaining pending steps should be skipped on failure"
+    );
 
     let usage = memory::UsageDb::open_default().unwrap();
     let insights = usage
