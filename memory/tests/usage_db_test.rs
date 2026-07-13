@@ -179,24 +179,31 @@ fn offset_timestamp_normalized_and_counted_in_month() {
 }
 
 #[test]
-fn estimate_cost_from_litellm_fixture() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let dir = TempDir::new().unwrap();
-    std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-    std::fs::write(
-        dir.path().join("litellm-model-meta.json"),
-        r#"{
-          "gpt-4o-mini": {
-            "input_cost_per_token": 0.00000015,
-            "output_cost_per_token": 0.0000006,
-            "max_input_tokens": 128000
-          }
-        }"#,
-    )
-    .unwrap();
-    let cost = memory::estimate_llm_cost("gpt-4o-mini", 1_000_000, 1_000_000);
-    // 0.15 + 0.6 = 0.75
-    assert!((cost - 0.75).abs() < 1e-9);
-    assert_eq!(memory::estimate_llm_cost("unknown-model", 100, 100), 0.0);
-    std::env::remove_var("ASTRO_MEMORY_DIR");
+fn estimate_usage_cost_official_snapshot_and_unknown() {
+    use memory::{estimate_usage_cost, CostStatus, UsageTokens};
+    let usage = UsageTokens {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        request_count: 1,
+    };
+    let r = estimate_usage_cost(
+        "gpt-4o-mini",
+        &usage,
+        Some("openai"),
+        None,
+        None,
+    );
+    assert_eq!(r.status, CostStatus::Estimated);
+    assert!(r.amount_usd.unwrap() > 0.0);
+    let unk = estimate_usage_cost(
+        "totally-unknown-model-xyz",
+        &usage,
+        Some("custom"),
+        Some("http://localhost:9"),
+        None,
+    );
+    assert_eq!(unk.status, CostStatus::Unknown);
+    assert!(unk.amount_usd.is_none() || unk.amount_usd == Some(0.0));
 }

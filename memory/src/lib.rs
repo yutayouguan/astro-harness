@@ -94,7 +94,9 @@ pub use usage_db::{
     period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
     UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
 };
-pub use usage_pricing::estimate_llm_cost;
+pub use usage_pricing::{
+    estimate_usage_cost, resolve_billing_route, BillingRoute, CostResult, CostStatus, UsageTokens,
+};
 pub use orchestration_db::{
     orchestration_db_path, NewOrchestration, NewOrchestrationStep, OrchestrationDb,
     OrchestrationRow, OrchestrationStatus, StepRow, StepStatus,

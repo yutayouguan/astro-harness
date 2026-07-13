@@ -137,6 +137,21 @@ pub async fn execute_job_with_roots(
     } else {
         creds.model.clone()
     };
+    let billing_provider = if creds.provider.trim().is_empty() {
+        None
+    } else {
+        Some(creds.provider.clone())
+    };
+    let billing_base_url = if creds.base_url.trim().is_empty() {
+        None
+    } else {
+        Some(creds.base_url.clone())
+    };
+    let billing_api_key = if creds.api_key.trim().is_empty() {
+        None
+    } else {
+        Some(creds.api_key.clone())
+    };
 
     let exec_result = tokio::time::timeout(
         Duration::from_secs(600),
@@ -182,11 +197,25 @@ pub async fn execute_job_with_roots(
 
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
     if !llm_usage.is_empty() {
-        let cost = memory::estimate_llm_cost(
+        let usage_tokens = memory::UsageTokens {
+            input_tokens: llm_usage.input_tokens,
+            output_tokens: llm_usage.output_tokens,
+            cache_read_tokens: llm_usage.cache_read_tokens,
+            cache_write_tokens: llm_usage.cache_write_tokens,
+            request_count: if llm_usage.request_count == 0 {
+                1
+            } else {
+                llm_usage.request_count
+            },
+        };
+        let cost_result = memory::estimate_usage_cost(
             &model_for_usage,
-            llm_usage.prompt_tokens(),
-            llm_usage.completion_tokens(),
+            &usage_tokens,
+            billing_provider.as_deref(),
+            billing_base_url.as_deref(),
+            billing_api_key.as_deref(),
         );
+        let cost = cost_result.amount_usd.unwrap_or(0.0);
         memory::UsageDb::try_record(memory::NewUsageEvent {
             ts: Utc::now().to_rfc3339(),
             kind: "llm".into(),

@@ -329,8 +329,29 @@ async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &
     let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
     let session_id = Some(agent.session_id().to_string());
+    let provider = agent.chat_provider().to_string();
+    let base_url = agent.chat_base_url().to_string();
+    let api_key = agent.chat_api_key().to_string();
     drop(agent);
-    let cost = memory::estimate_llm_cost(model, usage.prompt_tokens(), usage.completion_tokens());
+    let usage_tokens = memory::UsageTokens {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cache_read_tokens: usage.cache_read_tokens,
+        cache_write_tokens: usage.cache_write_tokens,
+        request_count: if usage.request_count == 0 {
+            1
+        } else {
+            usage.request_count
+        },
+    };
+    let cost_result = memory::estimate_usage_cost(
+        model,
+        &usage_tokens,
+        (!provider.is_empty()).then_some(provider.as_str()),
+        (!base_url.is_empty()).then_some(base_url.as_str()),
+        (!api_key.is_empty()).then_some(api_key.as_str()),
+    );
+    let cost = cost_result.amount_usd.unwrap_or(0.0);
     memory::UsageDb::try_record(memory::NewUsageEvent {
         ts: chrono::Utc::now().to_rfc3339(),
         kind: "llm".into(),
