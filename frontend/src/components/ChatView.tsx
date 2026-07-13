@@ -953,33 +953,84 @@ export default function ChatView({
                       {m.attachments && m.attachments.length > 0 && (
                         <MessageAttachments items={m.attachments} />
                       )}
-                      {/* 顺序对齐常见 Agent UI：先思考，再工具，再 GenUI 卡，最后正文 */}
-                      {m.reasoning ? (
-                        <MsgReasoning
-                          reasoning={m.reasoning}
-                          active={reasoningActive}
-                          durationSec={m.reasoningDurationSec}
-                        />
-                      ) : null}
-                      {m.activities && m.activities.length > 0 && (
-                        <ActivityCards
-                          items={m.activities}
-                          prefs={displayPrefs}
-                          showTimestamps={displayPrefs.showTimestamps}
-                        />
-                      )}
-                      {m.uiSurfaces && m.uiSurfaces.length > 0
-                        ? m.uiSurfaces.map((surface) => (
-                            <A2UIRenderer
-                              key={surface.messageId}
-                              operations={surface.operations}
-                              disabled={surface.status !== "active"}
-                              onAction={(name, context) =>
-                                onUiAction?.(m.id, name, context)
-                              }
+                      {m.segments && m.segments.length > 0 ? (
+                        <>
+                          {m.segments.map((seg, segIdx) => {
+                            if (seg.type === "reasoning") {
+                              const isLast =
+                                segIdx === m.segments!.length - 1;
+                              const active = Boolean(
+                                isStreamingBubble && isLast && !m.content,
+                              );
+                              return (
+                                <MsgReasoning
+                                  key={seg.id}
+                                  reasoning={seg.text}
+                                  active={active}
+                                  durationSec={seg.durationSec}
+                                />
+                              );
+                            }
+                            if (seg.type === "activity") {
+                              const act = m.activities?.find(
+                                (a) => a.id === seg.id,
+                              );
+                              if (!act) return null;
+                              return (
+                                <ActivityCards
+                                  key={seg.id}
+                                  items={[act]}
+                                  prefs={displayPrefs}
+                                  showTimestamps={displayPrefs.showTimestamps}
+                                />
+                              );
+                            }
+                            const surface = m.uiSurfaces?.find(
+                              (s) => s.messageId === seg.id,
+                            );
+                            if (!surface) return null;
+                            return (
+                              <A2UIRenderer
+                                key={seg.id}
+                                operations={surface.operations}
+                                disabled={surface.status !== "active"}
+                                onAction={(name, context) =>
+                                  onUiAction?.(m.id, name, context)
+                                }
+                              />
+                            );
+                          })}
+                        </>
+                      ) : (
+                        <>
+                          {m.reasoning ? (
+                            <MsgReasoning
+                              reasoning={m.reasoning}
+                              active={reasoningActive}
+                              durationSec={m.reasoningDurationSec}
                             />
-                          ))
-                        : null}
+                          ) : null}
+                          {m.activities && m.activities.length > 0 && (
+                            <ActivityCards
+                              items={m.activities}
+                              prefs={displayPrefs}
+                              showTimestamps={displayPrefs.showTimestamps}
+                            />
+                          )}
+                          {m.uiSurfaces && m.uiSurfaces.length > 0
+                            ? m.uiSurfaces.map((surface) => (
+                                <A2UIRenderer
+                                  key={surface.messageId}
+                                  operations={surface.operations}
+                                  disabled={surface.status !== "active"}
+                                  onAction={(name, context) =>
+                                    onUiAction?.(m.id, name, context)
+                                  }
+                                />
+                              ))
+                            : null}
+                        </>
+                      )}
                       {displayPrefs.showTimestamps && m.createdAt ? (
                         <div className="msg-timestamp">
                           {new Date(m.createdAt).toLocaleTimeString()}
