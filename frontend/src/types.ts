@@ -96,8 +96,33 @@ export type ChatMessage = {
   activities?: ChatActivity[];
   /** A2UI / AG-UI activity 表面 */
   uiSurfaces?: UiSurface[];
+  /**
+   * 本轮事件时间线（思考 / 工具 / A2UI 交错）。
+   * activity/surface 段只存 id，实体在 activities / uiSurfaces。
+   */
+  segments?: ChatTimelineSegment[];
   createdAt?: number;
 };
+
+/** 助手气泡内可交错的时间线段 */
+export type ChatTimelineSegment =
+  | {
+      type: "reasoning";
+      id: string;
+      text: string;
+      at: number;
+      durationSec?: number;
+    }
+  | {
+      type: "activity";
+      id: string;
+      at: number;
+    }
+  | {
+      type: "surface";
+      id: string;
+      at: number;
+    };
 
 /** `get_chat_history` 返回的活动条（已折叠进助手消息） */
 export type ChatHistoryActivityDto = {
