@@ -31,7 +31,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "present_ui".to_string(),
         toolset: "present_ui".to_string(),
-        description: "Present a read-only informational UI card (weather, summary, etc.) in the chat. Does not pause the agent."
+        description: "Present a read-only informational UI card in chat (no interrupt). Prefer shortcut fields title/body/image_url, or pass full A2UI v0.9 operations[] with catalogId astro://a2ui/catalog/v2. Allowed components: Text Icon Divider Card Column Row Button TextField ChoicePicker CheckBox Image List Badge Chip Metric Avatar Callout Spacer. Root should be Card. Use variant for semantics; never put hex colors in JSON. Example metric row: Metric{label,value,hint} inside Column inside Card."
             .to_string(),
         schema: schema_for_args::<PresentUiArgs>(),
         check_fn: None,
