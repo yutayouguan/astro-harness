@@ -350,6 +350,7 @@ export default function App() {
               id: actId,
               kind: "tool",
               title: d.name || `tool#${d.index}`,
+              input: d.args || undefined,
               detail: d.args || undefined,
               status: "running",
               at: Date.now(),
@@ -358,12 +359,14 @@ export default function App() {
             const cur = activities[idx];
             if (d.id) toolDeltaIdsRef.current.set(mapKey, d.id);
             const argsSoFar =
-              cur.status === "running" ? (cur.detail ?? "") : "";
+              cur.status === "running" ? (cur.input ?? cur.detail ?? "") : "";
+            const nextArgs = d.args ? argsSoFar + d.args : cur.input ?? cur.detail;
             activities[idx] = {
               ...cur,
               id: d.id || cur.id,
               title: d.name || cur.title,
-              detail: d.args ? argsSoFar + d.args : cur.detail,
+              input: nextArgs || undefined,
+              detail: nextArgs || undefined,
               status: "running",
             };
           }
@@ -904,6 +907,8 @@ export default function App() {
             id,
             kind,
             title: name,
+            input: payload.arguments_json || undefined,
+            output: payload.result || undefined,
             detail:
               [payload.arguments_json, payload.result]
                 .filter(Boolean)
@@ -933,6 +938,7 @@ export default function App() {
             id: `mem-${Date.now()}`,
             kind: "memory",
             title: payload.operation || "memory",
+            output: payload.content,
             detail: payload.content,
             status: "done",
             at: Date.now(),
