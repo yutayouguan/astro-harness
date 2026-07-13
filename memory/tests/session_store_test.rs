@@ -186,6 +186,63 @@ fn migrates_legacy_messages_and_sessions_db() {
     assert_eq!(msgs[0].content.as_deref(), Some("hello"));
     let sess = store.get_session("old").unwrap().unwrap();
     assert!(sess.title.as_deref().unwrap_or("").contains("hello"));
+
+    // v11：content 必须可空（旧表为 NOT NULL，迁移应整表重建）。
+    store
+        .append_message(NewMessage {
+            session_id: "old",
+            role: "assistant",
+            content: None,
+            tool_calls: Some(serde_json::json!([{
+                "id": "c1",
+                "name": "noop",
+                "arguments": {}
+            }])),
+            ..NewMessage::empty("old", "assistant")
+        })
+        .unwrap();
+    let msgs = store.get_messages("old").unwrap();
+    assert!(msgs.last().unwrap().content.is_none());
+
     // 幂等
     let _ = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+}
+
+#[test]
+fn legacy_migration_allows_duplicate_session_summaries() {
+    let dir = TempDir::new().unwrap();
+    let sessions_dir = dir.path().join("sessions");
+    std::fs::create_dir_all(&sessions_dir).unwrap();
+
+    {
+        let conn = rusqlite::Connection::open(sessions_dir.join("sessions.db")).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+                session_id TEXT PRIMARY KEY,
+                summary TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+             );
+             INSERT INTO sessions(session_id, summary) VALUES
+               ('dup-a', 'shared summary'),
+               ('dup-b', 'shared summary');",
+        )
+        .unwrap();
+    }
+
+    let store = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+    let a = store.get_session("dup-a").unwrap().unwrap();
+    let b = store.get_session("dup-b").unwrap().unwrap();
+    let titled = [a.title.as_deref(), b.title.as_deref()];
+    assert_eq!(
+        titled.iter().filter(|t| t.is_some()).count(),
+        1,
+        "exactly one session keeps the shared title"
+    );
+    assert_eq!(
+        titled.iter().filter(|t| t.is_none()).count(),
+        1,
+        "the other session falls back to NULL title"
+    );
+    assert!(titled.iter().any(|t| *t == Some("shared summary")));
 }

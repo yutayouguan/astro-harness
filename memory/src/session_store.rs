@@ -737,6 +737,7 @@ impl SessionStore {
         self.conn.execute_batch(SCHEMA_V11_DDL)?;
         self.ensure_messages_v11_columns()?;
         self.convert_legacy_message_timestamps()?;
+        self.ensure_messages_content_nullable()?;
         self.rebuild_messages_fts_v11()?;
         self.stamp_schema_version()?;
         Ok(())
@@ -785,6 +786,84 @@ impl SessionStore {
         Ok(())
     }
 
+    /// SQLite 无法 `ALTER` 去掉 NOT NULL；旧 MessageDb 的 `content TEXT NOT NULL` 需整表重建。
+    fn ensure_messages_content_nullable(&self) -> Result<()> {
+        if !self.table_exists("messages")? {
+            return Ok(());
+        }
+        if !self.column_is_not_null("messages", "content")? {
+            return Ok(());
+        }
+
+        // 先拆掉 FTS / 触发器，避免 DROP TABLE messages 被依赖挡住。
+        self.drop_messages_fts_objects()?;
+
+        // 复制期关闭 FK：遗留 messages 可能尚未有对应 sessions 行。
+        self.conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        self.conn.execute_batch(
+            r#"
+            CREATE TABLE messages_v11_rebuild (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL REFERENCES sessions(id),
+                role TEXT NOT NULL,
+                content TEXT,
+                tool_call_id TEXT,
+                tool_calls TEXT,
+                tool_name TEXT,
+                timestamp REAL NOT NULL,
+                token_count INTEGER,
+                finish_reason TEXT,
+                reasoning TEXT,
+                reasoning_content TEXT,
+                reasoning_details TEXT,
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
+            );
+
+            INSERT INTO messages_v11_rebuild (
+                id, session_id, role, content, tool_call_id, tool_calls, tool_name,
+                timestamp, token_count, finish_reason,
+                reasoning, reasoning_content, reasoning_details,
+                codex_reasoning_items, codex_message_items
+            )
+            SELECT
+                id, session_id, role, content, tool_call_id, tool_calls, tool_name,
+                timestamp, token_count, finish_reason,
+                reasoning, reasoning_content, reasoning_details,
+                codex_reasoning_items, codex_message_items
+            FROM messages;
+
+            DROP TABLE messages;
+            ALTER TABLE messages_v11_rebuild RENAME TO messages;
+            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
+            "#,
+        )?;
+        // 恢复 AUTOINCREMENT 序列，避免后续 id 冲突。
+        self.conn.execute_batch(
+            "DELETE FROM sqlite_sequence WHERE name IN ('messages', 'messages_v11_rebuild');
+             INSERT INTO sqlite_sequence(name, seq)
+             SELECT 'messages', IFNULL(MAX(id), 0) FROM messages;",
+        )?;
+        self.conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        Ok(())
+    }
+
+    fn column_is_not_null(&self, table: &str, column: &str) -> Result<bool> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!("PRAGMA table_info({table})"))?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, i64>(3)?))
+        })?;
+        for row in rows {
+            let (name, notnull) = row?;
+            if name == column {
+                return Ok(notnull != 0);
+            }
+        }
+        Ok(false)
+    }
+
     /// 将旧 MessageDb 的 DATETIME 文本时间戳转为 Unix epoch REAL，供 `get_messages` 读取。
     fn convert_legacy_message_timestamps(&self) -> Result<()> {
         self.conn.execute_batch(
@@ -798,8 +877,7 @@ impl SessionStore {
         Ok(())
     }
 
-    fn rebuild_messages_fts_v11(&self) -> Result<()> {
-        // 旧 MessageDb 触发器 / external-content FTS，以及任何半成品 v11 FTS。
+    fn drop_messages_fts_objects(&self) -> Result<()> {
         self.conn.execute_batch(
             "DROP TRIGGER IF EXISTS sync_messages_to_fts;
              DROP TRIGGER IF EXISTS sync_messages_fts_update;
@@ -810,6 +888,12 @@ impl SessionStore {
              DROP TABLE IF EXISTS messages_fts;
              DROP TABLE IF EXISTS messages_fts_trigram;",
         )?;
+        Ok(())
+    }
+
+    fn rebuild_messages_fts_v11(&self) -> Result<()> {
+        // 旧 MessageDb 触发器 / external-content FTS，以及任何半成品 v11 FTS。
+        self.drop_messages_fts_objects()?;
         self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
         self.conn.execute_batch(
             "INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
@@ -833,6 +917,8 @@ impl SessionStore {
         if already.as_deref() == Some("1") {
             return Ok(());
         }
+
+        let tx = self.conn.unchecked_transaction()?;
 
         let legacy_path = sessions_dir.join("sessions.db");
         if legacy_path.is_file() {
@@ -859,24 +945,18 @@ impl SessionStore {
                 for row in rows {
                     let (session_id, summary, started_at) = row?;
                     let title = truncate_chars(&summary, 80);
-                    let started = started_at.unwrap_or_else(|| {
-                        now_epoch_secs().unwrap_or(0.0)
-                    });
-                    self.conn.execute(
-                        "INSERT INTO sessions (id, source, title, started_at)
-                         VALUES (?1, 'tauri', ?2, ?3)
-                         ON CONFLICT(id) DO NOTHING",
-                        params![session_id, title, started],
-                    )?;
+                    let started = started_at.unwrap_or_else(|| now_epoch_secs().unwrap_or(0.0));
+                    insert_legacy_session(&tx, &session_id, &title, started)?;
                 }
             }
         }
 
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO state_meta (key, value) VALUES ('migrated_from_sessions_db', '1')
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [],
         )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -898,6 +978,43 @@ impl SessionStore {
             )
             .optional()?;
         Ok(version.unwrap_or(0))
+    }
+}
+
+/// 导入遗留会话：先带 title；若撞上 `idx_sessions_title_unique` 则降级为 title=NULL。
+fn insert_legacy_session(
+    conn: &Connection,
+    session_id: &str,
+    title: &str,
+    started_at: f64,
+) -> Result<()> {
+    let with_title = conn.execute(
+        "INSERT INTO sessions (id, source, title, started_at)
+         VALUES (?1, 'tauri', ?2, ?3)
+         ON CONFLICT(id) DO NOTHING",
+        params![session_id, title, started_at],
+    );
+    match with_title {
+        Ok(_) => Ok(()),
+        Err(err) if is_unique_constraint(&err) => {
+            conn.execute(
+                "INSERT INTO sessions (id, source, title, started_at)
+                 VALUES (?1, 'tauri', NULL, ?2)
+                 ON CONFLICT(id) DO NOTHING",
+                params![session_id, started_at],
+            )?;
+            Ok(())
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn is_unique_constraint(err: &rusqlite::Error) -> bool {
+    match err {
+        rusqlite::Error::SqliteFailure(e, _) => {
+            e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
+        }
+        _ => false,
     }
 }
 
