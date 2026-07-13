@@ -145,6 +145,8 @@ impl AgentLoop {
         let mut mcp_hub = McpHub::new();
         mcp_hub.set_agent_id(Some(agent_id));
         ensure_orchestration_spawner_registered();
+        ensure_delegate_runner_registered();
+        ensure_delegate_async_spawner_registered();
         Ok(AgentLoop {
             config,
             session_id,
@@ -250,6 +252,41 @@ impl AgentLoop {
     /// 当前 Agent 标识（来自 MemoryManager）。
     pub fn agent_id(&self) -> &str {
         &self.memory.agent_id
+    }
+
+    /// 记忆根目录。
+    pub fn memory_dir(&self) -> &std::path::Path {
+        &self.config.memory_dir
+    }
+
+    /// 当前 Agent 工作区路径。
+    pub fn workspace_dir(&self) -> std::path::PathBuf {
+        self.memory.workspace_dir.clone()
+    }
+
+    pub fn chat_api_key(&self) -> &str {
+        &self.chat_api_key
+    }
+
+    pub fn chat_base_url(&self) -> &str {
+        &self.chat_base_url
+    }
+
+    pub fn chat_provider(&self) -> &str {
+        &self.chat_provider
+    }
+
+    pub fn chat_model(&self) -> &str {
+        &self.chat_model
+    }
+
+    pub fn image_gen_targets(&self) -> &ImageGenTargets {
+        &self.image_gen_targets
+    }
+
+    /// Provider 注册表的共享副本（并发工具快照用）。
+    pub fn providers_arc(&self) -> Arc<ProviderRegistry> {
+        Arc::new(self.providers.clone())
     }
 
     /// 内置与 MCP 工具的注册表只读引用。
@@ -721,4 +758,49 @@ fn ensure_orchestration_spawner_registered() {
             }
         });
     }));
+    static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
+    RESUME_ONCE.call_once(|| {
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async {
+                if let Err(e) = crate::orchestration::resume_incomplete_orchestrations().await {
+                    tracing::warn!(error = %e, "orchestration resume failed");
+                }
+            });
+        }
+    });
+}
+
+/// 注册同步委派 runner（OnceLock，仅首次生效）。
+fn ensure_delegate_runner_registered() {
+    memory::set_delegate_runner(Arc::new(|req| {
+        crate::delegate_exec::run_delegate_blocking(req)
+    }));
+}
+
+/// 注册异步委派 spawner（OnceLock，仅首次生效）。
+fn ensure_delegate_async_spawner_registered() {
+    memory::set_delegate_async_spawner(Arc::new(|task_id, req| {
+        tokio::spawn(async move {
+            let reg = memory::AsyncDelegateRegistry::global();
+            if reg.is_cancel_requested(&task_id) {
+                return;
+            }
+            match crate::delegate_exec::run_delegate(req).await {
+                Ok(json) => {
+                    if !reg.is_cancel_requested(&task_id) {
+                        reg.finish_ok(&task_id, json);
+                    }
+                }
+                Err(e) => {
+                    if !reg.is_cancel_requested(&task_id) {
+                        reg.finish_err(&task_id, e.to_string());
+                    }
+                }
+            }
+        });
+    }));
+    static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
+    RESUME_ONCE.call_once(|| {
+        memory::resume_incomplete_async_delegates();
+    });
 }

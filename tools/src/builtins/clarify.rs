@@ -1,6 +1,7 @@
 //! 澄清工具：任务含糊时向用户提出选项问题。
 //!
-//! 返回带 `astro_hitl` 标记的 A2UI JSON；由 Agent 流层转为 activity + interrupt。
+//! 返回带 `astro_hitl` 标记的 A2UI JSON；由 streaming 层经 `HitlGate` 同回合 park，
+//! 用户提交后写入标准 tool result 并续跑（不再结束 run）。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

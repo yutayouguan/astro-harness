@@ -27,7 +27,11 @@ CREATE TABLE IF NOT EXISTS orchestrations (
     updated_at TEXT NOT NULL,
     finished_at TEXT,
     error TEXT,
-    result_summary TEXT
+    result_summary TEXT,
+    provider TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    api_key TEXT NOT NULL DEFAULT '',
+    base_url TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_orchestrations_status_updated
     ON orchestrations(status, updated_at);
@@ -109,6 +113,11 @@ pub struct OrchestrationRow {
     pub finished_at: Option<String>,
     pub error: Option<String>,
     pub result_summary: Option<String>,
+    /// 续跑用凭据（明文落库；进程内重启所需）。
+    pub provider: String,
+    pub model: String,
+    pub api_key: String,
+    pub base_url: String,
 }
 
 /// 编排步骤行
@@ -142,6 +151,10 @@ pub struct NewOrchestration {
     pub session_id: Option<String>,
     pub goal: String,
     pub steps: Vec<NewOrchestrationStep>,
+    pub provider: String,
+    pub model: String,
+    pub api_key: String,
+    pub base_url: String,
 }
 
 /// 编排状态 SQLite 访问层
@@ -183,6 +196,10 @@ fn orchestration_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Orchestrati
         finished_at: r.get(7)?,
         error: r.get(8)?,
         result_summary: r.get(9)?,
+        provider: r.get::<_, Option<String>>(10)?.unwrap_or_default(),
+        model: r.get::<_, Option<String>>(11)?.unwrap_or_default(),
+        api_key: r.get::<_, Option<String>>(12)?.unwrap_or_default(),
+        base_url: r.get::<_, Option<String>>(13)?.unwrap_or_default(),
     })
 }
 
@@ -202,8 +219,22 @@ fn step_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<StepRow> {
     })
 }
 
-const ORCH_SELECT_COLS: &str = "id, parent_agent_id, session_id, goal, status, created_at, updated_at, finished_at, error, result_summary";
+const ORCH_SELECT_COLS: &str = "id, parent_agent_id, session_id, goal, status, created_at, updated_at, finished_at, error, result_summary, provider, model, api_key, base_url";
 const STEP_SELECT_COLS: &str = "id, orchestration_id, seq, role, agent_id, prompt, status, output, error, started_at, finished_at";
+
+fn migrate_spawn_creds(conn: &Connection) -> anyhow::Result<()> {
+    for col in ["provider", "model", "api_key", "base_url"] {
+        let sql = format!(
+            "ALTER TABLE orchestrations ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"
+        );
+        match conn.execute(&sql, []) {
+            Ok(_) => {}
+            Err(e) if e.to_string().contains("duplicate column") => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
+}
 
 impl OrchestrationDb {
     /// 打开或创建数据库并执行 DDL（WAL 模式）
@@ -214,6 +245,7 @@ impl OrchestrationDb {
         let conn = Connection::open(&path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.execute_batch(DDL)?;
+        migrate_spawn_creds(&conn)?;
         Ok(Self { conn })
     }
 
@@ -231,8 +263,9 @@ impl OrchestrationDb {
         tx.execute(
             "INSERT INTO orchestrations (
                 id, parent_agent_id, session_id, goal, status,
-                created_at, updated_at, finished_at, error, result_summary
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL)",
+                created_at, updated_at, finished_at, error, result_summary,
+                provider, model, api_key, base_url
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL, ?8, ?9, ?10, ?11)",
             params![
                 id,
                 input.parent_agent_id,
@@ -241,6 +274,10 @@ impl OrchestrationDb {
                 OrchestrationStatus::Queued.as_str(),
                 now,
                 now,
+                input.provider,
+                input.model,
+                input.api_key,
+                input.base_url,
             ],
         )?;
 
@@ -407,6 +444,49 @@ impl OrchestrationDb {
             ],
         )?;
         Ok(changed > 0)
+    }
+
+    /// 崩溃续跑：将 `running` 步骤改回 `pending`，编排保持 `running`。
+    pub fn reclaim_stale_running(&self, id: &str) -> anyhow::Result<bool> {
+        let orch = match self.get(id)? {
+            Some(o) if o.status == OrchestrationStatus::Running.as_str() => o,
+            _ => return Ok(false),
+        };
+        let now = now_rfc3339();
+        self.conn.execute(
+            "UPDATE orchestration_steps
+             SET status = ?2, started_at = NULL, error = NULL
+             WHERE orchestration_id = ?1 AND status = ?3",
+            params![
+                orch.id,
+                StepStatus::Pending.as_str(),
+                StepStatus::Running.as_str(),
+            ],
+        )?;
+        self.conn.execute(
+            "UPDATE orchestrations SET updated_at = ?2 WHERE id = ?1",
+            params![id, now],
+        )?;
+        Ok(true)
+    }
+
+    /// 未完成编排 id（queued 或 running），按 updated_at 升序。
+    pub fn list_incomplete_ids(&self) -> anyhow::Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM orchestrations
+             WHERE status IN (?1, ?2)
+             ORDER BY updated_at ASC",
+        )?;
+        let rows = stmt
+            .query_map(
+                params![
+                    OrchestrationStatus::Queued.as_str(),
+                    OrchestrationStatus::Running.as_str(),
+                ],
+                |r| r.get(0),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     /// 按 created_at ∈ [start, end) 列出编排，可选 parent_agent_id，按 created_at DESC，limit（0→50）。

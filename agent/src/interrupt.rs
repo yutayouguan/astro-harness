@@ -147,7 +147,20 @@ fn validate_payload(interrupt: &Interrupt, payload_json: &str) -> Result<(), Int
         })?
     };
 
-    // MVP：按 reason 做轻量字段检查（完整 JSON Schema 留后续）
+    if !interrupt.response_schema_json.trim().is_empty() {
+        let schema: Value = serde_json::from_str(&interrupt.response_schema_json).map_err(|e| {
+            InterruptError::Payload(
+                interrupt.id.clone(),
+                format!("invalid response_schema_json: {e}"),
+            )
+        })?;
+        crate::schema_validate::validate_against_schema(&schema, &payload).map_err(|e| {
+            InterruptError::Payload(interrupt.id.clone(), e)
+        })?;
+        return Ok(());
+    }
+
+    // 无 schema 时回退 reason 轻量检查
     match interrupt.reason.as_str() {
         "confirmation" | "tool_call" => {
             let approved = payload.get("approved").and_then(|v| v.as_bool());
@@ -168,8 +181,7 @@ fn validate_payload(interrupt: &Interrupt, payload_json: &str) -> Result<(), Int
             }
         }
         _ => {
-            // 未知 reason：若提供了 schema 且非空，至少要求是 object
-            if !interrupt.response_schema_json.is_empty() && !payload.is_object() {
+            if !payload.is_object() {
                 return Err(InterruptError::Payload(
                     interrupt.id.clone(),
                     "payload must be a JSON object".into(),

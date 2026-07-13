@@ -45,7 +45,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "orchestration_run".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Start an async serial multi-agent orchestration. Returns orchestration_id immediately; poll with orchestration_status. Prefer this over multi_agent/delegate for real execution."
+        description: "Start an async serial multi-agent orchestration. Returns orchestration_id immediately; poll with orchestration_status. Prefer this (or multi_agent with a role list) for pipelines; use delegate for parallel one-shot subtasks."
             .to_string(),
         schema: schema_for_args::<OrchestrationRunArgs>(),
         check_fn: None,
@@ -64,6 +64,13 @@ pub fn register(registry: &mut ToolRegistry) {
 
 /// 创建编排并触发后台执行；立即返回 queued JSON。
 pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+    if !memory::can_spawn_nested() {
+        anyhow::bail!(
+            "spawn depth limit reached (depth {} >= max {})",
+            memory::current_spawn_depth(),
+            memory::effective_max_spawn_depth()
+        );
+    }
     let parsed: OrchestrationRunArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("orchestration_run 参数无效: {e}"))?;
     validate_run_args(&parsed)?;
@@ -88,6 +95,10 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         session_id: Some(ctx.session_id.clone()),
         goal: parsed.goal.trim().to_string(),
         steps,
+        provider: ctx.chat_provider.clone(),
+        model: ctx.chat_model.clone(),
+        api_key: ctx.chat_api_key.clone(),
+        base_url: ctx.chat_base_url.clone(),
     })?;
 
     memory::request_orchestration_spawn(memory::OrchestrationSpawnRequest {
@@ -97,6 +108,9 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         model: ctx.chat_model.clone(),
         api_key: ctx.chat_api_key.clone(),
         base_url: ctx.chat_base_url.clone(),
+        caller_depth: memory::current_spawn_depth(),
+        max_spawn_depth: memory::effective_max_spawn_depth(),
+        allow_reclaim: false,
     });
 
     Ok(serde_json::json!({

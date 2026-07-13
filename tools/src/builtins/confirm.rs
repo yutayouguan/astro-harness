@@ -1,6 +1,7 @@
 //! 确认/授权工具：敏感操作前向用户请求批准。
 //!
-//! 返回带 `astro_hitl` 标记的 JSON，由 Agent 流层转为 A2UI activity + interrupt。
+//! 返回带 `astro_hitl` 标记的 JSON；由 streaming 层经 `HitlGate` 同回合阻塞等待，
+//! 决议作为 tool result 写回后继续本 run。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

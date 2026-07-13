@@ -29,6 +29,10 @@ async fn register_all_includes_panel_tools() {
         "clarify",
         "confirm",
         "delegate",
+        "delegate_async",
+        "delegate_status",
+        "delegate_collect",
+        "delegate_cancel",
         "multi_agent",
         "task_plan",
     ] {

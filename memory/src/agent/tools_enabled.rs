@@ -206,7 +206,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "clarify" => "clarify",
         "confirm" => "confirm",
         "present_ui" => "present_ui",
-        "delegate" => "delegate",
+        "delegate" | "delegate_async" | "delegate_status" | "delegate_collect"
+        | "delegate_cancel" => "delegate",
         "multi_agent" | "create_agent" | "orchestration_run" | "orchestration_status" => {
             "multi_agent"
         }

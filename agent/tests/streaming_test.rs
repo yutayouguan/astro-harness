@@ -122,6 +122,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
             cfg,
             "You are a test agent".into(),
             pause,
+            None,
             tx,
         )
         .await;
@@ -248,6 +249,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
             cfg,
             "You are a test agent".into(),
             pause,
+            None,
             tx,
         )
         .await;
@@ -317,6 +319,7 @@ async fn multi_turn_fires_on_completion_after_model_stream() {
             cfg,
             "You are a test agent".into(),
             pause,
+            None,
             tx,
         )
         .await;
@@ -384,6 +387,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
             },
             "sys".into(),
             pause,
+            None,
             tx,
         )
         .await;
@@ -452,6 +456,7 @@ async fn error_is_followed_by_done() {
             },
             "sys".into(),
             pause,
+            None,
             tx,
         )
         .await;
@@ -522,6 +527,7 @@ async fn tool_call_delta_and_memory_add_path() {
             },
             "sys".into(),
             pause,
+            None,
             tx,
         )
         .await;
@@ -555,5 +561,113 @@ async fn tool_call_delta_and_memory_add_path() {
             .map(|i| format!("{i:?}"))
             .collect::<Vec<_>>()
     );
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hitl_waiting_parks_then_continues_same_run() {
+    use agent::{HitlGate, ResumeItem};
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "hitl-session".into()).unwrap();
+    let session = Arc::new(Mutex::new(agent));
+    {
+        let mut a = session.lock().await;
+        a.session_messages
+            .push(common::message::Message::user("please confirm"));
+    }
+
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![
+            vec![ChatChunk {
+                tool_call_deltas: vec![ToolCallDeltaChunk {
+                    index: 0,
+                    id: Some("call_confirm".into()),
+                    name: Some("confirm".into()),
+                    arguments: Some(
+                        r#"{"title":"Delete?","body":"Really delete the file?"}"#.into(),
+                    ),
+                }],
+                finish_reason: Some("tool_calls".into()),
+                ..Default::default()
+            }],
+            vec![ChatChunk {
+                token: Some("confirmed".into()),
+                finish_reason: Some("stop".into()),
+                ..Default::default()
+            }],
+        ]),
+    });
+
+    let gate = HitlGate::new("hitl-session");
+    let gate_resolve = gate.clone();
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+
+    tokio::spawn(async move {
+        run_multi_turn_stream(
+            session,
+            provider,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            pause,
+            Some(gate),
+            tx,
+        )
+        .await;
+    });
+
+    let mut saw_waiting = false;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
+            Ok(Some(Ok(MultiTurnStreamItem::RunFinished {
+                outcome_type,
+                interrupts_json,
+                ..
+            }))) if outcome_type == "hitl_waiting" => {
+                saw_waiting = true;
+                let interrupts: Vec<serde_json::Value> =
+                    serde_json::from_str(&interrupts_json).unwrap();
+                let id = interrupts[0]["id"].as_str().unwrap().to_string();
+                gate_resolve
+                    .resolve(&[ResumeItem {
+                        interrupt_id: id,
+                        status: "resolved".into(),
+                        payload_json: r#"{"approved":true}"#.into(),
+                    }])
+                    .await
+                    .unwrap();
+                break;
+            }
+            Ok(Some(Ok(_))) => continue,
+            Ok(Some(Err(e))) => panic!("stream err: {e}"),
+            Ok(None) => panic!("stream ended before hitl_waiting"),
+            Err(_) => continue,
+        }
+    }
+    assert!(saw_waiting, "expected hitl_waiting");
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::ToolResult { name, result, .. }
+        if name == "confirm" && result.contains("approved")
+    )));
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "confirmed"
+    )));
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+    )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }

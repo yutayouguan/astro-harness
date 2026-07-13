@@ -1021,7 +1021,7 @@ export default function App() {
           );
           setStatusPhase("generating");
         } else if (payload.type === "run_finished") {
-          if (payload.outcome_type === "interrupt") {
+          if (payload.outcome_type === "hitl_waiting" || payload.outcome_type === "interrupt") {
             let interrupts: PendingInterrupt[] = [];
             try {
               const arr = JSON.parse(payload.interrupts_json || "[]") as unknown;
@@ -1090,10 +1090,15 @@ export default function App() {
                 return sealOpenReasoning(next, reasoningDurationSec);
               }),
             );
-            setStreaming(false);
-            setStreamPaused(false);
-            setStatus("ready");
-            setStatusPhase("ready");
+            // hitl_waiting：同回合 park，保持 streaming；旧 interrupt 结束流
+            if (payload.outcome_type === "interrupt") {
+              setStreaming(false);
+              setStreamPaused(false);
+              setStatus("ready");
+              setStatusPhase("ready");
+            } else {
+              setStatusPhase("generating");
+            }
           } else if (payload.outcome_type === "success") {
             setSessionPendingInterrupts([]);
           }
@@ -1396,7 +1401,8 @@ export default function App() {
       name: string,
       context: Record<string, unknown>,
     ) => {
-      if (streaming || !activeProvider || sessionPendingInterrupts.length === 0) {
+      // 同回合 HITL：允许在 streaming 中提交；无 pending 则忽略
+      if (!activeProvider || sessionPendingInterrupts.length === 0) {
         return;
       }
       let payload: Record<string, unknown>;
@@ -1431,14 +1437,22 @@ export default function App() {
         }),
       );
       setSessionPendingInterrupts([]);
-      await send({
-        text: "",
-        skipUserAppend: true,
-        resumeJson,
-        allowEmpty: true,
-      });
+      if (!sessionId) {
+        setToastMsg(t("chat.interrupt.pending"));
+        return;
+      }
+      try {
+        await invoke("interrupt_resume", {
+          sessionId,
+          resumeJson,
+        });
+      } catch (e) {
+        setToastMsg(
+          e instanceof Error ? e.message : String(e ?? "HITL resume failed"),
+        );
+      }
     },
-    [streaming, activeProvider, sessionPendingInterrupts, send],
+    [activeProvider, sessionPendingInterrupts, sessionId, t],
   );
 
   const regenerateMessage = useCallback(

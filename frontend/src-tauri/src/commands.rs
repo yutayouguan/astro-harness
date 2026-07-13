@@ -534,7 +534,7 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
     Ok(())
 }
 
-/// 提交 interrupt resume（HITL）；随后应再调 `start_chat` 续跑。
+/// 提交 interrupt resume（HITL 阻塞闸门）；同回合续跑，无需再调 start_chat。
 #[tauri::command]
 pub async fn interrupt_resume(
     session_id: String,

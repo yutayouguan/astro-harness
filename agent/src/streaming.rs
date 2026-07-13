@@ -10,8 +10,10 @@
 //! - 末轮仍含工具调用时以 Error 结束，避免静默 `Done`
 //! - usage 采用覆盖式累加，兼容 Google 等 Provider 的累计式 `usageMetadata`
 
+use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use common::message::Message;
@@ -23,8 +25,81 @@ use providers::trait_::{
     ToolCallDeltaChunk,
 };
 use tokio::sync::{mpsc, Mutex};
+use tokio::task::JoinSet;
 
+use crate::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
+use crate::interrupt::Interrupt;
 use crate::loop_::AgentLoop;
+
+tokio::task_local! {
+    /// 同步 `delegate` 子路径上浮 HITL 时读取；由串行工具执行注入。
+    static PARENT_HITL_CTX: Option<ParentHitlCtx>;
+}
+
+/// 父会话 HITL 桥：子 Agent park 时复用同一 gate 与流。
+#[derive(Clone)]
+pub(crate) struct ParentHitlCtx {
+    pub gate: Arc<HitlGate>,
+    pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    pub run_id: String,
+}
+
+/// 进行中聊天流的父 HITL 表（供 `delegate_async` 子任务上浮）。
+static LIVE_PARENT_HITL: OnceLock<tokio::sync::RwLock<HashMap<String, ParentHitlCtx>>> =
+    OnceLock::new();
+
+fn live_parent_hitl_map() -> &'static tokio::sync::RwLock<HashMap<String, ParentHitlCtx>> {
+    LIVE_PARENT_HITL.get_or_init(|| tokio::sync::RwLock::new(HashMap::new()))
+}
+
+pub(crate) async fn register_live_parent_hitl(session_id: &str, ctx: ParentHitlCtx) {
+    live_parent_hitl_map()
+        .write()
+        .await
+        .insert(session_id.to_string(), ctx);
+}
+
+pub(crate) async fn unregister_live_parent_hitl(session_id: &str) {
+    live_parent_hitl_map().write().await.remove(session_id);
+}
+
+fn decorate_delegate_hitl(mut hitl: AstroHitlPayload, async_child: bool) -> AstroHitlPayload {
+    let tag = if async_child {
+        "[delegate_async]"
+    } else {
+        "[delegate]"
+    };
+    if !hitl.reason.starts_with("[delegate") {
+        hitl.reason = format!("{tag} {}", hitl.reason);
+    }
+    if hitl.message.is_empty() {
+        hitl.message = format!("{tag} Sub-agent needs your input");
+    } else if !hitl.message.starts_with("[delegate") {
+        hitl.message = format!("{tag} {}", hitl.message);
+    }
+    hitl
+}
+
+/// 子 Agent 若有父 HITL 上下文则 park 并返回 tool result；否则 `None`。
+///
+/// 查找顺序：task_local（同步 delegate）→ live 会话表（async，父流仍在）。
+pub(crate) async fn try_park_parent_hitl(
+    tool_call_id: &str,
+    hitl: AstroHitlPayload,
+    parent_session_id: Option<&str>,
+) -> Option<String> {
+    if let Some(ctx) = PARENT_HITL_CTX.try_with(|c| c.clone()).ok().flatten() {
+        let hitl = decorate_delegate_hitl(hitl, false);
+        return park_astro_hitl(&ctx.gate, &ctx.tx, &ctx.run_id, tool_call_id, hitl).await;
+    }
+    if let Some(sid) = parent_session_id {
+        if let Some(ctx) = live_parent_hitl_map().read().await.get(sid).cloned() {
+            let hitl = decorate_delegate_hitl(hitl, true);
+            return park_astro_hitl(&ctx.gate, &ctx.tx, &ctx.run_id, tool_call_id, hitl).await;
+        }
+    }
+    None
+}
 
 /// 单次模型流式片段，对齐 Rig `StreamedAssistantContent` 并扩展 Reasoning 通道。
 #[derive(Debug, Clone)]
@@ -74,7 +149,8 @@ pub enum MultiTurnStreamItem {
         content_json: String,
         replace: bool,
     },
-    /// AG-UI `RUN_FINISHED`：`outcome_type` 为 `success` 或 `interrupt`。
+    /// AG-UI `RUN_FINISHED`：`outcome_type` 为 `success`、`interrupt` 或 `hitl_waiting`。
+    /// `hitl_waiting`：同回合阻塞 HITL，流不随后发 Done。
     RunFinished {
         run_id: String,
         outcome_type: String,
@@ -329,13 +405,57 @@ async fn finish_usage_and_done(
 ///
 /// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
 /// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
+/// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
 pub async fn run_multi_turn_stream(
     session: Arc<Mutex<AgentLoop>>,
     provider: Arc<dyn AiProvider>,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
+    hitl_gate: Option<Arc<HitlGate>>,
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+) {
+    let session_id = {
+        let agent = session.lock().await;
+        agent.session_id().to_string()
+    };
+    let run_id = uuid::Uuid::new_v4().to_string();
+    if let Some(ref gate) = hitl_gate {
+        register_live_parent_hitl(
+            &session_id,
+            ParentHitlCtx {
+                gate: gate.clone(),
+                tx: tx.clone(),
+                run_id: run_id.clone(),
+            },
+        )
+        .await;
+    }
+    run_multi_turn_stream_inner(
+        session,
+        provider,
+        config,
+        system_prompt,
+        pause,
+        hitl_gate,
+        tx,
+        session_id.clone(),
+        run_id,
+    )
+    .await;
+    unregister_live_parent_hitl(&session_id).await;
+}
+
+async fn run_multi_turn_stream_inner(
+    session: Arc<Mutex<AgentLoop>>,
+    provider: Arc<dyn AiProvider>,
+    config: ProviderConfig,
+    system_prompt: String,
+    pause: Arc<PauseControl>,
+    hitl_gate: Option<Arc<HitlGate>>,
+    tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    thread_id: String,
+    run_id: String,
 ) {
     let model = config.model.clone();
     let streamer = ProviderStreamer {
@@ -345,12 +465,10 @@ pub async fn run_multi_turn_stream(
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
 
-    let (thread_id, run_id) = {
+    {
         let agent = session.lock().await;
-        let sid = agent.session_id().to_string();
         let _ = agent.ensure_session("tauri");
-        (sid, uuid::Uuid::new_v4().to_string())
-    };
+    }
     let _ = emit(
         &tx,
         MultiTurnStreamItem::RunStarted {
@@ -627,35 +745,48 @@ pub async fn run_multi_turn_stream(
         // 最后一轮仍要调工具：执行后结束并报错，避免静默 Done
         let last_round = round + 1 >= max_rounds;
 
-        for call in calls {
-            if pause.is_cancelled() {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
-                return;
-            }
-            if !pause.wait_if_paused().await {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
-                return;
-            }
+        let force_serial = calls.iter().any(|c| {
+            is_interactive_tool(&c.name)
+                || is_exclusive_tool(&c.name)
+                || terminal_needs_approval(&c.name, &c.arguments)
+        });
 
-            let result = if call.args_parse_error {
-                format!(
-                    "工具参数 JSON 解析失败: {}",
-                    call.arguments
-                        .get("_parse_error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("invalid json")
+        let outcomes = if force_serial || hitl_gate.is_none() {
+            execute_tools_serial(
+                &session,
+                &calls,
+                &pause,
+                &tx,
+                &run_id,
+                hitl_gate.as_ref(),
+            )
+            .await
+        } else {
+            execute_tools_concurrent(&session, &calls, &pause).await
+        };
+
+        let Some(outcomes) = outcomes else {
+            finish_usage_and_done(
+                &session,
+                &model,
+                &tx,
+                saw_usage.then_some(total_usage),
+                &run_id,
+            )
+            .await;
+            return;
+        };
+
+        for (call, result) in calls.iter().zip(outcomes.into_iter()) {
+            if pause.is_cancelled() {
+                finish_usage_and_done(
+                    &session,
+                    &model,
+                    &tx,
+                    saw_usage.then_some(total_usage),
+                    &run_id,
                 )
-            } else {
-                // MemoryManager !Send：持锁 + block_in_place（Rig 亦在工具边界同步执行）
-                let mut agent = session.lock().await;
-                tokio::task::block_in_place(|| {
-                    agent.handle_tool_call(&call.name, &call.arguments)
-                })
-                .unwrap_or_else(|e| format!("工具错误: {e}"))
-            };
-
-            if pause.is_cancelled() {
-                finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
+                .await;
                 return;
             }
 
@@ -673,7 +804,6 @@ pub async fn run_multi_turn_stream(
                 return;
             }
 
-            // 记忆工具成功后发出 MemoryUpdate，供右侧时间线展示
             if matches!(
                 call.name.as_str(),
                 "memory_add" | "memory_replace" | "memory_remove"
@@ -702,10 +832,12 @@ pub async fn run_multi_turn_stream(
                 }
             }
 
-            // 先解析声明式 UI：信息卡只发 Activity；HITL 另走 interrupt
             let info_ui = parse_astro_ui(&result);
             let result_for_history = if let Some(ref ui) = info_ui {
                 format!("Presented info card: {}", ui.summary)
+            } else if parse_astro_hitl(&result).is_some() {
+                // 串行路径已把 HITL park 结果写成非 astro_hitl；若仍是标记则兜底
+                result.clone()
             } else {
                 result.clone()
             };
@@ -746,56 +878,6 @@ pub async fn run_multi_turn_stream(
                     &result_for_history,
                 );
             }
-
-            // HITL：confirm/clarify 等返回 astro_hitl → Activity + RunFinished(interrupt)
-            if let Some(hitl) = parse_astro_hitl(&result) {
-                let message_id = format!("a2ui-surface-{}", call.id);
-                let content_json = serde_json::json!({ "operations": hitl.operations }).to_string();
-                timeline.upsert_surface(
-                    serde_json::json!({
-                        "messageId": message_id,
-                        "activityType": "a2ui-surface",
-                        "operations": hitl.operations,
-                        "status": "active",
-                    }),
-                    now_ms(),
-                );
-                if !emit(
-                    &tx,
-                    MultiTurnStreamItem::Activity {
-                        message_id,
-                        activity_type: "a2ui-surface".into(),
-                        content_json,
-                        replace: true,
-                    },
-                )
-                .await
-                {
-                    return;
-                }
-
-                let interrupt = crate::interrupt::Interrupt {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    reason: hitl.reason,
-                    message: hitl.message,
-                    tool_call_id: call.id.clone(),
-                    response_schema_json: hitl.response_schema.to_string(),
-                    expires_at: String::new(),
-                    metadata_json: String::new(),
-                };
-                let interrupts_json = serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
-                let _ = emit(
-                    &tx,
-                    MultiTurnStreamItem::RunFinished {
-                        run_id: run_id.clone(),
-                        outcome_type: "interrupt".into(),
-                        interrupts_json,
-                    },
-                )
-                .await;
-                let _ = emit(&tx, MultiTurnStreamItem::Done).await;
-                return;
-            }
         }
 
         if last_round {
@@ -814,6 +896,395 @@ pub async fn run_multi_turn_stream(
     finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
 }
 
+fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> bool {
+    if name != "terminal" {
+        return false;
+    }
+    let cmd = args
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    matches!(
+        tools::classify_dangerous_command(cmd).map(|d| d.action),
+        Some(tools::ApprovalAction::Ask)
+    )
+}
+
+/// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
+async fn execute_tools_serial(
+    session: &Arc<Mutex<AgentLoop>>,
+    calls: &[tools::ParsedToolCall],
+    pause: &Arc<PauseControl>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<Vec<String>> {
+    let ctx = hitl_gate.map(|gate| ParentHitlCtx {
+        gate: gate.clone(),
+        tx: tx.clone(),
+        run_id: run_id.to_string(),
+    });
+    PARENT_HITL_CTX
+        .scope(ctx, execute_tools_serial_inner(session, calls, pause, tx, run_id, hitl_gate))
+        .await
+}
+
+async fn execute_tools_serial_inner(
+    session: &Arc<Mutex<AgentLoop>>,
+    calls: &[tools::ParsedToolCall],
+    pause: &Arc<PauseControl>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<Vec<String>> {
+    let mut out = Vec::with_capacity(calls.len());
+    for call in calls {
+        if pause.is_cancelled() {
+            return None;
+        }
+        if !pause.wait_if_paused().await {
+            return None;
+        }
+
+        // 危险 terminal：deny / auto / ask
+        if call.name == "terminal" && !call.args_parse_error {
+            if let Some(decision) = call
+                .arguments
+                .get("command")
+                .and_then(|v| v.as_str())
+                .and_then(tools::classify_dangerous_command)
+            {
+                match decision.action {
+                    tools::ApprovalAction::Deny => {
+                        out.push(format!(
+                            "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
+                            decision.description
+                        ));
+                        continue;
+                    }
+                    tools::ApprovalAction::Auto => {
+                        // 放行，继续执行
+                    }
+                    tools::ApprovalAction::Ask => {
+                        let cmd = call
+                            .arguments
+                            .get("command")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        // 可选辅模型降级 Ask → Auto
+                        let smart_action = {
+                            let agent = session.lock().await;
+                            let pname = agent.chat_provider().to_string();
+                            let model = agent.chat_model().to_string();
+                            let api_key = agent.chat_api_key().to_string();
+                            let base_url = agent.chat_base_url().to_string();
+                            let providers = agent.providers_arc();
+                            drop(agent);
+                            if let Some(provider) = providers.get(&pname) {
+                                let config = ProviderConfig {
+                                    model: if model.trim().is_empty() {
+                                        provider.default_model().to_string()
+                                    } else {
+                                        model
+                                    },
+                                    api_key,
+                                    base_url: if base_url.trim().is_empty() {
+                                        None
+                                    } else {
+                                        Some(base_url)
+                                    },
+                                    ..ProviderConfig::default()
+                                };
+                                crate::smart_approval::maybe_smart_downgrade_ask(
+                                    cmd,
+                                    decision.description,
+                                    provider,
+                                    config,
+                                )
+                                .await
+                            } else {
+                                tools::ApprovalAction::Ask
+                            }
+                        };
+                        if smart_action == tools::ApprovalAction::Auto {
+                            tracing::info!(
+                                command = %cmd,
+                                reason = decision.description,
+                                "smart approval auto-approved dangerous command"
+                            );
+                            // 放行，继续执行
+                        } else if let Some(gate) = hitl_gate {
+                            let title = "批准危险命令";
+                            let body = format!(
+                                "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
+                                decision.description
+                            );
+                            let approved =
+                                park_confirm(gate, tx, run_id, &call.id, title, &body).await?;
+                            if !approved {
+                                out.push(
+                                    "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".to_string(),
+                                );
+                                continue;
+                            }
+                        } else {
+                            out.push(format!(
+                                "Command blocked: dangerous ({}) and no HITL gate available.",
+                                decision.description
+                            ));
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut result = if call.args_parse_error {
+            format!(
+                "工具参数 JSON 解析失败: {}",
+                call.arguments
+                    .get("_parse_error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("invalid json")
+            )
+        } else {
+            let mut agent = session.lock().await;
+            tokio::task::block_in_place(|| {
+                agent.handle_tool_call(&call.name, &call.arguments)
+            })
+            .unwrap_or_else(|e| format!("工具错误: {e}"))
+        };
+
+        // confirm/clarify：astro_hitl → 同回合 park
+        if let Some(hitl) = parse_astro_hitl(&result) {
+            if let Some(gate) = hitl_gate {
+                result = park_astro_hitl(gate, tx, run_id, &call.id, hitl).await?;
+            } else {
+                // 无闸门（测试/legacy）：退回旧行为不可用，改为说明
+                result = "HITL gate unavailable; confirmation/clarification could not be shown to the user.".to_string();
+            }
+        }
+
+        if pause.is_cancelled() {
+            return None;
+        }
+        out.push(result);
+    }
+    Some(out)
+}
+
+/// 并发执行非 interactive/exclusive 工具；按调用顺序返回结果。
+async fn execute_tools_concurrent(
+    session: &Arc<Mutex<AgentLoop>>,
+    calls: &[tools::ParsedToolCall],
+    pause: &Arc<PauseControl>,
+) -> Option<Vec<String>> {
+    if pause.is_cancelled() || !pause.wait_if_paused().await {
+        return None;
+    }
+
+    let snap = {
+        let agent = session.lock().await;
+        ToolExecSnapshot {
+            memory_dir: agent.memory_dir().to_path_buf(),
+            agent_id: agent.agent_id().to_string(),
+            workspace_dir: agent.workspace_dir(),
+            session_id: agent.session_id().to_string(),
+            chat_api_key: agent.chat_api_key().to_string(),
+            chat_base_url: agent.chat_base_url().to_string(),
+            chat_provider: agent.chat_provider().to_string(),
+            chat_model: agent.chat_model().to_string(),
+            image_gen_targets: agent.image_gen_targets().clone(),
+            providers: agent.providers_arc(),
+        }
+    };
+
+    let mut join_set = JoinSet::new();
+    for (idx, call) in calls.iter().cloned().enumerate() {
+        let snap = snap.clone();
+        join_set.spawn_blocking(move || {
+            let result = if call.args_parse_error {
+                format!(
+                    "工具参数 JSON 解析失败: {}",
+                    call.arguments
+                        .get("_parse_error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("invalid json")
+                )
+            } else {
+                run_tool_on_snapshot(&snap, &call.name, &call.arguments)
+            };
+            (idx, result)
+        });
+    }
+
+    let mut slots: Vec<Option<String>> = (0..calls.len()).map(|_| None).collect();
+    while let Some(joined) = join_set.join_next().await {
+        match joined {
+            Ok((idx, result)) => {
+                if let Some(slot) = slots.get_mut(idx) {
+                    *slot = Some(result);
+                }
+            }
+            Err(e) => {
+                // 标记失败占位
+                let msg = format!("工具错误: join failed: {e}");
+                if let Some(empty_idx) = slots.iter().position(|s| s.is_none()) {
+                    slots[empty_idx] = Some(msg);
+                }
+            }
+        }
+    }
+    Some(
+        slots
+            .into_iter()
+            .map(|s| s.unwrap_or_else(|| "工具错误: missing result".into()))
+            .collect(),
+    )
+}
+
+#[derive(Clone)]
+struct ToolExecSnapshot {
+    memory_dir: std::path::PathBuf,
+    agent_id: String,
+    workspace_dir: std::path::PathBuf,
+    session_id: String,
+    chat_api_key: String,
+    chat_base_url: String,
+    chat_provider: String,
+    chat_model: String,
+    image_gen_targets: tools::ImageGenTargets,
+    providers: Arc<providers::registry::ProviderRegistry>,
+}
+
+fn run_tool_on_snapshot(
+    snap: &ToolExecSnapshot,
+    name: &str,
+    args: &serde_json::Value,
+) -> String {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => return format!("工具错误: runtime: {e}"),
+    };
+    rt.block_on(async {
+        let mut memory = match memory::MemoryManager::for_agent(
+            snap.memory_dir.clone(),
+            &snap.agent_id,
+        ) {
+            Ok(m) => m,
+            Err(e) => return format!("工具错误: memory: {e}"),
+        };
+        let mut ctx = tools::ToolContext {
+            memory: &mut memory,
+            memory_dir: snap.memory_dir.clone(),
+            workspace_dir: snap.workspace_dir.clone(),
+            image_gen_targets: &snap.image_gen_targets,
+            providers: snap.providers.as_ref(),
+            session_id: snap.session_id.clone(),
+            chat_api_key: snap.chat_api_key.clone(),
+            chat_base_url: snap.chat_base_url.clone(),
+            chat_provider: snap.chat_provider.clone(),
+            chat_model: snap.chat_model.clone(),
+        };
+        tools::dispatch_tool(|_| true, &mut ctx, name, args)
+            .await
+            .unwrap_or_else(|e| format!("工具错误: {e}"))
+    })
+}
+
+async fn park_confirm(
+    gate: &Arc<HitlGate>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+    tool_call_id: &str,
+    title: &str,
+    body: &str,
+) -> Option<bool> {
+    let surface_id = format!("confirm-{}", uuid::Uuid::new_v4());
+    let operations = a2ui::templates::build_confirm_surface(&surface_id, title, body);
+    let ops_value = serde_json::Value::Array(operations);
+    let result = park_astro_hitl(
+        gate,
+        tx,
+        run_id,
+        tool_call_id,
+        AstroHitlPayload {
+            reason: "confirmation".into(),
+            message: title.into(),
+            operations: ops_value,
+            response_schema: serde_json::json!({
+                "type": "object",
+                "properties": { "approved": { "type": "boolean" } },
+                "required": ["approved"]
+            }),
+        },
+    )
+    .await?;
+    let v: serde_json::Value = serde_json::from_str(&result).unwrap_or_default();
+    Some(v.get("approved").and_then(|x| x.as_bool()).unwrap_or(false))
+}
+
+async fn park_astro_hitl(
+    gate: &Arc<HitlGate>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+    tool_call_id: &str,
+    hitl: AstroHitlPayload,
+) -> Option<String> {
+    let message_id = format!("a2ui-surface-{tool_call_id}");
+    let content_json = serde_json::json!({ "operations": hitl.operations }).to_string();
+    if !emit(
+        tx,
+        MultiTurnStreamItem::Activity {
+            message_id,
+            activity_type: "a2ui-surface".into(),
+            content_json,
+            replace: true,
+        },
+    )
+    .await
+    {
+        return None;
+    }
+
+    let interrupt = Interrupt {
+        id: uuid::Uuid::new_v4().to_string(),
+        reason: hitl.reason.clone(),
+        message: hitl.message.clone(),
+        tool_call_id: tool_call_id.to_string(),
+        response_schema_json: hitl.response_schema.to_string(),
+        expires_at: String::new(),
+        metadata_json: String::new(),
+    };
+    let interrupts_json =
+        serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
+    if !emit(
+        tx,
+        MultiTurnStreamItem::RunFinished {
+            run_id: run_id.to_string(),
+            outcome_type: "hitl_waiting".into(),
+            interrupts_json,
+        },
+    )
+    .await
+    {
+        return None;
+    }
+
+    let rx = gate.begin_wait(interrupt.clone()).await;
+    let resolution = gate
+        .finish_wait(
+            &interrupt.id,
+            rx,
+            Duration::from_secs(HITL_DEFAULT_TIMEOUT_SECS),
+        )
+        .await;
+    Some(resolution.to_tool_result())
+}
+
 /// 在后台 task 启动 [`run_multi_turn_stream`]，并返回可消费的 [`MultiTurnStream`]。
 ///
 /// channel 容量为 32；消费者 drop 后发送方通过 [`emit`] 返回 `false` 自然退出。
@@ -824,20 +1295,41 @@ pub fn stream_multi_turn(
     system_prompt: String,
     pause: Arc<PauseControl>,
 ) -> MultiTurnStream {
+    stream_multi_turn_with_hitl(session, provider, config, system_prompt, pause, None)
+}
+
+/// 带 HITL 闸门的多轮流。
+pub fn stream_multi_turn_with_hitl(
+    session: Arc<Mutex<AgentLoop>>,
+    provider: Arc<dyn AiProvider>,
+    config: ProviderConfig,
+    system_prompt: String,
+    pause: Arc<PauseControl>,
+    hitl_gate: Option<Arc<HitlGate>>,
+) -> MultiTurnStream {
     let (tx, rx) = mpsc::channel(32);
     tokio::spawn(async move {
-        run_multi_turn_stream(session, provider, config, system_prompt, pause, tx).await;
+        run_multi_turn_stream(
+            session,
+            provider,
+            config,
+            system_prompt,
+            pause,
+            hitl_gate,
+            tx,
+        )
+        .await;
     });
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))
 }
 
-struct AstroHitlPayload {
-    reason: String,
-    message: String,
-    operations: serde_json::Value,
-    response_schema: serde_json::Value,
+pub(crate) struct AstroHitlPayload {
+    pub reason: String,
+    pub message: String,
+    pub operations: serde_json::Value,
+    pub response_schema: serde_json::Value,
 }
 
 struct AstroUiPayload {
@@ -845,7 +1337,7 @@ struct AstroUiPayload {
     operations: serde_json::Value,
 }
 
-fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
+pub(crate) fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
     let value: serde_json::Value = serde_json::from_str(result).ok()?;
     if value.get("astro_hitl")?.as_bool() != Some(true) {
         return None;
@@ -895,3 +1387,150 @@ fn parse_astro_ui(result: &str) -> Option<AstroUiPayload> {
         operations,
     })
 }
+
+#[cfg(test)]
+mod child_hitl_tests {
+    use super::*;
+    use crate::interrupt::ResumeItem;
+    use serde_json::json;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn try_park_parent_hitl_resolves_via_gate() {
+        let gate = HitlGate::new("parent-sess");
+        let (tx, mut rx) = mpsc::channel::<anyhow::Result<MultiTurnStreamItem>>(8);
+        let ctx = ParentHitlCtx {
+            gate: gate.clone(),
+            tx,
+            run_id: "run-1".into(),
+        };
+
+        let gate_resolver = gate.clone();
+        let resolve_task = tokio::spawn(async move {
+            // 等到有 waiting
+            for _ in 0..50 {
+                if gate_resolver.is_waiting().await {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            let pending = gate_resolver.pending_interrupts().await;
+            assert!(!pending.is_empty());
+            assert!(pending[0].reason.contains("[delegate]"));
+            gate_resolver
+                .resolve(&[ResumeItem {
+                    interrupt_id: pending[0].id.clone(),
+                    status: "resolved".into(),
+                    payload_json: r#"{"approved":true}"#.into(),
+                }])
+                .await
+                .unwrap();
+        });
+
+        let hitl = AstroHitlPayload {
+            reason: "confirmation".into(),
+            message: "ok?".into(),
+            operations: json!([]),
+            response_schema: json!({
+                "type": "object",
+                "properties": { "approved": { "type": "boolean" } },
+                "required": ["approved"]
+            }),
+        };
+
+        let result = PARENT_HITL_CTX
+            .scope(Some(ctx), async {
+                try_park_parent_hitl("tc-child-1", hitl, None).await
+            })
+            .await
+            .expect("park should return");
+
+        assert!(result.contains("approved") || result.contains("true"), "got {result}");
+        resolve_task.await.unwrap();
+
+        // 至少收到 Activity 或 hitl_waiting
+        let mut saw_waiting = false;
+        while let Ok(item) = rx.try_recv() {
+            if let Ok(MultiTurnStreamItem::RunFinished { outcome_type, .. }) = item {
+                if outcome_type == "hitl_waiting" {
+                    saw_waiting = true;
+                }
+            }
+        }
+        assert!(saw_waiting, "expected hitl_waiting on parent stream");
+    }
+
+    #[tokio::test]
+    async fn try_park_without_ctx_returns_none() {
+        let hitl = AstroHitlPayload {
+            reason: "confirmation".into(),
+            message: "x".into(),
+            operations: json!([]),
+            response_schema: json!({}),
+        };
+        assert!(try_park_parent_hitl("tc", hitl, None).await.is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn try_park_via_live_session_map() {
+        let gate = HitlGate::new("async-parent");
+        let (tx, mut rx) = mpsc::channel::<anyhow::Result<MultiTurnStreamItem>>(8);
+        register_live_parent_hitl(
+            "async-parent",
+            ParentHitlCtx {
+                gate: gate.clone(),
+                tx,
+                run_id: "run-async".into(),
+            },
+        )
+        .await;
+
+        let gate_resolver = gate.clone();
+        let resolve_task = tokio::spawn(async move {
+            for _ in 0..50 {
+                if gate_resolver.is_waiting().await {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            let pending = gate_resolver.pending_interrupts().await;
+            assert!(!pending.is_empty());
+            assert!(pending[0].reason.contains("delegate_async"));
+            gate_resolver
+                .resolve(&[ResumeItem {
+                    interrupt_id: pending[0].id.clone(),
+                    status: "resolved".into(),
+                    payload_json: r#"{"approved":true}"#.into(),
+                }])
+                .await
+                .unwrap();
+        });
+
+        let hitl = AstroHitlPayload {
+            reason: "confirmation".into(),
+            message: "async?".into(),
+            operations: json!([]),
+            response_schema: json!({
+                "type": "object",
+                "properties": { "approved": { "type": "boolean" } },
+                "required": ["approved"]
+            }),
+        };
+        let result = try_park_parent_hitl("tc-async", hitl, Some("async-parent"))
+            .await
+            .expect("live park");
+        assert!(result.contains("approved") || result.contains("true"), "got {result}");
+        resolve_task.await.unwrap();
+        unregister_live_parent_hitl("async-parent").await;
+
+        let mut saw_waiting = false;
+        while let Ok(item) = rx.try_recv() {
+            if let Ok(MultiTurnStreamItem::RunFinished { outcome_type, .. }) = item {
+                if outcome_type == "hitl_waiting" {
+                    saw_waiting = true;
+                }
+            }
+        }
+        assert!(saw_waiting);
+    }
+}
+

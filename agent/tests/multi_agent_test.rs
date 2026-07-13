@@ -12,7 +12,7 @@ async fn test_orchestrator_dispatches_sub_agents() {
         SubTask { id: "task_a".to_string(), description: "搜索 Rust 异步编程资料".to_string() },
         SubTask { id: "task_b".to_string(), description: "总结 tokio 文档".to_string() },
     ];
-    let results = orchestrator.dispatch_parallel(tasks).await;
+    let results = orchestrator.dispatch_parallel_stub(tasks).await;
     assert_eq!(results.len(), 2);
 }
 

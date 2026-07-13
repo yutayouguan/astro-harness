@@ -12,6 +12,7 @@ use crate::vendors::{
 };
 
 /// 内置供应商实例的注册表。
+#[derive(Clone)]
 pub struct ProviderRegistry {
     /// provider id → 共享的 [`AiProvider`] 实现。
     providers: HashMap<String, Arc<dyn AiProvider>>,

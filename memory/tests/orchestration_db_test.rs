@@ -26,6 +26,10 @@ fn create_and_list_steps_in_order() {
                     prompt: "起草".into(),
                 },
             ],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
     let orch = db.get(&id).unwrap().unwrap();
@@ -51,6 +55,10 @@ fn mark_step_failed_stops_semantics_helpers() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
     let steps = db.list_steps(&id).unwrap();
@@ -78,6 +86,10 @@ fn try_claim_running_cas_only_queued() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
 
@@ -105,6 +117,10 @@ fn list_in_period_filters_by_created_at_and_agent() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
     let id_out = db
@@ -117,6 +133,10 @@ fn list_in_period_filters_by_created_at_and_agent() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
 
@@ -154,6 +174,10 @@ fn create_writes_second_precision_timestamps() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
     let orch = db.get(&id).unwrap().unwrap();
@@ -185,6 +209,10 @@ fn list_in_period_month_boundary_with_second_precision() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
     let id_first = db
@@ -197,6 +225,10 @@ fn list_in_period_month_boundary_with_second_precision() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
 
@@ -255,6 +287,10 @@ fn skip_pending_steps_after_marks_later_pending() {
                     prompt: "p2".into(),
                 },
             ],
+            provider: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
     let steps = db.list_steps(&id).unwrap();

@@ -10,6 +10,7 @@ skills = { path = "../skills" }
 providers = { path = "../providers" }
 tools = { path = "../tools" }
 mcp = { path = "../mcp" }
+a2ui = { path = "../a2ui" }
 tracing = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

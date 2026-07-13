@@ -13,18 +13,26 @@ pub mod cron_exec;
 pub mod event_bus;
 /// 提示词生命周期钩子（取消、录制、渠道回调等）。
 pub mod hooks;
+/// Hermes 风格 HITL 阻塞闸门（同回合 park / resume）。
+pub mod hitl;
 /// AG-UI 风格 interrupt 挂起与 resume 校验。
 pub mod interrupt;
 /// 多轮对话主循环：工具调用、深度限制与回合结果。
 pub mod loop_;
 /// 会话消息到 Provider API 消息的格式转换。
 pub mod messages;
-/// 多子 Agent 并行编排（任务拆分与结果汇总）。
+/// 程序化并行子任务调度（转调 delegate_exec）。
 pub mod multi_agent;
 /// 多 Agent 串行编排执行器（orchestration.db + spawn hook）。
 pub mod orchestration;
+/// 同步真委派执行器（delegate_task 对齐）。
+pub mod delegate_exec;
+/// 辅模型危险命令 Smart 审批（可选）。
+pub mod smart_approval;
 /// 将静态/动态上下文等层叠为完整 system prompt。
 pub mod prompt_builder;
+/// 轻量 JSON Schema（HITL payload）。
+pub mod schema_validate;
 /// 流式补全与多轮流式迭代抽象。
 pub mod streaming;
 /// 助手回合时间线（astro_timeline_v1）。
@@ -39,6 +47,11 @@ pub use context::{DynamicContext, StaticContext};
 pub use hooks::{
     CancelSignal, ChannelHooks, HookEvent, NoopHooks, PromptCancelled, PromptHooks, RecordingHooks,
 };
+/// HITL 闸门 re-export。
+pub use hitl::{
+    is_exclusive_tool, is_interactive_tool, HitlGate, HitlRegistry, HitlRequest, HitlResolution,
+    HITL_DEFAULT_TIMEOUT_SECS,
+};
 /// Interrupt 状态机 re-export。
 pub use interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
@@ -49,8 +62,8 @@ pub use messages::to_provider_messages;
 pub use providers::{PauseControl, Usage};
 /// 流式 API re-export。
 pub use streaming::{
-    stream_multi_turn, MultiTurnStreamItem, ProviderStreamer, StreamedAssistantContent,
-    StreamingChat, StreamingCompletion, StreamingPrompt,
+    stream_multi_turn, stream_multi_turn_with_hitl, MultiTurnStreamItem, ProviderStreamer,
+    StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
 };
 /// 工具注册表与条目定义（实现位于 `tools` crate）。
 pub use tools::{ToolEntry, ToolRegistry};

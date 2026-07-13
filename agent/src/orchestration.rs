@@ -33,8 +33,11 @@ const PROVIDER_MAX_ROUNDS: usize = 5;
 /// 认领并串行执行一次编排；若已被认领则立即返回 Ok。
 pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result<()> {
     let db = OrchestrationDb::open_default()?;
-    if !db.try_claim_running(&req.orchestration_id)? {
-        return Ok(());
+    let claimed = db.try_claim_running(&req.orchestration_id)?;
+    if !claimed {
+        if !(req.allow_reclaim && db.reclaim_stale_running(&req.orchestration_id)?) {
+            return Ok(());
+        }
     }
     let steps = db.list_steps(&req.orchestration_id)?;
     let orch = db
@@ -45,6 +48,22 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
     let mut summaries = Vec::new();
 
     for step in steps {
+        match step.status.as_str() {
+            "done" => {
+                if let Some(ref out) = step.output {
+                    prev_output = out.clone();
+                }
+                summaries.push(format!(
+                    "### {}\n{}",
+                    step.role,
+                    truncate_chars(step.output.as_deref().unwrap_or(""), 2_000)
+                ));
+                continue;
+            }
+            "skipped" | "failed" => continue,
+            _ => {}
+        }
+
         db.set_step_running(&step.id)?;
         record_orchestration_edge(&req, &orch, &step, "start", None);
 
@@ -114,6 +133,33 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
     Ok(())
 }
 
+/// 进程启动后：对 DB 中未完成编排重新 spawn（允许 reclaim）。
+pub async fn resume_incomplete_orchestrations() -> anyhow::Result<()> {
+    let db = OrchestrationDb::open_default()?;
+    let ids = db.list_incomplete_ids()?;
+    for id in ids {
+        let Some(row) = db.get(&id)? else {
+            continue;
+        };
+        if row.api_key.trim().is_empty() {
+            tracing::warn!(id = %id, "skip orchestration resume: empty api_key");
+            continue;
+        }
+        memory::request_orchestration_spawn(OrchestrationSpawnRequest {
+            orchestration_id: id,
+            parent_agent_id: row.parent_agent_id,
+            provider: row.provider,
+            model: row.model,
+            api_key: row.api_key,
+            base_url: row.base_url,
+            caller_depth: 0,
+            max_spawn_depth: memory::DEFAULT_MAX_SPAWN_DEPTH,
+            allow_reclaim: true,
+        });
+    }
+    Ok(())
+}
+
 async fn run_step(
     req: &OrchestrationSpawnRequest,
     orch: &OrchestrationRow,
@@ -151,26 +197,36 @@ async fn run_step(
     config.multi_turn = PROVIDER_MAX_ROUNDS;
 
     let mut agent = AgentLoop::with_session_id_for_agent(config, sid, &target_agent_id)?;
-    // 禁止子编排递归
-    agent.tool_registry_mut().unregister("orchestration_run");
-    agent.tool_registry_mut().unregister("orchestration_status");
+    let depth_ctx =
+        memory::SpawnDepthCtx::from_caller(req.caller_depth, req.max_spawn_depth);
+    crate::delegate_exec::apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx);
     agent.set_chat_credentials(&provider, &model, &api_key, &base_url);
 
-    let turn_result = agent.run_turn(&user_message, "orchestration").await?;
-    match turn_result {
-        TurnResult::Finished(message) => Ok(message),
-        TurnResult::Continue { system_prompt, .. } => {
-            let (output, _) =
-                run_provider_loop(&mut agent, &provider, &model, &api_key, &base_url, &system_prompt)
-                    .await?;
-            Ok(output)
+    memory::scope_spawn_depth(depth_ctx, async {
+        let turn_result = agent.run_turn(&user_message, "orchestration").await?;
+        match turn_result {
+            TurnResult::Finished(message) => Ok(message),
+            TurnResult::Continue { system_prompt, .. } => {
+                let (output, _) = run_provider_loop(
+                    &mut agent,
+                    &provider,
+                    &model,
+                    &api_key,
+                    &base_url,
+                    &system_prompt,
+                    depth_ctx,
+                )
+                .await?;
+                Ok(output)
+            }
+            TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
+            TurnResult::MaxDepth => anyhow::bail!("工具调用轮次已达上限"),
+            TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
+                anyhow::bail!("编排步骤不支持该轮次结果")
+            }
         }
-        TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
-        TurnResult::MaxDepth => anyhow::bail!("工具调用轮次已达上限"),
-        TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
-            anyhow::bail!("编排步骤不支持该轮次结果")
-        }
-    }
+    })
+    .await
 }
 
 fn resolve_creds(
@@ -205,6 +261,7 @@ async fn run_provider_loop(
     api_key: &str,
     base_url: &str,
     initial_system_prompt: &str,
+    depth_ctx: memory::SpawnDepthCtx,
 ) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
     let name = if provider_name.trim().is_empty() {
@@ -237,9 +294,7 @@ async fn run_provider_loop(
 
     for _round in 0..PROVIDER_MAX_ROUNDS {
         agent.reload_tools_and_mcp().await;
-        // 重载后再次剔除编排工具
-        agent.tool_registry_mut().unregister("orchestration_run");
-        agent.tool_registry_mut().unregister("orchestration_status");
+        crate::delegate_exec::apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx);
 
         let messages = to_provider_messages(&system_prompt, &agent.session_messages);
         let tools = agent.tool_registry().schemas_for_api();
@@ -291,10 +346,15 @@ async fn run_provider_loop(
         }
 
         for call in calls {
-            let result = tokio::task::block_in_place(|| {
+            let mut result = tokio::task::block_in_place(|| {
                 agent.handle_tool_call(&call.name, &call.arguments)
             })
             .unwrap_or_else(|e| format!("工具错误: {e}"));
+
+            // 编排后台无 UI：HITL 视为 cancelled，不 park
+            if is_orchestration_hitl_payload(&result) {
+                result = "HITL (confirm/clarify) is not available in background orchestration; treated as cancelled. Continue without user input or skip the action that required approval.".to_string();
+            }
 
             agent.record_tool_result_with_id(
                 Some(&call.id),
@@ -333,6 +393,14 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
         out.push('…');
     }
     out
+}
+
+/// 编排路径检测 confirm/clarify 的 `astro_hitl` 载荷。
+fn is_orchestration_hitl_payload(result: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(result) else {
+        return false;
+    };
+    value.get("astro_hitl").and_then(|v| v.as_bool()) == Some(true)
 }
 
 /// 写入 handoff 遥测边；`kind=orchestration` 不计入 Insights calls KPI。

@@ -12,6 +12,9 @@ pub mod infra;
 pub mod orchestration;
 pub mod session;
 pub mod usage;
+pub mod delegate_async;
+pub mod delegate_spawn;
+pub mod spawn_depth;
 
 // ── 域内路径（新）──────────────────────────────────────────────
 pub use agent::agent_icons;
@@ -99,6 +102,18 @@ pub use orchestration_db::{
 pub use orchestration_spawn::{
     request_orchestration_spawn, set_orchestration_spawner, OrchestrationSpawnRequest,
     OrchestrationSpawner,
+};
+pub use delegate_spawn::{
+    run_delegate_sync, set_delegate_runner, DelegateRunRequest, DelegateRunner, DelegateTaskSpec,
+};
+pub use delegate_async::{
+    async_delegate_cancel, async_delegate_collect, async_delegate_status, set_delegate_async_spawner,
+    start_delegate_async, resume_incomplete_async_delegates, AsyncDelegateRecord,
+    AsyncDelegateRegistry, AsyncDelegateStatus, DelegateAsyncSpawner,
+};
+pub use spawn_depth::{
+    can_spawn_nested, current_spawn_depth, effective_max_spawn_depth, scope_spawn_depth,
+    SpawnDepthCtx, DEFAULT_MAX_SPAWN_DEPTH,
 };
 pub use collab_insights::{
     query_collaboration_insights, CollaborationEdge, CollaborationGraph,

@@ -9,6 +9,12 @@ pub struct OrchestrationSpawnRequest {
     pub model: String,
     pub api_key: String,
     pub base_url: String,
+    /// 发起方当前嵌套深度（顶层 0）。
+    pub caller_depth: u32,
+    /// 允许发起嵌套的最大 caller depth（默认 1）。
+    pub max_spawn_depth: u32,
+    /// 为 true 时允许认领崩溃留下的 `running`（进程重启续跑）。
+    pub allow_reclaim: bool,
 }
 
 pub type OrchestrationSpawner =

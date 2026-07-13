@@ -9,9 +9,9 @@ use agent::builder::AgentBuilder;
 use agent::hooks::ChannelHooks;
 use agent::loop_::{AgentLoop, TurnResult};
 use agent::streaming::{
-    stream_multi_turn, MultiTurnStreamItem, StreamedAssistantContent,
+    stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
 };
-use agent::InterruptPending;
+use agent::{HitlGate, HitlRegistry};
 use futures::StreamExt;
 use memory::{AgentRuntimeConfig, MemoryManager};
 use proto::astro_service_server::AstroService;
@@ -30,8 +30,7 @@ use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use super::interrupt_store::{
-    format_resume_user_message, parse_pending_interrupts, parse_resume_items_json,
-    resume_items_from_proto, InterruptStore,
+    clear_interrupt_file, resume_items_from_proto, save_interrupt_file,
 };
 
 /// 会话 Agent 循环的共享句柄。
@@ -45,8 +44,8 @@ pub struct AstroServiceImpl {
     sessions: Arc<RwLock<HashMap<String, SessionHandle>>>,
     /// session_id → 暂停控制器。
     pause_controls: Arc<RwLock<HashMap<String, Arc<PauseControl>>>>,
-    /// session_id → 未决 HITL interrupt。
-    interrupt_store: InterruptStore,
+    /// session_id → 活 HITL 闸门。
+    hitl_registry: HitlRegistry,
     /// 模型供应商注册表。
     providers: Arc<ProviderRegistry>,
     /// 记忆根目录。
@@ -59,7 +58,7 @@ impl AstroServiceImpl {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             pause_controls: Arc::new(RwLock::new(HashMap::new())),
-            interrupt_store: InterruptStore::new(memory_dir.clone()),
+            hitl_registry: HitlRegistry::new(),
             providers: Arc::new(ProviderRegistry::new()),
             memory_dir,
         }
@@ -282,7 +281,8 @@ impl AstroService for AstroServiceImpl {
             ChatControlAction::ChatControlCancel => {
                 pause.cancel();
                 drop(map);
-                self.interrupt_store.cancel_pending(&req.session_id).await;
+                self.hitl_registry.cancel_and_remove(&req.session_id).await;
+                clear_interrupt_file(&self.memory_dir, &req.session_id);
                 if let Ok(session) = self.get_session(&req.session_id).await {
                     session.lock().await.cancel_signal().cancel();
                 }
@@ -292,9 +292,7 @@ impl AstroService for AstroServiceImpl {
         Ok(Response::new(Empty {}))
     }
 
-    /// 校验并应用 interrupt resume：注入用户消息并清除 pending。
-    ///
-    /// 随后客户端应再调 `Chat` 继续生成（可带补充 `content`）。
+    /// 完成同回合 HITL 等待（解析活闸门 oneshot）；不注入 user 消息、不新开 run。
     async fn interrupt_resume(
         &self,
         request: Request<proto::InterruptResumeRequest>,
@@ -303,22 +301,16 @@ impl AstroService for AstroServiceImpl {
         if req.session_id.is_empty() {
             return Err(Status::invalid_argument("session_id 不能为空"));
         }
-        let Some(mut pending) = self.interrupt_store.get(&req.session_id).await else {
-            return Err(Status::failed_precondition("当前会话没有未决 interrupt"));
+        let Some(gate) = self.hitl_registry.get(&req.session_id).await else {
+            return Err(Status::failed_precondition(
+                "当前会话没有等待中的 HITL（可能已超时或过期）",
+            ));
         };
         let items = resume_items_from_proto(&req.resume);
-        pending.apply_resume(&items).map_err(|e| {
-            Status::invalid_argument(format!("interrupt resume 无效: {e}"))
-        })?;
-        self.interrupt_store.clear(&req.session_id).await;
-        let session = self.get_session(&req.session_id).await?;
-        {
-            let mut agent = session.lock().await;
-            let msg = format_resume_user_message(pending.resolutions());
-            agent
-                .session_messages
-                .push(common::message::Message::user(&msg));
-        }
+        gate.resolve(&items)
+            .await
+            .map_err(|e| Status::invalid_argument(format!("interrupt resume 无效: {e}")))?;
+        clear_interrupt_file(&self.memory_dir, &req.session_id);
         Ok(Response::new(Empty {}))
     }
 
@@ -350,7 +342,7 @@ impl AstroService for AstroServiceImpl {
         };
         let model = req.model;
         let content = req.content;
-        let resume_json = req.resume_json;
+        let _resume_json = req.resume_json;
         let _use_memory = req.use_memory;
         let api_key = req.api_key;
         let base_url = req.base_url;
@@ -380,9 +372,31 @@ impl AstroService for AstroServiceImpl {
             agent.set_hooks(Arc::new(ChannelHooks::new(hook_tx)));
         }
         let providers = self.providers.clone();
+
+        // 有活 HITL 时拒绝新 chat（须在 register_pause 之前，避免取消进行中的流）
+        if let Some(gate) = self.hitl_registry.get(&session_id).await {
+            if gate.is_waiting().await {
+                let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
+                let _ = tx
+                    .send(Ok(ChatEvent {
+                        payload: Some(proto::chat_event::Payload::Error(
+                            "请先完成上方确认或澄清卡片（HITL waiting）".into(),
+                        )),
+                    }))
+                    .await;
+                let _ = tx
+                    .send(Ok(ChatEvent {
+                        payload: Some(proto::chat_event::Payload::Done(true)),
+                    }))
+                    .await;
+                return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
+            }
+        }
+
         let pause = self.register_pause(&session_id).await;
         let pause_controls = self.pause_controls.clone();
-        let interrupt_store = self.interrupt_store.clone();
+        let hitl_registry = self.hitl_registry.clone();
+        let memory_dir = self.memory_dir.clone();
         let sid_cleanup = session_id.clone();
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
@@ -406,68 +420,10 @@ impl AstroService for AstroServiceImpl {
             let cleanup = || async {
                 let mut map = pause_controls.write().await;
                 map.remove(&sid_cleanup);
+                hitl_registry.cancel_and_remove(&sid_cleanup).await;
             };
 
-            // HITL 闸门：有 pending 时必须带 resume_json
-            let mut turn_content = content;
-            if let Some(mut pending) = interrupt_store.get(&sid_cleanup).await {
-                if resume_json.trim().is_empty() {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Error(
-                                "请先完成上方确认或澄清卡片（interrupt pending）".into(),
-                            )),
-                        }))
-                        .await;
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Done(true)),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-                let items = match parse_resume_items_json(&resume_json) {
-                    Ok(items) => items,
-                    Err(err) => {
-                        let _ = tx
-                            .send(Ok(ChatEvent {
-                                payload: Some(proto::chat_event::Payload::Error(err)),
-                            }))
-                            .await;
-                        let _ = tx
-                            .send(Ok(ChatEvent {
-                                payload: Some(proto::chat_event::Payload::Done(true)),
-                            }))
-                            .await;
-                        cleanup().await;
-                        return;
-                    }
-                };
-                if let Err(err) = pending.apply_resume(&items) {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Error(format!(
-                                "interrupt resume 无效: {err}"
-                            ))),
-                        }))
-                        .await;
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Done(true)),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-                interrupt_store.clear(&sid_cleanup).await;
-                let resume_msg = format_resume_user_message(pending.resolutions());
-                turn_content = if turn_content.trim().is_empty() {
-                    resume_msg
-                } else {
-                    format!("{resume_msg}\n\n{turn_content}")
-                };
-            }
+            let turn_content = content;
 
             let run_result = {
                 let mut agent = session.lock().await;
@@ -583,7 +539,17 @@ impl AstroService for AstroServiceImpl {
                 ..ProviderConfig::default()
             };
 
-            let mut stream = stream_multi_turn(session, provider, config, system_prompt, pause);
+            let hitl_gate = HitlGate::new(sid_cleanup.clone());
+            hitl_registry.insert(hitl_gate.clone()).await;
+
+            let mut stream = stream_multi_turn_with_hitl(
+                session,
+                provider,
+                config,
+                system_prompt,
+                pause,
+                Some(hitl_gate),
+            );
             while let Some(item) = stream.next().await {
                 match item {
                     Ok(mt) => {
@@ -594,12 +560,15 @@ impl AstroService for AstroServiceImpl {
                             ..
                         } = mt
                         {
-                            if outcome_type == "interrupt" {
-                                let interrupts = parse_pending_interrupts(interrupts_json);
+                            if outcome_type == "hitl_waiting" || outcome_type == "interrupt" {
+                                let interrupts: Vec<agent::Interrupt> =
+                                    serde_json::from_str(interrupts_json).unwrap_or_default();
                                 if !interrupts.is_empty() {
-                                    interrupt_store
-                                        .insert(&sid_cleanup, InterruptPending::new(interrupts))
-                                        .await;
+                                    let _ = save_interrupt_file(
+                                        &memory_dir,
+                                        &sid_cleanup,
+                                        &interrupts,
+                                    );
                                 }
                             }
                         }
@@ -622,7 +591,7 @@ impl AstroService for AstroServiceImpl {
                     }
                 }
             }
-
+            clear_interrupt_file(&memory_dir, &sid_cleanup);
             cleanup().await;
         });
 

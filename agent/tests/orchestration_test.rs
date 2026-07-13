@@ -26,6 +26,10 @@ async fn second_claim_is_noop_without_llm() {
                 agent_id: None,
                 prompt: "p".into(),
             }],
+            provider: "openai".into(),
+            model: "gpt-4o-mini".into(),
+            api_key: "sk-test".into(),
+            base_url: String::new(),
         })
         .unwrap();
 
@@ -38,6 +42,9 @@ async fn second_claim_is_noop_without_llm() {
         model: "gpt-4o-mini".into(),
         api_key: "sk-test".into(),
         base_url: String::new(),
+        caller_depth: 0,
+        max_spawn_depth: memory::DEFAULT_MAX_SPAWN_DEPTH,
+        allow_reclaim: false,
     };
     agent::orchestration::run_orchestration(req).await.unwrap();
 
@@ -70,6 +77,10 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
                     prompt: "draft".into(),
                 },
             ],
+            provider: "openai".into(),
+            model: "gpt-4o-mini".into(),
+            api_key: String::new(),
+            base_url: String::new(),
         })
         .unwrap();
 
@@ -80,6 +91,9 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
         model: "gpt-4o-mini".into(),
         api_key: String::new(),
         base_url: String::new(),
+        caller_depth: 0,
+        max_spawn_depth: memory::DEFAULT_MAX_SPAWN_DEPTH,
+        allow_reclaim: false,
     };
     agent::orchestration::run_orchestration(req).await.unwrap();
 

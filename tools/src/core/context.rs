@@ -96,7 +96,7 @@ pub struct ToolContext<'a> {
     pub image_gen_targets: &'a ImageGenTargets,
     /// 已注册的 LLM Provider 列表，供 `image_gen` 查找实现。
     pub providers: &'a ProviderRegistry,
-    /// 当前会话 id；`delegate`、`task_plan`、`multi_agent` 落盘记录时写入 JSON。
+    /// 当前会话 id；`delegate`、`task_plan`、编排落盘时写入关联字段。
     pub session_id: String,
     /// 当前聊天会话的 API Key；`vision`、`tts` 在 Provider 为 OpenAI 时复用。
     pub chat_api_key: String,
