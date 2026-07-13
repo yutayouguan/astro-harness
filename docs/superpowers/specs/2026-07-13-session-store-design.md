@@ -1,7 +1,7 @@
 # 会话存储（Session Store）设计
 
 **日期:** 2026-07-13  
-**状态:** 已批准  
+**状态:** 已批准 / 已实现（P0）  
 **范围:** 将会话持久化升级为单库富消息模型（schema 目标版本 11）  
 **外部参考（仅设计借鉴，不引入其品牌命名）：** [NousResearch session storage 文档](https://hermes-agent.nousresearch.com/docs/developer-guide/session-storage) 所描述的 SQLite 会话架构
 
