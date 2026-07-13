@@ -962,6 +962,8 @@ export default function App() {
         arguments?: string;
         result?: string;
         operation?: string;
+        detail?: string;
+        outcome?: string;
         index?: number;
         prompt_tokens?: number;
         completion_tokens?: number;
@@ -1165,6 +1167,25 @@ export default function App() {
             title: payload.operation || "memory",
             output: payload.content,
             detail: payload.content,
+            status: "done",
+            at: Date.now(),
+          };
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? applyActivityUpsert(m, activity) : m,
+            ),
+          );
+        } else if (payload.type === "hook") {
+          const title = payload.name || "hook";
+          const detail = [payload.detail, payload.outcome]
+            .filter((s) => typeof s === "string" && s.trim())
+            .join(" · ");
+          const activity: ChatActivity = {
+            id: `hook-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            kind: "hook",
+            title,
+            output: detail || title,
+            detail: detail || title,
             status: "done",
             at: Date.now(),
           };

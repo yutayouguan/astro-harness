@@ -162,6 +162,8 @@ pub struct HookEvent {
     /// 钩子名，如 `pre_llm_call`。
     pub kind: String,
     pub detail: String,
+    /// 可选 outcome 摘要（Continue / Block / …）。
+    pub outcome: String,
 }
 
 /// Channel 生产者：实现 [`PromptHooks`] 并推送 Hermes 名事件。
@@ -178,6 +180,7 @@ impl ChannelHooks {
         let _ = self.tx.send(HookEvent {
             kind: kind.into(),
             detail: detail.into(),
+            outcome: String::new(),
         });
     }
 }

@@ -50,17 +50,36 @@ pub struct AstroServiceImpl {
     providers: Arc<ProviderRegistry>,
     /// 记忆根目录。
     memory_dir: PathBuf,
+    /// Plugin / Gateway / Shell 钩子运行时。
+    hook_runtime: Arc<::hooks::HookRuntime>,
 }
 
 impl AstroServiceImpl {
     /// 使用给定记忆目录创建服务（空会话表）。
     pub fn new(memory_dir: PathBuf) -> Self {
+        let hook_runtime = match ::hooks::HookRuntime::bootstrap_from_root(&memory_dir) {
+            Ok(rt) => {
+                rt.fire_gateway(
+                    ::hooks::GATEWAY_STARTUP,
+                    &::hooks::HookPayload {
+                        detail: "backend ready".into(),
+                        ..Default::default()
+                    },
+                );
+                Arc::new(rt)
+            }
+            Err(err) => {
+                tracing::warn!(%err, "hook runtime bootstrap failed; using empty");
+                Arc::new(::hooks::HookRuntime::new())
+            }
+        };
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             pause_controls: Arc::new(RwLock::new(HashMap::new())),
             hitl_registry: HitlRegistry::new(),
             providers: Arc::new(ProviderRegistry::new()),
             memory_dir,
+            hook_runtime,
         }
     }
 
@@ -335,13 +354,52 @@ impl AstroService for AstroServiceImpl {
         } else {
             req.session_id
         };
+
+        // pre_gateway_dispatch：可 Skip / Rewrite
+        let mut content = req.content;
+        let dispatch = self.hook_runtime.fire_plugin(
+            ::hooks::PRE_GATEWAY_DISPATCH,
+            &::hooks::HookPayload {
+                session_id: session_id.clone(),
+                message: Some(content.clone()),
+                detail: content.chars().take(200).collect(),
+                ..Default::default()
+            },
+        );
+        match dispatch {
+            ::hooks::HookOutcome::Skip(reason) => {
+                let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
+                let _ = tx
+                    .send(Ok(ChatEvent {
+                        payload: Some(proto::chat_event::Payload::Error(format!(
+                            "请求被钩子跳过: {reason}"
+                        ))),
+                    }))
+                    .await;
+                let _ = tx
+                    .send(Ok(ChatEvent {
+                        payload: Some(proto::chat_event::Payload::Done(true)),
+                    }))
+                    .await;
+                return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
+            }
+            ::hooks::HookOutcome::Rewrite(msg) => {
+                content = msg;
+            }
+            _ => {}
+        }
+
+        let is_new_session = {
+            let sessions = self.sessions.read().await;
+            !sessions.contains_key(&session_id)
+        };
+
         let provider_name = if req.provider.is_empty() {
             "ollama".to_string()
         } else {
             req.provider
         };
         let model = req.model;
-        let content = req.content;
         let _resume_json = req.resume_json;
         let _use_memory = req.use_memory;
         let api_key = req.api_key;
@@ -364,12 +422,22 @@ impl AstroService for AstroServiceImpl {
         );
 
         let session = self.get_session(&session_id).await?;
+        if is_new_session {
+            self.hook_runtime.fire_gateway(
+                ::hooks::SESSION_START,
+                &::hooks::HookPayload {
+                    session_id: session_id.clone(),
+                    ..Default::default()
+                },
+            );
+        }
         let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel();
         {
             let mut agent = session.lock().await;
             agent.set_image_gen_targets(image_targets);
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
             agent.set_hooks(Arc::new(ChannelHooks::new(hook_tx)));
+            agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
         }
         let providers = self.providers.clone();
 
@@ -405,12 +473,11 @@ impl AstroService for AstroServiceImpl {
             while let Some(ev) = hook_rx.recv().await {
                 let _ = hook_out
                     .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::MemoryUpdate(
-                            proto::MemoryUpdateEvent {
-                                operation: ev.kind,
-                                content: ev.detail,
-                            },
-                        )),
+                        payload: Some(proto::chat_event::Payload::Hook(proto::HookEvent {
+                            name: ev.kind,
+                            detail: ev.detail,
+                            outcome: ev.outcome,
+                        })),
                     }))
                     .await;
             }

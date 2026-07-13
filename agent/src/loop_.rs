@@ -198,6 +198,11 @@ impl AgentLoop {
         Arc::clone(&self.hooks)
     }
 
+    /// 当前会话轮次序号（从 1 起，未开始为 0）。
+    pub fn session_turn(&self) -> usize {
+        self.current_turn
+    }
+
     /// 返回可克隆的取消信号，供上层 streaming 或 UI 触发中断。
     pub fn cancel_signal(&self) -> CancelSignal {
         self.cancel.clone()
@@ -591,7 +596,48 @@ impl AgentLoop {
                 ..Default::default()
             },
         );
+        if name == "delegate" || name == "multi_agent" {
+            self.fire_subagent_stop_from_delegate_result(&result).await;
+        }
         Ok(result)
+    }
+
+    async fn fire_subagent_stop_from_delegate_result(&self, result: &str) {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(result) else {
+            return;
+        };
+        let tasks = v
+            .get("tasks")
+            .and_then(|t| t.as_array())
+            .cloned()
+            .unwrap_or_else(|| {
+                if v.get("session_id").is_some() {
+                    vec![v.clone()]
+                } else {
+                    Vec::new()
+                }
+            });
+        for t in tasks {
+            let child = t
+                .get("session_id")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown");
+            let summary = t
+                .get("summary")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            self.hooks
+                .subagent_stop(child, summary, &self.cancel)
+                .await;
+            let _ = self.hook_bus.fire(
+                ::hooks::SUBAGENT_STOP,
+                &::hooks::HookPayload {
+                    session_id: child.into(),
+                    detail: summary.chars().take(200).collect(),
+                    ..Default::default()
+                },
+            );
+        }
     }
 
     /// 确保会话行存在（不存在则按 `source` 创建）。

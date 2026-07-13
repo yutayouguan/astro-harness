@@ -30,6 +30,11 @@ pub enum ChatStreamEvent {
         operation: String,
         content: String,
     },
+    Hook {
+        name: String,
+        detail: String,
+        outcome: String,
+    },
     Usage {
         prompt_tokens: u32,
         completion_tokens: u32,
@@ -699,6 +704,16 @@ async fn run_chat_stream(
                     ChatStreamEvent::MemoryUpdate {
                         operation: mu.operation,
                         content: mu.content,
+                    },
+                );
+            }
+            Some(proto::chat_event::Payload::Hook(h)) => {
+                let _ = app.emit(
+                    event_name,
+                    ChatStreamEvent::Hook {
+                        name: h.name,
+                        detail: h.detail,
+                        outcome: h.outcome,
                     },
                 );
             }

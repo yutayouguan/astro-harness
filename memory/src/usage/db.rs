@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// `usage.db` schema 版本；不兼容时摧毁重建。
-pub const USAGE_SCHEMA_VERSION: i32 = 2;
+pub const USAGE_SCHEMA_VERSION: i32 = 3;
 
 /// 建表 DDL（`usage_events` 及 ts / agent / kind 索引）
 const DDL: &str = r#"

@@ -451,6 +451,9 @@ impl SessionStore {
     }
 
     /// 若 `state_meta.migrated_from_sessions_db` 未设，从旁路 `sessions.db` 导入会话行（幂等）。
+    ///
+    /// 自 schema v13 起不再调用：旧聊天直接丢弃。
+    #[allow(dead_code)]
     pub(crate) fn import_legacy_sessions_db_once(&self, sessions_dir: &Path) -> Result<()> {
         let already: Option<String> = self
             .conn

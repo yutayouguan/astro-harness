@@ -143,11 +143,12 @@ async fn test_prompt_hooks_on_run_turn() {
     let _ = agent.run_turn("你好", "t1").await.unwrap();
     let events = hooks.snapshot();
     assert!(
-        events.iter().any(|e| e.starts_with("prompt_build:")),
+        events.iter().any(|e| e.starts_with("pre_llm_call:")),
         "events={events:?}"
     );
+    // on_session_end 在 streaming 收尾触发；run_turn 仅准备阶段
     assert!(
-        events.iter().any(|e| e.starts_with("turn_end:")),
+        events.iter().any(|e| e.starts_with("on_session_start:")),
         "events={events:?}"
     );
 }

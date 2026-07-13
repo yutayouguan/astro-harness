@@ -95,7 +95,16 @@ message ChatEvent {
     ActivityEvent activity = 9;
     RunStartedEvent run_started = 10;
     RunFinishedEvent run_finished = 11;
+    // Plugin / Gateway / Shell 生命周期钩子（非 memory）
+    HookEvent hook = 12;
   }
+}
+
+// Plugin Hooks 等生命周期事件（UI 时间线；与 MemoryUpdate 分流）。
+message HookEvent {
+  string name = 1;
+  string detail = 2;
+  string outcome = 3;
 }
 
 // 结构化活动快照（如 activity_type = "a2ui-surface"）。

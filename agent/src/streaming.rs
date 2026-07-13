@@ -506,17 +506,44 @@ async fn run_multi_turn_stream_inner(
         let (history, tools) = {
             let mut agent = session.lock().await;
             agent.reload_tools_and_mcp().await;
-            let messages = agent.session_messages.clone();
+            let mut messages = agent.session_messages.clone();
+            if let Some(ctx) = agent.take_inject_context() {
+                messages.push(common::message::Message::user(&format!(
+                    "[hook:context]\n{ctx}"
+                )));
+            }
             let tools = agent.tool_registry().schemas_for_api();
             (messages, tools)
         };
+
+        {
+            let (hooks, cancel) = {
+                let agent = session.lock().await;
+                (agent.prompt_hooks(), agent.cancel_signal())
+            };
+            hooks.pre_api_request(&cancel).await;
+        }
 
         let raw_stream = match streamer
             .stream_chat(&system_prompt, &history, tools)
             .await
         {
-            Ok(s) => s,
+            Ok(s) => {
+                let (hooks, cancel) = {
+                    let agent = session.lock().await;
+                    (agent.prompt_hooks(), agent.cancel_signal())
+                };
+                hooks.post_api_request(None, &cancel).await;
+                s
+            }
             Err(err) => {
+                let (hooks, cancel) = {
+                    let agent = session.lock().await;
+                    (agent.prompt_hooks(), agent.cancel_signal())
+                };
+                hooks
+                    .post_api_request(Some(err.to_string().as_str()), &cancel)
+                    .await;
                 finish_error(
                     &session,
                     &model,
@@ -892,6 +919,14 @@ async fn run_multi_turn_stream_inner(
             .await;
             return;
         }
+    }
+
+    {
+        let (hooks, cancel, turn) = {
+            let agent = session.lock().await;
+            (agent.prompt_hooks(), agent.cancel_signal(), agent.session_turn())
+        };
+        hooks.on_session_end(turn, &cancel).await;
     }
 
     finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;

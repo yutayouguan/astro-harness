@@ -331,8 +331,8 @@ async fn multi_turn_fires_on_completion_after_model_stream() {
 
     let events = hooks.snapshot();
     assert!(
-        events.iter().any(|e| e == "completion:5"),
-        "expected on_completion for \"hello\" (5 chars), events={events:?}"
+        events.iter().any(|e| e == "post_llm_call:5"),
+        "expected post_llm_call for \"hello\" (5 chars), events={events:?}"
     );
 }
 
