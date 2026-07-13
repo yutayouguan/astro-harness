@@ -3,7 +3,7 @@
 //! 本模块是 Astro Agent 的核心编排层，负责：
 //! - 维护单次会话的消息历史与轮次预算（`max_turns` / `multi_turn`）
 //! - 在每轮用户输入时召回记忆、组装静态/动态上下文并生成 system prompt
-//! - 统一路由内置工具与 MCP 工具，并在调用前后触发 hooks
+//! - 统一路由内置工具与 MCP 工具，并在调用前后触发 hooks；流式主循环在模型回复聚合后触发 `on_completion`
 //!
 //! **关键不变量**
 //! - 每条用户消息开始时 `tool_rounds` 归零；工具调用次数不得超过 `multi_turn`
@@ -167,6 +167,11 @@ impl AgentLoop {
     /// 注入生命周期 hooks（工具调用、prompt 构建、轮次结束等回调）。
     pub fn set_hooks(&mut self, hooks: Arc<dyn PromptHooks>) {
         self.hooks = hooks;
+    }
+
+    /// 克隆当前 hooks，供 streaming 在不持有 `AgentLoop` 借用时触发回调。
+    pub fn prompt_hooks(&self) -> Arc<dyn PromptHooks> {
+        Arc::clone(&self.hooks)
     }
 
     /// 返回可克隆的取消信号，供上层 streaming 或 UI 触发中断。

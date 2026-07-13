@@ -598,6 +598,25 @@ pub async fn run_multi_turn_stream(
         }
 
         {
+            let (hooks, cancel) = {
+                let agent = session.lock().await;
+                (agent.prompt_hooks(), agent.cancel_signal())
+            };
+            hooks.on_completion(&full_response, &cancel).await;
+            if cancel.is_cancelled() {
+                finish_usage_and_done(
+                    &session,
+                    &model,
+                    &tx,
+                    saw_usage.then_some(total_usage),
+                    &run_id,
+                )
+                .await;
+                return;
+            }
+        }
+
+        {
             let mut agent = session.lock().await;
             // 原生与 XML 回退统一：assistant 带 tool_calls，tool 带 tool_call_id
             let tc = if calls.is_empty() {
@@ -615,6 +634,7 @@ pub async fn run_multi_turn_stream(
                 )
             };
             if let Err(err) = agent.record_assistant_message_with_tools(&full_response, tc) {
+                drop(agent);
                 finish_error(
                     &session,
                     &model,

@@ -158,6 +158,59 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn multi_turn_fires_on_completion_after_model_stream() {
+    use agent::hooks::RecordingHooks;
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let mut agent = AgentLoop::with_session_id(config, "completion-hook".into()).unwrap();
+    let hooks = Arc::new(RecordingHooks::new());
+    agent.set_hooks(hooks.clone());
+    agent
+        .session_messages
+        .push(common::message::Message::user("say hi"));
+    let session = Arc::new(Mutex::new(agent));
+
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![vec![ChatChunk {
+            token: Some("hello".into()),
+            finish_reason: Some("stop".into()),
+            usage: Some(Usage::from_parts(3, 2)),
+            ..Default::default()
+        }]]),
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    let cfg = ProviderConfig {
+        model: "test".into(),
+        ..Default::default()
+    };
+
+    tokio::spawn(async move {
+        run_multi_turn_stream(
+            session,
+            provider,
+            cfg,
+            "You are a test agent".into(),
+            pause,
+            tx,
+        )
+        .await;
+    });
+
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+
+    let events = hooks.snapshot();
+    assert!(
+        events.iter().any(|e| e == "completion:5"),
+        "expected on_completion for \"hello\" (5 chars), events={events:?}"
+    );
+}
+
 #[tokio::test]
 async fn pause_control_blocks_then_cancels() {
     let pause = PauseControl::new();
