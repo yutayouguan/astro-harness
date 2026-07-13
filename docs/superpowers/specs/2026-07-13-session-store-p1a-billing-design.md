@@ -1,10 +1,12 @@
 # Session Store P1a — 会话 LLM 计费（Billing）
 
 **日期:** 2026-07-13  
-**状态:** 已批准（对话确认）  
+**状态:** 已取代 — 见 [路由感知用量与费用估算](./2026-07-13-route-aware-usage-pricing-design.md)  
 **前置:** [session-store P0](./2026-07-13-session-store-design.md)（schema v11 列已齐）  
 **后续:** P1b Compaction / session split（另开 spec，本轮不做）  
-**范围:** 将会话级 LLM token / 估算费用落到 `sessions` billing 列；Insights 的 LLM 视图改读 sessions 聚合；停止向 `usage.db` 写 `kind=llm`；清空历史 `usage_events`
+**范围（原文，已过时）:** 将会话级 LLM token / 估算费用落到 `sessions` billing 列；Insights 的 LLM 视图改读 sessions 聚合；停止向 `usage.db` 写 `kind=llm`；清空历史 `usage_events`
+
+> **注意：** 定价改为路由感知、恢复 `usage_events` 写 `kind=llm`、四桶 token、清空策略以取代文档为准。下文仅作历史记录。
 
 ## 命名约束
 
