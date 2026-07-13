@@ -185,10 +185,19 @@ pub async fn execute_job_with_roots(
             name: job.id.clone(),
             agent_id: job.agent_id.clone(),
             session_id: row.session_id.clone(),
-            prompt_tokens: 0,
-            completion_tokens: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
             total_tokens: 0,
             cost_usd: 0.0,
+            cost_status: None,
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
             meta_json: Some(
                 serde_json::json!({ "title": job.title, "trigger": trigger }).to_string(),
             ),
@@ -215,17 +224,34 @@ pub async fn execute_job_with_roots(
             billing_base_url.as_deref(),
             billing_api_key.as_deref(),
         );
-        let cost = cost_result.amount_usd.unwrap_or(0.0);
+        let cost_usd = match cost_result.status {
+            memory::CostStatus::Unknown => 0.0,
+            _ => cost_result.amount_usd.unwrap_or(0.0),
+        };
+        let cost_status = Some(match cost_result.status {
+            memory::CostStatus::Estimated => "estimated".to_string(),
+            memory::CostStatus::Included => "included".to_string(),
+            memory::CostStatus::Unknown => "unknown".to_string(),
+        });
         memory::UsageDb::try_record(memory::NewUsageEvent {
             ts: Utc::now().to_rfc3339(),
             kind: "llm".into(),
             name: model_for_usage,
             agent_id: job.agent_id.clone(),
             session_id: row.session_id.clone(),
-            prompt_tokens: i64::from(llm_usage.prompt_tokens()),
-            completion_tokens: i64::from(llm_usage.completion_tokens()),
+            input_tokens: i64::from(llm_usage.input_tokens),
+            output_tokens: i64::from(llm_usage.output_tokens),
+            cache_read_tokens: i64::from(llm_usage.cache_read_tokens),
+            cache_write_tokens: i64::from(llm_usage.cache_write_tokens),
+            reasoning_tokens: i64::from(llm_usage.reasoning_tokens),
             total_tokens: i64::from(llm_usage.total_tokens()),
-            cost_usd: cost,
+            cost_usd,
+            cost_status,
+            cost_source: Some(cost_result.source),
+            pricing_version: cost_result.pricing_version,
+            billing_provider: billing_provider.clone(),
+            billing_base_url: billing_base_url.clone(),
+            billing_mode: None,
             meta_json: Some(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),

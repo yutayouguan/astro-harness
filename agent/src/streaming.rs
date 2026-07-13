@@ -351,17 +351,34 @@ async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &
         (!base_url.is_empty()).then_some(base_url.as_str()),
         (!api_key.is_empty()).then_some(api_key.as_str()),
     );
-    let cost = cost_result.amount_usd.unwrap_or(0.0);
+    let cost_usd = match cost_result.status {
+        memory::CostStatus::Unknown => 0.0,
+        _ => cost_result.amount_usd.unwrap_or(0.0),
+    };
+    let cost_status = Some(match cost_result.status {
+        memory::CostStatus::Estimated => "estimated".to_string(),
+        memory::CostStatus::Included => "included".to_string(),
+        memory::CostStatus::Unknown => "unknown".to_string(),
+    });
     memory::UsageDb::try_record(memory::NewUsageEvent {
         ts: chrono::Utc::now().to_rfc3339(),
         kind: "llm".into(),
         name: model.to_string(),
         agent_id,
         session_id,
-        prompt_tokens: i64::from(usage.prompt_tokens()),
-        completion_tokens: i64::from(usage.completion_tokens()),
+        input_tokens: i64::from(usage.input_tokens),
+        output_tokens: i64::from(usage.output_tokens),
+        cache_read_tokens: i64::from(usage.cache_read_tokens),
+        cache_write_tokens: i64::from(usage.cache_write_tokens),
+        reasoning_tokens: i64::from(usage.reasoning_tokens),
         total_tokens: i64::from(usage.total_tokens()),
-        cost_usd: cost,
+        cost_usd,
+        cost_status,
+        cost_source: Some(cost_result.source),
+        pricing_version: cost_result.pricing_version,
+        billing_provider: (!provider.is_empty()).then_some(provider),
+        billing_base_url: (!base_url.is_empty()).then_some(base_url),
+        billing_mode: None,
         meta_json: None,
     });
 }
