@@ -2,7 +2,7 @@
  * 聊天会话本地持久化：消息列表写入 localStorage，附件重字段剥离以免撑爆配额。
  */
 
-import type { ChatMessage } from "../types";
+import type { ChatMessage, PendingInterrupt } from "../types";
 
 const STORAGE_KEY = "astro.chat.session";
 const CLEARED_KEY = "astro.chat.cleared";
@@ -11,6 +11,8 @@ const CLEARED_KEY = "astro.chat.cleared";
 export type StoredChatSession = {
   sessionId: string | null;
   messages: ChatMessage[];
+  /** 未决 HITL interrupt（重载后仍禁用普通发送） */
+  pendingInterrupts?: PendingInterrupt[];
   updatedAt: number;
 };
 
@@ -80,6 +82,7 @@ export function loadChatSession(): StoredChatSession | null {
 export function saveChatSession(
   sessionId: string | null,
   messages: ChatMessage[],
+  pendingInterrupts: PendingInterrupt[] = [],
 ): void {
   try {
     if (isWelcomeOnly(messages)) {
@@ -93,6 +96,8 @@ export function saveChatSession(
     const payload: StoredChatSession = {
       sessionId,
       messages: stripHeavyFields(messages),
+      pendingInterrupts:
+        pendingInterrupts.length > 0 ? pendingInterrupts : undefined,
       updatedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));

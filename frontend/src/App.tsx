@@ -257,7 +257,7 @@ export default function App() {
   /** 会话级未决 HITL interrupt（有则拒发普通消息） */
   const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<
     PendingInterrupt[]
-  >([]);
+  >(() => loadChatSession()?.pendingInterrupts ?? []);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   /** 流式世代：stop / 新发送时递增，忽略迟到事件 */
   const streamGenRef = useRef(0);
@@ -486,8 +486,8 @@ export default function App() {
   /** 有实质对话时持久化，便于切换导航 / 重启后恢复 */
   useEffect(() => {
     if (restoringRef.current || streaming) return;
-    saveChatSession(sessionId, messages);
-  }, [messages, sessionId, streaming]);
+    saveChatSession(sessionId, messages, sessionPendingInterrupts);
+  }, [messages, sessionId, streaming, sessionPendingInterrupts]);
 
   useEffect(() => {
     try {
@@ -531,13 +531,15 @@ export default function App() {
     (
       sid: string | null,
       restored: ChatMessage[],
+      pendingInterrupts: PendingInterrupt[] = [],
     ) => {
       if (restored.length === 0) return false;
       restoringRef.current = true;
       setSessionId(sid);
       setMessages(restored);
+      setSessionPendingInterrupts(pendingInterrupts);
       setEmptyMode(null);
-      saveChatSession(sid, restored);
+      saveChatSession(sid, restored, pendingInterrupts);
       queueMicrotask(() => {
         restoringRef.current = false;
       });
@@ -554,7 +556,11 @@ export default function App() {
 
     const stored = loadChatSession();
     if (stored && !isWelcomeOnly(stored.messages)) {
-      applyRestoredHistory(stored.sessionId, stored.messages);
+      applyRestoredHistory(
+        stored.sessionId,
+        stored.messages,
+        stored.pendingInterrupts ?? [],
+      );
       return;
     }
 

@@ -1,23 +1,69 @@
-//! Session 级 interrupt 挂起表（进程内）。
+//! Session 级 interrupt 挂起表（进程内 + `sessions/{id}/interrupt.json`）。
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use agent::{Interrupt, InterruptPending, ResumeItem};
 use tokio::sync::RwLock;
 
+/// `{memory_dir}/sessions/{session_id}/interrupt.json`
+pub fn interrupt_file_path(memory_dir: &Path, session_id: &str) -> PathBuf {
+    memory_dir
+        .join("sessions")
+        .join(session_id)
+        .join("interrupt.json")
+}
+
+/// 将未决 interrupts 写入旁路文件。
+pub fn save_interrupt_file(
+    memory_dir: &Path,
+    session_id: &str,
+    interrupts: &[Interrupt],
+) -> std::io::Result<()> {
+    let path = interrupt_file_path(memory_dir, session_id);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_vec_pretty(interrupts)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    std::fs::write(path, json)
+}
+
+/// 读取旁路文件；无效或缺失返回 None。
+pub fn load_interrupt_file(memory_dir: &Path, session_id: &str) -> Option<InterruptPending> {
+    let path = interrupt_file_path(memory_dir, session_id);
+    let raw = std::fs::read_to_string(path).ok()?;
+    let interrupts: Vec<Interrupt> = serde_json::from_str(&raw).ok()?;
+    if interrupts.is_empty() {
+        return None;
+    }
+    Some(InterruptPending::new(interrupts))
+}
+
+/// 删除旁路文件（忽略缺失）。
+pub fn clear_interrupt_file(memory_dir: &Path, session_id: &str) {
+    let path = interrupt_file_path(memory_dir, session_id);
+    let _ = std::fs::remove_file(path);
+}
+
 /// session_id → 未决 InterruptPending。
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct InterruptStore {
     inner: Arc<RwLock<HashMap<String, InterruptPending>>>,
+    memory_dir: PathBuf,
 }
 
 impl InterruptStore {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(memory_dir: PathBuf) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(HashMap::new())),
+            memory_dir,
+        }
     }
 
     pub async fn insert(&self, session_id: &str, pending: InterruptPending) {
+        let _ = save_interrupt_file(&self.memory_dir, session_id, pending.interrupts());
         self.inner
             .write()
             .await
@@ -25,15 +71,25 @@ impl InterruptStore {
     }
 
     pub async fn get(&self, session_id: &str) -> Option<InterruptPending> {
-        self.inner.read().await.get(session_id).cloned()
+        if let Some(p) = self.inner.read().await.get(session_id).cloned() {
+            return Some(p);
+        }
+        let loaded = load_interrupt_file(&self.memory_dir, session_id)?;
+        self.inner
+            .write()
+            .await
+            .insert(session_id.to_string(), loaded.clone());
+        Some(loaded)
     }
 
     pub async fn clear(&self, session_id: &str) {
+        clear_interrupt_file(&self.memory_dir, session_id);
         self.inner.write().await.remove(session_id);
     }
 
     /// 取消挂起：若有 pending 则 cancel_all 并清除。
     pub async fn cancel_pending(&self, session_id: &str) {
+        clear_interrupt_file(&self.memory_dir, session_id);
         let mut map = self.inner.write().await;
         if let Some(mut p) = map.remove(session_id) {
             p.cancel_all();
@@ -119,7 +175,7 @@ pub fn format_resume_user_message(items: &[ResumeItem]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent::ResumeItem;
+    use agent::{Interrupt, ResumeItem};
 
     #[test]
     fn parse_resume_items_json_accepts_payload_object() {
@@ -138,5 +194,24 @@ mod tests {
             payload_json: r#"{"approved":true}"#.into(),
         }]);
         assert!(msg.starts_with("[interrupt_resume] "));
+    }
+
+    #[test]
+    fn interrupt_file_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let interrupts = vec![Interrupt {
+            id: "i1".into(),
+            reason: "confirmation".into(),
+            message: "ok?".into(),
+            ..Default::default()
+        }];
+        save_interrupt_file(dir.path(), "sess-1", &interrupts).unwrap();
+        let path = interrupt_file_path(dir.path(), "sess-1");
+        assert!(path.is_file());
+        let pending = load_interrupt_file(dir.path(), "sess-1").unwrap();
+        assert_eq!(pending.interrupts().len(), 1);
+        assert_eq!(pending.interrupts()[0].id, "i1");
+        clear_interrupt_file(dir.path(), "sess-1");
+        assert!(load_interrupt_file(dir.path(), "sess-1").is_none());
     }
 }

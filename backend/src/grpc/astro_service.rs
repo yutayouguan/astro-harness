@@ -59,7 +59,7 @@ impl AstroServiceImpl {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             pause_controls: Arc::new(RwLock::new(HashMap::new())),
-            interrupt_store: InterruptStore::new(),
+            interrupt_store: InterruptStore::new(memory_dir.clone()),
             providers: Arc::new(ProviderRegistry::new()),
             memory_dir,
         }
