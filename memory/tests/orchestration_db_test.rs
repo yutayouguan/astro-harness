@@ -120,10 +120,10 @@ fn list_in_period_filters_by_created_at_and_agent() {
         })
         .unwrap();
 
-    // 将 id_in 钉在窗内、id_out 钉在窗外
-    db.set_created_at_for_test(&id_in, "2026-07-10T12:00:00.000Z")
+    // 将 id_in 钉在窗内、id_out 钉在窗外（秒精度，与 period_window 一致）
+    db.set_created_at_for_test(&id_in, "2026-07-10T12:00:00Z")
         .unwrap();
-    db.set_created_at_for_test(&id_out, "2026-05-01T12:00:00.000Z")
+    db.set_created_at_for_test(&id_out, "2026-05-01T12:00:00Z")
         .unwrap();
 
     let rows = db
@@ -139,3 +139,93 @@ fn list_in_period_filters_by_created_at_and_agent() {
     let steps = db.list_steps(&rows[0].id).unwrap();
     assert_eq!(steps.len(), 1);
 }
+
+#[test]
+fn create_writes_second_precision_timestamps() {
+    let dir = TempDir::new().unwrap();
+    let db = OrchestrationDb::new(dir.path().join("orchestration.db")).unwrap();
+    let id = db
+        .create(NewOrchestration {
+            parent_agent_id: "workspace".into(),
+            session_id: None,
+            goal: "g".into(),
+            steps: vec![NewOrchestrationStep {
+                role: "a".into(),
+                agent_id: None,
+                prompt: "p".into(),
+            }],
+        })
+        .unwrap();
+    let orch = db.get(&id).unwrap().unwrap();
+    // 秒精度 RFC3339：`…00Z`，不含小数点
+    assert!(
+        !orch.created_at.contains('.'),
+        "created_at should be second precision, got {}",
+        orch.created_at
+    );
+    assert!(
+        orch.created_at.ends_with('Z'),
+        "created_at should end with Z, got {}",
+        orch.created_at
+    );
+}
+
+#[test]
+fn list_in_period_month_boundary_with_second_precision() {
+    let dir = TempDir::new().unwrap();
+    let db = OrchestrationDb::new(dir.path().join("orchestration.db")).unwrap();
+
+    let id_last = db
+        .create(NewOrchestration {
+            parent_agent_id: "alice".into(),
+            session_id: None,
+            goal: "july-last".into(),
+            steps: vec![NewOrchestrationStep {
+                role: "r".into(),
+                agent_id: None,
+                prompt: "p".into(),
+            }],
+        })
+        .unwrap();
+    let id_first = db
+        .create(NewOrchestration {
+            parent_agent_id: "alice".into(),
+            session_id: None,
+            goal: "aug-first".into(),
+            steps: vec![NewOrchestrationStep {
+                role: "r".into(),
+                agent_id: None,
+                prompt: "p".into(),
+            }],
+        })
+        .unwrap();
+
+    // 月末最后一秒应落入 7 月窗；月初边界秒属半开区间 [start, end) 的 end，不入 7 月
+    db.set_created_at_for_test(&id_last, "2026-07-31T23:59:59Z")
+        .unwrap();
+    db.set_created_at_for_test(&id_first, "2026-08-01T00:00:00Z")
+        .unwrap();
+
+    let july = db
+        .list_in_period(
+            "2026-07-01T00:00:00Z",
+            "2026-08-01T00:00:00Z",
+            Some("alice"),
+            50,
+        )
+        .unwrap();
+    assert_eq!(july.len(), 1);
+    assert_eq!(july[0].id, id_last);
+
+    let aug = db
+        .list_in_period(
+            "2026-08-01T00:00:00Z",
+            "2026-09-01T00:00:00Z",
+            Some("alice"),
+            50,
+        )
+        .unwrap();
+    assert_eq!(aug.len(), 1);
+    assert_eq!(aug[0].id, id_first);
+}
+

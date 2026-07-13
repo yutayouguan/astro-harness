@@ -8,7 +8,7 @@
 //! 不变量：
 //! - `output` 最长 64KB（UTF-8 安全截断）
 //! - 使用 WAL 模式；`id` 为主键 UUID
-//! - 时间戳为 ISO UTC（RFC3339）
+//! - 时间戳为 ISO UTC（RFC3339，秒精度，与 usage period_window 一致）
 
 use chrono::{SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -154,9 +154,9 @@ pub fn orchestration_db_path() -> PathBuf {
     crate::workspace::default_memory_dir().join("orchestration.db")
 }
 
-/// 当前 UTC 时间 RFC3339（含毫秒）
+/// 当前 UTC 时间 RFC3339（秒精度，与 `usage_db::period_window` / `fmt_utc_bound` 一致）
 fn now_rfc3339() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+    Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
 /// 按 UTF-8 字符边界截断字符串至 `max_bytes`
