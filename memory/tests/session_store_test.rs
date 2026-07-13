@@ -143,3 +143,49 @@ fn build_chat_history_folds_tools_into_activities() {
     assert_eq!(ui[1].activities[0].title, "memory_add");
     assert_eq!(ui[1].activities[0].output.as_deref(), Some("ok"));
 }
+
+#[test]
+fn migrates_legacy_messages_and_sessions_db() {
+    let dir = TempDir::new().unwrap();
+    let sessions_dir = dir.path().join("sessions");
+    std::fs::create_dir_all(&sessions_dir).unwrap();
+
+    // 旧 state.db：瘦 messages
+    {
+        let conn = rusqlite::Connection::open(sessions_dir.join("state.db")).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+             );
+             INSERT INTO messages(session_id, role, content) VALUES ('old','user','hello');",
+        )
+        .unwrap();
+    }
+    // 旧 sessions.db
+    {
+        let conn = rusqlite::Connection::open(sessions_dir.join("sessions.db")).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+                session_id TEXT PRIMARY KEY,
+                summary TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+             );
+             INSERT INTO sessions(session_id, summary) VALUES ('old','hello summary');",
+        )
+        .unwrap();
+    }
+
+    let store = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 11);
+    let msgs = store.get_messages("old").unwrap();
+    assert_eq!(msgs[0].content.as_deref(), Some("hello"));
+    let sess = store.get_session("old").unwrap().unwrap();
+    assert!(sess.title.as_deref().unwrap_or("").contains("hello"));
+    // 幂等
+    let _ = SessionStore::open_with_legacy_migration(&sessions_dir).unwrap();
+}

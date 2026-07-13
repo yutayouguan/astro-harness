@@ -66,6 +66,21 @@ pub struct StoredMessage {
     pub codex_message_items: Option<Value>,
 }
 
+/// 从库中读出的会话元数据行。
+#[derive(Debug, Clone)]
+pub struct StoredSession {
+    pub id: String,
+    pub source: String,
+    pub title: Option<String>,
+    pub started_at: f64,
+    pub ended_at: Option<f64>,
+    pub end_reason: Option<String>,
+    pub model: Option<String>,
+    pub parent_session_id: Option<String>,
+    pub message_count: i64,
+    pub tool_call_count: i64,
+}
+
 /// FTS 搜索命中。
 #[derive(Debug, Clone)]
 pub struct SearchHit {
@@ -190,7 +205,9 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
+"#;
 
+const MESSAGES_FTS_V11_DDL: &str = r#"
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     content,
     tool_name,
@@ -231,6 +248,20 @@ CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
 END;
 "#;
 
+/// `messages` 表在 v11 需要补齐的列（声明式 ADD COLUMN）。
+const MESSAGES_V11_COLUMNS: &[(&str, &str)] = &[
+    ("tool_call_id", "TEXT"),
+    ("tool_calls", "TEXT"),
+    ("tool_name", "TEXT"),
+    ("token_count", "INTEGER"),
+    ("finish_reason", "TEXT"),
+    ("reasoning", "TEXT"),
+    ("reasoning_content", "TEXT"),
+    ("reasoning_details", "TEXT"),
+    ("codex_reasoning_items", "TEXT"),
+    ("codex_message_items", "TEXT"),
+];
+
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
 pub struct SessionStore {
     conn: Connection,
@@ -252,6 +283,15 @@ impl SessionStore {
         Ok(store)
     }
 
+    /// 打开 `sessions_dir/state.db` 并迁移到 v11；若尚未导入，则从旁路 `sessions.db` 迁入会话元数据。
+    pub fn open_with_legacy_migration(sessions_dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(sessions_dir)
+            .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
+        let store = Self::open(&sessions_dir.join("state.db"))?;
+        store.import_legacy_sessions_db_once(sessions_dir)?;
+        Ok(store)
+    }
+
     /// 读取当前 `schema_version` 表中的版本号。
     pub fn schema_version(&self) -> Result<i32> {
         let version: Option<i32> = self
@@ -263,6 +303,33 @@ impl SessionStore {
             )
             .optional()?;
         version.ok_or_else(|| anyhow!("schema_version table is empty"))
+    }
+
+    /// 按 id 读取会话元数据。
+    pub fn get_session(&self, id: &str) -> Result<Option<StoredSession>> {
+        self.conn
+            .query_row(
+                "SELECT id, source, title, started_at, ended_at, end_reason,
+                        model, parent_session_id, message_count, tool_call_count
+                 FROM sessions WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(StoredSession {
+                        id: row.get(0)?,
+                        source: row.get(1)?,
+                        title: row.get(2)?,
+                        started_at: row.get(3)?,
+                        ended_at: row.get(4)?,
+                        end_reason: row.get(5)?,
+                        model: row.get(6)?,
+                        parent_session_id: row.get(7)?,
+                        message_count: row.get(8)?,
+                        tool_call_count: row.get(9)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     /// 插入一条会话元数据（最小字段集）。
@@ -656,21 +723,161 @@ impl SessionStore {
         if current >= SCHEMA_VERSION {
             return Ok(());
         }
-        // 空库 / 未建表：直接落到最新 schema。
-        if current == 0 {
+
+        let has_messages = self.table_exists("messages")?;
+        if current == 0 && !has_messages {
+            // 空库：直接落到最新 schema。
             self.conn.execute_batch(SCHEMA_V11_DDL)?;
-            self.conn
-                .execute("DELETE FROM schema_version", [])?;
-            self.conn.execute(
-                "INSERT INTO schema_version (version) VALUES (?1)",
-                params![SCHEMA_VERSION],
-            )?;
+            self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
+            self.stamp_schema_version()?;
             return Ok(());
         }
-        // 后续 task 再补逐步迁移；本期仅保证空库到 v11。
-        Err(anyhow!(
-            "session store schema version {current} requires stepwise migration (not implemented yet)"
-        ))
+
+        // 旧 MessageDb 风格（有 messages、无 schema_version）或中间版本：声明式补列 + FTS 重建。
+        self.conn.execute_batch(SCHEMA_V11_DDL)?;
+        self.ensure_messages_v11_columns()?;
+        self.convert_legacy_message_timestamps()?;
+        self.rebuild_messages_fts_v11()?;
+        self.stamp_schema_version()?;
+        Ok(())
+    }
+
+    fn stamp_schema_version(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM schema_version", [])?;
+        self.conn.execute(
+            "INSERT INTO schema_version (version) VALUES (?1)",
+            params![SCHEMA_VERSION],
+        )?;
+        Ok(())
+    }
+
+    fn table_exists(&self, name: &str) -> Result<bool> {
+        let exists: bool = self.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+            params![name],
+            |row| row.get(0),
+        )?;
+        Ok(exists)
+    }
+
+    fn table_columns(&self, table: &str) -> Result<HashSet<String>> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!("PRAGMA table_info({table})"))?;
+        let cols = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<HashSet<_>, _>>()?;
+        Ok(cols)
+    }
+
+    fn ensure_messages_v11_columns(&self) -> Result<()> {
+        let existing = self.table_columns("messages")?;
+        for (name, ty) in MESSAGES_V11_COLUMNS {
+            if !existing.contains(*name) {
+                self.conn
+                    .execute(
+                        &format!("ALTER TABLE messages ADD COLUMN {name} {ty}"),
+                        [],
+                    )
+                    .with_context(|| format!("add messages.{name}"))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// 将旧 MessageDb 的 DATETIME 文本时间戳转为 Unix epoch REAL，供 `get_messages` 读取。
+    fn convert_legacy_message_timestamps(&self) -> Result<()> {
+        self.conn.execute_batch(
+            "UPDATE messages
+             SET timestamp = CAST(strftime('%s', timestamp) AS REAL)
+             WHERE typeof(timestamp) = 'text';
+             UPDATE messages
+             SET timestamp = CAST(strftime('%s', 'now') AS REAL)
+             WHERE timestamp IS NULL;",
+        )?;
+        Ok(())
+    }
+
+    fn rebuild_messages_fts_v11(&self) -> Result<()> {
+        // 旧 MessageDb 触发器 / external-content FTS，以及任何半成品 v11 FTS。
+        self.conn.execute_batch(
+            "DROP TRIGGER IF EXISTS sync_messages_to_fts;
+             DROP TRIGGER IF EXISTS sync_messages_fts_update;
+             DROP TRIGGER IF EXISTS sync_messages_fts_delete;
+             DROP TRIGGER IF EXISTS messages_fts_insert;
+             DROP TRIGGER IF EXISTS messages_fts_delete;
+             DROP TRIGGER IF EXISTS messages_fts_update;
+             DROP TABLE IF EXISTS messages_fts;
+             DROP TABLE IF EXISTS messages_fts_trigram;",
+        )?;
+        self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
+        self.conn.execute_batch(
+            "INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
+             SELECT id, content, tool_name, tool_calls FROM messages;
+             INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
+             SELECT id, content, tool_name, tool_calls FROM messages;",
+        )?;
+        Ok(())
+    }
+
+    /// 若 `state_meta.migrated_from_sessions_db` 未设，从旁路 `sessions.db` 导入会话行（幂等）。
+    fn import_legacy_sessions_db_once(&self, sessions_dir: &Path) -> Result<()> {
+        let already: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM state_meta WHERE key = 'migrated_from_sessions_db'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if already.as_deref() == Some("1") {
+            return Ok(());
+        }
+
+        let legacy_path = sessions_dir.join("sessions.db");
+        if legacy_path.is_file() {
+            let legacy = Connection::open(&legacy_path)
+                .with_context(|| format!("open legacy {}", legacy_path.display()))?;
+            let has_sessions: bool = legacy.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='sessions'",
+                [],
+                |row| row.get(0),
+            )?;
+            if has_sessions {
+                let mut stmt = legacy.prepare(
+                    "SELECT session_id, summary,
+                            CAST(strftime('%s', created_at) AS REAL) AS started_at
+                     FROM sessions",
+                )?;
+                let rows = stmt.query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<f64>>(2)?,
+                    ))
+                })?;
+                for row in rows {
+                    let (session_id, summary, started_at) = row?;
+                    let title = truncate_chars(&summary, 80);
+                    let started = started_at.unwrap_or_else(|| {
+                        now_epoch_secs().unwrap_or(0.0)
+                    });
+                    self.conn.execute(
+                        "INSERT INTO sessions (id, source, title, started_at)
+                         VALUES (?1, 'tauri', ?2, ?3)
+                         ON CONFLICT(id) DO NOTHING",
+                        params![session_id, title, started],
+                    )?;
+                }
+            }
+        }
+
+        self.conn.execute(
+            "INSERT INTO state_meta (key, value) VALUES ('migrated_from_sessions_db', '1')
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [],
+        )?;
+        Ok(())
     }
 
     fn read_schema_version_or_zero(&self) -> Result<i32> {

@@ -36,6 +36,7 @@ pub use message_db::{build_conversation_context, MessageDb, ScrolledMessage};
 pub use session_db::{SessionDb, SessionSnippet};
 pub use session_store::{
     ChatActivityStored, ChatHistoryMessage, NewMessage, SearchHit, SessionStore, StoredMessage,
+    StoredSession,
 };
 pub use workspace::{
     active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
