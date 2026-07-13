@@ -1,5 +1,7 @@
 # Session Store P1a Billing Implementation Plan
 
+> **已废弃：** 请勿按本计划实现。权威设计见 [`docs/superpowers/specs/2026-07-13-route-aware-usage-pricing-design.md`](../specs/2026-07-13-route-aware-usage-pricing-design.md)；待该 spec 审阅通过后另写 implementation plan。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 LLM token/估算费用累加到 `sessions` billing 列；停写 `usage.db` 的 `kind=llm`；清空历史 `usage_events`；Insights LLM 视图改读 sessions 聚合。
@@ -8,7 +10,7 @@
 
 **Tech Stack:** Rust（rusqlite、chrono）、既有 `estimate_llm_cost`、Tauri command、可选前端 i18n
 
-**Spec:** `docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md`
+**Spec:** `docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md`（已取代）
 
 **执行注意:** `main` 上常有 HITL/delegate 未提交 WIP。**必须在干净 worktree**（从已提交 `main` 检出）实现本计划，勿在脏工作区直接改。
 
