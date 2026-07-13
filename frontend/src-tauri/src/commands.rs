@@ -1004,22 +1004,29 @@ pub async fn get_chat_history(
     })
 }
 
-/// 列出近期会话摘要供侧栏展示。
+/// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    let path = memory::default_memory_dir()
-        .join("sessions")
-        .join("sessions.db");
-    let db = memory::SessionDb::new(path).map_err(|e| e.to_string())?;
+    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+        .map_err(|e| e.to_string())?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
-    Ok(db
-        .list_recent(limit)
+    Ok(mgr
+        .list_recent_sessions(limit)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|s| RecentSessionDto {
-            session_id: s.session_id,
-            summary: s.summary,
-            created_at: s.created_at,
+        .map(|s| {
+            let summary = s
+                .title
+                .filter(|t| !t.trim().is_empty())
+                .or(s.preview)
+                .unwrap_or_default();
+            let created_at = chrono::DateTime::from_timestamp(s.started_at as i64, 0)
+                .map(|dt| dt.to_rfc3339());
+            RecentSessionDto {
+                session_id: s.id,
+                summary,
+                created_at,
+            }
         })
         .collect())
 }

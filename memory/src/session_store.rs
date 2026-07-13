@@ -368,6 +368,36 @@ impl SessionStore {
         self.create_session(id, source, None, None, None)
     }
 
+    /// 设置会话标题；空字符串清为 `NULL`。
+    ///
+    /// 若命中 `title` 唯一索引，则追加短 session id 后缀以保证可写入。
+    pub fn set_session_title(&self, id: &str, title: &str) -> Result<()> {
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            self.conn
+                .execute("UPDATE sessions SET title = NULL WHERE id = ?1", params![id])?;
+            return Ok(());
+        }
+
+        let result = self.conn.execute(
+            "UPDATE sessions SET title = ?1 WHERE id = ?2",
+            params![trimmed, id],
+        );
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) if is_unique_constraint(&err) => {
+                let suffix: String = id.chars().take(8).collect();
+                let unique = format!("{} · {}", truncate_chars(trimmed, 60), suffix);
+                self.conn.execute(
+                    "UPDATE sessions SET title = ?1 WHERE id = ?2",
+                    params![unique, id],
+                )?;
+                Ok(())
+            }
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// 追加一条富消息，并递增 `sessions.message_count`（`role=tool` 时同时 `tool_call_count++`）。
     pub fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
         let timestamp = now_epoch_secs()?;

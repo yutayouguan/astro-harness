@@ -7,7 +7,6 @@
 pub mod artifact_db;
 pub mod files;
 pub mod message_db;
-pub mod session_db;
 pub mod session_store;
 pub mod manager;
 pub mod workspace;
@@ -33,7 +32,6 @@ pub use manager::{
     dispatch_memory_tool, format_recalled_context, MemoryManager, MemoryTarget,
 };
 pub use message_db::{build_conversation_context, MessageDb, ScrolledMessage};
-pub use session_db::{SessionDb, SessionSnippet};
 pub use session_store::{
     ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit, SessionStore,
     StoredMessage, StoredSession,

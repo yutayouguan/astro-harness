@@ -1,8 +1,8 @@
 //! Tauri IPC 薄封装 → artifacts 索引（文件空间）
 
 use memory::{
-    active_agent_id, open_default, ArtifactRow, ArtifactSource, ReconcileReport, SessionDb,
-    default_memory_dir,
+    active_agent_id, default_memory_dir, open_default, ArtifactRow, ArtifactSource, MemoryManager,
+    ReconcileReport,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -92,12 +92,20 @@ pub async fn list_artifacts(
     let total: i64 = counts.values().sum();
     counts.insert("all".into(), total);
 
-    let session_db = SessionDb::new(mem.join("sessions").join("sessions.db"))
+    let mgr = MemoryManager::new(mem.clone()).map_err(|e| e.to_string())?;
+    let recent_sessions = mgr
+        .list_recent_sessions(200)
         .map_err(|e| e.to_string())?;
-    let recent_sessions = session_db.list_recent(200).map_err(|e| e.to_string())?;
     let title_map: HashMap<String, String> = recent_sessions
         .into_iter()
-        .map(|s| (s.session_id, s.summary))
+        .map(|s| {
+            let title = s
+                .title
+                .filter(|t| !t.trim().is_empty())
+                .or(s.preview)
+                .unwrap_or_default();
+            (s.id, title)
+        })
         .collect();
 
     let mut group_map: HashMap<Option<String>, Vec<ArtifactDto>> = HashMap::new();

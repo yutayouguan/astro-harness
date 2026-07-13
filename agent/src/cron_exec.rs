@@ -11,7 +11,7 @@ use chrono::Utc;
 use common::message::Role;
 use futures::StreamExt;
 use memory::{
-    cron_db_path, cron_dir, default_memory_dir, CronJob, CronRunDb, NewCronRun, SessionDb,
+    cron_db_path, cron_dir, default_memory_dir, CronJob, CronRunDb, MemoryManager, NewCronRun,
 };
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
@@ -102,10 +102,9 @@ pub async fn execute_job_with_roots(
 
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
-        if let Ok(session_db) =
-            SessionDb::new(default_memory_dir().join("sessions").join("sessions.db"))
-        {
-            let _ = session_db.save_session(sid, &summary);
+        if let Ok(mgr) = MemoryManager::new(default_memory_dir()) {
+            let _ = mgr.ensure_session(sid, "cron");
+            let _ = mgr.session_store.set_session_title(sid, &summary);
         }
     }
 
