@@ -77,10 +77,23 @@ pub struct SessionSnippetDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatHistoryActivityDto {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub input: Option<String>,
+    pub output: Option<String>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatHistoryMessageDto {
     pub id: String,
     pub role: String,
     pub content: String,
+    pub reasoning: Option<String>,
+    pub activities: Vec<ChatHistoryActivityDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -962,14 +975,26 @@ pub async fn get_chat_history(
 
     let messages = mgr
         .session_store
-        .recent_messages(&sid, limit)
+        .build_chat_history(&sid, limit)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .filter(|m| m.role == "user" || m.role == "assistant")
         .map(|m| ChatHistoryMessageDto {
             id: format!("db-{}", m.id),
             role: m.role,
             content: m.content,
+            reasoning: m.reasoning,
+            activities: m
+                .activities
+                .into_iter()
+                .map(|a| ChatHistoryActivityDto {
+                    id: a.id,
+                    kind: a.kind,
+                    title: a.title,
+                    input: a.input,
+                    output: a.output,
+                    status: a.status,
+                })
+                .collect(),
         })
         .collect();
 

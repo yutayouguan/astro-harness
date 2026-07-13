@@ -99,6 +99,31 @@ export type ChatMessage = {
   createdAt?: number;
 };
 
+/** `get_chat_history` 返回的活动条（已折叠进助手消息） */
+export type ChatHistoryActivityDto = {
+  id: string;
+  kind: string;
+  title: string;
+  input?: string | null;
+  output?: string | null;
+  status?: string | null;
+};
+
+/** `get_chat_history` 单条气泡（user / assistant，含 reasoning + activities） */
+export type ChatHistoryMessageDto = {
+  id: string;
+  role: string;
+  content: string;
+  reasoning?: string | null;
+  activities?: ChatHistoryActivityDto[];
+};
+
+/** `get_chat_history` 整包响应 */
+export type ChatHistoryDto = {
+  sessionId: string | null;
+  messages: ChatHistoryMessageDto[];
+};
+
 /** 模型供应商配置（Providers 面板） */
 export type ProviderDto = {
   id: string;
