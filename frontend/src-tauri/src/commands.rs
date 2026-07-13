@@ -946,7 +946,7 @@ pub async fn get_chat_history(
     let sid = match session_id.filter(|s| !s.is_empty()) {
         Some(s) => s,
         None => match mgr
-            .message_db
+            .session_store
             .latest_session_id()
             .map_err(|e| e.to_string())?
         {
@@ -961,7 +961,7 @@ pub async fn get_chat_history(
     };
 
     let messages = mgr
-        .message_db
+        .session_store
         .recent_messages(&sid, limit)
         .map_err(|e| e.to_string())?
         .into_iter()

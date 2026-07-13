@@ -876,10 +876,10 @@ impl AstroService for AstroServiceImpl {
         Ok(Response::new(McpServerList { servers }))
     }
 
-    /// 召回 MEMORY.md / USER.md 文本，并按 `query` 搜索会话摘要（`limit` 至少 1）。
+    /// 召回 MEMORY.md / USER.md 文本，并按 `query` 搜索历史消息（`limit` 至少 1）。
     ///
     /// # 错误
-    /// MemoryManager 或 session_db 失败 → `internal`。
+    /// MemoryManager 或 session_store 失败 → `internal`。
     async fn query_memory(
         &self,
         request: Request<MemoryQuery>,
@@ -890,14 +890,20 @@ impl AstroService for AstroServiceImpl {
         let (memory_content, user_content) = memory.prompt_content();
 
         let sessions = memory
-            .session_db
-            .search(&query.query)
+            .session_store
+            .search_messages(&query.query, None, None, query.limit.max(1) as i64)
             .map_err(|e| Status::internal(e.to_string()))?
             .into_iter()
-            .take(query.limit.max(1) as usize)
-            .map(|snippet| ProtoSessionSnippet {
-                session_id: snippet.session_id,
-                summary: snippet.highlight.unwrap_or(snippet.summary),
+            .map(|hit| {
+                let summary = if hit.snippet.trim().is_empty() {
+                    hit.context
+                } else {
+                    hit.snippet
+                };
+                ProtoSessionSnippet {
+                    session_id: hit.session_id,
+                    summary,
+                }
             })
             .collect();
 
