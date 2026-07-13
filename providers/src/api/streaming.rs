@@ -13,11 +13,17 @@ use tokio::sync::watch;
 /// Token 用量（对齐 OpenAI usage / Rig FinalUsage）。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Usage {
+    /// 未缓存新输入 token 数。
     pub input_tokens: u32,
+    /// 输出（completion）token 数。
     pub output_tokens: u32,
+    /// 缓存读取 token 数。
     pub cache_read_tokens: u32,
+    /// 缓存写入 token 数。
     pub cache_write_tokens: u32,
+    /// 推理 token 数（展示用，不单独计费）。
     pub reasoning_tokens: u32,
+    /// 请求次数（累加语义）。
     pub request_count: u32,
 }
 
@@ -33,14 +39,17 @@ impl Usage {
     pub fn total_tokens(&self) -> u32 {
         self.prompt_tokens().saturating_add(self.completion_tokens())
     }
+    /// 将另一份用量累加到当前值（饱和加法）；空 other 不累加 request_count。
     pub fn add_assign(&mut self, other: Usage) {
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
         self.cache_read_tokens = self.cache_read_tokens.saturating_add(other.cache_read_tokens);
         self.cache_write_tokens = self.cache_write_tokens.saturating_add(other.cache_write_tokens);
         self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
-        let n = if other.request_count == 0 { 1 } else { other.request_count };
-        self.request_count = self.request_count.saturating_add(n);
+        if !other.is_empty() {
+            let n = if other.request_count == 0 { 1 } else { other.request_count };
+            self.request_count = self.request_count.saturating_add(n);
+        }
     }
     pub fn from_parts(input: u32, output: u32) -> Self {
         Self {
@@ -244,5 +253,15 @@ mod tests {
         assert_eq!(a.prompt_tokens(), 13);
         assert_eq!(a.completion_tokens(), 12);
         assert_eq!(a.total_tokens(), 25);
+        assert_eq!(a.request_count, 2);
+    }
+
+    #[test]
+    fn usage_add_assign_empty_other_does_not_bump_request_count() {
+        let mut a = Usage::from_parts(10, 5);
+        a.add_assign(Usage::default());
+        assert_eq!(a.prompt_tokens(), 10);
+        assert_eq!(a.completion_tokens(), 5);
+        assert_eq!(a.request_count, 1);
     }
 }
