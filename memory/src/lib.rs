@@ -8,6 +8,7 @@ pub mod artifact_db;
 pub mod files;
 pub mod message_db;
 pub mod session_db;
+pub mod session_store;
 pub mod manager;
 pub mod workspace;
 pub mod agent_icons;
@@ -33,6 +34,7 @@ pub use manager::{
 };
 pub use message_db::{build_conversation_context, MessageDb, ScrolledMessage};
 pub use session_db::{SessionDb, SessionSnippet};
+pub use session_store::SessionStore;
 pub use workspace::{
     active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
     create_agent, create_agent_with_profile, daily_memory_path, default_agent_workspace_dir,
