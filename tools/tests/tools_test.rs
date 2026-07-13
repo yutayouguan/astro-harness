@@ -1,5 +1,6 @@
 //! 内置工具注册与分发集成测试。
 
+use std::path::Path;
 use tempfile::TempDir;
 use tools::{register_all, ToolContext, ToolRegistry};
 
@@ -68,6 +69,8 @@ async fn file_ops_write_and_read() {
     .await
     .unwrap();
     assert!(w.contains("已写入"));
+    assert!(w.contains("notes/hello.txt"));
+    assert!(!Path::new(w.trim_start_matches("已写入 ").trim()).is_absolute());
 
     let r = tools::dispatch_tool(
         |_| true,
@@ -81,4 +84,28 @@ async fn file_ops_write_and_read() {
     .await
     .unwrap();
     assert_eq!(r, "hello tools");
+
+    let missing = tools::dispatch_tool(
+        |_| true,
+        &mut ctx,
+        "file_ops",
+        &serde_json::json!({
+            "path": "notes/x.txt",
+            "operation": "write"
+        }),
+    )
+    .await;
+    assert!(missing.unwrap_err().to_string().contains("content"));
+
+    let del_root = tools::dispatch_tool(
+        |_| true,
+        &mut ctx,
+        "file_ops",
+        &serde_json::json!({
+            "path": ".",
+            "operation": "delete"
+        }),
+    )
+    .await;
+    assert!(del_root.unwrap_err().to_string().contains("根目录"));
 }

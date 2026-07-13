@@ -137,6 +137,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "path", type: "string" },
       { name: "operation", type: "string" },
       { name: "content", type: "string", optional: true },
+      { name: "offset", type: "number", optional: true },
+      { name: "limit", type: "number", optional: true },
+      { name: "recursive", type: "boolean", optional: true },
     ],
   },
   {

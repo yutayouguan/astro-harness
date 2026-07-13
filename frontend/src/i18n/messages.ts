@@ -126,7 +126,7 @@ export const zh = {
   "agentTools.terminal.title": "终端",
   "agentTools.terminal.desc": "执行 shell 命令和脚本",
   "agentTools.fileOps.title": "文件操作",
-  "agentTools.fileOps.desc": "读取、写入、搜索和管理文件",
+  "agentTools.fileOps.desc": "读取、写入、列举和管理工作区文件",
   "agentTools.codeExec.title": "代码执行",
   "agentTools.codeExec.desc": "直接执行 Python 和 shell 代码",
   "agentTools.vision.title": "视觉",
@@ -966,7 +966,7 @@ export const en: Record<MessageKey, string> = {
   "agentTools.terminal.title": "Terminal",
   "agentTools.terminal.desc": "Run shell commands and scripts",
   "agentTools.fileOps.title": "File Ops",
-  "agentTools.fileOps.desc": "Read, write, search, and manage files",
+  "agentTools.fileOps.desc": "Read, write, list, and manage workspace files"
   "agentTools.codeExec.title": "Code Execution",
   "agentTools.codeExec.desc": "Execute Python and shell code directly",
   "agentTools.vision.title": "Vision",
