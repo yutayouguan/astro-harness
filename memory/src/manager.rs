@@ -1,15 +1,15 @@
-//! 记忆管理器：聚合 Markdown 记忆、消息库与会话库，供 Agent Prompt 与记忆工具调用。
+//! 记忆管理器：聚合 Markdown 记忆与会话存储，供 Agent Prompt 与记忆工具调用。
 //!
 //! [`MemoryManager`] 绑定单个 Agent 工作区，统一管理 `MEMORY.md`、`USER.md`、每日记忆、
-//! SQLite 消息/会话索引。对外提供 Prompt 内容读取、消息记录、上下文构建及
+//! 以及单库 [`SessionStore`]。对外提供 Prompt 内容读取、消息记录、上下文构建及
 //! `memory_*` / `session_search` 工具分发。
 
 use std::path::PathBuf;
 
 use crate::build_conversation_context;
 use crate::files::MemoryFile;
-use crate::message_db::{MessageDb, ScrolledMessage};
-use crate::session_db::SessionDb;
+use crate::message_db::ScrolledMessage;
+use crate::session_store::{NewMessage, RecentSession, SearchHit, SessionStore};
 use crate::workspace::{
     active_agent_id, daily_memory_path, ensure_daily_memory, today_date_string, DEFAULT_AGENT_ID,
 };
@@ -27,8 +27,8 @@ pub enum MemoryTarget {
 
 /// 单 Agent 记忆子系统的聚合入口。
 ///
-/// 构造时会确保工作区与 Agent 空间存在；`message_db` 与 `session_db` 位于
-/// `{base_dir}/sessions/` 下，为所有 Agent 共享路径（按 `session_id` 隔离）。
+/// 构造时会确保工作区与 Agent 空间存在；`session_store` 位于
+/// `{base_dir}/sessions/state.db`，为所有 Agent 共享路径（按 `session_id` 隔离）。
 pub struct MemoryManager {
     /// Astro 数据根目录（通常为 `~/.astro`）。
     pub base_dir: PathBuf,
@@ -40,10 +40,8 @@ pub struct MemoryManager {
     pub memory: MemoryFile,
     /// 用户档案文件句柄。
     pub user: MemoryFile,
-    /// 会话消息 SQLite 库（`state.db`）。
-    pub message_db: MessageDb,
-    /// 会话摘要 FTS 库（`sessions.db`）。
-    pub session_db: SessionDb,
+    /// 单库会话存储（`state.db`，含 sessions / messages / FTS）。
+    pub session_store: SessionStore,
 }
 
 impl MemoryManager {
@@ -58,7 +56,7 @@ impl MemoryManager {
 
     /// 为指定 `agent_id` 构造管理器；空白 id 回退 [`DEFAULT_AGENT_ID`]。
     ///
-    /// 会创建 Agent 工作区（若不存在）并打开/初始化两个 SQLite 库。
+    /// 会创建 Agent 工作区（若不存在）并打开/迁移会话库。
     pub fn for_agent(base_dir: PathBuf, agent_id: &str) -> anyhow::Result<Self> {
         crate::workspace::ensure_workspace(&base_dir)?;
         let id = if agent_id.trim().is_empty() {
@@ -74,8 +72,7 @@ impl MemoryManager {
             workspace_dir: workspace.clone(),
             memory: MemoryFile::new(workspace.join("MEMORY.md"), 8000),
             user: MemoryFile::new(workspace.join("USER.md"), 4000),
-            message_db: MessageDb::new(sessions_dir.join("state.db"))?,
-            session_db: SessionDb::new(sessions_dir.join("sessions.db"))?,
+            session_store: SessionStore::open_with_legacy_migration(&sessions_dir)?,
         })
     }
 
@@ -128,15 +125,34 @@ impl MemoryManager {
         )
     }
 
+    /// 确保会话行存在（不存在则按 `source` 创建）。
+    pub fn ensure_session(&self, session_id: &str, source: &str) -> anyhow::Result<()> {
+        self.session_store.ensure_session(session_id, source)
+    }
+
     /// 向消息库插入一条会话消息，返回自增 `id`。
+    ///
+    /// 薄封装：自动 `ensure_session(..., "tauri")` 后委托 [`SessionStore::append_message`]。
     pub fn record_message(
         &self,
         session_id: &str,
         role: &str,
         content: &str,
     ) -> anyhow::Result<i64> {
-        self.message_db
-            .insert_message(session_id, role, content)
+        self.ensure_session(session_id, "tauri")?;
+        self.session_store.append_message(NewMessage {
+            content: Some(content),
+            ..NewMessage::empty(session_id, role)
+        })
+    }
+
+    /// 写入富消息行（含 tool / reasoning 等字段）；调用方需先 [`ensure_session`]。
+    pub fn record_message_ex(
+        &self,
+        _session_id: &str,
+        msg: NewMessage<'_>,
+    ) -> anyhow::Result<i64> {
+        self.session_store.append_message(msg)
     }
 
     /// 构建会话上下文：最近 `recent_turns` 条 + 可选 FTS 关键词召回窗口。
@@ -149,11 +165,16 @@ impl MemoryManager {
         fts_keywords: Option<&str>,
     ) -> anyhow::Result<Vec<ScrolledMessage>> {
         build_conversation_context(
-            &self.message_db,
+            &self.session_store,
             session_id,
             recent_turns,
             fts_keywords,
         )
+    }
+
+    /// 按 `started_at` 降序列出近期会话（供侧栏等后续任务使用）。
+    pub fn list_recent_sessions(&self, limit: usize) -> anyhow::Result<Vec<RecentSession>> {
+        self.session_store.list_recent_sessions(limit)
     }
 
     /// 向指定目标追加一条记忆；返回面向用户的中文操作结果。
@@ -240,32 +261,37 @@ impl MemoryManager {
         }
     }
 
-    /// FTS 检索历史会话摘要，格式化为 Markdown 列表；无结果时返回提示文案。
+    /// FTS 检索历史消息，格式化为 Markdown 列表；无结果时返回提示文案。
     ///
-    /// 最多展示 `limit` 条；日期取 `created_at` 前 10 字符（`YYYY-MM-DD`）。
+    /// 最多展示 `limit` 条；正文取 snippet（或邻接 context）。
     pub fn handle_session_search(&self, query: &str, limit: usize) -> anyhow::Result<String> {
-        let snippets = self.session_db.search(query)?;
-        if snippets.is_empty() {
-            return Ok("未找到相关历史会话".to_string());
-        }
-
-        let body = snippets
-            .iter()
-            .take(limit)
-            .map(|s| {
-                let date = s
-                    .created_at
-                    .as_deref()
-                    .map(|d| &d[..d.len().min(10)])
-                    .unwrap_or("unknown");
-                let text = s.highlight.as_deref().unwrap_or(&s.summary);
-                format!("- [{date}] {text}")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        Ok(format!("## 相关历史会话\n{body}"))
+        let hits = self
+            .session_store
+            .search_messages(query, None, None, limit as i64)?;
+        Ok(format_session_search_hits(&hits))
     }
+}
+
+/// 将 [`SearchHit`] 列表格式化为「相关历史消息」Markdown。
+fn format_session_search_hits(hits: &[SearchHit]) -> String {
+    if hits.is_empty() {
+        return "未找到相关历史消息".to_string();
+    }
+
+    let body = hits
+        .iter()
+        .map(|h| {
+            let text = if h.snippet.trim().is_empty() {
+                h.context.as_str()
+            } else {
+                h.snippet.as_str()
+            };
+            format!("- [{}] {}", h.session_id, text)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("## 相关历史消息\n{body}")
 }
 
 /// 将召回消息列表格式化为 `[id] role: content [anchor]` 多行文本。

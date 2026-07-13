@@ -103,6 +103,16 @@ pub struct ChatHistoryMessage {
     pub activities: Vec<ChatActivityStored>,
 }
 
+/// 侧栏「近期会话」列表项：`title` 优先，否则用首条 user `content` 截断作 preview。
+#[derive(Debug, Clone)]
+pub struct RecentSession {
+    pub id: String,
+    pub title: Option<String>,
+    pub started_at: f64,
+    /// 首条 user 消息正文截断；无则 `None`。
+    pub preview: Option<String>,
+}
+
 /// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。
 #[derive(Debug, Clone)]
 pub struct ChatActivityStored {
@@ -348,6 +358,14 @@ impl SessionStore {
             params![id, source, model, user_id, parent_session_id, started_at],
         )?;
         Ok(())
+    }
+
+    /// 若会话不存在则创建（最小字段）；已存在则 noop。
+    pub fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
+        if self.get_session(id)?.is_some() {
+            return Ok(());
+        }
+        self.create_session(id, source, None, None, None)
     }
 
     /// 追加一条富消息，并递增 `sessions.message_count`（`role=tool` 时同时 `tool_call_count++`）。
@@ -614,6 +632,188 @@ impl SessionStore {
             out = out.into_iter().skip(skip).collect();
         }
         Ok(out)
+    }
+
+    /// 取指定会话最近 `limit` 条消息，按时间正序返回（`is_anchor` 均为 false）。
+    pub fn recent_messages(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<crate::message_db::ScrolledMessage>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, role, COALESCE(content, '')
+             FROM messages
+             WHERE session_id = ?1
+             ORDER BY id DESC
+             LIMIT ?2",
+        )?;
+        let mut rows: Vec<crate::message_db::ScrolledMessage> = stmt
+            .query_map(params![session_id, limit as i64], |row| {
+                let id: i64 = row.get(0)?;
+                Ok(crate::message_db::ScrolledMessage {
+                    id,
+                    role: row.get(1)?,
+                    content: row.get(2)?,
+                    is_anchor: false,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.reverse();
+        Ok(rows)
+    }
+
+    /// 返回全局最近一条消息所属的 `session_id`；无消息时返回 `None`。
+    pub fn latest_session_id(&self) -> Result<Option<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT session_id FROM messages ORDER BY id DESC LIMIT 1")?;
+        let mut rows = stmt.query([])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 在指定会话内按 FTS 召回消息 id（优先 unicode61，再补 trigram），按相关度排序。
+    pub fn recall_message_ids(
+        &self,
+        session_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<i64>> {
+        let query = query.trim();
+        if query.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let fts_query = escape_fts5_query(query);
+        let mut ids = Vec::new();
+        let mut seen = HashSet::new();
+        self.collect_session_fts_ids(
+            "messages_fts",
+            session_id,
+            &fts_query,
+            limit,
+            &mut ids,
+            &mut seen,
+        )?;
+        if ids.len() < limit {
+            self.collect_session_fts_ids(
+                "messages_fts_trigram",
+                session_id,
+                &fts_query,
+                limit,
+                &mut ids,
+                &mut seen,
+            )?;
+        }
+        Ok(ids)
+    }
+
+    /// 以 `around_message_id` 为中心，取前后各 `window_size` 条消息（含中心），按 id 升序。
+    pub fn scroll_context_window(
+        &self,
+        session_id: &str,
+        around_message_id: i64,
+        window_size: i64,
+    ) -> Result<Vec<crate::message_db::ScrolledMessage>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, role, COALESCE(content, '')
+             FROM messages
+             WHERE session_id = ?1
+               AND id BETWEEN (?2 - ?3) AND (?2 + ?3)
+             ORDER BY id ASC",
+        )?;
+        let rows = stmt
+            .query_map(
+                params![session_id, around_message_id, window_size],
+                |row| {
+                    let id: i64 = row.get(0)?;
+                    Ok(crate::message_db::ScrolledMessage {
+                        id,
+                        role: row.get(1)?,
+                        content: row.get(2)?,
+                        is_anchor: id == around_message_id,
+                    })
+                },
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// 按 `started_at` 降序列出近期会话；preview 取首条 user content（截断 120 字）。
+    pub fn list_recent_sessions(&self, limit: usize) -> Result<Vec<RecentSession>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.id, s.title, s.started_at,
+                    (SELECT m.content FROM messages m
+                     WHERE m.session_id = s.id
+                       AND m.role = 'user'
+                       AND m.content IS NOT NULL
+                       AND TRIM(m.content) != ''
+                     ORDER BY m.timestamp ASC, m.id ASC
+                     LIMIT 1) AS preview
+             FROM sessions s
+             ORDER BY s.started_at DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(id, title, started_at, preview)| RecentSession {
+                id,
+                title,
+                started_at,
+                preview: preview.map(|p| truncate_chars(&p, 120)),
+            })
+            .collect())
+    }
+
+    fn collect_session_fts_ids(
+        &self,
+        fts_table: &str,
+        session_id: &str,
+        fts_query: &str,
+        limit: usize,
+        ids: &mut Vec<i64>,
+        seen: &mut HashSet<i64>,
+    ) -> Result<()> {
+        let remaining = limit.saturating_sub(ids.len());
+        if remaining == 0 {
+            return Ok(());
+        }
+        let sql = format!(
+            "SELECT m.id
+             FROM {fts} AS f
+             JOIN messages AS m ON m.id = f.rowid
+             WHERE m.session_id = ?1 AND {fts} MATCH ?2
+             ORDER BY rank
+             LIMIT ?3",
+            fts = fts_table
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![session_id, fts_query, remaining as i64], |row| {
+            row.get::<_, i64>(0)
+        })?;
+        for row in rows {
+            let id = row?;
+            if seen.insert(id) {
+                ids.push(id);
+                if ids.len() >= limit {
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn collect_fts_hits(
