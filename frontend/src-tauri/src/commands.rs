@@ -94,6 +94,8 @@ pub struct ChatHistoryMessageDto {
     pub content: String,
     pub reasoning: Option<String>,
     pub activities: Vec<ChatHistoryActivityDto>,
+    pub segments: Option<serde_json::Value>,
+    pub ui_surfaces: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -995,6 +997,8 @@ pub async fn get_chat_history(
                     status: a.status,
                 })
                 .collect(),
+            segments: m.segments,
+            ui_surfaces: m.ui_surfaces,
         })
         .collect();
 

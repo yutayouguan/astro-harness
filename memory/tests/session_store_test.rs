@@ -145,6 +145,71 @@ fn build_chat_history_folds_tools_into_activities() {
 }
 
 #[test]
+fn build_chat_history_restores_timeline() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "user",
+            content: Some("hi"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    let details = serde_json::json!({
+        "astro_timeline_v1": [
+            {"type": "reasoning", "id": "r1", "text": "think", "at": 1},
+            {"type": "activity", "id": "c1", "at": 2},
+            {"type": "surface", "id": "a2ui-surface-c1", "at": 3}
+        ],
+        "astro_surfaces_v1": [{
+            "messageId": "a2ui-surface-c1",
+            "activityType": "a2ui-surface",
+            "operations": [{"version": "v0.9"}],
+            "status": "active"
+        }]
+    });
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "assistant",
+            content: Some("card shown"),
+            reasoning: Some("think"),
+            tool_calls: Some(serde_json::json!([{
+                "id": "c1", "name": "present_ui", "arguments": {}
+            }])),
+            reasoning_details: Some(details),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "tool",
+            content: Some("Presented info card"),
+            tool_call_id: Some("c1"),
+            tool_name: Some("present_ui"),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+
+    let ui = store.build_chat_history("s1", 200).unwrap();
+    assert_eq!(ui.len(), 2);
+    let segs = ui[1].segments.as_ref().unwrap().as_array().unwrap();
+    assert_eq!(segs.len(), 3);
+    assert_eq!(segs[0]["type"], "reasoning");
+    assert_eq!(segs[1]["type"], "activity");
+    assert_eq!(segs[2]["type"], "surface");
+    let surfaces = ui[1].ui_surfaces.as_ref().unwrap().as_array().unwrap();
+    assert_eq!(surfaces.len(), 1);
+    assert_eq!(surfaces[0]["messageId"], "a2ui-surface-c1");
+    // tool 合并不应清掉 timeline
+    assert_eq!(ui[1].activities.len(), 1);
+    assert_eq!(ui[1].activities[0].output.as_deref(), Some("Presented info card"));
+}
+
+#[test]
 fn migrates_legacy_messages_and_sessions_db() {
     let dir = TempDir::new().unwrap();
     let sessions_dir = dir.path().join("sessions");

@@ -140,12 +140,34 @@ function mapHistoryMessages(messages: ChatHistoryMessageDto[]): ChatMessage[] {
               };
             })
           : undefined;
+      const segments =
+        Array.isArray(m.segments) && m.segments.length > 0
+          ? m.segments
+          : undefined;
+      const uiSurfaces =
+        Array.isArray(m.uiSurfaces) && m.uiSurfaces.length > 0
+          ? m.uiSurfaces.map((s) => {
+              const status =
+                s.status === "resolved" || s.status === "cancelled"
+                  ? s.status
+                  : ("active" as const);
+              return {
+                messageId: s.messageId,
+                activityType: s.activityType,
+                operations: Array.isArray(s.operations) ? s.operations : [],
+                status,
+                interrupts: s.interrupts,
+              };
+            })
+          : undefined;
       return {
         id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content,
         reasoning: m.reasoning ?? undefined,
         activities,
+        segments,
+        uiSurfaces,
       };
     });
 }

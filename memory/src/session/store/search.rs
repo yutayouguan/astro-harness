@@ -3,6 +3,7 @@
 use anyhow::Result;
 use std::collections::HashSet;
 use rusqlite::{params, OptionalExtension};
+use serde_json::Value;
 use super::{
     activities_from_tool_calls, attach_tool_output, escape_fts5_query, truncate_chars,
     ChatHistoryMessage, RecentSession, SearchHit, SessionStore,
@@ -70,16 +71,27 @@ impl SessionStore {
                         content: m.content.unwrap_or_default(),
                         reasoning: None,
                         activities: Vec::new(),
+                        segments: None,
+                        ui_surfaces: None,
                     });
                 }
                 "assistant" => {
                     let activities = activities_from_tool_calls(m.tool_calls.as_ref());
+                    let (segments, ui_surfaces) = match &m.reasoning_details {
+                        Some(Value::Object(map)) => (
+                            map.get("astro_timeline_v1").cloned(),
+                            map.get("astro_surfaces_v1").cloned(),
+                        ),
+                        _ => (None, None),
+                    };
                     out.push(ChatHistoryMessage {
                         id: m.id.to_string(),
                         role: "assistant".into(),
                         content: m.content.unwrap_or_default(),
                         reasoning: m.reasoning.or(m.reasoning_content),
                         activities,
+                        segments,
+                        ui_surfaces,
                     });
                 }
                 "tool" => {

@@ -106,6 +106,10 @@ pub struct ChatHistoryMessage {
     pub content: String,
     pub reasoning: Option<String>,
     pub activities: Vec<ChatActivityStored>,
+    /// `reasoning_details.astro_timeline_v1`（JSON array）
+    pub segments: Option<Value>,
+    /// `reasoning_details.astro_surfaces_v1`（JSON array）
+    pub ui_surfaces: Option<Value>,
 }
 
 /// 侧栏「近期会话」列表项：`title` 优先，否则用首条 user `content` 截断作 preview。

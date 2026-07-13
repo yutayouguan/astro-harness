@@ -141,6 +141,8 @@ export type ChatHistoryMessageDto = {
   content: string;
   reasoning?: string | null;
   activities?: ChatHistoryActivityDto[];
+  segments?: ChatTimelineSegment[] | null;
+  uiSurfaces?: UiSurface[] | null;
 };
 
 /** `get_chat_history` 整包响应 */
