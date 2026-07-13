@@ -30,6 +30,7 @@ use tokio::task::JoinSet;
 use crate::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
 use crate::interrupt::Interrupt;
 use crate::loop_::AgentLoop;
+use crate::usage_record::apply_llm_usage_dual_write;
 
 tokio::task_local! {
     /// 同步 `delegate` 子路径上浮 HITL 时读取；由串行工具执行注入。
@@ -321,66 +322,28 @@ async fn emit(
     tx.send(Ok(item)).await.is_ok()
 }
 
-/// 尽力写入一条 `kind=llm` 事件；失败忽略。
+/// 尽力双写 `kind=llm` 事件与会话账单；失败忽略。
 async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &Usage) {
     if usage.is_empty() {
         return;
     }
     let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
-    let session_id = Some(agent.session_id().to_string());
+    let session_id = agent.session_id().to_string();
     let provider = agent.chat_provider().to_string();
     let base_url = agent.chat_base_url().to_string();
     let api_key = agent.chat_api_key().to_string();
     drop(agent);
-    let usage_tokens = memory::UsageTokens {
-        input_tokens: usage.input_tokens,
-        output_tokens: usage.output_tokens,
-        cache_read_tokens: usage.cache_read_tokens,
-        cache_write_tokens: usage.cache_write_tokens,
-        request_count: if usage.request_count == 0 {
-            1
-        } else {
-            usage.request_count
-        },
-    };
-    let cost_result = memory::estimate_usage_cost(
+    apply_llm_usage_dual_write(
+        &agent_id,
+        Some(&session_id),
         model,
-        &usage_tokens,
-        (!provider.is_empty()).then_some(provider.as_str()),
-        (!base_url.is_empty()).then_some(base_url.as_str()),
-        (!api_key.is_empty()).then_some(api_key.as_str()),
+        usage,
+        &provider,
+        &base_url,
+        &api_key,
+        None,
     );
-    let cost_usd = match cost_result.status {
-        memory::CostStatus::Unknown => 0.0,
-        _ => cost_result.amount_usd.unwrap_or(0.0),
-    };
-    let cost_status = Some(match cost_result.status {
-        memory::CostStatus::Estimated => "estimated".to_string(),
-        memory::CostStatus::Included => "included".to_string(),
-        memory::CostStatus::Unknown => "unknown".to_string(),
-    });
-    memory::UsageDb::try_record(memory::NewUsageEvent {
-        ts: chrono::Utc::now().to_rfc3339(),
-        kind: "llm".into(),
-        name: model.to_string(),
-        agent_id,
-        session_id,
-        input_tokens: i64::from(usage.input_tokens),
-        output_tokens: i64::from(usage.output_tokens),
-        cache_read_tokens: i64::from(usage.cache_read_tokens),
-        cache_write_tokens: i64::from(usage.cache_write_tokens),
-        reasoning_tokens: i64::from(usage.reasoning_tokens),
-        total_tokens: i64::from(usage.total_tokens()),
-        cost_usd,
-        cost_status,
-        cost_source: Some(cost_result.source),
-        pricing_version: cost_result.pricing_version,
-        billing_provider: (!provider.is_empty()).then_some(provider),
-        billing_base_url: (!base_url.is_empty()).then_some(base_url),
-        billing_mode: None,
-        meta_json: None,
-    });
 }
 
 /// 发送 Error 后立即发送 Done；若有已累计 usage 则先写入 `usage.db`。

@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
 use crate::messages::to_provider_messages;
+use crate::usage_record::apply_llm_usage_dual_write;
 
 /// 执行定时任务所需的 LLM 凭据与路由信息。
 ///
@@ -206,57 +207,19 @@ pub async fn execute_job_with_roots(
 
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
     if !llm_usage.is_empty() {
-        let usage_tokens = memory::UsageTokens {
-            input_tokens: llm_usage.input_tokens,
-            output_tokens: llm_usage.output_tokens,
-            cache_read_tokens: llm_usage.cache_read_tokens,
-            cache_write_tokens: llm_usage.cache_write_tokens,
-            request_count: if llm_usage.request_count == 0 {
-                1
-            } else {
-                llm_usage.request_count
-            },
-        };
-        let cost_result = memory::estimate_usage_cost(
+        apply_llm_usage_dual_write(
+            &job.agent_id,
+            row.session_id.as_deref(),
             &model_for_usage,
-            &usage_tokens,
-            billing_provider.as_deref(),
-            billing_base_url.as_deref(),
-            billing_api_key.as_deref(),
-        );
-        let cost_usd = match cost_result.status {
-            memory::CostStatus::Unknown => 0.0,
-            _ => cost_result.amount_usd.unwrap_or(0.0),
-        };
-        let cost_status = Some(match cost_result.status {
-            memory::CostStatus::Estimated => "estimated".to_string(),
-            memory::CostStatus::Included => "included".to_string(),
-            memory::CostStatus::Unknown => "unknown".to_string(),
-        });
-        memory::UsageDb::try_record(memory::NewUsageEvent {
-            ts: Utc::now().to_rfc3339(),
-            kind: "llm".into(),
-            name: model_for_usage,
-            agent_id: job.agent_id.clone(),
-            session_id: row.session_id.clone(),
-            input_tokens: i64::from(llm_usage.input_tokens),
-            output_tokens: i64::from(llm_usage.output_tokens),
-            cache_read_tokens: i64::from(llm_usage.cache_read_tokens),
-            cache_write_tokens: i64::from(llm_usage.cache_write_tokens),
-            reasoning_tokens: i64::from(llm_usage.reasoning_tokens),
-            total_tokens: i64::from(llm_usage.total_tokens()),
-            cost_usd,
-            cost_status,
-            cost_source: Some(cost_result.source),
-            pricing_version: cost_result.pricing_version,
-            billing_provider: billing_provider.clone(),
-            billing_base_url: billing_base_url.clone(),
-            billing_mode: None,
-            meta_json: Some(
+            &llm_usage,
+            billing_provider.as_deref().unwrap_or(""),
+            billing_base_url.as_deref().unwrap_or(""),
+            billing_api_key.as_deref().unwrap_or(""),
+            Some(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),
             ),
-        });
+        );
     }
 
     Ok(row)

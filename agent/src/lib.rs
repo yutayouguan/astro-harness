@@ -35,6 +35,8 @@ pub mod prompt_builder;
 pub mod schema_validate;
 /// 流式补全与多轮流式迭代抽象。
 pub mod streaming;
+/// LLM 用量双写（UsageDb + SessionStore 账单）。
+mod usage_record;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
 
