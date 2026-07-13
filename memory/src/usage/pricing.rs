@@ -294,12 +294,20 @@ fn parse_models_api_response(json: Value) -> Option<PricingCacheFile> {
     let data = json.get("data")?.as_array()?;
     let mut models = HashMap::new();
     for item in data {
-        let id = item.get("id")?.as_str()?.to_string();
-        let pricing = item.get("pricing")?;
-        let prompt = parse_price_value(pricing.get("prompt")?)?;
-        let completion = parse_price_value(pricing.get("completion")?)?;
+        let Some(id) = item.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(pricing) = item.get("pricing") else {
+            continue;
+        };
+        let Some(prompt) = pricing.get("prompt").and_then(parse_price_value) else {
+            continue;
+        };
+        let Some(completion) = pricing.get("completion").and_then(parse_price_value) else {
+            continue;
+        };
         models.insert(
-            id,
+            id.to_string(),
             CachedModelPricing {
                 prompt,
                 completion,
@@ -312,6 +320,9 @@ fn parse_models_api_response(json: Value) -> Option<PricingCacheFile> {
                 request: pricing.get("request").and_then(parse_price_value),
             },
         );
+    }
+    if models.is_empty() {
+        return None;
     }
     Some(PricingCacheFile {
         fetched_at: Utc::now().to_rfc3339(),
@@ -470,5 +481,27 @@ pub fn estimate_usage_cost(
             estimate_from_provider_models_api(model, usage, &base_url, api_key)
         }
         BillingRoute::Unknown => unknown_result(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_models_api_response_skips_invalid_items() {
+        let json = json!({
+            "data": [
+                { "id": "bad-no-pricing" },
+                { "id": "bad-missing-completion", "pricing": { "prompt": "0.000001" } },
+                { "id": "good/model", "pricing": { "prompt": "0.000001", "completion": "0.000002" } }
+            ]
+        });
+        let cache = parse_models_api_response(json).expect("should parse with one valid model");
+        assert_eq!(cache.models.len(), 1);
+        let pricing = cache.models.get("good/model").expect("valid model present");
+        assert!((pricing.prompt - 0.000001).abs() < 1e-12);
+        assert!((pricing.completion - 0.000002).abs() < 1e-12);
     }
 }
