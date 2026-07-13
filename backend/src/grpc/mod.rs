@@ -2,5 +2,6 @@
 
 mod astro_service;
 mod files;
+mod interrupt_store;
 
 pub use astro_service::AstroServiceImpl;
