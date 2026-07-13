@@ -323,23 +323,23 @@ async fn emit(
 
 /// 尽力写入一条 `kind=llm` 事件；失败忽略。
 async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &Usage) {
-    if usage.prompt_tokens == 0 && usage.completion_tokens == 0 && usage.total_tokens == 0 {
+    if usage.is_empty() {
         return;
     }
     let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
     let session_id = Some(agent.session_id().to_string());
     drop(agent);
-    let cost = memory::estimate_llm_cost(model, usage.prompt_tokens, usage.completion_tokens);
+    let cost = memory::estimate_llm_cost(model, usage.prompt_tokens(), usage.completion_tokens());
     memory::UsageDb::try_record(memory::NewUsageEvent {
         ts: chrono::Utc::now().to_rfc3339(),
         kind: "llm".into(),
         name: model.to_string(),
         agent_id,
         session_id,
-        prompt_tokens: i64::from(usage.prompt_tokens),
-        completion_tokens: i64::from(usage.completion_tokens),
-        total_tokens: i64::from(usage.total_tokens),
+        prompt_tokens: i64::from(usage.prompt_tokens()),
+        completion_tokens: i64::from(usage.completion_tokens()),
+        total_tokens: i64::from(usage.total_tokens()),
         cost_usd: cost,
         meta_json: None,
     });

@@ -170,9 +170,9 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
         }
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)) => Some(ChatEvent {
             payload: Some(proto::chat_event::Payload::Usage(UsageEvent {
-                prompt_tokens: u.prompt_tokens,
-                completion_tokens: u.completion_tokens,
-                total_tokens: u.total_tokens,
+                prompt_tokens: u.prompt_tokens(),
+                completion_tokens: u.completion_tokens(),
+                total_tokens: u.total_tokens(),
             })),
         }),
         MultiTurnStreamItem::ToolResult {

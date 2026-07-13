@@ -706,9 +706,9 @@ async fn run_chat_stream(
                 let _ = app.emit(
                     event_name,
                     ChatStreamEvent::Usage {
-                        prompt_tokens: u.prompt_tokens,
-                        completion_tokens: u.completion_tokens,
-                        total_tokens: u.total_tokens,
+                        prompt_tokens: u.prompt_tokens(),
+                        completion_tokens: u.completion_tokens(),
+                        total_tokens: u.total_tokens(),
                     },
                 );
             }

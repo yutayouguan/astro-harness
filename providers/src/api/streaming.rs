@@ -13,31 +13,49 @@ use tokio::sync::watch;
 /// Token 用量（对齐 OpenAI usage / Rig FinalUsage）。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Usage {
-    /// 输入（prompt）token 数。
-    pub prompt_tokens: u32,
-    /// 输出（completion）token 数。
-    pub completion_tokens: u32,
-    /// 总 token 数。
-    pub total_tokens: u32,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub cache_read_tokens: u32,
+    pub cache_write_tokens: u32,
+    pub reasoning_tokens: u32,
+    pub request_count: u32,
 }
 
 impl Usage {
-    /// 将另一份用量累加到当前值（饱和加法）。
-    pub fn add_assign(&mut self, other: Usage) {
-        self.prompt_tokens = self.prompt_tokens.saturating_add(other.prompt_tokens);
-        self.completion_tokens = self
-            .completion_tokens
-            .saturating_add(other.completion_tokens);
-        self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
+    pub fn prompt_tokens(&self) -> u32 {
+        self.input_tokens
+            .saturating_add(self.cache_read_tokens)
+            .saturating_add(self.cache_write_tokens)
     }
-
-    /// 由输入/输出 token 构造，`total` 为两者之和。
-    pub fn from_parts(prompt: u32, completion: u32) -> Self {
+    pub fn completion_tokens(&self) -> u32 {
+        self.output_tokens
+    }
+    pub fn total_tokens(&self) -> u32 {
+        self.prompt_tokens().saturating_add(self.completion_tokens())
+    }
+    pub fn add_assign(&mut self, other: Usage) {
+        self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
+        self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
+        self.cache_read_tokens = self.cache_read_tokens.saturating_add(other.cache_read_tokens);
+        self.cache_write_tokens = self.cache_write_tokens.saturating_add(other.cache_write_tokens);
+        self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
+        let n = if other.request_count == 0 { 1 } else { other.request_count };
+        self.request_count = self.request_count.saturating_add(n);
+    }
+    pub fn from_parts(input: u32, output: u32) -> Self {
         Self {
-            prompt_tokens: prompt,
-            completion_tokens: completion,
-            total_tokens: prompt.saturating_add(completion),
+            input_tokens: input,
+            output_tokens: output,
+            request_count: 1,
+            ..Default::default()
         }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.input_tokens == 0
+            && self.output_tokens == 0
+            && self.cache_read_tokens == 0
+            && self.cache_write_tokens == 0
+            && self.reasoning_tokens == 0
     }
 }
 
@@ -223,8 +241,8 @@ mod tests {
     fn usage_add_assign() {
         let mut a = Usage::from_parts(10, 5);
         a.add_assign(Usage::from_parts(3, 7));
-        assert_eq!(a.prompt_tokens, 13);
-        assert_eq!(a.completion_tokens, 12);
-        assert_eq!(a.total_tokens, 25);
+        assert_eq!(a.prompt_tokens(), 13);
+        assert_eq!(a.completion_tokens(), 12);
+        assert_eq!(a.total_tokens(), 25);
     }
 }

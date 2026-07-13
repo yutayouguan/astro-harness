@@ -181,14 +181,11 @@ pub async fn execute_job_with_roots(
     }
 
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
-    if llm_usage.prompt_tokens > 0
-        || llm_usage.completion_tokens > 0
-        || llm_usage.total_tokens > 0
-    {
+    if !llm_usage.is_empty() {
         let cost = memory::estimate_llm_cost(
             &model_for_usage,
-            llm_usage.prompt_tokens,
-            llm_usage.completion_tokens,
+            llm_usage.prompt_tokens(),
+            llm_usage.completion_tokens(),
         );
         memory::UsageDb::try_record(memory::NewUsageEvent {
             ts: Utc::now().to_rfc3339(),
@@ -196,9 +193,9 @@ pub async fn execute_job_with_roots(
             name: model_for_usage,
             agent_id: job.agent_id.clone(),
             session_id: row.session_id.clone(),
-            prompt_tokens: i64::from(llm_usage.prompt_tokens),
-            completion_tokens: i64::from(llm_usage.completion_tokens),
-            total_tokens: i64::from(llm_usage.total_tokens),
+            prompt_tokens: i64::from(llm_usage.prompt_tokens()),
+            completion_tokens: i64::from(llm_usage.completion_tokens()),
+            total_tokens: i64::from(llm_usage.total_tokens()),
             cost_usd: cost,
             meta_json: Some(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
