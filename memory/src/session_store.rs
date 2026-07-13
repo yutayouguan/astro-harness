@@ -239,20 +239,18 @@ CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
         VALUES (new.id, new.content, new.tool_name, new.tool_calls);
 END;
 
+-- SQLite 3.43+ 上 contentful FTS5 的 INSERT … VALUES('delete', …) 会报 SQL logic error；
+-- 改用普通 DELETE（与 direct DELETE FROM fts 行为一致）。
 CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
-    INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
-    INSERT INTO messages_fts_trigram(messages_fts_trigram, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+    DELETE FROM messages_fts WHERE rowid = old.id;
+    DELETE FROM messages_fts_trigram WHERE rowid = old.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
-    INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+    DELETE FROM messages_fts WHERE rowid = old.id;
     INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
         VALUES (new.id, new.content, new.tool_name, new.tool_calls);
-    INSERT INTO messages_fts_trigram(messages_fts_trigram, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+    DELETE FROM messages_fts_trigram WHERE rowid = old.id;
     INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
         VALUES (new.id, new.content, new.tool_name, new.tool_calls);
 END;
@@ -290,8 +288,8 @@ impl SessionStore {
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let store = Self { conn };
         store.migrate_to_v11()?;
-        // 已 stamp v11 的库也可能残留旧 MessageDb 触发器（写 message_id），每次打开自愈。
-        store.repair_legacy_messages_fts_if_needed()?;
+        // 已 stamp v11 的库也可能残留旧触发器 / 失效的 FTS delete 语法，每次打开自愈。
+        store.repair_messages_fts_if_needed()?;
         Ok(store)
     }
 
@@ -1138,18 +1136,20 @@ impl SessionStore {
         Ok(())
     }
 
-    /// 检测并清除旧 MessageDb 的 `sync_messages_*` 触发器（引用已删除的 `message_id` 列）。
-    fn repair_legacy_messages_fts_if_needed(&self) -> Result<()> {
-        if !self.has_legacy_messages_fts_triggers()? {
+    /// 检测并重建失效的 `messages_fts` 触发器：
+    /// - 旧 MessageDb 的 `sync_messages_*`（引用已删除的 `message_id`）
+    /// - 使用 FTS5 `VALUES('delete', …)` 的 contentful 触发器（SQLite 3.43+ 会 SQL logic error）
+    fn repair_messages_fts_if_needed(&self) -> Result<()> {
+        if !self.needs_messages_fts_repair()? {
             return Ok(());
         }
         self.rebuild_messages_fts_v11()
-            .context("repair legacy messages_fts triggers")?;
+            .context("repair messages_fts triggers")?;
         Ok(())
     }
 
-    fn has_legacy_messages_fts_triggers(&self) -> Result<bool> {
-        let count: i64 = self.conn.query_row(
+    fn needs_messages_fts_repair(&self) -> Result<bool> {
+        let legacy: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM sqlite_master
              WHERE type = 'trigger'
                AND name IN (
@@ -1160,7 +1160,23 @@ impl SessionStore {
             [],
             |row| row.get(0),
         )?;
-        Ok(count > 0)
+        if legacy > 0 {
+            return Ok(true);
+        }
+
+        // 旧 v11 DDL 用 INSERT … ('delete', …)，在较新 SQLite 上无法 DELETE/UPDATE 消息。
+        let delete_sql: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT sql FROM sqlite_master
+                 WHERE type = 'trigger' AND name = 'messages_fts_delete'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(delete_sql
+            .as_deref()
+            .is_some_and(|sql| sql.contains("'delete'")))
     }
 
     /// 若 `state_meta.migrated_from_sessions_db` 未设，从旁路 `sessions.db` 导入会话行（幂等）。

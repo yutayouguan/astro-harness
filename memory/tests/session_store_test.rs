@@ -321,3 +321,60 @@ fn open_repairs_legacy_fts_triggers_on_v11_db() {
     assert_eq!(store.get_messages("s1").unwrap().len(), 2);
 }
 
+#[test]
+fn open_repairs_broken_fts_delete_command_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    {
+        let store = SessionStore::open(&path).unwrap();
+        store.create_session("s1", "test", None, None, None).unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("keep"),
+                ..NewMessage::empty("s1", "user")
+            })
+            .unwrap();
+    }
+    // 模拟旧 v11 DDL：contentful FTS 上使用 VALUES('delete', …)。
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            r#"
+            DROP TRIGGER IF EXISTS messages_fts_delete;
+            DROP TRIGGER IF EXISTS messages_fts_update;
+            CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
+                    VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+                INSERT INTO messages_fts_trigram(messages_fts_trigram, rowid, content, tool_name, tool_calls)
+                    VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+            END;
+            CREATE TRIGGER messages_fts_update AFTER UPDATE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
+                    VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+                INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
+                    VALUES (new.id, new.content, new.tool_name, new.tool_calls);
+            END;
+            "#,
+        )
+        .unwrap();
+    }
+
+    let id = {
+        let store = SessionStore::open(&path).unwrap();
+        store
+            .append_message(NewMessage {
+                content: Some("temp"),
+                ..NewMessage::empty("s1", "user")
+            })
+            .unwrap()
+    };
+    // 打开后应已换成 DELETE FROM fts，消息可删。
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute("DELETE FROM messages WHERE id = ?1", rusqlite::params![id])
+            .unwrap();
+    }
+    let store = SessionStore::open(&path).unwrap();
+    assert_eq!(store.get_messages("s1").unwrap().len(), 1);
+}
+
