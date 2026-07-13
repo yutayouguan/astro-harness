@@ -1,6 +1,7 @@
 /** CatalogAdapter：将 A2UI 组件映射为 React 节点。 */
 
 import type { ReactNode } from "react";
+import { mergeActionContext } from "./formState";
 import type { A2uiComponent } from "./types";
 import { isKnownComponent } from "./validate";
 
@@ -97,21 +98,92 @@ function CatalogNode({
           type="button"
           className={`a2ui-button ${node.variant === "primary" ? "is-primary" : ""}`}
           disabled={ctx.disabled}
-          onClick={() => ctx.onAction(eventName, context)}
+          onClick={() =>
+            ctx.onAction(
+              eventName,
+              mergeActionContext(context, ctx.fieldValues),
+            )
+          }
         >
           {renderChild(node.child, ctx)}
         </button>
       );
     }
-    case "TextField":
-    case "ChoicePicker":
-    case "CheckBox":
-      // MVP：HITL 澄清用 Button 选项；表单控件占位
+    case "TextField": {
+      const label = typeof node.label === "string" ? node.label : typeof node.text === "string" ? node.text : "";
+      const current =
+        ctx.fieldValues[node.id] != null
+          ? String(ctx.fieldValues[node.id])
+          : typeof node.value === "string"
+            ? node.value
+            : "";
       return (
-        <div className="a2ui-field-placeholder" data-component={node.component}>
-          {typeof node.text === "string" ? node.text : node.component}
-        </div>
+        <label className="a2ui-field">
+          {label ? <span className="a2ui-caption">{label}</span> : null}
+          <input
+            type="text"
+            disabled={ctx.disabled}
+            value={current}
+            onChange={(e) => ctx.setFieldValue(node.id, e.target.value)}
+          />
+        </label>
       );
+    }
+    case "ChoicePicker": {
+      const label = typeof node.label === "string" ? node.label : "";
+      const options = Array.isArray(node.options) ? node.options : [];
+      const current =
+        ctx.fieldValues[node.id] != null
+          ? String(ctx.fieldValues[node.id])
+          : typeof node.value === "string"
+            ? node.value
+            : "";
+      return (
+        <label className="a2ui-choice">
+          {label ? <span className="a2ui-caption">{label}</span> : null}
+          <select
+            disabled={ctx.disabled}
+            value={current}
+            onChange={(e) => ctx.setFieldValue(node.id, e.target.value)}
+          >
+            <option value="">—</option>
+            {options.map((opt, i) => {
+              if (typeof opt === "string") {
+                return (
+                  <option key={i} value={opt}>
+                    {opt}
+                  </option>
+                );
+              }
+              const v = opt.value ?? opt.label ?? "";
+              return (
+                <option key={i} value={v}>
+                  {opt.label ?? v}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+      );
+    }
+    case "CheckBox": {
+      const label = typeof node.label === "string" ? node.label : typeof node.text === "string" ? node.text : "";
+      const checked =
+        typeof ctx.fieldValues[node.id] === "boolean"
+          ? Boolean(ctx.fieldValues[node.id])
+          : Boolean(node.value);
+      return (
+        <label className="a2ui-check">
+          <input
+            type="checkbox"
+            disabled={ctx.disabled}
+            checked={checked}
+            onChange={(e) => ctx.setFieldValue(node.id, e.target.checked)}
+          />
+          <span>{label}</span>
+        </label>
+      );
+    }
     case "Badge": {
       const text = typeof node.text === "string" ? node.text : "";
       const variant = typeof node.variant === "string" ? node.variant : "info";
@@ -186,6 +258,8 @@ export function renderCatalogTree(
     disabled: boolean;
     onAction: (name: string, context: Record<string, unknown>) => void;
     unknownLabel: string;
+    fieldValues: Record<string, unknown>;
+    setFieldValue: (id: string, value: unknown) => void;
   },
 ): ReactNode {
   const byId = new Map(components.map((c) => [c.id, c]));
@@ -202,8 +276,8 @@ export function renderCatalogTree(
     disabled: opts.disabled,
     onAction: opts.onAction,
     unknownLabel: opts.unknownLabel,
-    fieldValues: {},
-    setFieldValue: () => {},
+    fieldValues: opts.fieldValues,
+    setFieldValue: opts.setFieldValue,
   };
   return <CatalogNode node={root} ctx={ctx} />;
 }
