@@ -35,6 +35,21 @@ pub enum ChatStreamEvent {
         completion_tokens: u32,
         total_tokens: u32,
     },
+    RunStarted {
+        thread_id: String,
+        run_id: String,
+    },
+    Activity {
+        message_id: String,
+        activity_type: String,
+        content_json: String,
+        replace: bool,
+    },
+    RunFinished {
+        run_id: String,
+        outcome_type: String,
+        interrupts_json: String,
+    },
     Done,
     Error { message: String },
 }
@@ -415,11 +430,13 @@ pub async fn start_chat(
     provider_id: Option<String>,
     thinking_enabled: Option<bool>,
     reasoning_effort: Option<String>,
+    resume_json: Option<String>,
 ) -> Result<String, String> {
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
     let attachments = attachments.unwrap_or_default();
     let merged = build_chat_content(&content, &attachments);
+    let resume_json = resume_json.unwrap_or_default();
     let grpc_address = default_grpc_address();
     let event_name = format!("chat-stream-{sid}");
     let thinking_enabled = thinking_enabled.unwrap_or(false);
@@ -455,6 +472,7 @@ pub async fn start_chat(
             &image_targets,
             thinking_enabled,
             &reasoning_effort,
+            &resume_json,
         )
         .await;
 
@@ -472,13 +490,19 @@ pub async fn start_chat(
 }
 
 /// 暂停 / 继续 / 取消进行中的聊天流。
+///
+/// `resume` / `stream_resume` 仅恢复流式生成，**不可**用于回答 interrupt。
 #[tauri::command]
 pub async fn chat_control(session_id: String, action: String) -> Result<(), String> {
     let action = match action.trim().to_ascii_lowercase().as_str() {
         "pause" => ChatControlAction::ChatControlPause,
-        "resume" => ChatControlAction::ChatControlResume,
+        "resume" | "stream_resume" => ChatControlAction::ChatControlStreamResume,
         "cancel" | "stop" => ChatControlAction::ChatControlCancel,
-        other => return Err(format!("未知控制动作: {other}（pause|resume|cancel）")),
+        other => {
+            return Err(format!(
+                "未知控制动作: {other}（pause|resume|stream_resume|cancel）"
+            ))
+        }
     };
     let grpc_address = default_grpc_address();
     let endpoint = endpoint_url(&grpc_address);
@@ -489,6 +513,51 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
         .chat_control(ChatControlRequest {
             session_id,
             action: action as i32,
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 提交 interrupt resume（HITL）；随后应再调 `start_chat` 续跑。
+#[tauri::command]
+pub async fn interrupt_resume(
+    session_id: String,
+    resume_json: String,
+) -> Result<(), String> {
+    let items: Vec<serde_json::Value> = serde_json::from_str(&resume_json)
+        .map_err(|e| format!("resume_json 无效: {e}"))?;
+    let resume: Vec<proto::InterruptResumeItem> = items
+        .iter()
+        .map(|item| proto::InterruptResumeItem {
+            interrupt_id: item
+                .get("interrupt_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            status: item
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("resolved")
+                .to_string(),
+            payload_json: match item.get("payload_json").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => item
+                    .get("payload")
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+            },
+        })
+        .collect();
+    let grpc_address = default_grpc_address();
+    let endpoint = endpoint_url(&grpc_address);
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| e.to_string())?;
+    client
+        .interrupt_resume(proto::InterruptResumeRequest {
+            session_id,
+            resume,
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -535,6 +604,7 @@ async fn run_chat_stream(
     image_targets: &[ImageGenTarget],
     thinking_enabled: bool,
     reasoning_effort: &str,
+    resume_json: &str,
 ) -> Result<(), String> {
     let endpoint = endpoint_url(grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
@@ -564,6 +634,7 @@ async fn run_chat_stream(
             image_gen_fallback_base_url: fallback.map(|t| t.base_url.clone()).unwrap_or_default(),
             thinking_enabled,
             reasoning_effort: reasoning_effort.to_string(),
+            resume_json: resume_json.to_string(),
         })
         .await
         .map_err(|e| e.to_string())?
@@ -626,6 +697,37 @@ async fn run_chat_stream(
                     },
                 );
             }
+            Some(proto::chat_event::Payload::RunStarted(rs)) => {
+                let _ = app.emit(
+                    event_name,
+                    ChatStreamEvent::RunStarted {
+                        thread_id: rs.thread_id,
+                        run_id: rs.run_id,
+                    },
+                );
+            }
+            Some(proto::chat_event::Payload::Activity(a)) => {
+                let _ = app.emit(
+                    event_name,
+                    ChatStreamEvent::Activity {
+                        message_id: a.message_id,
+                        activity_type: a.activity_type,
+                        content_json: a.content_json,
+                        replace: a.replace,
+                    },
+                );
+            }
+            Some(proto::chat_event::Payload::RunFinished(rf)) => {
+                let interrupts_json = serialize_interrupts(&rf.interrupts);
+                let _ = app.emit(
+                    event_name,
+                    ChatStreamEvent::RunFinished {
+                        run_id: rf.run_id,
+                        outcome_type: rf.outcome_type,
+                        interrupts_json,
+                    },
+                );
+            }
             Some(proto::chat_event::Payload::Done(true)) => {
                 let _ = app.emit(event_name, ChatStreamEvent::Done);
                 break;
@@ -644,6 +746,24 @@ async fn run_chat_stream(
     }
 
     Ok(())
+}
+
+fn serialize_interrupts(items: &[proto::Interrupt]) -> String {
+    let arr: Vec<_> = items
+        .iter()
+        .map(|i| {
+            serde_json::json!({
+                "id": i.id,
+                "reason": i.reason,
+                "message": i.message,
+                "tool_call_id": i.tool_call_id,
+                "response_schema_json": i.response_schema_json,
+                "expires_at": i.expires_at,
+                "metadata_json": i.metadata_json,
+            })
+        })
+        .collect();
+    serde_json::to_string(&arr).unwrap_or_else(|_| "[]".into())
 }
 
 /// 由 MIME 推断常用文件扩展名。
