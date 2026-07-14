@@ -1102,6 +1102,7 @@ async fn run_multi_turn_stream_inner(
         let sid = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().map(str::to_string);
         let turn = agent.session_turn();
+        let turn_id = agent.current_turn_id().map(str::to_string);
         let _ = agent.fire_hook(
             ::hooks::ON_SESSION_END,
             ::hooks::HookPayload {

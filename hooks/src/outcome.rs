@@ -6,6 +6,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, Default)]
 pub struct HookPayload {
     pub session_id: String,
+    /// 当前流式回合 id（= agent `current_turn_id` / run_id）；与 `turn`（轮次计数）不同。
     pub turn_id: Option<String>,
     pub detail: String,
     pub tool_name: Option<String>,

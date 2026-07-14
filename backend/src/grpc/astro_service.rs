@@ -90,6 +90,7 @@ impl AstroServiceImpl {
                 rt.fire_gateway(
                     ::hooks::GATEWAY_STARTUP,
                     &::hooks::HookPayload {
+                        turn_id: None,
                         detail: "backend ready".into(),
                         ..Default::default()
                     },
@@ -150,6 +151,7 @@ impl AstroServiceImpl {
     async fn release_session_for_new_chat(&self, session_id: &str) {
         let payload = ::hooks::HookPayload {
             session_id: session_id.to_string(),
+            turn_id: None,
             detail: "new_chat".into(),
             ..Default::default()
         };
@@ -179,8 +181,10 @@ impl AstroServiceImpl {
             let agent = handle.lock().await;
             agent.cancel_signal().cancel();
             let bus = agent.hook_bus();
+            let turn_id = agent.current_turn_id().map(str::to_string);
             let payload = ::hooks::HookPayload {
                 session_id: session_id.to_string(),
+                turn_id,
                 detail: format!("session={session_id}"),
                 ..Default::default()
             };
@@ -464,6 +468,7 @@ impl AstroService for AstroServiceImpl {
             ::hooks::PRE_GATEWAY_DISPATCH,
             &::hooks::HookPayload {
                 session_id: session_id.clone(),
+                turn_id: None,
                 message: Some(content.clone()),
                 detail: content.chars().take(200).collect(),
                 ..Default::default()
@@ -531,6 +536,7 @@ impl AstroService for AstroServiceImpl {
                 ::hooks::SESSION_START,
                 &::hooks::HookPayload {
                     session_id: session_id.clone(),
+                    turn_id: None,
                     ..Default::default()
                 },
             );
@@ -797,6 +803,7 @@ impl AstroService for AstroServiceImpl {
                 ::hooks::AGENT_END,
                 &::hooks::HookPayload {
                     session_id: sid_cleanup.clone(),
+                    turn_id: None,
                     ..Default::default()
                 },
             );

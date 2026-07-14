@@ -755,6 +755,7 @@ impl AgentLoop {
                 ::hooks::SUBAGENT_STOP,
                 ::hooks::HookPayload {
                     session_id: child.into(),
+                    turn_id: self.current_turn_id.clone(),
                     detail: summary.chars().take(200).collect(),
                     ..Default::default()
                 },

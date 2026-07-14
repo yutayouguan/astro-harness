@@ -10,3 +10,9 @@ delegation:
   child_max_iterations: 50    # 子 Agent 默认最大工具跟随轮次
   worktree: true              # 在 git 仓库内自动为子任务建独立检出（.worktrees/astro-*）
   orchestrator_enabled: true  # false 时强制所有子任务为 leaf
+
+# 遥测旁路（复制 telemetry-webhook.sh 后启用）
+# hooks:
+#   post_tool_call: '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+#   post_llm_call: '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+#   on_session_end: '"$HOME/.astro/hooks/telemetry-webhook.sh"'

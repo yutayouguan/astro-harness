@@ -62,13 +62,13 @@ impl ShellHookRunner {
     }
 }
 
-fn env_from_payload(event: &str, payload: &HookPayload) -> Vec<(String, String)> {
+pub(crate) fn env_from_payload(event: &str, payload: &HookPayload) -> Vec<(String, String)> {
     let mut env = vec![
         ("ASTRO_HOOK_EVENT".into(), event.into()),
         ("ASTRO_HOOK_SESSION".into(), payload.session_id.clone()),
         ("ASTRO_HOOK_DETAIL".into(), payload.detail.clone()),
     ];
-    if let Some(tid) = &payload.turn_id {
+    if let Some(tid) = payload.turn_id.as_ref().filter(|s| !s.is_empty()) {
         env.push(("ASTRO_HOOK_TURN".into(), tid.clone()));
     }
     if let Some(t) = &payload.tool_name {
@@ -115,6 +115,50 @@ pub fn load_shell_runner(_root: &Path, hooks: HashMap<String, String>) -> ShellH
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::outcome::HookPayload;
+
+    #[test]
+    fn env_includes_turn_when_set() {
+        let env = env_from_payload(
+            "post_tool_call",
+            &HookPayload {
+                session_id: "s1".into(),
+                turn_id: Some("turn-abc".into()),
+                detail: "d".into(),
+                ..Default::default()
+            },
+        );
+        assert!(env.iter().any(|(k, v)| k == "ASTRO_HOOK_TURN" && v == "turn-abc"));
+        assert!(env.iter().any(|(k, v)| k == "ASTRO_HOOK_SESSION" && v == "s1"));
+    }
+
+    #[test]
+    fn env_omits_turn_when_empty() {
+        let env = env_from_payload(
+            "post_tool_call",
+            &HookPayload {
+                session_id: "s1".into(),
+                turn_id: Some(String::new()),
+                detail: "d".into(),
+                ..Default::default()
+            },
+        );
+        assert!(!env.iter().any(|(k, _)| k == "ASTRO_HOOK_TURN"));
+    }
+
+    #[test]
+    fn env_omits_turn_when_none() {
+        let env = env_from_payload(
+            "post_tool_call",
+            &HookPayload {
+                session_id: "s1".into(),
+                turn_id: None,
+                detail: "d".into(),
+                ..Default::default()
+            },
+        );
+        assert!(!env.iter().any(|(k, _)| k == "ASTRO_HOOK_TURN"));
+    }
 
     #[tokio::test]
     async fn runs_echo() {

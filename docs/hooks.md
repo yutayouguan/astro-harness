@@ -122,11 +122,17 @@ hooks:
   agent:end: 'true'
 ```
 
-环境变量：`ASTRO_HOOK_EVENT`、`ASTRO_HOOK_SESSION`、`ASTRO_HOOK_DETAIL`、`ASTRO_HOOK_TOOL`、`ASTRO_HOOK_MESSAGE`。
+环境变量：`ASTRO_HOOK_EVENT`、`ASTRO_HOOK_SESSION`、`ASTRO_HOOK_TURN`（有值才设置）、`ASTRO_HOOK_DETAIL`、`ASTRO_HOOK_TOOL`、`ASTRO_HOOK_MESSAGE`。
 
 - 异步执行，默认超时 5 秒  
 - 失败只记日志  
 - 与 Plugin 同名事件可同时触发（Shell 始终旁路）
+
+### 遥测旁路（Shell）
+
+示例脚本 [`docs/examples/hooks/telemetry-webhook.sh`](./examples/hooks/telemetry-webhook.sh) 将 Hook 事件 POST 到 `ASTRO_TELEMETRY_URL`（可选 `ASTRO_TELEMETRY_TOKEN`）。未配置 URL 时静默跳过，curl 失败也不阻断 agent。
+
+`ASTRO_HOOK_TURN` 对应 `HookPayload.turn_id`（会话内流式回合 id，与 `UsageDb` / `agent.log` 一致）。这与 `HookPayload.turn`（**轮次**计数，1、2、3…）不同——后者不写入 Shell 环境变量。
 
 ---
 
