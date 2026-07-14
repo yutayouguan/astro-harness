@@ -363,8 +363,11 @@ export default function App() {
   const zoomingRef = useRef(false);
   /** 避免恢复过程中把空欢迎页写回覆盖已存会话 */
   const restoringRef = useRef(false);
-  /** 上次成功压实时间（Task 6 冷却用） */
+  /** 上次成功压实时间（冷却 / 状态用） */
   const lastCompactAtRef = useRef(0);
+  /** 上次自动压实尝试时间（失败也计入，避免死循环） */
+  const lastAutoCompactAttemptRef = useRef(0);
+  const prevStreamingRef = useRef(false);
   /** 编辑/再生后下次 start_chat 应截断 DB 到的气泡数；普通发送为 null */
   const pendingKeepChatBubblesRef = useRef<number | null>(null);
   /** 流式 token / reasoning 按帧合并，避免同 tick 批量 setState 导致整段弹出 */
@@ -2019,6 +2022,53 @@ export default function App() {
     showTransientToast,
     t,
   ]);
+
+  /** 上下文占用超阈值时自动压实（轮次结束时检查） */
+  const maybeAutoCompact = useCallback(() => {
+    if (streaming) return;
+    if (sessionPendingInterrupts.length > 0) return;
+    if (!sessionId) return;
+
+    const bubbles = messages.filter(
+      (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
+    ).length;
+    if (bubbles < 6) return;
+
+    const now = Date.now();
+    if (now - lastAutoCompactAttemptRef.current < 60_000) return;
+    if (now - lastCompactAtRef.current < 60_000) return;
+
+    let ratio: number;
+    if (tokenUsage && tokenUsage.totalTokens > 0) {
+      ratio = tokenUsage.totalTokens / 128_000;
+    } else {
+      const chars = messages.reduce(
+        (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
+        0,
+      );
+      ratio = Math.ceil(chars / 4) / 128_000;
+    }
+    if (ratio < 0.5) return;
+
+    lastAutoCompactAttemptRef.current = now;
+    void runCompactSession();
+  }, [
+    streaming,
+    sessionPendingInterrupts,
+    sessionId,
+    messages,
+    tokenUsage,
+    runCompactSession,
+  ]);
+
+  // 一轮流式成功结束后尝试自动压实（streaming true→false）
+  useEffect(() => {
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+    if (wasStreaming && !streaming) {
+      maybeAutoCompact();
+    }
+  }, [streaming, maybeAutoCompact]);
 
   /** 撤销最近一轮 user + 紧随的 assistant */
   const undoLastExchange = useCallback(() => {
