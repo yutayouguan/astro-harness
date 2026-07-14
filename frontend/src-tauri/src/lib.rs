@@ -284,6 +284,7 @@ pub fn run() {
             config_commands::get_usage_insights,
             config_commands::get_collaboration_insights,
             config_commands::get_trace_insights,
+            config_commands::query_agent_logs,
             providers_commands::get_providers_state,
             providers_commands::list_providers,
             providers_commands::add_provider,

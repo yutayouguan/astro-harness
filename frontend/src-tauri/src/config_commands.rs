@@ -283,3 +283,34 @@ pub async fn get_trace_insights(
     })
     .map_err(|e| e.to_string())
 }
+
+/// `query_agent_logs` 请求参数。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryAgentLogsArgs {
+    pub session_id: Option<String>,
+    pub turn_id: Option<String>,
+    pub min_level: Option<String>,
+    pub lines: Option<usize>,
+    /// "agent" | "errors" | "both"
+    pub source: Option<String>,
+}
+
+/// Tauri 命令：按 session/turn/level 查询 agent/errors 日志尾部。
+#[tauri::command]
+pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<memory::AgentLogLine>, String> {
+    let source = match args.source.as_deref() {
+        Some("agent") => memory::LogSource::Agent,
+        Some("errors") => memory::LogSource::Errors,
+        _ => memory::LogSource::Both,
+    };
+    let q = memory::AgentLogQuery {
+        logs_dir: memory::logs_dir(),
+        session_id: args.session_id,
+        turn_id: args.turn_id,
+        min_level: args.min_level,
+        lines: args.lines.unwrap_or(50),
+        source,
+    };
+    memory::query_agent_logs(q).map_err(|e| e.to_string())
+}
