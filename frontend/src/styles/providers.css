@@ -537,6 +537,103 @@
   border: 1px solid color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
+.providers-fallback-block {
+  flex-shrink: 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tone) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.providers-fallback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.providers-fallback-block h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.providers-fallback-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.providers-fallback-hint,
+.providers-fallback-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.providers-fallback-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.providers-fallback-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.providers-fallback-name {
+  flex: 0 1 120px;
+  min-width: 72px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.providers-fallback-model {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-panel);
+  color: inherit;
+  font-size: 13px;
+}
+
+.providers-fallback-model:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tone) 40%, transparent);
+}
+
+.providers-fallback-add select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-panel);
+  color: inherit;
+  font-size: 13px;
+}
+
+.providers-fallback-add select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tone) 40%, transparent);
+}
+
+.providers-fallback-add select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .providers-key-head {
   display: flex;
   align-items: center;
@@ -1250,7 +1347,9 @@ html[data-theme="dark"] .providers-list-item.is-selected {
 html[data-theme="dark"] .providers-field input,
 html[data-theme="dark"] .providers-kind-select,
 html[data-theme="dark"] .providers-key-input,
-html[data-theme="dark"] .providers-model-filter {
+html[data-theme="dark"] .providers-model-filter,
+html[data-theme="dark"] .providers-fallback-model,
+html[data-theme="dark"] .providers-fallback-add select {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.16);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -1259,6 +1358,7 @@ html[data-theme="dark"] .providers-model-filter {
 }
 
 html[data-theme="dark"] .providers-key-block,
+html[data-theme="dark"] .providers-fallback-block,
 html[data-theme="dark"] .providers-models-block {
   background: rgba(255, 255, 255, 0.07);
   border-color: rgba(255, 255, 255, 0.14);

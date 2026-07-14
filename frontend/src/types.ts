@@ -151,6 +151,12 @@ export type ChatHistoryDto = {
   messages: ChatHistoryMessageDto[];
 };
 
+/** 聊天后备链条目（写入 providers.json） */
+export type ProviderFallbackEntry = {
+  provider_id: string;
+  model?: string | null;
+};
+
 /** 模型供应商配置（Providers 面板） */
 export type ProviderDto = {
   id: string;
@@ -164,6 +170,8 @@ export type ProviderDto = {
   env_key_name: string | null;
   backend_id: string;
   official_key_url?: string | null;
+  /** 显式聊天后备链（最多 3；缺省为空） */
+  fallback?: ProviderFallbackEntry[];
 };
 
 /** 全部供应商 + 当前激活 id */

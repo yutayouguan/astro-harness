@@ -37,11 +37,28 @@ import { formatContextWindow } from "../lib/modelCaps";
 import type {
   ModelInfo,
   ProviderDto,
+  ProviderFallbackEntry,
   ProviderKindId,
   ProviderModelsResult,
   ProviderTestResult,
   ProvidersStateDto,
 } from "../types";
+
+/** 聊天后备链上限（与后端 / expand 一致） */
+const MAX_CHAT_FALLBACKS = 3;
+
+/** 规范化草稿中的后备列表（截断 + 空 model → null） */
+function normalizeFallback(
+  entries: ProviderFallbackEntry[] | undefined | null,
+): ProviderFallbackEntry[] {
+  return (entries ?? []).slice(0, MAX_CHAT_FALLBACKS).map((e) => {
+    const model = e.model?.trim();
+    return {
+      provider_id: e.provider_id,
+      model: model ? model : null,
+    };
+  });
+}
 
 /** 列表状态点：未启动灰 / 健康绿 / 不健康红 */
 type HealthStatus = "ok" | "fail" | "checking";
@@ -88,6 +105,8 @@ type Draft = {
   endpoint: string;
   model: string;
   enabled: boolean;
+  /** 聊天后备链（最多 3） */
+  fallback: ProviderFallbackEntry[];
 };
 
 /** 模型列表探测延迟结果 */
@@ -395,6 +414,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       endpoint: selected.endpoint,
       model: selected.model,
       enabled: selected.enabled,
+      fallback: normalizeFallback(selected.fallback),
     });
     setApiKeyInput("");
     setStoredApiKey(null);
@@ -432,12 +452,14 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       endpoint: selected.endpoint,
       model: selected.model,
       enabled: selected.enabled,
+      fallback: normalizeFallback(selected.fallback),
     });
   }, [
     selected?.display_name,
     selected?.endpoint,
     selected?.model,
     selected?.enabled,
+    selected?.fallback,
   ]);
 
   const saveDraft = async () => {
@@ -453,6 +475,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           endpoint: draft.endpoint.trim() || selected.endpoint,
           model: draft.model.trim() || selected.model,
           enabled: draft.enabled,
+          fallback: normalizeFallback(draft.fallback),
         },
       });
       applyState(next);
@@ -521,6 +544,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           endpoint: draft.endpoint.trim() || selected.endpoint,
           model: draft.model.trim() || selected.model,
           enabled: nextEnabled,
+          fallback: normalizeFallback(draft.fallback),
         },
       });
       applyState(next);
@@ -781,6 +805,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
             endpoint: draft.endpoint.trim() || selected.endpoint,
             model: draft.model.trim() || selected.model,
             enabled: draft.enabled,
+            fallback: normalizeFallback(draft.fallback),
           },
         }).then(applyState);
       }
@@ -850,6 +875,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
             endpoint: draft.endpoint.trim() || selected.endpoint,
             model: modelId.trim() || selected.model,
             enabled: draft.enabled,
+            fallback: normalizeFallback(draft.fallback),
           },
         }).then(applyState);
       }
@@ -988,6 +1014,53 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
         : maskApiKey(storedApiKey)
       : apiKeyInput;
   const canSaveApiKey = apiKeyDirty && apiKeyInput.trim().length > 0;
+
+  const fallbackEntries = draft?.fallback ?? [];
+  const fallbackCandidateProviders =
+    state?.providers.filter(
+      (p) =>
+        p.enabled &&
+        p.id !== selected?.id &&
+        !fallbackEntries.some((f) => f.provider_id === p.id),
+    ) ?? [];
+
+  const addFallback = (providerId: string) => {
+    if (!providerId || fallbackEntries.length >= MAX_CHAT_FALLBACKS) return;
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            fallback: [
+              ...d.fallback,
+              { provider_id: providerId, model: null },
+            ].slice(0, MAX_CHAT_FALLBACKS),
+          }
+        : d,
+    );
+  };
+
+  const removeFallback = (index: number) => {
+    setDraft((d) =>
+      d
+        ? { ...d, fallback: d.fallback.filter((_, i) => i !== index) }
+        : d,
+    );
+  };
+
+  const updateFallbackModel = (index: number, model: string) => {
+    setDraft((d) => {
+      if (!d) return d;
+      const next = d.fallback.map((entry, i) =>
+        i === index ? { ...entry, model } : entry,
+      );
+      return { ...d, fallback: next };
+    });
+  };
+
+  const providerLabel = (id: string) => {
+    const p = state?.providers.find((x) => x.id === id);
+    return p?.display_name ?? id;
+  };
 
   return (
     <div className="providers-page" data-tone="blue">
@@ -1309,6 +1382,72 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     }
                   />
                 </label>
+              </div>
+
+              <div className="providers-fallback-block">
+                <div className="providers-fallback-head">
+                  <h4>聊天后备</h4>
+                  <span className="providers-fallback-count">
+                    {fallbackEntries.length}/{MAX_CHAT_FALLBACKS}
+                  </span>
+                </div>
+                <p className="providers-fallback-hint">
+                  主模型首包失败时按顺序临时切换；最多 {MAX_CHAT_FALLBACKS} 个已启用供应商。
+                </p>
+                {fallbackEntries.length === 0 ? (
+                  <p className="providers-fallback-empty">尚未配置后备</p>
+                ) : (
+                  <ul className="providers-fallback-list">
+                    {fallbackEntries.map((entry, index) => (
+                      <li key={`${entry.provider_id}-${index}`} className="providers-fallback-row">
+                        <span className="providers-fallback-name" title={entry.provider_id}>
+                          {providerLabel(entry.provider_id)}
+                        </span>
+                        <input
+                          type="text"
+                          className="providers-fallback-model"
+                          value={entry.model ?? ""}
+                          placeholder="模型覆盖（可选）"
+                          spellCheck={false}
+                          onChange={(e) => updateFallbackModel(index, e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="providers-icon-btn"
+                          title="移除后备"
+                          aria-label={`移除后备 ${providerLabel(entry.provider_id)}`}
+                          onClick={() => removeFallback(index)}
+                        >
+                          <IconTrash />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {fallbackEntries.length < MAX_CHAT_FALLBACKS && (
+                  <label className="providers-field providers-fallback-add">
+                    <span>添加后备</span>
+                    <select
+                      value=""
+                      disabled={fallbackCandidateProviders.length === 0}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        if (id) addFallback(id);
+                      }}
+                    >
+                      <option value="">
+                        {fallbackCandidateProviders.length === 0
+                          ? "无可用已启用供应商"
+                          : "选择供应商…"}
+                      </option>
+                      {fallbackCandidateProviders.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
 
               <div className="providers-key-block">
