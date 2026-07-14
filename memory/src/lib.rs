@@ -26,7 +26,6 @@ pub(crate) mod test_env;
 // ── 域内路径（新）──────────────────────────────────────────────
 pub use agent::agent_icons;
 pub use agent::auto_icon;
-pub use agent::files;
 pub use agent::scan::scan_memory_content;
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::tools_enabled;
