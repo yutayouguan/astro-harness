@@ -407,9 +407,9 @@ EOF
   - `session_search` 仍可用
   - 无品牌禁用名泄漏（`rg -i hermes` 仅 spec 外链）
 
-- [ ] **Step 2: `cargo test -p memory -p agent -p tools`**
+- [x] **Step 2: `cargo test -p memory -p agent -p tools`**
 
-- [ ] **Step 3: Commit docs**
+- [x] **Step 3: Commit docs**
 
 ---
 
