@@ -17,8 +17,8 @@ use proto::astro_service_server::AstroService;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, Empty, FileListRequest,
     FileListResponse, ImageEvent, ImageRequest, MemoryQuery, MemoryResult, McpServerList,
-    SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillList, SkillRequest, SkillInfo,
-    UsageEvent,
+    SessionEvent, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillList, SkillRequest,
+    SkillInfo, SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::registry::ProviderRegistry;
 use providers::trait_::ProviderConfig;
@@ -31,39 +31,102 @@ use uuid::Uuid;
 use super::interrupt_store::{
     clear_interrupt_file, resume_items_from_proto, save_interrupt_file,
 };
+use crate::{
+    to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub, SessionEventMsg,
+    SubscribeFilter,
+};
 
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Mutex<AgentLoop>>;
 /// Chat RPC 返回的事件流类型别名。
 type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
+/// SubscribeSessionEvents RPC 返回的事件流类型别名。
+type SessionEventsStream =
+    Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
 
-/// 启动 background review，并在写盘成功时于同一 Chat 流上再推一条 `MemoryUpdate`。
+/// 工具 / review 返回文本是否表示写入只入了 pending（未改 live）。
+fn indicates_pending_enqueue(content: &str) -> bool {
+    content.contains("待审批") || content.contains("pending") || content.contains("入队")
+}
+
+/// 工具入 pending 时 publish 全局 `pending_changed`（+ live_written=false 的 memory_updated）。
 ///
-/// 在 `Done` 之后调用；最长等待 30s，超时或无写入则静默结束。
-async fn spawn_review_and_emit_update(
-    session: &SessionHandle,
-    tx: &tokio::sync::mpsc::Sender<Result<ChatEvent, Status>>,
+/// 回合内 **live** 工具写仍只走 Chat `MemoryUpdate`，不调用本函数。
+fn publish_tool_pending_to_hub(
+    hub: &SessionEventHub,
+    memory_dir: &std::path::Path,
+    agent_id: &str,
+    summary: &str,
 ) {
+    let pending_count = memory::list_pending(memory_dir)
+        .map(|v| v.len() as u32)
+        .unwrap_or(0);
+    hub.publish(SessionEventMsg {
+        session_id: None,
+        agent_id: agent_id.to_string(),
+        memory_updated: Some(MemoryUpdatedPayload {
+            source: "tool".into(),
+            target: "mixed".into(),
+            summary: summary.to_string(),
+            live_written: false,
+        }),
+        pending_changed: None,
+    });
+    hub.publish(SessionEventMsg {
+        session_id: None,
+        agent_id: agent_id.to_string(),
+        memory_updated: None,
+        pending_changed: Some(PendingChangedPayload {
+            pending_count,
+            reason: "enqueued".into(),
+        }),
+    });
+}
+
+/// 启动 background review，完成后将结果 fire-and-forget 发布到 [`SessionEventHub`]。
+///
+/// 本函数只在拿锁并 `spawn` 等待任务后立即返回；**不**阻塞 Chat 流。
+async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &SessionEventHub) {
+    let hub = hub.clone();
+    let sid = session_id.to_string();
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
-    {
+    let (agent_id, memory_dir) = {
         let agent = session.lock().await;
+        let id = agent.agent_id().to_string();
+        let dir = agent.memory_dir().to_path_buf();
         agent::spawn_background_review_after_turn(&agent, Some(notify_tx));
-    }
-    match tokio::time::timeout(std::time::Duration::from_secs(30), notify_rx.recv()).await {
-        Ok(Some(n)) => {
-            let _ = tx
-                .send(Ok(ChatEvent {
-                    payload: Some(proto::chat_event::Payload::MemoryUpdate(
-                        proto::MemoryUpdateEvent {
-                            operation: n.op,
-                            content: n.content,
-                        },
-                    )),
-                }))
-                .await;
+        (id, dir)
+    };
+    tokio::spawn(async move {
+        if let Some(n) = notify_rx.recv().await {
+            let live_written = !indicates_pending_enqueue(&n.content);
+            hub.publish(SessionEventMsg {
+                session_id: Some(sid),
+                agent_id: agent_id.clone(),
+                memory_updated: Some(MemoryUpdatedPayload {
+                    source: "review".into(),
+                    target: "mixed".into(),
+                    summary: n.content.clone(),
+                    live_written,
+                }),
+                pending_changed: None,
+            });
+            if !live_written {
+                let pending_count = memory::list_pending(&memory_dir)
+                    .map(|v| v.len() as u32)
+                    .unwrap_or(0);
+                hub.publish(SessionEventMsg {
+                    session_id: None,
+                    agent_id,
+                    memory_updated: None,
+                    pending_changed: Some(PendingChangedPayload {
+                        pending_count,
+                        reason: "enqueued".into(),
+                    }),
+                });
+            }
         }
-        _ => {}
-    }
+    });
 }
 
 /// Astro gRPC 服务实现：会话 Agent、流式聊天、记忆与技能等 RPC。
@@ -80,6 +143,8 @@ pub struct AstroServiceImpl {
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     hook_runtime: Arc<::hooks::HookRuntime>,
+    /// 会话记忆副作用事件 fan-out（SubscribeSessionEvents）。
+    session_events: SessionEventHub,
 }
 
 impl AstroServiceImpl {
@@ -109,7 +174,13 @@ impl AstroServiceImpl {
             providers: Arc::new(ProviderRegistry::new()),
             memory_dir,
             hook_runtime,
+            session_events: SessionEventHub::new(64),
         }
+    }
+
+    /// 会话记忆事件 hub（供 Chat / 其它 RPC 发布副作用）。
+    pub(crate) fn session_event_hub(&self) -> &SessionEventHub {
+        &self.session_events
     }
 
     /// 获取或惰性创建会话对应的 [`AgentLoop`]。
@@ -344,6 +415,8 @@ impl AstroService for AstroServiceImpl {
     /// [`execute_skill`](Self::execute_skill) 流类型。
     type ExecuteSkillStream =
         Pin<Box<dyn futures::Stream<Item = Result<SkillEvent, Status>> + Send>>;
+    /// [`subscribe_session_events`](Self::subscribe_session_events) 流类型。
+    type SubscribeSessionEventsStream = SessionEventsStream;
 
     /// Chat 流控制：暂停 / 继续 / 取消指定 `session_id` 的进行中对话。
     ///
@@ -578,6 +651,7 @@ impl AstroService for AstroServiceImpl {
         let sid_cleanup = session_id.clone();
         let hook_runtime = Arc::clone(&self.hook_runtime);
         let ui_slot = self.hook_runtime.ui_slot.clone();
+        let session_events_hub = self.session_event_hub().clone();
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
         let hook_out = tx.clone();
@@ -643,7 +717,7 @@ impl AstroService for AstroServiceImpl {
                             payload: Some(proto::chat_event::Payload::Done(true)),
                         }))
                         .await;
-                    spawn_review_and_emit_update(&session, &tx).await;
+                    spawn_review_to_hub(&session, &sid_cleanup, &session_events_hub).await;
                     cleanup().await;
                     return;
                 }
@@ -746,6 +820,10 @@ impl AstroService for AstroServiceImpl {
             }
 
             let session_for_review = session.clone();
+            let agent_id_for_events = {
+                let agent = session.lock().await;
+                agent.agent_id().to_string()
+            };
             let mut stream = stream_multi_turn_with_hitl(
                 session,
                 chat_targets,
@@ -777,14 +855,37 @@ impl AstroService for AstroServiceImpl {
                                 }
                             }
                         }
-                        if let Some(event) = multi_turn_to_chat_event(mt) {
-                            if tx.send(Ok(event)).await.is_err() {
-                                break;
+                        // 工具入 pending → 只走 Hub（不刷 Chat 时间线）；live 仍走 Chat MemoryUpdate
+                        let skip_chat_memory_update = matches!(
+                            &mt,
+                            MultiTurnStreamItem::MemoryUpdate { content, .. }
+                                if indicates_pending_enqueue(content)
+                        );
+                        if let MultiTurnStreamItem::MemoryUpdate { ref content, .. } = mt {
+                            if indicates_pending_enqueue(content) {
+                                publish_tool_pending_to_hub(
+                                    &session_events_hub,
+                                    &memory_dir,
+                                    &agent_id_for_events,
+                                    content,
+                                );
+                            }
+                        }
+                        if !skip_chat_memory_update {
+                            if let Some(event) = multi_turn_to_chat_event(mt) {
+                                if tx.send(Ok(event)).await.is_err() {
+                                    break;
+                                }
                             }
                         }
                         if is_done {
-                            // Done 之后再等 review，可能再推 MemoryUpdate，然后结束流
-                            spawn_review_and_emit_update(&session_for_review, &tx).await;
+                            // 回合成功后 fire-and-forget review → SessionEventHub（不阻塞 Chat 流）
+                            spawn_review_to_hub(
+                                &session_for_review,
+                                &sid_cleanup,
+                                &session_events_hub,
+                            )
+                            .await;
                             break;
                         }
                     }
@@ -1112,5 +1213,45 @@ impl AstroService for AstroServiceImpl {
         .map_err(|e| Status::invalid_argument(e.to_string()))?;
 
         Ok(Response::new(FileListResponse { entries }))
+    }
+
+    /// 订阅会话级记忆副作用事件（记忆更新 / pending 变化），与 Chat 流生命周期解耦。
+    ///
+    /// - `session_id` 为空：仅全局 pending
+    /// - `session_id` 非空：该 session 事件 + 全局 pending
+    /// - `agent_id` 为空：不过滤 agent
+    async fn subscribe_session_events(
+        &self,
+        request: Request<SubscribeSessionEventsRequest>,
+    ) -> Result<Response<Self::SubscribeSessionEventsStream>, Status> {
+        let req = request.into_inner();
+        let filter = SubscribeFilter {
+            session_id: if req.session_id.trim().is_empty() {
+                None
+            } else {
+                Some(req.session_id)
+            },
+            agent_id: if req.agent_id.trim().is_empty() {
+                None
+            } else {
+                Some(req.agent_id)
+            },
+        };
+        let hub = self.session_events.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        tokio::spawn(async move {
+            let mut filtered = hub.subscribe(filter);
+            loop {
+                match filtered.recv().await {
+                    Some(ev) => {
+                        if tx.send(Ok(to_proto(&ev))).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
+        });
+        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
 }

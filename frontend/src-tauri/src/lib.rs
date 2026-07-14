@@ -15,6 +15,7 @@ mod litellm_meta;
 mod memory_commands;
 mod model_meta;
 mod providers_commands;
+mod session_events;
 mod skills_commands;
 
 use tauri::{
@@ -243,9 +244,13 @@ pub fn run() {
             memory_commands::list_pending_memory_writes,
             memory_commands::approve_pending_memory_write,
             memory_commands::reject_pending_memory_write,
+            memory_commands::approve_all_pending_memory_writes,
+            memory_commands::reject_all_pending_memory_writes,
             memory_commands::get_memory_settings,
             memory_commands::set_memory_write_approval,
+            memory_commands::set_memory_auto_refresh,
             memory_commands::set_background_review_enabled,
+            session_events::set_session_events_filter,
             commands::get_chat_history,
             commands::fork_chat_session,
             commands::remove_chat_bubbles,
@@ -328,6 +333,8 @@ pub fn run() {
             if let Err(err) = memory::ensure_default_workspace() {
                 tracing::warn!("workspace bootstrap failed: {err}");
             }
+
+            session_events::start_bridge(app.handle());
 
             if let Err(err) = install_app_menu(app.handle()) {
                 tracing::warn!("app menu install failed: {err}");

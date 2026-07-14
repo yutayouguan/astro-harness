@@ -32,6 +32,7 @@ type Props = {
 type MemorySettings = {
   writeApproval: boolean;
   backgroundReviewEnabled: boolean;
+  autoRefreshOnUpdate: boolean;
 };
 
 /** 单个 Agent 的做梦统计 */
@@ -203,6 +204,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const [memorySettings, setMemorySettings] = useState<MemorySettings>({
     writeApproval: false,
     backgroundReviewEnabled: false,
+    autoRefreshOnUpdate: true,
   });
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,7 +262,11 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
       const s = await invoke<MemorySettings>("get_memory_settings");
       setMemorySettings(s);
     } catch {
-      setMemorySettings({ writeApproval: false, backgroundReviewEnabled: false });
+      setMemorySettings({
+        writeApproval: false,
+        backgroundReviewEnabled: false,
+        autoRefreshOnUpdate: true,
+      });
     }
   }, []);
 
@@ -297,6 +303,37 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
       setError(String(e));
     } finally {
       setSettingsBusy(false);
+    }
+  };
+
+  const setAutoRefresh = async (enabled: boolean) => {
+    setError(null);
+    setSaveMsg(null);
+    setSettingsBusy(true);
+    try {
+      const s = await invoke<MemorySettings>("set_memory_auto_refresh", { enabled });
+      setMemorySettings(s);
+      setSaveMsg(
+        enabled ? t("memory.settings.autoRefreshOn") : t("memory.settings.autoRefreshOff"),
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const refreshIntoChat = async () => {
+    setError(null);
+    setSaveMsg(null);
+    try {
+      await invoke("refresh_memory", {
+        agentId: filterAgentId === ALL_AGENTS ? null : filterAgentId,
+        sessionId: sessionId ?? null,
+      });
+      setSaveMsg(t("memory.refresh.done"));
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -1222,6 +1259,14 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
           <section className="mem-card mem-main mem-pending-settings">
             <div className="mem-main-header">
               <h3>{t("memory.settings.title")}</h3>
+              <button
+                type="button"
+                className="mem-glass-btn"
+                onClick={() => void refreshIntoChat()}
+                title={t("memory.refresh.intoChat")}
+              >
+                {t("memory.refresh.intoChat")}
+              </button>
             </div>
             <div className="mem-settings-list" role="group" aria-label={t("memory.settings.title")}>
               <label className="mem-settings-row">
@@ -1256,6 +1301,23 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                   aria-label={t("memory.settings.backgroundReview")}
                   disabled={settingsBusy}
                   onClick={() => void setBackgroundReview(!memorySettings.backgroundReviewEnabled)}
+                >
+                  <span className="prefs-switch-thumb" />
+                </button>
+              </label>
+              <label className="mem-settings-row">
+                <span className="mem-settings-text">
+                  <span className="mem-settings-label">{t("memory.settings.autoRefresh")}</span>
+                  <span className="mem-settings-desc">{t("memory.settings.autoRefreshDesc")}</span>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  className="prefs-switch"
+                  aria-checked={memorySettings.autoRefreshOnUpdate}
+                  aria-label={t("memory.settings.autoRefresh")}
+                  disabled={settingsBusy}
+                  onClick={() => void setAutoRefresh(!memorySettings.autoRefreshOnUpdate)}
                 >
                   <span className="prefs-switch-thumb" />
                 </button>

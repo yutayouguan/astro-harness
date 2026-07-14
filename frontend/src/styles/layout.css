@@ -147,6 +147,7 @@ html[data-theme="dark"] .nav-item.active[data-tone] {
 }
 
 .nav-icon {
+  position: relative;
   width: 18px;
   height: 18px;
   opacity: 0.78;
@@ -156,6 +157,24 @@ html[data-theme="dark"] .nav-item.active[data-tone] {
   /* 默认不上色：中性描边 */
   color: var(--ink-mute, var(--ink-soft));
   transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.nav-badge {
+  position: absolute;
+  top: -7px;
+  right: -10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+  background: color-mix(in srgb, var(--tone, var(--tone-green, #16a34a)) 88%, #000);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--glass-fill, #fff) 80%, transparent);
+  pointer-events: none;
 }
 
 .nav-item.active .nav-icon {

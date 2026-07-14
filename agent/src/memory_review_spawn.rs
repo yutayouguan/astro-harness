@@ -1,6 +1,7 @@
 //! 回合后记忆 background review：调用辅助模型并应用建议。
 //!
-//! 由 backend 在 Chat 流 `Done` 后等待本任务结束（可再推 `MemoryUpdate`）；
+//! 由 backend 在 Chat 流 `Done` 后 fire-and-forget；完成后可选通过
+//! [`MemoryReviewNotify`] 通知调用方（再由 backend 发布到 SessionEventHub）。
 //! `auxiliary.background_review_enabled` 为 false 时直接跳过。
 
 use std::path::PathBuf;
@@ -29,7 +30,7 @@ pub struct BackgroundReviewJob {
     pub base_url: String,
 }
 
-/// review 写盘后的轻量 UI 通知（`op` + `content`）。
+/// review 写盘后的轻量通知（`op` + `content`）。
 #[derive(Debug, Clone)]
 pub struct MemoryReviewNotify {
     pub op: String,
