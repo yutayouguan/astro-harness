@@ -11,6 +11,7 @@ import {
   IconEye,
   IconFileOps,
   IconImageGen,
+  IconLocation,
   IconMemoryTool,
   IconMultiAgent,
   IconPresentUi,
@@ -38,6 +39,7 @@ export type AgentToolId =
   | "session_search"
   | "clarify"
   | "confirm"
+  | "request_user_location"
   | "present_ui"
   | "delegate"
   | "scheduled"
@@ -238,6 +240,14 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "title", type: "string" },
       { name: "body", type: "string" },
     ],
+  },
+  {
+    id: "request_user_location",
+    titleKey: "agentTools.requestUserLocation.title",
+    descKey: "agentTools.requestUserLocation.desc",
+    Icon: IconLocation,
+    tone: "teal",
+    params: [{ name: "message", type: "string", optional: true }],
   },
   {
     id: "present_ui",

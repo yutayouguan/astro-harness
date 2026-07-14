@@ -2,10 +2,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Activity, ChevronDown, Webhook } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
+import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
 import {
   activityHasBody,
   resolveActivityIO,
 } from "../lib/resolveActivityIO";
+import { formatElapsedSec } from "../lib/elapsedSec";
 import type { ChatActivity, ChatActivityKind } from "../types";
 import McpIcon from "./McpIcon";
 import { IconMemory, IconSkills, IconTools } from "./NavIcons";
@@ -42,6 +44,8 @@ export default function MsgActivity({
   const hasBody = activityHasBody(activity);
   const { input, output } = resolveActivityIO(activity);
   const [open, setOpen] = useState(defaultOpen && hasBody);
+  const running = activity.status === "running";
+  const liveSec = useLiveElapsedSec(running, activity.at ?? null);
 
   useEffect(() => {
     if (hasBody) setOpen(defaultOpen);
@@ -50,12 +54,25 @@ export default function MsgActivity({
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
 
+  const durationLabel = running
+    ? liveSec != null
+      ? t("chat.activityDuration", { s: formatElapsedSec(liveSec) })
+      : t("chat.activity.status.running")
+    : activity.durationSec != null && activity.durationSec > 0
+      ? t("chat.activityDuration", {
+          s: formatElapsedSec(activity.durationSec),
+        })
+      : null;
+
   const summary: ReactNode = (
     <>
       <span className="msg-activity-kind-icon">
         <KindIcon kind={activity.kind} />
       </span>
       <span className="msg-activity-title">{activity.title}</span>
+      {durationLabel ? (
+        <span className="msg-activity-duration">{durationLabel}</span>
+      ) : null}
     </>
   );
 

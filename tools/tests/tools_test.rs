@@ -28,6 +28,7 @@ async fn register_all_includes_panel_tools() {
         "skills",
         "clarify",
         "confirm",
+        "request_user_location",
         "delegate",
         "delegate_async",
         "delegate_status",

@@ -5,6 +5,7 @@ import {
   applyActivityUpsert,
   applySurfaceUpsert,
   sealOpenReasoning,
+  sumReasoningDurations,
 } from "./chatTimeline.ts";
 import type { ChatMessage } from "../types.ts";
 
@@ -76,20 +77,65 @@ test("surface after activity appends surface segment", () => {
   assert.equal(m.uiSurfaces?.length, 1);
 });
 
-test("sealOpenReasoning writes duration even when last segment is activity", () => {
+test("tool interrupt seals first reasoning with segment wall-clock", () => {
   let m = emptyAssistant();
-  m = applyReasoningDelta(m, "think", 100);
+  m = applyReasoningDelta(m, "think1", 1000);
   m = applyActivityUpsert(m, {
     id: "c1",
     kind: "tool",
-    title: "tool",
-    status: "done",
-    at: 200,
+    title: "terminal",
+    status: "running",
+    at: 3500,
   });
-  m = sealOpenReasoning(m, 3.3);
-  assert.equal(m.reasoningDurationSec, 3.3);
-  const r = m.segments?.find((s) => s.type === "reasoning") as
-    | { durationSec?: number }
-    | undefined;
-  assert.equal(r?.durationSec, 3.3);
+  const r0 = m.segments?.[0] as { type: string; durationSec?: number };
+  assert.equal(r0.type, "reasoning");
+  assert.equal(r0.durationSec, 2.5);
+  m = applyReasoningDelta(m, "think2", 5000);
+  m = sealOpenReasoning(m, 6200);
+  const r1 = m.segments?.[2] as { type: string; durationSec?: number };
+  assert.equal(r1?.type, "reasoning");
+  assert.equal(r1?.durationSec, 1.2);
+  assert.equal(sumReasoningDurations(m.segments), 3.7);
+  assert.equal(m.reasoningDurationSec, 3.7);
+});
+
+test("tool done preserves at and writes durationSec", () => {
+  let m = emptyAssistant();
+  m = applyActivityUpsert(m, {
+    id: "c1",
+    kind: "tool",
+    title: "terminal",
+    status: "running",
+    at: 10_000,
+  });
+  m = applyActivityUpsert(m, {
+    id: "c1",
+    kind: "tool",
+    title: "terminal",
+    output: "ok",
+    status: "done",
+    at: 99_000,
+    durationSec: 1.5,
+  });
+  assert.equal(m.activities?.[0]?.at, 10_000);
+  assert.equal(m.activities?.[0]?.durationSec, 1.5);
+  assert.equal(m.activities?.[0]?.status, "done");
+});
+
+test("sealOpenReasoning does not paint total onto sealed earlier segments", () => {
+  let m = emptyAssistant();
+  m = applyReasoningDelta(m, "a", 1000);
+  m = applyActivityUpsert(m, {
+    id: "t1",
+    kind: "tool",
+    title: "x",
+    status: "running",
+    at: 2000,
+  });
+  m = applyReasoningDelta(m, "b", 3000);
+  m = sealOpenReasoning(m, 4000);
+  const durs = (m.segments ?? [])
+    .filter((s) => s.type === "reasoning")
+    .map((s) => (s.type === "reasoning" ? s.durationSec : undefined));
+  assert.deepEqual(durs, [1, 1]);
 });

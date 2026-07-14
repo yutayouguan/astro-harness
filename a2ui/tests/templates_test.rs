@@ -1,4 +1,7 @@
-use a2ui::templates::{build_clarify_surface, build_confirm_surface, build_info_surface};
+use a2ui::templates::{
+    build_clarify_surface, build_confirm_surface, build_info_surface,
+    build_location_request_surface,
+};
 use a2ui::{validate_operations, ASTRO_CATALOG_ID};
 use serde_json::Value;
 
@@ -51,6 +54,17 @@ fn clarify_template_validates() {
     let names = all_component_names(&ops);
     assert!(names.iter().any(|n| n == "ChoicePicker"));
     assert!(names.iter().any(|n| n == "Button"));
+}
+
+#[test]
+fn location_request_template_validates() {
+    let ops = build_location_request_surface("surf-loc-1", "需要定位以查询天气");
+    validate_operations(&ops).unwrap();
+    assert_eq!(catalog_ids(&ops), vec![ASTRO_CATALOG_ID]);
+    let names = all_component_names(&ops);
+    assert!(names.iter().any(|n| n == "TextField"));
+    assert!(names.iter().any(|n| n == "Button"));
+    assert!(names.iter().any(|n| n == "Avatar"));
 }
 
 #[test]

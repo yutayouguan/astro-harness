@@ -825,6 +825,19 @@ html[data-theme="light"] .a2ui-surface {
   color: var(--ink);
 }
 
+.msg-activity-duration {
+  flex-shrink: 0;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-mute);
+}
+
+.msg-activity.is-running .msg-activity-duration {
+  color: color-mix(in srgb, var(--tone, #60a5fa) 45%, var(--ink-mute));
+}
+
 .msg-activity-toggle {
   display: flex;
   align-items: center;

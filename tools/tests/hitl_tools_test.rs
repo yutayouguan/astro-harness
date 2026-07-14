@@ -104,6 +104,47 @@ async fn clarify_emits_valid_a2ui_hitl() {
 }
 
 #[tokio::test]
+async fn request_user_location_emits_valid_a2ui_hitl() {
+    let dir = TempDir::new().unwrap();
+    let (mut memory, providers, targets, workspace) = make_ctx(&dir);
+    let mut ctx = ToolContext {
+        memory: &mut memory,
+        memory_dir: dir.path().to_path_buf(),
+        workspace_dir: workspace,
+        project_root: None,
+        image_gen_targets: &targets,
+        providers: &providers,
+        session_id: "test".into(),
+        turn_id: None,
+        chat_api_key: String::new(),
+        chat_base_url: String::new(),
+        chat_provider: String::new(),
+        chat_model: String::new(),
+        chat_targets: vec![],
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
+    };
+
+    let raw = tools::dispatch_tool(
+        |_| true,
+        &mut ctx,
+        "request_user_location",
+        &serde_json::json!({
+            "message": "Need location for weather"
+        }),
+    )
+    .await
+    .unwrap();
+
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(v["astro_hitl"], true);
+    assert_eq!(v["reason"], "location_required");
+    let ops = v["operations"].as_array().expect("operations array");
+    a2ui::validate_operations(ops).unwrap();
+}
+
+#[tokio::test]
 async fn present_ui_emits_valid_astro_ui() {
     let dir = TempDir::new().unwrap();
     let (mut memory, providers, targets, workspace) = make_ctx(&dir);
@@ -158,5 +199,6 @@ async fn register_all_includes_confirm() {
         .collect();
     assert!(names.contains(&"confirm"));
     assert!(names.contains(&"clarify"));
+    assert!(names.contains(&"request_user_location"));
     assert!(names.contains(&"present_ui"));
 }

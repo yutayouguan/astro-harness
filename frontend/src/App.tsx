@@ -379,8 +379,6 @@ export default function App() {
   /** 流式 token / reasoning 按帧合并，避免同 tick 批量 setState 导致整段弹出 */
   const streamPendingRef = useRef<Map<string, string>>(new Map());
   const streamReasoningPendingRef = useRef<Map<string, string>>(new Map());
-  /** 各消息首次收到 reasoning 的时间戳，用于计算思考耗时 */
-  const reasoningStartRef = useRef<Map<string, number>>(new Map());
   /** 各助手消息开始流式的时间戳（发送时） */
   const streamStartRef = useRef<Map<string, number>>(new Map());
   /** 各助手消息首个 content token 的时间戳，用于更准的 t/s */
@@ -417,30 +415,14 @@ export default function App() {
         if (reasoningExtra) {
           next = applyReasoningDelta(next, reasoningExtra, now);
         }
-        let reasoningDurationSec = next.reasoningDurationSec;
-        // 正文开始出现时结算思考耗时，并写入 timeline 段
-        if (
-          extra &&
-          !next.content &&
-          next.reasoning &&
-          reasoningDurationSec == null
-        ) {
-          const start = reasoningStartRef.current.get(m.id);
-          if (start != null) {
-            reasoningDurationSec = Math.max(
-              0.1,
-              Math.round(((now - start) / 1000) * 10) / 10,
-            );
-          }
+        // 正文首包：封口当前开放的 reasoning 段（按段 at）
+        if (extra && !next.content && next.reasoning) {
+          next = sealOpenReasoning(next, now);
         }
         next = {
           ...next,
           content: extra ? next.content + extra : next.content,
-          reasoningDurationSec,
         };
-        if (reasoningDurationSec != null && reasoningDurationSec > 0) {
-          next = sealOpenReasoning(next, reasoningDurationSec);
-        }
         return next;
       }),
     );
@@ -521,9 +503,6 @@ export default function App() {
   const enqueueStreamReasoning = useCallback(
     (messageId: string, token: string) => {
       if (!token) return;
-      if (!reasoningStartRef.current.has(messageId)) {
-        reasoningStartRef.current.set(messageId, Date.now());
-      }
       streamReasoningPendingRef.current.set(
         messageId,
         (streamReasoningPendingRef.current.get(messageId) ?? "") + token,
@@ -567,7 +546,6 @@ export default function App() {
     }
     streamPendingRef.current.clear();
     streamReasoningPendingRef.current.clear();
-    reasoningStartRef.current.clear();
     streamStartRef.current.clear();
     firstTokenRef.current.clear();
     pendingUsageRef.current.clear();
@@ -1319,22 +1297,7 @@ export default function App() {
                     ),
                   });
                 }
-                let reasoningDurationSec = next.reasoningDurationSec;
-                if (next.reasoning && reasoningDurationSec == null) {
-                  const start = reasoningStartRef.current.get(assistantId);
-                  if (start != null) {
-                    reasoningDurationSec = Math.max(
-                      0.1,
-                      Math.round(((Date.now() - start) / 1000) * 10) / 10,
-                    );
-                  }
-                }
-                next = {
-                  ...next,
-                  reasoningDurationSec:
-                    reasoningDurationSec ?? next.reasoningDurationSec,
-                };
-                return sealOpenReasoning(next, reasoningDurationSec);
+                return sealOpenReasoning(next, Date.now());
               }),
             );
             // hitl_waiting：同回合 park，保持 streaming；旧 interrupt 结束流
@@ -1397,7 +1360,12 @@ export default function App() {
                 );
               }
               if (idx >= 0) {
-                merged = { ...activities[idx], ...activity, id: activities[idx]!.id };
+                merged = {
+                  ...activities[idx]!,
+                  ...activity,
+                  id: activities[idx]!.id,
+                  at: activities[idx]!.at ?? activity.at,
+                };
               }
               return applyActivityUpsert(m, merged);
             }),
@@ -1469,20 +1437,9 @@ export default function App() {
               if (m.id !== assistantId) return m;
               const pending = streamPendingRef.current.get(assistantId) ?? "";
               const content = (m.content + pending).trim();
-              let reasoningDurationSec = m.reasoningDurationSec;
-              if (m.reasoning && reasoningDurationSec == null) {
-                const start = reasoningStartRef.current.get(assistantId);
-                if (start != null) {
-                  reasoningDurationSec = Math.max(
-                    0.1,
-                    Math.round(((endedAt - start) / 1000) * 10) / 10,
-                  );
-                }
-              }
               let withUsage = sealOpenReasoning(
                 {
                   ...m,
-                  reasoningDurationSec,
                   usage: usage ?? m.usage,
                   tokensPerSec: tokensPerSec ?? m.tokensPerSec,
                   generationDurationSec:
@@ -1497,7 +1454,7 @@ export default function App() {
                         : undefined),
                   generationStartedAt: undefined,
                 },
-                reasoningDurationSec,
+                endedAt,
               );
               if (
                 !content &&
@@ -1514,7 +1471,6 @@ export default function App() {
               return withUsage;
             });
             streamPendingRef.current.delete(assistantId);
-            reasoningStartRef.current.delete(assistantId);
             streamStartRef.current.delete(assistantId);
             firstTokenRef.current.delete(assistantId);
             pendingUsageRef.current.delete(assistantId);
@@ -1543,22 +1499,11 @@ export default function App() {
               if (m.id !== assistantId) return m;
               // 保留已流式正文，仅追加错误提示
               const base = (m.content ?? "").trim();
-              let reasoningDurationSec = m.reasoningDurationSec;
-              if (m.reasoning && reasoningDurationSec == null) {
-                const start = reasoningStartRef.current.get(assistantId);
-                if (start != null) {
-                  reasoningDurationSec = Math.max(
-                    0.1,
-                    Math.round(((Date.now() - start) / 1000) * 10) / 10,
-                  );
-                }
-              }
               return sealOpenReasoning(
                 {
                   ...m,
                   content: base ? `${base}\n\n⚠️ ${errMsg}` : errMsg,
                   error: true,
-                  reasoningDurationSec,
                   generationDurationSec:
                     m.generationDurationSec ??
                     (m.generationStartedAt != null
@@ -1566,7 +1511,7 @@ export default function App() {
                       : undefined),
                   generationStartedAt: undefined,
                 },
-                reasoningDurationSec,
+                Date.now(),
               );
             }),
           );
@@ -2262,19 +2207,11 @@ export default function App() {
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id !== aid) return m;
-          let reasoningDurationSec = m.reasoningDurationSec;
-          if (m.reasoning && reasoningDurationSec == null) {
-            const start = reasoningStartRef.current.get(aid);
-            if (start != null) {
-              reasoningDurationSec = elapsedSecSince(start, endedAt);
-            }
-          }
           return sealOpenReasoning(
             {
               ...m,
               usage: usage ?? m.usage,
               tokensPerSec: tokensPerSec ?? m.tokensPerSec,
-              reasoningDurationSec,
               generationDurationSec:
                 m.generationDurationSec ??
                 (m.generationStartedAt != null
@@ -2282,7 +2219,7 @@ export default function App() {
                   : undefined),
               generationStartedAt: undefined,
             },
-            reasoningDurationSec,
+            endedAt,
           );
         }),
       );

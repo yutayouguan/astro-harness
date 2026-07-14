@@ -1079,22 +1079,24 @@ export default function ChatView({
                         <>
                           {m.segments.map((seg, segIdx) => {
                             if (seg.type === "reasoning") {
-                              const isLast =
-                                segIdx === m.segments!.length - 1;
+                              const openReasoning =
+                                seg.durationSec == null || seg.durationSec <= 0;
+                              const isLastReasoning =
+                                !m.segments!
+                                  .slice(segIdx + 1)
+                                  .some((s) => s.type === "reasoning");
                               const active = Boolean(
-                                isStreamingBubble && isLast && !m.content,
+                                isStreamingBubble &&
+                                  openReasoning &&
+                                  isLastReasoning,
                               );
                               return (
                                 <MsgReasoning
                                   key={seg.id}
                                   reasoning={seg.text}
                                   active={active}
-                                  durationSec={
-                                    seg.durationSec ?? m.reasoningDurationSec
-                                  }
-                                  startedAtMs={
-                                    active ? seg.at : undefined
-                                  }
+                                  durationSec={seg.durationSec}
+                                  startedAtMs={active ? seg.at : undefined}
                                 />
                               );
                             }

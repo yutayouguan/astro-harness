@@ -38,7 +38,10 @@ export type ChatActivity = {
   /** 工具 result / 记忆 content */
   output?: string;
   status?: "running" | "done" | "error";
+  /** 开始时刻（ms） */
   at?: number;
+  /** 调用耗时（秒），完成态写入 */
+  durationSec?: number;
 };
 
 /** A2UI surface 生命周期 */
