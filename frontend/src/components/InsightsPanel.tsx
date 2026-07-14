@@ -15,6 +15,7 @@ import {
   DollarSign,
   GitBranch,
   Layers,
+  LayoutDashboard,
   Network,
   Puzzle,
   Timer,
@@ -23,6 +24,13 @@ import {
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
 import { useAgentsChanged } from "../lib/agentsChanged";
+import {
+  DEFAULT_INSIGHTS_VIEW,
+  INSIGHTS_VIEW_ORDER,
+  needsUsageInsights,
+  providerSpendTop,
+  type InsightsViewMode,
+} from "../lib/insightsView";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
@@ -30,7 +38,7 @@ import McpIcon from "./McpIcon";
 
 type Period = "month" | "quarter" | "year";
 type Metric = "calls" | "tokens" | "cost";
-type ViewMode = "models" | "tools" | "collab" | "tracing";
+type ViewMode = InsightsViewMode;
 
 type RankItem = {
   kind: string;
@@ -150,12 +158,21 @@ const METRIC_TABS: { id: Metric; labelKey: MessageKey }[] = [
   { id: "cost", labelKey: "insights.metric.cost" },
 ];
 
-const VIEW_TABS: { id: ViewMode; labelKey: MessageKey; Icon: typeof BarChart3 }[] = [
-  { id: "models", labelKey: "insights.view.models", Icon: Cpu },
-  { id: "tools", labelKey: "insights.view.tools", Icon: Wrench },
-  { id: "collab", labelKey: "insights.view.collab", Icon: Network },
-  { id: "tracing", labelKey: "insights.view.tracing", Icon: Activity },
-];
+const VIEW_TAB_META: Record<
+  ViewMode,
+  { labelKey: MessageKey; Icon: typeof BarChart3 }
+> = {
+  overview: { labelKey: "insights.view.overview", Icon: LayoutDashboard },
+  models: { labelKey: "insights.view.models", Icon: Cpu },
+  tools: { labelKey: "insights.view.tools", Icon: Wrench },
+  collab: { labelKey: "insights.view.collab", Icon: Network },
+  tracing: { labelKey: "insights.view.tracing", Icon: Activity },
+};
+
+const VIEW_TABS = INSIGHTS_VIEW_ORDER.map((id) => ({
+  id,
+  ...VIEW_TAB_META[id],
+}));
 
 /** 从模型名推断厂商（OpenRouter `vendor/model` 或常见前缀）。 */
 function inferProvider(modelName: string): string {
@@ -380,7 +397,7 @@ function CollabGraphSvg({
 
 export default function InsightsPanel({ active }: { active: boolean }) {
   const { t, locale } = useI18n();
-  const [view, setView] = useState<ViewMode>("models");
+  const [view, setView] = useState<ViewMode>(DEFAULT_INSIGHTS_VIEW);
   const [period, setPeriod] = useState<Period>("month");
   const [metric, setMetric] = useState<Metric>("tokens");
   const [agentId, setAgentId] = useState("workspace");
@@ -440,7 +457,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   };
 
   useEffect(() => {
-    if (!active || !isTauri() || (view !== "models" && view !== "tools")) return;
+    if (!active || !isTauri() || !needsUsageInsights(view)) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -533,18 +550,19 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   const modelStats = useMemo(() => {
     const models = data?.rankings.by_model ?? [];
     return {
-      calls: models.reduce((s, r) => s + r.calls, 0),
-      tokens: models.reduce((s, r) => s + r.tokens, 0),
-      cost: models.reduce((s, r) => s + r.cost_usd, 0),
       modelCount: models.length,
       agentCount: data?.rankings.by_agent.length ?? 0,
     };
   }, [data]);
-  const providerBars = useMemo(() => {
-    const items = byProvider.slice(0, 8);
-    const max = Math.max(1, ...items.map((r) => (r.cost_usd > 0 ? r.cost_usd : r.tokens)));
-    return { items, max, useCost: items.some((r) => r.cost_usd > 0) };
-  }, [byProvider]);
+  const overviewProviderTop = useMemo(
+    () => providerSpendTop(byProvider, 5),
+    [byProvider],
+  );
+  const overviewProviderMax = Math.max(
+    1,
+    ...overviewProviderTop.map((r) => (r.cost_usd > 0 ? r.cost_usd : r.tokens)),
+  );
+  const overviewUseCost = overviewProviderTop.some((r) => r.cost_usd > 0);
   const modelBars = useMemo(() => {
     const items = [...(data?.rankings.by_model ?? [])]
       .sort((a, b) => b.tokens - a.tokens || b.calls - a.calls)
@@ -674,41 +692,8 @@ export default function InsightsPanel({ active }: { active: boolean }) {
 
       {error && <p className="insights-error">{error}</p>}
 
-      {view === "models" && data && (
+      {view === "overview" && data && (
         <>
-          <div className="insights-kpis insights-kpis-models">
-            <KpiCard
-              icon={<Cpu size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.llmCalls")}
-              value={String(modelStats.calls)}
-            />
-            <KpiCard
-              icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.tokens")}
-              value={formatTokens(modelStats.tokens || data.kpis.tokens)}
-            />
-            <KpiCard
-              icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.cost")}
-              value={formatCost(modelStats.cost || data.kpis.cost_usd)}
-            />
-            <KpiCard
-              icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.models")}
-              value={String(modelStats.modelCount)}
-            />
-            <KpiCard
-              icon={<Bot size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.agents")}
-              value={String(modelStats.agentCount || data.kpis.active_agents)}
-            />
-            <KpiCard
-              icon={<Building2 size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.rank.provider")}
-              value={String(byProvider.length)}
-            />
-          </div>
-
           {hasUnpriced && (
             <p className="insights-unpriced">
               <AlertTriangle size={14} strokeWidth={2.25} aria-hidden />
@@ -716,7 +701,25 @@ export default function InsightsPanel({ active }: { active: boolean }) {
             </p>
           )}
 
-          <div className="insights-models-grid">
+          <div className="insights-kpis insights-kpis-overview">
+            <KpiCard
+              icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.cost")}
+              value={formatCost(data.kpis.cost_usd)}
+            />
+            <KpiCard
+              icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.tokens")}
+              value={formatTokens(data.kpis.tokens)}
+            />
+            <KpiCard
+              icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.calls")}
+              value={String(data.kpis.calls)}
+            />
+          </div>
+
+          <div className="insights-overview-grid">
             <div className="insights-chart-wrap insights-models-chart">
               <div className="insights-chart-heading">
                 <div className="insights-chart-heading-label">
@@ -759,23 +762,30 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                   ))}
                 </div>
               ) : (
-                <div className="insights-panel-empty insights-chart-empty">
-                  <p>{t("insights.empty.models")}</p>
-                </div>
+                <div className="insights-panel-empty insights-chart-empty" />
               )}
             </div>
 
             <section className="insights-hbar-panel">
-              <h3 className="insights-rank-title">
-                <Building2 size={14} strokeWidth={2.25} aria-hidden />
-                {t("insights.rank.providerShare")}
-              </h3>
-              {providerBars.items.length === 0 ? (
+              <div className="insights-rank-title-row">
+                <h3 className="insights-rank-title">
+                  <Building2 size={14} strokeWidth={2.25} aria-hidden />
+                  {t("insights.rank.providerSpend")}
+                </h3>
+                <button
+                  type="button"
+                  className="insights-more-btn"
+                  onClick={() => setView("models")}
+                >
+                  {t("insights.rank.more")}
+                </button>
+              </div>
+              {overviewProviderTop.length === 0 ? (
                 <p className="insights-rank-empty">{t("insights.rank.empty")}</p>
               ) : (
                 <ul className="insights-hbar-list">
-                  {providerBars.items.map((r) => {
-                    const val = providerBars.useCost ? r.cost_usd : r.tokens;
+                  {overviewProviderTop.map((r) => {
+                    const val = overviewUseCost ? r.cost_usd : r.tokens;
                     return (
                       <li key={r.name} className="insights-hbar-item">
                         <span className="insights-hbar-label">
@@ -788,12 +798,12 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                           <div
                             className="insights-hbar-fill"
                             style={{
-                              width: `${(val / providerBars.max) * 100}%`,
+                              width: `${(val / overviewProviderMax) * 100}%`,
                             }}
                           />
                         </div>
                         <span className="insights-hbar-value">
-                          {providerBars.useCost
+                          {overviewUseCost
                             ? formatCost(r.cost_usd)
                             : formatTokens(r.tokens)}
                         </span>
@@ -803,6 +813,27 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                 </ul>
               )}
             </section>
+          </div>
+
+          {data.series.length === 0 && overviewProviderTop.length === 0 && (
+            <p className="insights-panel-hint">{t("insights.empty.overview")}</p>
+          )}
+        </>
+      )}
+
+      {view === "models" && data && (
+        <>
+          <div className="insights-kpis insights-kpis-models-secondary">
+            <KpiCard
+              icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.models")}
+              value={String(modelStats.modelCount)}
+            />
+            <KpiCard
+              icon={<Bot size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.agents")}
+              value={String(modelStats.agentCount || data.kpis.active_agents)}
+            />
           </div>
 
           <section className="insights-hbar-panel">
