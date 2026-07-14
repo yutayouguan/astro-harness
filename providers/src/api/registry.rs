@@ -27,6 +27,11 @@ impl ProviderRegistry {
         ProviderRegistry { providers: map }
     }
 
+    /// 注册或覆盖一个供应商（测试用自定义 Provider / 运行时注入）。
+    pub fn insert(&mut self, name: impl Into<String>, provider: Arc<dyn AiProvider>) {
+        self.providers.insert(name.into(), provider);
+    }
+
     /// 按名称获取供应商；支持 `minmax`→`minimax`、`anthropic`→`claude` 别名。
     pub fn get(&self, name: &str) -> Option<Arc<dyn AiProvider>> {
         self.providers

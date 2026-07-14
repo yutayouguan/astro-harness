@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use agent::loop_::{AgentConfig, AgentLoop};
 use agent::streaming::{
-    run_multi_turn_stream, MultiTurnStreamItem, StreamedAssistantContent,
+    run_multi_turn_stream_from_provider, MultiTurnStreamItem, StreamedAssistantContent,
 };
 
 struct ScriptedProvider {
@@ -116,7 +116,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream_from_provider(
             session,
             provider,
             cfg,
@@ -243,7 +243,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream_from_provider(
             session,
             provider,
             cfg,
@@ -313,7 +313,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream_from_provider(
             session,
             provider,
             cfg,
@@ -378,7 +378,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream_from_provider(
             session,
             provider,
             ProviderConfig {
@@ -447,7 +447,7 @@ async fn error_is_followed_by_done() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream_from_provider(
             session,
             provider,
             ProviderConfig {
@@ -518,7 +518,7 @@ async fn tool_call_delta_and_memory_add_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream_from_provider(
             session,
             provider,
             ProviderConfig {
@@ -606,7 +606,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream_from_provider(
             session,
             provider,
             ProviderConfig {

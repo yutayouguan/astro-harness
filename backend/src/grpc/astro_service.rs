@@ -657,9 +657,19 @@ impl AstroService for AstroServiceImpl {
             let hitl_gate = HitlGate::new(sid_cleanup.clone());
             hitl_registry.insert(hitl_gate.clone()).await;
 
+            // Task 3：单元素链（Task 4 再接入 chat_fallbacks proto）
+            let chat_targets = vec![common::ChatTarget {
+                provider_id: String::new(),
+                backend_id: provider_name.clone(),
+                model: config.model.clone(),
+                api_key: config.api_key.clone(),
+                base_url: config.base_url.clone().unwrap_or_default(),
+            }];
+
             let mut stream = stream_multi_turn_with_hitl(
                 session,
-                provider,
+                chat_targets,
+                providers,
                 config,
                 system_prompt,
                 pause,

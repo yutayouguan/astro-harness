@@ -71,7 +71,9 @@ pub use messages::to_provider_messages;
 pub use providers::{PauseControl, Usage};
 /// 流式 API re-export。
 pub use streaming::{
-    stream_multi_turn, stream_multi_turn_with_hitl, MultiTurnStreamItem, ProviderStreamer,
+    chat_target_from_provider_config, run_multi_turn_stream, run_multi_turn_stream_from_provider,
+    stream_multi_turn, stream_multi_turn_from_provider, stream_multi_turn_with_hitl,
+    targets_and_registry_from_primary, MultiTurnStreamItem, ProviderStreamer,
     StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
 };
 /// 工具注册表与条目定义（实现位于 `tools` crate）。

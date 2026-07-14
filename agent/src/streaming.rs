@@ -12,13 +12,15 @@
 
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use common::message::Message;
+use common::ChatTarget;
 use futures::stream::{AbortHandle, Abortable};
 use futures::{Stream, StreamExt};
+use providers::registry::ProviderRegistry;
 use providers::streaming::{PauseControl, Usage};
 use providers::trait_::{
     AiProvider, ChatChunk, ChatMessage as ProviderMessage, ChatStream, ProviderConfig,
@@ -27,6 +29,7 @@ use providers::trait_::{
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinSet;
 
+use crate::chat_fallback::{try_stream_completion_with_fallback, ActiveTargetMeta};
 use crate::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
 use crate::interrupt::Interrupt;
 use crate::loop_::AgentLoop;
@@ -259,26 +262,112 @@ pub trait StreamingPrompt: Send + Sync {
     ) -> anyhow::Result<AssistantContentStream>;
 }
 
-/// 包装 [`AiProvider`]，实现三层 Streaming trait 的默认适配器。
+/// 包装 [`ProviderRegistry`] + fallback 链，实现三层 Streaming trait。
 pub struct ProviderStreamer {
-    /// 底层 LLM Provider 实例。
-    pub provider: Arc<dyn AiProvider>,
-    /// 模型、温度、API 等运行时配置。
-    pub config: ProviderConfig,
+    /// 按 `backend_id` 解析具体 [`AiProvider`]。
+    pub registry: Arc<ProviderRegistry>,
+    /// 含 primary 的聊天目标链（失败切模仅用此列表，不改会话默认凭据）。
+    pub targets: Vec<ChatTarget>,
+    /// temperature / thinking 等；model/key/url 由每跳 target 覆盖。
+    pub base_config: ProviderConfig,
+    /// 最近一次成功补全命中的目标元数据（供 usage 记录）。
+    last_hit: StdMutex<Option<ActiveTargetMeta>>,
+}
+
+impl ProviderStreamer {
+    pub fn new(
+        registry: Arc<ProviderRegistry>,
+        targets: Vec<ChatTarget>,
+        base_config: ProviderConfig,
+    ) -> Self {
+        Self {
+            registry,
+            targets,
+            base_config,
+            last_hit: StdMutex::new(None),
+        }
+    }
+
+    /// 最近一次成功 stream 的命中元数据。
+    pub fn last_hit_meta(&self) -> Option<ActiveTargetMeta> {
+        self.last_hit.lock().ok().and_then(|g| g.clone())
+    }
+
+    fn api_key_for(&self, meta: &ActiveTargetMeta) -> String {
+        self.targets
+            .iter()
+            .find(|t| {
+                t.backend_id == meta.backend_id
+                    && t.model == meta.model
+                    && (meta.provider_id.is_empty() || t.provider_id == meta.provider_id)
+            })
+            .map(|t| t.api_key.clone())
+            .unwrap_or_else(|| self.base_config.api_key.clone())
+    }
+
+    fn primary_model(&self) -> String {
+        self.targets
+            .first()
+            .map(|t| t.model.clone())
+            .unwrap_or_else(|| self.base_config.model.clone())
+    }
+}
+
+/// 从单 Provider + config 构造单元素 fallback 链（旧调用方兼容）。
+pub fn chat_target_from_provider_config(
+    provider: &dyn AiProvider,
+    config: &ProviderConfig,
+) -> ChatTarget {
+    let backend_id = provider.name().to_string();
+    ChatTarget {
+        provider_id: backend_id.clone(),
+        backend_id,
+        model: config.model.clone(),
+        api_key: config.api_key.clone(),
+        base_url: config.base_url.clone().unwrap_or_default(),
+    }
+}
+
+/// 将自定义/测试 Provider 注入注册表，并返回单元素 `targets`。
+pub fn targets_and_registry_from_primary(
+    provider: Arc<dyn AiProvider>,
+    config: &ProviderConfig,
+) -> (Vec<ChatTarget>, Arc<ProviderRegistry>) {
+    let target = chat_target_from_provider_config(provider.as_ref(), config);
+    let mut registry = ProviderRegistry::new();
+    registry.insert(target.backend_id.clone(), provider);
+    (vec![target], Arc::new(registry))
 }
 
 #[async_trait]
 impl StreamingCompletion for ProviderStreamer {
-    /// 委托 `provider.chat_stream` 并经由 [`map_provider_stream`] 归一化 chunk。
+    /// 经 [`try_stream_completion_with_fallback`] 再 [`map_provider_stream`] 归一化。
     async fn stream_completion(
         &self,
         messages: Vec<ProviderMessage>,
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
-        let stream = self
-            .provider
-            .chat_stream(messages, tools, &self.config)
-            .await?;
+        let (stream, meta) = try_stream_completion_with_fallback(
+            &self.targets,
+            self.registry.as_ref(),
+            messages,
+            tools,
+            &self.base_config,
+            |from, to, err| {
+                tracing::warn!(
+                    from_backend = %from.backend_id,
+                    from_model = %from.model,
+                    to_backend = %to.backend_id,
+                    to_model = %to.model,
+                    error = %err,
+                    "chat failover: switching target before first content"
+                );
+            },
+        )
+        .await?;
+        if let Ok(mut guard) = self.last_hit.lock() {
+            *guard = Some(meta);
+        }
         Ok(map_provider_stream(stream))
     }
 }
@@ -323,21 +412,44 @@ async fn emit(
 }
 
 /// 尽力双写 `kind=llm` 事件与会话账单；失败忽略。
-async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &Usage) {
+/// `meta` 优先使用本轮实际命中目标；缺省时回退到 AgentLoop 上的会话凭据（不应在 failover 时写入）。
+async fn record_llm_usage(
+    session: &Arc<Mutex<AgentLoop>>,
+    streamer: &ProviderStreamer,
+    usage: &Usage,
+) {
     if usage.is_empty() {
         return;
     }
     let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
     let session_id = agent.session_id().to_string();
-    let provider = agent.chat_provider().to_string();
-    let base_url = agent.chat_base_url().to_string();
-    let api_key = agent.chat_api_key().to_string();
+    let fallback_provider = agent.chat_provider().to_string();
+    let fallback_base_url = agent.chat_base_url().to_string();
+    let fallback_api_key = agent.chat_api_key().to_string();
+    let fallback_model = agent.chat_model().to_string();
     drop(agent);
+
+    let (model, provider, base_url, api_key) = if let Some(meta) = streamer.last_hit_meta() {
+        let api_key = streamer.api_key_for(&meta);
+        (meta.model, meta.backend_id, meta.base_url, api_key)
+    } else {
+        (
+            if fallback_model.is_empty() {
+                streamer.primary_model()
+            } else {
+                fallback_model
+            },
+            fallback_provider,
+            fallback_base_url,
+            fallback_api_key,
+        )
+    };
+
     apply_llm_usage_dual_write(
         &agent_id,
         Some(&session_id),
-        model,
+        &model,
         usage,
         &provider,
         &base_url,
@@ -349,13 +461,13 @@ async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &
 /// 发送 Error 后立即发送 Done；若有已累计 usage 则先写入 `usage.db`。
 async fn finish_error(
     session: &Arc<Mutex<AgentLoop>>,
-    model: &str,
+    streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     msg: impl Into<String>,
     usage: Option<Usage>,
 ) {
     if let Some(u) = usage.as_ref() {
-        record_llm_usage(session, model, u).await;
+        record_llm_usage(session, streamer, u).await;
     }
     let _ = emit(tx, MultiTurnStreamItem::Error(msg.into())).await;
     let _ = emit(tx, MultiTurnStreamItem::Done).await;
@@ -386,13 +498,13 @@ async fn finish_success(
 /// 可选发送累计 usage 后发送 Done；若有 usage 则旁路写入 `usage.db`（kind=llm）。
 async fn finish_usage_and_done(
     session: &Arc<Mutex<AgentLoop>>,
-    model: &str,
+    streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     usage: Option<Usage>,
     run_id: &str,
 ) {
     if let Some(u) = usage {
-        record_llm_usage(session, model, &u).await;
+        record_llm_usage(session, streamer, &u).await;
         let _ = emit(
             tx,
             MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)),
@@ -409,8 +521,9 @@ async fn finish_usage_and_done(
 /// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
 pub async fn run_multi_turn_stream(
     session: Arc<Mutex<AgentLoop>>,
-    provider: Arc<dyn AiProvider>,
-    config: ProviderConfig,
+    targets: Vec<ChatTarget>,
+    registry: Arc<ProviderRegistry>,
+    base_config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
@@ -434,8 +547,9 @@ pub async fn run_multi_turn_stream(
     }
     run_multi_turn_stream_inner(
         session,
-        provider,
-        config,
+        targets,
+        registry,
+        base_config,
         system_prompt,
         pause,
         hitl_gate,
@@ -447,7 +561,8 @@ pub async fn run_multi_turn_stream(
     unregister_live_parent_hitl(&session_id).await;
 }
 
-async fn run_multi_turn_stream_inner(
+/// 旧签名兼容：单 Provider + config → 单元素链后走 fallback 路径。
+pub async fn run_multi_turn_stream_from_provider(
     session: Arc<Mutex<AgentLoop>>,
     provider: Arc<dyn AiProvider>,
     config: ProviderConfig,
@@ -455,14 +570,34 @@ async fn run_multi_turn_stream_inner(
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+) {
+    let (targets, registry) = targets_and_registry_from_primary(provider, &config);
+    run_multi_turn_stream(
+        session,
+        targets,
+        registry,
+        config,
+        system_prompt,
+        pause,
+        hitl_gate,
+        tx,
+    )
+    .await;
+}
+
+async fn run_multi_turn_stream_inner(
+    session: Arc<Mutex<AgentLoop>>,
+    targets: Vec<ChatTarget>,
+    registry: Arc<ProviderRegistry>,
+    base_config: ProviderConfig,
+    system_prompt: String,
+    pause: Arc<PauseControl>,
+    hitl_gate: Option<Arc<HitlGate>>,
+    tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     thread_id: String,
     run_id: String,
 ) {
-    let model = config.model.clone();
-    let streamer = ProviderStreamer {
-        provider: provider.clone(),
-        config,
-    };
+    let streamer = ProviderStreamer::new(registry, targets, base_config);
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
 
@@ -495,11 +630,11 @@ async fn run_multi_turn_stream_inner(
 
     for round in 0..max_rounds {
         if pause.is_cancelled() {
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
+            finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
         if !pause.wait_if_paused().await {
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
+            finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
 
@@ -546,7 +681,7 @@ async fn run_multi_turn_stream_inner(
                     .await;
                 finish_error(
                     &session,
-                    &model,
+                    &streamer,
                     &tx,
                     err.to_string(),
                     saw_usage.then_some(total_usage),
@@ -572,7 +707,7 @@ async fn run_multi_turn_stream_inner(
                 pause.clear_abort();
                 finish_usage_and_done(
                     &session,
-                    &model,
+                    &streamer,
                     &tx,
                     {
                         if let Some(u) = round_usage {
@@ -592,8 +727,8 @@ async fn run_multi_turn_stream_inner(
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
                     finish_usage_and_done(
-                        &session,
-                        &model,
+                    &session,
+                    &streamer,
                         &tx,
                         {
                             if let Some(u) = round_usage {
@@ -664,8 +799,8 @@ async fn run_multi_turn_stream_inner(
                         saw_usage = true;
                     }
                     finish_error(
-                        &session,
-                        &model,
+                    &session,
+                    &streamer,
                         &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
@@ -683,7 +818,7 @@ async fn run_multi_turn_stream_inner(
                 total_usage.add_assign(u);
                 saw_usage = true;
             }
-            finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
+            finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
         }
 
@@ -697,8 +832,8 @@ async fn run_multi_turn_stream_inner(
 
         if full_response.is_empty() && calls.is_empty() {
             finish_error(
-                &session,
-                &model,
+                    &session,
+                    &streamer,
                 &tx,
                 "模型返回了空回复。请重试，或换一个模型。",
                 saw_usage.then_some(total_usage),
@@ -716,7 +851,7 @@ async fn run_multi_turn_stream_inner(
             if cancel.is_cancelled() {
                 finish_usage_and_done(
                     &session,
-                    &model,
+                    &streamer,
                     &tx,
                     saw_usage.then_some(total_usage),
                     &run_id,
@@ -756,7 +891,7 @@ async fn run_multi_turn_stream_inner(
                 drop(agent);
                 finish_error(
                     &session,
-                    &model,
+                    &streamer,
                     &tx,
                     err.to_string(),
                     saw_usage.then_some(total_usage),
@@ -795,8 +930,8 @@ async fn run_multi_turn_stream_inner(
 
         let Some(outcomes) = outcomes else {
             finish_usage_and_done(
-                &session,
-                &model,
+                    &session,
+                    &streamer,
                 &tx,
                 saw_usage.then_some(total_usage),
                 &run_id,
@@ -809,7 +944,7 @@ async fn run_multi_turn_stream_inner(
             if pause.is_cancelled() {
                 finish_usage_and_done(
                     &session,
-                    &model,
+                    &streamer,
                     &tx,
                     saw_usage.then_some(total_usage),
                     &run_id,
@@ -910,8 +1045,8 @@ async fn run_multi_turn_stream_inner(
 
         if last_round {
             finish_error(
-                &session,
-                &model,
+                    &session,
+                    &streamer,
                 &tx,
                 "工具调用轮次已用尽，请简化任务后重试。".to_string(),
                 saw_usage.then_some(total_usage),
@@ -929,7 +1064,7 @@ async fn run_multi_turn_stream_inner(
         hooks.on_session_end(turn, &cancel).await;
     }
 
-    finish_usage_and_done(&session, &model, &tx, saw_usage.then_some(total_usage), &run_id).await;
+    finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
 }
 
 fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> bool {
@@ -1326,19 +1461,29 @@ async fn park_astro_hitl(
 /// channel 容量为 32；消费者 drop 后发送方通过 [`emit`] 返回 `false` 自然退出。
 pub fn stream_multi_turn(
     session: Arc<Mutex<AgentLoop>>,
-    provider: Arc<dyn AiProvider>,
-    config: ProviderConfig,
+    targets: Vec<ChatTarget>,
+    registry: Arc<ProviderRegistry>,
+    base_config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
 ) -> MultiTurnStream {
-    stream_multi_turn_with_hitl(session, provider, config, system_prompt, pause, None)
+    stream_multi_turn_with_hitl(
+        session,
+        targets,
+        registry,
+        base_config,
+        system_prompt,
+        pause,
+        None,
+    )
 }
 
 /// 带 HITL 闸门的多轮流。
 pub fn stream_multi_turn_with_hitl(
     session: Arc<Mutex<AgentLoop>>,
-    provider: Arc<dyn AiProvider>,
-    config: ProviderConfig,
+    targets: Vec<ChatTarget>,
+    registry: Arc<ProviderRegistry>,
+    base_config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
@@ -1347,8 +1492,9 @@ pub fn stream_multi_turn_with_hitl(
     tokio::spawn(async move {
         run_multi_turn_stream(
             session,
-            provider,
-            config,
+            targets,
+            registry,
+            base_config,
             system_prompt,
             pause,
             hitl_gate,
@@ -1359,6 +1505,18 @@ pub fn stream_multi_turn_with_hitl(
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))
+}
+
+/// 旧签名兼容：单 Provider + config → 单元素链。
+pub fn stream_multi_turn_from_provider(
+    session: Arc<Mutex<AgentLoop>>,
+    provider: Arc<dyn AiProvider>,
+    config: ProviderConfig,
+    system_prompt: String,
+    pause: Arc<PauseControl>,
+) -> MultiTurnStream {
+    let (targets, registry) = targets_and_registry_from_primary(provider, &config);
+    stream_multi_turn(session, targets, registry, config, system_prompt, pause)
 }
 
 pub(crate) struct AstroHitlPayload {
