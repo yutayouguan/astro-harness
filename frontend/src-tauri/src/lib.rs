@@ -248,6 +248,7 @@ pub fn run() {
             memory_commands::set_background_review_enabled,
             commands::get_chat_history,
             commands::fork_chat_session,
+            commands::remove_chat_bubbles,
             commands::list_recent_sessions,
             commands::list_files,
             commands::read_file,

@@ -295,6 +295,54 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 删除半开区间 `[start, end)` 内的聊天气泡（仅计 user/assistant，0-based）。
+    ///
+    /// 被删 assistant 之后的连续 `tool` 行一并删除。`start >= end` 时为 no-op。
+    /// 用于 UI 中部「删除消息」与 DB 对齐。
+    pub fn remove_chat_bubbles(
+        &self,
+        session_id: &str,
+        start: usize,
+        end: usize,
+    ) -> Result<()> {
+        if self.get_session(session_id)?.is_none() {
+            anyhow::bail!("remove_chat_bubbles: session not found");
+        }
+        if start >= end {
+            return Ok(());
+        }
+
+        let messages = self.get_messages(session_id)?;
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let ids = message_ids_in_bubble_range(&messages, start, end);
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        let tx = self.conn.unchecked_transaction()?;
+        for id in &ids {
+            tx.execute("DELETE FROM messages WHERE id = ?1", params![id])?;
+        }
+
+        let remaining = messages
+            .iter()
+            .filter(|m| !ids.contains(&m.id))
+            .collect::<Vec<_>>();
+        let message_count = remaining.len() as i64;
+        let tool_call_count = remaining.iter().filter(|m| m.role == "tool").count() as i64;
+        tx.execute(
+            "UPDATE sessions
+             SET message_count = ?1, tool_call_count = ?2
+             WHERE id = ?3",
+            params![message_count, tool_call_count, session_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// 重建 OpenAI conversation 形状（assistant 带 `tool_calls` / `reasoning*`）。
     pub fn get_messages_as_conversation(&self, session_id: &str) -> Result<Vec<Value>> {
         let messages = self.get_messages(session_id)?;
@@ -369,4 +417,48 @@ fn end_inclusive_for_bubbles(messages: &[StoredMessage], keep: usize) -> Option<
     }
     // 气泡不足 keep：整段都算前缀
     Some(messages.len() - 1)
+}
+
+/// 收集气泡半开区间 `[start, end)` 内的消息 id（含区间内 assistant 后的连续 tool）。
+fn message_ids_in_bubble_range(
+    messages: &[StoredMessage],
+    start: usize,
+    end: usize,
+) -> Vec<i64> {
+    if start >= end || messages.is_empty() {
+        return Vec::new();
+    }
+    let mut ids = Vec::new();
+    let mut bubble = 0usize;
+    let mut i = 0usize;
+    while i < messages.len() {
+        let m = &messages[i];
+        match m.role.as_str() {
+            "user" | "assistant" => {
+                if bubble >= start && bubble < end {
+                    ids.push(m.id);
+                    if m.role == "assistant" {
+                        let mut j = i + 1;
+                        while j < messages.len() && messages[j].role == "tool" {
+                            ids.push(messages[j].id);
+                            j += 1;
+                        }
+                        i = j;
+                        bubble += 1;
+                        continue;
+                    }
+                }
+                bubble += 1;
+                i += 1;
+            }
+            "tool" => {
+                // 孤立 tool（无前缀 assistant）按不计入气泡，但若落在已选区间尾随已被吞
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+    ids
 }

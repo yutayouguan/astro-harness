@@ -715,3 +715,64 @@ fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
     let meta = store.get_session("s1").unwrap().unwrap();
     assert_eq!(meta.message_count, 0);
 }
+
+#[test]
+fn remove_chat_bubbles_splices_middle_user_and_tools() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("s1", "test", Some("gpt"), None, None)
+        .unwrap();
+    // u0 a0(tool) u1 a1 u2
+    store
+        .append_message(NewMessage {
+            content: Some("u0".into()),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a0".into()),
+            tool_calls: Some(serde_json::json!([{ "id": "c0", "name": "x", "arguments": {} }])),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("tool0".into()),
+            tool_call_id: Some("c0".into()),
+            tool_name: Some("x".into()),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("u1".into()),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a1".into()),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("u2".into()),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+
+    // 删除气泡 [2,4) = u1 + a1（0=u0,1=a0），保留 u0/a0/tool0 + u2
+    store.remove_chat_bubbles("s1", 2, 4).unwrap();
+    let left = store.get_messages("s1").unwrap();
+    assert_eq!(left.len(), 4);
+    assert_eq!(left[0].content.as_deref(), Some("u0"));
+    assert_eq!(left[1].role, "assistant");
+    assert_eq!(left[2].role, "tool");
+    assert_eq!(left[3].content.as_deref(), Some("u2"));
+    let meta = store.get_session("s1").unwrap().unwrap();
+    assert_eq!(meta.message_count, 4);
+    assert_eq!(meta.tool_call_count, 1);
+}

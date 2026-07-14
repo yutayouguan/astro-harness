@@ -1116,6 +1116,29 @@ pub async fn fork_chat_session(
     Ok(new_id)
 }
 
+/// 删除当前会话聊天气泡半开区间 `[start, end)`（0-based，仅计 user/assistant）。
+#[tauri::command]
+pub async fn remove_chat_bubbles(
+    session_id: String,
+    start: i32,
+    end: i32,
+) -> Result<(), String> {
+    let sid = session_id.trim();
+    if sid.is_empty() {
+        return Err("session_id 不能为空".into());
+    }
+    let start = start.max(0) as usize;
+    let end = end.max(0) as usize;
+    if start >= end {
+        return Ok(());
+    }
+    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+        .map_err(|e| e.to_string())?;
+    mgr.session_store
+        .remove_chat_bubbles(sid, start, end)
+        .map_err(|e| e.to_string())
+}
+
 /// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {

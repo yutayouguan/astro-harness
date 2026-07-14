@@ -1729,25 +1729,51 @@ export default function App() {
   const deleteMessage = useCallback(
     (messageId: string) => {
       if (streaming) return;
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === messageId);
-        if (idx < 0) return prev;
-        let end = idx + 1;
-        // 删用户消息时，一并去掉其后紧跟的助手回复（到下一条 user 之前）
-        if (prev[idx].role === "user") {
-          while (end < prev.length && prev[end].role === "assistant") {
-            end += 1;
-          }
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx < 0) return;
+      let end = idx + 1;
+      // 删用户消息时，一并去掉其后紧跟的助手回复（到下一条 user 之前）
+      if (messages[idx].role === "user") {
+        while (end < messages.length && messages[end].role === "assistant") {
+          end += 1;
         }
-        const next = [...prev.slice(0, idx), ...prev.slice(end)];
-        if (next.length === 0) {
+      }
+      const bubbleStart = countChatBubbles(messages.slice(0, idx));
+      const bubbleEnd = countChatBubbles(messages.slice(0, end));
+      const next = [...messages.slice(0, idx), ...messages.slice(end)];
+
+      const applyLocal = () => {
+        setMessages(next);
+        if (next.length === 0 || next.every((m) => m.id === "welcome")) {
           queueMicrotask(() => setEmptyMode("chat"));
         }
-        return next;
-      });
-      setSessionPendingInterrupts([]);
+        setSessionPendingInterrupts([]);
+      };
+
+      if (
+        sessionId &&
+        bubbleStart < bubbleEnd &&
+        typeof window !== "undefined" &&
+        "__TAURI_INTERNALS__" in window
+      ) {
+        void invoke("remove_chat_bubbles", {
+          sessionId,
+          start: bubbleStart,
+          end: bubbleEnd,
+        })
+          .then(applyLocal)
+          .catch((e) => {
+            showTransientToast(
+              t("chat.deleteFailed", {
+                error: e instanceof Error ? e.message : String(e ?? "error"),
+              }),
+            );
+          });
+        return;
+      }
+      applyLocal();
     },
-    [streaming],
+    [messages, sessionId, streaming, showTransientToast, t],
   );
 
   /** 分支：复制截止该消息的历史到新会话，可继续聊 */
