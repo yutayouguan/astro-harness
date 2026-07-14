@@ -1,0 +1,28 @@
+---
+description: git worktree 隔离完成后主动询问合并与清理
+alwaysApply: true
+---
+
+# Worktree 完成后的收尾提示
+
+使用 **git worktree**（含 `-w` / 隔离工作树、best-of-n、独立子分支）完成任务后，**必须主动提示用户**是否合并与清理，不要静默结束。
+
+## 何时提示
+
+- 隔离 worktree 上的实现已完成（测试通过或用户接受当前结果）
+- 子分支已有可合并的 commit，准备收工时
+
+## 如何提示
+
+用简短中文列出选项，等待用户选择后再执行（默认不要擅自 merge / 删 worktree）：
+
+1. **合并到主分支**（如 `main`）并移除该 worktree / 可选删分支  
+2. **推送并开 PR**，worktree 暂留或按用户意愿清理  
+3. **先保留**：分支与 worktree 不动  
+4. **丢弃**：按用户确认后删除分支与 worktree（不可恢复须二次确认）
+
+执行时遵守 Git Safety Protocol：不做 force push / hard reset（除非用户明确要求）；合并前说明目标分支与快照摘要。
+
+## 与相关技能
+
+若已加载 `finishing-a-development-branch` / `using-git-worktrees`，按其流程执行，但**收工提示不可省略**。
