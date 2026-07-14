@@ -14,7 +14,7 @@ use crate::context::ToolContext;
 ///
 /// # 参数
 /// - `registry_allows`：通常传入 `registry.is_tool_allowed`，用于读取 `tools-enabled.json` 状态。
-/// - `ctx`：可变执行上下文，部分工具（如 `memory_*`、`create_agent`）会修改其中的 `memory` 或 `workspace_dir`。
+/// - `ctx`：可变执行上下文，部分工具（如 `memory`、`create_agent`）会修改其中的 `memory` 或 `workspace_dir`。
 ///
 /// # 约束
 /// - 未知工具名返回 `未知工具` 错误；MCP 工具不由本函数处理。
@@ -36,7 +36,7 @@ pub async fn dispatch_tool(
     let _ = memory::record_usage_tool_call(&agent_id, name, args, Some(ctx.session_id.as_str()));
 
     match name {
-        "memory_add" | "memory_replace" | "memory_remove" | "session_search" => {
+        "memory" | "session_search" | "memory_add" | "memory_replace" | "memory_remove" => {
             crate::memory_tools::dispatch(ctx, name, args)
         }
         "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable" | "scheduled" => {

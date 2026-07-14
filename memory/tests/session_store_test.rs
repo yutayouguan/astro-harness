@@ -25,7 +25,7 @@ fn append_and_reload_tool_calls_and_reasoning() {
             content: Some("done"),
             tool_calls: Some(serde_json::json!([{
                 "id": "c1",
-                "name": "memory_add",
+                "name": "memory",
                 "arguments": {"entry": "x"}
             }])),
             tool_call_id: None,
@@ -46,7 +46,7 @@ fn append_and_reload_tool_calls_and_reasoning() {
             content: Some("ok"),
             tool_calls: None,
             tool_call_id: Some("c1"),
-            tool_name: Some("memory_add"),
+            tool_name: Some("memory"),
             token_count: None,
             finish_reason: None,
             reasoning: None,
@@ -80,12 +80,12 @@ fn search_messages_hits_tool_name_and_cjk() {
             session_id: "s1",
             role: "tool",
             content: Some("已写入长期记忆"),
-            tool_name: Some("memory_add"),
+            tool_name: Some("memory"),
             tool_call_id: Some("c1"),
             ..NewMessage::empty("s1", "tool")
         })
         .unwrap();
-    let hits = store.search_messages("memory_add", None, None, 10).unwrap();
+    let hits = store.search_messages("memory", None, None, 10).unwrap();
     assert!(!hits.is_empty());
     let hits2 = store.search_messages("长期记忆", None, None, 10).unwrap();
     assert!(!hits2.is_empty());
@@ -111,7 +111,7 @@ fn build_chat_history_folds_tools_into_activities() {
             content: Some(""),
             reasoning: Some("plan"),
             tool_calls: Some(serde_json::json!([{
-                "id": "c1", "name": "memory_add",
+                "id": "c1", "name": "memory",
                 "arguments": {"entry": "e", "target": "project"}
             }])),
             ..NewMessage::empty("s1", "assistant")
@@ -123,7 +123,7 @@ fn build_chat_history_folds_tools_into_activities() {
             role: "tool",
             content: Some("ok"),
             tool_call_id: Some("c1"),
-            tool_name: Some("memory_add"),
+            tool_name: Some("memory"),
             ..NewMessage::empty("s1", "tool")
         })
         .unwrap();
@@ -140,7 +140,7 @@ fn build_chat_history_folds_tools_into_activities() {
     assert_eq!(ui.len(), 3); // user + assistant(with activity) + assistant(text)
     assert_eq!(ui[1].reasoning.as_deref(), Some("plan"));
     assert_eq!(ui[1].activities.len(), 1);
-    assert_eq!(ui[1].activities[0].title, "memory_add");
+    assert_eq!(ui[1].activities[0].title, "memory");
     assert_eq!(ui[1].activities[0].output.as_deref(), Some("ok"));
 }
 

@@ -189,17 +189,20 @@ async fn test_agent_loop_memory_injection() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
 
-    agent
+    let wrote = agent
         .handle_tool_call_async(
-            "memory_add",
+            "memory",
             &serde_json::json!({
-                "entry": "用户偏好 Rust 和深色主题",
-                "target": "user"
+                "action": "add",
+                "target": "user",
+                "content": "用户偏好 Rust 和深色主题"
             }),
         )
         .await
         .unwrap();
+    assert!(wrote.contains("已写盘（live）") || wrote.contains("已存在"));
 
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     let result = agent.run_turn("你好", "task-1").await.unwrap();
     match result {
         agent::TurnResult::Continue { system_prompt, .. } => {

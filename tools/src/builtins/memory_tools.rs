@@ -1,8 +1,8 @@
-//! 记忆工具：持久化记忆读写与会话全文检索。
+//! 记忆工具：单一 `memory` 写操作与 `session_search` 会话全文检索。
 //!
-//! 将 `memory_add` / `memory_replace` / `memory_remove` / `session_search`
-//! 注册到 `memory` 与 `session_search` toolset，实际逻辑委托给 `memory` crate。
-//! `session_search` 检索历史消息（FTS），而非会话摘要表。
+//! `memory` 通过 `action` + `target` 覆盖 add / replace / remove；
+//! 实际逻辑委托给 `memory` crate。`session_search` 检索历史消息（FTS），
+//! 而非会话摘要表。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,55 +11,48 @@ use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
 
-/// 记忆写入目标：`project` → MEMORY.md；`user` → USER.md；`daily` → 当日日志。
+/// `memory` 工具动作。
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MemoryAction {
+    /// 追加一条精炼记忆。
+    Add,
+    /// 按子串唯一匹配替换条目。
+    Replace,
+    /// 按子串唯一匹配删除条目。
+    Remove,
+}
+
+/// 记忆写入目标：`memory` → MEMORY.md；`user` → USER.md。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum MemoryTarget {
-    /// 项目级长期记忆（`MEMORY.md`）。
-    Project,
-    /// 用户偏好记忆（`USER.md`）。
+    /// 长期精炼记忆（`MEMORY.md`）。
+    Memory,
+    /// 用户档案（`USER.md`）。
     User,
-    /// 当日 mermaid 日志（`YYYY-MM-DD.md`）。
-    Daily,
 }
 
 impl Default for MemoryTarget {
-    /// 默认写入项目级 `MEMORY.md`。
     fn default() -> Self {
-        Self::Project
+        Self::Memory
     }
 }
 
-/// `memory_add` 工具的参数结构。
+/// 单一 `memory` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct MemoryAddArgs {
-    /// 要追加的简洁记忆条目。
-    pub entry: String,
-    /// 写入目标文件，默认 `project`。
+pub struct MemoryArgs {
+    /// 操作类型：`add` / `replace` / `remove`。
+    pub action: MemoryAction,
+    /// 写入目标，默认 `memory`。
     #[serde(default)]
     pub target: MemoryTarget,
-}
-
-/// `memory_replace` 工具的参数结构。
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct MemoryReplaceArgs {
-    /// 要被替换的原文本片段。
-    pub old_text: String,
-    /// 替换后的新文本。
-    pub new_text: String,
-    /// 操作目标文件，默认 `project`。
+    /// add / replace 的新内容。
     #[serde(default)]
-    pub target: MemoryTarget,
-}
-
-/// `memory_remove` 工具的参数结构。
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct MemoryRemoveArgs {
-    /// 要删除的记忆文本片段。
-    pub text: String,
-    /// 操作目标文件，默认 `project`。
+    pub content: Option<String>,
+    /// replace / remove 用于定位条目的子串。
     #[serde(default)]
-    pub target: MemoryTarget,
+    pub old_text: Option<String>,
 }
 
 /// `session_search` 工具的参数结构。
@@ -72,33 +65,15 @@ pub struct SessionSearchArgs {
     pub limit: Option<u32>,
 }
 
-/// 向注册表注册全部记忆相关工具（4 个函数）。
+/// 向注册表注册记忆相关工具（`memory` + `session_search`）。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
-        name: "memory_add".to_string(),
+        name: "memory".to_string(),
         toolset: "memory".to_string(),
-        description: "Add a persistent memory entry. Use target=project for long-term MEMORY.md, user for USER.md, daily for today's mermaid/YYYY-MM-DD.md.".to_string(),
-        schema: schema_for_args::<MemoryAddArgs>(),
+        description: "Manage persistent memory. action=add|replace|remove; target=memory (MEMORY.md) or user (USER.md). Use content for add/replace and old_text substring for replace/remove. Writes update live/disk; session prompt snapshot is not refreshed until next session or refresh_memory.".to_string(),
+        schema: schema_for_args::<MemoryArgs>(),
         check_fn: None,
         icon: "brain",
-    });
-
-    registry.register(crate::registry::ToolEntry {
-        name: "memory_replace".to_string(),
-        toolset: "memory".to_string(),
-        description: "Replace an outdated memory entry (project/user/daily).".to_string(),
-        schema: schema_for_args::<MemoryReplaceArgs>(),
-        check_fn: None,
-        icon: "pen-line",
-    });
-
-    registry.register(crate::registry::ToolEntry {
-        name: "memory_remove".to_string(),
-        toolset: "memory".to_string(),
-        description: "Remove a memory entry that is no longer relevant (project/user/daily).".to_string(),
-        schema: schema_for_args::<MemoryRemoveArgs>(),
-        check_fn: None,
-        icon: "trash-2",
     });
 
     registry.register(crate::registry::ToolEntry {

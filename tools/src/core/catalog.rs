@@ -223,16 +223,17 @@ mod tests {
     fn memory_has_per_function_params() {
         let cat = builtin_catalog();
         let memory = cat.iter().find(|c| c.id == "memory").expect("memory");
-        assert!(memory.functions.len() >= 3);
-        let add = memory
+        assert_eq!(memory.functions.len(), 1);
+        let mem = memory
             .functions
             .iter()
-            .find(|f| f.name == "memory_add")
-            .expect("memory_add");
-        assert!(add.params.iter().any(|p| p.name == "entry"));
+            .find(|f| f.name == "memory")
+            .expect("memory");
+        assert!(mem.params.iter().any(|p| p.name == "action"));
+        assert!(mem.params.iter().any(|p| p.name == "target"));
         // Lucide kebab-case id，不是 Unicode emoji
-        assert_eq!(add.icon, "brain");
-        assert!(add.icon.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()));
+        assert_eq!(mem.icon, "brain");
+        assert!(mem.icon.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()));
     }
 
     #[test]

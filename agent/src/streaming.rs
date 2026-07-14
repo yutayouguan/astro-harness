@@ -133,7 +133,7 @@ pub enum MultiTurnStreamItem {
     },
     /// 记忆工具成功变更，供右侧时间线展示。
     MemoryUpdate {
-        /// 操作类型：`memory_add` / `memory_replace` / `memory_remove`。
+        /// 操作类型：`memory`（单一记忆工具）或其 action 描述。
         op: String,
         /// 结果预览（最长 240 字符）。
         content: String,
@@ -832,10 +832,8 @@ async fn run_multi_turn_stream_inner(
                 return;
             }
 
-            if matches!(
-                call.name.as_str(),
-                "memory_add" | "memory_replace" | "memory_remove"
-            ) && !result.starts_with("工具错误")
+            if matches!(call.name.as_str(), "memory")
+                && !result.starts_with("工具错误")
                 && !result.starts_with("工具已禁用")
                 && !result.starts_with("工具参数 JSON 解析失败")
             {

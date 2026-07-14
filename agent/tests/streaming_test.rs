@@ -476,7 +476,7 @@ async fn error_is_followed_by_done() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn tool_call_delta_and_memory_add_path() {
+async fn tool_call_delta_and_memory_path() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "mem-session".into()).unwrap();
@@ -494,14 +494,14 @@ async fn tool_call_delta_and_memory_add_path() {
                     ToolCallDeltaChunk {
                         index: 0,
                         id: Some("c1".into()),
-                        name: Some("memory_add".into()),
-                        arguments: Some(r#"{"entry":""#.into()),
+                        name: Some("memory".into()),
+                        arguments: Some(r#"{"action":"add","content":""#.into()),
                     },
                     ToolCallDeltaChunk {
                         index: 0,
                         id: None,
                         name: None,
-                        arguments: Some(r#"hello from test","target":"project"}"#.into()),
+                        arguments: Some(r#"hello from test","target":"memory"}"#.into()),
                     },
                 ],
                 finish_reason: Some("tool_calls".into()),
@@ -550,12 +550,12 @@ async fn tool_call_delta_and_memory_add_path() {
     assert!(delta_count >= 2, "expected streamed tool_call_deltas");
     assert!(items
         .iter()
-        .any(|i| matches!(i, MultiTurnStreamItem::ToolResult { name, .. } if name == "memory_add")));
+        .any(|i| matches!(i, MultiTurnStreamItem::ToolResult { name, .. } if name == "memory")));
     assert!(
         items.iter().any(|i| {
-            matches!(i, MultiTurnStreamItem::MemoryUpdate { op, .. } if op == "memory_add")
+            matches!(i, MultiTurnStreamItem::MemoryUpdate { op, .. } if op == "memory")
         }),
-        "memory_add success should emit MemoryUpdate; got: {:?}",
+        "memory success should emit MemoryUpdate; got: {:?}",
         items
             .iter()
             .map(|i| format!("{i:?}"))

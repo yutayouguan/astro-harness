@@ -2,7 +2,7 @@
 //!
 //! [`MemoryManager`] 绑定单个 Agent 工作区，统一管理 `MEMORY.md`、`USER.md`、每日记忆、
 //! 以及单库 [`SessionStore`]。对外提供 Prompt 内容读取、消息记录、上下文构建及
-//! `memory_*` / `session_search` 工具分发。
+//! `memory` / `session_search` 工具分发。
 
 use std::path::PathBuf;
 
@@ -209,6 +209,38 @@ impl MemoryManager {
         self.session_store.list_recent_sessions(limit)
     }
 
+    /// 统一处理 `memory` 工具的 action / target。
+    pub fn handle_memory_op(
+        &mut self,
+        action: &str,
+        target: MemoryTarget,
+        content: Option<&str>,
+        old_text: Option<&str>,
+    ) -> anyhow::Result<String> {
+        match action {
+            "add" => {
+                let content = content
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("缺少 content 参数"))?;
+                self.handle_memory_add(content, target)
+            }
+            "replace" => {
+                let old_text = old_text
+                    .ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
+                let content = content
+                    .ok_or_else(|| anyhow::anyhow!("缺少 content 参数"))?;
+                self.handle_memory_replace(old_text, content, target)
+            }
+            "remove" => {
+                let old_text = old_text
+                    .ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
+                self.handle_memory_remove(old_text, target)
+            }
+            other => anyhow::bail!("未知 memory action: {other}（期望 add|replace|remove）"),
+        }
+    }
+
     /// 向指定目标追加一条记忆；返回面向用户的中文操作结果（含用量）。
     pub fn handle_memory_add(
         &mut self,
@@ -237,11 +269,11 @@ impl MemoryManager {
         match target {
             MemoryTarget::Memory => {
                 let result = self.memory.replace(old_text, new_text)?;
-                Ok(format!("{}（用量 {}）", result.message, result.usage))
+                Ok(format_op_message(&result))
             }
             MemoryTarget::User => {
                 let result = self.user.replace(old_text, new_text)?;
-                Ok(format!("{}（用量 {}）", result.message, result.usage))
+                Ok(format_op_message(&result))
             }
         }
     }
@@ -255,11 +287,11 @@ impl MemoryManager {
         match target {
             MemoryTarget::Memory => {
                 let result = self.memory.remove(text)?;
-                Ok(format!("{}（用量 {}）", result.message, result.usage))
+                Ok(format_op_message(&result))
             }
             MemoryTarget::User => {
                 let result = self.user.remove(text)?;
-                Ok(format!("{}（用量 {}）", result.message, result.usage))
+                Ok(format_op_message(&result))
             }
         }
     }
@@ -276,12 +308,27 @@ impl MemoryManager {
     }
 }
 
+const SNAPSHOT_NOTE: &str = "已写盘（live）；当前会话 prompt 快照未刷新";
+
 fn format_write_message(label: &str, result: &crate::MemoryWriteResult) -> String {
     if result.duplicate {
-        format!("记忆条目已存在于{label}（用量 {}）", result.usage)
+        format!(
+            "记忆条目已存在于{label}（用量 {}）；{SNAPSHOT_NOTE}",
+            result.usage
+        )
     } else {
-        format!("已写入{label}（用量 {}）", result.usage)
+        format!(
+            "已写入{label}（用量 {}）；{SNAPSHOT_NOTE}",
+            result.usage
+        )
     }
+}
+
+fn format_op_message(result: &crate::MemoryWriteResult) -> String {
+    format!(
+        "{}（用量 {}）；{SNAPSHOT_NOTE}",
+        result.message, result.usage
+    )
 }
 
 /// 按字符边界截断到 `max` 个字符。
@@ -364,37 +411,22 @@ fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
 
 /// 记忆相关 Agent 工具的统一分发入口。
 ///
-/// 支持 `memory_add`、`memory_replace`、`memory_remove`、`session_search`；
-/// 参数从 `args` JSON 提取，`target` 经 [`parse_memory_target`] 解析。未知工具名报错。
+/// 支持 `memory`、`session_search`；旧名 `memory_add` / `memory_replace` / `memory_remove`
+/// 返回迁移错误。参数从 `args` JSON 提取，`target` 经 [`parse_memory_target`] 解析。
 pub fn dispatch_memory_tool(
     memory: &mut MemoryManager,
     name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
     match name {
-        "memory_add" => {
-            let entry = args["entry"]
+        "memory" => {
+            let action = args["action"]
                 .as_str()
-                .ok_or_else(|| anyhow::anyhow!("缺少 entry 参数"))?;
+                .ok_or_else(|| anyhow::anyhow!("缺少 action 参数"))?;
             let target = parse_memory_target(args["target"].as_str())?;
-            memory.handle_memory_add(entry, target)
-        }
-        "memory_replace" => {
-            let old_text = args["old_text"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
-            let new_text = args["new_text"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("缺少 new_text 参数"))?;
-            let target = parse_memory_target(args["target"].as_str())?;
-            memory.handle_memory_replace(old_text, new_text, target)
-        }
-        "memory_remove" => {
-            let text = args["text"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("缺少 text 参数"))?;
-            let target = parse_memory_target(args["target"].as_str())?;
-            memory.handle_memory_remove(text, target)
+            let content = args["content"].as_str();
+            let old_text = args["old_text"].as_str();
+            memory.handle_memory_op(action, target, content, old_text)
         }
         "session_search" => {
             let query = args["query"]
@@ -402,6 +434,9 @@ pub fn dispatch_memory_tool(
                 .ok_or_else(|| anyhow::anyhow!("缺少 query 参数"))?;
             let limit = args["limit"].as_u64().unwrap_or(5).clamp(1, 10) as usize;
             memory.handle_session_search(query, limit)
+        }
+        "memory_add" | "memory_replace" | "memory_remove" => {
+            anyhow::bail!("工具已迁移为 memory(action,target)；请使用 action=add|replace|remove")
         }
         _ => anyhow::bail!("未知记忆工具: {name}"),
     }
@@ -495,5 +530,75 @@ memory:
         ));
         let err = parse_memory_target(Some("bogus")).unwrap_err().to_string();
         assert!(err.contains("未知的 memory target"));
+    }
+
+    #[test]
+    fn dispatch_memory_add_replace_remove_and_session_search() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
+
+        let added = dispatch_memory_tool(
+            &mut mgr,
+            "memory",
+            &serde_json::json!({
+                "action": "add",
+                "target": "memory",
+                "content": "喜欢深色主题"
+            }),
+        )
+        .unwrap();
+        assert!(added.contains("已写盘（live）"));
+        assert!(added.contains("快照未刷新"));
+        assert!(mgr.memory.live_entries().iter().any(|e| e.contains("深色主题")));
+
+        let replaced = dispatch_memory_tool(
+            &mut mgr,
+            "memory",
+            &serde_json::json!({
+                "action": "replace",
+                "target": "memory",
+                "old_text": "深色主题",
+                "content": "喜欢浅色主题"
+            }),
+        )
+        .unwrap();
+        assert!(replaced.contains("已替换") || replaced.contains("浅色主题") || replaced.contains("已写盘"));
+        assert!(mgr.memory.live_entries().iter().any(|e| e.contains("浅色主题")));
+
+        let removed = dispatch_memory_tool(
+            &mut mgr,
+            "memory",
+            &serde_json::json!({
+                "action": "remove",
+                "target": "memory",
+                "old_text": "浅色主题"
+            }),
+        )
+        .unwrap();
+        assert!(removed.contains("已删除") || removed.contains("已写盘"));
+        assert!(!mgr.memory.live_entries().iter().any(|e| e.contains("浅色主题")));
+
+        let miss = dispatch_memory_tool(
+            &mut mgr,
+            "session_search",
+            &serde_json::json!({ "query": "no-such-term-xyz", "limit": 3 }),
+        )
+        .unwrap();
+        assert!(miss.contains("未找到") || miss.contains("相关历史消息"));
+    }
+
+    #[test]
+    fn dispatch_old_memory_tool_names_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
+        for name in ["memory_add", "memory_replace", "memory_remove"] {
+            let err = dispatch_memory_tool(&mut mgr, name, &serde_json::json!({}))
+                .unwrap_err()
+                .to_string();
+            assert!(
+                err.contains("已迁移") && err.contains("memory(action,target)"),
+                "unexpected for {name}: {err}"
+            );
+        }
     }
 }

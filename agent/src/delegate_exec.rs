@@ -198,9 +198,7 @@ pub fn apply_nested_agent_tool_strips(
     depth_ctx: memory::SpawnDepthCtx,
 ) {
     for name in [
-        "memory_add",
-        "memory_replace",
-        "memory_remove",
+        "memory",
         "session_search",
         "create_agent",
         "multi_agent",
@@ -463,6 +461,6 @@ mod strip_tests {
             .collect();
         assert!(names.contains(&"delegate"));
         assert!(names.contains(&"orchestration_run"));
-        assert!(!names.contains(&"memory_add"));
+        assert!(!names.contains(&"memory"));
     }
 }
