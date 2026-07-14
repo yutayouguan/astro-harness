@@ -67,7 +67,7 @@ auxiliary:
 - **日记** `append_daily` **不受**审批门禁
 - 批准经 `MemoryStore` / `handle_memory_op` 等价路径落盘；拒绝即删除 pending 文件。
 
-记忆面板顶部有 **「审批」** 页：列出 pending、批准 / 拒绝、可刷新。相应 Tauri 命令：
+记忆面板有 **「审批」** 页：列表、批准 / 拒绝、刷新。Tauri 命令：
 
 | 命令 | 作用 |
 |------|------|

@@ -3,11 +3,14 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Book,
+  Check,
+  ClipboardList,
   Files,
   List,
   MoonStar,
   Pencil,
   Save,
+  X,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
@@ -57,7 +60,19 @@ type DreamRunReport = {
 };
 
 /** 记忆面板子视图 */
-type MemoryView = "diary" | "dream" | "longterm";
+type MemoryView = "diary" | "dream" | "longterm" | "pending";
+
+/** `write_approval` 待审批写入（Tauri camelCase） */
+type PendingMemoryWrite = {
+  id: string;
+  agentId: string;
+  target: string;
+  action: string;
+  content?: string | null;
+  oldText?: string | null;
+  source: string;
+  createdAt: string;
+};
 
 /** 长期记忆归档文件 id */
 type ArchiveId = "agent" | "identity" | "user" | "soul" | "agents" | "tools";
@@ -120,6 +135,11 @@ function IconList(props: { width?: number; height?: number }) {
   return <List size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
 }
 
+/** 写入审批 */
+function IconPending(props: { width?: number; height?: number }) {
+  return <ClipboardList size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
+}
+
 /** 编辑 */
 function IconPencil(props: { width?: number; height?: number }) {
   return <Pencil size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
@@ -170,6 +190,8 @@ export default function MemoryPanel({ onClose }: Props) {
 
   const [dreamStatus, setDreamStatus] = useState<DreamingStatus | null>(null);
   const [dreamRunning, setDreamRunning] = useState(false);
+  const [pendingWrites, setPendingWrites] = useState<PendingMemoryWrite[]>([]);
+  const [pendingBusyId, setPendingBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -210,6 +232,50 @@ export default function MemoryPanel({ onClose }: Props) {
       setDreamStatus(null);
     }
   }, []);
+
+  const refreshPendingWrites = useCallback(async () => {
+    try {
+      const rows = await invoke<PendingMemoryWrite[]>("list_pending_memory_writes");
+      setPendingWrites(rows ?? []);
+    } catch {
+      setPendingWrites([]);
+    }
+  }, []);
+
+  const approvePending = async (id: string) => {
+    setError(null);
+    setSaveMsg(null);
+    setPendingBusyId(id);
+    try {
+      const msg = await invoke<string>("approve_pending_memory_write", { id });
+      setSaveMsg(msg || t("memory.pending.approved"));
+      await refreshPendingWrites();
+      try {
+        await invoke("refresh_memory", { agentId: null, sessionId: null });
+      } catch {
+        // 非阻塞
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPendingBusyId(null);
+    }
+  };
+
+  const rejectPending = async (id: string) => {
+    setError(null);
+    setSaveMsg(null);
+    setPendingBusyId(id);
+    try {
+      await invoke("reject_pending_memory_write", { id });
+      setSaveMsg(t("memory.pending.rejected"));
+      await refreshPendingWrites();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPendingBusyId(null);
+    }
+  };
 
   const enableDreaming = async () => {
     setError(null);
@@ -378,6 +444,11 @@ export default function MemoryPanel({ onClose }: Props) {
     if (view !== "dream") return;
     void refreshDreamStatus();
   }, [view, refreshDreamStatus]);
+
+  useEffect(() => {
+    if (view !== "pending") return;
+    void refreshPendingWrites();
+  }, [view, refreshPendingWrites]);
 
   const confirmIfDirty = () => {
     if (!dirty) return true;
@@ -646,6 +717,11 @@ export default function MemoryPanel({ onClose }: Props) {
                 { id: "diary" as const, label: t("memory.view.diary"), Icon: IconBook },
                 { id: "dream" as const, label: t("memory.view.dream"), Icon: IconMoon },
                 { id: "longterm" as const, label: t("memory.view.longterm"), Icon: IconList },
+                {
+                  id: "pending" as const,
+                  label: t("memory.view.pending"),
+                  Icon: IconPending,
+                },
               ] as const
             ).map((item) => (
               <button
@@ -655,7 +731,12 @@ export default function MemoryPanel({ onClose }: Props) {
                 onClick={() => switchView(item.id)}
               >
                 <item.Icon />
-                <span>{item.label}</span>
+                <span>
+                  {item.label}
+                  {item.id === "pending" && pendingWrites.length > 0
+                    ? ` (${pendingWrites.length})`
+                    : ""}
+                </span>
               </button>
             ))}
           </nav>
@@ -1068,6 +1149,75 @@ export default function MemoryPanel({ onClose }: Props) {
                 spellCheck={false}
                 aria-label="MEMORY.md"
               />
+            )}
+          </section>
+        </div>
+      )}
+
+      {view === "pending" && (
+        <div className="mem-pending-wrap">
+          <section className="mem-card mem-main mem-pending">
+            <div className="mem-main-header">
+              <h3>{t("memory.view.pending")}</h3>
+              <button
+                type="button"
+                className="mem-glass-btn"
+                onClick={() => void refreshPendingWrites()}
+                title={t("memory.pending.refresh")}
+              >
+                {t("memory.pending.refresh")}
+              </button>
+            </div>
+            <p className="mem-pending-hint">{t("memory.pending.hint")}</p>
+            {pendingWrites.length === 0 ? (
+              <div className="mem-empty">
+                <EmptyIllustration
+                  scene="memory"
+                  size="sm"
+                  title={t("memory.pending.emptyTitle")}
+                  hint={t("memory.pending.emptyHint")}
+                />
+              </div>
+            ) : (
+              <ul className="mem-pending-list">
+                {pendingWrites.map((p) => (
+                  <li key={p.id} className="mem-pending-item">
+                    <div className="mem-pending-meta">
+                      <span className="mem-pending-badge">{p.action}</span>
+                      <span className="mem-pending-badge soft">{p.target}</span>
+                      <span className="mem-pending-badge soft">{p.source}</span>
+                      <span className="mem-pending-agent">{p.agentId}</span>
+                      <span className="mem-pending-time">{p.createdAt}</span>
+                    </div>
+                    {p.content ? (
+                      <pre className="mem-pending-body">{p.content}</pre>
+                    ) : null}
+                    {p.oldText ? (
+                      <pre className="mem-pending-body muted">{p.oldText}</pre>
+                    ) : null}
+                    <div className="mem-pending-actions">
+                      <button
+                        type="button"
+                        className="mem-glass-btn is-primary"
+                        disabled={pendingBusyId === p.id}
+                        onClick={() => void approvePending(p.id)}
+                      >
+                        <Check size={14} strokeWidth={2} aria-hidden />
+                        {t("memory.pending.approve")}
+                      </button>
+                      <button
+                        type="button"
+                        className="mem-glass-btn"
+                        disabled={pendingBusyId === p.id}
+                        onClick={() => void rejectPending(p.id)}
+                      >
+                        <X size={14} strokeWidth={2} aria-hidden />
+                        {t("memory.pending.reject")}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
         </div>

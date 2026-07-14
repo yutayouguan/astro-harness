@@ -1108,3 +1108,100 @@ html[data-theme="dark"] .memory-dirty-badge {
   color: var(--danger);
   background: var(--danger-bg);
 }
+
+/* ── Pending 审批队列 ── */
+.mem-pending-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 0 4px 8px;
+}
+
+.mem-pending {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mem-pending-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.mem-pending-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mem-pending-item {
+  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 16%, rgba(255, 255, 255, 0.5));
+  border-radius: 14px;
+  padding: 12px 14px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.16) 100%);
+}
+
+.mem-pending-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.mem-pending-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--tone, var(--tone-green)) 22%, transparent);
+  color: var(--ink);
+}
+
+.mem-pending-badge.soft {
+  background: rgba(0, 0, 0, 0.06);
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.mem-pending-agent,
+.mem-pending-time {
+  color: var(--ink-soft);
+}
+
+.mem-pending-body {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.04);
+  font-family: inherit;
+}
+
+.mem-pending-body.muted {
+  opacity: 0.72;
+}
+
+.mem-pending-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mem-view-tab--pending.active {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55)),
+    color-mix(in srgb, var(--tone-soft, var(--tone-amber-soft, #f5e6c8)) 70%, transparent);
+}
