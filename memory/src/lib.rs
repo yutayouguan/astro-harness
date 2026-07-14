@@ -6,6 +6,7 @@
 
 pub mod agent;
 pub mod artifacts;
+pub mod config;
 pub mod cron;
 pub mod dreaming;
 pub mod infra;
@@ -23,6 +24,8 @@ pub use agent::scan::scan_memory_content;
 pub use agent::store::{MemoryStore, MemoryWriteResult};
 pub use agent::tools_enabled;
 pub use agent::workspace;
+
+pub use config::{load_memory_config, MemoryConfig};
 
 pub use session::manager;
 pub use session::message_db;

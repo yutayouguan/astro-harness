@@ -7,22 +7,21 @@
 use std::path::PathBuf;
 
 use crate::build_conversation_context;
-use crate::files::MemoryFile;
+use crate::config::{load_memory_config, MemoryConfig};
 use crate::message_db::ScrolledMessage;
 use crate::session_store::{NewMessage, RecentSession, SearchHit, SessionStore};
+use crate::MemoryStore;
 use crate::workspace::{
     active_agent_id, daily_memory_path, ensure_daily_memory, today_date_string, DEFAULT_AGENT_ID,
 };
 
-/// 记忆写入/替换/删除的目标存储位置。
+/// 记忆写入/替换/删除的目标存储位置（工具面仅 MEMORY / USER）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryTarget {
-    /// `MEMORY.md` — 长期精炼记忆（上限 8000 字符）。
-    Project,
-    /// `USER.md` — 用户档案（上限 4000 字符）。
+    /// `MEMORY.md` — 长期精炼记忆。
+    Memory,
+    /// `USER.md` — 用户档案。
     User,
-    /// `mermaid/YYYY-MM-DD.md` — 按日滚动的每日记忆。
-    Daily,
 }
 
 /// 单 Agent 记忆子系统的聚合入口。
@@ -36,12 +35,14 @@ pub struct MemoryManager {
     pub agent_id: String,
     /// Agent 工作区目录，含 `MEMORY.md`、`USER.md`、`mermaid/` 等。
     pub workspace_dir: PathBuf,
-    /// 长期记忆文件句柄。
-    pub memory: MemoryFile,
-    /// 用户档案文件句柄。
-    pub user: MemoryFile,
+    /// 长期记忆存储（live + snapshot）。
+    pub memory: MemoryStore,
+    /// 用户档案存储（live + snapshot）。
+    pub user: MemoryStore,
     /// 单库会话存储（`state.db`，含 sessions / messages / FTS）。
     pub session_store: SessionStore,
+    /// 从 `{base_dir}/config.yaml` 加载的记忆配置。
+    pub config: MemoryConfig,
 }
 
 impl MemoryManager {
@@ -66,13 +67,17 @@ impl MemoryManager {
         };
         let workspace = crate::workspace::ensure_agent_space(&base_dir, &id, None)?;
         let sessions_dir = base_dir.join("sessions");
+        let config = load_memory_config(&base_dir);
+        let memory = MemoryStore::open(workspace.join("MEMORY.md"), config.memory_char_limit)?;
+        let user = MemoryStore::open(workspace.join("USER.md"), config.user_char_limit)?;
         Ok(MemoryManager {
             base_dir,
             agent_id: id,
-            workspace_dir: workspace.clone(),
-            memory: MemoryFile::new(workspace.join("MEMORY.md"), 8000),
-            user: MemoryFile::new(workspace.join("USER.md"), 4000),
+            workspace_dir: workspace,
+            memory,
+            user,
             session_store: SessionStore::open_sessions_dir(&sessions_dir)?,
+            config,
         })
     }
 
@@ -89,7 +94,7 @@ impl MemoryManager {
         std::fs::read_to_string(path).unwrap_or_default()
     }
 
-    /// 向每日记忆追加一段（按日期，默认今天）
+    /// 向每日记忆追加一段（按日期，默认今天）。非工具入口；日记请走系统/入梦管线。
     pub fn append_daily(&self, entry: &str, date: Option<&str>) -> anyhow::Result<String> {
         let date = date
             .map(|s| s.to_string())
@@ -111,18 +116,45 @@ impl MemoryManager {
         Ok(format!("已写入每日记忆 mermaid/{date}.md"))
     }
 
-    /// 返回 `(长期记忆, 用户档案)` 的 Markdown 列表文本，供 Prompt 注入。
+    /// 返回 `(长期记忆, 用户档案)` 的 **snapshot** 渲染文本，供 Prompt 注入。
+    ///
+    /// 与 [`prompt_snapshot_with_daily`] 相同语义（不含日记）；受 `memory_*_enabled` 开关影响。
     pub fn prompt_content(&self) -> (String, String) {
-        (self.memory.content(), self.user.content())
+        let (mem, user, _) = self.prompt_snapshot_with_daily();
+        (mem, user)
     }
 
-    /// (长期记忆, 用户档案, 今日每日记忆)
+    /// `(长期记忆, 用户档案, 今日每日记忆)` —— **snapshot** 语义；日记按 `daily_prompt_max_chars` 截断。
+    ///
+    /// 保留兼容旧调用方；新代码优先用 [`prompt_snapshot_with_daily`]。
     pub fn prompt_content_with_daily(&self) -> (String, String, String) {
-        (
-            self.memory.content(),
-            self.user.content(),
-            self.daily_content_today(),
-        )
+        self.prompt_snapshot_with_daily()
+    }
+
+    /// Prompt 注入用：MEMORY / USER 取 **snapshot**；今日日记读盘后截断到配置上限。
+    pub fn prompt_snapshot_with_daily(&self) -> (String, String, String) {
+        let mem = if self.config.memory_enabled {
+            self.memory.snapshot_render()
+        } else {
+            String::new()
+        };
+        let user = if self.config.user_profile_enabled {
+            self.user.snapshot_render()
+        } else {
+            String::new()
+        };
+        let daily = truncate_chars(
+            &self.daily_content_today(),
+            self.config.daily_prompt_max_chars,
+        );
+        (mem, user, daily)
+    }
+
+    /// 从磁盘重载 MEMORY / USER 到 live，并同步 snapshot（供换 session / 显式 refresh）。
+    pub fn refresh_memory_snapshot(&mut self) -> anyhow::Result<()> {
+        self.memory.reload()?;
+        self.user.reload()?;
+        Ok(())
     }
 
     /// 确保会话行存在（不存在则按 `source` 创建）。
@@ -177,32 +209,25 @@ impl MemoryManager {
         self.session_store.list_recent_sessions(limit)
     }
 
-    /// 向指定目标追加一条记忆；返回面向用户的中文操作结果。
+    /// 向指定目标追加一条记忆；返回面向用户的中文操作结果（含用量）。
     pub fn handle_memory_add(
         &mut self,
         entry: &str,
         target: MemoryTarget,
     ) -> anyhow::Result<String> {
         match target {
-            MemoryTarget::Project => {
-                self.memory.add(entry)?;
-                Ok(format!(
-                    "已写入长期记忆 MEMORY.md（{}/8000 字符）",
-                    self.memory.current_chars()
-                ))
+            MemoryTarget::Memory => {
+                let result = self.memory.add(entry)?;
+                Ok(format_write_message("长期记忆 MEMORY.md", &result))
             }
             MemoryTarget::User => {
-                self.user.add(entry)?;
-                Ok(format!(
-                    "已写入用户档案（{}/4000 字符）",
-                    self.user.current_chars()
-                ))
+                let result = self.user.add(entry)?;
+                Ok(format_write_message("用户档案 USER.md", &result))
             }
-            MemoryTarget::Daily => self.append_daily(entry, None),
         }
     }
 
-    /// 在指定目标中替换首次匹配 `old_text` 的片段；每日记忆按全文 `replacen` 处理。
+    /// 在指定目标中替换唯一匹配 `old_text` 的条目。
     pub fn handle_memory_replace(
         &mut self,
         old_text: &str,
@@ -210,53 +235,31 @@ impl MemoryManager {
         target: MemoryTarget,
     ) -> anyhow::Result<String> {
         match target {
-            MemoryTarget::Project => {
-                self.memory.replace(old_text, new_text)?;
-                Ok("长期记忆已更新".to_string())
+            MemoryTarget::Memory => {
+                let result = self.memory.replace(old_text, new_text)?;
+                Ok(format!("{}（用量 {}）", result.message, result.usage))
             }
             MemoryTarget::User => {
-                self.user.replace(old_text, new_text)?;
-                Ok("用户档案已更新".to_string())
-            }
-            MemoryTarget::Daily => {
-                let date = today_date_string();
-                let path = ensure_daily_memory(&self.workspace_dir, &date)?;
-                let content = std::fs::read_to_string(&path)?;
-                if !content.contains(old_text) {
-                    anyhow::bail!("每日记忆中未找到匹配文本");
-                }
-                let updated = content.replacen(old_text, new_text, 1);
-                std::fs::write(&path, updated)?;
-                Ok(format!("每日记忆 mermaid/{date}.md 已更新"))
+                let result = self.user.replace(old_text, new_text)?;
+                Ok(format!("{}（用量 {}）", result.message, result.usage))
             }
         }
     }
 
-    /// 从指定目标删除包含 `text` 的条目；每日记忆按全文 `replacen` 删除首次匹配。
+    /// 从指定目标删除唯一包含 `text` 的条目。
     pub fn handle_memory_remove(
         &mut self,
         text: &str,
         target: MemoryTarget,
     ) -> anyhow::Result<String> {
         match target {
-            MemoryTarget::Project => {
-                self.memory.remove(text)?;
-                Ok("长期记忆已删除".to_string())
+            MemoryTarget::Memory => {
+                let result = self.memory.remove(text)?;
+                Ok(format!("{}（用量 {}）", result.message, result.usage))
             }
             MemoryTarget::User => {
-                self.user.remove(text)?;
-                Ok("用户档案已删除".to_string())
-            }
-            MemoryTarget::Daily => {
-                let date = today_date_string();
-                let path = ensure_daily_memory(&self.workspace_dir, &date)?;
-                let content = std::fs::read_to_string(&path)?;
-                if !content.contains(text) {
-                    anyhow::bail!("每日记忆中未找到匹配文本");
-                }
-                let updated = content.replacen(text, "", 1);
-                std::fs::write(&path, updated)?;
-                Ok(format!("已从每日记忆 mermaid/{date}.md 删除"))
+                let result = self.user.remove(text)?;
+                Ok(format!("{}（用量 {}）", result.message, result.usage))
             }
         }
     }
@@ -271,6 +274,26 @@ impl MemoryManager {
             .search_messages(query, None, None, limit as i64)?;
         Ok(format_session_search_hits(&hits))
     }
+}
+
+fn format_write_message(label: &str, result: &crate::MemoryWriteResult) -> String {
+    if result.duplicate {
+        format!("记忆条目已存在于{label}（用量 {}）", result.usage)
+    } else {
+        format!("已写入{label}（用量 {}）", result.usage)
+    }
+}
+
+/// 按字符边界截断到 `max` 个字符。
+fn truncate_chars(s: &str, max: usize) -> String {
+    if max == 0 {
+        return String::new();
+    }
+    let count = s.chars().count();
+    if count <= max {
+        return s.to_string();
+    }
+    s.chars().take(max).collect()
 }
 
 /// 将 [`SearchHit`] 列表格式化为「相关历史消息」Markdown。
@@ -322,14 +345,19 @@ pub fn format_recalled_context(messages: &[ScrolledMessage]) -> String {
         .join("\n")
 }
 
-/// 将工具参数 `target` 字符串解析为 [`MemoryTarget`]；未知或缺失时默认 `Project`。
+/// 将工具参数 `target` 字符串解析为 [`MemoryTarget`]。
 ///
-/// 接受 `"user"`、`"daily"`、`"mermaid"`（后二者均映射为每日记忆）。
-fn parse_memory_target(value: Option<&str>) -> MemoryTarget {
+/// - `"user"` → [`MemoryTarget::User`]
+/// - `"memory"` / `"project"` / 缺省 → [`MemoryTarget::Memory`]
+/// - `"daily"` / `"mermaid"` → 错误（日记仅系统入口）
+fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
     match value {
-        Some("user") => MemoryTarget::User,
-        Some("daily") | Some("mermaid") => MemoryTarget::Daily,
-        _ => MemoryTarget::Project,
+        Some("user") => Ok(MemoryTarget::User),
+        Some("daily") | Some("mermaid") => {
+            anyhow::bail!("日记请使用系统入口，不支持 memory 工具 target=daily")
+        }
+        Some("memory") | Some("project") | None => Ok(MemoryTarget::Memory),
+        Some(_) => Ok(MemoryTarget::Memory),
     }
 }
 
@@ -347,7 +375,7 @@ pub fn dispatch_memory_tool(
             let entry = args["entry"]
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("缺少 entry 参数"))?;
-            let target = parse_memory_target(args["target"].as_str());
+            let target = parse_memory_target(args["target"].as_str())?;
             memory.handle_memory_add(entry, target)
         }
         "memory_replace" => {
@@ -357,14 +385,14 @@ pub fn dispatch_memory_tool(
             let new_text = args["new_text"]
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("缺少 new_text 参数"))?;
-            let target = parse_memory_target(args["target"].as_str());
+            let target = parse_memory_target(args["target"].as_str())?;
             memory.handle_memory_replace(old_text, new_text, target)
         }
         "memory_remove" => {
             let text = args["text"]
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("缺少 text 参数"))?;
-            let target = parse_memory_target(args["target"].as_str());
+            let target = parse_memory_target(args["target"].as_str())?;
             memory.handle_memory_remove(text, target)
         }
         "session_search" => {
@@ -375,5 +403,78 @@ pub fn dispatch_memory_tool(
             memory.handle_session_search(query, limit)
         }
         _ => anyhow::bail!("未知记忆工具: {name}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn for_agent_opens_stores_with_config_limits() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            "memory:\n  memory_char_limit: 80\n  user_char_limit: 60\n",
+        )
+        .unwrap();
+        let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
+        assert_eq!(mgr.config.memory_char_limit, 80);
+        assert_eq!(mgr.config.user_char_limit, 60);
+
+        // 超限应报错（验证 store 使用了配置上限；模板可能已占用部分配额）
+        let long = "x".repeat(100);
+        let err = mgr.memory.add(&long).unwrap_err().to_string();
+        assert!(
+            err.contains("上限") || err.contains("limit") || err.contains("字符"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn prompt_snapshot_respects_enabled_flags_and_truncates_daily() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+memory:
+  memory_enabled: false
+  user_profile_enabled: true
+  daily_prompt_max_chars: 10
+"#,
+        )
+        .unwrap();
+        let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
+        mgr.memory.add("alpha-entry").unwrap();
+        mgr.user.add("prefer-dark-mode").unwrap();
+        // live 写入不会自动进 snapshot；reload 后 snapshot 跟上
+        mgr.refresh_memory_snapshot().unwrap();
+
+        mgr.append_daily("0123456789ABCDEF", None).unwrap();
+
+        let (mem, user, daily) = mgr.prompt_snapshot_with_daily();
+        assert!(mem.is_empty(), "memory_enabled=false → empty mem");
+        assert!(user.contains("prefer-dark-mode") || !user.is_empty());
+        assert_eq!(daily.chars().count(), 10);
+        assert!(!daily.contains('A') || daily.chars().count() == 10);
+    }
+
+    #[test]
+    fn parse_daily_target_errors() {
+        let err = parse_memory_target(Some("daily")).unwrap_err().to_string();
+        assert!(err.contains("日记"));
+        assert!(matches!(
+            parse_memory_target(Some("project")).unwrap(),
+            MemoryTarget::Memory
+        ));
+        assert!(matches!(
+            parse_memory_target(Some("memory")).unwrap(),
+            MemoryTarget::Memory
+        ));
+        assert!(matches!(
+            parse_memory_target(Some("user")).unwrap(),
+            MemoryTarget::User
+        ));
     }
 }
