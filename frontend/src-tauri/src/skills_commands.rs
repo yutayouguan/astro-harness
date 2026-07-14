@@ -98,7 +98,9 @@ pub async fn install_store_skill(
     agent_id: Option<String>,
 ) -> Result<String, String> {
     let agent = normalize_agent_id(agent_id);
-    install_from_ref(&install_ref, agent.as_deref()).map_err(|e| e.to_string())
+    install_from_ref(&install_ref, agent.as_deref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：get_skill_content。

@@ -58,11 +58,13 @@ fn map_skillhub(s: SkillHubSkill) -> StoreSkill {
         .unwrap_or_default();
     let owner = s.owner_name.unwrap_or_else(|| "unknown".into());
     let slug = s.slug.clone();
-    let install_ref = s
-        .upstream_url
-        .clone()
-        .or(s.homepage.clone())
-        .unwrap_or_else(|| format!("skillhub:{owner}/{slug}"));
+    // 勿用 homepage（api.skillhub.cn/...）：那不是可安装引用，会导致 CLI 安装必失败。
+    let install_ref = match s.upstream_url.filter(|u| !u.trim().is_empty()) {
+        Some(url) if url.contains("github.com/") => url,
+        Some(url) if url.contains("clawhub") => clawhub_install_ref(&url)
+            .unwrap_or_else(|| format!("skillhub:{owner}/{slug}")),
+        _ => format!("skillhub:{owner}/{slug}"),
+    };
     StoreSkill {
         id: format!("skillhub:{owner}/{slug}"),
         name: s.name,
@@ -73,6 +75,19 @@ fn map_skillhub(s: SkillHubSkill) -> StoreSkill {
         install_ref,
         homepage: s.homepage,
     }
+}
+
+/// `https://clawhub.ai/owner/slug` → `clawhub:owner--slug`
+fn clawhub_install_ref(url: &str) -> Option<String> {
+    let path = url
+        .split("clawhub.ai/")
+        .nth(1)
+        .or_else(|| url.split("clawhub.com/").nth(1))?
+        .trim_matches('/');
+    let mut parts = path.split('/').filter(|p| !p.is_empty());
+    let owner = parts.next()?;
+    let slug = parts.next()?;
+    Some(format!("clawhub:{owner}--{slug}"))
 }
 
 async fn fetch_skillhub(query: &str, limit: usize, page: usize) -> Result<Vec<StoreSkill>> {
@@ -132,7 +147,8 @@ fn parse_skills_sh_html(html: &str, query: &str) -> Vec<StoreSkill> {
             source: source.clone(),
             store: "skillsdotsh".into(),
             installs: Some(installs),
-            install_ref: source.clone(),
+            // package 可能含 `/`（如 vercel-labs/skills），附带 skill 名供非交互安装
+            install_ref: format!("skillsdotsh:{source}/{slug}"),
             homepage: Some(format!("https://skills.sh/{source}/{slug}")),
         });
     }
@@ -227,4 +243,47 @@ pub async fn fetch_detail(skill: &StoreSkill) -> Result<StoreSkillDetail> {
         owner_name: None,
         verified: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skillhub_install_ref_prefers_skillhub_prefix_over_homepage() {
+        let s = SkillHubSkill {
+            name: "web-tools-guide".into(),
+            slug: "web-tools-guide".into(),
+            description: None,
+            description_zh: Some("desc".into()),
+            source: Some("community".into()),
+            owner_name: Some("user_x".into()),
+            installs: Some(1),
+            downloads: None,
+            homepage: Some("https://api.skillhub.cn/user_x/web-tools-guide".into()),
+            upstream_url: None,
+        };
+        let mapped = map_skillhub(s);
+        assert_eq!(mapped.install_ref, "skillhub:user_x/web-tools-guide");
+        assert!(!mapped.install_ref.contains("api.skillhub.cn"));
+    }
+
+    #[test]
+    fn clawhub_url_to_install_ref() {
+        assert_eq!(
+            clawhub_install_ref("https://clawhub.ai/guipi888/find-skills").as_deref(),
+            Some("clawhub:guipi888--find-skills")
+        );
+    }
+
+    #[test]
+    fn skills_sh_install_ref_includes_skill_id() {
+        let html = r#"\"source\":\"vercel-labs/skills\",\"skillId\":\"find-skills\",\"name\":\"find-skills\",\"installs\":1"#;
+        let list = parse_skills_sh_html(html, "");
+        assert_eq!(list.len(), 1);
+        assert_eq!(
+            list[0].install_ref,
+            "skillsdotsh:vercel-labs/skills/find-skills"
+        );
+    }
 }

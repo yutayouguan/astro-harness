@@ -35,9 +35,11 @@ export function storeInstallCommand(skill: StoreSkill): string {
 
   if (skill.store === "skillhub") {
     const slug = skillhubSlug(skill);
+    const installHint = skill.install_ref || `skillhub:${slug}`;
+    // 一键安装由 Astro 走 api.skillhub.cn 文件 API；提示给 Agent 时仍给可操作引用
     return (
-      `请按 SkillHub 文档安装技能「${skill.name}」\n` +
-      `- 安装引用：${skill.install_ref || slug}\n` +
+      `请帮我安装 SkillHub 技能「${skill.name}」\n` +
+      `- 安装引用：${installHint}\n` +
       `- 文档：${SKILLHUB_INSTALL_DOC}\n` +
       (skill.homepage ? `- 主页：${skill.homepage}\n` : "")
     );

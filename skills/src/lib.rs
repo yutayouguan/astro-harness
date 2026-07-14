@@ -5,7 +5,7 @@
 //! ├── models             DTO 与商店筛选
 //! ├── installed          扫描 SKILL.md、启用状态
 //! ├── store              SkillHub API、skills.sh 爬虫
-//! ├── install            npx skills add
+//! ├── install            SkillHub HTTP / npx skills add
 //! ├── skill / registry   运行时 LoadedSkill
 //! ```
 

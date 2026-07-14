@@ -132,3 +132,32 @@ fn rejects_deferred_modal() {
     let err = validate_operations(ops.as_array().unwrap()).unwrap_err();
     assert!(err.to_string().contains("Modal"));
 }
+
+#[test]
+fn delete_surface_requires_surface_id() {
+    let ops = serde_json::json!([{
+        "version": "v0.9",
+        "deleteSurface": {}
+    }]);
+    let err = validate_operations(ops.as_array().unwrap()).unwrap_err();
+    assert!(err.to_string().contains("surfaceId"));
+}
+
+#[test]
+fn delete_surface_rejects_empty_id() {
+    let ops = serde_json::json!([{
+        "version": "v0.9",
+        "deleteSurface": { "surfaceId": "" }
+    }]);
+    let err = validate_operations(ops.as_array().unwrap()).unwrap_err();
+    assert!(err.to_string().contains("surfaceId"));
+}
+
+#[test]
+fn delete_surface_accepts_valid_id() {
+    let ops = serde_json::json!([{
+        "version": "v0.9",
+        "deleteSurface": { "surfaceId": "my-surface" }
+    }]);
+    validate_operations(ops.as_array().unwrap()).unwrap();
+}

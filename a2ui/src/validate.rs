@@ -71,6 +71,15 @@ pub fn validate_operations(ops: &[Value]) -> Result<(), Error> {
                 }
             }
         }
+
+        if let Some(delete) = obj.get("deleteSurface") {
+            let sid = delete.get("surfaceId").and_then(|v| v.as_str());
+            if sid.map(|s| s.is_empty()).unwrap_or(true) {
+                return Err(Error::InvalidStructure(
+                    "deleteSurface.surfaceId must be a non-empty string",
+                ));
+            }
+        }
     }
     Ok(())
 }
