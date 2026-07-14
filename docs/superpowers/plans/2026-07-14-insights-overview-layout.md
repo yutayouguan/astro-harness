@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-14-insights-overview-layout-design.md`
 
+> **Plan status:** Completed on `main`（2026-07-14）。实现已落地；后续 polish（趋势空态 + `InsightsTrendChart` 抽取）同批收尾。
+
 ---
 
 ## File map

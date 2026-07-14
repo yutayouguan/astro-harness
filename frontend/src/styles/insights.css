@@ -1173,3 +1173,8 @@ html.dark .insights-collab-label {
 .insights-more-btn:hover {
   background: color-mix(in srgb, var(--tone) 12%, transparent);
 }
+
+.insights-more-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 55%, transparent);
+  outline-offset: 2px;
+}

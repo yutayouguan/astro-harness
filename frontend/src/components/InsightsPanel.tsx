@@ -397,6 +397,78 @@ function CollabGraphSvg({
   );
 }
 
+function InsightsTrendChart({
+  title,
+  series,
+  metric,
+  onMetricChange,
+  maxVal,
+  period,
+  locale,
+  emptyMessage,
+  t,
+}: {
+  title: string;
+  series: UsageInsights["series"];
+  metric: Metric;
+  onMetricChange: (m: Metric) => void;
+  maxVal: number;
+  period: Period;
+  locale: Locale;
+  emptyMessage: string;
+  t: (key: MessageKey) => string;
+}) {
+  return (
+    <div className="insights-chart-wrap insights-models-chart">
+      <div className="insights-chart-heading">
+        <div className="insights-chart-heading-label">
+          <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
+          <span>{title}</span>
+        </div>
+        <div className="insights-metric-tabs" role="tablist">
+          {METRIC_TABS.map(({ id, labelKey }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              className={`insights-metric-tab${metric === id ? " active" : ""}`}
+              aria-selected={metric === id}
+              onClick={() => onMetricChange(id)}
+            >
+              {t(labelKey)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {series.length > 0 ? (
+        <div className="insights-chart" aria-label={`${metric} trend`}>
+          {series.map((s) => (
+            <div
+              key={s.bucket}
+              className="insights-bar-col"
+              title={formatSeriesTip(s, metric)}
+            >
+              <div
+                className="insights-bar"
+                style={{
+                  height: `${(seriesValue(s, metric) / maxVal) * 100}%`,
+                }}
+              />
+              <span className="insights-bar-label">
+                {formatBucketLabel(s.bucket, period, locale)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="insights-panel-empty insights-chart-empty">
+          <p>{emptyMessage}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function InsightsPanel({ active }: { active: boolean }) {
   const { t, locale } = useI18n();
   const [view, setView] = useState<ViewMode>(DEFAULT_INSIGHTS_VIEW);
@@ -731,51 +803,17 @@ export default function InsightsPanel({ active }: { active: boolean }) {
           </div>
 
           <div className="insights-overview-grid">
-            <div className="insights-chart-wrap insights-models-chart">
-              <div className="insights-chart-heading">
-                <div className="insights-chart-heading-label">
-                  <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
-                  <span>{t("insights.chart.usageTrend")}</span>
-                </div>
-                <div className="insights-metric-tabs" role="tablist">
-                  {METRIC_TABS.map(({ id, labelKey }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      className={`insights-metric-tab${metric === id ? " active" : ""}`}
-                      aria-selected={metric === id}
-                      onClick={() => setMetric(id)}
-                    >
-                      {t(labelKey)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {data.series.length > 0 ? (
-                <div className="insights-chart" aria-label={`${metric} trend`}>
-                  {data.series.map((s) => (
-                    <div
-                      key={s.bucket}
-                      className="insights-bar-col"
-                      title={formatSeriesTip(s, metric)}
-                    >
-                      <div
-                        className="insights-bar"
-                        style={{
-                          height: `${(seriesValue(s, metric) / maxVal) * 100}%`,
-                        }}
-                      />
-                      <span className="insights-bar-label">
-                        {formatBucketLabel(s.bucket, period, locale)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="insights-panel-empty insights-chart-empty" />
-              )}
-            </div>
+            <InsightsTrendChart
+              title={t("insights.chart.usageTrend")}
+              series={data.series}
+              metric={metric}
+              onMetricChange={setMetric}
+              maxVal={maxVal}
+              period={period}
+              locale={locale}
+              emptyMessage={t("insights.chart.empty")}
+              t={t}
+            />
 
             <section className="insights-hbar-panel">
               <div className="insights-rank-title-row">
