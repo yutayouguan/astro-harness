@@ -2,7 +2,7 @@
 import type { ComponentType, SVGProps } from "react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
-import { IllustEmptyChat } from "../illustrations/art";
+import { EmptyIllustration } from "../illustrations";
 import {
   SolidBolt,
   SolidChat,
@@ -70,7 +70,7 @@ export function ChatWelcome({ onPickCard }: Props) {
         <span className="chat-welcome-orb" />
         <span className="chat-welcome-orb chat-welcome-orb--soft" />
         <div className="chat-welcome-illust">
-          <IllustEmptyChat />
+          <EmptyIllustration scene="chat" size="lg" className="chat-welcome-empty" />
         </div>
       </div>
       <div className="chat-welcome-copy">
