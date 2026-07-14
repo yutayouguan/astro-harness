@@ -77,7 +77,6 @@ import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
-import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
 import { formatElapsedSec } from "../lib/elapsedSec";
 import {
@@ -90,24 +89,6 @@ import {
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
-/** 流式回合实时墙钟（Hermes TUI 风格） */
-function MsgGenerationTimer({
-  startedAtMs,
-  active,
-}: {
-  startedAtMs: number;
-  active: boolean;
-}) {
-  const { t } = useI18n();
-  const liveSec = useLiveElapsedSec(active, startedAtMs);
-  if (!active || liveSec == null) return null;
-  return (
-    <div className="msg-gen-timer" aria-live="polite">
-      {t("chat.generatingWithTime", { s: formatElapsedSec(liveSec) })}
-    </div>
-  );
 }
 
 /** 单条消息底部的 token 用量、回合耗时与生成速度 */
@@ -1204,15 +1185,6 @@ export default function ChatView({
                           />
                         )
                       )}
-                      {m.role === "assistant" &&
-                      isStreamingBubble &&
-                      !reasoningActive &&
-                      m.generationStartedAt ? (
-                        <MsgGenerationTimer
-                          startedAtMs={m.generationStartedAt}
-                          active
-                        />
-                      ) : null}
                       {m.role === "assistant" &&
                       !isStreamingBubble &&
                       (m.usage || m.generationDurationSec) ? (

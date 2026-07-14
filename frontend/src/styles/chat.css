@@ -240,36 +240,6 @@
   border-left: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
-.msg-gen-timer {
-  position: relative;
-  align-self: flex-start;
-  display: inline-block;
-  margin-top: 8px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  user-select: none;
-  color: color-mix(in srgb, var(--tone, #60a5fa) 35%, var(--ink-mute));
-  overflow: hidden;
-}
-
-.msg-gen-timer::before {
-  content: "";
-  position: absolute;
-  inset: -20% -40%;
-  background: linear-gradient(
-    105deg,
-    transparent 42%,
-    color-mix(in srgb, #fff 52%, transparent) 50%,
-    transparent 58%
-  );
-  background-size: 220% 100%;
-  background-repeat: no-repeat;
-  animation: msg-text-sheen 2.4s linear infinite;
-  pointer-events: none;
-  mix-blend-mode: soft-light;
-}
-
 html[data-theme="dark"] .msg-token-stats {
   color: color-mix(in srgb, var(--ink-mute) 92%, #fff);
   border-color: rgba(255, 255, 255, 0.1);
@@ -1092,14 +1062,12 @@ html[data-theme="light"] .a2ui-surface {
   .msg-activity.is-running .msg-activity-kind-icon,
   .msg-activity.is-running .msg-activity-title::after,
   .msg-reasoning.is-active .msg-reasoning-label::before,
-  .msg-activity.is-running .msg-activity-title::before,
-  .msg-gen-timer::before {
+  .msg-activity.is-running .msg-activity-title::before {
     animation: none !important;
   }
 
   .msg-reasoning.is-active .msg-reasoning-label::before,
-  .msg-activity.is-running .msg-activity-title::before,
-  .msg-gen-timer::before {
+  .msg-activity.is-running .msg-activity-title::before {
     display: none;
   }
 
