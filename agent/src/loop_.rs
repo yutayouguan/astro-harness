@@ -686,6 +686,7 @@ impl AgentLoop {
             ::hooks::PRE_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
+                turn_id: self.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args.clone()),
                 detail: format!("{name} {args}"),
@@ -710,6 +711,7 @@ impl AgentLoop {
             ::hooks::POST_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
+                turn_id: self.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_result: Some(result.clone()),
                 detail: {
@@ -753,6 +755,7 @@ impl AgentLoop {
                 ::hooks::SUBAGENT_STOP,
                 ::hooks::HookPayload {
                     session_id: child.into(),
+                    turn_id: self.current_turn_id.clone(),
                     detail: summary.chars().take(200).collect(),
                     ..Default::default()
                 },
@@ -877,6 +880,7 @@ impl AgentLoop {
             ::hooks::ON_SESSION_START,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
+                turn_id: self.current_turn_id.clone(),
                 detail: format!("session={}", self.session_id),
                 ..Default::default()
             },
@@ -885,6 +889,7 @@ impl AgentLoop {
             ::hooks::PRE_LLM_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
+                turn_id: self.current_turn_id.clone(),
                 system_prompt_chars: Some(system_prompt.len()),
                 detail: format!("system_prompt_chars={}", system_prompt.len()),
                 ..Default::default()

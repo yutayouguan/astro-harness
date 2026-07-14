@@ -667,10 +667,12 @@ async fn run_multi_turn_stream_inner(
         {
             let agent = session.lock().await;
             let sid = agent.session_id().to_string();
+            let turn_id = agent.current_turn_id().map(str::to_string);
             let _ = agent.fire_hook(
                 ::hooks::PRE_API_REQUEST,
                 ::hooks::HookPayload {
                     session_id: sid,
+                    turn_id,
                     ..Default::default()
                 },
             );
@@ -683,10 +685,12 @@ async fn run_multi_turn_stream_inner(
             Ok(s) => {
                 let agent = session.lock().await;
                 let sid = agent.session_id().to_string();
+                let turn_id = agent.current_turn_id().map(str::to_string);
                 let _ = agent.fire_hook(
                     ::hooks::POST_API_REQUEST,
                     ::hooks::HookPayload {
                         session_id: sid,
+                        turn_id,
                         ..Default::default()
                     },
                 );
@@ -696,10 +700,12 @@ async fn run_multi_turn_stream_inner(
             Err(err) => {
                 let agent = session.lock().await;
                 let sid = agent.session_id().to_string();
+                let turn_id = agent.current_turn_id().map(str::to_string);
                 let _ = agent.fire_hook(
                     ::hooks::POST_API_REQUEST,
                     ::hooks::HookPayload {
                         session_id: sid,
+                        turn_id,
                         error: Some(err.to_string()),
                         detail: format!("error={err}"),
                         ..Default::default()
@@ -872,10 +878,12 @@ async fn run_multi_turn_stream_inner(
         {
             let agent = session.lock().await;
             let sid = agent.session_id().to_string();
+            let turn_id = agent.current_turn_id().map(str::to_string);
             let _ = agent.fire_hook(
                 ::hooks::POST_LLM_CALL,
                 ::hooks::HookPayload {
                     session_id: sid,
+                    turn_id,
                     assistant_chars: Some(full_response.len()),
                     detail: format!("assistant_chars={}", full_response.len()),
                     ..Default::default()
@@ -1093,10 +1101,12 @@ async fn run_multi_turn_stream_inner(
         let agent = session.lock().await;
         let sid = agent.session_id().to_string();
         let turn = agent.session_turn();
+        let turn_id = agent.current_turn_id().map(str::to_string);
         let _ = agent.fire_hook(
             ::hooks::ON_SESSION_END,
             ::hooks::HookPayload {
                 session_id: sid,
+                turn_id,
                 turn: Some(turn),
                 detail: format!("turn={turn}"),
                 ..Default::default()
