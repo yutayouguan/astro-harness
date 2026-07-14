@@ -31,6 +31,7 @@ export type SlashAction =
   | "nav_providers"
   | "nav_settings"
   | "open_context"
+  | "compact"
   | "insert_skill";
 
 /** 内置斜杠命令定义 */
@@ -192,6 +193,13 @@ export const BUILTIN_SLASH_COMMANDS: BuiltinSlashCommand[] = [
     descKey: "chat.slashContext",
     action: "open_context",
     icon: "▣",
+  },
+  {
+    name: "compact",
+    aliases: ["compress"],
+    descKey: "chat.slashCompact",
+    action: "compact",
+    icon: "↯",
   },
 ];
 

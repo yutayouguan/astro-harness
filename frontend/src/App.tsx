@@ -363,6 +363,8 @@ export default function App() {
   const zoomingRef = useRef(false);
   /** 避免恢复过程中把空欢迎页写回覆盖已存会话 */
   const restoringRef = useRef(false);
+  /** 上次成功压实时间（Task 6 冷却用） */
+  const lastCompactAtRef = useRef(0);
   /** 编辑/再生后下次 start_chat 应截断 DB 到的气泡数；普通发送为 null */
   const pendingKeepChatBubblesRef = useRef<number | null>(null);
   /** 流式 token / reasoning 按帧合并，避免同 tick 批量 setState 导致整段弹出 */
@@ -1950,6 +1952,74 @@ export default function App() {
     ],
   );
 
+  /** 压实：摘要旧会话并切换到含摘要+尾部的新会话 */
+  const runCompactSession = useCallback(async () => {
+    if (streaming) {
+      showTransientToast(t("chat.compactBlockedStreaming"));
+      return;
+    }
+    if (sessionPendingInterrupts.length > 0) {
+      showTransientToast(t("chat.compactBlockedInterrupt"));
+      return;
+    }
+    if (!sessionId) {
+      showTransientToast(t("chat.compactFailed", { error: "no session" }));
+      return;
+    }
+    try {
+      const res = await invoke<{
+        newSessionId: string;
+        summaryPreview: string;
+        degraded: boolean;
+      }>("compact_chat_session", {
+        sessionId,
+        keepTailBubbles: 3,
+        focus: null,
+      });
+      const history = await invoke<ChatHistoryDto>("get_chat_history", {
+        sessionId: res.newSessionId,
+        limit: 200,
+      });
+      const restored = mapHistoryMessages(history.messages ?? []);
+
+      unlistenRef.current?.();
+      unlistenRef.current = null;
+      clearStreamBuffers();
+      setStreaming(false);
+      setStreamPaused(false);
+      setFocusMessageId(null);
+      currentRunIdRef.current = null;
+      setCurrentTurnId(null);
+
+      if (!applyRestoredHistory(res.newSessionId, restored)) {
+        setSessionPendingInterrupts([]);
+        setSessionId(res.newSessionId);
+        setMessages(restored);
+        setEmptyMode(null);
+        saveChatSession(res.newSessionId, restored, []);
+      }
+
+      lastCompactAtRef.current = Date.now();
+      showTransientToast(
+        res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
+      );
+    } catch (e) {
+      showTransientToast(
+        t("chat.compactFailed", {
+          error: e instanceof Error ? e.message : String(e ?? "error"),
+        }),
+      );
+    }
+  }, [
+    streaming,
+    sessionPendingInterrupts,
+    sessionId,
+    clearStreamBuffers,
+    applyRestoredHistory,
+    showTransientToast,
+    t,
+  ]);
+
   /** 撤销最近一轮 user + 紧随的 assistant */
   const undoLastExchange = useCallback(() => {
     if (streaming) return;
@@ -2186,6 +2256,9 @@ export default function App() {
         case "new_chat":
           startNewChat();
           break;
+        case "compact":
+          void runCompactSession();
+          break;
         case "undo":
           undoLastExchange();
           break;
@@ -2388,6 +2461,7 @@ export default function App() {
       undoLastExchange,
       retryLastAssistant,
       stopStream,
+      runCompactSession,
       tokenUsage,
       sessionId,
       activeProvider,
