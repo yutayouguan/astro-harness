@@ -424,6 +424,7 @@ async fn record_llm_usage(
     let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
     let session_id = agent.session_id().to_string();
+    let turn_id = agent.current_turn_id().map(str::to_string);
     let fallback_provider = agent.chat_provider().to_string();
     let fallback_base_url = agent.chat_base_url().to_string();
     let fallback_api_key = agent.chat_api_key().to_string();
@@ -449,6 +450,7 @@ async fn record_llm_usage(
     apply_llm_usage_dual_write(
         &agent_id,
         Some(&session_id),
+        turn_id.as_deref(),
         &model,
         usage,
         &provider,
@@ -534,6 +536,12 @@ pub async fn run_multi_turn_stream(
         agent.session_id().to_string()
     };
     let run_id = uuid::Uuid::new_v4().to_string();
+    let turn_id = run_id.clone();
+    {
+        let mut agent = session.lock().await;
+        agent.set_current_turn_id(turn_id.clone());
+    }
+    tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn started");
     if let Some(ref gate) = hitl_gate {
         register_live_parent_hitl(
             &session_id,
@@ -546,7 +554,7 @@ pub async fn run_multi_turn_stream(
         .await;
     }
     run_multi_turn_stream_inner(
-        session,
+        session.clone(),
         targets,
         registry,
         base_config,
@@ -555,9 +563,14 @@ pub async fn run_multi_turn_stream(
         hitl_gate,
         tx,
         session_id.clone(),
-        run_id,
+        run_id.clone(),
     )
     .await;
+    {
+        let mut agent = session.lock().await;
+        agent.clear_current_turn_id();
+    }
+    tracing::info!(session_id = %session_id, turn_id = %run_id, "turn finished");
     unregister_live_parent_hitl(&session_id).await;
 }
 
