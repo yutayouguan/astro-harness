@@ -1645,11 +1645,51 @@ export default function App() {
       if (!activeProvider || sessionPendingInterrupts.length === 0) {
         return;
       }
+      const isLocationHitl = sessionPendingInterrupts.some(
+        (p) => p.reason === "location_required",
+      );
+
       let payload: Record<string, unknown>;
-      if (name === "approve") {
+      if (name === "share_location") {
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.geolocation?.getCurrentPosition
+        ) {
+          setToastMsg(t("chat.location.geoUnavailable"));
+          setToastVisible(true);
+          return;
+        }
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 15_000,
+              maximumAge: 60_000,
+            });
+          });
+          payload = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy_m: pos.coords.accuracy,
+          };
+        } catch {
+          setToastMsg(t("chat.location.geoFailed"));
+          setToastVisible(true);
+          return;
+        }
+      } else if (name === "choose_city") {
+        const cityRaw = context.city;
+        const city = typeof cityRaw === "string" ? cityRaw.trim() : "";
+        if (!city) {
+          setToastMsg(t("chat.location.cityRequired"));
+          setToastVisible(true);
+          return;
+        }
+        payload = { city };
+      } else if (name === "approve") {
         payload = { approved: true };
       } else if (name === "deny") {
-        payload = { approved: false };
+        payload = isLocationHitl ? { denied: true } : { approved: false };
       } else if (name === "choose") {
         const value = context.value;
         if (typeof value !== "string" || !value.trim()) return;
