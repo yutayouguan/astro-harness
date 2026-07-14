@@ -95,6 +95,21 @@ message UsageEvent {
   uint32 total_tokens = 3;
 }
 
+// 上下文占用分层片段（count=0 表示未设置）。
+message ContextUsageSegment {
+  string id = 1;
+  uint32 tokens = 2;
+  uint32 count = 3;
+}
+
+// 本轮 API 请求前的上下文占用估算。
+message ContextUsageEvent {
+  uint32 context_window = 1;
+  uint32 total_tokens = 2;
+  repeated ContextUsageSegment segments = 3;
+  int64 updated_at = 4;
+}
+
 // Chat 流的单条事件（oneof 互斥）。
 message ChatEvent {
   oneof payload {
@@ -114,6 +129,7 @@ message ChatEvent {
     RunFinishedEvent run_finished = 11;
     // Plugin / Gateway / Shell 生命周期钩子（非 memory）
     HookEvent hook = 12;
+    ContextUsageEvent context_usage = 13;
   }
 }
 
