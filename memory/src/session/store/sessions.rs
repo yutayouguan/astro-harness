@@ -63,6 +63,33 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 标记会话结束（幂等：已 ended 且 reason 相同则 Ok）。
+    pub fn end_session(&self, id: &str, end_reason: &str) -> Result<()> {
+        if self.get_session(id)?.is_none() {
+            anyhow::bail!("end_session: session not found");
+        }
+        let ended_at = now_epoch_secs()?;
+        self.conn.execute(
+            "UPDATE sessions SET ended_at = ?1, end_reason = ?2 WHERE id = ?3",
+            params![ended_at, end_reason, id],
+        )?;
+        Ok(())
+    }
+
+    /// 会话存在且未结束。
+    pub fn assert_session_writable(&self, id: &str) -> Result<()> {
+        let Some(s) = self.get_session(id)? else {
+            anyhow::bail!("assert_session_writable: session not found");
+        };
+        if s.ended_at.is_some() {
+            anyhow::bail!(
+                "assert_session_writable: session ended ({})",
+                s.end_reason.unwrap_or_else(|| "unknown".into())
+            );
+        }
+        Ok(())
+    }
+
     /// 设置会话标题；空字符串清为 `NULL`。
     ///
     /// 若命中 `title` 唯一索引，则追加短 session id 后缀以保证可写入。

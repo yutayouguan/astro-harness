@@ -776,3 +776,34 @@ fn remove_chat_bubbles_splices_middle_user_and_tools() {
     assert_eq!(meta.message_count, 4);
     assert_eq!(meta.tool_call_count, 1);
 }
+
+#[test]
+fn end_session_sets_ended_at_and_reason() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("s1", "test", Some("gpt"), None, None)
+        .unwrap();
+    store.end_session("s1", "compacted").unwrap();
+    let row = store.get_session("s1").unwrap().unwrap();
+    assert!(row.ended_at.is_some());
+    assert_eq!(row.end_reason.as_deref(), Some("compacted"));
+}
+
+#[test]
+fn append_message_rejects_ended_session() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store.create_session("s1", "test", None, None, None).unwrap();
+    store.end_session("s1", "compacted").unwrap();
+    let err = store
+        .append_message(NewMessage {
+            content: Some("x"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("ended") || err.to_string().contains("writable"),
+        "{err}"
+    );
+}

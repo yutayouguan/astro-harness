@@ -9,6 +9,7 @@ use super::{json_from_db, json_to_db, now_epoch_secs, NewMessage, SessionStore, 
 impl SessionStore {
     /// 追加一条富消息，并递增 `sessions.message_count`（`role=tool` 时同时 `tool_call_count++`）。
     pub fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        self.assert_session_writable(msg.session_id)?;
         let timestamp = now_epoch_secs()?;
         let tool_calls = json_to_db(&msg.tool_calls)?;
         let reasoning_details = json_to_db(&msg.reasoning_details)?;
