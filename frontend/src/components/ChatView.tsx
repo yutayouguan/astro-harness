@@ -51,6 +51,7 @@ import {
   CHAT_MODES,
   type ChatInteractionMode,
 } from "../lib/chatMode";
+import type { ContextUsageSnapshot } from "../lib/contextUsage";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../lib/thinkingPrefs";
 import type {
   ChatActivity,
@@ -72,6 +73,7 @@ import {
   type PaletteKind,
 } from "./ComposerPalette";
 import ComposerMcpMenu from "./ComposerMcpMenu";
+import ContextUsagePopover from "./ContextUsagePopover";
 import McpIcon from "./McpIcon";
 import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
@@ -206,6 +208,10 @@ type Props = {
   onOpenContext: () => void;
   /** 简易上下文占用 0–100，用于按钮提示 */
   contextUsagePercent?: number | null;
+  /** 本轮上下文分层占用快照；无则浮层空态 */
+  contextUsage?: ContextUsageSnapshot | null;
+  /** 模型上下文窗口（tokens），默认 128K */
+  contextWindow?: number;
   /** 重新生成该条 assistant 回复（基于前一条 user） */
   onRegenerateMessage?: (messageId: string) => void;
   /** 编辑用户消息并重发（内容填回输入框，截断该条及之后） */
@@ -522,6 +528,8 @@ export default function ChatView({
   onChatModeChange,
   onOpenContext,
   contextUsagePercent = null,
+  contextUsage = null,
+  contextWindow = 128_000,
   onRegenerateMessage,
   onEditUserMessage,
   dissolvingIds = [],
@@ -536,7 +544,9 @@ export default function ChatView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
+  const contextWrapRef = useRef<HTMLDivElement>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -696,6 +706,7 @@ export default function ChatView({
   const openThinkingPalette = useCallback(() => {
     setMcpOpen(false);
     setModeMenuOpen(false);
+    setContextPopoverOpen(false);
     setPaletteKind((k) => (k === "thinking" ? null : "thinking"));
     setPaletteQuery("");
     setPaletteIndex(
@@ -1351,6 +1362,7 @@ export default function ChatView({
                   title={t("chat.modeMenu")}
                   onClick={() => {
                     setMcpOpen(false);
+                    setContextPopoverOpen(false);
                     setModeMenuOpen((o) => !o);
                   }}
                 >
@@ -1432,6 +1444,7 @@ export default function ChatView({
                   onClick={() => {
                     setModeMenuOpen(false);
                     setPaletteKind(null);
+                    setContextPopoverOpen(false);
                     setMcpOpen((v) => !v);
                   }}
                 >
@@ -1454,6 +1467,7 @@ export default function ChatView({
                 aria-label={t("chat.mentionTitle")}
                 onClick={() => {
                   setMcpOpen(false);
+                  setContextPopoverOpen(false);
                   const el = textareaRef.current;
                   const caret = el?.selectionStart ?? input.length;
                   const next = `${input.slice(0, caret)}@${input.slice(caret)}`;
@@ -1479,6 +1493,7 @@ export default function ChatView({
                 aria-label={t("chat.slashTitle")}
                 onClick={() => {
                   setMcpOpen(false);
+                  setContextPopoverOpen(false);
                   const el = textareaRef.current;
                   const caret = el?.selectionStart ?? input.length;
                   const next = `${input.slice(0, caret)}/${input.slice(caret)}`;
@@ -1498,23 +1513,45 @@ export default function ChatView({
             </div>
 
             <div className="composer-bar-right">
-              <button
-                type="button"
-                className="composer-icon-btn composer-context-btn"
-                disabled={streaming}
-                title={
-                  contextUsagePercent != null
-                    ? `${t("chat.contextUsage")} · ${contextUsagePercent}%`
-                    : t("chat.contextUsageHint")
-                }
-                aria-label={t("chat.contextUsage")}
-                onClick={onOpenContext}
-              >
-                <ChartPie size={17} strokeWidth={2} />
-                {contextUsagePercent != null ? (
-                  <span className="composer-context-pct">{contextUsagePercent}%</span>
-                ) : null}
-              </button>
+              <div className="composer-context-wrap" ref={contextWrapRef}>
+                <button
+                  type="button"
+                  className={`composer-icon-btn composer-context-btn ${
+                    contextPopoverOpen ? "is-open" : ""
+                  }`}
+                  disabled={streaming}
+                  title={
+                    contextUsagePercent != null
+                      ? `${t("chat.contextUsage")} · ${contextUsagePercent}%`
+                      : t("chat.contextUsageHint")
+                  }
+                  aria-label={t("chat.contextUsage")}
+                  aria-expanded={contextPopoverOpen}
+                  onClick={() => {
+                    setModeMenuOpen(false);
+                    setMcpOpen(false);
+                    setPaletteKind(null);
+                    setContextPopoverOpen((v) => !v);
+                  }}
+                >
+                  <ChartPie size={17} strokeWidth={2} />
+                  {contextUsagePercent != null ? (
+                    <span className="composer-context-pct">
+                      {contextUsagePercent}%
+                    </span>
+                  ) : null}
+                </button>
+                <ContextUsagePopover
+                  open={contextPopoverOpen}
+                  snapshot={contextUsage}
+                  windowTokens={contextWindow}
+                  containRef={contextWrapRef}
+                  onClose={() => setContextPopoverOpen(false)}
+                  onViewDetails={() => {
+                    onOpenContext();
+                  }}
+                />
+              </div>
               <button
                 type="button"
                 className="composer-icon-btn"
