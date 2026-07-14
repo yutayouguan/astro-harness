@@ -91,6 +91,23 @@ fn migrate_v3_to_v4_keeps_rows_and_adds_turn_id() {
 
     let db = memory::UsageDb::new(path.clone()).unwrap();
 
+    // idempotent reopen after v3→v4 migrate
+    let _db2 = memory::UsageDb::new(path.clone()).unwrap();
+    let _db3 = memory::UsageDb::new(path.clone()).unwrap();
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let ver: i32 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(ver, USAGE_SCHEMA_VERSION);
+    let old_turn: Option<String> = conn
+        .query_row(
+            "SELECT turn_id FROM usage_events WHERE id = 'old1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(old_turn, None);
+
     let id = db
         .insert(memory::NewUsageEvent {
             ts: "2026-07-14T00:00:00Z".into(),
@@ -138,6 +155,34 @@ fn migrate_v3_to_v4_keeps_rows_and_adds_turn_id() {
         )
         .unwrap();
     assert_eq!(old_ok, 1);
+}
+
+#[test]
+fn usage_db_rejects_newer_schema_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("usage.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE usage_events (
+                id TEXT PRIMARY KEY,
+                ts TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                name TEXT NOT NULL,
+                agent_id TEXT NOT NULL,
+                session_id TEXT,
+                turn_id TEXT
+            );
+            PRAGMA user_version = 5;
+            "#,
+        )
+        .unwrap();
+    }
+    let err = memory::UsageDb::new(path).err().expect("expected Err");
+    assert!(err
+        .to_string()
+        .contains("newer than supported"));
 }
 
 #[test]
