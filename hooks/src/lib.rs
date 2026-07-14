@@ -95,4 +95,30 @@ mod tests {
         assert_eq!(hits.load(Ordering::SeqCst), 0);
         let _ = rt.fire_plugin(ON_SESSION_RESET, &HookPayload::default());
     }
+
+    #[test]
+    fn pre_gateway_dispatch_skip_short_circuits() {
+        let rt = HookRuntime::new();
+        rt.plugin.register(PRE_GATEWAY_DISPATCH, |_| {
+            HookOutcome::Skip("blocked-by-test".into())
+        });
+        let out = rt.fire_plugin(
+            PRE_GATEWAY_DISPATCH,
+            &HookPayload {
+                message: Some("hello".into()),
+                ..Default::default()
+            },
+        );
+        assert!(matches!(out, HookOutcome::Skip(ref s) if s == "blocked-by-test"));
+    }
+
+    #[test]
+    fn pre_gateway_dispatch_rewrite() {
+        let rt = HookRuntime::new();
+        rt.plugin.register(PRE_GATEWAY_DISPATCH, |_| {
+            HookOutcome::Rewrite("rewritten".into())
+        });
+        let out = rt.fire_plugin(PRE_GATEWAY_DISPATCH, &HookPayload::default());
+        assert!(matches!(out, HookOutcome::Rewrite(ref s) if s == "rewritten"));
+    }
 }

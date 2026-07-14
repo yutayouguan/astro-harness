@@ -144,7 +144,7 @@ hooks:
 | Crate / 模块 | 职责 |
 |--------------|------|
 | `hooks` | `PluginHookBus`、`GatewayHookRegistry`、`ShellHookRunner`、`HookRuntime` |
-| `agent::hooks` | `PromptHooks` trait、`ChannelHooks`、`RecordingHooks`、`CompositeHooks` |
+| `agent::hooks` | `PromptHooks` trait、`ChannelHooks`、`RecordingHooks`（观察推送）；可拦截走 `PluginHookBus` |
 | `backend` | 启动扫描、`pre_gateway_dispatch`、Gateway 事件、`new_chat` 卸会话 |
 | `permissions` | 危险命令检测与权限裁决（钩子已迁出） |
 
@@ -156,4 +156,6 @@ hooks:
 cargo test -p hooks
 cargo test -p agent --test streaming_test multi_turn_fires_post_llm_call
 cargo test -p agent --test rig_agent_test test_prompt_hooks_on_run_turn
+cargo test -p agent --test rig_agent_test pre_tool_call_block_via_hook_bus
+cargo test -p agent --test rig_agent_test pre_llm_call_inject_context_via_hook_bus
 ```

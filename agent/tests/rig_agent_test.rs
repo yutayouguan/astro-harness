@@ -154,6 +154,37 @@ async fn test_prompt_hooks_on_run_turn() {
 }
 
 #[tokio::test]
+async fn pre_tool_call_block_via_hook_bus() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let bus = agent.hook_bus();
+    bus.register(hooks::PRE_TOOL_CALL, |_| {
+        hooks::HookOutcome::Block("denied-by-test".into())
+    });
+    let out = agent
+        .handle_tool_call_async("echo", &serde_json::json!({"text": "hi"}))
+        .await
+        .unwrap();
+    assert!(
+        out.contains("blocked by hook") && out.contains("denied-by-test"),
+        "out={out}"
+    );
+}
+
+#[tokio::test]
+async fn pre_llm_call_inject_context_via_hook_bus() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let bus = agent.hook_bus();
+    bus.register(hooks::PRE_LLM_CALL, |_| {
+        hooks::HookOutcome::InjectContext("tz=Asia/Shanghai".into())
+    });
+    let _ = agent.run_turn("你好", "inject-test").await.unwrap();
+    let ctx = agent.take_inject_context();
+    assert_eq!(ctx.as_deref(), Some("tz=Asia/Shanghai"));
+}
+
+#[tokio::test]
 async fn test_agent_loop_memory_injection() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();

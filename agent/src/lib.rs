@@ -47,8 +47,8 @@ pub use builder::{AgentBuilder, BuiltAgentSpec};
 pub use context::{DynamicContext, StaticContext};
 /// 钩子 trait 与常用实现 re-export。
 pub use hooks::{
-    CancelSignal, ChannelHooks, CompositeHooks, HookEvent, NoopHooks, PromptCancelled,
-    PromptHooks, RecordingHooks,
+    CancelSignal, ChannelHooks, HookEvent, NoopHooks, PromptCancelled, PromptHooks,
+    RecordingHooks,
 };
 /// HITL 闸门 re-export。
 pub use hitl::{

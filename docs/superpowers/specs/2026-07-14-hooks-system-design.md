@@ -25,7 +25,7 @@
 | 插件形态 | Rust 进程内注册，无动态库 |
 | 可影响流程 | `pre_llm_call` 注入；`pre_tool_call` Block/Modify；`pre_gateway_dispatch` allow/skip/rewrite；其余观察 |
 | 配置根 | `~/.astro`（`ASTRO_MEMORY_DIR` 可覆盖） |
-| 旧代码 | `agent::PromptHooks` / `ChannelHooks` 迁移改名；`permissions::HookBus` 并入或薄转发后删除重复 |
+| 旧代码 | 已清理：`permissions` 钩子迁出；Agent 钩子名对齐 Hermes 风格 |
 
 ## 架构
 
@@ -120,16 +120,6 @@ on_session_start（仅首轮）
   → on_session_end
 ```
 
-### 与旧命名映射（迁移期）
-
-| 旧 `PromptHooks` / Channel kind | 新钩子名 |
-|--------------------------------|----------|
-| `on_prompt_build` / `hook:prompt_build` | `pre_llm_call`（prompt 观测并入；注入走 InjectContext） |
-| `on_completion` / `hook:completion` | `post_llm_call` |
-| `on_tool_call` / `hook:tool_call` | `pre_tool_call` |
-| `on_tool_result` / `hook:tool_result` | `post_tool_call` |
-| `on_turn_end` / `hook:turn_end` | `on_session_end`（单次 turn 结束；finalize/reset 另点） |
-
 ### `InjectContext` 语义
 
 - 仅影响**当前 turn** 送给模型的消息视图：在最新 user 消息后追加一段明确标记的上下文（实现时固定前缀 `[astro:hook-context]`）。  
@@ -139,7 +129,7 @@ on_session_start（仅首轮）
 
 - `Block(reason)`：不执行工具；向模型写入 tool result，内容为阻断说明。  
 - `Modify(args)`：用替换后的 JSON 执行。  
-- 多个钩子：按注册顺序；首个非 `Continue` 短路（与现 `permissions::HookBus` 一致）。
+- 多个钩子：按注册顺序；首个非 `Continue` 短路。
 
 ## Gateway Event Hooks
 
@@ -212,9 +202,9 @@ hooks:
 | P0 | `hooks` crate + PluginHookBus 改名接线 + UiTimeline + proto HookEvent + 前端 |
 | P1 | Gateway 发现 + startup/session/agent:end/new_chat + `pre_gateway_dispatch` |
 | P2 | Shell config + runner；`subagent_stop`；`docs/hooks.md` |
-| P3 | 清理 `PromptHooks` 旧 API、`permissions::HookBus` 重复、测试补齐 |
+| P3 | 清理重复 API、`permissions` 钩子迁出、测试补齐 | **已完成** |
 
-P0–P2 同一次交付目标；P3 可紧随。
+P0–P3 均已交付。
 
 ## 验收标准
 
