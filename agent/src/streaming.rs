@@ -1100,7 +1100,6 @@ async fn run_multi_turn_stream_inner(
     {
         let agent = session.lock().await;
         let sid = agent.session_id().to_string();
-        let turn_id = agent.current_turn_id().map(str::to_string);
         let turn = agent.session_turn();
         let turn_id = agent.current_turn_id().map(str::to_string);
         let _ = agent.fire_hook(
