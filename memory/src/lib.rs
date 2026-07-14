@@ -33,8 +33,8 @@ pub use agent::tools_enabled;
 pub use agent::workspace;
 
 pub use config::{
-    load_auxiliary_config, load_memory_config, resolve_auxiliary, AuxiliaryConfig, AuxiliaryKind,
-    AuxiliaryRoute, MemoryConfig,
+    load_auxiliary_config, load_memory_config, resolve_auxiliary, set_background_review_enabled,
+    set_write_approval, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute, MemoryConfig,
 };
 pub use pending::{
     approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,

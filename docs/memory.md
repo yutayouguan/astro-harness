@@ -67,10 +67,13 @@ auxiliary:
 - **日记** `append_daily` **不受**审批门禁
 - 批准经 `MemoryStore` / `handle_memory_op` 等价路径落盘；拒绝即删除 pending 文件。
 
-记忆面板有 **「审批」** 页：列表、批准 / 拒绝、刷新。Tauri 命令：
+记忆面板有 **「审批」** 页：开关、列表、批准 / 拒绝、刷新。批准后若有打开的聊天会话，会刷新该会话的 frozen snapshot。Tauri 命令：
 
 | 命令 | 作用 |
 |------|------|
+| `get_memory_settings` | 读取 `write_approval` / `background_review_enabled` |
+| `set_memory_write_approval(enabled)` | 写入 `memory.write_approval`（保留其它 yaml 键） |
+| `set_background_review_enabled(enabled)` | 写入 `auxiliary.background_review_enabled` |
 | `list_pending_memory_writes` | 列出 pending |
 | `approve_pending_memory_write(id)` | 批准并写 live |
 | `reject_pending_memory_write(id)` | 拒绝并丢弃 |

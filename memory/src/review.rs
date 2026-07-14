@@ -108,7 +108,6 @@ pub fn apply_review_suggestions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::MemoryConfig;
     use crate::session::manager::MemoryManager;
     use std::fs;
 
@@ -128,11 +127,9 @@ mod tests {
     fn parse_and_apply_add_respects_write_approval() {
         let dir = tempfile::tempdir().unwrap();
         crate::workspace::ensure_workspace(dir.path()).unwrap();
+        crate::config::set_write_approval(dir.path(), true).unwrap();
         let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "workspace").unwrap();
-        mgr.config = MemoryConfig {
-            write_approval: true,
-            ..MemoryConfig::default()
-        };
+        assert!(mgr.config.write_approval);
 
         let raw = r#"{"suggestions":[{"action":"add","target":"memory","content":"prefers rust"}],"daily_note":"reviewed today"}"#;
         let out = parse_review_llm_output(raw).unwrap();

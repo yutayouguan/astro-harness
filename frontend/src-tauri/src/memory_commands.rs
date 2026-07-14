@@ -112,3 +112,39 @@ pub async fn reject_pending_memory_write(id: String) -> Result<(), String> {
     let root = memory::default_memory_dir();
     memory::reject_pending_memory(&root, &id).map_err(|e| e.to_string())
 }
+
+/// 记忆面板开关状态（从 `config.yaml` 读取）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemorySettingsDto {
+    pub write_approval: bool,
+    pub background_review_enabled: bool,
+}
+
+/// 读取记忆相关开关。
+#[tauri::command]
+pub async fn get_memory_settings() -> Result<MemorySettingsDto, String> {
+    let root = memory::default_memory_dir();
+    let mem = memory::load_memory_config(&root);
+    let aux = memory::load_auxiliary_config(&root);
+    Ok(MemorySettingsDto {
+        write_approval: mem.write_approval,
+        background_review_enabled: aux.background_review_enabled,
+    })
+}
+
+/// 设置 `memory.write_approval`。
+#[tauri::command]
+pub async fn set_memory_write_approval(enabled: bool) -> Result<MemorySettingsDto, String> {
+    let root = memory::default_memory_dir();
+    memory::set_write_approval(&root, enabled).map_err(|e| e.to_string())?;
+    get_memory_settings().await
+}
+
+/// 设置 `auxiliary.background_review_enabled`。
+#[tauri::command]
+pub async fn set_background_review_enabled(enabled: bool) -> Result<MemorySettingsDto, String> {
+    let root = memory::default_memory_dir();
+    memory::set_background_review_enabled(&root, enabled).map_err(|e| e.to_string())?;
+    get_memory_settings().await
+}

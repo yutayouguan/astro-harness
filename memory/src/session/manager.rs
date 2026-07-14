@@ -151,10 +151,18 @@ impl MemoryManager {
     }
 
     /// 从磁盘重载 MEMORY / USER 到 live，并同步 snapshot（供换 session / 显式 refresh）。
+    ///
+    /// 同时重读 `config.yaml` 的 `memory:` 段，使 `write_approval` 等开关即时生效。
     pub fn refresh_memory_snapshot(&mut self) -> anyhow::Result<()> {
+        self.config = load_memory_config(&self.base_dir);
         self.memory.reload()?;
         self.user.reload()?;
         Ok(())
+    }
+
+    /// 从磁盘重读记忆配置（开关变更后、不换 snapshot 时可用）。
+    pub fn reload_memory_config(&mut self) {
+        self.config = load_memory_config(&self.base_dir);
     }
 
     /// 确保会话行存在（不存在则按 `source` 创建）。
@@ -231,6 +239,7 @@ impl MemoryManager {
         old_text: Option<&str>,
         source: &str,
     ) -> anyhow::Result<String> {
+        self.reload_memory_config();
         if self.config.write_approval {
             return self.enqueue_memory_op(action, target, content, old_text, source);
         }

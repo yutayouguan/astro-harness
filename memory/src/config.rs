@@ -1,6 +1,7 @@
 //! 从 `{base}/config.yaml` 加载记忆相关配置（`memory:` / `auxiliary:` 段）。
 //!
 //! 与 hooks 共用同一路径；本模块只反序列化关心的段，忽略其余键。
+//! 写回开关时用 [`serde_yaml::Value`] 合并，保留 hooks 等其余键。
 
 use std::fs;
 use std::path::Path;
@@ -150,6 +151,84 @@ pub fn load_auxiliary_config(base: &Path) -> AuxiliaryConfig {
     read_file_config(base).auxiliary.unwrap_or_default()
 }
 
+fn config_yaml_path(base: &Path) -> std::path::PathBuf {
+    base.join("config.yaml")
+}
+
+/// 读入已有 `config.yaml` 为 Value；缺失则空 Mapping。
+fn load_yaml_root(base: &Path) -> anyhow::Result<serde_yaml::Value> {
+    let path = config_yaml_path(base);
+    if !path.is_file() {
+        return Ok(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+    }
+    let text = fs::read_to_string(&path)?;
+    if text.trim().is_empty() {
+        return Ok(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+    }
+    Ok(serde_yaml::from_str(&text)?)
+}
+
+/// 原子写回 `config.yaml`。
+fn save_yaml_root(base: &Path, root: &serde_yaml::Value) -> anyhow::Result<()> {
+    fs::create_dir_all(base)?;
+    let path = config_yaml_path(base);
+    let tmp = path.with_extension("yaml.tmp");
+    let text = serde_yaml::to_string(root)?;
+    fs::write(&tmp, text)?;
+    fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// 确保 `root[seg…]` 为 Mapping，返回最内层可变 Mapping。
+fn ensure_mapping_path<'a>(
+    root: &'a mut serde_yaml::Value,
+    segs: &[&str],
+) -> anyhow::Result<&'a mut serde_yaml::Mapping> {
+    if !root.is_mapping() {
+        *root = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+    }
+    let mut cur = root
+        .as_mapping_mut()
+        .ok_or_else(|| anyhow::anyhow!("config.yaml root must be a mapping"))?;
+    for &seg in segs {
+        let key = serde_yaml::Value::String(seg.to_string());
+        if !cur.contains_key(&key) || !cur.get(&key).is_some_and(|v| v.is_mapping()) {
+            cur.insert(key.clone(), serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        }
+        cur = cur
+            .get_mut(&key)
+            .and_then(|v| v.as_mapping_mut())
+            .ok_or_else(|| anyhow::anyhow!("config.yaml segment `{seg}` is not a mapping"))?;
+    }
+    Ok(cur)
+}
+
+/// 设置嵌套布尔键（如 `memory.write_approval`），保留文件中其它键。
+fn set_nested_bool(base: &Path, parents: &[&str], key: &str, value: bool) -> anyhow::Result<()> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, parents)?;
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Bool(value),
+    );
+    save_yaml_root(base, &root)
+}
+
+/// 设置 `memory.write_approval` 并返回最新配置。
+pub fn set_write_approval(base: &Path, enabled: bool) -> anyhow::Result<MemoryConfig> {
+    set_nested_bool(base, &["memory"], "write_approval", enabled)?;
+    Ok(load_memory_config(base))
+}
+
+/// 设置 `auxiliary.background_review_enabled` 并返回最新辅助配置。
+pub fn set_background_review_enabled(
+    base: &Path,
+    enabled: bool,
+) -> anyhow::Result<AuxiliaryConfig> {
+    set_nested_bool(base, &["auxiliary"], "background_review_enabled", enabled)?;
+    Ok(load_auxiliary_config(base))
+}
+
 /// 将辅助路由解析为具体 `(provider, model)`。
 ///
 /// `provider`/`model` 为 `auto`（忽略大小写）或空白时，回退到会话主模型。
@@ -256,6 +335,32 @@ auxiliary:
         );
         assert_eq!(p2, "session-prov");
         assert_eq!(m2, "cheap-review");
+    }
+
+    #[test]
+    fn set_write_approval_preserves_other_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            "hooks:\n  post_tool_call: \"echo hi\"\nmemory:\n  memory_char_limit: 99\n",
+        )
+        .unwrap();
+        let cfg = set_write_approval(dir.path(), true).unwrap();
+        assert!(cfg.write_approval);
+        assert_eq!(cfg.memory_char_limit, 99);
+        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        assert!(text.contains("post_tool_call"));
+        assert!(text.contains("write_approval: true"));
+        assert!(text.contains("99"));
+    }
+
+    #[test]
+    fn set_background_review_enabled_creates_auxiliary() {
+        let dir = tempfile::tempdir().unwrap();
+        let aux = set_background_review_enabled(dir.path(), true).unwrap();
+        assert!(aux.background_review_enabled);
+        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        assert!(text.contains("background_review_enabled: true"));
     }
 }
 

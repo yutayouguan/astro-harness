@@ -24,6 +24,14 @@ import type { AgentInfo } from "../types/agent";
 /** 记忆面板入参 */
 type Props = {
   onClose?: () => void;
+  /** 当前聊天会话 id；批准写入后用于刷新活会话 frozen snapshot */
+  sessionId?: string | null;
+};
+
+/** `config.yaml` 记忆开关（Tauri camelCase） */
+type MemorySettings = {
+  writeApproval: boolean;
+  backgroundReviewEnabled: boolean;
 };
 
 /** 单个 Agent 的做梦统计 */
@@ -160,7 +168,7 @@ function IconSave(props: { width?: number; height?: number }) {
   return <Save size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
 }
 
-export default function MemoryPanel({ onClose }: Props) {
+export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const { t, locale } = useI18n();
   const flowUid = useId().replace(/:/g, "");
   const flowStrokeId = `memFlowStroke-${flowUid}`;
@@ -192,6 +200,11 @@ export default function MemoryPanel({ onClose }: Props) {
   const [dreamRunning, setDreamRunning] = useState(false);
   const [pendingWrites, setPendingWrites] = useState<PendingMemoryWrite[]>([]);
   const [pendingBusyId, setPendingBusyId] = useState<string | null>(null);
+  const [memorySettings, setMemorySettings] = useState<MemorySettings>({
+    writeApproval: false,
+    backgroundReviewEnabled: false,
+  });
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -242,6 +255,51 @@ export default function MemoryPanel({ onClose }: Props) {
     }
   }, []);
 
+  const refreshMemorySettings = useCallback(async () => {
+    try {
+      const s = await invoke<MemorySettings>("get_memory_settings");
+      setMemorySettings(s);
+    } catch {
+      setMemorySettings({ writeApproval: false, backgroundReviewEnabled: false });
+    }
+  }, []);
+
+  const setWriteApproval = async (enabled: boolean) => {
+    setError(null);
+    setSaveMsg(null);
+    setSettingsBusy(true);
+    try {
+      const s = await invoke<MemorySettings>("set_memory_write_approval", { enabled });
+      setMemorySettings(s);
+      setSaveMsg(
+        enabled ? t("memory.settings.writeApprovalOn") : t("memory.settings.writeApprovalOff"),
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const setBackgroundReview = async (enabled: boolean) => {
+    setError(null);
+    setSaveMsg(null);
+    setSettingsBusy(true);
+    try {
+      const s = await invoke<MemorySettings>("set_background_review_enabled", { enabled });
+      setMemorySettings(s);
+      setSaveMsg(
+        enabled
+          ? t("memory.settings.backgroundReviewOn")
+          : t("memory.settings.backgroundReviewOff"),
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
   const approvePending = async (id: string) => {
     setError(null);
     setSaveMsg(null);
@@ -251,7 +309,10 @@ export default function MemoryPanel({ onClose }: Props) {
       setSaveMsg(msg || t("memory.pending.approved"));
       await refreshPendingWrites();
       try {
-        await invoke("refresh_memory", { agentId: null, sessionId: null });
+        await invoke("refresh_memory", {
+          agentId: null,
+          sessionId: sessionId ?? null,
+        });
       } catch {
         // 非阻塞
       }
@@ -409,13 +470,14 @@ export default function MemoryPanel({ onClose }: Props) {
       }>("get_config");
       setMemoryDir(cfg.memory_dir);
       await refreshDreamStatus();
+      await refreshMemorySettings();
       await applyConfig(cfg);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, [applyConfig, refreshDreamStatus]);
+  }, [applyConfig, refreshDreamStatus, refreshMemorySettings]);
 
   useEffect(() => {
     void bootstrap();
@@ -448,7 +510,8 @@ export default function MemoryPanel({ onClose }: Props) {
   useEffect(() => {
     if (view !== "pending") return;
     void refreshPendingWrites();
-  }, [view, refreshPendingWrites]);
+    void refreshMemorySettings();
+  }, [view, refreshPendingWrites, refreshMemorySettings]);
 
   const confirmIfDirty = () => {
     if (!dirty) return true;
@@ -1156,6 +1219,49 @@ export default function MemoryPanel({ onClose }: Props) {
 
       {view === "pending" && (
         <div className="mem-pending-wrap">
+          <section className="mem-card mem-main mem-pending-settings">
+            <div className="mem-main-header">
+              <h3>{t("memory.settings.title")}</h3>
+            </div>
+            <div className="mem-settings-list" role="group" aria-label={t("memory.settings.title")}>
+              <label className="mem-settings-row">
+                <span className="mem-settings-text">
+                  <span className="mem-settings-label">{t("memory.settings.writeApproval")}</span>
+                  <span className="mem-settings-desc">{t("memory.settings.writeApprovalDesc")}</span>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  className="prefs-switch"
+                  aria-checked={memorySettings.writeApproval}
+                  aria-label={t("memory.settings.writeApproval")}
+                  disabled={settingsBusy}
+                  onClick={() => void setWriteApproval(!memorySettings.writeApproval)}
+                >
+                  <span className="prefs-switch-thumb" />
+                </button>
+              </label>
+              <label className="mem-settings-row">
+                <span className="mem-settings-text">
+                  <span className="mem-settings-label">{t("memory.settings.backgroundReview")}</span>
+                  <span className="mem-settings-desc">
+                    {t("memory.settings.backgroundReviewDesc")}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  className="prefs-switch"
+                  aria-checked={memorySettings.backgroundReviewEnabled}
+                  aria-label={t("memory.settings.backgroundReview")}
+                  disabled={settingsBusy}
+                  onClick={() => void setBackgroundReview(!memorySettings.backgroundReviewEnabled)}
+                >
+                  <span className="prefs-switch-thumb" />
+                </button>
+              </label>
+            </div>
+          </section>
           <section className="mem-card mem-main mem-pending">
             <div className="mem-main-header">
               <h3>{t("memory.view.pending")}</h3>
@@ -1175,7 +1281,11 @@ export default function MemoryPanel({ onClose }: Props) {
                   scene="memory"
                   size="sm"
                   title={t("memory.pending.emptyTitle")}
-                  hint={t("memory.pending.emptyHint")}
+                  hint={
+                    memorySettings.writeApproval
+                      ? t("memory.pending.emptyHintOn")
+                      : t("memory.pending.emptyHint")
+                  }
                 />
               </div>
             ) : (

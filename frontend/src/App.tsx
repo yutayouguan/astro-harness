@@ -2502,7 +2502,12 @@ export default function App() {
                   )}
                 </div>
               )}
-              {nav === "memory" && <MemoryPanel onClose={() => setNav("chat")} />}
+              {nav === "memory" && (
+                <MemoryPanel
+                  onClose={() => setNav("chat")}
+                  sessionId={sessionId}
+                />
+              )}
               {nav === "workspace" && (
                 <WorkspacePanel onClose={() => setNav("chat")} />
               )}
