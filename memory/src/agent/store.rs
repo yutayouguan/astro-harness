@@ -119,6 +119,10 @@ impl MemoryStore {
 
     /// 将唯一包含 `old_text` 子串的条目全文替换为 `content`。
     pub fn replace(&mut self, old_text: &str, content: &str) -> anyhow::Result<MemoryWriteResult> {
+        if old_text.trim().is_empty() {
+            anyhow::bail!("old_text 不能为空");
+        }
+
         let content = content.trim();
         if content.is_empty() {
             anyhow::bail!("记忆条目不能为空");
@@ -165,6 +169,10 @@ impl MemoryStore {
 
     /// 删除唯一包含 `old_text` 子串的条目。
     pub fn remove(&mut self, old_text: &str) -> anyhow::Result<MemoryWriteResult> {
+        if old_text.trim().is_empty() {
+            anyhow::bail!("old_text 不能为空");
+        }
+
         let matches: Vec<usize> = self
             .live
             .iter()
@@ -332,6 +340,22 @@ mod tests {
         let result = store.add("same fact").unwrap();
         assert!(result.duplicate);
         assert_eq!(store.live_entries().len(), 1);
+    }
+
+    #[test]
+    fn replace_and_remove_reject_empty_old_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("MEMORY.md");
+        let mut store = MemoryStore::open(path, 2200).unwrap();
+        store.add("some entry").unwrap();
+
+        let replace_err = store.replace("", "new").unwrap_err();
+        assert!(replace_err.to_string().contains("old_text"));
+
+        let remove_err = store.remove("   ").unwrap_err();
+        assert!(remove_err.to_string().contains("old_text"));
+
+        assert_eq!(store.live_entries(), &["some entry"]);
     }
 
     #[test]

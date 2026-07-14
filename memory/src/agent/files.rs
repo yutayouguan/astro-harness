@@ -1,14 +1,18 @@
-//! Markdown 列表式记忆文件的读写与容量管理。
+//! **LEGACY:** Markdown 列表式记忆文件的 FIFO 读写与容量管理。
 //!
-//! 每条记忆以 `- ` 或 `* ` 开头的列表项存储；超出 `max_chars` 时从最早条目起逐条淘汰。
+//! [`MemoryFile`] 为旧实现：超出 `max_chars` 时从最早条目起逐条淘汰（FIFO）。
+//! 新代码请使用 [`crate::agent::store::MemoryStore`]（§ 分隔、有界报错、live/snapshot 双态）。
+//!
+//! 每条记忆以 `- ` 或 `* ` 开头的列表项存储。
 //! 持久化采用临时文件 + `rename` 的原子写入，避免写入中断导致文件损坏。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// 单文件记忆存储：维护条目列表并在写入时强制执行字符上限。
+/// **LEGACY:** FIFO 单文件记忆存储，正由 [`crate::agent::store::MemoryStore`] 取代。
 ///
 /// 构造时从磁盘加载已有条目；文件不存在时从空列表开始。
+#[deprecated(note = "use MemoryStore")]
 pub struct MemoryFile {
     /// 目标 Markdown 文件路径。
     path: PathBuf,

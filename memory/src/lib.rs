@@ -19,6 +19,8 @@ pub mod spawn_depth;
 // ── 域内路径（新）──────────────────────────────────────────────
 pub use agent::agent_icons;
 pub use agent::files;
+pub use agent::scan::scan_memory_content;
+pub use agent::store::{MemoryStore, MemoryWriteResult};
 pub use agent::tools_enabled;
 pub use agent::workspace;
 
