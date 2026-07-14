@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use serde::Deserialize;
+use tracing::warn;
 
 fn default_true() -> bool {
     true
@@ -73,11 +74,25 @@ pub fn load_memory_config(base: &Path) -> MemoryConfig {
     }
     let text = match fs::read_to_string(&path) {
         Ok(t) => t,
-        Err(_) => return MemoryConfig::default(),
+        Err(e) => {
+            warn!(
+                path = %path.display(),
+                error = %e,
+                "falling back to MemoryConfig defaults"
+            );
+            return MemoryConfig::default();
+        }
     };
     match serde_yaml::from_str::<FileConfig>(&text) {
         Ok(file) => file.memory.unwrap_or_default(),
-        Err(_) => MemoryConfig::default(),
+        Err(e) => {
+            warn!(
+                path = %path.display(),
+                error = %e,
+                "falling back to MemoryConfig defaults"
+            );
+            MemoryConfig::default()
+        }
     }
 }
 

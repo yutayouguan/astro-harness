@@ -352,12 +352,13 @@ pub fn format_recalled_context(messages: &[ScrolledMessage]) -> String {
 /// - `"daily"` / `"mermaid"` → 错误（日记仅系统入口）
 fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
     match value {
+        None => Ok(MemoryTarget::Memory),
         Some("user") => Ok(MemoryTarget::User),
+        Some("memory") | Some("project") => Ok(MemoryTarget::Memory),
         Some("daily") | Some("mermaid") => {
             anyhow::bail!("日记请使用系统入口，不支持 memory 工具 target=daily")
         }
-        Some("memory") | Some("project") | None => Ok(MemoryTarget::Memory),
-        Some(_) => Ok(MemoryTarget::Memory),
+        Some(other) => anyhow::bail!("未知的 memory target: {other}"),
     }
 }
 
@@ -453,11 +454,23 @@ memory:
 
         mgr.append_daily("0123456789ABCDEF", None).unwrap();
 
+        let full_daily = mgr.daily_content_today();
         let (mem, user, daily) = mgr.prompt_snapshot_with_daily();
         assert!(mem.is_empty(), "memory_enabled=false → empty mem");
-        assert!(user.contains("prefer-dark-mode") || !user.is_empty());
+        assert!(
+            user.contains("prefer-dark-mode"),
+            "user snapshot must contain added entry; got: {user:?}"
+        );
+        assert!(
+            full_daily.starts_with(&format!("# {}", today_date_string())),
+            "daily file must use today's date header"
+        );
         assert_eq!(daily.chars().count(), 10);
-        assert!(!daily.contains('A') || daily.chars().count() == 10);
+        assert_eq!(
+            daily,
+            full_daily.chars().take(10).collect::<String>(),
+            "daily must be exact char-boundary prefix of full content"
+        );
     }
 
     #[test]
@@ -476,5 +489,11 @@ memory:
             parse_memory_target(Some("user")).unwrap(),
             MemoryTarget::User
         ));
+        assert!(matches!(
+            parse_memory_target(None).unwrap(),
+            MemoryTarget::Memory
+        ));
+        let err = parse_memory_target(Some("bogus")).unwrap_err().to_string();
+        assert!(err.contains("未知的 memory target"));
     }
 }
