@@ -31,6 +31,11 @@ pub struct AgentLogLine {
 
 const MAX_LINES: usize = 500;
 
+/// 扫描 `agent.log` / `errors.log` 尾部，按 session/turn/level 过滤后返回匹配行。
+///
+/// - 每个文件内按**从新到旧**（文件末尾优先）遍历；返回顺序与遍历一致。
+/// - `LogSource::Both` 先读 `agent.log` 再读 `errors.log`，在共享 `lines` 上限内顺序拼接；
+///   **不会**按时间戳跨文件合并排序。
 pub fn query_agent_logs(q: AgentLogQuery) -> anyhow::Result<Vec<AgentLogLine>> {
     let limit = q.lines.clamp(1, MAX_LINES);
     let mut out = Vec::new();
@@ -173,5 +178,116 @@ mod tests {
         .unwrap();
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].source, "errors");
+    }
+
+    #[test]
+    fn min_level_warn_filters_info_keeps_warn() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(
+            &dir.path().join("agent.log"),
+            &[
+                "INFO session_id=s1 turn_id=t1 info-only",
+                "WARN session_id=s1 turn_id=t1 warn-line",
+            ],
+        );
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: Some("s1".into()),
+            turn_id: Some("t1".into()),
+            min_level: Some("WARN".into()),
+            lines: 50,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].raw.contains("warn-line"));
+    }
+
+    #[test]
+    fn empty_agent_log_returns_empty_vec() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::File::create(dir.path().join("agent.log")).unwrap();
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: None,
+            turn_id: None,
+            min_level: None,
+            lines: 50,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn lines_zero_clamps_to_one() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(
+            &dir.path().join("agent.log"),
+            &[
+                "INFO session_id=s1 turn_id=t1 first",
+                "INFO session_id=s1 turn_id=t1 second",
+            ],
+        );
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: Some("s1".into()),
+            turn_id: Some("t1".into()),
+            min_level: None,
+            lines: 0,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].raw.contains("second"));
+    }
+
+    #[test]
+    fn lines_over_max_clamps_to_500() {
+        let dir = tempfile::tempdir().unwrap();
+        let content: Vec<String> = (0..600)
+            .map(|i| format!("INFO session_id=s1 turn_id=t1 line-{i}"))
+            .collect();
+        write_lines(
+            &dir.path().join("agent.log"),
+            &content.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: Some("s1".into()),
+            turn_id: Some("t1".into()),
+            min_level: None,
+            lines: 9999,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+        assert_eq!(lines.len(), 500);
+        assert!(lines[0].raw.contains("line-599"));
+        assert!(lines[499].raw.contains("line-100"));
+    }
+
+    #[test]
+    fn both_source_agent_fills_limit_before_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(
+            &dir.path().join("agent.log"),
+            &["INFO session_id=s1 turn_id=t1 agent-line"],
+        );
+        write_lines(
+            &dir.path().join("errors.log"),
+            &["WARN session_id=s1 turn_id=t1 error-line"],
+        );
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: Some("s1".into()),
+            turn_id: Some("t1".into()),
+            min_level: None,
+            lines: 1,
+            source: LogSource::Both,
+        })
+        .unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].source, "agent");
+        assert!(lines[0].raw.contains("agent-line"));
     }
 }
