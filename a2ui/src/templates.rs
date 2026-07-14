@@ -153,6 +153,116 @@ pub fn build_clarify_surface(
     ]
 }
 
+/// Build A2UI operations for a location-request HITL surface (share GPS / deny / city).
+pub fn build_location_request_surface(surface_id: &str, message: &str) -> Vec<Value> {
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": {
+                "surfaceId": surface_id,
+                "catalogId": ASTRO_CATALOG_ID
+            }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": {
+                "surfaceId": surface_id,
+                "components": [
+                    { "id": "root", "component": "Card", "child": "col" },
+                    {
+                        "id": "col",
+                        "component": "Column",
+                        "children": ["header", "body", "actions", "city_hint", "city", "choose_city"]
+                    },
+                    {
+                        "id": "header",
+                        "component": "Row",
+                        "children": ["avatar", "header_text", "badge"]
+                    },
+                    {
+                        "id": "avatar",
+                        "component": "Avatar",
+                        "name": "map-pin"
+                    },
+                    {
+                        "id": "header_text",
+                        "component": "Column",
+                        "children": ["title"]
+                    },
+                    {
+                        "id": "title",
+                        "component": "Text",
+                        "text": "位置授权",
+                        "variant": "h2"
+                    },
+                    {
+                        "id": "badge",
+                        "component": "Badge",
+                        "text": "Location",
+                        "variant": "info"
+                    },
+                    {
+                        "id": "body",
+                        "component": "Text",
+                        "text": message
+                    },
+                    {
+                        "id": "actions",
+                        "component": "Row",
+                        "children": ["share_location", "deny"]
+                    },
+                    {
+                        "id": "share_location",
+                        "component": "Button",
+                        "child": "share_label",
+                        "variant": "primary",
+                        "action": { "event": { "name": "share_location" } }
+                    },
+                    {
+                        "id": "share_label",
+                        "component": "Text",
+                        "text": "共享当前位置"
+                    },
+                    {
+                        "id": "deny",
+                        "component": "Button",
+                        "child": "deny_label",
+                        "variant": "secondary",
+                        "action": { "event": { "name": "deny" } }
+                    },
+                    {
+                        "id": "deny_label",
+                        "component": "Text",
+                        "text": "暂不分享"
+                    },
+                    {
+                        "id": "city_hint",
+                        "component": "Text",
+                        "text": "或手动填写城市"
+                    },
+                    {
+                        "id": "city",
+                        "component": "TextField",
+                        "label": "城市"
+                    },
+                    {
+                        "id": "choose_city",
+                        "component": "Button",
+                        "child": "choose_city_label",
+                        "variant": "secondary",
+                        "action": { "event": { "name": "choose_city" } }
+                    },
+                    {
+                        "id": "choose_city_label",
+                        "component": "Text",
+                        "text": "使用该城市"
+                    }
+                ]
+            }
+        }),
+    ]
+}
+
 /// Build a read-only info card surface (title + body + optional image).
 pub fn build_info_surface(
     surface_id: &str,
@@ -312,6 +422,122 @@ pub fn build_result_surface(
                     { "id": "body", "component": "Text", "text": body }
                 ]
             }
+        }),
+    ]
+}
+
+/// Build a `deleteSurface` operation — removes an A2UI surface from the chat.
+pub fn build_delete_surface(surface_id: &str) -> Vec<Value> {
+    vec![json!({
+        "version": "v0.9",
+        "deleteSurface": { "surfaceId": surface_id }
+    })]
+}
+
+/// Form field descriptor for [`build_form_surface`].
+pub struct FormField<'a> {
+    /// Component id (also used as data-model key).
+    pub id: &'a str,
+    /// `"text"` → TextField, `"checkbox"` → CheckBox.
+    pub kind: &'a str,
+    pub label: &'a str,
+    pub required: bool,
+}
+
+/// Build a form surface with TextField / CheckBox fields and a submit button.
+///
+/// Emits `{ event: { name: "submit" } }` when the user taps the button.
+pub fn build_form_surface(
+    surface_id: &str,
+    title: &str,
+    fields: &[FormField<'_>],
+    submit_label: &str,
+) -> Vec<Value> {
+    let mut col_children: Vec<String> = vec!["title".into(), "divider".into()];
+    for f in fields {
+        col_children.push(f.id.to_string());
+    }
+    col_children.push("submit".into());
+
+    let mut components = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({ "id": "col", "component": "Column", "children": col_children }),
+        json!({ "id": "title", "component": "Text", "text": title, "variant": "h2" }),
+        json!({ "id": "divider", "component": "Divider" }),
+    ];
+
+    for f in fields {
+        let comp = match f.kind {
+            "checkbox" => json!({
+                "id": f.id,
+                "component": "CheckBox",
+                "label": f.label,
+                "required": f.required
+            }),
+            _ => json!({
+                "id": f.id,
+                "component": "TextField",
+                "label": f.label,
+                "required": f.required
+            }),
+        };
+        components.push(comp);
+    }
+
+    components.push(json!({ "id": "spacer", "component": "Spacer" }));
+    components.push(json!({
+        "id": "submit",
+        "component": "Button",
+        "child": "submit_label",
+        "variant": "primary",
+        "action": { "event": { "name": "submit" } }
+    }));
+    components.push(json!({ "id": "submit_label", "component": "Text", "text": submit_label }));
+
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": { "surfaceId": surface_id, "catalogId": ASTRO_CATALOG_ID }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": { "surfaceId": surface_id, "components": components }
+        }),
+    ]
+}
+
+/// Build a tag/chip-list surface — title row + horizontal row of Chip labels.
+pub fn build_chip_list_surface(surface_id: &str, title: &str, chips: &[String]) -> Vec<Value> {
+    let chip_ids: Vec<String> =
+        chips.iter().enumerate().map(|(i, _)| format!("chip{i}")).collect();
+
+    let col_children = if chips.is_empty() {
+        vec!["title".to_string()]
+    } else {
+        vec!["title".to_string(), "row".to_string()]
+    };
+
+    let mut components = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({ "id": "col", "component": "Column", "children": col_children }),
+        json!({ "id": "title", "component": "Text", "text": title, "variant": "h2" }),
+    ];
+
+    if !chips.is_empty() {
+        components.push(json!({ "id": "row", "component": "Row", "children": chip_ids }));
+        for (i, chip) in chips.iter().enumerate() {
+            components.push(json!({ "id": format!("chip{i}"), "component": "Chip", "text": chip }));
+        }
+    }
+
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": { "surfaceId": surface_id, "catalogId": ASTRO_CATALOG_ID }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": { "surfaceId": surface_id, "components": components }
         }),
     ]
 }

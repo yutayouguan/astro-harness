@@ -28,6 +28,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "session_search",
     "clarify",
     "confirm",
+    "request_user_location",
     "present_ui",
     "delegate",
     "scheduled",
@@ -198,6 +199,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "skills" => "skills",
         "clarify" => "clarify",
         "confirm" => "confirm",
+        "request_user_location" => "request_user_location",
         "present_ui" => "present_ui",
         "delegate" | "delegate_async" | "delegate_status" | "delegate_collect"
         | "delegate_cancel" => "delegate",

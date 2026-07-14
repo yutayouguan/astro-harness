@@ -1,4 +1,4 @@
-//! confirm / clarify HITL 工具输出须通过 A2UI catalog 校验。
+//! confirm / clarify / request_user_location HITL 工具输出须通过 A2UI catalog 校验。
 
 use tempfile::TempDir;
 use tools::{register_all, ToolContext, ToolRegistry};

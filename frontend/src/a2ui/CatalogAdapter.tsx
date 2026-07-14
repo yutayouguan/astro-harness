@@ -6,6 +6,7 @@ import {
   Check,
   HelpCircle,
   Info,
+  MapPin,
   Shield,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -21,6 +22,7 @@ const AVATAR_ICONS: Record<string, LucideIcon> = {
   warning: AlertTriangle,
   check: Check,
   success: Check,
+  "map-pin": MapPin,
 };
 
 type RenderCtx = {

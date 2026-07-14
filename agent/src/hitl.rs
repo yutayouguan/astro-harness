@@ -265,7 +265,7 @@ impl HitlRegistry {
 
 /// 工具名是否为 interactive（整批强制串行）。
 pub fn is_interactive_tool(name: &str) -> bool {
-    matches!(name, "confirm" | "clarify")
+    matches!(name, "confirm" | "clarify" | "request_user_location")
 }
 
 /// 工具名是否需独占 `&mut MemoryManager`（整批强制串行）。
@@ -450,6 +450,7 @@ mod tests {
         assert!(!is_exclusive_tool("web_search"));
         assert!(is_interactive_tool("confirm"));
         assert!(is_interactive_tool("clarify"));
+        assert!(is_interactive_tool("request_user_location"));
         assert!(!is_interactive_tool("terminal"));
     }
 }
