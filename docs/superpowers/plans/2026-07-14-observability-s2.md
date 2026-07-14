@@ -38,7 +38,7 @@
 - Modify: `memory/src/usage/trace_insights.rs`
 - Test: 在 `memory/src/usage/trace_insights.rs` 的 `#[cfg(test)]` 或 `memory/tests/` 追加（优先沿用现有 trace_insights 测试模块）
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 在已有 trace_insights / usage 测试附近追加（用 tempfile UsageDb）：
 
@@ -85,7 +85,7 @@ fn trace_event_from_usage_preserves_turn_id() {
 
 （第二个测试按现有 `events_from_usage` / 类似私有函数访问调整；若私有，只测 `query_trace_insights` 公开路径。）
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 ```bash
 cargo test -p memory list_trace_events_includes_turn_id -- --nocapture
@@ -93,7 +93,7 @@ cargo test -p memory list_trace_events_includes_turn_id -- --nocapture
 
 Expected: compile error（无 `turn_id` 字段）或 assert fail。
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 1. `TraceEventRow` 增加 `pub turn_id: Option<String>`
 2. `list_trace_events` SQL：
@@ -119,14 +119,14 @@ pub turn_id: Option<String>,
 4. 所有构造 `TraceEvent { ... }` 处：usage 行 → `turn_id: row.turn_id.clone()`；chat-history 合成 → `turn_id: None`
 5. `merge_usage_into_spans`：在匹配到 usage 行时**同时拷贝** `turn_id`（否则 chat-history 主导时间线时 UI 全进「未标注」）
 
-- [ ] **Step 4: Tests PASS**
+- [x] **Step 4: Tests PASS**
 
 ```bash
 cargo test -p memory list_trace_events_includes_turn_id
 cargo test -p memory --lib usage::trace_insights
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/usage/db.rs memory/src/usage/trace_insights.rs memory/tests/
@@ -146,7 +146,7 @@ EOF
 - Modify: `frontend/src/styles/insights.css`
 - Modify: `frontend/src/i18n/messages.ts`
 
-- [ ] **Step 1: Add pure helper + unit-level assert via small extract (optional file)**
+- [x] **Step 1: Add pure helper + unit-level assert via small extract (optional file)**
 
 在 `InsightsPanel.tsx` 顶部（或 `frontend/src/lib/traceTurnGroups.ts`）：
 
@@ -192,7 +192,7 @@ export function shortTurnId(id: string | null, unlabeled: string): string {
 
 扩展 FE `TraceEvent` 类型加 `turn_id?: string | null`。
 
-- [ ] **Step 2: Replace flat timeline with collapsible groups**
+- [x] **Step 2: Replace flat timeline with collapsible groups**
 
 在 `insights-trace-chain-panel` 中（约现有 `selectedTrace.events.map`）：
 
@@ -241,7 +241,7 @@ useEffect(() => {
 
 **Default:** groups collapsed (`expandedTurns` 缺省 false）。
 
-- [ ] **Step 3: CSS + i18n**
+- [x] **Step 3: CSS + i18n**
 
 `insights.css`:
 
@@ -265,13 +265,13 @@ i18n（en + zh 等全部 locale 块）：
 // zh: "未标注" / "回合"
 ```
 
-- [ ] **Step 4: Manual / typecheck**
+- [x] **Step 4: Manual / typecheck**
 
 ```bash
 cd frontend && npx tsc --noEmit
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/InsightsPanel.tsx frontend/src/styles/insights.css frontend/src/i18n/messages.ts frontend/src/lib/traceTurnGroups.ts
@@ -293,7 +293,7 @@ EOF
 - Modify: `frontend/src/components/ChatAgentInfo.tsx`
 - Modify: `frontend/src/i18n/messages.ts`
 
-- [ ] **Step 1: Formatter**
+- [x] **Step 1: Formatter**
 
 ```ts
 // frontend/src/lib/diagnosticContext.ts
@@ -302,7 +302,7 @@ export function formatDiagnosticContext(sessionId: string, turnId: string): stri
 }
 ```
 
-- [ ] **Step 2: App state**
+- [x] **Step 2: App state**
 
 - 将 `currentRunIdRef` 升为（或并存）`const [currentTurnId, setCurrentTurnId] = useState<string | null>(null)`
 - 在 `run_started` 处理：`setCurrentTurnId(payload.run_id ?? null)`（保留 ref 若别处需要）
@@ -310,7 +310,7 @@ export function formatDiagnosticContext(sessionId: string, turnId: string): stri
 - 切换 session / 新会话 / 清空聊天：`setCurrentTurnId(null)`
 - 传入 `ChatRightPanel`：`sessionId={sessionId}`（已有）、`turnId={currentTurnId}`
 
-- [ ] **Step 3: ChatAgentInfo UI**
+- [x] **Step 3: ChatAgentInfo UI**
 
 Props 增加：
 
@@ -348,13 +348,13 @@ i18n：
 // zh: "回合" / "复制诊断"
 ```
 
-- [ ] **Step 4: Check**
+- [x] **Step 4: Check**
 
 ```bash
 cd frontend && npx tsc --noEmit
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/App.tsx frontend/src/components/ChatRightPanel.tsx \
@@ -371,7 +371,7 @@ EOF
 
 ## Task 4: 验收 + 文档状态
 
-- [ ] **Step 1: Regressions**
+- [x] **Step 1: Regressions**
 
 ```bash
 cargo test -p memory list_trace_events_includes_turn_id
@@ -380,11 +380,11 @@ cargo check --manifest-path frontend/src-tauri/Cargo.toml
 cd frontend && npx tsc --noEmit
 ```
 
-- [ ] **Step 2: Spec / plan checkbox**
+- [x] **Step 2: Spec / plan checkbox**
 
 将 `docs/superpowers/specs/2026-07-14-observability-s2-design.md` 状态改为 `已批准 / S2 已实现`；计划 Tasks 勾选。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
