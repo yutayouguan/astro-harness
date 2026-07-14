@@ -332,6 +332,23 @@ impl AstroService for AstroServiceImpl {
             return Ok(Response::new(Empty {}));
         }
 
+        // 刷新活会话记忆快照：不要求有进行中的流；也不惰性创建新会话。
+        if matches!(action, ChatControlAction::ChatControlRefreshMemory) {
+            let sessions = self.sessions.read().await;
+            let Some(session) = sessions.get(&req.session_id).cloned() else {
+                return Err(Status::not_found(format!(
+                    "会话 {} 不在内存中（无活 AgentLoop 可刷新）",
+                    req.session_id
+                )));
+            };
+            drop(sessions);
+            let mut agent = session.lock().await;
+            agent
+                .refresh_memory()
+                .map_err(|e| Status::internal(e.to_string()))?;
+            return Ok(Response::new(Empty {}));
+        }
+
         let map = self.pause_controls.read().await;
         let Some(pause) = map.get(&req.session_id) else {
             return Err(Status::not_found(format!(
@@ -353,6 +370,7 @@ impl AstroService for AstroServiceImpl {
                 }
             }
             ChatControlAction::ChatControlNewChat
+            | ChatControlAction::ChatControlRefreshMemory
             | ChatControlAction::ChatControlUnspecified => {}
         }
         Ok(Response::new(Empty {}))
@@ -579,6 +597,10 @@ impl AstroService for AstroServiceImpl {
                             payload: Some(proto::chat_event::Payload::Done(true)),
                         }))
                         .await;
+                    {
+                        let agent = session.lock().await;
+                        agent::spawn_background_review_after_turn(&agent);
+                    }
                     cleanup().await;
                     return;
                 }
@@ -680,6 +702,7 @@ impl AstroService for AstroServiceImpl {
                 agent.set_chat_targets(chat_targets.clone());
             }
 
+            let session_for_review = session.clone();
             let mut stream = stream_multi_turn_with_hitl(
                 session,
                 chat_targets,
@@ -717,6 +740,11 @@ impl AstroService for AstroServiceImpl {
                             }
                         }
                         if is_done {
+                            // 回合成功结束后异步 memory background review（可配置关闭）
+                            {
+                                let agent = session_for_review.lock().await;
+                                agent::spawn_background_review_after_turn(&agent);
+                            }
                             break;
                         }
                     }

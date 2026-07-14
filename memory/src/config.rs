@@ -85,6 +85,9 @@ impl Default for AuxiliaryRoute {
 /// 辅助模型配置（`config.yaml` 的 `auxiliary:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 pub struct AuxiliaryConfig {
+    /// 回合结束后是否自动跑 memory background review（默认关闭，避免意外产生费用）。
+    #[serde(default)]
+    pub background_review_enabled: bool,
     #[serde(default)]
     pub background_review: AuxiliaryRoute,
     #[serde(default)]
@@ -217,6 +220,7 @@ auxiliary:
   background_review:
     provider: auto
     model: cheap-review
+  background_review_enabled: true
 "#,
         )
         .unwrap();
@@ -229,6 +233,7 @@ auxiliary:
         assert_eq!(cfg.daily_prompt_max_chars, 32);
 
         let aux = load_auxiliary_config(dir.path());
+        assert!(aux.background_review_enabled);
         assert_eq!(aux.dreaming.provider, "openai");
         assert_eq!(aux.dreaming.model, "gpt-4o-mini");
         assert_eq!(aux.background_review.provider, "auto");

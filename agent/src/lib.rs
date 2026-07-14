@@ -31,6 +31,8 @@ pub mod orchestration;
 pub mod delegate_exec;
 /// 辅模型危险命令 Smart 审批（可选）。
 pub mod smart_approval;
+/// 回合后记忆 background review 调度。
+pub mod memory_review_spawn;
 /// 将静态/动态上下文等层叠为完整 system prompt。
 pub mod prompt_builder;
 /// 轻量 JSON Schema（HITL payload）。
@@ -65,6 +67,11 @@ pub use hitl::{
 pub use interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
 pub use loop_::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
+/// 回合后记忆 review。
+pub use memory_review_spawn::{
+    job_from_agent, maybe_run_background_review, spawn_background_review_after_turn,
+    BackgroundReviewJob,
+};
 /// 消息转换入口 re-export。
 pub use messages::to_provider_messages;
 /// Provider 侧用量统计与暂停控制 re-export。

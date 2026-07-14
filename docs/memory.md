@@ -35,6 +35,7 @@ P2 辅助模型与回合后 review 见下文「辅助模型 / background review�
 
 ```yaml
 auxiliary:
+  background_review_enabled: false   # true 时每轮 Chat Done 后异步跑 review
   background_review:
     provider: auto    # auto = 跟随当前会话主模型
     model: auto
@@ -45,18 +46,17 @@ auxiliary:
 
 | 键 | 说明 |
 |----|------|
+| `auxiliary.background_review_enabled` | **开关**：回合成功结束后是否自动 background review（默认 `false`） |
 | `auxiliary.dreaming` | 入梦 Extractor / 回退补全使用的 provider（backend_id）与 model |
-| `auxiliary.background_review` | 回合后自我改进 review 路由（API 已就绪） |
+| `auxiliary.background_review` | review 用的 provider / model（`auto` 跟随主会话） |
 
 **入梦**：`run_dreaming` 会先 `resolve_auxiliary(Dreaming)`，再查找匹配 backend 的提供商密钥。
 
-**background review**（库 API，由 Agent/后端在 turn 成功后调用）：
+**background review**（已挂入 backend Chat 流）：
 
-1. `build_review_digest(messages, recent_n=6)` — 构建 digest  
-2. 用 `REVIEW_SYSTEM_PROMPT` + digest 调 LLM  
-3. `parse_review_llm_output` → `apply_review_suggestions`（走 `handle_memory_op_with_source(..., "review")`，尊重 `write_approval`；`daily_note` 直写入日记）
-
-当前交付：**解析/应用/配置/入梦路由**已接线；Agent 主循环内「自动 fire-and-forget 调用 LLM」可在后续用同一套 API 挂载（避免在无凭据的路径硬编码）。
+1. Chat 流收到 `Done` → fire-and-forget `maybe_run_background_review`
+2. 仅当 `background_review_enabled: true`
+3. `build_review_digest` → 辅助模型 → `parse_review_llm_output` → `apply_review_suggestions`（尊重 `write_approval`）
 
 ### `write_approval` pending 队列
 
@@ -65,9 +65,9 @@ auxiliary:
 - `write_approval: false`（默认）：过 Store 门禁后直接写 live
 - `true`：`memory` 工具与入梦 MEMORY 写回**入队不改 live**；安全扫描失败**不入队**
 - **日记** `append_daily` **不受**审批门禁
-- 批准经 `MemoryStore` / `handle_memory_op` 等价路径落盘；拒绝即删除 pending 文件
+- 批准经 `MemoryStore` / `handle_memory_op` 等价路径落盘；拒绝即删除 pending 文件。
 
-Tauri 命令（设置页 UI 可后续接）：
+记忆面板顶部有 **「审批」** 页：列出 pending、批准 / 拒绝、可刷新。相应 Tauri 命令：
 
 | 命令 | 作用 |
 |------|------|
@@ -140,15 +140,14 @@ Tauri 命令（设置页 UI 可后续接）：
 
 ### Tauri `refresh_memory`
 
-桌面端提供 `refresh_memory` 命令：对当前 Agent 打开 `MemoryManager`，从磁盘重载 MEMORY / USER 并返回最新 snapshot 渲染文本。**会更新该 Manager 的 snapshot**。
+桌面端提供 `refresh_memory(agentId?, sessionId?)`：
 
-**限制（P1 已知 gap）：**
+1. 打开当前 Agent 的 `MemoryManager`，从磁盘重载 MEMORY / USER 并返回渲染文本  
+2. 若传入 `sessionId`，再经 gRPC `ChatControl.REFRESH_MEMORY` 调用活会话的 `AgentLoop::refresh_memory`，**立刻**刷新该会话后续轮次的 system prompt snapshot  
 
-- Tauri 进程**不持有** backend 侧长驻的 `AgentLoop`；聊天经 gRPC 由 backend 按 `session_id` 缓存 Loop。
-- 因此 Tauri `refresh_memory` **不会**自动刷新**正在进行中**的后端会话 prompt。
-- 要让对话立刻看到最新 MEMORY/USER，需：**新开对话**（新 session 会 reload），或等待后续 backend RPC 调用 `AgentLoop::refresh_memory`（接口已在 agent crate 实现，P2 可接 gRPC）。
+无内存会话时 `sessionRefreshed=false`（不报错）。也可直接 `chat_control(sessionId, "refresh_memory")`。
 
-入梦写回 MEMORY 经 `MemoryStore` 门禁（scan + 上限）；成功**不**刷新任何在途 AgentLoop snapshot。
+入梦写回 MEMORY 经 `MemoryStore` 门禁（scan + 上限）；成功**不**自动刷新在途 AgentLoop snapshot（需显式 refresh 或新会话）。
 
 ---
 
