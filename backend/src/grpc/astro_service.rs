@@ -675,6 +675,10 @@ impl AstroService for AstroServiceImpl {
                     base_url: fb.base_url,
                 });
             }
+            {
+                let mut agent = session.lock().await;
+                agent.set_chat_targets(chat_targets.clone());
+            }
 
             let mut stream = stream_multi_turn_with_hitl(
                 session,

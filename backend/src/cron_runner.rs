@@ -20,6 +20,7 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
         model,
         api_key,
         base_url,
+        targets: vec![],
     }
 }
 

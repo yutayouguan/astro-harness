@@ -19,6 +19,9 @@ pub struct DelegateRunRequest {
     pub model: String,
     pub api_key: String,
     pub base_url: String,
+    /// 含 primary 的聊天 fallback 链；空则子 Agent 由四字段合成单目标。
+    #[serde(default)]
+    pub chat_targets: Vec<common::ChatTarget>,
     pub tasks: Vec<DelegateTaskSpec>,
     /// 并行上限（至少 1）。
     pub max_concurrent: usize,

@@ -366,6 +366,7 @@ mod tests {
             model: "m".into(),
             api_key: "k".into(),
             base_url: String::new(),
+            chat_targets: vec![],
             tasks: vec![DelegateTaskSpec {
                 goal: "g".into(),
                 context: String::new(),

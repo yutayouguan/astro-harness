@@ -22,6 +22,7 @@ async fn execute_job_fails_without_api_key() {
         model: "gpt-4o-mini".into(),
         api_key: String::new(),
         base_url: String::new(),
+        targets: vec![],
     };
     let row = agent::cron_exec::execute_job_with_roots(
         dir.path(),

@@ -115,6 +115,7 @@ mod tests {
             chat_base_url: String::new(),
             chat_provider: String::new(),
             chat_model: String::new(),
+            chat_targets: vec![],
         }
     }
 

@@ -103,6 +103,8 @@ pub struct AgentLoop {
     chat_base_url: String,
     chat_provider: String,
     chat_model: String,
+    /// 含 primary 的聊天 fallback 链（供工具/委派下传）。
+    chat_targets: Vec<common::ChatTarget>,
     hooks: Arc<dyn PromptHooks>,
     /// 进程内插件钩子总线（Block / Modify / Inject）。
     hook_bus: Arc<::hooks::PluginHookBus>,
@@ -167,6 +169,7 @@ impl AgentLoop {
             chat_base_url: String::new(),
             chat_provider: String::new(),
             chat_model: String::new(),
+            chat_targets: Vec::new(),
             hooks: Arc::new(NoopHooks),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             pending_inject_context: None,
@@ -262,6 +265,16 @@ impl AgentLoop {
         self.chat_model = model.to_string();
         self.chat_api_key = api_key.to_string();
         self.chat_base_url = base_url.to_string();
+    }
+
+    /// 设置含 primary 的聊天 fallback 链（主聊 / cron / delegate 共用）。
+    pub fn set_chat_targets(&mut self, targets: Vec<common::ChatTarget>) {
+        self.chat_targets = targets;
+    }
+
+    /// 当前聊天 fallback 链。
+    pub fn chat_targets(&self) -> &[common::ChatTarget] {
+        &self.chat_targets
     }
 
     /// 返回 `(project_memory, user_profile)` 原始 prompt 片段。
@@ -501,6 +514,7 @@ impl AgentLoop {
         let chat_base_url = self.chat_base_url.clone();
         let chat_provider = self.chat_provider.clone();
         let chat_model = self.chat_model.clone();
+        let chat_targets = self.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
         let mut ctx = ToolContext {
             memory: &mut self.memory,
@@ -513,6 +527,7 @@ impl AgentLoop {
             chat_base_url,
             chat_provider,
             chat_model,
+            chat_targets,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args).await
     }

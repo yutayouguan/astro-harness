@@ -175,6 +175,7 @@ fn build_run_request(
         model: ctx.chat_model.clone(),
         api_key: ctx.chat_api_key.clone(),
         base_url: ctx.chat_base_url.clone(),
+        chat_targets: ctx.chat_targets.clone(),
         tasks: task_specs,
         max_concurrent,
         caller_depth: memory::current_spawn_depth(),

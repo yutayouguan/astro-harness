@@ -24,6 +24,7 @@ fn make_ctx<'a>(
         chat_base_url: String::new(),
         chat_provider: "openai".into(),
         chat_model: "test".into(),
+        chat_targets: vec![],
     }
 }
 

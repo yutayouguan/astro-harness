@@ -10,6 +10,7 @@ use providers::trait_::ProviderConfig;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
+use crate::chat_fallback::try_stream_completion_with_fallback;
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
 use crate::messages::to_provider_messages;
 
@@ -107,11 +108,42 @@ fn req_clone_creds(req: &DelegateRunRequest) -> DelegateRunRequest {
         model: req.model.clone(),
         api_key: req.api_key.clone(),
         base_url: req.base_url.clone(),
+        chat_targets: req.chat_targets.clone(),
         tasks: vec![],
         max_concurrent: req.max_concurrent,
         caller_depth: req.caller_depth,
         max_spawn_depth: req.max_spawn_depth,
     }
+}
+
+/// 有效聊天目标：优先 `chat_targets`，否则由四字段合成。
+fn effective_chat_targets(
+    creds: &DelegateRunRequest,
+    registry: &ProviderRegistry,
+) -> Vec<common::ChatTarget> {
+    if !creds.chat_targets.is_empty() {
+        return creds.chat_targets.clone();
+    }
+    let backend = if creds.provider.trim().is_empty() {
+        "openai".to_string()
+    } else {
+        creds.provider.clone()
+    };
+    let model = if creds.model.trim().is_empty() {
+        registry
+            .get(&backend)
+            .map(|p| p.default_model().to_string())
+            .unwrap_or_default()
+    } else {
+        creds.model.clone()
+    };
+    vec![common::ChatTarget {
+        provider_id: backend.clone(),
+        backend_id: backend,
+        model,
+        api_key: creds.api_key.clone(),
+        base_url: creds.base_url.clone(),
+    }]
 }
 
 async fn run_one_child(
@@ -147,6 +179,9 @@ async fn run_one_child_inner(
         &creds.api_key,
         &creds.base_url,
     );
+    let registry = ProviderRegistry::new();
+    let targets = effective_chat_targets(&creds, &registry);
+    agent.set_chat_targets(targets);
 
     let user_message = if task.context.trim().is_empty() {
         format!(
@@ -166,10 +201,7 @@ async fn run_one_child_inner(
         TurnResult::Continue { system_prompt, .. } => {
             let (out, _) = run_provider_loop(
                 &mut agent,
-                &creds.provider,
-                &creds.model,
-                &creds.api_key,
-                &creds.base_url,
+                &creds,
                 &system_prompt,
                 depth_ctx,
                 &creds.parent_session_id,
@@ -224,38 +256,14 @@ pub fn apply_nested_agent_tool_strips(
 
 async fn run_provider_loop(
     agent: &mut AgentLoop,
-    provider_name: &str,
-    model: &str,
-    api_key: &str,
-    base_url: &str,
+    creds: &DelegateRunRequest,
     initial_system_prompt: &str,
     depth_ctx: memory::SpawnDepthCtx,
     parent_session_id: &str,
 ) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
-    let name = if provider_name.trim().is_empty() {
-        "openai"
-    } else {
-        provider_name
-    };
-    let provider = providers
-        .get(name)
-        .ok_or_else(|| anyhow::anyhow!("未知 Provider: {name}"))?;
-
-    let config = ProviderConfig {
-        model: if model.trim().is_empty() {
-            provider.default_model().to_string()
-        } else {
-            model.to_string()
-        },
-        api_key: api_key.to_string(),
-        base_url: if base_url.trim().is_empty() {
-            None
-        } else {
-            Some(base_url.to_string())
-        },
-        ..ProviderConfig::default()
-    };
+    let targets = effective_chat_targets(creds, &providers);
+    let base_config = ProviderConfig::default();
 
     let mut system_prompt = initial_system_prompt.to_string();
     let mut last_response = String::new();
@@ -268,10 +276,24 @@ async fn run_provider_loop(
         let messages = to_provider_messages(&system_prompt, &agent.session_messages);
         let tools = agent.tool_registry().schemas_for_api();
 
-        let mut stream = provider
-            .chat_stream(messages, tools, &config)
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let (mut stream, _meta) = try_stream_completion_with_fallback(
+            &targets,
+            &providers,
+            messages,
+            tools,
+            &base_config,
+            |from, to, err| {
+                tracing::warn!(
+                    from_backend = %from.backend_id,
+                    from_model = %from.model,
+                    to_backend = %to.backend_id,
+                    to_model = %to.model,
+                    error = %err,
+                    "delegate chat failover: switching target before first content"
+                );
+            },
+        )
+        .await?;
 
         let mut full_response = String::new();
         let mut round_usage: Option<Usage> = None;

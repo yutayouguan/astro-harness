@@ -1716,7 +1716,7 @@ fn run_to_dto(r: memory::cron_run_db::CronRunRow) -> CronRunDto {
 
 /// 为定时任务解析 Provider/模型/密钥。
 fn resolve_creds_for_job(job: &memory::CronJob) -> Result<agent::cron_exec::CronExecCredentials, String> {
-    use crate::providers_commands::{find_provider, find_provider_by_backend, resolve_api_key};
+    use crate::providers_commands::{find_provider, find_provider_by_backend, resolve_chat_targets};
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id).or_else(|_| find_provider_by_backend(id))?
@@ -1729,19 +1729,27 @@ fn resolve_creds_for_job(job: &memory::CronJob) -> Result<agent::cron_exec::Cron
         find_provider(&id)?
     };
 
-    let (_has, _src, _env, key) = resolve_api_key(&provider_cfg);
-    let api_key = key.unwrap_or_default();
     let model = job
         .model
         .clone()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| provider_cfg.model.clone());
 
+    let targets = resolve_chat_targets(
+        Some(provider_cfg.id.as_str()),
+        provider_cfg.kind.backend_id(),
+        &model,
+    )?;
+    let primary = targets.first().ok_or_else(|| {
+        "未能解析聊天目标链，请检查模型提供商配置".to_string()
+    })?;
+
     Ok(agent::cron_exec::CronExecCredentials {
-        provider: provider_cfg.kind.backend_id().to_string(),
-        model,
-        api_key,
-        base_url: provider_cfg.endpoint.clone(),
+        provider: primary.backend_id.clone(),
+        model: primary.model.clone(),
+        api_key: primary.api_key.clone(),
+        base_url: primary.base_url.clone(),
+        targets,
     })
 }
 
