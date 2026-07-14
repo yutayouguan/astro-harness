@@ -1,10 +1,23 @@
 # 会话压实与拆分续聊（Session Compaction P1b）
 
 **日期:** 2026-07-14  
-**状态:** 已批准（对话确认）  
+**状态:** **已实现**  
+**实现分支:** `feat/session-compaction`  
 **范围:** 上下文逼近上限时（或手动）生成摘要、结束旧会话、新会话挂 `parent_session_id` 续聊；前端无感切换  
 **关联:** [`2026-07-13-session-store-design.md`](./2026-07-13-session-store-design.md)（P1 预留）、编辑截断 / 分支 fork、chat fallback 链  
-**外部参考（正文不重复品牌名）:** 参考 Agent 的 context compression：辅模型摘要 + 会话拆分与谱系；社区亦有「同 session 原地压实」讨论，本设计**不采用**原地方案
+**外部参考（正文不重复品牌名）:** 参考 Agent 的 context compression：辅模型摘要 + 会话拆分与谱系；社区亦有「同 session 原地压实」讨论，本设计**不采用**原地方案  
+**计划:** [`../plans/2026-07-14-session-compaction.md`](../plans/2026-07-14-session-compaction.md)
+
+### 实现说明
+
+| 入口 | 状态 |
+|------|------|
+| `SessionStore::end_session` / `assert_session_writable` / `append` 拒绝已结束 | 已接线 |
+| `SessionStore::compact_and_split`（摘要 + 尾 K，含 tool） | 已接线 + 单测 |
+| Tauri `compact_chat_session`（LLM → 启发式降级） | 已接线 |
+| 前端 `/compact`（`/compress`）无感切会话 + toast | 已接线 |
+| 侧栏 `endReason=compacted` 徽章 | 已接线 |
+| 自动压实（约 50% 上下文 + 60s 冷却，轮次结束触发） | 已接线 |
 
 ## 命名约束
 
