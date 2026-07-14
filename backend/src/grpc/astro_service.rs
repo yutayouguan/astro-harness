@@ -17,8 +17,8 @@ use proto::astro_service_server::AstroService;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, Empty, FileListRequest,
     FileListResponse, ImageEvent, ImageRequest, MemoryQuery, MemoryResult, McpServerList,
-    SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillList, SkillRequest, SkillInfo,
-    UsageEvent,
+    SessionEvent, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillList, SkillRequest,
+    SkillInfo, SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::registry::ProviderRegistry;
 use providers::trait_::ProviderConfig;
@@ -31,11 +31,15 @@ use uuid::Uuid;
 use super::interrupt_store::{
     clear_interrupt_file, resume_items_from_proto, save_interrupt_file,
 };
+use crate::{to_proto, SessionEventHub, SubscribeFilter};
 
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Mutex<AgentLoop>>;
 /// Chat RPC 返回的事件流类型别名。
 type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
+/// SubscribeSessionEvents RPC 返回的事件流类型别名。
+type SessionEventsStream =
+    Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
 
 /// Astro gRPC 服务实现：会话 Agent、流式聊天、记忆与技能等 RPC。
 pub struct AstroServiceImpl {
@@ -51,6 +55,8 @@ pub struct AstroServiceImpl {
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     hook_runtime: Arc<::hooks::HookRuntime>,
+    /// 会话记忆副作用事件 fan-out（SubscribeSessionEvents）。
+    session_events: SessionEventHub,
 }
 
 impl AstroServiceImpl {
@@ -79,6 +85,7 @@ impl AstroServiceImpl {
             providers: Arc::new(ProviderRegistry::new()),
             memory_dir,
             hook_runtime,
+            session_events: SessionEventHub::new(64),
         }
     }
 
@@ -311,6 +318,8 @@ impl AstroService for AstroServiceImpl {
     /// [`execute_skill`](Self::execute_skill) 流类型。
     type ExecuteSkillStream =
         Pin<Box<dyn futures::Stream<Item = Result<SkillEvent, Status>> + Send>>;
+    /// [`subscribe_session_events`](Self::subscribe_session_events) 流类型。
+    type SubscribeSessionEventsStream = SessionEventsStream;
 
     /// Chat 流控制：暂停 / 继续 / 取消指定 `session_id` 的进行中对话。
     ///
@@ -1082,5 +1091,45 @@ impl AstroService for AstroServiceImpl {
         .map_err(|e| Status::invalid_argument(e.to_string()))?;
 
         Ok(Response::new(FileListResponse { entries }))
+    }
+
+    /// 订阅会话级记忆副作用事件（记忆更新 / pending 变化），与 Chat 流生命周期解耦。
+    ///
+    /// - `session_id` 为空：仅全局 pending
+    /// - `session_id` 非空：该 session 事件 + 全局 pending
+    /// - `agent_id` 为空：不过滤 agent
+    async fn subscribe_session_events(
+        &self,
+        request: Request<SubscribeSessionEventsRequest>,
+    ) -> Result<Response<Self::SubscribeSessionEventsStream>, Status> {
+        let req = request.into_inner();
+        let filter = SubscribeFilter {
+            session_id: if req.session_id.trim().is_empty() {
+                None
+            } else {
+                Some(req.session_id)
+            },
+            agent_id: if req.agent_id.trim().is_empty() {
+                None
+            } else {
+                Some(req.agent_id)
+            },
+        };
+        let hub = self.session_events.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        tokio::spawn(async move {
+            let mut filtered = hub.subscribe(filter);
+            loop {
+                match filtered.recv().await {
+                    Some(ev) => {
+                        if tx.send(Ok(to_proto(&ev))).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
+        });
+        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
 }
