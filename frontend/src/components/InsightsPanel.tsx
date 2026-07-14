@@ -550,18 +550,10 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   const modelStats = useMemo(() => {
     const models = data?.rankings.by_model ?? [];
     return {
-      calls: models.reduce((s, r) => s + r.calls, 0),
-      tokens: models.reduce((s, r) => s + r.tokens, 0),
-      cost: models.reduce((s, r) => s + r.cost_usd, 0),
       modelCount: models.length,
       agentCount: data?.rankings.by_agent.length ?? 0,
     };
   }, [data]);
-  const providerBars = useMemo(() => {
-    const items = byProvider.slice(0, 8);
-    const max = Math.max(1, ...items.map((r) => (r.cost_usd > 0 ? r.cost_usd : r.tokens)));
-    return { items, max, useCost: items.some((r) => r.cost_usd > 0) };
-  }, [byProvider]);
   const overviewProviderTop = useMemo(
     () => providerSpendTop(byProvider, 5),
     [byProvider],
@@ -831,22 +823,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
 
       {view === "models" && data && (
         <>
-          <div className="insights-kpis insights-kpis-models">
-            <KpiCard
-              icon={<Cpu size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.llmCalls")}
-              value={String(modelStats.calls)}
-            />
-            <KpiCard
-              icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.tokens")}
-              value={formatTokens(modelStats.tokens || data.kpis.tokens)}
-            />
-            <KpiCard
-              icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.kpi.cost")}
-              value={formatCost(modelStats.cost || data.kpis.cost_usd)}
-            />
+          <div className="insights-kpis insights-kpis-models-secondary">
             <KpiCard
               icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
               label={t("insights.kpi.models")}
@@ -857,107 +834,6 @@ export default function InsightsPanel({ active }: { active: boolean }) {
               label={t("insights.kpi.agents")}
               value={String(modelStats.agentCount || data.kpis.active_agents)}
             />
-            <KpiCard
-              icon={<Building2 size={16} strokeWidth={2.25} aria-hidden />}
-              label={t("insights.rank.provider")}
-              value={String(byProvider.length)}
-            />
-          </div>
-
-          {hasUnpriced && (
-            <p className="insights-unpriced">
-              <AlertTriangle size={14} strokeWidth={2.25} aria-hidden />
-              {t("insights.unpriced")}
-            </p>
-          )}
-
-          <div className="insights-models-grid">
-            <div className="insights-chart-wrap insights-models-chart">
-              <div className="insights-chart-heading">
-                <div className="insights-chart-heading-label">
-                  <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
-                  <span>{t("insights.chart.usageTrend")}</span>
-                </div>
-                <div className="insights-metric-tabs" role="tablist">
-                  {METRIC_TABS.map(({ id, labelKey }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      className={`insights-metric-tab${metric === id ? " active" : ""}`}
-                      aria-selected={metric === id}
-                      onClick={() => setMetric(id)}
-                    >
-                      {t(labelKey)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {data.series.length > 0 ? (
-                <div className="insights-chart" aria-label={`${metric} trend`}>
-                  {data.series.map((s) => (
-                    <div
-                      key={s.bucket}
-                      className="insights-bar-col"
-                      title={formatSeriesTip(s, metric)}
-                    >
-                      <div
-                        className="insights-bar"
-                        style={{
-                          height: `${(seriesValue(s, metric) / maxVal) * 100}%`,
-                        }}
-                      />
-                      <span className="insights-bar-label">
-                        {formatBucketLabel(s.bucket, period, locale)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="insights-panel-empty insights-chart-empty">
-                  <p>{t("insights.empty.models")}</p>
-                </div>
-              )}
-            </div>
-
-            <section className="insights-hbar-panel">
-              <h3 className="insights-rank-title">
-                <Building2 size={14} strokeWidth={2.25} aria-hidden />
-                {t("insights.rank.providerShare")}
-              </h3>
-              {providerBars.items.length === 0 ? (
-                <p className="insights-rank-empty">{t("insights.rank.empty")}</p>
-              ) : (
-                <ul className="insights-hbar-list">
-                  {providerBars.items.map((r) => {
-                    const val = providerBars.useCost ? r.cost_usd : r.tokens;
-                    return (
-                      <li key={r.name} className="insights-hbar-item">
-                        <span className="insights-hbar-label">
-                          <span className="insights-rank-kind-icon" title="provider">
-                            <KindIcon kind="provider" />
-                          </span>
-                          {r.name}
-                        </span>
-                        <div className="insights-hbar-track">
-                          <div
-                            className="insights-hbar-fill"
-                            style={{
-                              width: `${(val / providerBars.max) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="insights-hbar-value">
-                          {providerBars.useCost
-                            ? formatCost(r.cost_usd)
-                            : formatTokens(r.tokens)}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
           </div>
 
           <section className="insights-hbar-panel">
