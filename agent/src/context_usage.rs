@@ -45,7 +45,7 @@ pub struct ContextUsageInput<'a> {
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
-    pub tools_json: &'a serde_json::Value,
+    pub tools: &'a [serde_json::Value],
     pub messages: &'a [Message],
     pub context_window: u32,
     pub updated_at_ms: i64,
@@ -83,17 +83,15 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
     let mut mcp_chars = 0usize;
     let mut tools_n = 0u32;
     let mut mcp_n = 0u32;
-    if let Some(arr) = input.tools_json.as_array() {
-        for t in arr {
-            let s = t.to_string();
-            let n = tool_schema_name(t).unwrap_or("");
-            if n.starts_with("mcp__") {
-                mcp_chars += s.len();
-                mcp_n += 1;
-            } else {
-                tools_chars += s.len();
-                tools_n += 1;
-            }
+    for t in input.tools {
+        let s = t.to_string();
+        let n = tool_schema_name(t).unwrap_or("");
+        if n.starts_with("mcp__") {
+            mcp_chars += s.len();
+            mcp_n += 1;
+        } else {
+            tools_chars += s.len();
+            tools_n += 1;
         }
     }
 
@@ -207,16 +205,19 @@ mod tests {
 
     #[test]
     fn mcp_prefix_goes_to_mcp_segment() {
-        let tools = serde_json::json!([
+        let tools: Vec<serde_json::Value> = serde_json::json!([
             {"type":"function","function":{"name":"file_ops","parameters":{}}},
             {"type":"function","function":{"name":"mcp__fs__read","parameters":{"a":1}}}
-        ]);
+        ])
+        .as_array()
+        .unwrap()
+        .clone();
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 40,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
-            tools_json: &tools,
+            tools: &tools,
             messages: &[],
             context_window: 128_000,
             updated_at_ms: 1,
@@ -244,7 +245,7 @@ mod tests {
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
-            tools_json: &serde_json::json!([]),
+            tools: &[],
             messages: &[assistant, tool],
             context_window: 128_000,
             updated_at_ms: 1,
