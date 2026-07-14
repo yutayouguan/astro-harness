@@ -100,6 +100,8 @@ pub struct ToolContext<'a> {
     pub providers: &'a ProviderRegistry,
     /// 当前会话 id；`delegate`、`task_plan`、编排落盘时写入关联字段。
     pub session_id: String,
+    /// 当前流式 run 的 turn_id（与 agent `run_id` 相同）；未在 run 内为 `None`。
+    pub turn_id: Option<String>,
     /// 当前聊天会话的 API Key；`vision`、`tts` 在 Provider 为 OpenAI 时复用。
     pub chat_api_key: String,
     /// 当前聊天会话的 Base URL。

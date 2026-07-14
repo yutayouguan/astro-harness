@@ -102,6 +102,7 @@ mod tests {
             image_gen_targets: &targets,
             providers: &providers,
             session_id: "test".into(),
+            turn_id: None,
             chat_api_key: String::new(),
             chat_base_url: String::new(),
             chat_provider: String::new(),

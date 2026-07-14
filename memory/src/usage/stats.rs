@@ -123,12 +123,13 @@ pub fn get_usage_summary(agent_id: Option<&str>) -> AgentUsageSummary {
 /// 成功写 JSON 后双写 `usage.db`：`kind=tool`（工具集 id）；skills 再写 `kind=skill`。
 /// MCP 工具（`mcp__` 前缀）只更新 JSON，事件由 Agent loop 写 `kind=mcp`。
 ///
-/// `session_id` 写入 usage 事件，便于 Tracing 按会话串联工具调用。
+/// `session_id` / `turn_id` 写入 usage 事件，便于 Tracing 按会话与 turn 串联工具调用。
 pub fn record_tool_call(
     agent_id: &str,
     tool_name: &str,
     args: &serde_json::Value,
     session_id: Option<&str>,
+    turn_id: Option<&str>,
 ) -> anyhow::Result<()> {
     // 串行化写盘，避免并发丢计数
     static LOCK: Mutex<()> = Mutex::new(());
@@ -160,6 +161,10 @@ pub fn record_tool_call(
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string);
+        let tid = turn_id
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
         let ts = chrono::Utc::now().to_rfc3339();
         UsageDb::try_record(NewUsageEvent {
             ts: ts.clone(),
@@ -167,7 +172,7 @@ pub fn record_tool_call(
             name: toolset,
             agent_id: id.clone(),
             session_id: sid.clone(),
-            turn_id: None,
+            turn_id: tid.clone(),
             input_tokens: 0,
             output_tokens: 0,
             cache_read_tokens: 0,
@@ -196,7 +201,7 @@ pub fn record_tool_call(
                     name: skill_id.to_string(),
                     agent_id: id,
                     session_id: sid,
-                    turn_id: None,
+                    turn_id: tid,
                     input_tokens: 0,
                     output_tokens: 0,
                     cache_read_tokens: 0,
@@ -236,6 +241,7 @@ mod tests {
             "skills",
             &json!({ "skill_id": "demo-skill", "input": {} }),
             Some("sess-1"),
+            None,
         )
         .unwrap();
         record_tool_call(
@@ -243,6 +249,7 @@ mod tests {
             "skills",
             &json!({ "skill_id": "demo-skill" }),
             Some("sess-1"),
+            None,
         )
         .unwrap();
         record_tool_call(
@@ -250,6 +257,7 @@ mod tests {
             "web_search",
             &json!({ "query": "hi" }),
             Some("sess-1"),
+            None,
         )
         .unwrap();
 
@@ -291,10 +299,37 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
-        record_tool_call("workspace", "skills", &json!({ "skill_id": "  " }), None).unwrap();
+        record_tool_call("workspace", "skills", &json!({ "skill_id": "  " }), None, None)
+            .unwrap();
         let summary = get_usage_summary(Some("workspace"));
         assert_eq!(summary.tools.get("skills").copied().unwrap_or(0), 1);
         assert!(summary.skills.is_empty());
         assert_eq!(summary.skill_total, 0);
+    }
+
+    #[test]
+    fn records_tool_event_with_turn_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = AstroMemoryDirGuard::set(dir.path());
+
+        record_tool_call(
+            "workspace",
+            "web_search",
+            &json!({ "query": "hi" }),
+            Some("sess-turn"),
+            Some("turn-42"),
+        )
+        .unwrap();
+
+        let path = crate::usage_db::usage_db_path();
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let turn: Option<String> = conn
+            .query_row(
+                "SELECT turn_id FROM usage_events WHERE kind = 'tool' AND session_id = 'sess-turn'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(turn.as_deref(), Some("turn-42"));
     }
 }
