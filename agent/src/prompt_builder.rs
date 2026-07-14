@@ -97,7 +97,7 @@ impl PromptBuilder {
         self
     }
 
-    /// 追加 FTS/向量召回的对话上下文块（与 `DynamicContext` 标题区分，用于旧路径兼容）。
+    /// 追加 FTS/向量召回的对话上下文块（标题与 `DynamicContext` 区分）。
     pub fn with_recalled_context(mut self, context: &str) -> Self {
         if !context.is_empty() {
             self.layers

@@ -123,13 +123,6 @@ pub fn classify_dangerous_command(command: &str) -> Option<ApprovalDecision> {
     None
 }
 
-/// 兼容旧 API：任意非 Auto 危险（含 Deny/Ask）返回说明；Auto 视为「检测到但仍可自动批」也返回 Some。
-///
-/// 若只需「是否要弹卡」，请用 [`classify_dangerous_command`]。
-pub fn detect_dangerous_command(command: &str) -> Option<&'static str> {
-    classify_dangerous_command(command).map(|d| d.description)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

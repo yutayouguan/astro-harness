@@ -595,3 +595,60 @@ fn outdated_schema_discards_prior_chat_and_billing() {
 }
 
 
+
+#[test]
+fn fork_session_copies_bubbles_and_trailing_tools() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("src", "test", Some("gpt"), None, None)
+        .unwrap();
+    store.set_session_title("src", "hello").unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("u1".into()),
+            ..NewMessage::empty("src", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a1".into()),
+            tool_calls: Some(serde_json::json!([{ "id": "c1", "name": "x", "arguments": {} }])),
+            ..NewMessage::empty("src", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("tool-out".into()),
+            tool_call_id: Some("c1".into()),
+            tool_name: Some("x".into()),
+            ..NewMessage::empty("src", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a1b".into()),
+            ..NewMessage::empty("src", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("u2".into()),
+            ..NewMessage::empty("src", "user")
+        })
+        .unwrap();
+
+    // keep 2 bubbles = user + assistant(+trailing tools until next non-tool)
+    // After first assistant with tools, we include tool rows then stop before next assistant? 
+    // Looking at impl: when bubble count hits keep, it includes following tool rows only.
+    // So keep=2: u1, a1(+tool). Not a1b.
+    store.fork_session("src", "dst", 2).unwrap();
+    let dst = store.get_messages("dst").unwrap();
+    assert_eq!(dst.len(), 3);
+    assert_eq!(dst[0].content.as_deref(), Some("u1"));
+    assert_eq!(dst[1].role, "assistant");
+    assert_eq!(dst[2].role, "tool");
+    let meta = store.get_session("dst").unwrap().unwrap();
+    assert_eq!(meta.parent_session_id.as_deref(), Some("src"));
+    assert!(meta.title.as_deref().unwrap_or("").contains("branch"));
+}

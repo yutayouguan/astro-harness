@@ -28,6 +28,7 @@ import {
   Music2,
   Paperclip,
   Pause,
+  Pencil,
   Play,
   RefreshCw,
   SendHorizontal,
@@ -187,12 +188,11 @@ type Props = {
   contextUsagePercent?: number | null;
   /** 重新生成该条 assistant 回复（基于前一条 user） */
   onRegenerateMessage?: (messageId: string) => void;
+  /** 编辑用户消息并重发（内容填回输入框，截断该条及之后） */
+  onEditUserMessage?: (messageId: string) => void;
   /** 删除该条消息 */
   onDeleteMessage?: (messageId: string) => void;
-  /**
-   * 从该条回复分支新会话。
-   * 产品尚未实现分支会话时可不传；按钮仍展示，点击为 no-op 占位。
-   */
+  /** 从该条消息分支新会话（复制历史到新 session） */
   onBranchMessage?: (messageId: string) => void;
   /** Hermes 风格斜杠命令执行（不含 insert_skill / help 本地处理） */
   onSlashAction?: (action: SlashAction, args?: string) => void;
@@ -346,18 +346,23 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
 }
 
 /** 消息悬停操作（复制/再生/删除/分支） */
+/** 消息悬停操作（复制 / 再生或编辑 / 删除 / 分支） */
 function MessageActions({
   messageId,
   content,
+  role,
   disabled,
   onRegenerate,
+  onEdit,
   onDelete,
   onBranch,
 }: {
   messageId: string;
   content: string;
+  role: "user" | "assistant";
   disabled?: boolean;
   onRegenerate?: (messageId: string) => void;
+  onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onBranch?: (messageId: string) => void;
 }) {
@@ -391,16 +396,29 @@ function MessageActions({
           <Copy size={14} strokeWidth={2} aria-hidden />
         )}
       </button>
-      <button
-        type="button"
-        className="msg-action-btn"
-        disabled={disabled || !onRegenerate}
-        onClick={() => onRegenerate?.(messageId)}
-        aria-label={t("chat.regenerate")}
-        title={t("chat.regenerate")}
-      >
-        <RefreshCw size={14} strokeWidth={2} aria-hidden />
-      </button>
+      {role === "assistant" ? (
+        <button
+          type="button"
+          className="msg-action-btn"
+          disabled={disabled || !onRegenerate}
+          onClick={() => onRegenerate?.(messageId)}
+          aria-label={t("chat.regenerate")}
+          title={t("chat.regenerate")}
+        >
+          <RefreshCw size={14} strokeWidth={2} aria-hidden />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="msg-action-btn"
+          disabled={disabled || !onEdit}
+          onClick={() => onEdit?.(messageId)}
+          aria-label={t("chat.editResend")}
+          title={t("chat.editResend")}
+        >
+          <Pencil size={14} strokeWidth={2} aria-hidden />
+        </button>
+      )}
       <button
         type="button"
         className="msg-action-btn msg-action-btn--danger"
@@ -411,11 +429,10 @@ function MessageActions({
       >
         <Trash2 size={14} strokeWidth={2} aria-hidden />
       </button>
-      {/* 分支会话：后端/会话树未就绪时仅 UI + 可接线回调占位 */}
       <button
         type="button"
         className="msg-action-btn"
-        disabled={disabled}
+        disabled={disabled || !onBranch}
         onClick={() => onBranch?.(messageId)}
         aria-label={t("chat.branch")}
         title={t("chat.branchHint")}
@@ -484,6 +501,7 @@ export default function ChatView({
   onOpenContext,
   contextUsagePercent = null,
   onRegenerateMessage,
+  onEditUserMessage,
   onDeleteMessage,
   onBranchMessage,
   onSlashAction,
@@ -1137,12 +1155,20 @@ export default function ChatView({
                         />
                       ) : null}
                     </div>
-                    {m.role === "assistant" && !isStreamingBubble ? (
+                    {!isStreamingBubble &&
+                    m.id !== "welcome" &&
+                    (m.role === "user" || m.role === "assistant") ? (
                       <MessageActions
                         messageId={m.id}
                         content={m.content}
+                        role={m.role}
                         disabled={streaming}
-                        onRegenerate={onRegenerateMessage}
+                        onRegenerate={
+                          m.role === "assistant" ? onRegenerateMessage : undefined
+                        }
+                        onEdit={
+                          m.role === "user" ? onEditUserMessage : undefined
+                        }
                         onDelete={onDeleteMessage}
                         onBranch={onBranchMessage}
                       />

@@ -49,7 +49,7 @@ pub struct ToolCatalogItem {
     pub icon: String,
     /// 代表性工具的参数列表（与 `functions[0]` 可能不同，取决于 id 匹配）。
     pub params: Vec<ToolParamInfo>,
-    /// 该 toolset 下全部工具名（兼容旧前端）。
+    /// 该 toolset 下全部工具名。
     pub tools: Vec<String>,
     /// 每个函数的完整说明与参数。
     pub functions: Vec<ToolFunctionInfo>,

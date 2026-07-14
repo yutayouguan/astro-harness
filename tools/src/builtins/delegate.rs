@@ -22,12 +22,9 @@ pub struct DelegateTaskArgs {
 /// `delegate` / `delegate_async` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct DelegateArgs {
-    /// 单任务目标（与 `task` / `tasks` 三选一）。
+    /// 单任务目标（与 `tasks` 二选一）。
     #[serde(default)]
     pub goal: Option<String>,
-    /// 兼容旧字段：等同于 `goal`。
-    #[serde(default)]
-    pub task: Option<String>,
     /// 单任务上下文。
     #[serde(default)]
     pub context: Option<String>,
@@ -37,9 +34,6 @@ pub struct DelegateArgs {
     /// 并行上限，默认 3。
     #[serde(default)]
     pub max_concurrent: Option<usize>,
-    /// 遗留字段，忽略（真委派复用父 Agent）。
-    #[serde(default)]
-    pub agent_type: Option<String>,
 }
 
 /// `delegate_status` / `delegate_cancel` 参数。
@@ -210,14 +204,9 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<memory::DelegateTa
         return Ok(out);
     }
 
-    let goal = parsed
-        .goal
-        .as_deref()
-        .or(parsed.task.as_deref())
-        .unwrap_or("")
-        .trim();
+    let goal = parsed.goal.as_deref().unwrap_or("").trim();
     if goal.is_empty() {
-        anyhow::bail!("delegate 需要 goal、task 或 tasks");
+        anyhow::bail!("delegate 需要 goal 或 tasks");
     }
     Ok(vec![memory::DelegateTaskSpec {
         goal: goal.to_string(),

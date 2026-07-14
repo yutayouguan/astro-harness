@@ -14,7 +14,7 @@ pub mod approval;
 
 // 保持原有顶层路径，避免破坏下游 crate 引用。
 pub use core::{catalog, context, dispatch, parse, registry, schema};
-pub use approval::{classify_dangerous_command, detect_dangerous_command, ApprovalAction};
+pub use approval::{classify_dangerous_command, ApprovalAction};
 pub(crate) use core::path_safe;
 pub(crate) use builtins::{
     browser, clarify, code_exec, confirm, create_agent, delegate, file_ops, image_gen, memory_tools,

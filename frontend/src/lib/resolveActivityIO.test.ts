@@ -10,25 +10,13 @@ test("prefers explicit input/output over detail", () => {
       title: "x",
       input: "in",
       output: "out",
-      detail: "old\n→\nold2",
+      detail: "ignored",
     }),
     { input: "in", output: "out" },
   );
 });
 
-test("splits legacy detail on arrow separator", () => {
-  assert.deepEqual(
-    resolveActivityIO({
-      id: "1",
-      kind: "tool",
-      title: "x",
-      detail: '{"a":1}\n→\nok',
-    }),
-    { input: '{"a":1}', output: "ok" },
-  );
-});
-
-test("detail without separator becomes output only", () => {
+test("detail without input/output becomes output only", () => {
   assert.deepEqual(
     resolveActivityIO({
       id: "1",

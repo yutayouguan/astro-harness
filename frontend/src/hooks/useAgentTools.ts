@@ -259,8 +259,10 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     Icon: IconDelegate,
     tone: "sky",
     params: [
-      { name: "task", type: "string" },
-      { name: "agent_type", type: "string", optional: true },
+      { name: "goal", type: "string", optional: true },
+      { name: "context", type: "string", optional: true },
+      { name: "tasks", type: "object", optional: true },
+      { name: "max_concurrent", type: "number", optional: true },
     ],
   },
   {

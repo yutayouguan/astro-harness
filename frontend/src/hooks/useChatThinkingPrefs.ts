@@ -1,5 +1,5 @@
 /**
- * 聊天思考强度偏好：读写 localStorage，兼容旧版 `{ enabled, effort }`。
+ * 聊天思考强度偏好：读写 localStorage（仅 `{ level }`）。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -9,7 +9,7 @@ import {
   thinkingPrefsEnabled,
 } from "../lib/thinkingPrefs";
 
-const STORAGE_KEY = "astro.chat.thinking";
+const STORAGE_KEY = "astro.chat.thinking.v2";
 
 const DEFAULT: ChatThinkingPrefs = { level: "high" };
 
@@ -17,10 +17,7 @@ function readStored(): ChatThinkingPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT };
-    const parsed = JSON.parse(raw) as Partial<ChatThinkingPrefs> & {
-      enabled?: boolean;
-      effort?: string;
-    };
+    const parsed = JSON.parse(raw) as Partial<ChatThinkingPrefs>;
     if (
       parsed.level === "off" ||
       parsed.level === "low" ||
@@ -29,10 +26,7 @@ function readStored(): ChatThinkingPrefs {
     ) {
       return { level: parsed.level };
     }
-    // 兼容旧版 { enabled, effort }
-    if (parsed.enabled === false) return { level: "off" };
-    if (parsed.effort === "max") return { level: "max" };
-    return { level: "high" };
+    return { ...DEFAULT };
   } catch {
     return { ...DEFAULT };
   }

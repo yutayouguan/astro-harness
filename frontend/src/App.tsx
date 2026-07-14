@@ -998,10 +998,18 @@ export default function App() {
         }
 
         if (resolved.loadedSkills.length > 0) {
-          // 轻量提示，避免打断
-          console.info(
-            "skills injected:",
-            resolved.loadedSkills.join(", "),
+          setToastMsg(
+            t("chat.skillLoaded", {
+              names: resolved.loadedSkills.join(", "),
+            }),
+          );
+          setToastVisible(true);
+          if (hideTimerRef.current != null) {
+            window.clearTimeout(hideTimerRef.current);
+          }
+          hideTimerRef.current = window.setTimeout(
+            () => setToastVisible(false),
+            3500,
           );
         }
       } catch (e) {
@@ -1249,10 +1257,7 @@ export default function App() {
             title: name,
             input: payload.arguments_json || undefined,
             output: payload.result || undefined,
-            detail:
-              [payload.arguments_json, payload.result]
-                .filter(Boolean)
-                .join("\n→\n") || undefined,
+            detail: payload.result || payload.arguments_json || undefined,
             status: payload.result ? "done" : "running",
             at: Date.now(),
           };
@@ -1518,6 +1523,7 @@ export default function App() {
     activeProvider,
     providers,
     sessionId,
+    messages,
     emptyMode,
     sessionPendingInterrupts,
     t,
@@ -1616,26 +1622,117 @@ export default function App() {
     [messages, streaming, send],
   );
 
-  const deleteMessage = useCallback(
-    (messageId: string) => {
-      if (streaming) return;
-      setMessages((prev) => {
-        const next = prev.filter((m) => m.id !== messageId);
-        if (next.length === 0) {
-          queueMicrotask(() => setEmptyMode("chat"));
-        }
-        return next;
-      });
-    },
-    [streaming],
-  );
-
   const showTransientToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setToastVisible(true);
     if (hideTimerRef.current != null) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
   }, []);
+
+  /** 编辑用户消息：正文与附件填入输入框，截断该条及之后，改完后发送即重发 */
+  const editUserMessage = useCallback(
+    (messageId: string) => {
+      if (streaming) return;
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx < 0 || messages[idx]?.role !== "user") return;
+      const userMsg = messages[idx];
+      setInput(userMsg.content);
+      setAttachments(
+        (userMsg.attachments ?? []).map((a) => ({
+          ...a,
+        })),
+      );
+      setMessages((prev) => prev.slice(0, idx));
+      setSessionPendingInterrupts([]);
+      queueMicrotask(() => {
+        const el = document.querySelector<HTMLTextAreaElement>(
+          ".composer-shell textarea",
+        );
+        el?.focus();
+        if (el) {
+          const len = el.value.length;
+          el.setSelectionRange(len, len);
+        }
+      });
+    },
+    [messages, streaming],
+  );
+
+  const deleteMessage = useCallback(
+    (messageId: string) => {
+      if (streaming) return;
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === messageId);
+        if (idx < 0) return prev;
+        let end = idx + 1;
+        // 删用户消息时，一并去掉其后紧跟的助手回复（到下一条 user 之前）
+        if (prev[idx].role === "user") {
+          while (end < prev.length && prev[end].role === "assistant") {
+            end += 1;
+          }
+        }
+        const next = [...prev.slice(0, idx), ...prev.slice(end)];
+        if (next.length === 0) {
+          queueMicrotask(() => setEmptyMode("chat"));
+        }
+        return next;
+      });
+      setSessionPendingInterrupts([]);
+    },
+    [streaming],
+  );
+
+  /** 分支：复制截止该消息的历史到新会话，可继续聊 */
+  const branchMessage = useCallback(
+    async (messageId: string) => {
+      if (streaming) return;
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx < 0) return;
+      const keep = messages.slice(0, idx + 1).filter((m) => m.id !== "welcome");
+      if (keep.length === 0) return;
+
+      const newId = crypto.randomUUID();
+      const sourceId = sessionId;
+
+      if (sourceId) {
+        try {
+          await invoke<string>("fork_chat_session", {
+            sourceSessionId: sourceId,
+            keepChatBubbles: keep.length,
+            newSessionId: newId,
+          });
+        } catch (e) {
+          showTransientToast(
+            t("chat.branchFailed", {
+              error: e instanceof Error ? e.message : String(e ?? "error"),
+            }),
+          );
+          return;
+        }
+      }
+
+      unlistenRef.current?.();
+      unlistenRef.current = null;
+      clearStreamBuffers();
+      setSessionPendingInterrupts([]);
+      setStreaming(false);
+      setStreamPaused(false);
+      setFocusMessageId(null);
+      setSessionId(newId);
+      setMessages(keep);
+      setEmptyMode(null);
+      saveChatSession(newId, keep, []);
+      showTransientToast(t("chat.branchDone"));
+    },
+    [
+      messages,
+      streaming,
+      sessionId,
+      clearStreamBuffers,
+      showTransientToast,
+      t,
+    ],
+  );
 
   /** 撤销最近一轮 user + 紧随的 assistant */
   const undoLastExchange = useCallback(() => {
@@ -2347,8 +2444,9 @@ export default function App() {
                         setChatRightOpen(true);
                       }}
                       onRegenerateMessage={regenerateMessage}
+                      onEditUserMessage={editUserMessage}
                       onDeleteMessage={deleteMessage}
-                      onBranchMessage={undefined}
+                      onBranchMessage={(id) => void branchMessage(id)}
                       onSlashAction={handleSlashAction}
                       contextUsagePercent={(() => {
                         if (tokenUsage && tokenUsage.totalTokens > 0) {

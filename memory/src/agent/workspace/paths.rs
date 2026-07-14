@@ -56,11 +56,6 @@ pub fn default_agent_workspace_dir() -> PathBuf {
     agent_workspace_dir(&base, &id)
 }
 
-/// 兼容旧单参调用：等价于 `agent_workspace_dir(base, DEFAULT_AGENT_ID)`
-pub fn default_workspace_dir(base: &Path) -> PathBuf {
-    agent_workspace_dir(base, DEFAULT_AGENT_ID)
-}
-
 /// 规范化 agent id：小写、空格转 `-`，仅保留 `[a-z0-9_-]`
 /// 纯非 ASCII 名称（如中文）用 `agent-{hash}` 兜底，避免落到默认 `workspace`
 pub fn normalize_agent_id(raw: &str) -> String {

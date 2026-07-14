@@ -1,30 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import {
   parseSlashInput,
   resolveBuiltinSlash,
 } from "./composerCommands.ts";
 
-describe("composerCommands", () => {
-  it("resolves builtins and aliases", () => {
-    expect(resolveBuiltinSlash("new")?.action).toBe("new_chat");
-    expect(resolveBuiltinSlash("reset")?.action).toBe("new_chat");
-    expect(resolveBuiltinSlash("hel")?.name).toBe("help");
-    expect(resolveBuiltinSlash("mcp")?.action).toBe("nav_mcp");
-  });
+test("resolves builtins and aliases", () => {
+  assert.equal(resolveBuiltinSlash("new")?.action, "new_chat");
+  assert.equal(resolveBuiltinSlash("reset")?.action, "new_chat");
+  assert.equal(resolveBuiltinSlash("hel")?.name, "help");
+  assert.equal(resolveBuiltinSlash("mcp")?.action, "nav_mcp");
+});
 
-  it("parses skill slash before prefix match", () => {
-    const parsed = parseSlashInput("/skills-demo foo", ["skills-demo"]);
-    expect(parsed?.action).toBe("insert_skill");
-    expect(parsed?.skillName).toBe("skills-demo");
-    expect(parsed?.args).toBe("foo");
-  });
+test("parses skill slash before prefix match", () => {
+  const parsed = parseSlashInput("/skills-demo foo", ["skills-demo"]);
+  assert.equal(parsed?.action, "insert_skill");
+  assert.equal(parsed?.skillName, "skills-demo");
+  assert.equal(parsed?.args, "foo");
+});
 
-  it("parses builtin with args", () => {
-    const parsed = parseSlashInput("/mode");
-    expect(parsed?.action).toBe("mode");
-  });
+test("parses builtin with args", () => {
+  const parsed = parseSlashInput("/mode");
+  assert.equal(parsed?.action, "mode");
+});
 
-  it("returns null for plain text", () => {
-    expect(parseSlashInput("hello")).toBeNull();
-  });
+test("returns null for plain text", () => {
+  assert.equal(parseSlashInput("hello"), null);
 });

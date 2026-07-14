@@ -239,6 +239,7 @@ pub fn run() {
             commands::generate_image,
             commands::query_memory,
             commands::get_chat_history,
+            commands::fork_chat_session,
             commands::list_recent_sessions,
             commands::list_files,
             commands::read_file,

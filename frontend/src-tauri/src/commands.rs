@@ -1024,6 +1024,33 @@ pub async fn get_chat_history(
     })
 }
 
+/// 从当前会话分支：复制截止到第 `keep_chat_bubbles` 条聊天气泡的消息到新会话。
+#[tauri::command]
+pub async fn fork_chat_session(
+    source_session_id: String,
+    keep_chat_bubbles: i32,
+    new_session_id: Option<String>,
+) -> Result<String, String> {
+    let source = source_session_id.trim();
+    if source.is_empty() {
+        return Err("source_session_id 不能为空".into());
+    }
+    let keep = keep_chat_bubbles.max(0) as usize;
+    let new_id = new_session_id
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    if new_id == source {
+        return Err("新会话 id 不能与源会话相同".into());
+    }
+
+    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+        .map_err(|e| e.to_string())?;
+    mgr.session_store
+        .fork_session(source, &new_id, keep)
+        .map_err(|e| e.to_string())?;
+    Ok(new_id)
+}
+
 /// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {

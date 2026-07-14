@@ -137,6 +137,123 @@ impl SessionStore {
         Ok(out)
     }
 
+    /// 将源会话消息复制到新会话（含 tool 行），截止到第 `keep_chat_bubbles` 个 user/assistant 气泡。
+    ///
+    /// 新会话写入 `parent_session_id = source_id`，便于谱系追溯。`keep_chat_bubbles == 0` 时仅创建空会话。
+    pub fn fork_session(
+        &self,
+        source_id: &str,
+        new_id: &str,
+        keep_chat_bubbles: usize,
+    ) -> Result<()> {
+        if source_id == new_id {
+            anyhow::bail!("fork_session: source and target session ids must differ");
+        }
+        if self.get_session(new_id)?.is_some() {
+            anyhow::bail!("fork_session: target session already exists");
+        }
+
+        let parent = self.get_session(source_id)?;
+        let model = parent.as_ref().and_then(|p| p.model.clone());
+        self.create_session(
+            new_id,
+            "tauri",
+            model.as_deref(),
+            None,
+            Some(source_id),
+        )?;
+
+        if keep_chat_bubbles == 0 {
+            return Ok(());
+        }
+
+        let messages = self.get_messages(source_id)?;
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let mut bubbles = 0usize;
+        let mut end = None;
+        for (i, m) in messages.iter().enumerate() {
+            match m.role.as_str() {
+                "user" | "assistant" => {
+                    bubbles += 1;
+                    if bubbles >= keep_chat_bubbles {
+                        let mut last = i;
+                        for (j, n) in messages.iter().enumerate().skip(i + 1) {
+                            if n.role == "tool" {
+                                last = j;
+                            } else {
+                                break;
+                            }
+                        }
+                        end = Some(last);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let end = end.unwrap_or(messages.len() - 1);
+
+        let tx = self.conn.unchecked_transaction()?;
+        let mut message_count = 0i64;
+        let mut tool_call_count = 0i64;
+        for m in &messages[..=end] {
+            let tool_calls = json_to_db(&m.tool_calls)?;
+            let reasoning_details = json_to_db(&m.reasoning_details)?;
+            let codex_reasoning_items = json_to_db(&m.codex_reasoning_items)?;
+            let codex_message_items = json_to_db(&m.codex_message_items)?;
+            tx.execute(
+                "INSERT INTO messages (
+                    session_id, role, content, tool_call_id, tool_calls, tool_name,
+                    timestamp, token_count, finish_reason,
+                    reasoning, reasoning_content, reasoning_details,
+                    codex_reasoning_items, codex_message_items
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6,
+                    ?7, ?8, ?9,
+                    ?10, ?11, ?12,
+                    ?13, ?14
+                 )",
+                params![
+                    new_id,
+                    m.role,
+                    m.content,
+                    m.tool_call_id,
+                    tool_calls,
+                    m.tool_name,
+                    m.timestamp,
+                    m.token_count,
+                    m.finish_reason,
+                    m.reasoning,
+                    m.reasoning_content,
+                    reasoning_details,
+                    codex_reasoning_items,
+                    codex_message_items,
+                ],
+            )?;
+            message_count += 1;
+            if m.role == "tool" {
+                tool_call_count += 1;
+            }
+        }
+        tx.execute(
+            "UPDATE sessions
+             SET message_count = ?1, tool_call_count = ?2
+             WHERE id = ?3",
+            params![message_count, tool_call_count, new_id],
+        )?;
+        tx.commit()?;
+
+        if let Some(title) = parent.and_then(|p| p.title).filter(|t| !t.trim().is_empty()) {
+            let branched = format!("{title} · branch");
+            let _ = self.set_session_title(new_id, &branched);
+        }
+
+        Ok(())
+    }
+
     /// 重建 OpenAI conversation 形状（assistant 带 `tool_calls` / `reasoning*`）。
     pub fn get_messages_as_conversation(&self, session_id: &str) -> Result<Vec<Value>> {
         let messages = self.get_messages(session_id)?;

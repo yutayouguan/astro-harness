@@ -41,19 +41,19 @@ async fn delegate_requires_goal() {
         .unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("goal") || msg.contains("task") || msg.contains("runner"),
+        msg.contains("goal") || msg.contains("runner"),
         "unexpected: {msg}"
     );
 }
 
 #[tokio::test]
-async fn delegate_legacy_task_hits_runner_or_key() {
+async fn delegate_goal_hits_runner_or_key() {
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
-    let args = serde_json::json!({"task": "do thing"});
+    let args = serde_json::json!({"goal": "do thing"});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "delegate", &args)
         .await
         .unwrap_err();

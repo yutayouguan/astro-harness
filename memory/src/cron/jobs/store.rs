@@ -272,7 +272,7 @@ impl CronStore {
         Ok(fired)
     }
 
-    /// 扫描到期任务（兼容旧调用方）：写 heartbeat，委托 `claim_due`
+    /// 扫描到期任务：写 heartbeat，再 `claim_due`。
     pub fn tick(&self) -> anyhow::Result<Vec<CronJob>> {
         let now = Local::now();
         self.write_heartbeat(&now)?;

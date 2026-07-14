@@ -1,13 +1,13 @@
 //! Agent 运行时核心 crate：组装对话循环、上下文、钩子与流式输出。
 //!
 //! 对外暴露构建器、循环控制、消息转换与工具注册等能力，供 Tauri 前端与后端服务复用。
-//! `ToolRegistry` 已迁移至 `tools` crate，此处保留 re-export 以兼容旧导入路径。
+//! 工具注册表实现位于 `tools` crate，本 crate re-export [`ToolRegistry`]。
 
 /// 声明式 Agent 构建与规格导出。
 pub mod builder;
 /// 静态/动态上下文分层，用于 system prompt 组装。
 pub mod context;
-/// 定时任务执行逻辑（与 `cron_tools` 注册的工具配合）。
+/// 定时任务执行逻辑。
 pub mod cron_exec;
 /// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。
 pub mod event_bus;
@@ -40,7 +40,6 @@ mod usage_record;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
 
-// 兼容旧路径：ToolRegistry 现位于 tools crate
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
 /// 上下文类型 re-export，便于调用方直接 `use agent::StaticContext`。

@@ -58,11 +58,10 @@ pub use session_store::{
 pub use workspace::{
     active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
     create_agent, create_agent_with_profile, daily_memory_path, default_agent_workspace_dir,
-    default_memory_dir, default_workspace_dir, ensure_agent_space, ensure_daily_memory,
-    ensure_default_workspace, ensure_workspace, list_agents, list_daily_memory_dates,
-    normalize_agent_id, seed_create_agent_skill, set_active_agent, today_date_string,
-    write_agent_config, AgentInfo, AgentProfile, AgentRuntimeConfig, EnsureWorkspaceReport,
-    DEFAULT_AGENT_ID,
+    default_memory_dir, ensure_agent_space, ensure_daily_memory, ensure_default_workspace,
+    ensure_workspace, list_agents, list_daily_memory_dates, normalize_agent_id,
+    seed_create_agent_skill, set_active_agent, today_date_string, write_agent_config, AgentInfo,
+    AgentProfile, AgentRuntimeConfig, EnsureWorkspaceReport, DEFAULT_AGENT_ID,
 };
 pub use agent_icons::{
     apply_pending_agent_icons, clear_pending_agent_icon, resolve_icon_field, set_pending_agent_icon,

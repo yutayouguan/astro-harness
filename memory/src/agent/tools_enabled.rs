@@ -107,7 +107,7 @@ pub fn load_tools_enabled_for_agent(agent_id: Option<&str>) -> HashMap<String, b
 
 /// 写入指定 Agent 的工具开关；`agent_id` 为 `None` 时写全局配置。
 ///
-/// 默认 Agent 会同步写入全局文件，兼容旧版仅读全局路径的逻辑。
+/// 默认 Agent 同时写入全局 `tools-enabled.json`，供无 Agent 专属配置时的回退读取。
 pub fn save_tools_enabled_for_agent(
     agent_id: Option<&str>,
     state: &HashMap<String, bool>,
@@ -137,7 +137,7 @@ pub fn save_tools_enabled_for_agent(
         });
         cfg.tools_enabled = Some(serde_json::to_value(state)?);
         cfg.save(&base)?;
-        // 默认 Agent 同步一份全局，兼容旧路径
+        // 默认 Agent：同步全局回退文件
         if id == DEFAULT_AGENT_ID {
             save_tools_enabled(state)?;
         }
