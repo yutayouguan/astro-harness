@@ -451,6 +451,7 @@ impl AstroService for AstroServiceImpl {
         let _use_memory = req.use_memory;
         let api_key = req.api_key;
         let base_url = req.base_url;
+        let chat_fallbacks = req.chat_fallbacks;
         let thinking_enabled = req.thinking_enabled;
         let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
             "high".to_string()
@@ -657,14 +658,23 @@ impl AstroService for AstroServiceImpl {
             let hitl_gate = HitlGate::new(sid_cleanup.clone());
             hitl_registry.insert(hitl_gate.clone()).await;
 
-            // Task 3：单元素链（Task 4 再接入 chat_fallbacks proto）
-            let chat_targets = vec![common::ChatTarget {
+            // primary（ChatRequest 字段）+ chat_fallbacks → Vec<ChatTarget>
+            let mut chat_targets = vec![common::ChatTarget {
                 provider_id: String::new(),
                 backend_id: provider_name.clone(),
                 model: config.model.clone(),
                 api_key: config.api_key.clone(),
                 base_url: config.base_url.clone().unwrap_or_default(),
             }];
+            for fb in chat_fallbacks {
+                chat_targets.push(common::ChatTarget {
+                    provider_id: fb.provider_id,
+                    backend_id: fb.provider,
+                    model: fb.model,
+                    api_key: fb.api_key,
+                    base_url: fb.base_url,
+                });
+            }
 
             let mut stream = stream_multi_turn_with_hitl(
                 session,

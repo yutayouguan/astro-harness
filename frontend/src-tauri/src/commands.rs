@@ -656,6 +656,7 @@ async fn run_chat_stream(
             thinking_enabled,
             reasoning_effort: reasoning_effort.to_string(),
             resume_json: resume_json.to_string(),
+            chat_fallbacks: vec![],
         })
         .await
         .map_err(|e| e.to_string())?
