@@ -2,8 +2,6 @@
 
 use futures::StreamExt;
 use serde::Serialize;
-use tauri::AppHandle;
-
 use tauri::{AppHandle, Emitter};
 
 use memory::dreaming::{
