@@ -21,7 +21,7 @@ pub mod spawn_depth;
 pub use agent::agent_icons;
 pub use agent::files;
 pub use agent::scan::scan_memory_content;
-pub use agent::store::{MemoryStore, MemoryWriteResult};
+pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::tools_enabled;
 pub use agent::workspace;
 
