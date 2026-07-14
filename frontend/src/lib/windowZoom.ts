@@ -1,4 +1,4 @@
-/** 窗口缩放 / 还原辅助（物理外框 + 工作区铺满）。 */
+/** 窗口缩放 / 还原：瞬间贴齐工作区（不走原生 zoom 动画，避免白边）。 */
 import {
   currentMonitor,
   getCurrentWindow,
@@ -10,13 +10,8 @@ import {
 type Rect = { x: number; y: number; w: number; h: number };
 
 const SNAP_EPS = 24;
-const DURATION_MS = 220;
 
 type ZoomStore = Window & { __astroPrevRect?: Rect };
-
-function easeOutCubic(t: number) {
-  return 1 - Math.pow(1 - t, 3);
-}
 
 function near(a: number, b: number, eps = SNAP_EPS) {
   return Math.abs(a - b) <= eps;
@@ -39,47 +34,24 @@ async function workAreaOuterRect(): Promise<Rect | null> {
   };
 }
 
-/**
- * 用物理像素逐帧改外框。与已验证的社区方案一致；
- * WKWebView 贴边由 Rust `on_window_event(Resized)` 强制保证。
- */
-async function animateRect(from: Rect, to: Rect, durationMs = DURATION_MS) {
+async function applyRect(rect: Rect) {
   const win = getCurrentWindow();
-  const start = performance.now();
   document.documentElement.classList.add("zooming");
-
   try {
-    for (;;) {
-      const now = await new Promise<number>((resolve) => {
-        requestAnimationFrame(resolve);
-      });
-      const t = Math.min(1, (now - start) / durationMs);
-      const e = easeOutCubic(t);
-      const x = Math.round(from.x + (to.x - from.x) * e);
-      const y = Math.round(from.y + (to.y - from.y) * e);
-      const w = Math.max(1, Math.round(from.w + (to.w - from.w) * e));
-      const h = Math.max(1, Math.round(from.h + (to.h - from.h) * e));
-      // 不等待 IPC：并发排队会把帧序打乱；fire-and-forget 更跟手
-      void win.setPosition(new PhysicalPosition(x, y));
-      void win.setSize(new PhysicalSize(w, h));
-      if (t >= 1) {
-        await Promise.all([
-          win.setPosition(new PhysicalPosition(to.x, to.y)),
-          win.setSize(new PhysicalSize(to.w, to.h)),
-        ]);
-        break;
-      }
-    }
+    await Promise.all([
+      win.setPosition(new PhysicalPosition(rect.x, rect.y)),
+      win.setSize(new PhysicalSize(Math.max(1, rect.w), Math.max(1, rect.h))),
+    ]);
   } finally {
     window.setTimeout(() => {
       document.documentElement.classList.remove("zooming");
-    }, 40);
+    }, 30);
   }
 }
 
 /**
- * 双击标题栏：铺满工作区（带动画）；再双击还原。
- * Option/Alt + 双击：系统真正最大化（无动画）。
+ * 双击标题栏：铺满工作区（无动画瞬间切换）；再双击还原。
+ * Option/Alt + 双击：系统真正最大化（原生动画已在 Rust 侧关掉）。
  */
 export async function zoomOrRestore(optionKey: boolean) {
   const win = getCurrentWindow();
@@ -103,10 +75,11 @@ export async function zoomOrRestore(optionKey: boolean) {
 
   const store = window as unknown as ZoomStore;
   if (nearWorkArea && store.__astroPrevRect) {
-    await animateRect(current, store.__astroPrevRect);
+    const prev = store.__astroPrevRect;
     store.__astroPrevRect = undefined;
+    await applyRect(prev);
   } else {
     store.__astroPrevRect = current;
-    await animateRect(current, wa);
+    await applyRect(wa);
   }
 }
