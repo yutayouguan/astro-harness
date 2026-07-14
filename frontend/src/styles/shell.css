@@ -1,4 +1,4 @@
-/* Overlay 标题栏拖拽区：系统红绿灯 + 自定义双击缩放动画 */
+/* Overlay 标题栏拖拽区：不用 app-region:drag，避免 WebKit 触发原生双击 zoom */
 .native-drag-region {
   position: absolute;
   top: 0;
@@ -8,8 +8,9 @@
   height: var(--titlebar-h);
   padding-left: var(--titlebar-traffic-w);
   background: transparent;
-  -webkit-app-region: drag;
-  app-region: drag;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  cursor: default;
 }
 
 .app-shell {

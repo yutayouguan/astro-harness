@@ -801,6 +801,11 @@ export default function App() {
 
   const onTitleMouseDown = async (e: ReactMouseEvent) => {
     if (e.button !== 0) return;
+    // 双击的第二次按下不要 startDragging，否则会和自定义 zoom 抢事件
+    if (e.detail > 1) {
+      e.preventDefault();
+      return;
+    }
     try {
       await getCurrentWindow().startDragging();
     } catch {
@@ -814,7 +819,8 @@ export default function App() {
     if (zoomingRef.current) return;
     zoomingRef.current = true;
     try {
-      await zoomOrRestore(e.altKey);
+      // 始终走自定义贴齐，绝不调用原生 toggleMaximize / zoom
+      await zoomOrRestore();
     } catch {
       // ignore
     } finally {
