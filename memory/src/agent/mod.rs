@@ -2,5 +2,7 @@
 
 pub mod agent_icons;
 pub mod files;
+pub mod scan;
+pub mod store;
 pub mod tools_enabled;
 pub mod workspace;
