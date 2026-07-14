@@ -230,7 +230,8 @@ impl SessionStore {
                        AND m.content IS NOT NULL
                        AND TRIM(m.content) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
-                     LIMIT 1) AS preview
+                     LIMIT 1) AS preview,
+                    s.ended_at, s.end_reason
              FROM sessions s
              ORDER BY s.started_at DESC
              LIMIT ?1",
@@ -242,17 +243,21 @@ impl SessionStore {
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, f64>(2)?,
                     row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<f64>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(rows
             .into_iter()
-            .map(|(id, title, started_at, preview)| RecentSession {
+            .map(|(id, title, started_at, preview, ended_at, end_reason)| RecentSession {
                 id,
                 title,
                 started_at,
                 preview: preview.map(|p| truncate_chars(&p, 120)),
+                ended_at,
+                end_reason,
             })
             .collect())
     }

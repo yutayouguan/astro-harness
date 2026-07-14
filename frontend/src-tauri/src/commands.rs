@@ -67,6 +67,7 @@ pub struct RecentSessionDto {
     pub session_id: String,
     pub summary: String,
     pub created_at: Option<String>,
+    pub end_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1161,6 +1162,7 @@ pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessio
                 session_id: s.id,
                 summary,
                 created_at,
+                end_reason: s.end_reason,
             }
         })
         .collect())

@@ -9,6 +9,7 @@ use super::{json_from_db, json_to_db, now_epoch_secs, NewMessage, SessionStore, 
 impl SessionStore {
     /// 追加一条富消息，并递增 `sessions.message_count`（`role=tool` 时同时 `tool_call_count++`）。
     pub fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        self.assert_session_writable(msg.session_id)?;
         let timestamp = now_epoch_secs()?;
         let tool_calls = json_to_db(&msg.tool_calls)?;
         let reasoning_details = json_to_db(&msg.reasoning_details)?;
@@ -343,6 +344,114 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 结束旧会话并拆出子会话：摘要消息 + 最近 `keep_tail_bubbles` 轮（含 tool）。
+    pub fn compact_and_split(
+        &self,
+        old_id: &str,
+        new_id: &str,
+        summary_text: &str,
+        keep_tail_bubbles: usize,
+    ) -> Result<()> {
+        if old_id == new_id {
+            anyhow::bail!("compact_and_split: session ids must differ");
+        }
+        if self.get_session(new_id)?.is_some() {
+            anyhow::bail!("compact_and_split: target session already exists");
+        }
+        let parent = self
+            .get_session(old_id)?
+            .ok_or_else(|| anyhow::anyhow!("compact_and_split: source session not found"))?;
+        if parent.ended_at.is_some() {
+            anyhow::bail!("compact_and_split: source session already ended");
+        }
+
+        self.end_session(old_id, "compacted")?;
+
+        let model = parent.model.clone();
+        let source = parent.source.clone();
+        self.create_session(
+            new_id,
+            &source,
+            model.as_deref(),
+            None,
+            Some(old_id),
+        )?;
+
+        self.append_message(NewMessage {
+            content: Some(summary_text),
+            ..NewMessage::empty(new_id, "user")
+        })?;
+
+        if keep_tail_bubbles > 0 {
+            let messages = self.get_messages(old_id)?;
+            if let Some(start) = start_inclusive_for_tail_bubbles(&messages, keep_tail_bubbles) {
+                // 摘要已按「当前时间」写入；尾部若保留旧 timestamp，ORDER BY 会把它排到摘要之前。
+                let summary_ts = self
+                    .get_messages(new_id)?
+                    .first()
+                    .map(|m| m.timestamp)
+                    .unwrap_or(0.0);
+                let tx = self.conn.unchecked_transaction()?;
+                let mut message_count = 1i64; // 已有摘要
+                let mut tool_call_count = 0i64;
+                for (i, m) in messages[start..].iter().enumerate() {
+                    let tool_calls = json_to_db(&m.tool_calls)?;
+                    let reasoning_details = json_to_db(&m.reasoning_details)?;
+                    let codex_reasoning_items = json_to_db(&m.codex_reasoning_items)?;
+                    let codex_message_items = json_to_db(&m.codex_message_items)?;
+                    let timestamp = summary_ts + (i + 1) as f64 * 0.001;
+                    tx.execute(
+                        "INSERT INTO messages (
+                            session_id, role, content, tool_call_id, tool_calls, tool_name,
+                            timestamp, token_count, finish_reason,
+                            reasoning, reasoning_content, reasoning_details,
+                            codex_reasoning_items, codex_message_items
+                         ) VALUES (
+                            ?1, ?2, ?3, ?4, ?5, ?6,
+                            ?7, ?8, ?9,
+                            ?10, ?11, ?12,
+                            ?13, ?14
+                         )",
+                        params![
+                            new_id,
+                            m.role,
+                            m.content,
+                            m.tool_call_id,
+                            tool_calls,
+                            m.tool_name,
+                            timestamp,
+                            m.token_count,
+                            m.finish_reason,
+                            m.reasoning,
+                            m.reasoning_content,
+                            reasoning_details,
+                            codex_reasoning_items,
+                            codex_message_items,
+                        ],
+                    )?;
+                    message_count += 1;
+                    if m.role == "tool" {
+                        tool_call_count += 1;
+                    }
+                }
+                tx.execute(
+                    "UPDATE sessions
+                     SET message_count = ?1, tool_call_count = ?2
+                     WHERE id = ?3",
+                    params![message_count, tool_call_count, new_id],
+                )?;
+                tx.commit()?;
+            }
+        }
+
+        if let Some(title) = parent.title.filter(|t| !t.trim().is_empty()) {
+            let continued = format!("{title} · continued");
+            let _ = self.set_session_title(new_id, &continued);
+        }
+
+        Ok(())
+    }
+
     /// 重建 OpenAI conversation 形状（assistant 带 `tool_calls` / `reasoning*`）。
     pub fn get_messages_as_conversation(&self, session_id: &str) -> Result<Vec<Value>> {
         let messages = self.get_messages(session_id)?;
@@ -386,6 +495,24 @@ impl SessionStore {
         }
         Ok(out)
     }
+}
+
+/// 返回保留尾部 `keep` 个 user/assistant 气泡（含 assistant 后连续 tool）的**起始下标**。
+fn start_inclusive_for_tail_bubbles(messages: &[StoredMessage], keep: usize) -> Option<usize> {
+    if keep == 0 || messages.is_empty() {
+        return None;
+    }
+    let mut bubble_starts = Vec::new();
+    for (i, m) in messages.iter().enumerate() {
+        if m.role == "user" || m.role == "assistant" {
+            bubble_starts.push(i);
+        }
+    }
+    if bubble_starts.is_empty() {
+        return None;
+    }
+    let skip = bubble_starts.len().saturating_sub(keep);
+    Some(bubble_starts[skip])
 }
 
 /// 返回保留前缀的**含尾**下标：数到第 `keep` 个 user/assistant 后，再吞掉其后连续 tool 行。

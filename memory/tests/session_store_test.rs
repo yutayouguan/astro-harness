@@ -776,3 +776,120 @@ fn remove_chat_bubbles_splices_middle_user_and_tools() {
     assert_eq!(meta.message_count, 4);
     assert_eq!(meta.tool_call_count, 1);
 }
+
+#[test]
+fn end_session_sets_ended_at_and_reason() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("s1", "test", Some("gpt"), None, None)
+        .unwrap();
+    store.end_session("s1", "compacted").unwrap();
+    let row = store.get_session("s1").unwrap().unwrap();
+    assert!(row.ended_at.is_some());
+    assert_eq!(row.end_reason.as_deref(), Some("compacted"));
+}
+
+#[test]
+fn append_message_rejects_ended_session() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store.create_session("s1", "test", None, None, None).unwrap();
+    store.end_session("s1", "compacted").unwrap();
+    let err = store
+        .append_message(NewMessage {
+            content: Some("x"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("ended") || err.to_string().contains("writable"),
+        "{err}"
+    );
+}
+
+#[test]
+fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("old", "test", Some("gpt"), None, None)
+        .unwrap();
+    store.set_session_title("old", "topic").unwrap();
+    for (role, text) in [
+        ("user", "u1"),
+        ("assistant", "a1"),
+        ("user", "u2"),
+        ("assistant", "a2"),
+        ("user", "u3"),
+        ("assistant", "a3"),
+    ] {
+        store
+            .append_message(NewMessage {
+                content: Some(text),
+                ..NewMessage::empty("old", role)
+            })
+            .unwrap();
+    }
+    // 给最后一条 assistant 挂 tool
+    store
+        .append_message(NewMessage {
+            content: Some("tool-out"),
+            tool_call_id: Some("c1"),
+            tool_name: Some("x"),
+            ..NewMessage::empty("old", "tool")
+        })
+        .unwrap();
+
+    store
+        .compact_and_split(
+            "old",
+            "new",
+            "[CONTEXT COMPACTION]\nsummary body",
+            2, // 保留 u3 + a3(+tool)
+        )
+        .unwrap();
+
+    let old = store.get_session("old").unwrap().unwrap();
+    assert!(old.ended_at.is_some());
+    assert_eq!(old.end_reason.as_deref(), Some("compacted"));
+    // 旧全文仍在
+    assert!(store.get_messages("old").unwrap().len() >= 6);
+
+    let neu = store.get_session("new").unwrap().unwrap();
+    assert_eq!(neu.parent_session_id.as_deref(), Some("old"));
+    assert_eq!(neu.model.as_deref(), Some("gpt"));
+    assert!(neu.ended_at.is_none());
+    assert!(neu.title.as_deref().unwrap_or("").contains("continued"));
+
+    let msgs = store.get_messages("new").unwrap();
+    assert_eq!(msgs[0].role, "user");
+    assert!(msgs[0]
+        .content
+        .as_deref()
+        .unwrap_or("")
+        .starts_with("[CONTEXT COMPACTION]"));
+    // 摘要 + u3 + a3 + tool
+    assert_eq!(msgs.len(), 4);
+    assert_eq!(msgs[1].content.as_deref(), Some("u3"));
+    assert_eq!(msgs[2].role, "assistant");
+    assert_eq!(msgs[3].role, "tool");
+}
+
+#[test]
+fn compact_and_split_keep_zero_is_summary_only() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store.create_session("old", "test", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("u1"),
+            ..NewMessage::empty("old", "user")
+        })
+        .unwrap();
+    store
+        .compact_and_split("old", "new", "[CONTEXT COMPACTION]\nx", 0)
+        .unwrap();
+    let msgs = store.get_messages("new").unwrap();
+    assert_eq!(msgs.len(), 1);
+}

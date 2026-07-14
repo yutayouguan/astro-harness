@@ -68,6 +68,11 @@ export default function ChatSessionList({ activeSessionId, onOpenSession }: Prop
               >
                 <strong>
                   {(s.summary ?? "").trim() || t("chat.rightPanel.untitledSession")}
+                  {s.endReason === "compacted" ? (
+                    <span className="chat-session-badge">
+                      {t("chat.sessionCompactedBadge")}
+                    </span>
+                  ) : null}
                 </strong>
                 <span>{s.sessionId.slice(0, 8)}</span>
               </button>
