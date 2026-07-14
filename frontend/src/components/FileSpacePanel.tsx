@@ -22,8 +22,6 @@ import {
   IconWsFile,
   IconWsFileCode,
   IconWsFileImage,
-  IconWsFileJson,
-  IconWsFileMd,
   IconWsFileSheet,
   IconWsFileSlides,
   IconWsFileText,
@@ -32,6 +30,7 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "./WorkspaceIcons";
+import { resolveFileType } from "../lib/fileTypeIcon";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
@@ -175,25 +174,12 @@ function formatDate(iso: string): string {
   return d.toLocaleString();
 }
 
-/** 按分类/扩展名选择文件图标组件 */
-function categoryIcon(category: string, name: string) {
-  const ext = fileExt(name);
-  if (category === "image" || IMAGE_EXTS.has(ext)) return IconWsFileImage;
-  if (category === "av") return IconWsFileVideo;
-  if (ext === "md" || ext === "txt") return IconWsFileMd;
-  if (ext === "json") return IconWsFileJson;
-  if (category === "code" || category === "doc" || category === "sheet") {
-    return IconWsFileText;
-  }
-  return IconWsFile;
-}
-
-/** 文件列表中的分类图标 */
-function FileGlyph({ category, name }: { category: string; name: string }) {
-  const Icon = categoryIcon(category, name);
+/** 按扩展名选择 Lucide 图标并着色 */
+function FileGlyph({ name }: { name: string; category?: string }) {
+  const { kind, Icon } = resolveFileType(name, false);
   return (
-    <span className="fs-file-glyph" data-cat={category} aria-hidden>
-      <Icon width={18} height={18} />
+    <span className="fs-file-glyph" data-kind={kind} aria-hidden>
+      <Icon size={18} strokeWidth={2} />
     </span>
   );
 }

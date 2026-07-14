@@ -10,12 +10,16 @@ import {
   type SVGProps,
 } from "react";
 import {
+  Box,
   ChevronsUpDown,
   Eye,
   EyeOff,
   Globe,
   GripVertical,
+  KeyRound,
+  Layers,
   Lightbulb,
+  Link2,
   LoaderCircle,
   Plus,
   Power,
@@ -24,7 +28,9 @@ import {
   Search,
   Star,
   Stethoscope,
+  Tag,
   Trash2,
+  Waypoints,
   Wrench,
 } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -206,6 +212,30 @@ function IconGrip(props: SVGProps<SVGSVGElement>) {
   return <GripVertical size={14} strokeWidth={2} aria-hidden {...props} />;
 }
 
+function IconTag(props: SVGProps<SVGSVGElement>) {
+  return <Tag size={12} strokeWidth={2} aria-hidden {...props} />;
+}
+
+function IconBox(props: SVGProps<SVGSVGElement>) {
+  return <Box size={12} strokeWidth={2} aria-hidden {...props} />;
+}
+
+function IconLink(props: SVGProps<SVGSVGElement>) {
+  return <Link2 size={12} strokeWidth={2} aria-hidden {...props} />;
+}
+
+function IconWaypoints(props: SVGProps<SVGSVGElement>) {
+  return <Waypoints size={14} strokeWidth={2} aria-hidden {...props} />;
+}
+
+function IconKey(props: SVGProps<SVGSVGElement>) {
+  return <KeyRound size={14} strokeWidth={2} aria-hidden {...props} />;
+}
+
+function IconLayers(props: SVGProps<SVGSVGElement>) {
+  return <Layers size={14} strokeWidth={2} aria-hidden {...props} />;
+}
+
 export default function ProvidersPanel({ active, onStateChange }: Props) {
   const { t } = useI18n();
   const [state, setState] = useState<ProvidersStateDto | null>(null);
@@ -252,6 +282,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [healthById, setHealthById] = useState<Record<string, HealthStatus>>(
     {},
   );
+  /** 后备供应商 → 可选模型列表（缓存 / 拉取） */
+  const [fallbackModelsById, setFallbackModelsById] = useState<
+    Record<string, ModelInfo[]>
+  >({});
   const autoFetchIdRef = useRef<string | null>(null);
   const healthRunRef = useRef(0);
   const addKindRef = useRef<HTMLDivElement | null>(null);
@@ -1050,8 +1084,11 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const updateFallbackModel = (index: number, model: string) => {
     setDraft((d) => {
       if (!d) return d;
+      const trimmed = model.trim();
       const next = d.fallback.map((entry, i) =>
-        i === index ? { ...entry, model } : entry,
+        i === index
+          ? { ...entry, model: trimmed ? trimmed : null }
+          : entry,
       );
       return { ...d, fallback: next };
     });
@@ -1061,6 +1098,71 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     const p = state?.providers.find((x) => x.id === id);
     return p?.display_name ?? id;
   };
+
+  const fallbackProviderIds = fallbackEntries
+    .map((e) => e.provider_id)
+    .filter(Boolean)
+    .sort()
+    .join(",");
+
+  // 为每条后备加载模型列表（优先缓存，必要时在线拉取）
+  useEffect(() => {
+    if (!active || !isTauri() || !fallbackProviderIds) {
+      return;
+    }
+    const ids = [...new Set(fallbackProviderIds.split(",").filter(Boolean))];
+    let cancelled = false;
+    void (async () => {
+      for (const id of ids) {
+        if (cancelled) return;
+        const provider = state?.providers.find((p) => p.id === id);
+        if (!provider) continue;
+        const canList = provider.kind === "ollama" || provider.has_api_key;
+        if (!canList) {
+          setFallbackModelsById((prev) =>
+            prev[id] ? prev : { ...prev, [id]: [] },
+          );
+          continue;
+        }
+        let modelsForId: ModelInfo[] = [];
+        try {
+          const cached = await invoke<ProviderModelsResult | null>(
+            "get_cached_provider_models",
+            { id },
+          );
+          if (cached?.models?.length) {
+            modelsForId = cached.models;
+          }
+        } catch {
+          // ignore
+        }
+        if (!cancelled && modelsForId.length === 0) {
+          try {
+            const listed = await invoke<ProviderModelsResult>(
+              "list_provider_models",
+              { id },
+            );
+            modelsForId = listed.models ?? [];
+          } catch {
+            // ignore — 下拉仍可用供应商默认 model
+          }
+        }
+        if (cancelled) return;
+        setFallbackModelsById((prev) => {
+          if (
+            prev[id]?.length === modelsForId.length &&
+            prev[id]?.every((m, i) => m.id === modelsForId[i]?.id)
+          ) {
+            return prev;
+          }
+          return { ...prev, [id]: modelsForId };
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, fallbackProviderIds, state?.providers]);
 
   return (
     <div className="providers-page" data-tone="blue">
@@ -1342,7 +1444,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
 
               <div className="providers-form-grid">
                 <label className="providers-field">
-                  <span>{t("providers.displayName")}</span>
+                  <span className="providers-field-label">
+                    <IconTag />
+                    {t("providers.displayName")}
+                  </span>
                   <input
                     type="text"
                     value={draft.display_name}
@@ -1355,7 +1460,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 </label>
 
                 <label className="providers-field">
-                  <span>{t("providers.model")}</span>
+                  <span className="providers-field-label">
+                    <IconBox />
+                    {t("providers.model")}
+                  </span>
                   <input
                     type="text"
                     value={draft.model}
@@ -1371,7 +1479,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 )}
 
                 <label className="providers-field providers-field-span">
-                  <span>{t("providers.endpoint")}</span>
+                  <span className="providers-field-label">
+                    <IconLink />
+                    {t("providers.endpoint")}
+                  </span>
                   <input
                     type="url"
                     value={draft.endpoint}
@@ -1386,31 +1497,67 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
 
               <div className="providers-fallback-block">
                 <div className="providers-fallback-head">
-                  <h4>聊天后备</h4>
+                  <h4 className="providers-block-title">
+                    <IconWaypoints />
+                    聊天后备
+                  </h4>
                   <span className="providers-fallback-count">
                     {fallbackEntries.length}/{MAX_CHAT_FALLBACKS}
                   </span>
                 </div>
                 <p className="providers-fallback-hint">
-                  主模型首包失败时按顺序临时切换；最多 {MAX_CHAT_FALLBACKS} 个已启用供应商。
+                  {fallbackEntries.length === 0
+                    ? `失败时按序切换 · 最多 ${MAX_CHAT_FALLBACKS} 个`
+                    : `失败时按序切换`}
                 </p>
-                {fallbackEntries.length === 0 ? (
-                  <p className="providers-fallback-empty">尚未配置后备</p>
-                ) : (
+                {fallbackEntries.length > 0 && (
                   <ul className="providers-fallback-list">
-                    {fallbackEntries.map((entry, index) => (
+                    {fallbackEntries.map((entry, index) => {
+                      const options = fallbackModelsById[entry.provider_id] ?? [];
+                      const fallbackProvider = state?.providers.find(
+                        (p) => p.id === entry.provider_id,
+                      );
+                      const defaultModel = fallbackProvider?.model?.trim() || "";
+                      const selectedModel = entry.model?.trim() || "";
+                      const knownIds = new Set(options.map((m) => m.id));
+                      const orphanSelected =
+                        selectedModel && !knownIds.has(selectedModel)
+                          ? selectedModel
+                          : null;
+                      return (
                       <li key={`${entry.provider_id}-${index}`} className="providers-fallback-row">
+                        <span className="providers-fallback-brand" aria-hidden>
+                          {fallbackProvider ? (
+                            <ProviderBrandIcon kind={fallbackProvider.kind} />
+                          ) : (
+                            <IconLayers />
+                          )}
+                        </span>
                         <span className="providers-fallback-name" title={entry.provider_id}>
                           {providerLabel(entry.provider_id)}
                         </span>
-                        <input
-                          type="text"
+                        <select
                           className="providers-fallback-model"
-                          value={entry.model ?? ""}
-                          placeholder="模型覆盖（可选）"
-                          spellCheck={false}
+                          value={selectedModel}
+                          aria-label={`${providerLabel(entry.provider_id)} 模型覆盖`}
                           onChange={(e) => updateFallbackModel(index, e.target.value)}
-                        />
+                        >
+                          <option value="">
+                            {defaultModel
+                              ? `默认（${defaultModel}）`
+                              : "默认模型"}
+                          </option>
+                          {orphanSelected && (
+                            <option value={orphanSelected}>{orphanSelected}</option>
+                          )}
+                          {options.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.display_name?.trim()
+                                ? `${m.display_name} (${m.id})`
+                                : m.id}
+                            </option>
+                          ))}
+                        </select>
                         <button
                           type="button"
                           className="providers-icon-btn"
@@ -1421,14 +1568,18 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                           <IconTrash />
                         </button>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
                 {fallbackEntries.length < MAX_CHAT_FALLBACKS && (
-                  <label className="providers-field providers-fallback-add">
-                    <span>添加后备</span>
+                  <div className="providers-fallback-add">
+                    <span className="providers-fallback-add-icon" aria-hidden>
+                      <IconPlus />
+                    </span>
                     <select
                       value=""
+                      aria-label="添加后备供应商"
                       disabled={fallbackCandidateProviders.length === 0}
                       onChange={(e) => {
                         const id = e.target.value;
@@ -1437,8 +1588,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     >
                       <option value="">
                         {fallbackCandidateProviders.length === 0
-                          ? "无可用已启用供应商"
-                          : "选择供应商…"}
+                          ? "暂无可用供应商"
+                          : "添加后备供应商…"}
                       </option>
                       {fallbackCandidateProviders.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -1446,13 +1597,16 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
                 )}
               </div>
 
               <div className="providers-key-block">
                 <div className="providers-key-head">
-                  <h4>{t("providers.apiKey")}</h4>
+                  <h4 className="providers-block-title">
+                    <IconKey />
+                    {t("providers.apiKey")}
+                  </h4>
                   {needsKey && selected.official_key_url && (
                     <button
                       type="button"
@@ -1577,7 +1731,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
               <div className="providers-models-block">
                 <div className="providers-models-head">
                   <div className="providers-models-title-row">
-                    <h4>{t("providers.modelsTitle")}</h4>
+                    <h4 className="providers-block-title">
+                      <IconLayers />
+                      {t("providers.modelsTitle")}
+                    </h4>
                     {models.length > 0 && (
                       <span className="providers-models-count">
                         {filteredModels.length}

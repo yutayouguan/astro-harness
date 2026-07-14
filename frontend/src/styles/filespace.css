@@ -672,6 +672,41 @@ html[data-theme="dark"] .fs-layout-btn:hover {
   filter: drop-shadow(0 0.5px 0.5px color-mix(in srgb, var(--tone) 20%, transparent));
 }
 
+.fs-file-glyph[data-kind] {
+  --tone: var(--fs-glyph-tone, var(--tone-cyan, #06b6d4));
+}
+
+.fs-file-glyph[data-kind="md"] { --fs-glyph-tone: #2563eb; }
+.fs-file-glyph[data-kind="json"] { --fs-glyph-tone: #d97706; }
+.fs-file-glyph[data-kind="config"] { --fs-glyph-tone: #ca8a04; }
+.fs-file-glyph[data-kind="db"],
+.fs-file-glyph[data-kind="code-sql"] { --fs-glyph-tone: #059669; }
+.fs-file-glyph[data-kind="lock"] { --fs-glyph-tone: #dc2626; }
+.fs-file-glyph[data-kind="text"] { --fs-glyph-tone: #64748b; }
+.fs-file-glyph[data-kind="image"] { --fs-glyph-tone: #db2777; }
+.fs-file-glyph[data-kind="video"] { --fs-glyph-tone: #7c3aed; }
+.fs-file-glyph[data-kind="audio"] { --fs-glyph-tone: #c026d3; }
+.fs-file-glyph[data-kind="archive"],
+.fs-file-glyph[data-kind="package"] { --fs-glyph-tone: #b45309; }
+.fs-file-glyph[data-kind="pdf"] { --fs-glyph-tone: #e11d48; }
+.fs-file-glyph[data-kind="word"] { --fs-glyph-tone: #2563eb; }
+.fs-file-glyph[data-kind="sheet"] { --fs-glyph-tone: #16a34a; }
+.fs-file-glyph[data-kind="slides"] { --fs-glyph-tone: #ea580c; }
+.fs-file-glyph[data-kind="code"],
+.fs-file-glyph[data-kind="notebook"] { --fs-glyph-tone: #4f46e5; }
+.fs-file-glyph[data-kind="code-js"] { --fs-glyph-tone: #ca8a04; }
+.fs-file-glyph[data-kind="code-ts"] { --fs-glyph-tone: #0284c7; }
+.fs-file-glyph[data-kind="code-py"] { --fs-glyph-tone: #3776ab; }
+.fs-file-glyph[data-kind="code-rs"] { --fs-glyph-tone: #b45309; }
+.fs-file-glyph[data-kind="code-go"] { --fs-glyph-tone: #00add8; }
+.fs-file-glyph[data-kind="code-java"] { --fs-glyph-tone: #ea580c; }
+.fs-file-glyph[data-kind="code-c"] { --fs-glyph-tone: #6366f1; }
+.fs-file-glyph[data-kind="code-shell"] { --fs-glyph-tone: #0f766e; }
+.fs-file-glyph[data-kind="code-web"] { --fs-glyph-tone: #e11d48; }
+.fs-file-glyph[data-kind="font"] { --fs-glyph-tone: #7c3aed; }
+.fs-file-glyph[data-kind="binary"] { --fs-glyph-tone: #57534e; }
+.fs-file-glyph[data-kind="unknown"] { --fs-glyph-tone: #94a3b8; }
+
 .fs-preview-head .fs-file-glyph {
   width: 42px;
   height: 42px;

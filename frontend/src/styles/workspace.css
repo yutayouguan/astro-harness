@@ -592,7 +592,12 @@ html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-delete {
   --ws-tone: #d97706;
 }
 
-.ws-file-glyph[data-kind="db"] {
+.ws-file-glyph[data-kind="config"] {
+  --ws-tone: #ca8a04;
+}
+
+.ws-file-glyph[data-kind="db"],
+.ws-file-glyph[data-kind="code-sql"] {
   --ws-tone: #059669;
 }
 
@@ -610,6 +615,80 @@ html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-delete {
 
 .ws-file-glyph[data-kind="video"] {
   --ws-tone: #7c3aed;
+}
+
+.ws-file-glyph[data-kind="audio"] {
+  --ws-tone: #c026d3;
+}
+
+.ws-file-glyph[data-kind="archive"],
+.ws-file-glyph[data-kind="package"] {
+  --ws-tone: #b45309;
+}
+
+.ws-file-glyph[data-kind="pdf"] {
+  --ws-tone: #e11d48;
+}
+
+.ws-file-glyph[data-kind="word"] {
+  --ws-tone: #2563eb;
+}
+
+.ws-file-glyph[data-kind="sheet"] {
+  --ws-tone: #16a34a;
+}
+
+.ws-file-glyph[data-kind="slides"] {
+  --ws-tone: #ea580c;
+}
+
+.ws-file-glyph[data-kind="code"],
+.ws-file-glyph[data-kind="notebook"] {
+  --ws-tone: #4f46e5;
+}
+
+.ws-file-glyph[data-kind="code-js"] {
+  --ws-tone: #ca8a04;
+}
+
+.ws-file-glyph[data-kind="code-ts"] {
+  --ws-tone: #0284c7;
+}
+
+.ws-file-glyph[data-kind="code-py"] {
+  --ws-tone: #3776ab;
+}
+
+.ws-file-glyph[data-kind="code-rs"] {
+  --ws-tone: #b45309;
+}
+
+.ws-file-glyph[data-kind="code-go"] {
+  --ws-tone: #00add8;
+}
+
+.ws-file-glyph[data-kind="code-java"] {
+  --ws-tone: #ea580c;
+}
+
+.ws-file-glyph[data-kind="code-c"] {
+  --ws-tone: #6366f1;
+}
+
+.ws-file-glyph[data-kind="code-shell"] {
+  --ws-tone: #0f766e;
+}
+
+.ws-file-glyph[data-kind="code-web"] {
+  --ws-tone: #e11d48;
+}
+
+.ws-file-glyph[data-kind="font"] {
+  --ws-tone: #7c3aed;
+}
+
+.ws-file-glyph[data-kind="binary"] {
+  --ws-tone: #57534e;
 }
 
 .ws-file-glyph[data-kind="unknown"] {

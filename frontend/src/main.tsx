@@ -4,7 +4,10 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ThemeProvider } from "./hooks/useTheme";
+import { installContextMenuGuard } from "./lib/contextMenuGuard";
 import "./styles/index.css";
+
+installContextMenuGuard();
 
 (() => {
   try {

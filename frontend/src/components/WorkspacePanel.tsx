@@ -27,15 +27,6 @@ import {
   IconWsArrowLeft,
   IconWsArrowUp,
   IconWsBackChat,
-  IconWsFile,
-  IconWsFileDb,
-  IconWsFileImage,
-  IconWsFileJson,
-  IconWsFileLock,
-  IconWsFileMd,
-  IconWsFileText,
-  IconWsFileVideo,
-  IconWsFolder,
   IconWsNewFile,
   IconWsNewFolder,
   IconWsTrash,
@@ -43,6 +34,12 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "./WorkspaceIcons";
+import {
+  isExternalOnlyFile as isExternalOnlyByType,
+  mediaKindOf as mediaKindOfByType,
+  resolveFileType,
+  type FileGlyphKind,
+} from "../lib/fileTypeIcon";
 
 /** 工作区面板入参 */
 type Props = {
@@ -57,16 +54,7 @@ type ListLayout = "list" | "grid" | "compact";
 /** 新建条目类型 */
 type CreateMode = "file" | "folder";
 /** 工作区条目语义种类（决定图标与打开方式） */
-type FileKind =
-  | "folder"
-  | "md"
-  | "json"
-  | "db"
-  | "lock"
-  | "text"
-  | "image"
-  | "video"
-  | "unknown";
+type FileKind = FileGlyphKind;
 /** 可内嵌预览的媒体类型 */
 type MediaKind = "image" | "video";
 /** 右键菜单上下文：空白区 / 选中条目 */
@@ -74,20 +62,6 @@ type MenuKind = "blank" | "entries";
 
 const LIST_LAYOUT_KEY = "astro-workspace-list-layout";
 const MAX_OPEN_EXTERNALLY = 5;
-const IMAGE_EXTS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "svg",
-  "bmp",
-  "ico",
-  "avif",
-  "heic",
-  "heif",
-]);
-const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "mkv", "avi", "m4v", "ogv"]);
 
 /** 是否运行在 Tauri 壳内 */
 function isTauri(): boolean {
@@ -99,12 +73,6 @@ function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
   const tag = el.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
-}
-
-/** 小写扩展名（无点） */
-function fileExt(name: string): string {
-  const i = name.lastIndexOf(".");
-  return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
 }
 
 /** 从 localStorage 读取列表布局 */
@@ -120,69 +88,17 @@ function readListLayout(): ListLayout {
 
 /** 由名称与是否目录推断条目种类 */
 function fileKind(name: string, isDir: boolean): FileKind {
-  if (isDir) return "folder";
-  const ext = fileExt(name);
-  if (IMAGE_EXTS.has(ext)) return "image";
-  if (VIDEO_EXTS.has(ext)) return "video";
-  if (ext === "md" || ext === "txt") return "md";
-  if (ext === "json") return "json";
-  if (
-    ext === "db" ||
-    ext === "sqlite" ||
-    ext === "sqlite3" ||
-    ext === "db-shm" ||
-    ext === "db-wal" ||
-    ext === "db-journal"
-  ) {
-    return "db";
-  }
-  if (ext === "lock") return "lock";
-  if (ext) return "text";
-  return "unknown";
+  return resolveFileType(name, isDir).kind;
 }
 
 /** 不宜用内置文本编辑器打开的文件（用系统默认应用） */
 function isExternalOnlyFile(name: string): boolean {
-  const kind = fileKind(name, false);
-  if (kind === "db" || kind === "lock") return true;
-  const ext = fileExt(name);
-  return [
-    "bin",
-    "exe",
-    "dll",
-    "dylib",
-    "so",
-    "wasm",
-    "o",
-    "a",
-    "zip",
-    "gz",
-    "tar",
-    "tgz",
-    "7z",
-    "rar",
-    "pdf",
-    "doc",
-    "docx",
-    "xls",
-    "xlsx",
-    "ppt",
-    "pptx",
-    "dmg",
-    "pkg",
-    "ttf",
-    "otf",
-    "woff",
-    "woff2",
-    "icns",
-  ].includes(ext);
+  return isExternalOnlyByType(name);
 }
 
 /** 若可内嵌预览则返回 image/video */
 function mediaKindOf(name: string): MediaKind | null {
-  const kind = fileKind(name, false);
-  if (kind === "image" || kind === "video") return kind;
-  return null;
+  return mediaKindOfByType(name);
 }
 
 /** 本地绝对路径 → Tauri 可加载的 asset URL */
@@ -244,30 +160,12 @@ function buildBreadcrumbs(
   return crumbs;
 }
 
-/** 工作区条目图标 */
-/** 工作区条目图标 */
-function FileGlyph({ kind }: { kind: FileKind }) {
-  const Icon =
-    kind === "folder"
-      ? IconWsFolder
-      : kind === "md"
-        ? IconWsFileMd
-        : kind === "json"
-          ? IconWsFileJson
-          : kind === "db"
-            ? IconWsFileDb
-            : kind === "lock"
-              ? IconWsFileLock
-              : kind === "image"
-                ? IconWsFileImage
-                : kind === "video"
-                  ? IconWsFileVideo
-                  : kind === "text"
-                    ? IconWsFileText
-                    : IconWsFile;
+/** 工作区条目图标（按后缀直接映射 Lucide） */
+function FileGlyph({ name, isDir }: { name: string; isDir: boolean }) {
+  const { kind, Icon } = resolveFileType(name, isDir);
   return (
     <span className="ws-file-glyph" data-kind={kind} aria-hidden>
-      <Icon width={18} height={18} />
+      <Icon size={18} strokeWidth={2} />
     </span>
   );
 }
@@ -1274,7 +1172,7 @@ export default function WorkspacePanel({ onClose }: Props) {
                             <img src={thumb} alt="" loading="lazy" />
                           </span>
                         ) : (
-                          <FileGlyph kind={kind} />
+                          <FileGlyph name={entry.name} isDir={entry.is_dir} />
                         )}
                         <input
                           className="ws-rename-input"
@@ -1318,7 +1216,7 @@ export default function WorkspacePanel({ onClose }: Props) {
                             <img src={thumb} alt="" loading="lazy" />
                           </span>
                         ) : (
-                          <FileGlyph kind={kind} />
+                          <FileGlyph name={entry.name} isDir={entry.is_dir} />
                         )}
                         <span className="ws-file-name">{entry.name}</span>
                         <span className="ws-file-meta">{meta}</span>
@@ -1405,7 +1303,7 @@ export default function WorkspacePanel({ onClose }: Props) {
           </div>
 
           <div className="ws-editor-head">
-            <FileGlyph kind={mediaKind === "video" ? "video" : "image"} />
+            <FileGlyph name={editorName} isDir={false} />
             <div className="ws-editor-meta-block">
               <h3 className="ws-editor-filename">{editorName}</h3>
               <p className="ws-editor-path">
@@ -1426,7 +1324,7 @@ export default function WorkspacePanel({ onClose }: Props) {
             <div className="ws-media-frame">
               {mediaBroken || !mediaSrc ? (
                 <div className="ws-media-fallback">
-                  <FileGlyph kind={mediaKind === "video" ? "video" : "image"} />
+                  <FileGlyph name={editorName} isDir={false} />
                   <p>{t("workspace.mediaLoadError")}</p>
                   <button
                     type="button"
@@ -1529,7 +1427,7 @@ export default function WorkspacePanel({ onClose }: Props) {
           </div>
 
           <div className="ws-editor-head">
-            <FileGlyph kind={fileKind(editorName, false)} />
+            <FileGlyph name={editorName} isDir={false} />
             <div className="ws-editor-meta-block">
               <h3 className="ws-editor-filename">{editorName}</h3>
               <p className="ws-editor-path">{editorPath}</p>

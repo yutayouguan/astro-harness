@@ -284,6 +284,30 @@ html {
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 默认不可选中 UI 文案；可复制区域见下方白名单 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 允许选择/复制：输入控件与正文内容 */
+input,
+textarea,
+select,
+[contenteditable="true"],
+.user-select-text,
+.msg-content,
+.msg-md,
+.msg-activity-body,
+pre,
+code,
+.cm-editor,
+.cm-content,
+.ws-editor,
+.fs-preview-text,
+.chat-agent-preview,
+.skills-preview {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* 亮色：按 tab 主题对齐壳层渐变中段色 */
