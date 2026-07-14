@@ -20,44 +20,14 @@
   overflow: hidden;
   /* 圆角交给系统窗；CSS 再裁会与系统半径错位，四角露缝 */
   border-radius: 0;
-  /* 实色兜底，避免漂移层边缘露缝；主题渐变改由 ::before 承载并动画 */
-  background: var(--bg0);
+  background: var(--shell-bg);
   border: none;
   box-shadow: none;
   /* 多层渐变无法平滑插值，勿对 background 做 transition，否则 tab 切换会「慢半拍」 */
-}
-
-/* 整层壳渐变缓慢漂移（看得见的色晕位移，不是淡到看不见的 soft 叠层） */
-.app-shell::before {
-  content: "";
-  position: absolute;
-  inset: -22%;
-  z-index: 0;
-  pointer-events: none;
-  background: var(--shell-bg);
-  transform-origin: 50% 40%;
-  animation: shell-aurora-drift 14s ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-@keyframes shell-aurora-drift {
-  0% {
-    transform: translate3d(-5%, -4%, 0) scale(1.06);
-  }
-  50% {
-    transform: translate3d(4%, 3%, 0) scale(1.12);
-  }
-  100% {
-    transform: translate3d(6%, -2%, 0) scale(1.08);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-shell::before {
-    inset: 0;
-    animation: none;
-    transform: none;
-  }
+  /*
+   * 勿对壳层伪元素做 transform/will-change 动画：
+   * WebKit 下会污染子树 backdrop-filter，出现绿条/雪花撕裂（记忆导航等磨砂控件）。
+   */
 }
 
 /* Tab 主题色驱动背景渐变（暗色） */
@@ -215,7 +185,6 @@ html[data-theme="light"] .app-shell[data-tone="teal"] {
   padding: 0;
   gap: 0;
   position: relative;
-  z-index: 1;
 }
 
 /* 左缘热区：收起时鼠标靠近即可展开 */
