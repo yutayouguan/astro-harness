@@ -91,11 +91,11 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         max_spawn_depth: memory::effective_max_spawn_depth(),
         allow_reclaim: false,
     };
-    if let Some(spawner) = &ctx.orchestration_spawner {
-        spawner(spawn_req);
-    } else {
-        memory::request_orchestration_spawn(spawn_req);
-    }
+    let spawner = ctx
+        .orchestration_spawner
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("no orchestration spawner configured"))?;
+    spawner(spawn_req);
 
     Ok(serde_json::json!({
         "orchestration_id": orchestration_id,

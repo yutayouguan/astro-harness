@@ -237,20 +237,6 @@ pub fn list_persisted_running() -> Vec<(String, DelegateRunRequest)> {
 pub type DelegateAsyncSpawner =
     Arc<dyn Fn(String, DelegateRunRequest) + Send + Sync + 'static>;
 
-static ASYNC_SPAWNER: OnceLock<Mutex<Option<DelegateAsyncSpawner>>> = OnceLock::new();
-
-/// 注册异步委派 spawner；可重复调用（测试覆盖 / 热替换）。
-pub fn set_delegate_async_spawner(spawner: DelegateAsyncSpawner) {
-    let slot = ASYNC_SPAWNER.get_or_init(|| Mutex::new(None));
-    *slot.lock().unwrap() = Some(spawner);
-}
-
-fn take_async_spawner() -> Option<DelegateAsyncSpawner> {
-    ASYNC_SPAWNER
-        .get()
-        .and_then(|m| m.lock().unwrap().clone())
-}
-
 /// 创建 running 记录并触发后台执行；立即返回 `task_id`。
 pub fn start_delegate_async(req: DelegateRunRequest, spawner: &DelegateAsyncSpawner) -> anyhow::Result<String> {
     let reg = AsyncDelegateRegistry::global();

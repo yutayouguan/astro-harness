@@ -128,19 +128,13 @@ pub use orchestration_db::{
     orchestration_db_path, NewOrchestration, NewOrchestrationStep, OrchestrationDb,
     OrchestrationRow, OrchestrationStatus, StepRow, StepStatus,
 };
-pub use orchestration_spawn::{
-    request_orchestration_spawn, set_orchestration_spawner, OrchestrationSpawnRequest,
-    OrchestrationSpawner,
-};
-pub use delegate_spawn::{
-    run_delegate_sync, set_delegate_runner, DelegateRole, DelegateRunRequest, DelegateRunner,
-    DelegateTaskSpec,
-};
+pub use orchestration_spawn::{OrchestrationSpawnRequest, OrchestrationSpawner};
+pub use delegate_spawn::{DelegateRole, DelegateRunRequest, DelegateRunner, DelegateTaskSpec};
 pub use git_worktree::{
     create_task_worktree, find_git_root, resolve_project_root, WorktreeHandle,
 };
 pub use delegate_async::{
-    async_delegate_cancel, async_delegate_collect, async_delegate_status, set_delegate_async_spawner,
+    async_delegate_cancel, async_delegate_collect, async_delegate_status,
     start_delegate_async, resume_incomplete_async_delegates, AsyncDelegateRecord,
     AsyncDelegateRegistry, AsyncDelegateStatus, DelegateAsyncSpawner,
 };

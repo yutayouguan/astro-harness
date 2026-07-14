@@ -1,7 +1,7 @@
 //! 由 agent 在启动时注入；tools 的 `delegate` 同步调用并等待结果。
 
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 /// 委派子 Agent 角色：叶子不可再派；编排者在深度允许时可再派。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -77,19 +77,3 @@ pub struct DelegateRunRequest {
 
 pub type DelegateRunner =
     Arc<dyn Fn(DelegateRunRequest) -> anyhow::Result<String> + Send + Sync + 'static>;
-
-static RUNNER: OnceLock<DelegateRunner> = OnceLock::new();
-
-pub fn set_delegate_runner(runner: DelegateRunner) {
-    let _ = RUNNER.set(runner);
-}
-
-/// 未注册时返回错误（便于测试发现漏注册）。
-pub fn run_delegate_sync(req: DelegateRunRequest) -> anyhow::Result<String> {
-    match RUNNER.get() {
-        Some(f) => f(req),
-        None => anyhow::bail!(
-            "delegate runner not registered; cannot execute sub-agent (PLAN-ONLY fallback removed)"
-        ),
-    }
-}

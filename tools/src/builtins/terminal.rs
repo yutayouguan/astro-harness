@@ -108,6 +108,9 @@ mod tests {
             chat_provider: String::new(),
             chat_model: String::new(),
             chat_targets: vec![],
+            delegate_runner: None,
+            async_spawner: None,
+            orchestration_spawner: None,
         };
 
         let n = common::MAX_TOOL_RESULT_BYTES + 8 * 1024;

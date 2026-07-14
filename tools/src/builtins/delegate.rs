@@ -119,19 +119,21 @@ pub fn register(registry: &mut ToolRegistry) {
 /// 同步执行真委派并返回摘要 JSON。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let req = build_run_request(ctx, args)?;
-    if let Some(runner) = &ctx.delegate_runner {
-        return runner(req);
-    }
-    memory::run_delegate_sync(req)
+    let runner = ctx
+        .delegate_runner
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("no delegate runner configured"))?;
+    runner(req)
 }
 
 /// 异步启动委派；立即返回 `task_id`。
 pub fn dispatch_async(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let req = build_run_request(ctx, args)?;
-    if let Some(spawner) = ctx.async_spawner.clone() {
-        memory::set_delegate_async_spawner(spawner);
-    }
-    let task_id = memory::start_delegate_async(req)?;
+    let spawner = ctx
+        .async_spawner
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("no async_spawner configured"))?;
+    let task_id = memory::start_delegate_async(req, spawner)?;
     Ok(serde_json::json!({
         "task_id": task_id,
         "status": "running",

@@ -56,14 +56,15 @@ async fn file_ops_write_and_read() {
         image_gen_targets: &targets,
         providers: &providers,
         session_id: "test".into(),
+        turn_id: None,
         chat_api_key: String::new(),
         chat_base_url: String::new(),
         chat_provider: String::new(),
         chat_model: String::new(),
         chat_targets: vec![],
-    delegate_runner: None,
-    async_spawner: None,
-    orchestration_spawner: None,
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
     };
 
     let w = tools::dispatch_tool(

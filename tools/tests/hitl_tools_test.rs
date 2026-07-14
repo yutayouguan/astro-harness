@@ -31,14 +31,15 @@ async fn confirm_emits_valid_a2ui_hitl() {
         image_gen_targets: &targets,
         providers: &providers,
         session_id: "test".into(),
+        turn_id: None,
         chat_api_key: String::new(),
         chat_base_url: String::new(),
         chat_provider: String::new(),
         chat_model: String::new(),
         chat_targets: vec![],
-    delegate_runner: None,
-    async_spawner: None,
-    orchestration_spawner: None,
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -72,14 +73,15 @@ async fn clarify_emits_valid_a2ui_hitl() {
         image_gen_targets: &targets,
         providers: &providers,
         session_id: "test".into(),
+        turn_id: None,
         chat_api_key: String::new(),
         chat_base_url: String::new(),
         chat_provider: String::new(),
         chat_model: String::new(),
         chat_targets: vec![],
-    delegate_runner: None,
-    async_spawner: None,
-    orchestration_spawner: None,
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -113,14 +115,15 @@ async fn present_ui_emits_valid_astro_ui() {
         image_gen_targets: &targets,
         providers: &providers,
         session_id: "test".into(),
+        turn_id: None,
         chat_api_key: String::new(),
         chat_base_url: String::new(),
         chat_provider: String::new(),
         chat_model: String::new(),
         chat_targets: vec![],
-    delegate_runner: None,
-    async_spawner: None,
-    orchestration_spawner: None,
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
     };
 
     let raw = tools::dispatch_tool(
