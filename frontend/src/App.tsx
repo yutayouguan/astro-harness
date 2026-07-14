@@ -342,6 +342,10 @@ export default function App() {
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  /** 记忆 pending 角标 */
+  const [memoryPendingCount, setMemoryPendingCount] = useState(0);
+  const [autoRefreshOnUpdate, setAutoRefreshOnUpdate] = useState(true);
+  const memoryToastDedupeRef = useRef<{ key: string; at: number } | null>(null);
   /** 会话级未决 HITL interrupt（有则拒发普通消息） */
   const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<
     PendingInterrupt[]
@@ -702,6 +706,42 @@ export default function App() {
       unlisten?.();
     };
   }, []);
+
+  /** 记忆 SessionEvents：角标初值 + 自动 refresh 配置 */
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+    void (async () => {
+      try {
+        const settings = await invoke<{
+          writeApproval: boolean;
+          backgroundReviewEnabled: boolean;
+          autoRefreshOnUpdate: boolean;
+        }>("get_memory_settings");
+        setAutoRefreshOnUpdate(settings.autoRefreshOnUpdate !== false);
+      } catch {
+        // ignore
+      }
+      try {
+        const rows = await invoke<{ id: string }[]>("list_pending_memory_writes");
+        setMemoryPendingCount(rows?.length ?? 0);
+      } catch {
+        setMemoryPendingCount(0);
+      }
+    })();
+  }, []);
+
+  /** 会话变化时更新 gRPC SessionEvents 订阅过滤 */
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+    void invoke("set_session_events_filter", {
+      sessionId: sessionId ?? null,
+      agentId: null,
+    }).catch(() => {});
+  }, [sessionId]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
@@ -1653,6 +1693,57 @@ export default function App() {
     hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
   }, []);
 
+  /** listen session_event → toast / 角标 / 可选 refresh */
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+    let unlisten: UnlistenFn | undefined;
+    type SessionEventPayload = {
+      sessionId?: string | null;
+      agentId?: string;
+      memoryUpdated?: {
+        source: string;
+        target: string;
+        summary: string;
+        liveWritten: boolean;
+      } | null;
+      pendingChanged?: { pendingCount: number; reason: string } | null;
+    };
+    void listen<SessionEventPayload>("session_event", (ev) => {
+      const p = ev.payload;
+      if (p.pendingChanged) {
+        setMemoryPendingCount(p.pendingChanged.pendingCount);
+      }
+      if (p.memoryUpdated) {
+        const live = p.memoryUpdated.liveWritten;
+        const summary = p.memoryUpdated.summary?.trim() || "";
+        const key = `${live}:${summary}`;
+        const now = Date.now();
+        const prev = memoryToastDedupeRef.current;
+        if (!(prev && prev.key === key && now - prev.at < 2000)) {
+          memoryToastDedupeRef.current = { key, at: now };
+          showTransientToast(
+            live ? t("memory.toast.updated") : t("memory.toast.pending"),
+          );
+        }
+        if (live && autoRefreshOnUpdate && sessionId) {
+          void invoke("refresh_memory", {
+            agentId: null,
+            sessionId,
+          }).catch(() => {});
+        }
+      }
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      unlisten?.();
+    };
+  }, [autoRefreshOnUpdate, sessionId, showTransientToast, t]);
+
   /** 编辑用户消息：正文与附件填入输入框，截断该条及之后；发送时再截断 DB */
   const editUserMessage = useCallback(
     (messageId: string) => {
@@ -2348,6 +2439,12 @@ export default function App() {
           </div>
           {NAV.map((item) => {
             const label = t(item.labelKey);
+            const pendingBadge =
+              item.id === "memory" && memoryPendingCount > 0
+                ? memoryPendingCount > 99
+                  ? "99+"
+                  : String(memoryPendingCount)
+                : null;
             return (
               <button
                 key={item.id}
@@ -2357,10 +2454,17 @@ export default function App() {
                 {...(showSidebarLabels
                   ? {}
                   : { "data-tip": label, "data-tip-pos": "right" as const })}
-                aria-label={label}
+                aria-label={
+                  pendingBadge
+                    ? `${label} (${pendingBadge})`
+                    : label
+                }
               >
                 <span className="nav-icon" aria-hidden>
                   <item.Icon />
+                  {pendingBadge ? (
+                    <span className="nav-badge">{pendingBadge}</span>
+                  ) : null}
                 </span>
                 <span className="nav-label">{label}</span>
               </button>

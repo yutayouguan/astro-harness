@@ -248,6 +248,7 @@ pub fn run() {
             memory_commands::set_memory_write_approval,
             memory_commands::set_memory_auto_refresh,
             memory_commands::set_background_review_enabled,
+            session_events::set_session_events_filter,
             commands::get_chat_history,
             commands::fork_chat_session,
             commands::list_recent_sessions,
@@ -329,6 +330,8 @@ pub fn run() {
             if let Err(err) = memory::ensure_default_workspace() {
                 tracing::warn!("workspace bootstrap failed: {err}");
             }
+
+            session_events::start_bridge(app.handle());
 
             if let Err(err) = install_app_menu(app.handle()) {
                 tracing::warn!("app menu install failed: {err}");
