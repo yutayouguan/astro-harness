@@ -44,6 +44,7 @@ pub use orchestration::spawn as orchestration_spawn;
 
 pub use artifacts::db as artifact_db;
 
+pub use infra::log_query;
 pub use infra::logging;
 pub use infra::tool_calls;
 
@@ -73,6 +74,9 @@ pub use agent_icons::{
     update_agent_icons, write_agent_icon, AgentIconKind,
 };
 pub use logging::{init_logging, logs_dir};
+pub use log_query::{
+    default_agent_log_query, query_agent_logs, AgentLogLine, AgentLogQuery, LogSource,
+};
 pub use cron::{
     cron_dir, cron_extract_preamble, dispatch_cron_tool, normalize_cron_extract, tick_default,
     CronJob, CronJobExtract, CronStore, NewCronJob,
