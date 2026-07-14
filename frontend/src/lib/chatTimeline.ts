@@ -85,17 +85,32 @@ export function applySurfaceUpsert(
   return { ...m, uiSurfaces: surfaces, segments };
 }
 
-/** 封口末段 reasoning（写入 durationSec） */
+/** 封口最近一条 reasoning 段（写入 durationSec），并同步 message 级耗时 */
 export function sealOpenReasoning(
   m: ChatMessage,
   durationSec?: number,
 ): ChatMessage {
   const segments = ensureSegments(m);
-  const last = segments[segments.length - 1];
+  let target = -1;
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    if (segments[i]?.type === "reasoning") {
+      target = i;
+      break;
+    }
+  }
+  if (target < 0) {
+    if (durationSec == null || durationSec <= 0) return m;
+    return { ...m, reasoningDurationSec: durationSec };
+  }
+  const last = segments[target];
   if (last?.type !== "reasoning") return m;
-  segments[segments.length - 1] = {
+  segments[target] = {
     ...last,
     durationSec: durationSec ?? last.durationSec,
   };
-  return { ...m, segments };
+  return {
+    ...m,
+    segments,
+    reasoningDurationSec: durationSec ?? m.reasoningDurationSec ?? last.durationSec,
+  };
 }

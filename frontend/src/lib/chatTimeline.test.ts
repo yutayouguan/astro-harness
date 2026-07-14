@@ -4,6 +4,7 @@ import {
   applyReasoningDelta,
   applyActivityUpsert,
   applySurfaceUpsert,
+  sealOpenReasoning,
 } from "./chatTimeline.ts";
 import type { ChatMessage } from "../types.ts";
 
@@ -73,4 +74,22 @@ test("surface after activity appends surface segment", () => {
   );
   assert.equal(m.segments?.at(-1)?.type, "surface");
   assert.equal(m.uiSurfaces?.length, 1);
+});
+
+test("sealOpenReasoning writes duration even when last segment is activity", () => {
+  let m = emptyAssistant();
+  m = applyReasoningDelta(m, "think", 100);
+  m = applyActivityUpsert(m, {
+    id: "c1",
+    kind: "tool",
+    title: "tool",
+    status: "done",
+    at: 200,
+  });
+  m = sealOpenReasoning(m, 3.3);
+  assert.equal(m.reasoningDurationSec, 3.3);
+  const r = m.segments?.find((s) => s.type === "reasoning") as
+    | { durationSec?: number }
+    | undefined;
+  assert.equal(r?.durationSec, 3.3);
 });

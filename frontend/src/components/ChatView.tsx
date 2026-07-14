@@ -1089,7 +1089,9 @@ export default function ChatView({
                                   key={seg.id}
                                   reasoning={seg.text}
                                   active={active}
-                                  durationSec={seg.durationSec}
+                                  durationSec={
+                                    seg.durationSec ?? m.reasoningDurationSec
+                                  }
                                   startedAtMs={
                                     active ? seg.at : undefined
                                   }

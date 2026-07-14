@@ -413,7 +413,7 @@ export default function App() {
           next = applyReasoningDelta(next, reasoningExtra, now);
         }
         let reasoningDurationSec = next.reasoningDurationSec;
-        // 正文开始出现时结算思考耗时
+        // 正文开始出现时结算思考耗时，并写入 timeline 段
         if (
           extra &&
           !next.content &&
@@ -428,11 +428,15 @@ export default function App() {
             );
           }
         }
-        return {
+        next = {
           ...next,
           content: extra ? next.content + extra : next.content,
           reasoningDurationSec,
         };
+        if (reasoningDurationSec != null && reasoningDurationSec > 0) {
+          next = sealOpenReasoning(next, reasoningDurationSec);
+        }
+        return next;
       }),
     );
   }, []);
