@@ -31,7 +31,10 @@ use uuid::Uuid;
 use super::interrupt_store::{
     clear_interrupt_file, resume_items_from_proto, save_interrupt_file,
 };
-use crate::{to_proto, SessionEventHub, SubscribeFilter};
+use crate::{
+    to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub, SessionEventMsg,
+    SubscribeFilter,
+};
 
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Mutex<AgentLoop>>;
@@ -40,6 +43,54 @@ type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> 
 /// SubscribeSessionEvents RPC 返回的事件流类型别名。
 type SessionEventsStream =
     Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
+
+/// 启动 background review，完成后将结果 fire-and-forget 发布到 [`SessionEventHub`]。
+///
+/// 本函数只在拿锁并 `spawn` 等待任务后立即返回；**不**阻塞 Chat 流。
+async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &SessionEventHub) {
+    let hub = hub.clone();
+    let sid = session_id.to_string();
+    let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (agent_id, memory_dir) = {
+        let agent = session.lock().await;
+        let id = agent.agent_id().to_string();
+        let dir = agent.memory_dir().to_path_buf();
+        agent::spawn_background_review_after_turn(&agent, Some(notify_tx));
+        (id, dir)
+    };
+    tokio::spawn(async move {
+        if let Some(n) = notify_rx.recv().await {
+            let live_written = !n.content.contains("待审批")
+                && !n.content.contains("pending")
+                && !n.content.contains("入队");
+            hub.publish(SessionEventMsg {
+                session_id: Some(sid),
+                agent_id: agent_id.clone(),
+                memory_updated: Some(MemoryUpdatedPayload {
+                    source: "review".into(),
+                    target: "mixed".into(),
+                    summary: n.content.clone(),
+                    live_written,
+                }),
+                pending_changed: None,
+            });
+            if !live_written {
+                let pending_count = memory::list_pending(&memory_dir)
+                    .map(|v| v.len() as u32)
+                    .unwrap_or(0);
+                hub.publish(SessionEventMsg {
+                    session_id: None,
+                    agent_id,
+                    memory_updated: None,
+                    pending_changed: Some(PendingChangedPayload {
+                        pending_count,
+                        reason: "review".into(),
+                    }),
+                });
+            }
+        }
+    });
+}
 
 /// Astro gRPC 服务实现：会话 Agent、流式聊天、记忆与技能等 RPC。
 pub struct AstroServiceImpl {
@@ -87,6 +138,11 @@ impl AstroServiceImpl {
             hook_runtime,
             session_events: SessionEventHub::new(64),
         }
+    }
+
+    /// 会话记忆事件 hub（供 Chat / 其它 RPC 发布副作用）。
+    pub(crate) fn session_event_hub(&self) -> &SessionEventHub {
+        &self.session_events
     }
 
     /// 获取或惰性创建会话对应的 [`AgentLoop`]。
@@ -552,6 +608,7 @@ impl AstroService for AstroServiceImpl {
         let sid_cleanup = session_id.clone();
         let hook_runtime = Arc::clone(&self.hook_runtime);
         let ui_slot = self.hook_runtime.ui_slot.clone();
+        let session_events_hub = self.session_event_hub().clone();
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
         let hook_out = tx.clone();
@@ -617,10 +674,7 @@ impl AstroService for AstroServiceImpl {
                             payload: Some(proto::chat_event::Payload::Done(true)),
                         }))
                         .await;
-                    {
-                        let agent = session.lock().await;
-                        agent::spawn_background_review_after_turn(&agent);
-                    }
+                    spawn_review_to_hub(&session, &sid_cleanup, &session_events_hub).await;
                     cleanup().await;
                     return;
                 }
@@ -760,11 +814,13 @@ impl AstroService for AstroServiceImpl {
                             }
                         }
                         if is_done {
-                            // 回合成功结束后异步 memory background review（可配置关闭）
-                            {
-                                let agent = session_for_review.lock().await;
-                                agent::spawn_background_review_after_turn(&agent);
-                            }
+                            // 回合成功后 fire-and-forget review → SessionEventHub（不阻塞 Chat 流）
+                            spawn_review_to_hub(
+                                &session_for_review,
+                                &sid_cleanup,
+                                &session_events_hub,
+                            )
+                            .await;
                             break;
                         }
                     }

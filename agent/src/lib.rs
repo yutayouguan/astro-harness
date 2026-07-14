@@ -66,8 +66,8 @@ pub use interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 pub use loop_::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
 /// 回合后记忆 review。
 pub use memory_review_spawn::{
-    job_from_agent, maybe_run_background_review, spawn_background_review_after_turn,
-    BackgroundReviewJob,
+    job_from_agent, maybe_run_background_review, review_notify_from_applied,
+    spawn_background_review_after_turn, BackgroundReviewJob, MemoryReviewNotify,
 };
 /// 消息转换入口 re-export。
 pub use messages::to_provider_messages;
