@@ -214,7 +214,7 @@ fn make_window_transparent(win: &tauri::WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// 启动 Tauri 应用（菜单、窗口与插件）。
 pub fn run() {
-    if let Err(err) = memory::init_logging("astro-agent") {
+    if let Err(err) = memory::init_logging("agent") {
         eprintln!("frontend logging init failed: {err}");
     }
 

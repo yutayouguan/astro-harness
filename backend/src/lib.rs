@@ -19,7 +19,7 @@ use tonic::transport::Server;
 /// # 错误
 /// 地址解析失败、工作区初始化失败，或 tonic 服务异常退出。
 pub async fn run() -> anyhow::Result<()> {
-    init_logging("backend")?;
+    init_logging("agent")?;
 
     let addr = std::env::var("ASTRO_GRPC_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:50051".to_string())
