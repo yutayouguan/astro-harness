@@ -2,6 +2,7 @@
 
 use futures::StreamExt;
 use serde::Serialize;
+use tauri::AppHandle;
 
 use memory::dreaming::{
     build_dream_extract_inputs, finalize_dream_job_from_update, load_dreaming_state,
@@ -9,13 +10,17 @@ use memory::dreaming::{
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
 use memory::{
-    default_memory_dir, list_agents, load_auxiliary_config, resolve_auxiliary, AuxiliaryKind,
+    default_memory_dir, list_agents, list_pending, load_auxiliary_config, load_memory_config,
+    resolve_auxiliary, AuxiliaryKind,
 };
 use providers::client::ProviderClient;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 
 use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
+use crate::session_events::{
+    emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
+};
 
 /// Dreaming 总状态（供偏好 / 状态页）。
 #[derive(Debug, Clone, Serialize)]
@@ -257,9 +262,51 @@ fn resolve_dreaming_provider() -> Result<(UiProvider, String, String), String> {
     Ok((provider, backend_id, model))
 }
 
+/// 入梦 finalize 成功后向前端发 `session_event`（live 或入 pending）。
+fn emit_dreaming_session_event(app: &AppHandle, base: &std::path::Path, agent_id: &str) {
+    let write_approval = load_memory_config(base).write_approval;
+    if write_approval {
+        let pending_count = list_pending(base).map(|v| v.len() as u32).unwrap_or(0);
+        emit_session_event(
+            app,
+            SessionEventDto {
+                session_id: None,
+                agent_id: agent_id.to_string(),
+                ts_ms: now_ts_ms(),
+                memory_updated: Some(MemoryUpdatedDto {
+                    source: "dreaming".into(),
+                    target: "memory".into(),
+                    summary: "有待审批的记忆写入".into(),
+                    live_written: false,
+                }),
+                pending_changed: Some(PendingChangedDto {
+                    pending_count,
+                    reason: "enqueued".into(),
+                }),
+            },
+        );
+    } else {
+        emit_session_event(
+            app,
+            SessionEventDto {
+                session_id: None,
+                agent_id: agent_id.to_string(),
+                ts_ms: now_ts_ms(),
+                memory_updated: Some(MemoryUpdatedDto {
+                    source: "dreaming".into(),
+                    target: "memory".into(),
+                    summary: "入梦已更新记忆".into(),
+                    live_written: true,
+                }),
+                pending_changed: None,
+            },
+        );
+    }
+}
+
 /// Tauri 命令：run_dreaming。
 #[tauri::command]
-pub async fn run_dreaming() -> Result<DreamRunReport, String> {
+pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
     let base = default_memory_dir();
     let mut state = load_dreaming_state(&base);
     if state.running {
@@ -318,6 +365,7 @@ pub async fn run_dreaming() -> Result<DreamRunReport, String> {
             Ok(update) => match finalize_dream_job_from_update(&mut state, job, &update) {
                 Ok(rep) => {
                     diaries_processed += rep.diaries;
+                    emit_dreaming_session_event(&app, &base, &rep.agent_id);
                     reports.push(rep);
                 }
                 Err(e) => {

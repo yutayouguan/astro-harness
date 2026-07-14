@@ -15,6 +15,7 @@ mod litellm_meta;
 mod memory_commands;
 mod model_meta;
 mod providers_commands;
+mod session_events;
 mod skills_commands;
 
 use tauri::{

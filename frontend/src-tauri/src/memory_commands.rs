@@ -11,8 +11,12 @@
 //!   的 [`AgentLoop::refresh_memory`]，使后续轮次 system prompt 立刻用到新 snapshot。
 
 use serde::Serialize;
+use tauri::AppHandle;
 
 use crate::commands::chat_control;
+use crate::session_events::{
+    emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
+};
 
 /// `refresh_memory` 返回：活跃 Agent 重载后的 MEMORY / USER snapshot 渲染。
 #[derive(Debug, Clone, Serialize)]
@@ -99,18 +103,84 @@ pub async fn list_pending_memory_writes() -> Result<Vec<PendingMemoryWriteDto>, 
         .map_err(|e| e.to_string())
 }
 
-/// 批准并应用一条 pending（写 live）。
-#[tauri::command]
-pub async fn approve_pending_memory_write(id: String) -> Result<String, String> {
-    let root = memory::default_memory_dir();
-    memory::approve_pending_memory(&root, &id).map_err(|e| e.to_string())
+fn pending_target_str(target: memory::MemoryTarget) -> &'static str {
+    match target {
+        memory::MemoryTarget::Memory => "memory",
+        memory::MemoryTarget::User => "user",
+    }
 }
 
-/// 拒绝并丢弃一条 pending。
+/// 批准并应用一条 pending（写 live）；成功后 emit `session_event`。
 #[tauri::command]
-pub async fn reject_pending_memory_write(id: String) -> Result<(), String> {
+pub async fn approve_pending_memory_write(
+    app: AppHandle,
+    id: String,
+) -> Result<String, String> {
     let root = memory::default_memory_dir();
-    memory::reject_pending_memory(&root, &id).map_err(|e| e.to_string())
+    let item = memory::list_pending(&root)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("pending 写入不存在: {id}"))?;
+    let agent_id = item.agent_id.clone();
+    let target = pending_target_str(item.target).to_string();
+
+    let msg = memory::approve_pending_memory(&root, &id).map_err(|e| e.to_string())?;
+    let pending_count = memory::list_pending(&root)
+        .map(|v| v.len() as u32)
+        .unwrap_or(0);
+
+    emit_session_event(
+        &app,
+        SessionEventDto {
+            session_id: None,
+            agent_id,
+            ts_ms: now_ts_ms(),
+            memory_updated: Some(MemoryUpdatedDto {
+                source: "approve".into(),
+                target,
+                summary: msg.clone(),
+                live_written: true,
+            }),
+            pending_changed: Some(PendingChangedDto {
+                pending_count,
+                reason: "approved".into(),
+            }),
+        },
+    );
+    Ok(msg)
+}
+
+/// 拒绝并丢弃一条 pending；成功后 emit `session_event`。
+#[tauri::command]
+pub async fn reject_pending_memory_write(app: AppHandle, id: String) -> Result<(), String> {
+    let root = memory::default_memory_dir();
+    let item = memory::list_pending(&root)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("pending 写入不存在: {id}"))?;
+    let agent_id = item.agent_id;
+
+    memory::reject_pending_memory(&root, &id).map_err(|e| e.to_string())?;
+    let pending_count = memory::list_pending(&root)
+        .map(|v| v.len() as u32)
+        .unwrap_or(0);
+
+    emit_session_event(
+        &app,
+        SessionEventDto {
+            session_id: None,
+            agent_id,
+            ts_ms: now_ts_ms(),
+            memory_updated: None,
+            pending_changed: Some(PendingChangedDto {
+                pending_count,
+                reason: "rejected".into(),
+            }),
+        },
+    );
+    Ok(())
 }
 
 /// 记忆面板开关状态（从 `config.yaml` 读取）。

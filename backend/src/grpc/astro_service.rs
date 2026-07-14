@@ -44,6 +44,45 @@ type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> 
 type SessionEventsStream =
     Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
 
+/// 工具 / review 返回文本是否表示写入只入了 pending（未改 live）。
+fn indicates_pending_enqueue(content: &str) -> bool {
+    content.contains("待审批") || content.contains("pending") || content.contains("入队")
+}
+
+/// 工具入 pending 时 publish 全局 `pending_changed`（+ live_written=false 的 memory_updated）。
+///
+/// 回合内 **live** 工具写仍只走 Chat `MemoryUpdate`，不调用本函数。
+fn publish_tool_pending_to_hub(
+    hub: &SessionEventHub,
+    memory_dir: &std::path::Path,
+    agent_id: &str,
+    summary: &str,
+) {
+    let pending_count = memory::list_pending(memory_dir)
+        .map(|v| v.len() as u32)
+        .unwrap_or(0);
+    hub.publish(SessionEventMsg {
+        session_id: None,
+        agent_id: agent_id.to_string(),
+        memory_updated: Some(MemoryUpdatedPayload {
+            source: "tool".into(),
+            target: "mixed".into(),
+            summary: summary.to_string(),
+            live_written: false,
+        }),
+        pending_changed: None,
+    });
+    hub.publish(SessionEventMsg {
+        session_id: None,
+        agent_id: agent_id.to_string(),
+        memory_updated: None,
+        pending_changed: Some(PendingChangedPayload {
+            pending_count,
+            reason: "enqueued".into(),
+        }),
+    });
+}
+
 /// 启动 background review，完成后将结果 fire-and-forget 发布到 [`SessionEventHub`]。
 ///
 /// 本函数只在拿锁并 `spawn` 等待任务后立即返回；**不**阻塞 Chat 流。
@@ -60,9 +99,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
     };
     tokio::spawn(async move {
         if let Some(n) = notify_rx.recv().await {
-            let live_written = !n.content.contains("待审批")
-                && !n.content.contains("pending")
-                && !n.content.contains("入队");
+            let live_written = !indicates_pending_enqueue(&n.content);
             hub.publish(SessionEventMsg {
                 session_id: Some(sid),
                 agent_id: agent_id.clone(),
@@ -84,7 +121,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                     memory_updated: None,
                     pending_changed: Some(PendingChangedPayload {
                         pending_count,
-                        reason: "review".into(),
+                        reason: "enqueued".into(),
                     }),
                 });
             }
@@ -777,6 +814,10 @@ impl AstroService for AstroServiceImpl {
             }
 
             let session_for_review = session.clone();
+            let agent_id_for_events = {
+                let agent = session.lock().await;
+                agent.agent_id().to_string()
+            };
             let mut stream = stream_multi_turn_with_hitl(
                 session,
                 chat_targets,
@@ -808,9 +849,27 @@ impl AstroService for AstroServiceImpl {
                                 }
                             }
                         }
-                        if let Some(event) = multi_turn_to_chat_event(mt) {
-                            if tx.send(Ok(event)).await.is_err() {
-                                break;
+                        // 工具入 pending → 只走 Hub（不刷 Chat 时间线）；live 仍走 Chat MemoryUpdate
+                        let skip_chat_memory_update = matches!(
+                            &mt,
+                            MultiTurnStreamItem::MemoryUpdate { content, .. }
+                                if indicates_pending_enqueue(content)
+                        );
+                        if let MultiTurnStreamItem::MemoryUpdate { ref content, .. } = mt {
+                            if indicates_pending_enqueue(content) {
+                                publish_tool_pending_to_hub(
+                                    &session_events_hub,
+                                    &memory_dir,
+                                    &agent_id_for_events,
+                                    content,
+                                );
+                            }
+                        }
+                        if !skip_chat_memory_update {
+                            if let Some(event) = multi_turn_to_chat_event(mt) {
+                                if tx.send(Ok(event)).await.is_err() {
+                                    break;
+                                }
                             }
                         }
                         if is_done {
