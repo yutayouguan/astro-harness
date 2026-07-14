@@ -7,7 +7,7 @@
 //! **关键不变量**
 //! - Pause/Cancel 对齐 Rig：`wait_if_paused` 先于上游 poll；取消时通过 `Abortable` 中止 Provider 流
 //! - 每轮 assistant 回复必须写入 `session_messages`（含 tool_calls）后再执行工具
-//! - 末轮仍含工具调用时以 Error 结束，避免静默 `Done`
+//! - 迭代预算对齐 Hermes：默认 90 轮；`code_exec` 独占轮可 refund；耗尽后无工具强制总结再 Done
 //! - usage 采用覆盖式累加，兼容 Google 等 Provider 的累计式 `usageMetadata`
 
 use std::collections::HashMap;
@@ -400,8 +400,13 @@ impl StreamingPrompt for ProviderStreamer {
     }
 }
 
-/// 当 Agent 配置 `multi_turn == 0` 时使用的默认工具轮次上限。
-const DEFAULT_MAX_ROUNDS: usize = 8;
+/// 当 Agent 配置 `multi_turn == 0` 时使用的默认工具迭代上限（Hermes `max_iterations`）。
+const DEFAULT_MAX_ROUNDS: usize = crate::iteration_budget::DEFAULT_MAX_ITERATIONS;
+
+/// 预算耗尽后注入的总结提示（对齐 Hermes `handle_max_iterations`）。
+const MAX_ITERATIONS_SUMMARY_PROMPT: &str = "\
+你已达到本回合允许的最大工具调用迭代次数。\
+请直接给出最终回复，总结目前已完成与尚未完成的内容，不要再调用任何工具。";
 
 /// 向 mpsc 发送单个成功事件；接收方关闭时返回 `false`。
 async fn emit(
@@ -636,12 +641,19 @@ async fn run_multi_turn_stream_inner(
             n
         }
     };
+    let budget = crate::iteration_budget::IterationBudget::new(max_rounds);
+    // 工具循环结束后是否需要无工具强制总结（预算耗尽且尚无自然语言终答）
+    let mut need_summary;
 
     // 整次 run 累积时间线，供每轮 assistant 落盘写入 reasoning_details
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
 
-    for round in 0..max_rounds {
+    loop {
+        if !budget.consume() {
+            need_summary = true;
+            break;
+        }
         if pause.is_cancelled() {
             finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
             return;
@@ -945,11 +957,9 @@ async fn run_multi_turn_stream_inner(
         }
 
         if calls.is_empty() {
+            need_summary = false;
             break;
         }
-
-        // 最后一轮仍要调工具：执行后结束并报错，避免静默 Done
-        let last_round = round + 1 >= max_rounds;
 
         let force_serial = calls.iter().any(|c| {
             is_interactive_tool(&c.name)
@@ -1084,16 +1094,47 @@ async fn run_multi_turn_stream_inner(
             }
         }
 
-        if last_round {
-            finish_error(
+        // 对齐 Hermes：本轮工具仅 code_exec 时退还本次迭代
+        let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+        if crate::iteration_budget::should_refund_tool_round(&names) {
+            budget.refund();
+        }
+
+        if budget.remaining() == 0 {
+            need_summary = true;
+            break;
+        }
+    }
+
+    if need_summary {
+        match run_max_iterations_summary(
+            &session,
+            &streamer,
+            &system_prompt,
+            &pause,
+            &tx,
+            &mut timeline,
+            &mut total_usage,
+            &mut saw_usage,
+            &run_id,
+            budget.used(),
+            budget.max_total(),
+        )
+        .await
+        {
+            SummaryOutcome::Finished => {}
+            SummaryOutcome::Aborted => return,
+            SummaryOutcome::Failed(err) => {
+                finish_error(
                     &session,
                     &streamer,
-                &tx,
-                "工具调用轮次已用尽，请简化任务后重试。".to_string(),
-                saw_usage.then_some(total_usage),
-            )
-            .await;
-            return;
+                    &tx,
+                    err,
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
+                return;
+            }
         }
     }
 
@@ -1115,6 +1156,192 @@ async fn run_multi_turn_stream_inner(
     }
 
     finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
+}
+
+enum SummaryOutcome {
+    Finished,
+    Aborted,
+    Failed(String),
+}
+
+/// 预算耗尽后：注入总结提示，再发一轮 **无 tools** 的 completion（对齐 Hermes）。
+async fn run_max_iterations_summary(
+    session: &Arc<Mutex<AgentLoop>>,
+    streamer: &ProviderStreamer,
+    system_prompt: &str,
+    pause: &Arc<PauseControl>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    timeline: &mut crate::timeline::TimelineBuilder,
+    total_usage: &mut Usage,
+    saw_usage: &mut bool,
+    run_id: &str,
+    used: usize,
+    max_total: usize,
+) -> SummaryOutcome {
+    let notice = format!(
+        "⚠️ 迭代预算已用尽（{used}/{max_total}），正在请求模型总结（不再调用工具）…\n\n"
+    );
+    if !emit(
+        tx,
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(notice)),
+    )
+    .await
+    {
+        return SummaryOutcome::Aborted;
+    }
+
+    {
+        let mut agent = session.lock().await;
+        agent
+            .session_messages
+            .push(Message::user(MAX_ITERATIONS_SUMMARY_PROMPT));
+    }
+
+    let history = {
+        let agent = session.lock().await;
+        agent.session_messages.clone()
+    };
+
+    let raw_stream = match streamer
+        .stream_chat(system_prompt, &history, Vec::new())
+        .await
+    {
+        Ok(s) => s,
+        Err(err) => {
+            return SummaryOutcome::Failed(format!(
+                "迭代预算已用尽（{used}/{max_total}），且总结请求失败: {err}"
+            ));
+        }
+    };
+
+    let (abort_handle, abort_reg) = AbortHandle::new_pair();
+    pause.attach_abort(abort_handle);
+    let mut stream = Abortable::new(raw_stream, abort_reg);
+
+    let mut full_response = String::new();
+    let mut full_reasoning = String::new();
+    let mut round_usage: Option<Usage> = None;
+    let now_ms = || chrono::Utc::now().timestamp_millis();
+
+    loop {
+        if !pause.wait_if_paused().await {
+            pause.clear_abort();
+            if let Some(u) = round_usage {
+                total_usage.add_assign(u);
+                *saw_usage = true;
+            }
+            finish_usage_and_done(
+                session,
+                streamer,
+                tx,
+                saw_usage.then_some(*total_usage),
+                run_id,
+            )
+            .await;
+            return SummaryOutcome::Aborted;
+        }
+
+        let next = tokio::select! {
+            biased;
+            _ = pause.wait_cancelled() => {
+                pause.clear_abort();
+                if let Some(u) = round_usage {
+                    total_usage.add_assign(u);
+                    *saw_usage = true;
+                }
+                finish_usage_and_done(
+                    session,
+                    streamer,
+                    tx,
+                    saw_usage.then_some(*total_usage),
+                    run_id,
+                )
+                .await;
+                return SummaryOutcome::Aborted;
+            }
+            item = stream.next() => item,
+        };
+
+        match next {
+            None => break,
+            Some(Ok(StreamedAssistantContent::Text(text))) => {
+                full_response.push_str(&text);
+                if !emit(
+                    tx,
+                    MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(text)),
+                )
+                .await
+                {
+                    pause.clear_abort();
+                    return SummaryOutcome::Aborted;
+                }
+            }
+            Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
+                full_reasoning.push_str(&r);
+                timeline.push_reasoning_delta(&r, now_ms());
+                if !emit(
+                    tx,
+                    MultiTurnStreamItem::Assistant(StreamedAssistantContent::Reasoning(r)),
+                )
+                .await
+                {
+                    pause.clear_abort();
+                    return SummaryOutcome::Aborted;
+                }
+            }
+            // 总结轮禁止再调工具：忽略 tool delta
+            Some(Ok(StreamedAssistantContent::ToolCallDelta(_))) => {}
+            Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
+                round_usage = Some(u);
+            }
+            Some(Err(err)) => {
+                pause.clear_abort();
+                if let Some(u) = round_usage {
+                    total_usage.add_assign(u);
+                    *saw_usage = true;
+                }
+                return SummaryOutcome::Failed(format!(
+                    "迭代预算已用尽（{used}/{max_total}），总结流式失败: {err}"
+                ));
+            }
+        }
+    }
+    pause.clear_abort();
+
+    if let Some(u) = round_usage {
+        total_usage.add_assign(u);
+        *saw_usage = true;
+    }
+
+    if full_response.trim().is_empty() {
+        let fallback = format!(
+            "迭代预算已用尽（{used}/{max_total}）。模型未能生成总结，请基于已有工具结果继续或简化任务。"
+        );
+        full_response = fallback.clone();
+        if !emit(
+            tx,
+            MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(fallback)),
+        )
+        .await
+        {
+            return SummaryOutcome::Aborted;
+        }
+    }
+
+    {
+        let mut agent = session.lock().await;
+        let details = Some(timeline.reasoning_details_snapshot());
+        if let Err(err) = agent.record_assistant_message_with_tools(
+            &full_response,
+            None,
+            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+            details,
+        ) {
+            return SummaryOutcome::Failed(err.to_string());
+        }
+    }
+
+    SummaryOutcome::Finished
 }
 
 fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> bool {

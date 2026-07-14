@@ -6,7 +6,7 @@
 //! - 统一路由内置工具与 MCP 工具，并在调用前后触发 hooks；流式主循环在模型回复聚合后触发 `post_llm_call`
 //!
 //! **关键不变量**
-//! - 每条用户消息开始时 `tool_rounds` 归零；工具调用次数不得超过 `multi_turn`
+//! - 每条用户消息开始时 `tool_rounds` 归零；工具调用次数不得超过 `multi_turn`（默认 90，对齐 Hermes）
 //! - `session_messages` 中相邻消息不得连续出现相同角色（见 `validate_message_order`）
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
@@ -34,7 +34,7 @@ pub use tools::{ImageGenCreds, ImageGenTargets};
 pub struct AgentConfig {
     /// 整个会话允许的最大对话轮次（用户消息计数）。
     pub max_turns: usize,
-    /// 单次用户消息内允许的工具轮次（对齐 Rig multi_turn）。
+    /// 单次用户消息内允许的工具迭代次数（对齐 Hermes `max_iterations`，默认 90）。
     pub multi_turn: usize,
     /// 上下文压缩时保留的最近消息条数。
     pub protect_last_n: usize,
@@ -66,7 +66,7 @@ impl AgentConfig {
             .unwrap_or_else(|_| "你是 Astro，一个自我进化的 AI 助手".to_string());
         Self {
             max_turns: 90,
-            multi_turn: 8,
+            multi_turn: crate::iteration_budget::DEFAULT_MAX_ITERATIONS,
             protect_last_n: 20,
             memory_dir,
             recent_turns: 10,

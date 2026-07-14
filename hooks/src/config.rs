@@ -32,8 +32,9 @@ fn default_max_spawn_depth() -> u32 {
 fn default_max_concurrent() -> usize {
     3
 }
+/// 子 Agent 独立迭代预算默认值（对齐 Hermes `delegation.max_iterations`）。
 fn default_child_max_iterations() -> usize {
-    50
+    50 // 与 agent::DEFAULT_CHILD_MAX_ITERATIONS 保持一致
 }
 fn default_true() -> bool {
     true

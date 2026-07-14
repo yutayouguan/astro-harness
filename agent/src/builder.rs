@@ -44,7 +44,7 @@ pub struct BuiltAgentSpec {
 ///
 /// 通过 `new` 设定工作区后，以 `agent_id`、`preamble` 等方法逐项覆盖；
 /// 最终调用 [`build`](Self::build) 或 [`build_spec`](Self::build_spec) 完成组装。
-/// 工具轮次默认 8，近期历史默认 10 条。
+/// 工具迭代默认 90（Hermes `max_iterations`），近期历史默认 10 条。
 pub struct AgentBuilder {
     /// Agent 持久化数据根目录。
     memory_dir: PathBuf,
@@ -56,7 +56,7 @@ pub struct AgentBuilder {
     temperature: Option<f32>,
     /// 可选会话轮次上限；缺省 90。
     max_turns: Option<usize>,
-    /// 单次用户消息内允许的工具轮次（对齐 Rig `.multi_turn(n)`），默认 8。
+    /// 单次用户消息内允许的工具迭代次数（对齐 Hermes `max_iterations`），默认 90。
     multi_turn: usize,
     /// 近期对话注入条数，默认 10。
     recent_turns: usize,
@@ -81,7 +81,7 @@ impl AgentBuilder {
             preamble: None,
             temperature: None,
             max_turns: None,
-            multi_turn: 8,
+            multi_turn: crate::iteration_budget::DEFAULT_MAX_ITERATIONS,
             recent_turns: 10,
             additional_params: Value::Null,
             static_context: StaticContext::default(),

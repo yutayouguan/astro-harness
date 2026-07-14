@@ -126,6 +126,7 @@ fn delegation_cfg() -> hooks::config::DelegationConfig {
     hooks::config::load_config_or_default().delegation
 }
 
+/// 子 Agent 独立预算（默认 `delegation.child_max_iterations` = 50，对齐 Hermes）。
 fn child_max_rounds(task: &DelegateTaskSpec, cfg: &hooks::config::DelegationConfig) -> usize {
     task.max_iterations
         .unwrap_or(cfg.child_max_iterations)

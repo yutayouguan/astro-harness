@@ -19,6 +19,8 @@ pub mod hooks;
 pub mod hitl;
 /// AG-UI 风格 interrupt 挂起与 resume 校验。
 pub mod interrupt;
+/// Hermes 风格迭代预算（consume / refund）。
+pub mod iteration_budget;
 /// 多轮对话主循环：工具调用、深度限制与回合结果。
 pub mod loop_;
 /// 会话消息到 Provider API 消息的格式转换。
@@ -68,6 +70,11 @@ pub use loop_::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
 pub use memory_review_spawn::{
     job_from_agent, maybe_run_background_review, review_notify_from_applied,
     spawn_background_review_after_turn, BackgroundReviewJob, MemoryReviewNotify,
+};
+/// 迭代预算 re-export。
+pub use iteration_budget::{
+    should_refund_tool_round, IterationBudget, DEFAULT_CHILD_MAX_ITERATIONS,
+    DEFAULT_MAX_ITERATIONS,
 };
 /// 消息转换入口 re-export。
 pub use messages::to_provider_messages;
