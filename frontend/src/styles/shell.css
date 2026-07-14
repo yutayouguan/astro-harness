@@ -20,45 +20,43 @@
   overflow: hidden;
   /* 圆角交给系统窗；CSS 再裁会与系统半径错位，四角露缝 */
   border-radius: 0;
-  background: var(--shell-bg);
+  /* 实色兜底，避免漂移层边缘露缝；主题渐变改由 ::before 承载并动画 */
+  background: var(--bg0);
   border: none;
   box-shadow: none;
   /* 多层渐变无法平滑插值，勿对 background 做 transition，否则 tab 切换会「慢半拍」 */
 }
 
-/* 浮动色晕层：用 transform 漂移，比 background-position 更易察觉 */
-.app-shell::after {
+/* 整层壳渐变缓慢漂移（看得见的色晕位移，不是淡到看不见的 soft 叠层） */
+.app-shell::before {
   content: "";
   position: absolute;
-  inset: -28%;
+  inset: -22%;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 48% 42% at 22% 18%, var(--shell-tone-soft, transparent), transparent 68%),
-    radial-gradient(ellipse 42% 38% at 82% 28%, var(--shell-tone-soft, transparent), transparent 65%),
-    radial-gradient(ellipse 50% 40% at 58% 88%, color-mix(in srgb, var(--tone, transparent) 22%, transparent), transparent 70%);
-  opacity: 0.95;
-  transform-origin: 50% 45%;
-  animation: shell-aurora-drift 18s ease-in-out infinite alternate;
+  background: var(--shell-bg);
+  transform-origin: 50% 40%;
+  animation: shell-aurora-drift 14s ease-in-out infinite alternate;
   will-change: transform;
 }
 
 @keyframes shell-aurora-drift {
   0% {
-    transform: translate3d(-8%, -5%, 0) scale(1.05) rotate(-2deg);
+    transform: translate3d(-5%, -4%, 0) scale(1.06);
   }
   50% {
-    transform: translate3d(6%, 4%, 0) scale(1.14) rotate(3deg);
+    transform: translate3d(4%, 3%, 0) scale(1.12);
   }
   100% {
-    transform: translate3d(9%, -3%, 0) scale(1.1) rotate(-1deg);
+    transform: translate3d(6%, -2%, 0) scale(1.08);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-shell::after {
+  .app-shell::before {
+    inset: 0;
     animation: none;
-    opacity: 0;
+    transform: none;
   }
 }
 
