@@ -15,6 +15,7 @@ import {
   DollarSign,
   GitBranch,
   Layers,
+  LayoutDashboard,
   Network,
   Puzzle,
   Timer,
@@ -23,6 +24,12 @@ import {
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
 import { useAgentsChanged } from "../lib/agentsChanged";
+import {
+  DEFAULT_INSIGHTS_VIEW,
+  INSIGHTS_VIEW_ORDER,
+  needsUsageInsights,
+  type InsightsViewMode,
+} from "../lib/insightsView";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
@@ -30,7 +37,7 @@ import McpIcon from "./McpIcon";
 
 type Period = "month" | "quarter" | "year";
 type Metric = "calls" | "tokens" | "cost";
-type ViewMode = "models" | "tools" | "collab" | "tracing";
+type ViewMode = InsightsViewMode;
 
 type RankItem = {
   kind: string;
@@ -150,12 +157,21 @@ const METRIC_TABS: { id: Metric; labelKey: MessageKey }[] = [
   { id: "cost", labelKey: "insights.metric.cost" },
 ];
 
-const VIEW_TABS: { id: ViewMode; labelKey: MessageKey; Icon: typeof BarChart3 }[] = [
-  { id: "models", labelKey: "insights.view.models", Icon: Cpu },
-  { id: "tools", labelKey: "insights.view.tools", Icon: Wrench },
-  { id: "collab", labelKey: "insights.view.collab", Icon: Network },
-  { id: "tracing", labelKey: "insights.view.tracing", Icon: Activity },
-];
+const VIEW_TAB_META: Record<
+  ViewMode,
+  { labelKey: MessageKey; Icon: typeof BarChart3 }
+> = {
+  overview: { labelKey: "insights.view.overview", Icon: LayoutDashboard },
+  models: { labelKey: "insights.view.models", Icon: Cpu },
+  tools: { labelKey: "insights.view.tools", Icon: Wrench },
+  collab: { labelKey: "insights.view.collab", Icon: Network },
+  tracing: { labelKey: "insights.view.tracing", Icon: Activity },
+};
+
+const VIEW_TABS = INSIGHTS_VIEW_ORDER.map((id) => ({
+  id,
+  ...VIEW_TAB_META[id],
+}));
 
 /** 从模型名推断厂商（OpenRouter `vendor/model` 或常见前缀）。 */
 function inferProvider(modelName: string): string {
@@ -380,7 +396,7 @@ function CollabGraphSvg({
 
 export default function InsightsPanel({ active }: { active: boolean }) {
   const { t, locale } = useI18n();
-  const [view, setView] = useState<ViewMode>("models");
+  const [view, setView] = useState<ViewMode>(DEFAULT_INSIGHTS_VIEW);
   const [period, setPeriod] = useState<Period>("month");
   const [metric, setMetric] = useState<Metric>("tokens");
   const [agentId, setAgentId] = useState("workspace");
@@ -440,7 +456,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   };
 
   useEffect(() => {
-    if (!active || !isTauri() || (view !== "models" && view !== "tools")) return;
+    if (!active || !isTauri() || !needsUsageInsights(view)) return;
     let cancelled = false;
     void (async () => {
       try {
