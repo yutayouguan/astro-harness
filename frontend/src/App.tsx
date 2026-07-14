@@ -84,7 +84,11 @@ import {
   usagePercent,
   type ContextUsageSnapshot,
 } from "./lib/contextUsage";
-import { zoomOrRestore } from "./lib/windowZoom";
+import {
+  zoomOrRestore,
+  prefetchZoomState,
+  installMacMaximizeRedirect,
+} from "./lib/windowZoom";
 import { syncWindowUnderlay } from "./lib/windowUnderlay";
 import {
   clearChatSession,
@@ -380,6 +384,9 @@ export default function App() {
   const dissolvingIdsRef = useRef<string[]>([]);
   dissolvingIdsRef.current = dissolvingIds;
   const zoomingRef = useRef(false);
+  /** Sparky：延迟拖拽，避免第一击 startDragging 把双击交给系统 zoom */
+  const titleDragTimerRef = useRef<number | null>(null);
+  const titleLastClickRef = useRef({ time: 0, x: 0, y: 0 });
   /** 避免恢复过程中把空欢迎页写回覆盖已存会话 */
   const restoringRef = useRef(false);
   /** 上次成功压实时间（冷却 / 状态用） */
@@ -626,6 +633,13 @@ export default function App() {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
       return;
     }
+    return installMacMaximizeRedirect();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
     let unlisten: UnlistenFn | undefined;
     try {
       const win = getCurrentWindow();
@@ -812,33 +826,51 @@ export default function App() {
     };
   }, [t]);
 
-  const onTitleMouseDown = async (e: ReactMouseEvent) => {
+  const onTitleMouseDown = (e: ReactMouseEvent) => {
     if (e.button !== 0) return;
-    // 双击的第二次按下不要 startDragging，否则会和自定义 zoom 抢事件
-    if (e.detail > 1) {
-      e.preventDefault();
-      return;
-    }
-    try {
-      await getCurrentWindow().startDragging();
-    } catch {
-      // ignore outside Tauri
-    }
-  };
-
-  const onTitleDoubleClick = async (e: ReactMouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (zoomingRef.current) return;
-    zoomingRef.current = true;
-    try {
-      // 始终走自定义贴齐，绝不调用原生 toggleMaximize / zoom
-      await zoomOrRestore();
-    } catch {
-      // ignore
-    } finally {
-      zoomingRef.current = false;
+
+    // 社区解法（Sparky / tauri#13898）：先等 200ms 再拖拽；
+    // 若 300ms 内二次点击 → 取消拖拽，走伪最大化动画，绝不交给系统 zoom。
+    const now = Date.now();
+    const prev = titleLastClickRef.current;
+    const isDouble =
+      now - prev.time < 300 &&
+      Math.abs(e.clientX - prev.x) < 5 &&
+      Math.abs(e.clientY - prev.y) < 5;
+
+    if (isDouble) {
+      if (titleDragTimerRef.current != null) {
+        window.clearTimeout(titleDragTimerRef.current);
+        titleDragTimerRef.current = null;
+      }
+      titleLastClickRef.current = { time: 0, x: 0, y: 0 };
+      if (zoomingRef.current) return;
+      zoomingRef.current = true;
+      void zoomOrRestore().finally(() => {
+        zoomingRef.current = false;
+      });
+      return;
     }
+
+    titleLastClickRef.current = { time: now, x: e.clientX, y: e.clientY };
+    void prefetchZoomState();
+    if (titleDragTimerRef.current != null) {
+      window.clearTimeout(titleDragTimerRef.current);
+    }
+    titleDragTimerRef.current = window.setTimeout(() => {
+      titleDragTimerRef.current = null;
+      void getCurrentWindow()
+        .startDragging()
+        .catch(() => {});
+    }, 200);
+  };
+
+  // 原生 dblclick 抑制；真正的缩放在 mousedown 双击检测里完成
+  const onTitleDoubleClick = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const syncProvidersFromState = useCallback((state: ProvidersStateDto) => {

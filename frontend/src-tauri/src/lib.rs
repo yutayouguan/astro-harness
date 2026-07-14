@@ -29,7 +29,8 @@ use tauri::{
 };
 
 /// 原生窗全透明；内容由 CSS 铺满。macOS 用系统装饰 + Overlay 标题栏（红绿灯）。
-const BG: Color = Color(0x00, 0x00, 0x00, 0x00);
+/// 与 light/blue underlay 一致；勿用全透明，否则 zoom 不同步时会露白边（tauri#13898）。
+const BG: Color = Color(0xdb, 0xea, 0xfe, 0xff);
 
 /// 与偏好设置「关于Astro」卡片一致的应用介绍（macOS 关于面板 credits）。
 const ABOUT_CREDITS: &str = "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。";
@@ -154,62 +155,60 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> 
     Ok(())
 }
 
-/// macOS：透明窗；关闭原生动画。标题栏双击走 JS → toggleMaximize（与绿灯同路径）。
+/// macOS：吞掉原生 `zoom:`（标题栏双击白边根因，见 tauri#13898 / tao#1207）。
+/// 底色保持不透明 underlay，勿清成 clearColor（露白边）。
 #[cfg(target_os = "macos")]
 fn configure_macos_window(win: &tauri::WebviewWindow) {
-    use objc::runtime::{Class, Object, BOOL, NO, YES};
+    use objc::runtime::{Class, Object, Sel};
     use objc::{msg_send, sel, sel_impl};
+    use std::os::raw::c_void;
+    use std::sync::Once;
+
+    type Imp = unsafe extern "C" fn(*mut Object, Sel, *mut Object);
+
+    #[link(name = "objc")]
+    extern "C" {
+        fn class_getInstanceMethod(cls: *const Class, name: Sel) -> *mut c_void;
+        fn method_setImplementation(method: *mut c_void, imp: Imp) -> Imp;
+    }
+
+    unsafe extern "C" fn ns_window_zoom_noop(
+        _this: *mut Object,
+        _cmd: Sel,
+        _sender: *mut Object,
+    ) {
+    }
+
+    static PATCH_ZOOM: Once = Once::new();
+    PATCH_ZOOM.call_once(|| unsafe {
+        if let Some(cls) = Class::get("NSWindow") {
+            let method = class_getInstanceMethod(cls, sel!(zoom:));
+            if !method.is_null() {
+                let _ = method_setImplementation(method, ns_window_zoom_noop);
+            }
+        }
+    });
 
     if let Ok(ns_window) = win.ns_window() {
         unsafe {
             let ns_window = ns_window as *mut Object;
-            let clear: *mut Object =
-                msg_send![Class::get("NSColor").unwrap(), clearColor];
-            let _: () = msg_send![ns_window, setOpaque: NO];
-            let _: () = msg_send![ns_window, setBackgroundColor: clear];
-            // NSWindowAnimationBehaviorNone = 0 — 关掉系统缩放动画闪白
+            // NSWindowAnimationBehaviorNone = 0：禁止系统缩放动画（WebView 跟不上）
             let _: () = msg_send![ns_window, setAnimationBehavior: 0i64];
 
             let content_view: *mut Object = msg_send![ns_window, contentView];
             if content_view.is_null() {
                 return;
             }
-
-            let _: () = msg_send![content_view, setWantsLayer: YES];
-            let layer: *mut Object = msg_send![content_view, layer];
-            if !layer.is_null() {
-                let cg: *mut Object = msg_send![clear, CGColor];
-                let _: () = msg_send![layer, setBackgroundColor: cg];
-                let _: () = msg_send![layer, setOpaque: NO];
-            }
-
             let subviews: *mut Object = msg_send![content_view, subviews];
             if subviews.is_null() {
                 return;
             }
-            // NSViewWidthSizable (2) | NSViewHeightSizable (16)
-            let flexible: usize = 2 | 16;
+            let flexible: usize = 2 | 16; // WidthSizable | HeightSizable
             let count: usize = msg_send![subviews, count];
             for i in 0..count {
                 let child: *mut Object = msg_send![subviews, objectAtIndex: i];
                 if child.is_null() {
                     continue;
-                }
-                let responds: BOOL =
-                    msg_send![child, respondsToSelector: sel!(setDrawsBackground:)];
-                if responds == YES {
-                    let _: () = msg_send![child, setDrawsBackground: NO];
-                }
-                let responds: BOOL = msg_send![child, respondsToSelector: sel!(setOpaque:)];
-                if responds == YES {
-                    let _: () = msg_send![child, setOpaque: NO];
-                }
-                let _: () = msg_send![child, setWantsLayer: YES];
-                let child_layer: *mut Object = msg_send![child, layer];
-                if !child_layer.is_null() {
-                    let cg: *mut Object = msg_send![clear, CGColor];
-                    let _: () = msg_send![child_layer, setBackgroundColor: cg];
-                    let _: () = msg_send![child_layer, setOpaque: NO];
                 }
                 let _: () = msg_send![child, setAutoresizingMask: flexible];
             }
