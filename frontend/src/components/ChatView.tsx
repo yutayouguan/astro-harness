@@ -76,6 +76,7 @@ import McpIcon from "./McpIcon";
 import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";
+import MsgStreamLoader from "./MsgStreamLoader";
 import { useMcpTools } from "../hooks/useMcpTools";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
 import { formatElapsedSec } from "../lib/elapsedSec";
@@ -1160,30 +1161,29 @@ export default function ChatView({
                           {new Date(m.createdAt).toLocaleTimeString()}
                         </div>
                       ) : null}
-                      {!m.content &&
+                      {isStreamingBubble &&
+                      !m.content &&
                       !m.reasoning &&
                       !m.attachments?.length &&
                       !m.uiSurfaces?.length &&
                       !(
                         m.activities?.length &&
                         displayPrefs.verbosity !== "compact"
-                      ) &&
-                      streaming ? (
-                        <span className="typing-dots" aria-label={t("chat.typing")}>
-                          <span />
-                          <span />
-                          <span />
-                        </span>
+                      ) ? (
+                        <MsgStreamLoader alone />
                       ) : (
-                        m.content && (
-                          <ChatMarkdown
-                            content={m.content}
-                            streaming={isStreamingBubble}
-                            compact={displayPrefs.verbosity === "compact"}
-                            plain={m.role === "user" || Boolean(m.error)}
-                            caret={isStreamingBubble}
-                          />
-                        )
+                        <>
+                          {m.content ? (
+                            <ChatMarkdown
+                              content={m.content}
+                              streaming={isStreamingBubble}
+                              compact={displayPrefs.verbosity === "compact"}
+                              plain={m.role === "user" || Boolean(m.error)}
+                              caret={isStreamingBubble}
+                            />
+                          ) : null}
+                          {isStreamingBubble ? <MsgStreamLoader /> : null}
+                        </>
                       )}
                       {m.role === "assistant" &&
                       !isStreamingBubble &&

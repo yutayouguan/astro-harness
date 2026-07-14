@@ -476,6 +476,51 @@ html[data-theme="dark"] .bubble.user {
   min-width: 48px;
 }
 
+.msg-stream-loader {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 5px);
+  gap: 3px;
+  margin-top: 10px;
+  padding: 2px 0;
+  align-self: flex-start;
+}
+
+.msg-stream-loader.is-alone {
+  margin-top: 0;
+  align-self: center;
+}
+
+.msg-stream-loader span {
+  width: 5px;
+  height: 5px;
+  border-radius: 1.5px;
+  background: color-mix(in srgb, var(--tone, #60a5fa) 55%, var(--ink-mute));
+  opacity: 0.28;
+  animation: msg-matrix-pulse 1.05s ease-in-out infinite;
+}
+
+@keyframes msg-matrix-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.08);
+    background: color-mix(in srgb, var(--tone, #60a5fa) 70%, #fff);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--tone, #60a5fa) 35%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-stream-loader span {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
+/* 兼容旧类名（若别处仍引用） */
 .typing-dots {
   display: inline-flex;
   gap: 4px;
