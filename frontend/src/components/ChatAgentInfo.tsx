@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
+import { formatDiagnosticContext } from "../lib/diagnosticContext";
 import type { AgentInfo } from "../types/agent";
 import type { InstalledSkill } from "../types";
 import AgentAvatar from "./AgentAvatar";
@@ -14,6 +15,8 @@ export type TokenUsage = {
 
 /** 当前 Agent 信息条入参 */
 type Props = {
+  sessionId?: string | null;
+  turnId?: string | null;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
   /** 本轮 token 用量摘要 */
@@ -23,6 +26,8 @@ type Props = {
 const MEMORY_PREVIEW_LEN = 280;
 
 export default function ChatAgentInfo({
+  sessionId = null,
+  turnId = null,
   onOpenMemory,
   onOpenSkills,
   tokenUsage = null,
@@ -170,6 +175,23 @@ export default function ChatAgentInfo({
               : undefined
           }
         />
+        {turnId && sessionId ? (
+          <div className="chat-agent-turn">
+            <span>{t("chat.rightPanel.turnLabel")}</span>
+            <code>{turnId.length > 8 ? `${turnId.slice(0, 8)}…` : turnId}</code>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                void navigator.clipboard.writeText(
+                  formatDiagnosticContext(sessionId, turnId),
+                );
+              }}
+            >
+              {t("chat.rightPanel.copyDiagnostic")}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <section className="chat-agent-card">

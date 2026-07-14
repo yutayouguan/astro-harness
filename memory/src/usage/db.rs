@@ -153,6 +153,7 @@ pub struct TraceEventRow {
     pub output_tokens: i64,
     pub total_tokens: i64,
     pub cost_usd: f64,
+    pub turn_id: Option<String>,
 }
 
 /// 洞察查询完整结果
@@ -729,7 +730,7 @@ impl UsageDb {
     ) -> anyhow::Result<Vec<TraceEventRow>> {
         let sql = format!(
             "SELECT id, ts, kind, name, agent_id,
-                    input_tokens, output_tokens, total_tokens, cost_usd
+                    input_tokens, output_tokens, total_tokens, cost_usd, turn_id
              FROM usage_events
              WHERE session_id = ?1
              ORDER BY ts ASC, rowid ASC
@@ -748,6 +749,7 @@ impl UsageDb {
                     output_tokens: r.get(6)?,
                     total_tokens: r.get(7)?,
                     cost_usd: r.get(8)?,
+                    turn_id: r.get(9)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

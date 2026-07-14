@@ -73,6 +73,8 @@ pub struct TraceEvent {
     pub input: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<String>,
 }
 
 /// Tracing 查询参数
@@ -164,6 +166,7 @@ fn usage_rows_to_events(
             status: None,
             input: None,
             output: None,
+            turn_id: e.turn_id.clone(),
         })
         .collect()
 }
@@ -213,6 +216,7 @@ fn spans_from_chat_history(
                     status: Some("ok".into()),
                     input: None,
                     output: nonempty_truncated(&msg.content),
+                    turn_id: None,
                 });
             }
             "assistant" => {
@@ -233,6 +237,7 @@ fn spans_from_chat_history(
                         status: act.status.clone(),
                         input: act.input.as_ref().and_then(|s| nonempty_truncated(s)),
                         output: act.output.as_ref().and_then(|s| nonempty_truncated(s)),
+                        turn_id: None,
                     });
                 }
 
@@ -257,6 +262,7 @@ fn spans_from_chat_history(
                         status: Some("ok".into()),
                         input,
                         output,
+                        turn_id: None,
                     });
                 }
             }
@@ -318,6 +324,7 @@ fn merge_usage_into_spans(
         if !u.agent_id.is_empty() {
             ev.agent_id = u.agent_id.clone();
         }
+        ev.turn_id = u.turn_id.clone();
         i += 1;
     }
 }
@@ -402,6 +409,39 @@ mod tests {
             billing_mode: None,
             meta_json: None,
         }
+    }
+
+    #[test]
+    fn list_trace_events_includes_turn_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("usage.db");
+        let db = UsageDb::new(path).unwrap();
+        db.insert(NewUsageEvent {
+            ts: "2026-07-14T12:00:00Z".into(),
+            kind: "llm".into(),
+            name: "m".into(),
+            agent_id: "a".into(),
+            session_id: Some("sess-1".into()),
+            turn_id: Some("turn-abc".into()),
+            input_tokens: 1,
+            output_tokens: 2,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
+            total_tokens: 3,
+            cost_usd: 0.01,
+            cost_status: Some("estimated".into()),
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
+            meta_json: None,
+        })
+        .unwrap();
+        let rows = db.list_trace_events("sess-1", 50).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].turn_id.as_deref(), Some("turn-abc"));
     }
 
     #[test]

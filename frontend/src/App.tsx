@@ -351,6 +351,8 @@ export default function App() {
   const streamGenRef = useRef(0);
   /** 当前 AG-UI run id（run_started） */
   const currentRunIdRef = useRef<string | null>(null);
+  /** 当前回合 turn_id（run_started，会话切换时清空） */
+  const [currentTurnId, setCurrentTurnId] = useState<string | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const zoomingRef = useRef(false);
   /** 避免恢复过程中把空欢迎页写回覆盖已存会话 */
@@ -632,6 +634,8 @@ export default function App() {
     ) => {
       if (restored.length === 0) return false;
       restoringRef.current = true;
+      currentRunIdRef.current = null;
+      setCurrentTurnId(null);
       setSessionId(sid);
       setMessages(restored);
       setSessionPendingInterrupts(pendingInterrupts);
@@ -1129,7 +1133,9 @@ export default function App() {
             prev.map((m) => (m.id === assistantId ? { ...m, usage } : m)),
           );
         } else if (payload.type === "run_started") {
-          currentRunIdRef.current = payload.run_id ?? null;
+          const runId = payload.run_id ?? null;
+          currentRunIdRef.current = runId;
+          setCurrentTurnId(runId);
         } else if (payload.type === "activity") {
           let operations: unknown[] = [];
           try {
@@ -1739,6 +1745,8 @@ export default function App() {
       setStreaming(false);
       setStreamPaused(false);
       setFocusMessageId(null);
+      currentRunIdRef.current = null;
+      setCurrentTurnId(null);
       setSessionId(newId);
       setMessages(keep);
       setEmptyMode(null);
@@ -1946,6 +1954,7 @@ export default function App() {
     setMessages([]);
     setSessionPendingInterrupts([]);
     currentRunIdRef.current = null;
+    setCurrentTurnId(null);
     setNav("chat");
   };
 
@@ -2234,6 +2243,8 @@ export default function App() {
       if (restored.length > 0) {
         applyRestoredHistory(hist.sessionId ?? targetSessionId, restored);
       } else {
+        currentRunIdRef.current = null;
+        setCurrentTurnId(null);
         setSessionId(hist.sessionId ?? targetSessionId);
       }
       const canFocus =
@@ -2493,6 +2504,7 @@ export default function App() {
                       onTabChange={setChatRightTab}
                       onClose={() => setChatRightOpen(false)}
                       sessionId={sessionId}
+                      turnId={currentTurnId}
                       messages={messages}
                       tokenUsage={tokenUsage}
                       onOpenSession={(id) => void openSessionFromFilespace(id)}

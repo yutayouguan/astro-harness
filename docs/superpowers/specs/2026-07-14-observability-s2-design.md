@@ -1,7 +1,7 @@
 # 可观测性 S2 设计（Insights turn 折叠 + 聊天诊断）
 
 **日期:** 2026-07-14  
-**状态:** 已批准（待实现）  
+**状态:** 已批准 / S2 已实现  
 **范围:** Insights 按 `turn_id` 默认折叠下钻；聊天展示当前 `turn_id`；一键复制诊断上下文  
 **依赖:** [S1 可观测性对齐](./2026-07-14-observability-alignment-design.md)（已实现）  
 **外部参考（仅设计借鉴）：** 参考 Agent 运行时「session = Trace、turn = 回合」产品语义（非 OTEL）
