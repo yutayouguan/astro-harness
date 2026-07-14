@@ -5,6 +5,7 @@
 mod artifacts_commands;
 mod clipboard_files;
 mod commands;
+mod compaction_commands;
 mod config_commands;
 mod dreaming_commands;
 mod env_hydrate;
@@ -328,6 +329,7 @@ pub fn run() {
             dreaming_commands::get_dreaming_status,
             dreaming_commands::set_dreaming_enabled_cmd,
             dreaming_commands::run_dreaming,
+            compaction_commands::compact_chat_session,
         ])
         .setup(|app| {
             if let Err(err) = memory::ensure_default_workspace() {
