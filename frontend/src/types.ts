@@ -314,6 +314,7 @@ export type RecentSessionDto = {
   sessionId: string;
   summary: string;
   createdAt: string | null;
+  endReason?: string | null;
 };
 
 /** 产物分类筛选 */

@@ -159,6 +159,8 @@ pub struct RecentSession {
     pub started_at: f64,
     /// 首条 user 消息正文截断；无则 `None`。
     pub preview: Option<String>,
+    pub ended_at: Option<f64>,
+    pub end_reason: Option<String>,
 }
 
 /// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。
