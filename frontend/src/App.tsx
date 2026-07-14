@@ -1727,11 +1727,18 @@ export default function App() {
             live ? t("memory.toast.updated") : t("memory.toast.pending"),
           );
         }
-        if (live && autoRefreshOnUpdate && sessionId) {
-          void invoke("refresh_memory", {
-            agentId: null,
-            sessionId,
-          }).catch(() => {});
+        if (live && sessionId) {
+          void (async () => {
+            try {
+              const settings = await invoke<{ autoRefreshOnUpdate: boolean }>(
+                "get_memory_settings",
+              );
+              if (settings.autoRefreshOnUpdate === false) return;
+              await invoke("refresh_memory", { agentId: null, sessionId });
+            } catch {
+              // ignore
+            }
+          })();
         }
       }
     })
