@@ -1,7 +1,7 @@
 # 记忆系统对齐升级设计
 
 **日期:** 2026-07-14  
-**状态:** 部分实现（P1 完成 / P2 待做）  
+**状态:** 已实现（P1 完成；P2：write_approval + auxiliary/dreaming 已落地，主循环 auto-review LLM 挂载可选增强）  
 **范围:** 有界精炼记忆（MEMORY/USER）、Frozen Snapshot、单一 `memory` 工具、安全扫描、`write_approval`、回合后 review、入梦 auxiliary 模型  
 **外部参考（仅设计借鉴，不引入其品牌命名）：** [Persistent Memory 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)
 

@@ -29,7 +29,34 @@ memory:
 | `write_approval` | `false` | 开启后 MEMORY/USER 写入（工具 / 入梦 / 未来 review）进入 pending 队列，批准后才改 live |
 | `daily_prompt_max_chars` | `1024` | 每轮可读盘的今日日记截断上限；**不属于**长期记忆 |
 
-P2 还将增加 `auxiliary.background_review` / `auxiliary.dreaming` 模型路由，见设计 spec。
+P2 辅助模型与回合后 review 见下文「辅助模型 / background review」。
+
+### 辅助模型 / background review
+
+```yaml
+auxiliary:
+  background_review:
+    provider: auto    # auto = 跟随当前会话主模型
+    model: auto
+  dreaming:
+    provider: auto
+    model: auto       # 建议填便宜模型，如 gpt-4o-mini / flash
+```
+
+| 键 | 说明 |
+|----|------|
+| `auxiliary.dreaming` | 入梦 Extractor / 回退补全使用的 provider（backend_id）与 model |
+| `auxiliary.background_review` | 回合后自我改进 review 路由（API 已就绪） |
+
+**入梦**：`run_dreaming` 会先 `resolve_auxiliary(Dreaming)`，再查找匹配 backend 的提供商密钥。
+
+**background review**（库 API，由 Agent/后端在 turn 成功后调用）：
+
+1. `build_review_digest(messages, recent_n=6)` — 构建 digest  
+2. 用 `REVIEW_SYSTEM_PROMPT` + digest 调 LLM  
+3. `parse_review_llm_output` → `apply_review_suggestions`（走 `handle_memory_op_with_source(..., "review")`，尊重 `write_approval`；`daily_note` 直写入日记）
+
+当前交付：**解析/应用/配置/入梦路由**已接线；Agent 主循环内「自动 fire-and-forget 调用 LLM」可在后续用同一套 API 挂载（避免在无凭据的路径硬编码）。
 
 ### `write_approval` pending 队列
 
