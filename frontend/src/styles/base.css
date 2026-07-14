@@ -133,9 +133,9 @@ html[data-theme="light"] {
   --glass-strong: rgba(255, 255, 255, 0.62);
   --glass-edge: rgba(255, 255, 255, 0.72);
   --glass-card: rgba(255, 255, 255, 0.48);
-  --glass-panel: rgba(255, 255, 255, 0.5);
+  --glass-panel: rgba(255, 255, 255, 0.38);
   --glass-inner: rgba(255, 255, 255, 0.62);
-  --sidebar-bg: rgba(255, 255, 255, 0.55);
+  --sidebar-bg: rgba(255, 255, 255, 0.42);
   --sidebar-pinned-bg: rgba(255, 255, 255, 0.42);
   --ink: #1e293b;
   --ink-soft: rgba(30, 41, 59, 0.78);
@@ -148,16 +148,16 @@ html[data-theme="light"] {
   --pink: #ec4899;
   --gold: #f59e0b;
   --user-fill: linear-gradient(145deg, rgba(219, 234, 254, 0.85), rgba(191, 219, 254, 0.55));
-  --assist-fill: rgba(255, 255, 255, 0.72);
+  --assist-fill: rgba(255, 255, 255, 0.32);
   --danger: #e11d48;
   --danger-bg: rgba(244, 63, 94, 0.1);
   --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
   --shadow-card: 0 2px 12px rgba(15, 23, 42, 0.05), 0 0 1px rgba(15, 23, 42, 0.04);
   --rim: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 0.5px rgba(255, 255, 255, 0.6);
   --scroll-thumb: rgba(148, 163, 184, 0.16);
-  --chip-bg: rgba(255, 255, 255, 0.65);
+  --chip-bg: rgba(255, 255, 255, 0.42);
   --chip-border: rgba(148, 163, 184, 0.22);
-  --composer-bg: rgba(255, 255, 255, 0.38);
+  --composer-bg: rgba(255, 255, 255, 0.28);
   --send-fg: #1e293b;
   --glass-border: rgba(148, 163, 184, 0.28);
     --glass-fill:

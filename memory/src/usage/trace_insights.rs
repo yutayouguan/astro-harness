@@ -367,7 +367,7 @@ mod tests {
     use serde_json::json;
     use tempfile::TempDir;
 
-    use crate::usage::test_env::lock_astro_memory_dir;
+    use crate::usage::test_env::AstroMemoryDirGuard;
 
     fn evt(
         ts: &str,
@@ -405,9 +405,8 @@ mod tests {
 
     #[test]
     fn traces_group_by_session_and_order_events() {
-        let _guard = lock_astro_memory_dir();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = AstroMemoryDirGuard::set(dir.path());
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
         db.insert(evt(
             "2026-07-13T10:00:00Z",
@@ -464,15 +463,12 @@ mod tests {
         assert_eq!(s1.events.len(), 2);
         assert_eq!(s1.events[0].kind, "llm");
         assert_eq!(s1.events[1].kind, "tool");
-
-        std::env::remove_var("ASTRO_MEMORY_DIR");
     }
 
     #[test]
     fn chat_history_builds_io_chain_and_merges_llm_usage() {
-        let _guard = lock_astro_memory_dir();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = AstroMemoryDirGuard::set(dir.path());
 
         let sessions = dir.path().join("sessions");
         std::fs::create_dir_all(&sessions).unwrap();
@@ -569,7 +565,5 @@ mod tests {
         assert_eq!(llms[0].total_tokens, 140);
         assert_eq!(llms[1].output.as_deref(), Some("今天晴，约 25°C。"));
         assert_eq!(llms[1].input.as_deref(), Some("先搜索再回答"));
-
-        std::env::remove_var("ASTRO_MEMORY_DIR");
     }
 }

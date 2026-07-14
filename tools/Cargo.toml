@@ -9,6 +9,7 @@ memory = { path = "../memory" }
 providers = { path = "../providers" }
 skills = { path = "../skills" }
 a2ui = { path = "../a2ui" }
+hooks = { path = "../hooks" }
 tokio = { workspace = true, features = ["process", "time", "rt", "macros"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

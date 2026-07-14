@@ -50,7 +50,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "file_ops".to_string(),
         toolset: "file_ops".to_string(),
-        description: "Read, write, append, list, mkdir, or delete files under the agent workspace. \
+        description: "Read, write, append, list, mkdir, or delete files under project_root when set (delegated worktree), else the agent memory workspace. \
              read returns at most 64KiB UTF-8 (use offset/limit to continue). \
              list caps at 500 entries / 64KiB and marks dirs with '/'. \
              delete refuses workspace root; directories need recursive=true to remove trees."
@@ -69,8 +69,9 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
     let parsed: FileOpsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("file_ops 参数无效: {e}"))?;
     let op = parsed.operation.trim().to_lowercase();
-    let full = crate::path_safe::resolve_safe(&ctx.workspace_dir, &parsed.path)?;
-    let rel = display_rel(&ctx.workspace_dir, &full);
+    let root = ctx.project_or_workspace();
+    let full = crate::path_safe::resolve_safe(root, &parsed.path)?;
+    let rel = display_rel(root, &full);
 
     match op.as_str() {
         "read" => read_file_capped(&full, parsed.offset.unwrap_or(0), parsed.limit),
@@ -81,8 +82,8 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             if let Some(parent) = full.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            // resolve_safe 已拒绝越界 symlink；写前再确认最终路径仍在工作区
-            reaffirm_within(&full, &ctx.workspace_dir)?;
+            // resolve_safe 已拒绝越界 symlink；写前再确认最终路径仍在沙箱根
+            reaffirm_within(&full, root)?;
             std::fs::write(&full, content.as_bytes())?;
             Ok(format!("已写入 {rel}"))
         }
@@ -94,7 +95,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             if let Some(parent) = full.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            reaffirm_within(&full, &ctx.workspace_dir)?;
+            reaffirm_within(&full, root)?;
             let mut f = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -102,8 +103,8 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             f.write_all(content.as_bytes())?;
             Ok(format!("已追加 {rel}"))
         }
-        "list" => list_dir_capped(&full, &ctx.workspace_dir),
-        "delete" => delete_path(&full, &ctx.workspace_dir, &rel, parsed.recursive.unwrap_or(false)),
+        "list" => list_dir_capped(&full, root),
+        "delete" => delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false)),
         "mkdir" => {
             std::fs::create_dir_all(&full)?;
             Ok(format!("已创建目录 {rel}"))

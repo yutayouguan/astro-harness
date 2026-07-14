@@ -3,6 +3,9 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 export type AgentIconInfo = {
   name: string;
+  /** 用于识别默认 workspace Agent 的固定 fallback 图标 */
+  id?: string | null;
+  is_default?: boolean;
   emoji?: string | null;
   avatar?: string | null;
 };

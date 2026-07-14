@@ -13,20 +13,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
 import { useAgentsChanged } from "../lib/agentsChanged";
 import AnimatedSwitch from "./AnimatedSwitch";
+import AgentAvatar from "./AgentAvatar";
 import { IconWsBackChat } from "./WorkspaceIcons";
+import type { AgentInfo } from "../types/agent";
 
 /** 记忆面板入参 */
 type Props = {
   onClose?: () => void;
-};
-
-/** 列表用 Agent 简项 */
-type AgentInfo = {
-  id: string;
-  name: string;
-  path: string;
-  is_default: boolean;
-  is_active: boolean;
 };
 
 /** 单个 Agent 的做梦统计 */
@@ -619,7 +612,7 @@ export default function MemoryPanel({ onClose }: Props) {
             title={a.path}
           >
             <span className="mem-agent-avatar" aria-hidden>
-              {(a.name.trim()[0] || "A").toUpperCase()}
+              <AgentAvatar agent={a} size={28} />
             </span>
             <span className="mem-agent-row-name">{a.name}</span>
             {a.is_default && (
@@ -972,7 +965,16 @@ export default function MemoryPanel({ onClose }: Props) {
                   <article key={a.agent_id} className="mem-card mem-dream-agent-card">
                     <div className="mem-dream-agent-head">
                       <span className="mem-agent-avatar lg" aria-hidden>
-                        {(a.agent_name.trim()[0] || "A").toUpperCase()}
+                        <AgentAvatar
+                          agent={
+                            agents.find((x) => x.id === a.agent_id) ?? {
+                              id: a.agent_id,
+                              name: a.agent_name,
+                              is_default: a.agent_id === "workspace",
+                            }
+                          }
+                          size={36}
+                        />
                       </span>
                       <div>
                         <div className="mem-dream-agent-name">{a.agent_name}</div>

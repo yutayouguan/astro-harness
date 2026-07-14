@@ -151,11 +151,13 @@ html[data-theme="dark"] .msg-token-stats {
 
 html[data-theme="light"] .msg-token-stats {
   color: color-mix(in srgb, var(--ink-mute) 88%, #64748b);
-  border-color: rgba(148, 163, 184, 0.28);
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 16%, rgba(148, 163, 184, 0.28));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 250, 252, 0.65) 100%),
-    rgba(241, 245, 249, 0.7);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 45%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px) saturate(1.25);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
 }
 
 /* AI 消息悬停操作条：玻璃液态小按钮，贴在气泡下方，不挡选中文字 */
@@ -174,17 +176,19 @@ html[data-theme="light"] .msg-token-stats {
     background 0.15s ease,
     border-color 0.15s ease,
     box-shadow 0.15s ease;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.32) 100%),
-    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.12)) 55%, transparent);
-  box-shadow: var(--glass-rim), 0 6px 16px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px) saturate(1.3);
-  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.2) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 40%, transparent);
+  box-shadow: var(--glass-rim), 0 6px 16px color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06));
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
 }
 
 .msg-row.assistant:hover .msg-actions,
 .msg-row.assistant:focus-within .msg-actions,
+.msg-row.user:hover .msg-actions,
+.msg-row.user:focus-within .msg-actions,
 .msg-actions:focus-within {
   opacity: 1;
   pointer-events: auto;
@@ -228,22 +232,22 @@ html[data-theme="light"] .msg-token-stats {
 }
 
 html[data-theme="dark"] .msg-actions {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 20%, rgba(255, 255, 255, 0.12));
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
-    rgba(18, 16, 32, 0.55);
+    color-mix(in srgb, var(--tone-soft, transparent) 40%, rgba(18, 16, 32, 0.5));
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 html[data-theme="light"] .msg-actions {
-  border-color: rgba(148, 163, 184, 0.28);
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 16%, rgba(148, 163, 184, 0.28));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.55) 100%),
-    rgba(255, 255, 255, 0.5);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 45%, transparent);
   box-shadow:
     var(--glass-rim),
-    0 6px 14px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    0 6px 14px color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .msg-row.is-focus-flash .bubble {
@@ -283,24 +287,22 @@ html[data-theme="light"] .msg-actions {
 }
 
 .bubble.user {
-  /* 浅蓝玻璃拟态：渐变不要太深，亮/暗主题再微调 */
+  /* 跟随 tab tone 的浅蓝/主题色玻璃，避免实心色块 */
   background:
     linear-gradient(
       145deg,
-      color-mix(in srgb, #bfdbfe 72%, transparent) 0%,
-      color-mix(in srgb, #c7d2fe 48%, transparent) 55%,
-      color-mix(in srgb, #93c5fd 38%, transparent) 100%
+      color-mix(in srgb, #fff 52%, transparent) 0%,
+      color-mix(in srgb, #fff 16%, transparent) 100%
     ),
-    color-mix(in srgb, #60a5fa 14%, transparent);
-  color: color-mix(in srgb, var(--ink) 92%, #1e3a8a);
-  border: 1px solid color-mix(in srgb, #93c5fd 42%, var(--glass-edge));
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 80%, transparent);
+  color: color-mix(in srgb, var(--ink) 86%, var(--tone, #2563eb));
+  border: 1px solid color-mix(in srgb, var(--tone, #2563eb) 26%, var(--glass-edge));
   border-bottom-right-radius: 8px;
   box-shadow:
     var(--glass-rim),
-    0 1px 0 rgba(255, 255, 255, 0.55) inset,
-    0 10px 26px color-mix(in srgb, #60a5fa 16%, transparent);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    0 8px 22px color-mix(in srgb, var(--tone, #2563eb) 14%, transparent);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
   white-space: pre-wrap;
   width: fit-content;
   max-width: 100%;
@@ -310,34 +312,32 @@ html[data-theme="light"] .bubble.user {
   background:
     linear-gradient(
       145deg,
-      rgba(239, 246, 255, 0.92) 0%,
-      rgba(219, 234, 254, 0.72) 50%,
-      rgba(191, 219, 254, 0.58) 100%
+      rgba(255, 255, 255, 0.58) 0%,
+      rgba(255, 255, 255, 0.22) 100%
     ),
-    rgba(147, 197, 253, 0.22);
-  color: #1e3a5f;
-  border-color: rgba(147, 197, 253, 0.55);
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 75%, transparent);
+  color: color-mix(in srgb, #0f172a 78%, var(--tone, #2563eb));
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 22%, rgba(255, 255, 255, 0.72));
   box-shadow:
     var(--glass-rim),
-    0 1px 0 rgba(255, 255, 255, 0.92) inset,
-    0 8px 22px rgba(96, 165, 250, 0.14);
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 8px 20px color-mix(in srgb, var(--tone, #2563eb) 12%, transparent);
 }
 
 html[data-theme="dark"] .bubble.user {
   background:
     linear-gradient(
       145deg,
-      rgba(147, 197, 253, 0.28) 0%,
-      rgba(129, 140, 248, 0.16) 55%,
-      rgba(96, 165, 250, 0.12) 100%
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.03) 100%
     ),
-    rgba(59, 130, 246, 0.1);
-  color: #e8eefc;
-  border-color: rgba(147, 197, 253, 0.22);
+    color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 70%, transparent);
+  color: color-mix(in srgb, var(--ink) 90%, #fff);
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 28%, rgba(255, 255, 255, 0.12));
   box-shadow:
     var(--glass-rim),
     0 1px 0 rgba(255, 255, 255, 0.1) inset,
-    0 10px 28px rgba(37, 99, 235, 0.18);
+    0 10px 26px color-mix(in srgb, var(--tone, #60a5fa) 16%, transparent);
 }
 
 .bubble.user .msg-timestamp {
@@ -348,15 +348,15 @@ html[data-theme="dark"] .bubble.user {
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, #fff 14%, transparent) 0%,
-      color-mix(in srgb, #fff 3%, transparent) 100%
+      color-mix(in srgb, #fff 18%, transparent) 0%,
+      color-mix(in srgb, #fff 4%, transparent) 100%
     ),
-    var(--assist-fill);
-  border-color: color-mix(in srgb, var(--glass-edge) 88%, transparent);
+    color-mix(in srgb, var(--tone-soft, transparent) 28%, var(--assist-fill));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 10%, var(--glass-edge));
   border-bottom-left-radius: 8px;
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(18px) saturate(1.25);
-  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
   color: var(--ink);
 }
 
@@ -648,8 +648,12 @@ html[data-theme="light"] .a2ui-surface {
   align-items: flex-start;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 12%, var(--glass-edge));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.08) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 30%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
 }
 
 .msg-activity-kind {
@@ -1351,20 +1355,22 @@ html[data-theme="light"] .a2ui-surface {
 
 html[data-theme="light"] .bubble.assistant {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.42) 100%),
-    rgba(255, 255, 255, 0.55);
-  border-color: rgba(255, 255, 255, 0.82);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 40%, rgba(255, 255, 255, 0.28));
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(255, 255, 255, 0.7));
   box-shadow:
     var(--shadow-card),
     var(--glass-rim),
-    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+    0 1px 0 rgba(255, 255, 255, 0.88) inset;
 }
 
 html[data-theme="light"] .msg-reasoning {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.35) 100%),
-    rgba(248, 250, 252, 0.55);
-  border-color: rgba(148, 163, 184, 0.28);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 35%, transparent);
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(148, 163, 184, 0.28));
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
 }
 
 html[data-theme="light"] .chat-msg-nav-track {
@@ -1427,8 +1433,8 @@ html[data-theme="light"] .msg-md-pre {
 html[data-theme="dark"] .bubble.assistant {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-    rgba(18, 16, 32, 0.55);
-  border-color: rgba(255, 255, 255, 0.1);
+    color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 35%, rgba(18, 16, 32, 0.48));
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 16%, rgba(255, 255, 255, 0.1));
 }
 
 html[data-theme="dark"] .msg-md-codeblock {
@@ -1480,24 +1486,24 @@ html[data-theme="dark"] .msg-md-codeblock {
   margin: 0 12px 12px;
   padding: 10px 10px 10px 12px;
   border-radius: 22px;
-  /* 玻璃拟态：半透明底 + 顶缘高光 + 柔外影，对齐 header / model-picker */
+  /* 与 chat-pane / sidebar 同系：tone 轻染色 + 高透磨砂 */
   background:
     linear-gradient(
       160deg,
-      rgba(255, 255, 255, 0.62) 0%,
-      rgba(255, 255, 255, 0.28) 55%,
-      rgba(255, 255, 255, 0.16) 100%
+      rgba(255, 255, 255, 0.48) 0%,
+      rgba(255, 255, 255, 0.18) 55%,
+      rgba(255, 255, 255, 0.1) 100%
     ),
-    var(--composer-bg);
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 78%, rgba(148, 163, 184, 0.32));
+    color-mix(in srgb, var(--tone-soft, transparent) 42%, var(--composer-bg));
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
   box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.07),
+    0 10px 28px color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
     0 2px 8px rgba(15, 23, 42, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(22px) saturate(1.35);
-  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
@@ -1554,14 +1560,14 @@ html[data-theme="dark"] .msg-md-codeblock {
   gap: 0.35rem;
   height: 32px;
   padding: 0 0.65rem 0 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
   border-radius: 999px;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
-    color-mix(in srgb, var(--ink) 5%, transparent);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
   color: var(--ink-soft);
   font-size: 0.78rem;
   font-weight: 600;
@@ -2003,8 +2009,8 @@ html[data-theme="dark"] .composer {
       rgba(255, 255, 255, 0.035) 55%,
       rgba(255, 255, 255, 0.02) 100%
     ),
-    var(--composer-bg);
-  border-color: rgba(255, 255, 255, 0.12);
+    color-mix(in srgb, var(--tone-soft, transparent) 35%, var(--composer-bg));
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 18%, rgba(255, 255, 255, 0.12));
   box-shadow:
     0 12px 32px rgba(0, 0, 0, 0.38),
     0 2px 8px rgba(0, 0, 0, 0.22),

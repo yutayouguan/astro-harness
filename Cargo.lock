@@ -4913,6 +4913,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "common",
+ "hooks",
  "memory",
  "providers",
  "regex",

@@ -85,6 +85,11 @@
   color: var(--agent-avatar-ink);
 }
 
+.agent-picker-chip .agent-avatar--default,
+.agent-picker-option .agent-avatar--default {
+  color: var(--tone, #2563eb);
+}
+
 .agent-picker-meta {
   flex: 1;
   min-width: 0;

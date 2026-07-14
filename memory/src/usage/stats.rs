@@ -222,13 +222,12 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    use crate::usage::test_env::lock_astro_memory_dir;
+    use crate::usage::test_env::AstroMemoryDirGuard;
 
     #[test]
     fn records_toolset_and_skill_counts() {
-        let _guard = lock_astro_memory_dir();
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = AstroMemoryDirGuard::set(dir.path());
 
         record_tool_call(
             "workspace",
@@ -283,22 +282,17 @@ mod tests {
             .by_kind
             .iter()
             .any(|r| r.kind == "tool" && r.name == "web_search"));
-
-        std::env::remove_var("ASTRO_MEMORY_DIR");
     }
 
     #[test]
     fn skills_without_skill_id_only_bumps_toolset() {
-        let _guard = lock_astro_memory_dir();
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = AstroMemoryDirGuard::set(dir.path());
 
         record_tool_call("workspace", "skills", &json!({ "skill_id": "  " }), None).unwrap();
         let summary = get_usage_summary(Some("workspace"));
         assert_eq!(summary.tools.get("skills").copied().unwrap_or(0), 1);
         assert!(summary.skills.is_empty());
         assert_eq!(summary.skill_total, 0);
-
-        std::env::remove_var("ASTRO_MEMORY_DIR");
     }
 }

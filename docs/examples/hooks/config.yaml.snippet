@@ -2,3 +2,11 @@
 hooks:
   post_tool_call: 'mkdir -p "$HOME/.astro/logs" && echo "$(date -Iseconds) tool=$ASTRO_HOOK_TOOL session=$ASTRO_HOOK_SESSION" >> "$HOME/.astro/logs/tool-audit.log"'
   agent:end: 'true'
+
+# 委派子任务（delegate）与嵌套深度
+delegation:
+  max_spawn_depth: 1          # 顶层可派一层叶子；设为 2 才允许 role=orchestrator 再派工人
+  max_concurrent_children: 3
+  child_max_iterations: 50    # 子 Agent 默认最大工具跟随轮次
+  worktree: true              # 在 git 仓库内自动为子任务建独立检出（.worktrees/astro-*）
+  orchestrator_enabled: true  # false 时强制所有子任务为 leaf

@@ -109,6 +109,8 @@ pub struct AgentLoop {
     /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
     pending_inject_context: Option<String>,
     cancel: CancelSignal,
+    /// 代码/项目根（委派 worktree 或会话级 ASTRO_PROJECT_ROOT）。
+    project_root: Option<PathBuf>,
 }
 
 impl AgentLoop {
@@ -171,6 +173,7 @@ impl AgentLoop {
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             pending_inject_context: None,
             cancel: CancelSignal::new(),
+            project_root: resolve_session_project_root(),
         })
     }
 
@@ -262,6 +265,16 @@ impl AgentLoop {
         self.chat_model = model.to_string();
         self.chat_api_key = api_key.to_string();
         self.chat_base_url = base_url.to_string();
+    }
+
+    /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
+    pub fn set_project_root(&mut self, root: Option<PathBuf>) {
+        self.project_root = root;
+    }
+
+    /// 当前代码/项目根（若有）。
+    pub fn project_root(&self) -> Option<&PathBuf> {
+        self.project_root.as_ref()
     }
 
     /// 返回 `(project_memory, user_profile)` 原始 prompt 片段。
@@ -506,6 +519,7 @@ impl AgentLoop {
             memory: &mut self.memory,
             memory_dir,
             workspace_dir,
+            project_root: self.project_root.clone(),
             image_gen_targets: &image_gen_targets,
             providers: &self.providers,
             session_id,
@@ -900,6 +914,15 @@ fn ensure_orchestration_spawner_registered() {
             });
         }
     });
+}
+
+/// 会话级项目根：`ASTRO_SESSION_WORKTREE=1` 且存在 `ASTRO_PROJECT_ROOT`（或 cwd git root）时启用。
+fn resolve_session_project_root() -> Option<PathBuf> {
+    let flag = std::env::var("ASTRO_SESSION_WORKTREE").unwrap_or_default();
+    if flag != "1" && !flag.eq_ignore_ascii_case("true") {
+        return None;
+    }
+    memory::resolve_project_root(None).filter(|p| memory::find_git_root(p).is_some() || p.is_dir())
 }
 
 /// 注册同步委派 runner（OnceLock，仅首次生效）。

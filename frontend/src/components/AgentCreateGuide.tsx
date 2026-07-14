@@ -6,6 +6,8 @@ import { useI18n } from "../i18n/LocaleContext";
 import { agentNameInitial } from "../lib/agentIcons";
 import {
   lucideIconToSvgBase64Async,
+  solidPaint,
+  suggestLucideAgentIcon,
   type LucideAgentIcon,
   type LucidePaint,
   type LucideRenderStyle,
@@ -139,6 +141,18 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
       setLucideBusy(false);
     }
   };
+
+  // 名称变化且用户未手动选图标时，自动预选 Lucide（与 create_agent 后端策略一致）
+  useEffect(() => {
+    const name = previewName.trim();
+    if (!name || emoji.lucideId || emoji.fileName || avatar.fileName || lucideBusy) {
+      return;
+    }
+    const suggested = suggestLucideAgentIcon(name);
+    void pickLucide(suggested, solidPaint("#2563eb"), "stroke");
+    // 仅随 previewName 触发；避免在用户手动清空后立刻抢回
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewName]);
 
   const initial = agentNameInitial(previewName || t("chat.agentIconFallbackName"));
   const heroPreview = avatar.previewUrl || emoji.previewUrl;

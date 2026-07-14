@@ -57,7 +57,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "create_agent".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Create a new Agent memory space at ~/.astro/workspace-{id}/ with agents/{id}/config.json, and optionally fill AGENT/IDENTITY/SOUL/USER/MEMORY from a profile. activate defaults to false (set true only when you intentionally switch the current workspace). Use after loading the create-agent skill.".to_string(),
+        description: "Create a durable Agent persona (MEMORY/IDENTITY workspace at ~/.astro/workspace-{id}/ + agents/{id}/config.json). NOT for in-turn task splitting—use `delegate` for ephemeral sub-agents. activate defaults to false. Prefer after loading the create-agent skill.".to_string(),
         schema: schema_for_args::<CreateAgentArgs>(),
         check_fn: None,
         icon: "bot",
@@ -119,7 +119,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     }
 
     Ok(format!(
-        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n\n可用 file_ops 继续微调 AGENT.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
+        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n- 图标: {icon}\n\n可用 file_ops 继续微调 AGENT.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
         name = info.name,
         id = info.id,
         path = info.path,
@@ -127,5 +127,10 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
             .join("config.json")
             .display(),
         active = activate,
+        icon = info
+            .emoji
+            .as_deref()
+            .map(|p| format!("已自动选择 Lucide（{p}）"))
+            .unwrap_or_else(|| "未设置".into()),
     ))
 }

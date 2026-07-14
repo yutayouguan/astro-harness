@@ -52,6 +52,7 @@ async fn file_ops_write_and_read() {
         memory: &mut memory,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace.clone(),
+        project_root: None,
         image_gen_targets: &targets,
         providers: &providers,
         session_id: "test".into(),

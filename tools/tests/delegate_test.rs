@@ -17,6 +17,7 @@ fn make_ctx<'a>(
         memory,
         memory_dir: dir.to_path_buf(),
         workspace_dir: dir.to_path_buf(),
+        project_root: None,
         image_gen_targets: targets,
         providers,
         session_id: "s".into(),

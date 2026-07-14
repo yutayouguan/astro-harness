@@ -48,11 +48,14 @@ pub fn current_spawn_depth() -> u32 {
     SPAWN_DEPTH_CTX.try_with(|c| c.depth).unwrap_or(0)
 }
 
-/// 有效 max；未注入时用默认。
+/// 是否在 task_local 深度上下文内；是则返回其中的 max_depth。
+pub fn scoped_max_spawn_depth() -> Option<u32> {
+    SPAWN_DEPTH_CTX.try_with(|c| c.max_depth).ok()
+}
+
+/// 有效 max；嵌套上下文用注入值，顶层用默认（调用方可用配置覆盖写入请求）。
 pub fn effective_max_spawn_depth() -> u32 {
-    SPAWN_DEPTH_CTX
-        .try_with(|c| c.max_depth)
-        .unwrap_or(DEFAULT_MAX_SPAWN_DEPTH)
+    scoped_max_spawn_depth().unwrap_or(DEFAULT_MAX_SPAWN_DEPTH)
 }
 
 /// 是否允许再调用 delegate / orchestration_run。

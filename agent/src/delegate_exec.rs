@@ -1,9 +1,15 @@
 //! 同步真委派：并行 spawn 子 AgentLoop，摘要回父。
 //!
-//! 对齐 Hermes `delegate_task`：隔离会话、受限工具、阻塞至完成。
+//! 对齐 ephemeral 子任务语义：隔离会话、受限工具、可选 git worktree、阻塞至完成。
+
+use std::collections::HashSet;
+use std::path::PathBuf;
 
 use futures::StreamExt;
-use memory::{default_memory_dir, DelegateRunRequest, DelegateTaskSpec};
+use memory::{
+    default_memory_dir, create_task_worktree, find_git_root, resolve_project_root, DelegateRole,
+    DelegateRunRequest, DelegateTaskSpec, WorktreeHandle,
+};
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
@@ -13,7 +19,6 @@ use uuid::Uuid;
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
 use crate::messages::to_provider_messages;
 
-const CHILD_MAX_ROUNDS: usize = 5;
 const OUTPUT_TRUNCATE: usize = 8_000;
 
 /// 同步执行委派（可在 `block_in_place` / 独立 runtime 中调用）。
@@ -111,6 +116,33 @@ fn req_clone_creds(req: &DelegateRunRequest) -> DelegateRunRequest {
         max_concurrent: req.max_concurrent,
         caller_depth: req.caller_depth,
         max_spawn_depth: req.max_spawn_depth,
+        project_root: req.project_root.clone(),
+    }
+}
+
+fn delegation_cfg() -> hooks::config::DelegationConfig {
+    hooks::config::load_config_or_default().delegation
+}
+
+fn child_max_rounds(task: &DelegateTaskSpec, cfg: &hooks::config::DelegationConfig) -> usize {
+    task.max_iterations
+        .unwrap_or(cfg.child_max_iterations)
+        .clamp(1, 200)
+}
+
+/// 生效角色：orchestrator 仅在配置允许且仍可再嵌套时保留。
+fn effective_role(
+    requested: DelegateRole,
+    depth_ctx: memory::SpawnDepthCtx,
+    cfg: &hooks::config::DelegationConfig,
+) -> DelegateRole {
+    if !cfg.orchestrator_enabled {
+        return DelegateRole::Leaf;
+    }
+    if requested == DelegateRole::Orchestrator && !depth_ctx.is_leaf() {
+        DelegateRole::Orchestrator
+    } else {
+        DelegateRole::Leaf
     }
 }
 
@@ -127,6 +159,30 @@ async fn run_one_child_inner(
     task: DelegateTaskSpec,
     depth_ctx: memory::SpawnDepthCtx,
 ) -> anyhow::Result<serde_json::Value> {
+    let cfg = delegation_cfg();
+    let role = effective_role(task.role, depth_ctx, &cfg);
+    let max_rounds = child_max_rounds(&task, &cfg);
+
+    let mut worktree: Option<WorktreeHandle> = None;
+    let mut project_root: Option<PathBuf> = None;
+
+    if cfg.worktree {
+        if let Some(repo) = resolve_git_repo_for_delegate(creds.project_root.as_deref()) {
+            let tid = Uuid::new_v4().to_string();
+            match create_task_worktree(&repo, &tid) {
+                Ok(handle) => {
+                    project_root = Some(handle.path().to_path_buf());
+                    worktree = Some(handle);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "delegate worktree create failed; continuing without");
+                }
+            }
+        }
+    } else if let Some(p) = resolve_project_root(creds.project_root.as_deref()) {
+        project_root = Some(p);
+    }
+
     let memory_dir = default_memory_dir();
     let sid = Uuid::new_v4().to_string();
     let agent_id = creds.parent_agent_id.clone();
@@ -136,11 +192,13 @@ async fn run_one_child_inner(
     if let Ok(soul) = std::fs::read_to_string(ws.join("SOUL.md")) {
         config.soul = soul;
     }
-    config.multi_turn = CHILD_MAX_ROUNDS;
-    config.max_turns = CHILD_MAX_ROUNDS + 2;
+    config.multi_turn = max_rounds;
+    config.max_turns = max_rounds.saturating_add(2);
 
     let mut agent = AgentLoop::with_session_id_for_agent(config, sid.clone(), &agent_id)?;
-    apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx);
+    agent.set_project_root(project_root.clone());
+    apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx, role);
+    apply_toolsets_filter(agent.tool_registry_mut(), task.toolsets.as_deref());
     agent.set_chat_credentials(
         &creds.provider,
         &creds.model,
@@ -148,54 +206,107 @@ async fn run_one_child_inner(
         &creds.base_url,
     );
 
+    let role_note = match role {
+        DelegateRole::Leaf => {
+            "You are a leaf sub-agent: do NOT call delegate / orchestration tools; complete the goal yourself."
+        }
+        DelegateRole::Orchestrator => {
+            "You are an orchestrator sub-agent: you MAY spawn leaf workers via delegate when independent subtasks parallelize well. Prefer leaf role for your children."
+        }
+    };
+
     let user_message = if task.context.trim().is_empty() {
         format!(
-            "You are a delegated sub-agent. Complete the goal and reply with a concise summary of what you did, what you found, and any issues.\n\n## Goal\n{}",
+            "You are a delegated sub-agent. {role_note}\nComplete the goal and reply with a concise summary of what you did, what you found, and any issues.\n\n## Goal\n{}",
             task.goal
         )
     } else {
         format!(
-            "You are a delegated sub-agent. Complete the goal and reply with a concise summary of what you did, what you found, and any issues.\n\n## Goal\n{}\n\n## Context\n{}",
+            "You are a delegated sub-agent. {role_note}\nComplete the goal and reply with a concise summary of what you did, what you found, and any issues.\n\n## Goal\n{}\n\n## Context\n{}",
             task.goal, task.context
         )
     };
 
-    let turn_result = agent.run_turn(&user_message, "delegate").await?;
-    let output = match turn_result {
-        TurnResult::Finished(message) => message,
-        TurnResult::Continue { system_prompt, .. } => {
-            let (out, _) = run_provider_loop(
-                &mut agent,
-                &creds.provider,
-                &creds.model,
-                &creds.api_key,
-                &creds.base_url,
-                &system_prompt,
-                depth_ctx,
-                &creds.parent_session_id,
-            )
-            .await?;
-            out
-        }
-        TurnResult::BudgetExhausted => anyhow::bail!("子 Agent 轮次预算已用尽"),
-        TurnResult::MaxDepth => anyhow::bail!("子 Agent 工具轮次已达上限"),
-        TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
-            anyhow::bail!("子 Agent 返回了不支持的轮次结果")
-        }
-    };
+    let result = async {
+        let turn_result = agent.run_turn(&user_message, "delegate").await?;
+        let output = match turn_result {
+            TurnResult::Finished(message) => message,
+            TurnResult::Continue { system_prompt, .. } => {
+                let (out, _) = run_provider_loop(
+                    &mut agent,
+                    &creds.provider,
+                    &creds.model,
+                    &creds.api_key,
+                    &creds.base_url,
+                    &system_prompt,
+                    depth_ctx,
+                    role,
+                    task.toolsets.as_deref(),
+                    max_rounds,
+                    &creds.parent_session_id,
+                )
+                .await?;
+                out
+            }
+            TurnResult::BudgetExhausted => anyhow::bail!("子 Agent 轮次预算已用尽"),
+            TurnResult::MaxDepth => anyhow::bail!("子 Agent 工具轮次已达上限"),
+            TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
+                anyhow::bail!("子 Agent 返回了不支持的轮次结果")
+            }
+        };
 
-    Ok(serde_json::json!({
-        "status": "ok",
-        "goal": task.goal,
-        "session_id": sid,
-        "summary": truncate_chars(&output, OUTPUT_TRUNCATE),
-    }))
+        Ok::<_, anyhow::Error>(serde_json::json!({
+            "status": "ok",
+            "goal": task.goal,
+            "session_id": sid,
+            "role": match role {
+                DelegateRole::Leaf => "leaf",
+                DelegateRole::Orchestrator => "orchestrator",
+            },
+            "project_root": project_root.as_ref().map(|p| p.display().to_string()),
+            "summary": truncate_chars(&output, OUTPUT_TRUNCATE),
+        }))
+    }
+    .await;
+
+    if let Some(handle) = worktree {
+        handle.cleanup();
+    }
+
+    result
 }
 
-/// 嵌套子 Agent 工具剥离：记忆/建 Agent 始终禁用；叶子再禁委派与编排。
+fn resolve_git_repo_for_delegate(explicit: Option<&std::path::Path>) -> Option<PathBuf> {
+    let candidate = resolve_project_root(explicit)?;
+    find_git_root(&candidate)
+}
+
+/// 嵌套子 Agent 工具剥离：记忆/建 Agent/clarify/confirm 始终禁用；叶子再禁委派与编排。
 pub fn apply_nested_agent_tool_strips(
     registry: &mut tools::ToolRegistry,
     depth_ctx: memory::SpawnDepthCtx,
+    role: DelegateRole,
+) {
+    apply_nested_agent_tool_strips_with_role(registry, depth_ctx, role);
+}
+
+/// 兼容仅依赖深度的调用方（编排步默认按叶子深度剥离委派）。
+pub fn apply_nested_agent_tool_strips_depth_only(
+    registry: &mut tools::ToolRegistry,
+    depth_ctx: memory::SpawnDepthCtx,
+) {
+    let role = if depth_ctx.is_leaf() {
+        DelegateRole::Leaf
+    } else {
+        DelegateRole::Orchestrator
+    };
+    apply_nested_agent_tool_strips_with_role(registry, depth_ctx, role);
+}
+
+fn apply_nested_agent_tool_strips_with_role(
+    registry: &mut tools::ToolRegistry,
+    depth_ctx: memory::SpawnDepthCtx,
+    role: DelegateRole,
 ) {
     for name in [
         "memory_add",
@@ -204,10 +315,13 @@ pub fn apply_nested_agent_tool_strips(
         "session_search",
         "create_agent",
         "multi_agent",
+        "clarify",
+        "confirm",
     ] {
         registry.unregister(name);
     }
-    if depth_ctx.is_leaf() {
+    let strip_delegate = role == DelegateRole::Leaf || depth_ctx.is_leaf();
+    if strip_delegate {
         for name in [
             "delegate",
             "delegate_async",
@@ -222,6 +336,39 @@ pub fn apply_nested_agent_tool_strips(
     }
 }
 
+/// 将常用别名规范为 Astro toolset id。
+pub fn normalize_toolset_name(name: &str) -> String {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "file" | "files" => "file_ops".into(),
+        "web" | "websearch" => "web_search".into(),
+        "delegation" | "delegate_task" => "delegate".into(),
+        "code" | "code_execution" | "code-execution" => "code_exec".into(),
+        other => other.to_string(),
+    }
+}
+
+/// 白名单过滤：未列出的 toolset 整表 unregister；空/缺省不改。
+pub fn apply_toolsets_filter(registry: &mut tools::ToolRegistry, toolsets: Option<&[String]>) {
+    let Some(list) = toolsets else {
+        return;
+    };
+    if list.is_empty() {
+        return;
+    }
+    let allowed: HashSet<String> = list.iter().map(|s| normalize_toolset_name(s)).collect();
+    let names: Vec<String> = registry
+        .all_tools()
+        .iter()
+        .map(|t| t.name.clone())
+        .collect();
+    for name in names {
+        let ts = memory::tool_name_to_toolset(&name);
+        if !allowed.contains(ts) {
+            registry.unregister(&name);
+        }
+    }
+}
+
 async fn run_provider_loop(
     agent: &mut AgentLoop,
     provider_name: &str,
@@ -230,6 +377,9 @@ async fn run_provider_loop(
     base_url: &str,
     initial_system_prompt: &str,
     depth_ctx: memory::SpawnDepthCtx,
+    role: DelegateRole,
+    toolsets: Option<&[String]>,
+    max_rounds: usize,
     parent_session_id: &str,
 ) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
@@ -261,9 +411,10 @@ async fn run_provider_loop(
     let mut last_response = String::new();
     let mut total_usage = Usage::default();
 
-    for _round in 0..CHILD_MAX_ROUNDS {
+    for _round in 0..max_rounds {
         agent.reload_tools_and_mcp().await;
-        apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx);
+        apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx, role);
+        apply_toolsets_filter(agent.tool_registry_mut(), toolsets);
 
         let messages = to_provider_messages(&system_prompt, &agent.session_messages);
         let tools = agent.tool_registry().schemas_for_api();
@@ -377,10 +528,7 @@ pub async fn run_subtasks_parallel(
 ) -> Vec<(String, String)> {
     let tasks: Vec<_> = descriptions
         .into_iter()
-        .map(|(id, description)| (id, DelegateTaskSpec {
-            goal: description,
-            context: String::new(),
-        }))
+        .map(|(id, description)| (id, DelegateTaskSpec::new(description, String::new())))
         .collect();
     let mut out = Vec::new();
     let mut join_set = JoinSet::new();
@@ -421,12 +569,12 @@ pub async fn run_subtasks_parallel(
 
 #[cfg(test)]
 mod strip_tests {
-    use super::apply_nested_agent_tool_strips;
+    use super::*;
     use memory::SpawnDepthCtx;
     use tools::{register_all, ToolRegistry};
 
     #[test]
-    fn leaf_strips_delegate_and_orchestration() {
+    fn leaf_strips_delegate_clarify_and_memory() {
         let mut reg = ToolRegistry::new();
         register_all(&mut reg);
         apply_nested_agent_tool_strips(
@@ -435,6 +583,7 @@ mod strip_tests {
                 depth: 1,
                 max_depth: 1,
             },
+            DelegateRole::Leaf,
         );
         let names: Vec<_> = reg
             .available_tools()
@@ -443,10 +592,14 @@ mod strip_tests {
             .collect();
         assert!(!names.contains(&"delegate"));
         assert!(!names.contains(&"orchestration_run"));
+        assert!(!names.contains(&"clarify"));
+        assert!(!names.contains(&"confirm"));
+        assert!(!names.contains(&"create_agent"));
+        assert!(!names.contains(&"memory_add"));
     }
 
     #[test]
-    fn mid_depth_keeps_delegate_when_max_allows() {
+    fn mid_depth_orchestrator_keeps_delegate() {
         let mut reg = ToolRegistry::new();
         register_all(&mut reg);
         apply_nested_agent_tool_strips(
@@ -455,6 +608,7 @@ mod strip_tests {
                 depth: 1,
                 max_depth: 2,
             },
+            DelegateRole::Orchestrator,
         );
         let names: Vec<_> = reg
             .available_tools()
@@ -464,5 +618,34 @@ mod strip_tests {
         assert!(names.contains(&"delegate"));
         assert!(names.contains(&"orchestration_run"));
         assert!(!names.contains(&"memory_add"));
+        assert!(!names.contains(&"clarify"));
+    }
+
+    #[test]
+    fn toolsets_whitelist_keeps_only_terminal() {
+        let mut reg = ToolRegistry::new();
+        register_all(&mut reg);
+        apply_nested_agent_tool_strips(
+            &mut reg,
+            SpawnDepthCtx {
+                depth: 1,
+                max_depth: 1,
+            },
+            DelegateRole::Leaf,
+        );
+        apply_toolsets_filter(&mut reg, Some(&["terminal".into()]));
+        let names: Vec<_> = reg
+            .available_tools()
+            .iter()
+            .map(|t| t.name.as_str())
+            .collect();
+        assert!(names.contains(&"terminal"));
+        assert!(!names.contains(&"file_ops"));
+    }
+
+    #[test]
+    fn normalize_aliases() {
+        assert_eq!(normalize_toolset_name("file"), "file_ops");
+        assert_eq!(normalize_toolset_name("web"), "web_search");
     }
 }

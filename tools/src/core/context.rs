@@ -3,7 +3,7 @@
 //! 各内置工具的 `dispatch` 函数通过 [`ToolContext`] 访问工作区路径、
 //! 记忆管理器、Provider 注册表及聊天/生图凭证，避免在工具层重复读取环境变量。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use memory::MemoryManager;
@@ -90,8 +90,10 @@ pub struct ToolContext<'a> {
     pub memory: &'a mut MemoryManager,
     /// Agent 根目录（`~/.astro`），用于定位 `agents/{id}/` 等全局路径。
     pub memory_dir: PathBuf,
-    /// 当前 Agent 工作区目录，文件类工具的操作根路径。
+    /// 当前 Agent 工作区目录（记忆空间），与代码仓分离。
     pub workspace_dir: PathBuf,
+    /// 可选代码/项目根（git worktree 或 `ASTRO_PROJECT_ROOT`）；有值时 terminal/file_ops 以此为根。
+    pub project_root: Option<PathBuf>,
     /// 图片生成主备凭证，由前端 Provider 面板注入。
     pub image_gen_targets: &'a ImageGenTargets,
     /// 已注册的 LLM Provider 列表，供 `image_gen` 查找实现。
@@ -109,12 +111,24 @@ pub struct ToolContext<'a> {
 }
 
 impl<'a> ToolContext<'a> {
-    /// 确保 `workspace_dir` 存在；文件/终端/代码执行类工具在操作前调用。
-    ///
-    /// 返回工作区路径副本，便于后续 `path_safe::resolve_safe` 拼接相对路径。
+    /// 确保记忆工作区存在。
     pub fn ensure_workspace(&self) -> anyhow::Result<PathBuf> {
         std::fs::create_dir_all(&self.workspace_dir)?;
         Ok(self.workspace_dir.clone())
+    }
+
+    /// 终端 / 文件操作的沙箱根：优先 `project_root`，否则记忆 `workspace_dir`。
+    pub fn project_or_workspace(&self) -> &Path {
+        self.project_root
+            .as_ref()
+            .unwrap_or(&self.workspace_dir)
+    }
+
+    /// 确保 [`Self::project_or_workspace`] 目录存在。
+    pub fn ensure_project_or_workspace(&self) -> anyhow::Result<PathBuf> {
+        let root = self.project_or_workspace().to_path_buf();
+        std::fs::create_dir_all(&root)?;
+        Ok(root)
     }
 }
 

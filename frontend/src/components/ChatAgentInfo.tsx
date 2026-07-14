@@ -2,15 +2,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
+import type { AgentInfo } from "../types/agent";
 import type { InstalledSkill } from "../types";
-
-type AgentInfo = {
-  id: string;
-  name: string;
-  path: string;
-  is_default: boolean;
-  is_active: boolean;
-};
+import AgentAvatar from "./AgentAvatar";
 
 export type TokenUsage = {
   promptTokens: number;
@@ -131,7 +125,7 @@ export default function ChatAgentInfo({
     <div className="chat-agent-info">
       <header className="chat-agent-hero">
         <div className="chat-agent-avatar" aria-hidden>
-          {agent.name.slice(0, 1).toUpperCase()}
+          <AgentAvatar agent={agent} size={48} />
         </div>
         <div>
           <h3>{agent.name}</h3>

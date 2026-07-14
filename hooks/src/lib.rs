@@ -11,7 +11,9 @@ pub mod plugin;
 pub mod shell;
 pub mod ui;
 
-pub use config::{default_astro_root, load_config, AstroConfig};
+pub use config::{
+    default_astro_root, load_config, load_config_or_default, AstroConfig, DelegationConfig,
+};
 pub use context::PluginContext;
 pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
 pub use names::*;

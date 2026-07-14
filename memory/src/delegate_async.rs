@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn persist_request_and_list_running() {
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         set_delegate_async_spawner(Arc::new(|_id, _req| {}));
         let req = DelegateRunRequest {
             parent_agent_id: "a".into(),
@@ -366,13 +366,11 @@ mod tests {
             model: "m".into(),
             api_key: "k".into(),
             base_url: String::new(),
-            tasks: vec![DelegateTaskSpec {
-                goal: "g".into(),
-                context: String::new(),
-            }],
+            tasks: vec![DelegateTaskSpec::new("g", "")],
             max_concurrent: 1,
             caller_depth: 0,
             max_spawn_depth: 1,
+            project_root: None,
         };
         let id = start_delegate_async(req).unwrap();
         let listed = list_persisted_running();
@@ -382,7 +380,6 @@ mod tests {
                 .any(|(tid, r)| tid == &id && r.tasks[0].goal == "g"),
             "listed={listed:?}"
         );
-        std::env::remove_var("ASTRO_MEMORY_DIR");
     }
 }
 

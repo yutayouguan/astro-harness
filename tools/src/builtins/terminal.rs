@@ -28,7 +28,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "terminal".to_string(),
         toolset: "terminal".to_string(),
-        description: "Run a shell command. Default cwd is the agent workspace (not a jail—commands can still touch paths outside it). Timeout 60s. stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
+        description: "Run a shell command. Default cwd is project_root when set (e.g. delegated git worktree), else the agent memory workspace (not a jail—commands can still touch paths outside it). Timeout 60s. stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
             .to_string(),
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,
@@ -50,11 +50,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         anyhow::bail!("terminal 需要 command");
     }
 
-    ctx.ensure_workspace()?;
+    let root = ctx.ensure_project_or_workspace()?;
     let cwd = if let Some(rel) = parsed.cwd.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        crate::path_safe::resolve_safe(&ctx.workspace_dir, rel)?
+        crate::path_safe::resolve_safe(&root, rel)?
     } else {
-        ctx.workspace_dir.clone()
+        root
     };
     std::fs::create_dir_all(&cwd)?;
 
@@ -98,6 +98,7 @@ mod tests {
             memory: &mut memory,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
+            project_root: None,
             image_gen_targets: &targets,
             providers: &providers,
             session_id: "test".into(),

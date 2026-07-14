@@ -170,6 +170,23 @@ async fn run_step(
         anyhow::bail!("未配置 API Key，无法执行编排步骤");
     }
 
+    let del_cfg = hooks::config::load_config_or_default().delegation;
+    let mut worktree: Option<memory::WorktreeHandle> = None;
+    let mut project_root: Option<std::path::PathBuf> = None;
+    if del_cfg.worktree {
+        if let Some(repo) = memory::resolve_project_root(None).and_then(|p| memory::find_git_root(&p)) {
+            match memory::create_task_worktree(&repo, &step.id) {
+                Ok(handle) => {
+                    project_root = Some(handle.path().to_path_buf());
+                    worktree = Some(handle);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "orchestration worktree create failed; continuing without");
+                }
+            }
+        }
+    }
+
     let memory_dir = default_memory_dir();
     let sid = Uuid::new_v4().to_string();
 
@@ -197,12 +214,16 @@ async fn run_step(
     config.multi_turn = PROVIDER_MAX_ROUNDS;
 
     let mut agent = AgentLoop::with_session_id_for_agent(config, sid, &target_agent_id)?;
+    agent.set_project_root(project_root);
     let depth_ctx =
         memory::SpawnDepthCtx::from_caller(req.caller_depth, req.max_spawn_depth);
-    crate::delegate_exec::apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx);
+    crate::delegate_exec::apply_nested_agent_tool_strips_depth_only(
+        agent.tool_registry_mut(),
+        depth_ctx,
+    );
     agent.set_chat_credentials(&provider, &model, &api_key, &base_url);
 
-    memory::scope_spawn_depth(depth_ctx, async {
+    let result = memory::scope_spawn_depth(depth_ctx, async {
         let turn_result = agent.run_turn(&user_message, "orchestration").await?;
         match turn_result {
             TurnResult::Finished(message) => Ok(message),
@@ -226,7 +247,12 @@ async fn run_step(
             }
         }
     })
-    .await
+    .await;
+
+    if let Some(handle) = worktree {
+        handle.cleanup();
+    }
+    result
 }
 
 fn resolve_creds(
@@ -294,7 +320,10 @@ async fn run_provider_loop(
 
     for _round in 0..PROVIDER_MAX_ROUNDS {
         agent.reload_tools_and_mcp().await;
-        crate::delegate_exec::apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx);
+        crate::delegate_exec::apply_nested_agent_tool_strips_depth_only(
+        agent.tool_registry_mut(),
+        depth_ctx,
+    );
 
         let messages = to_provider_messages(&system_prompt, &agent.session_messages);
         let tools = agent.tool_registry().schemas_for_api();

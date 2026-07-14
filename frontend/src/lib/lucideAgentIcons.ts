@@ -708,6 +708,56 @@ export function filterLucideAgentIcons(query: string): LucideAgentIcon[] {
   });
 }
 
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * 按名称 / 职能文本自动挑选 Lucide 图标（对齐后端 memory::auto_icon）。
+ * 无命中时用 name 哈希稳定选取，避免总是同一种。
+ */
+export function suggestLucideAgentIcon(
+  name: string,
+  extras: string[] = [],
+): LucideAgentIcon {
+  const hay = [name, ...extras].join(" ").toLowerCase().trim();
+  let best = LUCIDE_AGENT_ICONS[0];
+  let bestScore = 0;
+  const tied: LucideAgentIcon[] = [];
+
+  for (const item of LUCIDE_AGENT_ICONS) {
+    let score = 0;
+    if (hay.includes(item.id)) score += 4;
+    for (const kw of item.keywords) {
+      const k = kw.toLowerCase();
+      if (hay.includes(k)) score += 1 + Math.floor([...k].length / 2);
+    }
+    if (item.id === "bot" || item.id === "sparkles") {
+      score = Math.max(0, score - 1);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
+      tied.length = 0;
+      tied.push(item);
+    } else if (score === bestScore && score > 0) {
+      tied.push(item);
+    }
+  }
+
+  if (bestScore === 0) {
+    const idx = hashSeed(name.trim() || "agent") % LUCIDE_AGENT_ICONS.length;
+    return LUCIDE_AGENT_ICONS[idx]!;
+  }
+  if (tied.length <= 1) return best;
+  return tied[hashSeed(name.trim() || "agent") % tied.length]!;
+}
+
 /** 按 Lucide kebab-case id 解析图标组件（工具 catalog 的 emoji 字段） */
 export function resolveLucideIconById(id: string | null | undefined): LucideIconComponent | null {
   if (!id) return null;

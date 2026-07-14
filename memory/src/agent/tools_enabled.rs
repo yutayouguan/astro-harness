@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn missing_defaults_to_enabled() {
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         assert!(is_toolset_enabled("memory"));
         assert!(is_tool_call_allowed("memory_add"));
     }
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn disabled_toolset_blocks_calls() {
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         let mut state = HashMap::new();
         state.insert("memory".into(), false);
         state.insert("scheduled".into(), true);
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn non_default_agent_tools_enabled_overrides_global() {
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let mut global = HashMap::new();
         global.insert("memory".into(), true);
@@ -264,12 +264,9 @@ mod tests {
         agent.insert("memory".into(), false);
         save_tools_enabled_for_agent(Some("other"), &agent).unwrap();
 
-        // 再次钉住 env，避免并行测试改写 ASTRO_MEMORY_DIR
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
         let loaded = load_tools_enabled_for_agent(Some("other"));
         assert_eq!(loaded.get("memory"), Some(&false));
 
-        // 直接读本测试目录的全局文件，不依赖 load_tools_enabled 的瞬时 env
         let raw = fs::read_to_string(dir.path().join("tools-enabled.json")).unwrap();
         let map: HashMap<String, bool> = serde_json::from_str(&raw).unwrap();
         assert_eq!(map.get("memory"), Some(&true));

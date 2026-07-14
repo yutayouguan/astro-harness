@@ -260,6 +260,8 @@ pub fn run() {
             commands::list_agents,
             commands::create_agent,
             commands::set_active_agent,
+            commands::set_pending_agent_icon,
+            commands::clear_pending_agent_icon,
             commands::list_daily_memory,
             commands::read_daily_memory,
             commands::write_daily_memory,

@@ -3,11 +3,52 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock};
 
+/// 委派子 Agent 角色：叶子不可再派；编排者在深度允许时可再派。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DelegateRole {
+    #[default]
+    Leaf,
+    Orchestrator,
+}
+
+impl DelegateRole {
+    /// 解析字符串；未知值视为 leaf。
+    pub fn parse(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "orchestrator" => Self::Orchestrator,
+            _ => Self::Leaf,
+        }
+    }
+}
+
 /// 单个委派子任务。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DelegateTaskSpec {
     pub goal: String,
     pub context: String,
+    /// 默认 leaf：不可嵌套委派。
+    #[serde(default)]
+    pub role: DelegateRole,
+    /// 可选工具集白名单（如 `terminal`、`file`/`file_ops`、`web`/`web_search`）。
+    /// 空/缺省 = 父集减去嵌套剥离后的全部工具。
+    #[serde(default)]
+    pub toolsets: Option<Vec<String>>,
+    /// 子 Agent 最大工具跟随轮次；缺省读配置 `child_max_iterations`（默认 50）。
+    #[serde(default)]
+    pub max_iterations: Option<usize>,
+}
+
+impl DelegateTaskSpec {
+    pub fn new(goal: impl Into<String>, context: impl Into<String>) -> Self {
+        Self {
+            goal: goal.into(),
+            context: context.into(),
+            role: DelegateRole::Leaf,
+            toolsets: None,
+            max_iterations: None,
+        }
+    }
 }
 
 /// 同步委派请求（父 Agent 凭据 + 任务列表）。
@@ -26,6 +67,9 @@ pub struct DelegateRunRequest {
     pub caller_depth: u32,
     /// 允许发起嵌套的最大 caller depth（默认 1）。
     pub max_spawn_depth: u32,
+    /// 可选：代码仓根（显式或环境）；缺省由执行器解析。
+    #[serde(default)]
+    pub project_root: Option<std::path::PathBuf>,
 }
 
 pub type DelegateRunner =

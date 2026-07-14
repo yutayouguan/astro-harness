@@ -405,6 +405,38 @@ pub async fn set_active_agent(agent_id: String) -> Result<AppConfigDto, String> 
     get_config().await
 }
 
+/// 创建引导页：暂存 Agent 图标（Lucide SVG / 上传图片），待 create_agent 时写入工作区。
+#[tauri::command]
+pub async fn set_pending_agent_icon(
+    kind: String,
+    data_base64: String,
+    file_name: String,
+) -> Result<(), String> {
+    let kind = memory::agent_icons::AgentIconKind::from_str(&kind)
+        .ok_or_else(|| format!("未知图标类型: {kind}"))?;
+    let bytes = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD
+            .decode(data_base64.trim())
+            .map_err(|e| format!("图标 base64 无效: {e}"))?
+    };
+    memory::agent_icons::set_pending_agent_icon(&memory_root(), kind, &bytes, &file_name)
+        .map_err(|e| e.to_string())
+}
+
+/// 清除创建引导页暂存的 Agent 图标。
+#[tauri::command]
+pub async fn clear_pending_agent_icon(kind: Option<String>) -> Result<(), String> {
+    let kind = match kind.as_deref() {
+        None => None,
+        Some(s) => Some(
+            memory::agent_icons::AgentIconKind::from_str(s)
+                .ok_or_else(|| format!("未知图标类型: {s}"))?,
+        ),
+    };
+    memory::agent_icons::clear_pending_agent_icon(&memory_root(), kind).map_err(|e| e.to_string())
+}
+
 /// 列出每日记忆日期。
 #[tauri::command]
 pub async fn list_daily_memory(agent_id: Option<String>) -> Result<Vec<String>, String> {

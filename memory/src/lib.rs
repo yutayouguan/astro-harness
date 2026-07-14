@@ -14,10 +14,15 @@ pub mod session;
 pub mod usage;
 pub mod delegate_async;
 pub mod delegate_spawn;
+pub mod git_worktree;
 pub mod spawn_depth;
+
+#[cfg(test)]
+pub(crate) mod test_env;
 
 // ── 域内路径（新）──────────────────────────────────────────────
 pub use agent::agent_icons;
+pub use agent::auto_icon;
 pub use agent::files;
 pub use agent::tools_enabled;
 pub use agent::workspace;
@@ -106,7 +111,11 @@ pub use orchestration_spawn::{
     OrchestrationSpawner,
 };
 pub use delegate_spawn::{
-    run_delegate_sync, set_delegate_runner, DelegateRunRequest, DelegateRunner, DelegateTaskSpec,
+    run_delegate_sync, set_delegate_runner, DelegateRole, DelegateRunRequest, DelegateRunner,
+    DelegateTaskSpec,
+};
+pub use git_worktree::{
+    create_task_worktree, find_git_root, resolve_project_root, WorktreeHandle,
 };
 pub use delegate_async::{
     async_delegate_cancel, async_delegate_collect, async_delegate_status, set_delegate_async_spawner,
@@ -114,8 +123,8 @@ pub use delegate_async::{
     AsyncDelegateRegistry, AsyncDelegateStatus, DelegateAsyncSpawner,
 };
 pub use spawn_depth::{
-    can_spawn_nested, current_spawn_depth, effective_max_spawn_depth, scope_spawn_depth,
-    SpawnDepthCtx, DEFAULT_MAX_SPAWN_DEPTH,
+    can_spawn_nested, current_spawn_depth, effective_max_spawn_depth, scoped_max_spawn_depth,
+    scope_spawn_depth, SpawnDepthCtx, DEFAULT_MAX_SPAWN_DEPTH,
 };
 pub use collab_insights::{
     query_collaboration_insights, CollaborationEdge, CollaborationGraph,

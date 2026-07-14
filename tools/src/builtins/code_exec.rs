@@ -59,8 +59,8 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         ),
     };
 
-    ctx.ensure_workspace()?;
-    let tmp = ctx.workspace_dir.join(".code_exec");
+    let root = ctx.ensure_project_or_workspace()?;
+    let tmp = root.join(".code_exec");
     std::fs::create_dir_all(&tmp)?;
 
     let path = tmp.join(filename);
@@ -71,7 +71,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         cmd.arg(a);
     }
     cmd.arg(&path)
-        .current_dir(&ctx.workspace_dir)
+        .current_dir(&root)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -108,6 +108,7 @@ mod tests {
             memory,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
+            project_root: None,
             image_gen_targets: targets,
             providers,
             session_id: "test".into(),

@@ -660,8 +660,21 @@ html[data-theme="dark"] .mem-view-tab--dream {
   font-weight: 700;
   flex-shrink: 0;
   color: var(--ink);
-  background: color-mix(in srgb, var(--accent) 18%, var(--chip-bg));
-  border: 1px solid var(--chip-border);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.5) 0%, transparent 62%),
+    color-mix(in srgb, var(--tone, var(--accent)) 16%, var(--chip-bg));
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--chip-border));
+  overflow: hidden;
+}
+
+.mem-agent-avatar .agent-avatar {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.mem-agent-avatar .agent-avatar--default {
+  color: var(--tone, #2563eb);
 }
 
 .mem-agent-avatar.lg {

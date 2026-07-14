@@ -344,6 +344,13 @@ pub fn create_agent_with_profile(
     // 创建引导页上传的 Emoji/Avatar → assets/ + IDENTITY.md
     let _ = crate::agent_icons::apply_pending_agent_icons(base, &ws);
 
+    // 技能 / 工具创建且未手动选图标时：按名称与 profile 自动挑 Lucide 图标
+    {
+        let focus = profile.map(|p| p.focus.as_str()).unwrap_or("");
+        let style = profile.map(|p| p.style.as_str()).unwrap_or("");
+        let _ = crate::auto_icon::apply_auto_lucide_icon(&ws, display, focus, style);
+    }
+
     if activate {
         let _ = set_active_agent(base, &id);
     }
@@ -800,6 +807,12 @@ mod tests {
         let user = fs::read_to_string(ws.join("USER.md")).unwrap();
         assert!(user.contains("老板"));
         assert_eq!(active_agent_id(dir.path()), info.id);
+        // 未手动选图标时自动写入 Lucide SVG
+        assert!(
+            ws.join("assets/emoji.svg").is_file(),
+            "expected auto lucide emoji.svg"
+        );
+        assert!(info.emoji.as_ref().unwrap().ends_with("assets/emoji.svg"));
     }
 
     #[test]

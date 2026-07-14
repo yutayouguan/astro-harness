@@ -1,6 +1,7 @@
-//! 委派工具：同步 / 异步真 spawn 子 Agent（Hermes `delegate_task` 对齐）。
+//! 委派工具：同步 / 异步真 spawn 子 Agent。
 //!
 //! 经 `memory` OnceLock 回调执行；未注册 runner/spawner 时返回错误。
+//! 用于回合内短暂子任务（不建持久 Agent）；新建长期助手请用 `create_agent`。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,15 @@ pub struct DelegateTaskArgs {
     /// 子 Agent 所需上下文（父须显式传入）。
     #[serde(default)]
     pub context: Option<String>,
+    /// `leaf`（默认）不可再委派；`orchestrator` 在 max_spawn_depth 允许时可再派一层。
+    #[serde(default)]
+    pub role: Option<String>,
+    /// 工具集白名单，如 `["terminal","file","web"]`；缺省=父集减去剥离项。
+    #[serde(default)]
+    pub toolsets: Option<Vec<String>>,
+    /// 子 Agent 最大迭代轮次；缺省用配置 child_max_iterations（通常 50）。
+    #[serde(default)]
+    pub max_iterations: Option<usize>,
 }
 
 /// `delegate` / `delegate_async` 工具参数。
@@ -28,10 +38,19 @@ pub struct DelegateArgs {
     /// 单任务上下文。
     #[serde(default)]
     pub context: Option<String>,
+    /// 单任务角色：`leaf` | `orchestrator`。
+    #[serde(default)]
+    pub role: Option<String>,
+    /// 单任务工具集白名单。
+    #[serde(default)]
+    pub toolsets: Option<Vec<String>>,
+    /// 单任务最大迭代轮次。
+    #[serde(default)]
+    pub max_iterations: Option<usize>,
     /// 并行子任务（1～3 建议；上限 8）。
     #[serde(default)]
     pub tasks: Option<Vec<DelegateTaskArgs>>,
-    /// 并行上限，默认 3。
+    /// 并行上限，默认读配置（通常 3）。
     #[serde(default)]
     pub max_concurrent: Option<usize>,
 }
@@ -58,7 +77,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "delegate".to_string(),
         toolset: "delegate".to_string(),
-        description: "Spawn isolated sub-agent(s) to work on goal(s) in parallel (max 3 by default). Blocks until done; only summaries return. Pass full context—sub-agents have no parent history. Prefer orchestration_run for multi-step serial pipelines; use delegate_async to not block the parent turn.".to_string(),
+        description: "Spawn ephemeral sub-agent(s) for in-turn goals (parallel, isolated; optional git worktree). Does NOT create a durable Agent persona—use `create_agent` for that. Pass full context; children have no parent history and cannot clarify/confirm or write MEMORY. Optional: role=leaf|orchestrator, toolsets, max_iterations. Prefer orchestration_run for serial pipelines; use delegate_async to not block.".to_string(),
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",
@@ -66,7 +85,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "delegate_async".to_string(),
         toolset: "delegate".to_string(),
-        description: "Start delegated sub-agent(s) in the background. Returns task_id immediately; poll with delegate_status or wait with delegate_collect. Same args as delegate.".to_string(),
+        description: "Start delegated sub-agent(s) in the background. Returns task_id immediately; poll with delegate_status or wait with delegate_collect. Same args as delegate (ephemeral only—not create_agent).".to_string(),
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",
@@ -167,7 +186,13 @@ fn build_run_request(
     let parsed: DelegateArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("delegate 参数无效: {e}"))?;
     let task_specs = resolve_tasks(&parsed)?;
-    let max_concurrent = parsed.max_concurrent.unwrap_or(3).clamp(1, 8);
+    let cfg = hooks::config::load_config_or_default();
+    let max_concurrent = parsed
+        .max_concurrent
+        .unwrap_or(cfg.delegation.max_concurrent_children)
+        .clamp(1, 8);
+    let max_spawn_depth = memory::scoped_max_spawn_depth()
+        .unwrap_or(cfg.delegation.max_spawn_depth.max(1));
     Ok(memory::DelegateRunRequest {
         parent_agent_id: ctx.memory.agent_id.clone(),
         parent_session_id: ctx.session_id.clone(),
@@ -178,7 +203,8 @@ fn build_run_request(
         tasks: task_specs,
         max_concurrent,
         caller_depth: memory::current_spawn_depth(),
-        max_spawn_depth: memory::effective_max_spawn_depth(),
+        max_spawn_depth,
+        project_root: ctx.project_root.clone(),
     })
 }
 
@@ -199,6 +225,9 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<memory::DelegateTa
             out.push(memory::DelegateTaskSpec {
                 goal: goal.to_string(),
                 context: t.context.as_deref().unwrap_or("").trim().to_string(),
+                role: memory::DelegateRole::parse(t.role.as_deref().unwrap_or("leaf")),
+                toolsets: t.toolsets.clone(),
+                max_iterations: t.max_iterations,
             });
         }
         return Ok(out);
@@ -211,6 +240,9 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<memory::DelegateTa
     Ok(vec![memory::DelegateTaskSpec {
         goal: goal.to_string(),
         context: parsed.context.as_deref().unwrap_or("").trim().to_string(),
+        role: memory::DelegateRole::parse(parsed.role.as_deref().unwrap_or("leaf")),
+        toolsets: parsed.toolsets.clone(),
+        max_iterations: parsed.max_iterations,
     }])
 }
 
@@ -239,4 +271,30 @@ fn record_to_json(rec: &memory::AsyncDelegateRecord, truncate_result: bool) -> S
         },
     })
     .to_string()
+}
+
+#[cfg(test)]
+mod resolve_tests {
+    use super::*;
+
+    #[test]
+    fn parses_role_toolsets_max_iterations() {
+        let parsed = DelegateArgs {
+            goal: Some("do it".into()),
+            context: Some("ctx".into()),
+            role: Some("orchestrator".into()),
+            toolsets: Some(vec!["terminal".into(), "file".into()]),
+            max_iterations: Some(12),
+            tasks: None,
+            max_concurrent: None,
+        };
+        let specs = resolve_tasks(&parsed).unwrap();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].role, memory::DelegateRole::Orchestrator);
+        assert_eq!(
+            specs[0].toolsets.as_ref().unwrap(),
+            &vec!["terminal".to_string(), "file".to_string()]
+        );
+        assert_eq!(specs[0].max_iterations, Some(12));
+    }
 }
