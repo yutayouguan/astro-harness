@@ -643,7 +643,7 @@ async fn run_multi_turn_stream_inner(
     };
     let budget = crate::iteration_budget::IterationBudget::new(max_rounds);
     // 工具循环结束后是否需要无工具强制总结（预算耗尽且尚无自然语言终答）
-    let mut need_summary;
+    let need_summary;
 
     // 整次 run 累积时间线，供每轮 assistant 落盘写入 reasoning_details
     let mut timeline = crate::timeline::TimelineBuilder::new();
