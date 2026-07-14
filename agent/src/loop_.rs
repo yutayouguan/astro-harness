@@ -145,8 +145,10 @@ impl AgentLoop {
     fn from_memory(
         config: AgentConfig,
         session_id: String,
-        memory: MemoryManager,
+        mut memory: MemoryManager,
     ) -> anyhow::Result<Self> {
+        // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
+        memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
         let session_messages = hydrate_session_messages(&memory, &session_id)?;
         let mut tool_registry = ToolRegistry::new();
@@ -196,6 +198,11 @@ impl AgentLoop {
     /// 当前绑定的 turn_id（若有）。
     pub fn current_turn_id(&self) -> Option<&str> {
         self.current_turn_id.as_deref()
+    }
+
+    /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。
+    pub fn refresh_memory(&mut self) -> anyhow::Result<()> {
+        self.memory.refresh_memory_snapshot()
     }
 
     /// 注入生命周期 hooks（工具调用、prompt 构建、轮次结束等回调）。
@@ -443,9 +450,10 @@ impl AgentLoop {
 
     /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
     ///
+    /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
     /// 副作用：设置 `ASTRO_WORKSPACE` 环境变量供工具读取。
     pub fn build_system_prompt(&self) -> String {
-        let (project_memory, user_profile, daily) = self.memory.prompt_content_with_daily();
+        let (project_memory, user_profile, daily) = self.memory.prompt_snapshot_with_daily();
         std::env::set_var("ASTRO_WORKSPACE", &self.memory.workspace_dir);
         let skill_pairs = if self.tool_registry.is_toolset_enabled("skills") {
             skills::list_enabled_for_prompt()

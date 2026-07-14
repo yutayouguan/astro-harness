@@ -21,7 +21,7 @@ test("detail without input/output becomes output only", () => {
     resolveActivityIO({
       id: "1",
       kind: "memory",
-      title: "memory_add",
+      title: "memory",
       detail: "remember this",
     }),
     { output: "remember this" },

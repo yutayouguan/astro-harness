@@ -341,9 +341,7 @@ fn apply_nested_agent_tool_strips_with_role(
     role: DelegateRole,
 ) {
     for name in [
-        "memory_add",
-        "memory_replace",
-        "memory_remove",
+        "memory",
         "session_search",
         "create_agent",
         "multi_agent",
@@ -617,7 +615,7 @@ mod strip_tests {
         assert!(!names.contains(&"clarify"));
         assert!(!names.contains(&"confirm"));
         assert!(!names.contains(&"create_agent"));
-        assert!(!names.contains(&"memory_add"));
+        assert!(!names.contains(&"memory"));
     }
 
     #[test]
@@ -639,7 +637,7 @@ mod strip_tests {
             .collect();
         assert!(names.contains(&"delegate"));
         assert!(names.contains(&"orchestration_run"));
-        assert!(!names.contains(&"memory_add"));
+        assert!(!names.contains(&"memory"));
         assert!(!names.contains(&"clarify"));
     }
 

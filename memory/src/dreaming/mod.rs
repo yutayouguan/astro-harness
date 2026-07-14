@@ -18,9 +18,11 @@ use chrono::Utc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::config::load_memory_config;
 use crate::workspace::{
     agent_workspace_dir, daily_memory_path, list_agents, list_daily_memory_dates, AgentInfo,
 };
+use crate::{parse_memory_entries, MemoryStore};
 
 /// 入梦全局状态文件：`{base}/dreaming.json`
 const STATE_FILE: &str = "dreaming.json";
@@ -182,17 +184,6 @@ fn read_text(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_default()
 }
 
-/// 原子写入文本（`.md.tmp` → rename）
-fn write_text_atomic(path: &Path, content: &str) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let tmp = path.with_extension("md.tmp");
-    fs::write(&tmp, content)?;
-    fs::rename(&tmp, path)?;
-    Ok(())
-}
-
 /// 选出尚未入梦的日记（新→旧，受数量与字符上限约束）
 pub fn select_undreamed_diaries(
     workspace: &Path,
@@ -313,15 +304,9 @@ pub fn estimate_points(input_chars: usize, output_chars: usize) -> u64 {
     ((input_chars + output_chars) as u64).div_ceil(1000).max(1)
 }
 
-/// 统计 MEMORY 中以 `- ` 或 `* ` 开头的要点行数
+/// 统计 MEMORY 要点条数；兼容 `§` 分隔与遗留 `- `/`* ` 列表。
 pub fn count_memory_bullets(content: &str) -> u64 {
-    content
-        .lines()
-        .filter(|l| {
-            let t = l.trim_start();
-            t.starts_with("- ") || t.starts_with("* ")
-        })
-        .count() as u64
+    parse_memory_entries(content).len() as u64
 }
 
 /// 为单个 Agent 准备入梦任务；无新日记则返回 None
@@ -375,7 +360,12 @@ pub fn finalize_dream_job_from_update(
     finalize_dream_job_with_memory(state, job, &cleaned)
 }
 
-/// 将清洗后的 MEMORY 写盘并更新全局/Agent 统计（内部共用）
+/// 将清洗后的 MEMORY 经 MemoryStore 写盘并更新全局/Agent 统计（内部共用）。
+///
+/// 超限 / 扫描失败直接返回 Err，不做静默截断。不触碰任何 AgentLoop snapshot。
+///
+/// 当 `write_approval` 开启时：扫描通过后入 pending（`action=replace_all`），**不**改 live MEMORY；
+/// 仍更新 dreamed_dates / 统计，避免重复入梦。
 fn finalize_dream_job_with_memory(
     state: &mut DreamingState,
     job: &DreamJob,
@@ -384,8 +374,48 @@ fn finalize_dream_job_with_memory(
     if cleaned.trim().is_empty() {
         anyhow::bail!("模型返回空内容");
     }
+    let entries = parse_memory_entries(cleaned);
+    if entries.is_empty() {
+        anyhow::bail!("未能从 MEMORY 输出中解析出任何条目");
+    }
+
+    let base = job
+        .workspace
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| job.workspace.clone());
+    let cfg = load_memory_config(&base);
     let memory_path = job.workspace.join("MEMORY.md");
-    write_text_atomic(&memory_path, &format!("{}\n", cleaned.trim()))?;
+
+    if cfg.write_approval {
+        // 超限也要在 finalize 失败（与直写路径一致）；扫描在 enqueue 内完成
+        let used = entries
+            .join(crate::agent::store::ENTRY_DELIMITER)
+            .chars()
+            .count();
+        if used > cfg.memory_char_limit {
+            anyhow::bail!(
+                "记忆内容超过字符上限（{used}/{}）；无法入队审批",
+                cfg.memory_char_limit
+            );
+        }
+        crate::pending::enqueue(
+            &base,
+            crate::pending::PendingMemoryWrite {
+                id: String::new(),
+                agent_id: job.agent_id.clone(),
+                target: crate::MemoryTarget::Memory,
+                action: "replace_all".into(),
+                content: Some(cleaned.to_string()),
+                old_text: None,
+                source: "dreaming".into(),
+                created_at: String::new(),
+            },
+        )?;
+    } else {
+        let mut store = MemoryStore::open(memory_path, cfg.memory_char_limit)?;
+        store.replace_all_entries(entries)?;
+    }
 
     let before_n = count_memory_bullets(&job.memory_before);
     let after_n = count_memory_bullets(cleaned);
@@ -473,6 +503,10 @@ mod tests {
         assert_eq!(report.diaries, 1);
         let mem = fs::read_to_string(ws.join("MEMORY.md")).unwrap();
         assert!(mem.contains("Alice"));
+        assert!(
+            mem.contains('§') || mem == "Alice is a collaborator",
+            "dreaming writeback should go through MemoryStore § format; got: {mem}"
+        );
         assert!(state.agents[&agent.id]
             .dreamed_dates
             .iter()
@@ -502,5 +536,45 @@ mod tests {
             .dreamed_dates
             .iter()
             .any(|d| d == "2026-07-08"));
+    }
+
+    #[test]
+    fn finalize_over_limit_fails_without_silent_truncate() {
+        let dir = tempdir().unwrap();
+        ensure_workspace(dir.path()).unwrap();
+        // Tiny MEMORY limit so finalize must fail instead of truncating.
+        fs::write(
+            dir.path().join("config.yaml"),
+            "memory:\n  memory_char_limit: 30\n",
+        )
+        .unwrap();
+        let agent = create_agent(dir.path(), "Bot").unwrap();
+        let ws = agent_workspace_dir(dir.path(), &agent.id);
+        let diary = daily_memory_path(&ws, "2026-07-07");
+        fs::create_dir_all(diary.parent().unwrap()).unwrap();
+        fs::write(&diary, "- seed\n").unwrap();
+        fs::write(ws.join("MEMORY.md"), "seed note").unwrap();
+        let before = fs::read_to_string(ws.join("MEMORY.md")).unwrap();
+        let mut state = DreamingState::default();
+        let job = prepare_dream_job(dir.path(), &agent, &state).unwrap();
+        let err = finalize_dream_job(
+            &mut state,
+            &job,
+            "- this drafted memory entry is intentionally far too long for the tiny limit\n",
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("limit") || err.to_string().contains("上限"),
+            "unexpected error: {err}"
+        );
+        let after = fs::read_to_string(ws.join("MEMORY.md")).unwrap();
+        assert_eq!(after, before);
+        assert!(!state.agents.contains_key(&agent.id) || state.agents[&agent.id].dreamed_dates.is_empty());
+    }
+
+    #[test]
+    fn count_memory_bullets_counts_section_entries() {
+        assert_eq!(count_memory_bullets("- a\n- b\n"), 2);
+        assert_eq!(count_memory_bullets("a\n§\nb\n§\nc"), 3);
     }
 }

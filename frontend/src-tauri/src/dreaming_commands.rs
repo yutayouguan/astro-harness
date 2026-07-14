@@ -8,7 +8,9 @@ use memory::dreaming::{
     mark_agent_dream_error, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
-use memory::{default_memory_dir, list_agents};
+use memory::{
+    default_memory_dir, list_agents, load_auxiliary_config, resolve_auxiliary, AuxiliaryKind,
+};
 use providers::client::ProviderClient;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
@@ -227,6 +229,34 @@ pub async fn set_dreaming_enabled_cmd(enabled: bool) -> Result<DreamingStatusDto
     Ok(status_from_state(&base, &state))
 }
 
+/// 取入梦用提供商：先按 `auxiliary.dreaming` 解析，再回退到 UI 激活提供商。
+fn resolve_dreaming_provider() -> Result<(UiProvider, String, String), String> {
+    let ui = active_ui_provider()?;
+    let session_backend = ui.kind.backend_id().to_string();
+    let session_model = ui.model.clone();
+    let base = default_memory_dir();
+    let aux = load_auxiliary_config(&base);
+    let (prov, model) = resolve_auxiliary(
+        AuxiliaryKind::Dreaming,
+        &aux,
+        &session_backend,
+        &session_model,
+    );
+
+    let provider = if prov == session_backend {
+        ui
+    } else {
+        providers_commands::find_provider_by_backend(&prov).unwrap_or(ui)
+    };
+    if model.trim().is_empty() {
+        return Err(
+            "入梦模型未配置（auxiliary.dreaming.model 与激活提供商均无模型）".into(),
+        );
+    }
+    let backend_id = provider.kind.backend_id().to_string();
+    Ok((provider, backend_id, model))
+}
+
 /// Tauri 命令：run_dreaming。
 #[tauri::command]
 pub async fn run_dreaming() -> Result<DreamRunReport, String> {
@@ -236,7 +266,7 @@ pub async fn run_dreaming() -> Result<DreamRunReport, String> {
         return Err("入梦正在进行中，请稍候".into());
     }
 
-    let ui = active_ui_provider()?;
+    let (ui, backend_id, model) = resolve_dreaming_provider()?;
     let (has, _src, _env, key) = resolve_api_key(&ui);
     if ui.kind.requires_api_key() && !has {
         return Err(format!(
@@ -245,12 +275,6 @@ pub async fn run_dreaming() -> Result<DreamRunReport, String> {
         ));
     }
     let api_key = key.unwrap_or_default();
-    let backend_id = ui.kind.backend_id().to_string();
-    let model = if ui.model.trim().is_empty() {
-        return Err("当前提供商未设置默认模型".into());
-    } else {
-        ui.model.clone()
-    };
     let base_url = ui.endpoint.clone();
 
     if !state.enabled {
@@ -278,6 +302,12 @@ pub async fn run_dreaming() -> Result<DreamRunReport, String> {
             agents: vec![],
         });
     }
+
+    tracing::info!(
+        backend = %backend_id,
+        model = %model,
+        "入梦使用 auxiliary.dreaming 解析后的模型"
+    );
 
     let mut reports: Vec<DreamAgentReport> = Vec::new();
     let mut diaries_processed = 0usize;

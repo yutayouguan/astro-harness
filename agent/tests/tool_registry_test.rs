@@ -40,7 +40,7 @@ fn test_check_fn_filters_unavailable() {
 fn test_enabled_map_filters_toolset() {
     let mut registry = ToolRegistry::new();
     registry.register(ToolEntry {
-        name: "memory_add".to_string(),
+        name: "memory".to_string(),
         toolset: "memory".to_string(),
         description: "add".to_string(),
         schema: serde_json::json!({}),
@@ -63,7 +63,7 @@ fn test_enabled_map_filters_toolset() {
     let tools = registry.available_tools();
     assert_eq!(tools.len(), 1);
     assert_eq!(tools[0].name, "cron_list");
-    assert!(!registry.is_tool_allowed("memory_add"));
+    assert!(!registry.is_tool_allowed("memory"));
     assert!(registry.is_tool_allowed("cron_list"));
 }
 
@@ -133,7 +133,7 @@ fn reload_uses_agent_specific_tools_enabled() {
 
     let mut reg = ToolRegistry::new();
     reg.register(ToolEntry {
-        name: "memory_add".into(),
+        name: "memory".into(),
         toolset: "memory".into(),
         description: "add".into(),
         schema: serde_json::json!({"type": "object"}),
@@ -141,9 +141,9 @@ fn reload_uses_agent_specific_tools_enabled() {
         icon: "brain",
     });
     reg.reload_enabled_from_disk(Some("custom-bot"));
-    assert!(!reg.is_tool_allowed("memory_add"));
+    assert!(!reg.is_tool_allowed("memory"));
     assert!(reg
         .schemas_for_api()
         .iter()
-        .all(|s| s.pointer("/function/name").and_then(|n| n.as_str()) != Some("memory_add")));
+        .all(|s| s.pointer("/function/name").and_then(|n| n.as_str()) != Some("memory")));
 }

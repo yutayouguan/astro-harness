@@ -190,7 +190,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         return "mcp";
     }
     match name {
-        "memory_add" | "memory_replace" | "memory_remove" => "memory",
+        "memory" | "memory_add" | "memory_replace" | "memory_remove" => "memory",
         "session_search" => "session_search",
         "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
         | "scheduled" => "scheduled",
@@ -236,7 +236,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         assert!(is_toolset_enabled("memory"));
-        assert!(is_tool_call_allowed("memory_add"));
+        assert!(is_tool_call_allowed("memory"));
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod tests {
         state.insert("memory".into(), false);
         state.insert("scheduled".into(), true);
         save_tools_enabled(&state).unwrap();
-        assert!(!is_tool_call_allowed("memory_add"));
+        assert!(!is_tool_call_allowed("memory"));
         assert!(is_tool_call_allowed("cron_list"));
     }
 

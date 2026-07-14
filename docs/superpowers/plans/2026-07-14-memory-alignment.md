@@ -130,11 +130,11 @@ pub fn scan_memory_content(content: &str) -> Result<(), String>;
 
 - [ ] **Step 5: Tests for unique substring, duplicate add, scan block**
 
-- [ ] **Step 6: `cargo test -p memory`**
+- [x] **Step 6: `cargo test -p memory`**
 
 Expected: PASS for new store/scan tests
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add memory/src/agent/store.rs memory/src/agent/scan.rs memory/src/agent/mod.rs memory/src/agent/files.rs
@@ -218,12 +218,12 @@ pub fn prompt_snapshot_with_daily(&self) -> (String, String, String) {
 
 - [ ] **Step 5: `refresh_memory_snapshot(&mut self)`** — `memory.reload()?; user.reload()?;` 或 live→snapshot 后若需跟盘则 reload
 
-- [ ] **Step 6: 更新所有 `MemoryTarget::Project` 编译点**
+- [x] **Step 6: 更新所有 `MemoryTarget::Project` 编译点**
 
 Run: `cargo check -p memory -p agent -p tools -p backend`  
 Expected: 修到通过
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -282,9 +282,9 @@ pub fn handle_memory_op(&mut self, action, target, content, old_text) -> Result<
 
 - [ ] **Step 3: `tool_name_to_toolset("memory") => "memory"`**；清理旧三名
 
-- [ ] **Step 4: `cargo test -p tools -p memory`**
+- [x] **Step 4: `cargo test -p tools -p memory`**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -331,9 +331,9 @@ fn snapshot_frozen_within_session() {
 }
 ```
 
-- [ ] **Step 6: `cargo test -p agent`**
+- [x] **Step 6: `cargo test -p agent`**
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -381,9 +381,9 @@ pub fn replace_all_entries(&mut self, entries: Vec<String>) -> anyhow::Result<()
 
 - [ ] **Step 3: 更新 `count_memory_bullets` 等统计适配 `§`**
 
-- [ ] **Step 4: `cargo test -p memory` dreaming 相关 + tauri check**
+- [x] **Step 4: `cargo test -p memory` dreaming 相关 + tauri check**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -401,15 +401,15 @@ EOF
 - Modify: `docs/superpowers/specs/2026-07-14-memory-hermes-alignment-design.md` 状态 → 部分实现  
 - Create or Modify: 简短用户说明（`docs/memory.md` 或 README 一节）— 配置键、`memory` 工具、`refresh`
 
-- [ ] **Step 1: 手测清单写入计划备注并执行**
+- [x] **Step 1: 手测清单写入计划备注并执行**
   - 旧 `- ` MEMORY 可加载并在首次写入后变 `§`
   - 超限工具错误含 usage
   - `session_search` 仍可用
   - 无品牌禁用名泄漏（`rg -i hermes` 仅 spec 外链）
 
-- [ ] **Step 2: `cargo test -p memory -p agent -p tools`**
+- [x] **Step 2: `cargo test -p memory -p agent -p tools`**
 
-- [ ] **Step 3: Commit docs**
+- [x] **Step 3: Commit docs**
 
 ---
 
@@ -440,10 +440,10 @@ pub struct PendingMemoryWrite {
 
 路径：`{base}/pending/memory/{id}.json`
 
-- [ ] **Step 2: `config.write_approval == true` 时** `handle_memory_op` / dreaming / review → `enqueue` 不改 live  
-- [ ] **Step 3: `approve(id)` / `reject(id)` / `list_pending()`  
-- [ ] **Step 4: UI 最小列表  
-- [ ] **Step 5: Tests + commit**
+- [x] **Step 2: `config.write_approval == true` 时** `handle_memory_op` / dreaming → `enqueue` 不改 live  
+- [x] **Step 3: `approve(id)` / `reject(id)` / `list_pending()`  
+- [x] **Step 4: Tauri 命令**（`list_pending_memory_writes` / approve / reject；UI 留待设置页）  
+- [x] **Step 5: Tests + commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'

@@ -14,7 +14,7 @@ async fn register_all_includes_panel_tools() {
         .map(|t| t.name.as_str())
         .collect();
     for expected in [
-        "memory_add",
+        "memory",
         "session_search",
         "cron_add",
         "image_gen",

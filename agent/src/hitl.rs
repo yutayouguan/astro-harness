@@ -272,9 +272,7 @@ pub fn is_interactive_tool(name: &str) -> bool {
 pub fn is_exclusive_tool(name: &str) -> bool {
     matches!(
         name,
-        "memory_add"
-            | "memory_replace"
-            | "memory_remove"
+        "memory"
             | "session_search"
             | "create_agent"
             | "delegate"

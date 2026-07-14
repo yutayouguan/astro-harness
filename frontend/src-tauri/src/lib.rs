@@ -12,6 +12,7 @@ mod fs_ops;
 mod grpc;
 mod keystore;
 mod litellm_meta;
+mod memory_commands;
 mod model_meta;
 mod providers_commands;
 mod skills_commands;
@@ -238,6 +239,10 @@ pub fn run() {
             commands::interrupt_resume,
             commands::generate_image,
             commands::query_memory,
+            memory_commands::refresh_memory,
+            memory_commands::list_pending_memory_writes,
+            memory_commands::approve_pending_memory_write,
+            memory_commands::reject_pending_memory_write,
             commands::get_chat_history,
             commands::fork_chat_session,
             commands::list_recent_sessions,

@@ -6,10 +6,13 @@
 
 pub mod agent;
 pub mod artifacts;
+pub mod config;
 pub mod cron;
 pub mod dreaming;
 pub mod infra;
 pub mod orchestration;
+pub mod pending;
+pub mod review;
 pub mod session;
 pub mod usage;
 pub mod delegate_async;
@@ -24,8 +27,23 @@ pub(crate) mod test_env;
 pub use agent::agent_icons;
 pub use agent::auto_icon;
 pub use agent::files;
+pub use agent::scan::scan_memory_content;
+pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::tools_enabled;
 pub use agent::workspace;
+
+pub use config::{
+    load_auxiliary_config, load_memory_config, resolve_auxiliary, AuxiliaryConfig, AuxiliaryKind,
+    AuxiliaryRoute, MemoryConfig,
+};
+pub use pending::{
+    approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,
+    pending_dir, reject as reject_pending_memory, PendingMemoryWrite,
+};
+pub use review::{
+    apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,
+    ReviewSuggestion, REVIEW_SYSTEM_PROMPT,
+};
 
 pub use session::manager;
 pub use session::message_db;

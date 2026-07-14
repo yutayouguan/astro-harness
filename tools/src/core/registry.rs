@@ -190,7 +190,7 @@ mod tests {
     fn disabled_toolset_excluded_from_schemas_for_api() {
         let mut reg = ToolRegistry::new();
         reg.register(ToolEntry {
-            name: "memory_add".into(),
+            name: "memory".into(),
             toolset: "memory".into(),
             description: "add".into(),
             schema: serde_json::json!({"type": "object", "properties": {}}),
@@ -211,9 +211,9 @@ mod tests {
         reg.set_enabled_map(enabled);
 
         let names = schema_names(&reg);
-        assert!(!names.iter().any(|n| n == "memory_add"));
+        assert!(!names.iter().any(|n| n == "memory"));
         assert!(names.iter().any(|n| n == "cron_list"));
-        assert!(!reg.is_tool_allowed("memory_add"));
+        assert!(!reg.is_tool_allowed("memory"));
         assert!(reg.is_tool_allowed("cron_list"));
     }
 
@@ -234,7 +234,7 @@ mod tests {
 
         let mut reg = ToolRegistry::new();
         reg.register(ToolEntry {
-            name: "memory_add".into(),
+            name: "memory".into(),
             toolset: "memory".into(),
             description: "add".into(),
             schema: serde_json::json!({"type": "object", "properties": {}}),
@@ -252,14 +252,14 @@ mod tests {
 
         // 全局仍启用 memory
         reg.reload_enabled_from_disk(None);
-        assert!(reg.is_tool_allowed("memory_add"));
+        assert!(reg.is_tool_allowed("memory"));
 
         // 非默认 agent 读取专属配置
         reg.reload_enabled_from_disk(Some("alice"));
-        assert!(!reg.is_tool_allowed("memory_add"));
+        assert!(!reg.is_tool_allowed("memory"));
         assert!(reg.is_tool_allowed("cron_list"));
         let names = schema_names(&reg);
-        assert!(!names.iter().any(|n| n == "memory_add"));
+        assert!(!names.iter().any(|n| n == "memory"));
         assert!(names.iter().any(|n| n == "cron_list"));
     }
 }

@@ -77,7 +77,7 @@ impl PromptBuilder {
     pub fn with_daily_memory(mut self, daily_content: &str) -> Self {
         if !daily_content.is_empty() {
             self.layers.push(format!(
-                "# 今日记忆（mermaid/日文件）\n{}",
+                "# 今日记忆（流水截断）\n{}",
                 daily_content
             ));
         }
