@@ -4,7 +4,7 @@
 //! - 子 Agent 使用独立预算，默认来自配置 `delegation.child_max_iterations`（50）
 //! - `code_exec` 等廉价轮次可通过 [`IterationBudget::refund`] 退还
 
-use std::sync::Mutex;
+use std::cell::Cell;
 
 /// 父 Agent / 主会话默认工具迭代上限（对齐 Hermes `max_iterations`）。
 pub const DEFAULT_MAX_ITERATIONS: usize = 90;
@@ -12,11 +12,13 @@ pub const DEFAULT_MAX_ITERATIONS: usize = 90;
 /// 子 Agent 默认独立迭代上限（对齐 Hermes `delegation.max_iterations`）。
 pub const DEFAULT_CHILD_MAX_ITERATIONS: usize = 50;
 
-/// 线程安全的迭代计数器：每轮 API/工具迭代 `consume` 一次，必要时 `refund`。
+/// 单任务迭代计数器：每轮 API/工具迭代 `consume` 一次，必要时 `refund`。
+///
+/// 仅在单个 async 任务内顺序访问，不需要跨线程同步，故用 `Cell` 而非 `Mutex`。
 #[derive(Debug)]
 pub struct IterationBudget {
     max_total: usize,
-    used: Mutex<usize>,
+    used: Cell<usize>,
 }
 
 impl IterationBudget {
@@ -24,7 +26,7 @@ impl IterationBudget {
     pub fn new(max_total: usize) -> Self {
         Self {
             max_total,
-            used: Mutex::new(0),
+            used: Cell::new(0),
         }
     }
 
@@ -35,29 +37,29 @@ impl IterationBudget {
 
     /// 已消耗次数。
     pub fn used(&self) -> usize {
-        *self.used.lock().unwrap_or_else(|e| e.into_inner())
+        self.used.get()
     }
 
     /// 剩余次数。
     pub fn remaining(&self) -> usize {
-        self.max_total.saturating_sub(self.used())
+        self.max_total.saturating_sub(self.used.get())
     }
 
     /// 尝试消耗 1 次；已满则返回 `false`。
     pub fn consume(&self) -> bool {
-        let mut used = self.used.lock().unwrap_or_else(|e| e.into_inner());
-        if *used >= self.max_total {
+        let cur = self.used.get();
+        if cur >= self.max_total {
             return false;
         }
-        *used += 1;
+        self.used.set(cur + 1);
         true
     }
 
     /// 退还 1 次（例如仅 `code_exec` 的轮次，或压缩后重试）。
     pub fn refund(&self) {
-        let mut used = self.used.lock().unwrap_or_else(|e| e.into_inner());
-        if *used > 0 {
-            *used -= 1;
+        let cur = self.used.get();
+        if cur > 0 {
+            self.used.set(cur - 1);
         }
     }
 }

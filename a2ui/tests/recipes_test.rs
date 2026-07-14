@@ -49,13 +49,13 @@ fn form_surface_validates() {
 
 #[test]
 fn chip_list_surface_validates() {
-    let chips = vec!["Rust".into(), "A2UI".into(), "Astro".into()];
+    let chips: Vec<&str> = vec!["Rust", "A2UI", "Astro"];
     let ops = build_chip_list_surface("surf-chips1", "技术栈", &chips);
     validate_operations(&ops).unwrap();
 }
 
 #[test]
 fn chip_list_empty_validates() {
-    let ops = build_chip_list_surface("surf-chips-empty", "标签", &[]);
+    let ops = build_chip_list_surface("surf-chips-empty", "标签", &[] as &[&str]);
     validate_operations(&ops).unwrap();
 }

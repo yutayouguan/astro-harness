@@ -400,8 +400,6 @@ impl StreamingPrompt for ProviderStreamer {
     }
 }
 
-/// 当 Agent 配置 `multi_turn == 0` 时使用的默认工具迭代上限（Hermes `max_iterations`）。
-const DEFAULT_MAX_ROUNDS: usize = crate::iteration_budget::DEFAULT_MAX_ITERATIONS;
 
 /// 预算耗尽后注入的总结提示（对齐 Hermes `handle_max_iterations`）。
 const MAX_ITERATIONS_SUMMARY_PROMPT: &str = "\
@@ -636,7 +634,7 @@ async fn run_multi_turn_stream_inner(
         let agent = session.lock().await;
         let n = agent.multi_turn();
         if n == 0 {
-            DEFAULT_MAX_ROUNDS
+            crate::iteration_budget::DEFAULT_MAX_ITERATIONS
         } else {
             n
         }
@@ -644,13 +642,17 @@ async fn run_multi_turn_stream_inner(
     let budget = crate::iteration_budget::IterationBudget::new(max_rounds);
     // 工具循环结束后是否需要无工具强制总结（预算耗尽且尚无自然语言终答）
     let need_summary;
+    // 原始迭代计数（不受 refund 影响），防止 code_exec-only 反复 refund 导致净预算永不耗尽。
+    // 硬上限 = max_rounds × 2，超过即视为预算耗尽。
+    let mut raw_rounds: usize = 0;
 
     // 整次 run 累积时间线，供每轮 assistant 落盘写入 reasoning_details
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
 
     loop {
-        if !budget.consume() {
+        raw_rounds += 1;
+        if raw_rounds > max_rounds.saturating_mul(2) || !budget.consume() {
             need_summary = true;
             break;
         }
@@ -1190,15 +1192,9 @@ async fn run_max_iterations_summary(
         return SummaryOutcome::Aborted;
     }
 
-    {
-        let mut agent = session.lock().await;
-        agent
-            .session_messages
-            .push(Message::user(MAX_ITERATIONS_SUMMARY_PROMPT));
-    }
-
     let history = {
-        let agent = session.lock().await;
+        let mut agent = session.lock().await;
+        agent.session_messages.push(Message::user(MAX_ITERATIONS_SUMMARY_PROMPT));
         agent.session_messages.clone()
     };
 
@@ -1299,6 +1295,17 @@ async fn run_max_iterations_summary(
                 if let Some(u) = round_usage {
                     total_usage.add_assign(u);
                     *saw_usage = true;
+                }
+                // 持久化已积累的部分回复，保证历史连贯
+                if !full_response.is_empty() {
+                    let mut agent = session.lock().await;
+                    let details = Some(timeline.reasoning_details_snapshot());
+                    let _ = agent.record_assistant_message_with_tools(
+                        &full_response,
+                        None,
+                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                        details,
+                    );
                 }
                 return SummaryOutcome::Failed(format!(
                     "迭代预算已用尽（{used}/{max_total}），总结流式失败: {err}"

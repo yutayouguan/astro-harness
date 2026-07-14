@@ -2,12 +2,11 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use uuid::Uuid;
 
 use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
+use crate::builtins::present_shared::dispatch_present;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PresentResultArgs {
@@ -33,8 +32,8 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
     let parsed: PresentResultArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("present_result 参数无效: {e}"))?;
 
-    let title = parsed.title.trim();
-    let body = parsed.body.trim();
+    let title = parsed.title.trim().to_string();
+    let body = parsed.body.trim().to_string();
     if title.is_empty() {
         anyhow::bail!("present_result 需要 title");
     }
@@ -46,17 +45,10 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
         .status
         .as_deref()
         .filter(|s| matches!(*s, "success" | "warn" | "danger" | "info"))
-        .unwrap_or("success");
+        .unwrap_or("success")
+        .to_string();
 
-    let surface_id = format!("result-{}", Uuid::new_v4());
-    let ops = a2ui::templates::build_result_surface(&surface_id, title, body, status);
-    a2ui::validate_operations(&ops)
-        .map_err(|e| anyhow::anyhow!("present_result A2UI 无效: {e}"))?;
-
-    Ok(json!({
-        "astro_ui": true,
-        "summary": title,
-        "operations": ops,
+    dispatch_present("result", &title, |sid| {
+        a2ui::templates::build_result_surface(sid, &title, &body, &status)
     })
-    .to_string())
 }

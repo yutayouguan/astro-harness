@@ -453,17 +453,18 @@ pub fn build_form_surface(
     fields: &[FormField<'_>],
     submit_label: &str,
 ) -> Vec<Value> {
-    let mut col_children: Vec<String> = vec!["title".into(), "divider".into()];
+    // Internal IDs are prefixed with "_" so they can never collide with caller-supplied field IDs.
+    let mut col_children: Vec<String> = vec!["_title".into(), "_divider".into()];
     for f in fields {
         col_children.push(f.id.to_string());
     }
-    col_children.push("submit".into());
+    col_children.push("_submit".into());
 
     let mut components = vec![
-        json!({ "id": "root", "component": "Card", "child": "col" }),
-        json!({ "id": "col", "component": "Column", "children": col_children }),
-        json!({ "id": "title", "component": "Text", "text": title, "variant": "h2" }),
-        json!({ "id": "divider", "component": "Divider" }),
+        json!({ "id": "_root", "component": "Card", "child": "_col" }),
+        json!({ "id": "_col", "component": "Column", "children": col_children }),
+        json!({ "id": "_title", "component": "Text", "text": title, "variant": "h2" }),
+        json!({ "id": "_divider", "component": "Divider" }),
     ];
 
     for f in fields {
@@ -484,15 +485,15 @@ pub fn build_form_surface(
         components.push(comp);
     }
 
-    components.push(json!({ "id": "spacer", "component": "Spacer" }));
+    components.push(json!({ "id": "_spacer", "component": "Spacer" }));
     components.push(json!({
-        "id": "submit",
+        "id": "_submit",
         "component": "Button",
-        "child": "submit_label",
+        "child": "_submit_label",
         "variant": "primary",
         "action": { "event": { "name": "submit" } }
     }));
-    components.push(json!({ "id": "submit_label", "component": "Text", "text": submit_label }));
+    components.push(json!({ "id": "_submit_label", "component": "Text", "text": submit_label }));
 
     vec![
         json!({
@@ -507,7 +508,11 @@ pub fn build_form_surface(
 }
 
 /// Build a tag/chip-list surface — title row + horizontal row of Chip labels.
-pub fn build_chip_list_surface(surface_id: &str, title: &str, chips: &[String]) -> Vec<Value> {
+pub fn build_chip_list_surface(
+    surface_id: &str,
+    title: &str,
+    chips: &[impl AsRef<str>],
+) -> Vec<Value> {
     let chip_ids: Vec<String> =
         chips.iter().enumerate().map(|(i, _)| format!("chip{i}")).collect();
 
@@ -526,7 +531,8 @@ pub fn build_chip_list_surface(surface_id: &str, title: &str, chips: &[String]) 
     if !chips.is_empty() {
         components.push(json!({ "id": "row", "component": "Row", "children": chip_ids }));
         for (i, chip) in chips.iter().enumerate() {
-            components.push(json!({ "id": format!("chip{i}"), "component": "Chip", "text": chip }));
+            let label = chip.as_ref();
+            components.push(json!({ "id": format!("chip{i}"), "component": "Chip", "text": label }));
         }
     }
 

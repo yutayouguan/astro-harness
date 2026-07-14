@@ -2,12 +2,11 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use uuid::Uuid;
 
 use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
+use crate::builtins::present_shared::dispatch_present;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MetricItem {
@@ -38,7 +37,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
     let parsed: PresentMetricsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("present_metrics 参数无效: {e}"))?;
 
-    let title = parsed.title.trim();
+    let title = parsed.title.trim().to_string();
     if title.is_empty() {
         anyhow::bail!("present_metrics 需要 title");
     }
@@ -46,21 +45,13 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
         anyhow::bail!("present_metrics 需要至少一条 metric");
     }
 
-    let surface_id = format!("metrics-{}", Uuid::new_v4());
     let rows: Vec<(String, String, Option<String>)> = parsed
         .metrics
         .iter()
         .map(|m| (m.label.clone(), m.value.clone(), m.hint.clone()))
         .collect();
 
-    let ops = a2ui::templates::build_metrics_surface(&surface_id, title, &rows);
-    a2ui::validate_operations(&ops)
-        .map_err(|e| anyhow::anyhow!("present_metrics A2UI 无效: {e}"))?;
-
-    Ok(json!({
-        "astro_ui": true,
-        "summary": title,
-        "operations": ops,
+    dispatch_present("metrics", &title, |sid| {
+        a2ui::templates::build_metrics_surface(sid, &title, &rows)
     })
-    .to_string())
 }
