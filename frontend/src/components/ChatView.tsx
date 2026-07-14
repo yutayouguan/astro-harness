@@ -79,6 +79,7 @@ import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
 import { useMcpTools } from "../hooks/useMcpTools";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
+import A2UISurfaceCard from "./A2UISurfaceCard";
 import { formatElapsedSec } from "../lib/elapsedSec";
 import {
   buildMentionCandidates,
@@ -1118,11 +1119,22 @@ export default function ChatView({
                               (s) => s.messageId === seg.id,
                             );
                             if (!surface) return null;
+                            if (surface.interrupts && surface.interrupts.length > 0) {
+                              return (
+                                <A2UIRenderer
+                                  key={seg.id}
+                                  operations={surface.operations}
+                                  disabled={surface.status !== "active"}
+                                  onAction={(name, context) =>
+                                    onUiAction?.(m.id, name, context)
+                                  }
+                                />
+                              );
+                            }
                             return (
-                              <A2UIRenderer
+                              <A2UISurfaceCard
                                 key={seg.id}
-                                operations={surface.operations}
-                                disabled={surface.status !== "active"}
+                                surface={surface}
                                 onAction={(name, context) =>
                                   onUiAction?.(m.id, name, context)
                                 }
@@ -1147,16 +1159,26 @@ export default function ChatView({
                             />
                           )}
                           {m.uiSurfaces && m.uiSurfaces.length > 0
-                            ? m.uiSurfaces.map((surface) => (
-                                <A2UIRenderer
-                                  key={surface.messageId}
-                                  operations={surface.operations}
-                                  disabled={surface.status !== "active"}
-                                  onAction={(name, context) =>
-                                    onUiAction?.(m.id, name, context)
-                                  }
-                                />
-                              ))
+                            ? m.uiSurfaces.map((surface) =>
+                                surface.interrupts && surface.interrupts.length > 0 ? (
+                                  <A2UIRenderer
+                                    key={surface.messageId}
+                                    operations={surface.operations}
+                                    disabled={surface.status !== "active"}
+                                    onAction={(name, context) =>
+                                      onUiAction?.(m.id, name, context)
+                                    }
+                                  />
+                                ) : (
+                                  <A2UISurfaceCard
+                                    key={surface.messageId}
+                                    surface={surface}
+                                    onAction={(name, context) =>
+                                      onUiAction?.(m.id, name, context)
+                                    }
+                                  />
+                                ),
+                              )
                             : null}
                         </>
                       )}
