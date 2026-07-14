@@ -7,7 +7,9 @@ use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 use crate::grpc::{endpoint_url, default_grpc_address};
-use crate::providers_commands::{resolve_image_gen_targets, ImageGenTarget};
+use crate::providers_commands::{
+    resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
+};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -469,8 +471,23 @@ pub async fn start_chat(
         _ => "high".to_string(),
     };
 
-    // 从 providers.json + keyring 解析密钥与 endpoint
-    let (api_key, base_url) = resolve_chat_credentials(provider_id.as_deref(), &provider)?;
+    // 从 providers.json + keyring 解析 primary 与聊天后备链
+    let targets = resolve_chat_targets(provider_id.as_deref(), &provider, &model)?;
+    let primary = targets
+        .first()
+        .cloned()
+        .ok_or_else(|| "无可用聊天目标".to_string())?;
+    let chat_fallbacks: Vec<proto::ChatFallbackTarget> = targets
+        .iter()
+        .skip(1)
+        .map(|t| proto::ChatFallbackTarget {
+            provider: t.backend_id.clone(),
+            model: t.model.clone(),
+            api_key: t.api_key.clone(),
+            base_url: t.base_url.clone(),
+            provider_id: t.provider_id.clone(),
+        })
+        .collect();
     let image_targets = resolve_image_gen_targets().unwrap_or_default();
 
     let app2 = app.clone();
@@ -484,12 +501,13 @@ pub async fn start_chat(
             &grpc_address,
             &sid2,
             &merged,
-            &provider,
-            &model,
+            &primary.backend_id,
+            &primary.model,
             use_memory,
-            &api_key,
-            &base_url,
+            &primary.api_key,
+            &primary.base_url,
             &image_targets,
+            &chat_fallbacks,
             thinking_enabled,
             &reasoning_effort,
             &resume_json,
@@ -585,29 +603,17 @@ pub async fn interrupt_resume(
     Ok(())
 }
 
-/// 从请求/钥匙串/环境解析聊天 Provider 凭证。
+/// 从请求/钥匙串/环境解析聊天 Provider 凭证（仅 primary；完整链见 `resolve_chat_targets`）。
+#[allow(dead_code)] // cron / 其它入口仍可复用；主聊已走 resolve_chat_targets
 fn resolve_chat_credentials(
     provider_id: Option<&str>,
     backend_id: &str,
 ) -> Result<(String, String), String> {
-    use crate::providers_commands::{find_provider, resolve_api_key, ProviderConfig};
-
-    let cfg: ProviderConfig = if let Some(id) = provider_id.filter(|s| !s.is_empty()) {
-        find_provider(id)?
-    } else {
-        // 回退：按 backend_id 找第一个启用的
-        crate::providers_commands::find_provider_by_backend(backend_id)?
-    };
-
-    let (has, _source, _env, key) = resolve_api_key(&cfg);
-    if cfg.kind.requires_api_key() && !has {
-        return Err(format!(
-            "未配置 API Key。请在「模型提供商」中为 {} 保存密钥。",
-            cfg.display_name
-        ));
-    }
-
-    Ok((key.unwrap_or_default(), cfg.endpoint))
+    let targets = resolve_chat_targets(provider_id, backend_id, "")?;
+    let t = targets
+        .first()
+        .ok_or_else(|| "无可用聊天目标".to_string())?;
+    Ok((t.api_key.clone(), t.base_url.clone()))
 }
 
 /// 执行本地流式聊天主循环并向窗口发事件。
@@ -623,6 +629,7 @@ async fn run_chat_stream(
     api_key: &str,
     base_url: &str,
     image_targets: &[ImageGenTarget],
+    chat_fallbacks: &[proto::ChatFallbackTarget],
     thinking_enabled: bool,
     reasoning_effort: &str,
     resume_json: &str,
@@ -656,7 +663,7 @@ async fn run_chat_stream(
             thinking_enabled,
             reasoning_effort: reasoning_effort.to_string(),
             resume_json: resume_json.to_string(),
-            chat_fallbacks: vec![],
+            chat_fallbacks: chat_fallbacks.to_vec(),
         })
         .await
         .map_err(|e| e.to_string())?

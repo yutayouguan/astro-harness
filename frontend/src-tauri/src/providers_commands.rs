@@ -217,6 +217,14 @@ impl ProviderKind {
     }
 }
 
+/// 单条聊天后备引用（写入 `providers.json`）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ProviderFallbackEntry {
+    pub provider_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub id: String,
@@ -225,6 +233,9 @@ pub struct ProviderConfig {
     pub endpoint: String,
     pub model: String,
     pub enabled: bool,
+    /// 显式聊天后备链（最多 3；老配置无此字段时默认空）。
+    #[serde(default)]
+    pub fallback: Vec<ProviderFallbackEntry>,
 }
 
 impl ProviderConfig {
@@ -237,6 +248,7 @@ impl ProviderConfig {
             enabled: true,
             id: format!("prov-{}", uuid::Uuid::new_v4().simple()),
             kind,
+            fallback: Vec::new(),
         }
     }
 
@@ -378,6 +390,8 @@ pub struct ProviderConfigDto {
     pub backend_id: String,
     /// 官方获取 API Key 的链接（若有）
     pub official_key_url: Option<String>,
+    /// 聊天后备链（显式配置）
+    pub fallback: Vec<ProviderFallbackEntry>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -394,6 +408,8 @@ pub struct ProviderConfigInput {
     pub endpoint: String,
     pub model: String,
     pub enabled: bool,
+    #[serde(default)]
+    pub fallback: Vec<ProviderFallbackEntry>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -555,6 +571,7 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         env_key_name,
         backend_id: p.kind.backend_id().to_string(),
         official_key_url: p.kind.official_key_url().map(str::to_string),
+        fallback: p.fallback.clone(),
     }
 }
 
@@ -651,6 +668,12 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             .iter()
             .position(|p| p.id == provider.id)
             .ok_or_else(|| "提供商不存在".to_string())?;
+        let fallback = provider
+            .fallback
+            .into_iter()
+            .take(common::MAX_CHAT_FALLBACKS)
+            .filter(|e| !e.provider_id.trim().is_empty())
+            .collect();
         s.providers[idx] = ProviderConfig {
             id: provider.id,
             kind,
@@ -658,6 +681,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             endpoint: provider.endpoint,
             model: provider.model,
             enabled: provider.enabled,
+            fallback,
         };
         Ok(to_state_dto(s))
     })
@@ -814,6 +838,80 @@ pub(crate) fn find_provider_by_backend(backend_id: &str) -> Result<ProviderConfi
             })
             .ok_or_else(|| format!("未找到 backend_id={backend_id} 的提供商"))
     })
+}
+
+/// 从 providers.json + keyring 展开主目标与聊天后备链（含 primary）。
+///
+/// - primary：与 `resolve_chat_credentials` 相同的查找规则；`model` 空则用条目默认模型
+/// - fallback：跳过禁用、无 Key（ollama 除外）、缺失条目；去重与上限由 `expand_chat_targets` 负责
+pub fn resolve_chat_targets(
+    primary_provider_id: Option<&str>,
+    backend_hint: &str,
+    model: &str,
+) -> Result<Vec<common::ChatTarget>, String> {
+    let cfg: ProviderConfig = if let Some(id) = primary_provider_id.filter(|s| !s.is_empty()) {
+        find_provider(id)?
+    } else {
+        find_provider_by_backend(backend_hint)?
+    };
+
+    let (has, _source, _env, key) = resolve_api_key(&cfg);
+    if cfg.kind.requires_api_key() && !has {
+        return Err(format!(
+            "未配置 API Key。请在「模型提供商」中为 {} 保存密钥。",
+            cfg.display_name
+        ));
+    }
+
+    let model = {
+        let trimmed = model.trim();
+        if trimmed.is_empty() {
+            cfg.model.clone()
+        } else {
+            trimmed.to_string()
+        }
+    };
+
+    let primary = common::ChatTarget {
+        provider_id: cfg.id.clone(),
+        backend_id: cfg.kind.backend_id().to_string(),
+        model,
+        api_key: key.unwrap_or_default(),
+        base_url: cfg.endpoint.clone(),
+    };
+
+    let refs: Vec<common::FallbackRef> = cfg
+        .fallback
+        .iter()
+        .map(|e| common::FallbackRef {
+            provider_id: e.provider_id.clone(),
+            model: e.model.clone(),
+        })
+        .collect();
+
+    let chain = common::expand_chat_targets(&primary, &refs, |id| {
+        let Ok(p) = find_provider(id) else {
+            return None;
+        };
+        if !p.enabled {
+            return None;
+        }
+        let (_has, _source, _env, key) = resolve_api_key(&p);
+        let api_key = key.unwrap_or_default();
+        let allow_empty_key = p.kind.backend_id() == "ollama";
+        if api_key.trim().is_empty() && !allow_empty_key {
+            return None;
+        }
+        Some(common::ChatTarget {
+            provider_id: p.id.clone(),
+            backend_id: p.kind.backend_id().to_string(),
+            model: p.model.clone(),
+            api_key,
+            base_url: p.endpoint.clone(),
+        })
+    });
+
+    Ok(chain)
 }
 
 /// 图片生成目标（已开启 + 有 API Key 的 Google / OpenAI）
@@ -1423,8 +1521,22 @@ mod tests {
         let raw = r#"{"id":"x","kind":"minmax","display_name":"M","endpoint":"https://api.minimax.io/v1","model":"MiniMax-M2.5","enabled":false}"#;
         let p: ProviderConfig = serde_json::from_str(raw).expect("minmax alias");
         assert_eq!(p.kind, ProviderKind::Minimax);
+        assert!(p.fallback.is_empty());
         let out = serde_json::to_value(&p).unwrap();
         assert_eq!(out["kind"], "minimax");
+    }
+
+    #[test]
+    fn serde_providers_without_fallback_loads() {
+        let raw = r#"{"id":"p1","kind":"openai","display_name":"O","endpoint":"https://api.openai.com/v1","model":"gpt","enabled":true}"#;
+        let p: ProviderConfig = serde_json::from_str(raw).expect("no fallback field");
+        assert!(p.fallback.is_empty());
+
+        let with_fb = r#"{"id":"p1","kind":"openai","display_name":"O","endpoint":"https://api.openai.com/v1","model":"gpt","enabled":true,"fallback":[{"provider_id":"p2","model":"m"}]}"#;
+        let p2: ProviderConfig = serde_json::from_str(with_fb).expect("with fallback");
+        assert_eq!(p2.fallback.len(), 1);
+        assert_eq!(p2.fallback[0].provider_id, "p2");
+        assert_eq!(p2.fallback[0].model.as_deref(), Some("m"));
     }
 
     #[test]
@@ -1448,6 +1560,7 @@ mod tests {
                     endpoint: ProviderKind::Moonshot.default_endpoint().into(),
                     model: "kimi-k2-0711-preview".into(),
                     enabled: false,
+                    fallback: vec![],
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -1456,6 +1569,7 @@ mod tests {
                     endpoint: ProviderKind::Volcengine.default_endpoint().into(),
                     model: "doubao-pro-32k".into(),
                     enabled: false,
+                    fallback: vec![],
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -1464,6 +1578,7 @@ mod tests {
                     endpoint: "https://api.minimax.chat/v1".into(),
                     model: "MiniMax-M2.5".into(),
                     enabled: false,
+                    fallback: vec![],
                 },
             ],
         };
