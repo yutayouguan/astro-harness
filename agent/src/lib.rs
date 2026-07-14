@@ -5,6 +5,8 @@
 
 /// 声明式 Agent 构建与规格导出。
 pub mod builder;
+/// 聊天主模型故障切换（首包前 fallback）。
+pub mod chat_fallback;
 /// 静态/动态上下文分层，用于 system prompt 组装。
 pub mod context;
 /// 定时任务执行逻辑。
@@ -42,6 +44,11 @@ pub mod timeline;
 
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
+/// 聊天 fallback 分类与流式尝试入口。
+pub use chat_fallback::{
+    is_failover_eligible, probe_or_wrap_pre_content, try_stream_completion_with_fallback,
+    ActiveTargetMeta,
+};
 /// 上下文类型 re-export，便于调用方直接 `use agent::StaticContext`。
 pub use context::{DynamicContext, StaticContext};
 /// 钩子 trait 与常用实现 re-export。
@@ -64,7 +71,9 @@ pub use messages::to_provider_messages;
 pub use providers::{PauseControl, Usage};
 /// 流式 API re-export。
 pub use streaming::{
-    stream_multi_turn, stream_multi_turn_with_hitl, MultiTurnStreamItem, ProviderStreamer,
+    chat_target_from_provider_config, run_multi_turn_stream, run_multi_turn_stream_from_provider,
+    stream_multi_turn, stream_multi_turn_from_provider, stream_multi_turn_with_hitl,
+    targets_and_registry_from_primary, MultiTurnStreamItem, ProviderStreamer,
     StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
 };
 /// 工具注册表与条目定义（实现位于 `tools` crate）。

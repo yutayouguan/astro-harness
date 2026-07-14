@@ -108,6 +108,8 @@ pub struct ToolContext<'a> {
     pub chat_provider: String,
     /// 当前聊天模型名称。
     pub chat_model: String,
+    /// 含 primary 的聊天 fallback 链，供 `delegate` 下传给子 Agent。
+    pub chat_targets: Vec<common::ChatTarget>,
 }
 
 impl<'a> ToolContext<'a> {

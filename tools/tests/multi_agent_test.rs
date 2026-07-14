@@ -22,6 +22,7 @@ async fn multi_agent_queues_orchestration() {
         chat_base_url: String::new(),
         chat_provider: "openai".into(),
         chat_model: "test".into(),
+        chat_targets: vec![],
     };
 
     let out = tools::dispatch_tool(
@@ -69,6 +70,7 @@ async fn multi_agent_rejects_empty_agents() {
         chat_base_url: String::new(),
         chat_provider: "openai".into(),
         chat_model: "test".into(),
+        chat_targets: vec![],
     };
     let err = tools::dispatch_tool(
         |_| true,

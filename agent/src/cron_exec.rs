@@ -8,6 +8,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
+use common::ChatTarget;
 use futures::StreamExt;
 use memory::{
     cron_db_path, cron_dir, default_memory_dir, CronJob, CronRunDb, MemoryManager, NewCronRun,
@@ -17,6 +18,7 @@ use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
 use uuid::Uuid;
 
+use crate::chat_fallback::try_stream_completion_with_fallback;
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
 use crate::messages::to_provider_messages;
 use crate::usage_record::apply_llm_usage_dual_write;
@@ -24,6 +26,7 @@ use crate::usage_record::apply_llm_usage_dual_write;
 /// 执行定时任务所需的 LLM 凭据与路由信息。
 ///
 /// 字段允许部分为空字符串，执行路径会在 Provider 层回落到默认 model 或内置 base URL。
+/// `targets` 为空时由 primary 四字段合成单目标；非空时走 chat fallback 链。
 pub struct CronExecCredentials {
     /// Provider 注册名（如 `openai`）；空白时 `run_provider_loop` 使用 `openai`。
     pub provider: String,
@@ -33,6 +36,37 @@ pub struct CronExecCredentials {
     pub api_key: String,
     /// 自定义 API 基址；空白时由 Provider 默认配置决定。
     pub base_url: String,
+    /// 含 primary 的聊天目标链；空则从四字段合成。
+    pub targets: Vec<ChatTarget>,
+}
+
+impl CronExecCredentials {
+    /// 有效聊天目标：优先 `targets`，否则由四字段合成单元素链。
+    fn effective_targets(&self, registry: &ProviderRegistry) -> Vec<ChatTarget> {
+        if !self.targets.is_empty() {
+            return self.targets.clone();
+        }
+        let backend = if self.provider.trim().is_empty() {
+            "openai".to_string()
+        } else {
+            self.provider.clone()
+        };
+        let model = if self.model.trim().is_empty() {
+            registry
+                .get(&backend)
+                .map(|p| p.default_model().to_string())
+                .unwrap_or_default()
+        } else {
+            self.model.clone()
+        };
+        vec![ChatTarget {
+            provider_id: backend.clone(),
+            backend_id: backend,
+            model,
+            api_key: self.api_key.clone(),
+            base_url: self.base_url.clone(),
+        }]
+    }
 }
 
 /// 使用默认 cron 数据根目录执行一条定时任务。
@@ -250,6 +284,9 @@ async fn run_agent_job(
         &creds.api_key,
         &creds.base_url,
     );
+    let registry = ProviderRegistry::new();
+    let targets = creds.effective_targets(&registry);
+    agent.set_chat_targets(targets);
 
     let turn_result = agent.run_turn(&job.task, "cron").await?;
     match turn_result {
@@ -268,7 +305,7 @@ async fn run_agent_job(
 /// 直接与 LLM Provider 进行最多 5 轮流式对话，并在模型返回工具调用时同步执行工具。
 ///
 /// 每轮重新加载 MCP/工具注册表，将 `system_prompt` 与会话消息转为 Provider 格式后
-/// `chat_stream`；无工具调用则返回最终助手文本。
+/// 经 [`try_stream_completion_with_fallback`] 调用；无工具调用则返回最终助手文本。
 ///
 /// # 错误
 ///
@@ -279,30 +316,8 @@ async fn run_provider_loop(
     initial_system_prompt: &str,
 ) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
-    let provider_name = if creds.provider.trim().is_empty() {
-        "openai".to_string()
-    } else {
-        creds.provider.clone()
-    };
-
-    let provider = providers
-        .get(&provider_name)
-        .ok_or_else(|| anyhow::anyhow!("未知 Provider: {provider_name}"))?;
-
-    let config = ProviderConfig {
-        model: if creds.model.trim().is_empty() {
-            provider.default_model().to_string()
-        } else {
-            creds.model.clone()
-        },
-        api_key: creds.api_key.clone(),
-        base_url: if creds.base_url.trim().is_empty() {
-            None
-        } else {
-            Some(creds.base_url.clone())
-        },
-        ..ProviderConfig::default()
-    };
+    let targets = creds.effective_targets(&providers);
+    let base_config = ProviderConfig::default();
 
     let mut system_prompt = initial_system_prompt.to_string();
     let mut last_response = String::new();
@@ -313,10 +328,24 @@ async fn run_provider_loop(
         let messages = to_provider_messages(&system_prompt, &agent.session_messages);
         let tools = agent.tool_registry().schemas_for_api();
 
-        let mut stream = provider
-            .chat_stream(messages, tools, &config)
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let (mut stream, _meta) = try_stream_completion_with_fallback(
+            &targets,
+            &providers,
+            messages,
+            tools,
+            &base_config,
+            |from, to, err| {
+                tracing::warn!(
+                    from_backend = %from.backend_id,
+                    from_model = %from.model,
+                    to_backend = %to.backend_id,
+                    to_model = %to.model,
+                    error = %err,
+                    "cron chat failover: switching target before first content"
+                );
+            },
+        )
+        .await?;
 
         let mut full_response = String::new();
         // 与 streaming.rs 一致：同轮内覆盖取最后一次 usage，跨轮累加

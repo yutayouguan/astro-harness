@@ -28,6 +28,15 @@ service AstroService {
 // 空请求/响应占位。
 message Empty {}
 
+// 聊天后备目标（不含 primary；primary 仍用 ChatRequest 字段 3/4/7/8）。
+message ChatFallbackTarget {
+  string provider = 1;   // backend_id（registry）
+  string model = 2;
+  string api_key = 3;
+  string base_url = 4;
+  string provider_id = 5; // providers.json 条目 id，可空
+}
+
 // 发起一轮聊天所需的会话、模型与工具/图片凭证。
 message ChatRequest {
   string session_id = 1;   // 空则服务端生成新 UUID
@@ -54,6 +63,8 @@ message ChatRequest {
   string reasoning_effort = 18;
   // JSON array of InterruptResumeItem；session 有 pending interrupt 时必填
   string resume_json = 19;
+  // 不含 primary 的聊天后备链（最多 3；由前端 expand 后下传）
+  repeated ChatFallbackTarget chat_fallbacks = 20;
 }
 
 // Chat 流控制动作。

@@ -28,6 +28,7 @@ uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 proto = { path = "../../proto" }
+common = { path = "../../common" }
 memory = { path = "../../memory" }
 agent = { path = "../../agent" }
 tools = { path = "../../tools" }

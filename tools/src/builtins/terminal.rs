@@ -106,6 +106,7 @@ mod tests {
             chat_base_url: String::new(),
             chat_provider: String::new(),
             chat_model: String::new(),
+            chat_targets: vec![],
         };
 
         let n = common::MAX_TOOL_RESULT_BYTES + 8 * 1024;

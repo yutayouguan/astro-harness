@@ -60,6 +60,7 @@ async fn file_ops_write_and_read() {
         chat_base_url: String::new(),
         chat_provider: String::new(),
         chat_model: String::new(),
+        chat_targets: vec![],
     };
 
     let w = tools::dispatch_tool(
