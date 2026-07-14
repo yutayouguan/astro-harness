@@ -17,6 +17,7 @@ memory:
   memory_char_limit: 2200       # MEMORY.md 字符上限（默认 2200）
   user_char_limit: 1375         # USER.md 字符上限（默认 1375）
   write_approval: false         # 开启后 MEMORY/USER 写入进入 pending 审批队列
+  auto_refresh_on_update: true  # live 记忆更新后是否自动 refresh 当前会话 snapshot
   daily_prompt_max_chars: 1024  # 今日日记注入 prompt 的最大字符数
 ```
 
@@ -26,7 +27,8 @@ memory:
 | `user_profile_enabled` | `true` | 关闭后不注入 USER 档案；对称控制 USER 写入 |
 | `memory_char_limit` | `2200` | 条目合计字符上限（含 `§` 分隔开销）；超限**报错**，不做 FIFO 淘汰 |
 | `user_char_limit` | `1375` | 同上，作用于 USER.md |
-| `write_approval` | `false` | 开启后 MEMORY/USER 写入（工具 / 入梦 / 未来 review）进入 pending 队列，批准后才改 live |
+| `write_approval` | `false` | 开启后 MEMORY/USER 写入（工具 / 入梦 / review）进入 pending 队列，批准后才改 live |
+| `auto_refresh_on_update` | `true` | 收到 live `memory_updated` SessionEvent 时自动 `refresh_memory` 当前聊天会话 |
 | `daily_prompt_max_chars` | `1024` | 每轮可读盘的今日日记截断上限；**不属于**长期记忆 |
 
 P2 辅助模型与回合后 review 见下文「辅助模型 / background review」。
@@ -54,9 +56,34 @@ auxiliary:
 
 **background review**（已挂入 backend Chat 流）：
 
-1. Chat 流收到 `Done` → fire-and-forget `maybe_run_background_review`
+1. Chat 流收到 `Done` → **立即结束流**，同时 fire-and-forget `maybe_run_background_review`（**不再**在 Chat 流上挂起等待 review）
 2. 仅当 `background_review_enabled: true`
 3. `build_review_digest` → 辅助模型 → `parse_review_llm_output` → `apply_review_suggestions`（尊重 `write_approval`）
+4. 完成后经 gRPC **`SubscribeSessionEvents`** 推送 `memory_updated`（桌面端 Toast / 角标 / 可选自动 refresh）
+
+### SessionEvents（P3）
+
+独立于 Chat 流的会话副作用通道：
+
+| 事件 | 何时 |
+|------|------|
+| `memory_updated` | review / approve / dreaming 写 live，或写入仅入 pending（`live_written=false`） |
+| `pending_changed` | pending 入队 / 批准 / 拒绝后的队列计数 |
+
+- 回合内工具 **live** 写入仍走 Chat `memory_update`（时间线活动卡），**不**发 SessionEvent  
+- 工具 **入 pending** 只走 SessionEvents（避免双通道刷屏）  
+- Tauri 订阅 `SubscribeSessionEvents`，并转发为前端 `session_event`；本机 approve/reject/dreaming 亦可直接 emit
+
+### Slash `/memory`
+
+| 命令 | 行为 |
+|------|------|
+| `/memory` | 打开记忆面板 |
+| `/memory list` | Toast 列出 pending 摘要 |
+| `/memory approve` / `approve all` | 批准全部 |
+| `/memory approve <id>` | 批准单条 |
+| `/memory reject` / `reject all` / `reject <id>` | 拒绝 |
+| `/memory refresh` | 强制刷新当前会话 frozen snapshot |
 
 ### `write_approval` pending 队列
 
@@ -71,12 +98,16 @@ auxiliary:
 
 | 命令 | 作用 |
 |------|------|
-| `get_memory_settings` | 读取 `write_approval` / `background_review_enabled` |
+| `get_memory_settings` | 读取 `write_approval` / `background_review_enabled` / `auto_refresh_on_update` |
 | `set_memory_write_approval(enabled)` | 写入 `memory.write_approval`（保留其它 yaml 键） |
+| `set_memory_auto_refresh(enabled)` | 写入 `memory.auto_refresh_on_update` |
 | `set_background_review_enabled(enabled)` | 写入 `auxiliary.background_review_enabled` |
 | `list_pending_memory_writes` | 列出 pending |
 | `approve_pending_memory_write(id)` | 批准并写 live |
 | `reject_pending_memory_write(id)` | 拒绝并丢弃 |
+| `approve_all_pending_memory_writes` | 批准全部 |
+| `reject_all_pending_memory_writes` | 拒绝全部 |
+| `set_session_events_filter(sessionId?, agentId?)` | 更新 SessionEvents 订阅过滤 |
 
 ---
 

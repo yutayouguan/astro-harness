@@ -1,7 +1,7 @@
 # Memory P3：SessionEvents 通知与 Slash 审批
 
 **日期:** 2026-07-14  
-**状态:** 待用户确认  
+**状态:** 已批准（实现中 / 分支 `feat/memory-p3-session-events`）  
 **范围:** 独立会话事件流、记忆更新 Toast、pending 角标、「刷新进对话」、可配自动 refresh、完整 `/memory` 子命令  
 **前置:** [`2026-07-14-memory-hermes-alignment-design.md`](./2026-07-14-memory-hermes-alignment-design.md)（P1/P2 已落地）
 
