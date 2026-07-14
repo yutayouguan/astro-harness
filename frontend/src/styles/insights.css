@@ -1,7 +1,11 @@
 .insights-panel {
   flex: 1;
+  min-width: 0;
   min-height: 0;
+  /* overflow-y:auto 会把 overflow-x 一并算成 auto；锁住横滑，避免触控板把整页拖偏 */
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-x: none;
   padding: 4px 2px 16px;
   display: flex;
   flex-direction: column;
@@ -9,6 +13,11 @@
   --tone: var(--tone-amber);
   --tone-soft: var(--tone-amber-soft);
   --tone-glow: var(--tone-amber-glow);
+}
+
+.insights-panel > .panel-agent-toolbar {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .insights-period-tabs {
@@ -93,6 +102,7 @@
   grid-template-columns: 1.4fr 1fr;
   gap: 12px;
   align-items: stretch;
+  min-width: 0;
 }
 
 @media (max-width: 1000px) {
@@ -107,6 +117,7 @@
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 80%, transparent);
   min-height: 220px;
+  min-width: 0;
 }
 
 .insights-models-chart .insights-chart {
@@ -182,6 +193,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .insights-chart-heading {
@@ -241,12 +253,15 @@
   display: flex;
   align-items: flex-end;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   min-height: 140px;
   padding: 16px 12px 8px;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 75%, transparent);
   overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .insights-bar-col {
@@ -323,6 +338,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .insights-ranks-tools {
@@ -577,7 +593,10 @@ html.dark .insights-view-tab.active {
 /* —— View mode tabs（模型用量 | 工具技能 | Agent 协作 | Tracing） —— */
 .insights-view-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
   padding: 4px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
@@ -632,6 +651,7 @@ html.dark .insights-view-tab.active {
   grid-template-columns: 1.15fr 1fr;
   gap: 14px;
   align-items: stretch;
+  min-width: 0;
   min-height: 420px;
   flex: 1;
 }
@@ -936,6 +956,7 @@ html.dark .insights-collab-label {
   grid-template-columns: 1fr 1.4fr;
   gap: 14px;
   align-items: stretch;
+  min-width: 0;
   min-height: 420px;
   flex: 1;
 }
