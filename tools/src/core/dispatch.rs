@@ -55,6 +55,7 @@ pub async fn dispatch_tool(
         "code_exec" => crate::code_exec::dispatch(ctx, args).await,
         "vision" => crate::vision::dispatch(ctx, args).await,
         "tts" => crate::tts::dispatch(ctx, args).await,
+        "music" => crate::music::dispatch(ctx, args).await,
         "skills" => crate::skills_tool::dispatch(ctx, args),
         "clarify" => crate::clarify::dispatch(ctx, args),
         "confirm" => crate::confirm::dispatch(ctx, args),
