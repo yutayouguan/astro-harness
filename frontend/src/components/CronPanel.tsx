@@ -37,6 +37,7 @@ import {
   type ProviderOpt,
 } from "./CreateCronDialog";
 import { SelectMenu } from "./SelectMenu";
+import { EmptyIllustration } from "../illustrations";
 
 /** 定时任务 DTO（与 Rust cron 序列化对齐） */
 export type CronJobDto = {
@@ -1015,10 +1016,13 @@ export default function CronPanel({
     }
     if (!historyLoading && historyRuns.length === 0) {
       return (
-        <div className="cron-empty cron-empty--history">
-          <p className="cron-empty-title">{t("cron.history.empty")}</p>
-          <p className="cron-empty-hint">{t("cron.history.emptyHint")}</p>
-        </div>
+        <EmptyIllustration
+          scene="cron"
+          size="sm"
+          className="cron-empty cron-empty--history"
+          title={t("cron.history.empty")}
+          hint={t("cron.history.emptyHint")}
+        />
       );
     }
     return (
@@ -1203,17 +1207,12 @@ export default function CronPanel({
         )}
 
         {activeTab === "jobs" && !loading && filteredJobs.length === 0 && !error && (
-          <div className="cron-empty">
-            <div className="cron-empty-orb" aria-hidden />
-            <span className="cron-empty-icon" aria-hidden>
-              <span className="cron-empty-lens" />
-              <span className="cron-empty-glyph">
-                <IconCronGlyph />
-              </span>
-            </span>
-            <p className="cron-empty-title">{t("cron.empty")}</p>
-            <p className="cron-empty-hint">{t("cron.emptyHint")}</p>
-          </div>
+          <EmptyIllustration
+            scene="cron"
+            className="cron-empty"
+            title={t("cron.empty")}
+            hint={t("cron.emptyHint")}
+          />
         )}
 
         {activeTab === "jobs" && filteredJobs.length > 0 && (

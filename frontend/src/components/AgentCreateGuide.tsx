@@ -14,6 +14,11 @@ import {
 } from "../lib/lucideAgentIcons";
 import { IconSparkles, IconSkills, IconWorkspace } from "./NavIcons";
 import LucideIconPicker from "./LucideIconPicker";
+import {
+  CoverPicker,
+  coverIllustrationToSvgBase64,
+  type CoverId,
+} from "../illustrations";
 
 /** 创建 Agent 引导卡片入参 */
 type Props = {
@@ -52,9 +57,11 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
   const { t } = useI18n();
   const [emoji, setEmoji] = useState<SlotState>({ previewUrl: null, fileName: null });
   const [avatar, setAvatar] = useState<SlotState>({ previewUrl: null, fileName: null });
+  const [coverId, setCoverId] = useState<CoverId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lucideOpen, setLucideOpen] = useState(false);
   const [lucideBusy, setLucideBusy] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
   const emojiInputRef = useRef<HTMLInputElement | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -79,6 +86,7 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
       if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
       return { previewUrl, fileName: file.name, lucideId: null };
     });
+    if (kind === "avatar") setCoverId(null);
     if (!isTauri()) return;
     try {
       const dataBase64 = await fileToBase64(file);
@@ -98,6 +106,7 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
       if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
       return { previewUrl: null, fileName: null, lucideId: null };
     });
+    if (kind === "avatar") setCoverId(null);
     if (!isTauri()) return;
     try {
       await invoke("clear_pending_agent_icon", { kind });
@@ -142,10 +151,40 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     }
   };
 
+  const pickCover = async (id: CoverId) => {
+    setCoverBusy(true);
+    setError(null);
+    try {
+      const dataBase64 = await coverIllustrationToSvgBase64(id);
+      const binary = atob(dataBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "image/svg+xml" });
+      const previewUrl = URL.createObjectURL(blob);
+      const fileName = `avatar-cover-${id}.svg`;
+      setCoverId(id);
+      setAvatar((prev) => {
+        if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return { previewUrl, fileName, lucideId: null };
+      });
+      if (isTauri()) {
+        await invoke("set_pending_agent_icon", {
+          kind: "avatar",
+          dataBase64,
+          fileName,
+        });
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
   // 名称变化且用户未手动选图标时，自动预选 Lucide（与 create_agent 后端策略一致）
   useEffect(() => {
     const name = previewName.trim();
-    if (!name || emoji.lucideId || emoji.fileName || avatar.fileName || lucideBusy) {
+    if (!name || emoji.lucideId || emoji.fileName || lucideBusy) {
       return;
     }
     const suggested = suggestLucideAgentIcon(name);
@@ -318,6 +357,19 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
             <p className="chat-agent-icons-title">{t("chat.agentIconsTitle")}</p>
             <p className="chat-agent-icons-sub">{t("chat.agentIconsSub")}</p>
           </div>
+
+          <div className="chat-agent-covers">
+            <div className="chat-agent-covers-head">
+              <p className="chat-agent-covers-title">{t("chat.agentCoversTitle")}</p>
+              <p className="chat-agent-covers-sub">{t("chat.agentCoversSub")}</p>
+            </div>
+            <CoverPicker
+              value={coverId}
+              busy={coverBusy}
+              onChange={(id) => void pickCover(id)}
+            />
+          </div>
+
           <div className="chat-agent-icons-grid">
             {renderSlot(
               "emoji",

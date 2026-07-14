@@ -37,6 +37,7 @@ import ExpandableSearch from "./ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceBatchBar from "./FileSpaceBatchBar";
 import FileSpaceConfirm from "./FileSpaceConfirm";
+import { EmptyIllustration } from "../illustrations";
 import { useFileSelection } from "../hooks/useFileSelection";
 import { useAgentsChanged } from "../lib/agentsChanged";
 import type { AgentInfo } from "../types/agent";
@@ -847,7 +848,11 @@ export default function FileSpacePanel({
             {loading && <div className="fs-status">{t("filespace.search")}…</div>}
             {error && <div className="fs-error">{error}</div>}
             {!loading && !error && groups.length === 0 && (
-              <div className="fs-empty">{t("filespace.empty")}</div>
+              <EmptyIllustration
+                scene="files"
+                className="fs-empty-illust"
+                title={t("filespace.empty")}
+              />
             )}
 
             {layout === "grid" ? (

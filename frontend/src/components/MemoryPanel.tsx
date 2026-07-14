@@ -15,6 +15,7 @@ import { useAgentsChanged } from "../lib/agentsChanged";
 import AnimatedSwitch from "./AnimatedSwitch";
 import AgentAvatar from "./AgentAvatar";
 import { IconWsBackChat } from "./WorkspaceIcons";
+import { EmptyIllustration } from "../illustrations";
 import type { AgentInfo } from "../types/agent";
 
 /** 记忆面板入参 */
@@ -117,46 +118,6 @@ function IconMoon(props: { width?: number; height?: number }) {
 /** 长期记忆列表 */
 function IconList(props: { width?: number; height?: number }) {
   return <List size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
-}
-
-/** 日记空状态插画 */
-function IconDiaryEmpty(props: { width?: number; height?: number }) {
-  const w = props.width ?? 88;
-  const h = props.height ?? 88;
-  return (
-    <svg
-      viewBox="0 0 96 96"
-      width={w}
-      height={h}
-      aria-hidden
-      className="mem-empty-svg"
-    >
-      <defs>
-        <linearGradient id="memDiaryCover" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--tone-green, #34d399)" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="var(--tone, #10b981)" stopOpacity="0.82" />
-        </linearGradient>
-      </defs>
-      {/* notebook body */}
-      <rect x="22" y="18" width="48" height="60" rx="6" fill="url(#memDiaryCover)" />
-      <rect x="28" y="24" width="36" height="48" rx="3" fill="rgba(255,255,255,0.92)" />
-      <path
-        d="M34 36h24M34 44h24M34 52h16"
-        stroke="rgba(15,23,42,0.18)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      {/* spine */}
-      <rect x="22" y="18" width="8" height="60" rx="3" fill="rgba(0,0,0,0.12)" />
-      {/* pencil */}
-      <g transform="rotate(-38 62 58)">
-        <rect x="54" y="40" width="8" height="36" rx="2" fill="#fbbf24" />
-        <path d="M54 76h8l-4 8z" fill="#f59e0b" />
-        <rect x="54" y="36" width="8" height="6" rx="1" fill="#e2e8f0" />
-        <path d="M56 36h4v-4a2 2 0 0 0-4 0z" fill="#94a3b8" />
-      </g>
-    </svg>
-  );
 }
 
 /** 编辑 */
@@ -839,8 +800,12 @@ export default function MemoryPanel({ onClose }: Props) {
                     <IconWsBackChat width={28} height={28} />
                   </button>
                 )}
-                <p className="mem-empty-title">{t("memory.pickExpertForDiary")}</p>
-                <p className="mem-empty-sub">{t("memory.pickExpertHint")}</p>
+                <EmptyIllustration
+                  scene="memory"
+                  size="sm"
+                  title={t("memory.pickExpertForDiary")}
+                  hint={t("memory.pickExpertHint")}
+                />
               </div>
             ) : diaryEmpty ? (
               <div className="mem-empty mem-empty-diary">
@@ -854,13 +819,12 @@ export default function MemoryPanel({ onClose }: Props) {
                   >
                     <IconWsBackChat width={28} height={28} />
                   </button>
-                ) : (
-                  <div className="mem-empty-art" aria-hidden>
-                    <IconDiaryEmpty width={96} height={96} />
-                  </div>
-                )}
-                <p className="mem-empty-title">{t("memory.diaryEmptyTitle")}</p>
-                <p className="mem-empty-sub">{t("memory.diaryEmptySub")}</p>
+                ) : null}
+                <EmptyIllustration
+                  scene="memory"
+                  title={t("memory.diaryEmptyTitle")}
+                  hint={t("memory.diaryEmptySub")}
+                />
                 {onClose && (
                   <button type="button" className="mem-cta" onClick={onClose}>
                     {t("memory.goChat")}
@@ -1054,15 +1018,11 @@ export default function MemoryPanel({ onClose }: Props) {
 
             {filterAgentId === ALL_AGENTS ? (
               <div className="mem-empty mem-empty-pick">
-                <div className="mem-empty-orb" aria-hidden />
-                <div className="mem-empty-icon" aria-hidden>
-                  <span className="mem-empty-lens" />
-                  <span className="mem-empty-glyph">
-                    <IconList width={26} height={26} />
-                  </span>
-                </div>
-                <p className="mem-empty-title">{t("memory.pickExpertForMemory")}</p>
-                <p className="mem-empty-sub">{t("memory.pickExpertHint")}</p>
+                <EmptyIllustration
+                  scene="memory"
+                  title={t("memory.pickExpertForMemory")}
+                  hint={t("memory.pickExpertHint")}
+                />
               </div>
             ) : showArchives ? (
               <>

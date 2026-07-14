@@ -1,0 +1,200 @@
+/* 空状态插画 + Agent 封面选择器 */
+
+.astro-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 20px 16px;
+  color: var(--tone, var(--tone-cyan, #06b6d4));
+}
+
+.astro-empty-art {
+  width: 160px;
+  max-width: 72%;
+  line-height: 0;
+}
+
+.astro-empty--sm .astro-empty-art {
+  width: 120px;
+}
+
+.astro-empty--lg .astro-empty-art {
+  width: 200px;
+}
+
+.astro-empty-art svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.astro-empty-title {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.astro-empty-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-mute);
+  max-width: 28ch;
+}
+
+.astro-cover-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.astro-cover-swatch {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--cover-tone, #2563eb) 22%, var(--glass-edge, rgba(15, 23, 42, 0.08)));
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--cover-tone, #2563eb) 10%, transparent);
+  border-radius: 12px;
+  padding: 6px 4px 8px;
+  cursor: pointer;
+  color: var(--cover-tone, #2563eb);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.astro-cover-swatch:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--cover-tone) 42%, transparent);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--cover-tone) 16%, transparent);
+}
+
+.astro-cover-swatch.is-selected {
+  border-color: color-mix(in srgb, var(--cover-tone) 55%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--cover-tone) 28%, transparent),
+    0 8px 16px color-mix(in srgb, var(--cover-tone) 18%, transparent);
+}
+
+.astro-cover-swatch:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.astro-cover-swatch-art {
+  line-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.astro-cover-swatch-art svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.astro-cover-swatch-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--cover-tone) 55%, var(--ink));
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.astro-cover-swatch[data-tone="blue"] { --cover-tone: #2563eb; }
+.astro-cover-swatch[data-tone="purple"] { --cover-tone: #7c3aed; }
+.astro-cover-swatch[data-tone="cyan"] { --cover-tone: #0891b2; }
+.astro-cover-swatch[data-tone="orange"] { --cover-tone: #ea580c; }
+.astro-cover-swatch[data-tone="green"] { --cover-tone: #059669; }
+.astro-cover-swatch[data-tone="rose"] { --cover-tone: #e11d48; }
+.astro-cover-swatch[data-tone="amber"] { --cover-tone: #d97706; }
+.astro-cover-swatch[data-tone="indigo"] { --cover-tone: #4f46e5; }
+
+html[data-theme="dark"] .astro-cover-swatch {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--cover-tone) 14%, transparent);
+}
+
+/* 聊天空欢迎页内嵌插画 */
+.chat-welcome-illust {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: min(220px, 56vw);
+  color: var(--tone-blue, #2563eb);
+  line-height: 0;
+  opacity: 0.92;
+  z-index: 1;
+}
+
+.chat-welcome-illust svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--tone-blue, #2563eb) 18%, transparent));
+}
+
+.chat-agent-covers {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-agent-covers-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-agent-covers-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.chat-agent-covers-sub {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+
+.ws-empty-illust,
+.fs-empty-illust,
+.providers-empty-illust {
+  --tone: var(--tone-purple, #8b5cf6);
+  min-height: 160px;
+}
+
+.fs-empty-illust {
+  --tone: var(--tone-cyan, #06b6d4);
+}
+
+.providers-empty-illust {
+  --tone: var(--tone-blue, #2563eb);
+  margin: 24px auto;
+}
+
+.mem-empty .astro-empty {
+  padding: 8px 12px 4px;
+  --tone: var(--tone-green, #10b981);
+}
+
+.cron-empty.astro-empty {
+  --tone: var(--tone-orange, #ea580c);
+}

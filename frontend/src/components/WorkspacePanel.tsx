@@ -23,6 +23,7 @@ import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceConfirm from "./FileSpaceConfirm";
 import WorkspaceBatchBar from "./WorkspaceBatchBar";
 import WorkspaceEditor from "./WorkspaceEditor";
+import { EmptyIllustration } from "../illustrations";
 import {
   IconWsArrowLeft,
   IconWsArrowUp,
@@ -1139,9 +1140,18 @@ export default function WorkspacePanel({ onClose }: Props) {
             {loadingList ? (
               <p className="ws-muted">{t("workspace.loading")}</p>
             ) : entries.length === 0 ? (
-              <p className="ws-muted">{t("workspace.empty")}</p>
+              <EmptyIllustration
+                scene="workspace"
+                className="ws-empty-illust"
+                title={t("workspace.empty")}
+              />
             ) : filteredEntries.length === 0 ? (
-              <p className="ws-muted">{t("workspace.searchEmpty")}</p>
+              <EmptyIllustration
+                scene="workspace"
+                size="sm"
+                className="ws-empty-illust"
+                title={t("workspace.searchEmpty")}
+              />
             ) : (
               filteredEntries.map((entry) => {
                 const kind = fileKind(entry.name, entry.is_dir);

@@ -2,6 +2,7 @@
 import type { ComponentType, SVGProps } from "react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
+import { IllustEmptyChat } from "../illustrations/art";
 import {
   SolidBolt,
   SolidChat,
@@ -68,6 +69,9 @@ export function ChatWelcome({ onPickCard }: Props) {
       <div className="chat-welcome-hero" aria-hidden>
         <span className="chat-welcome-orb" />
         <span className="chat-welcome-orb chat-welcome-orb--soft" />
+        <div className="chat-welcome-illust">
+          <IllustEmptyChat />
+        </div>
       </div>
       <div className="chat-welcome-copy">
         <p className="chat-welcome-eyebrow">Astro Agent</p>

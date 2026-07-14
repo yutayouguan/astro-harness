@@ -39,6 +39,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { ModelBrandIcon, ProviderBrandIcon } from "./ProviderIcons";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
+import { EmptyIllustration } from "../illustrations";
 import { formatContextWindow } from "../lib/modelCaps";
 import type {
   ModelInfo,
@@ -1420,7 +1421,11 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           </div>
 
           {!selected || !draft ? (
-            <p className="providers-empty">{t("providers.emptySelect")}</p>
+            <EmptyIllustration
+              scene="providers"
+              className="providers-empty-illust"
+              title={t("providers.emptySelect")}
+            />
           ) : (
             <div className="providers-form">
               <div className="providers-form-head">
