@@ -1,17 +1,16 @@
-/** 窗口缩放 / 还原辅助。 */
+/** 窗口缩放 / 还原辅助（物理外框 + 工作区铺满）。 */
 import {
   currentMonitor,
   getCurrentWindow,
-  LogicalPosition,
-  LogicalSize,
+  PhysicalPosition,
+  PhysicalSize,
   primaryMonitor,
 } from "@tauri-apps/api/window";
-import { syncWebviewToWindow, syncWebviewToWindowSoon } from "./webviewSync";
 
 type Rect = { x: number; y: number; w: number; h: number };
 
-const SNAP_EPS = 12;
-const DURATION_MS = 280;
+const SNAP_EPS = 24;
+const DURATION_MS = 220;
 
 type ZoomStore = Window & { __astroPrevRect?: Rect };
 
@@ -23,66 +22,27 @@ function near(a: number, b: number, eps = SNAP_EPS) {
   return Math.abs(a - b) <= eps;
 }
 
-async function toLogicalRect(physical: {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}): Promise<Rect> {
-  const factor = await getCurrentWindow().scaleFactor();
+async function currentOuterRect(): Promise<Rect> {
+  const win = getCurrentWindow();
+  const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
+  return { x: pos.x, y: pos.y, w: size.width, h: size.height };
+}
+
+async function workAreaOuterRect(): Promise<Rect | null> {
+  const mon = (await currentMonitor()) ?? (await primaryMonitor());
+  if (!mon) return null;
   return {
-    x: physical.x / factor,
-    y: physical.y / factor,
-    w: physical.width / factor,
-    h: physical.height / factor,
+    x: mon.workArea.position.x,
+    y: mon.workArea.position.y,
+    w: mon.workArea.size.width,
+    h: mon.workArea.size.height,
   };
 }
 
 /**
- * 逻辑外框矩形（位置用 outer；尺寸换算成 setSize 所需的 inner）。
- * Overlay 标题栏下 chrome 通常为 0，但显式扣除可避免把外框尺寸喂给 setSize。
+ * 用物理像素逐帧改外框。与已验证的社区方案一致；
+ * WKWebView 贴边由 Rust `on_window_event(Resized)` 强制保证。
  */
-async function currentFrameRect(): Promise<Rect> {
-  const win = getCurrentWindow();
-  const [pos, outer, inner] = await Promise.all([
-    win.outerPosition(),
-    win.outerSize(),
-    win.innerSize(),
-  ]);
-  const factor = await win.scaleFactor();
-  const chromeW = Math.max(0, (outer.width - inner.width) / factor);
-  const chromeH = Math.max(0, (outer.height - inner.height) / factor);
-  return {
-    x: pos.x / factor,
-    y: pos.y / factor,
-    w: outer.width / factor - chromeW,
-    h: outer.height / factor - chromeH,
-  };
-}
-
-async function workAreaInnerRect(): Promise<Rect | null> {
-  const mon = (await currentMonitor()) ?? (await primaryMonitor());
-  if (!mon) return null;
-  const win = getCurrentWindow();
-  const [outer, inner] = await Promise.all([win.outerSize(), win.innerSize()]);
-  const factor = await win.scaleFactor();
-  const chromeW = Math.max(0, (outer.width - inner.width) / factor);
-  const chromeH = Math.max(0, (outer.height - inner.height) / factor);
-  const wa = await toLogicalRect({
-    x: mon.workArea.position.x,
-    y: mon.workArea.position.y,
-    width: mon.workArea.size.width,
-    height: mon.workArea.size.height,
-  });
-  return {
-    x: wa.x,
-    y: wa.y,
-    w: Math.max(1, wa.w - chromeW),
-    h: Math.max(1, wa.h - chromeH),
-  };
-}
-
-/** 逐帧插值位置+尺寸；每帧强制 webview 跟窗，避免 macOS 白边。 */
 async function animateRect(from: Rect, to: Rect, durationMs = DURATION_MS) {
   const win = getCurrentWindow();
   const start = performance.now();
@@ -97,21 +57,23 @@ async function animateRect(from: Rect, to: Rect, durationMs = DURATION_MS) {
       const e = easeOutCubic(t);
       const x = Math.round(from.x + (to.x - from.x) * e);
       const y = Math.round(from.y + (to.y - from.y) * e);
-      const w = Math.round(from.w + (to.w - from.w) * e);
-      const h = Math.round(from.h + (to.h - from.h) * e);
-      await Promise.all([
-        win.setPosition(new LogicalPosition(x, y)),
-        win.setSize(new LogicalSize(Math.max(1, w), Math.max(1, h))),
-      ]);
-      await syncWebviewToWindow();
-      if (t >= 1) break;
+      const w = Math.max(1, Math.round(from.w + (to.w - from.w) * e));
+      const h = Math.max(1, Math.round(from.h + (to.h - from.h) * e));
+      // 不等待 IPC：并发排队会把帧序打乱；fire-and-forget 更跟手
+      void win.setPosition(new PhysicalPosition(x, y));
+      void win.setSize(new PhysicalSize(w, h));
+      if (t >= 1) {
+        await Promise.all([
+          win.setPosition(new PhysicalPosition(to.x, to.y)),
+          win.setSize(new PhysicalSize(to.w, to.h)),
+        ]);
+        break;
+      }
     }
   } finally {
-    syncWebviewToWindowSoon();
     window.setTimeout(() => {
       document.documentElement.classList.remove("zooming");
-      void syncWebviewToWindow();
-    }, 50);
+    }, 40);
   }
 }
 
@@ -123,23 +85,21 @@ export async function zoomOrRestore(optionKey: boolean) {
   const win = getCurrentWindow();
   if (optionKey) {
     await win.toggleMaximize();
-    syncWebviewToWindowSoon();
     return;
   }
 
-  const wa = await workAreaInnerRect();
+  const wa = await workAreaOuterRect();
   if (!wa) {
     await win.toggleMaximize();
-    syncWebviewToWindowSoon();
     return;
   }
 
-  const current = await currentFrameRect();
+  const current = await currentOuterRect();
   const nearWorkArea =
     near(current.x, wa.x) &&
     near(current.y, wa.y) &&
-    near(current.w, wa.w, 20) &&
-    near(current.h, wa.h, 20);
+    near(current.w, wa.w, 40) &&
+    near(current.h, wa.h, 40);
 
   const store = window as unknown as ZoomStore;
   if (nearWorkArea && store.__astroPrevRect) {

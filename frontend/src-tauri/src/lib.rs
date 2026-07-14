@@ -154,10 +154,21 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> 
     Ok(())
 }
 
-/// macOS：将窗口背景设为全透明，由 WebView CSS 负责视觉。
+/// AppKit 矩形（与 `NSRect`/`CGRect` 内存布局一致）。
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NsRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+/// macOS：透明化窗与 WKWebView 背景，并为 WebView 开启随 contentView 伸缩。
 #[cfg(target_os = "macos")]
 fn make_window_transparent(win: &tauri::WebviewWindow) {
-    use objc::runtime::{Class, Object, BOOL, NO, YES};
+    use objc::runtime::{Class, Object, NO, YES};
     use objc::{msg_send, sel, sel_impl};
 
     if let Ok(ns_window) = win.ns_window() {
@@ -167,7 +178,6 @@ fn make_window_transparent(win: &tauri::WebviewWindow) {
                 msg_send![Class::get("NSColor").unwrap(), clearColor];
             let _: () = msg_send![ns_window, setOpaque: NO];
             let _: () = msg_send![ns_window, setBackgroundColor: clear];
-            // decorations: true 时保留系统阴影
 
             let content_view: *mut Object = msg_send![ns_window, contentView];
             if content_view.is_null() {
@@ -182,35 +192,92 @@ fn make_window_transparent(win: &tauri::WebviewWindow) {
                 let _: () = msg_send![layer, setOpaque: NO];
             }
 
-            // 只处理直接子视图（WKWebView），避免闪烁
-            let subviews: *mut Object = msg_send![content_view, subviews];
-            if subviews.is_null() {
-                return;
-            }
-            let count: usize = msg_send![subviews, count];
-            for i in 0..count {
-                let child: *mut Object = msg_send![subviews, objectAtIndex: i];
-                if child.is_null() {
-                    continue;
-                }
-                let responds: BOOL =
-                    msg_send![child, respondsToSelector: sel!(setDrawsBackground:)];
-                if responds == YES {
-                    let _: () = msg_send![child, setDrawsBackground: NO];
-                }
-                let responds: BOOL = msg_send![child, respondsToSelector: sel!(setOpaque:)];
-                if responds == YES {
-                    let _: () = msg_send![child, setOpaque: NO];
-                }
-                let _: () = msg_send![child, setWantsLayer: YES];
-                let child_layer: *mut Object = msg_send![child, layer];
-                if !child_layer.is_null() {
-                    let cg: *mut Object = msg_send![clear, CGColor];
-                    let _: () = msg_send![child_layer, setBackgroundColor: cg];
-                    let _: () = msg_send![child_layer, setOpaque: NO];
-                }
-            }
+            sync_webview_frame_to_content(content_view, clear);
         }
+    }
+}
+
+/// 把 WKWebView 撑满 contentView，并设置 Width/Height sizable（否则放大后会留白边）。
+#[cfg(target_os = "macos")]
+unsafe fn sync_webview_frame_to_content(
+    content_view: *mut objc::runtime::Object,
+    clear: *mut objc::runtime::Object,
+) {
+    use objc::runtime::{Object, BOOL, NO, YES};
+    use objc::{msg_send, sel, sel_impl};
+
+    let subviews: *mut Object = msg_send![content_view, subviews];
+    if subviews.is_null() {
+        return;
+    }
+    let bounds: NsRect = msg_send![content_view, bounds];
+    // NSViewWidthSizable (2) | NSViewHeightSizable (16)
+    let flexible: usize = 2 | 16;
+    let count: usize = msg_send![subviews, count];
+    for i in 0..count {
+        let child: *mut Object = msg_send![subviews, objectAtIndex: i];
+        if child.is_null() {
+            continue;
+        }
+        let responds: BOOL =
+            msg_send![child, respondsToSelector: sel!(setDrawsBackground:)];
+        if responds == YES {
+            let _: () = msg_send![child, setDrawsBackground: NO];
+        }
+        let responds: BOOL = msg_send![child, respondsToSelector: sel!(setOpaque:)];
+        if responds == YES {
+            let _: () = msg_send![child, setOpaque: NO];
+        }
+        let _: () = msg_send![child, setWantsLayer: YES];
+        let child_layer: *mut Object = msg_send![child, layer];
+        if !child_layer.is_null() {
+            let cg: *mut Object = msg_send![clear, CGColor];
+            let _: () = msg_send![child_layer, setBackgroundColor: cg];
+            let _: () = msg_send![child_layer, setOpaque: NO];
+        }
+        let _: () = msg_send![child, setAutoresizingMask: flexible];
+        let _: () = msg_send![child, setFrame: bounds];
+    }
+}
+
+/// 在窗口尺寸变化后把 WKWebView 重新贴满 contentView。
+#[cfg(target_os = "macos")]
+fn sync_macos_webview_on_resize(window: &tauri::Window) {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+
+    let Ok(ns_window) = window.ns_window() else {
+        return;
+    };
+    unsafe {
+        let ns_window = ns_window as *mut Object;
+        let content_view: *mut Object = msg_send![ns_window, contentView];
+        if content_view.is_null() {
+            return;
+        }
+        let clear: *mut Object =
+            msg_send![Class::get("NSColor").unwrap(), clearColor];
+        sync_webview_frame_to_content(content_view, clear);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn sync_macos_webview_window(win: &tauri::WebviewWindow) {
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+
+    let Ok(ns_window) = win.ns_window() else {
+        return;
+    };
+    unsafe {
+        let ns_window = ns_window as *mut Object;
+        let content_view: *mut Object = msg_send![ns_window, contentView];
+        if content_view.is_null() {
+            return;
+        }
+        let clear: *mut Object =
+            msg_send![Class::get("NSColor").unwrap(), clearColor];
+        sync_webview_frame_to_content(content_view, clear);
     }
 }
 
@@ -233,6 +300,23 @@ pub fn run() {
                     let _ = win.unminimize();
                     let _ = win.set_focus();
                 }
+            }
+        })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::WindowEvent;
+                if matches!(
+                    event,
+                    WindowEvent::Resized(_)
+                        | WindowEvent::ScaleFactorChanged { .. }
+                ) {
+                    sync_macos_webview_on_resize(window);
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (window, event);
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -360,7 +444,10 @@ pub fn run() {
             let _ = window.as_ref().set_auto_resize(true);
 
             #[cfg(target_os = "macos")]
-            make_window_transparent(&window);
+            {
+                make_window_transparent(&window);
+                sync_macos_webview_window(&window);
+            }
 
             Ok(())
         })
