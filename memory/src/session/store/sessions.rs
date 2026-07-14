@@ -63,7 +63,7 @@ impl SessionStore {
         Ok(())
     }
 
-    /// 标记会话结束（幂等：已 ended 且 reason 相同则 Ok）。
+    /// 标记会话结束；会话须存在。重复调用会覆盖 ended_at / end_reason。
     pub fn end_session(&self, id: &str, end_reason: &str) -> Result<()> {
         if self.get_session(id)?.is_none() {
             anyhow::bail!("end_session: session not found");
