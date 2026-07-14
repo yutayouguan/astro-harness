@@ -20,21 +20,37 @@ pub use names::*;
 pub use outcome::{HookOutcome, HookPayload};
 pub use plugin::PluginHookBus;
 pub use shell::{load_shell_runner, ShellHookRunner};
-pub use ui::{install_recording, install_ui_timeline, UiHookEvent};
+pub use ui::{install_recording, install_ui_timeline, UiHookEvent, UiTimelineSlot};
 
 use std::sync::Arc;
 
 /// 进程级钩子运行时：三套体系的聚合句柄。
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct HookRuntime {
     pub plugin: Arc<PluginHookBus>,
     pub gateway: Arc<GatewayHookRegistry>,
     pub shell: Arc<std::sync::Mutex<ShellHookRunner>>,
+    /// 进程 plugin bus 上的 UI 时间线槽（每轮 chat 热替换 sender）。
+    pub ui_slot: UiTimelineSlot,
+}
+
+impl Default for HookRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HookRuntime {
     pub fn new() -> Self {
-        Self::default()
+        let plugin = Arc::new(PluginHookBus::new());
+        let ui_slot = UiTimelineSlot::new();
+        ui_slot.install(&plugin);
+        Self {
+            plugin,
+            gateway: Arc::new(GatewayHookRegistry::default()),
+            shell: Arc::new(std::sync::Mutex::new(ShellHookRunner::default())),
+            ui_slot,
+        }
     }
 
     /// 从数据根加载 config + 发现 gateway 清单。

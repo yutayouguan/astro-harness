@@ -24,7 +24,7 @@ use serde_json::Value;
 use tools::{dispatch_tool, register_all, ToolContext, ToolEntry, ToolRegistry};
 
 use crate::context::{DynamicContext, StaticContext};
-use crate::hooks::{CancelSignal, NoopHooks, PromptHooks};
+use crate::hooks::CancelSignal;
 use crate::prompt_builder::PromptBuilder;
 
 /// 图像生成凭据与输出目标，供 `image_gen` 等工具使用。
@@ -105,7 +105,6 @@ pub struct AgentLoop {
     chat_model: String,
     /// 含 primary 的聊天 fallback 链（供工具/委派下传）。
     chat_targets: Vec<common::ChatTarget>,
-    hooks: Arc<dyn PromptHooks>,
     /// 进程内插件钩子总线（Block / Modify / Inject）。
     hook_bus: Arc<::hooks::PluginHookBus>,
     /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
@@ -131,7 +130,7 @@ impl AgentLoop {
 
     /// 以指定 session_id 创建 Agent 实例，并注册全部内置工具。
     ///
-    /// 初始化时 `tool_rounds` 与 `current_turn` 均为 0，hooks 默认为 `NoopHooks`。
+    /// 初始化时 `tool_rounds` 与 `current_turn` 均为 0。
     /// 记忆侧使用当前活跃 Agent（[`MemoryManager::new`]）。
     pub fn with_session_id(config: AgentConfig, session_id: String) -> anyhow::Result<Self> {
         let memory = MemoryManager::new(config.memory_dir.clone())?;
@@ -227,7 +226,6 @@ impl AgentLoop {
             chat_provider: String::new(),
             chat_model: String::new(),
             chat_targets: Vec::new(),
-            hooks: Arc::new(NoopHooks),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             pending_inject_context: None,
             cancel: CancelSignal::new(),
@@ -274,28 +272,28 @@ impl AgentLoop {
         self.memory.refresh_memory_snapshot()
     }
 
-    /// 注入生命周期 hooks（工具调用、prompt 构建、轮次结束等回调）。
-    pub fn set_hooks(&mut self, hooks: Arc<dyn PromptHooks>) {
-        self.hooks = hooks;
-    }
-
-    /// 设置插件钩子总线（可与 [`set_hooks`] 并存）。
+    /// 设置插件钩子总线。
     pub fn set_hook_bus(&mut self, bus: Arc<::hooks::PluginHookBus>) {
         self.hook_bus = bus;
     }
 
+    /// 当前插件钩子总线。
     pub fn hook_bus(&self) -> Arc<::hooks::PluginHookBus> {
         Arc::clone(&self.hook_bus)
+    }
+
+    /// 触发插件钩子（UI 观察由进程 `HookRuntime.ui_slot` 承接）。
+    pub fn fire_hook(
+        &self,
+        name: &str,
+        payload: ::hooks::HookPayload,
+    ) -> ::hooks::HookOutcome {
+        self.hook_bus.fire(name, &payload)
     }
 
     /// 取出并清空本轮 `pre_llm_call` 注入上下文。
     pub fn take_inject_context(&mut self) -> Option<String> {
         self.pending_inject_context.take()
-    }
-
-    /// 克隆当前 hooks，供 streaming 在不持有 `AgentLoop` 借用时触发回调。
-    pub fn prompt_hooks(&self) -> Arc<dyn PromptHooks> {
-        Arc::clone(&self.hooks)
     }
 
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
@@ -684,9 +682,9 @@ impl AgentLoop {
         }
         self.increment_tool_round()?;
         // 可拦截：PluginHookBus 优先
-        let bus_out = self.hook_bus.fire(
+        let bus_out = self.fire_hook(
             ::hooks::PRE_TOOL_CALL,
-            &::hooks::HookPayload {
+            ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args.clone()),
@@ -697,30 +695,20 @@ impl AgentLoop {
         let mut args_owned = args.clone();
         match bus_out {
             ::hooks::HookOutcome::Block(reason) => {
-                let msg = format!("[blocked by hook] {reason}");
-                self.hooks
-                    .post_tool_call(name, &msg, &self.cancel)
-                    .await;
-                return Ok(msg);
+                return Ok(format!("[blocked by hook] {reason}"));
             }
             ::hooks::HookOutcome::Modify(v) => {
                 args_owned = v;
             }
             _ => {}
         }
-        self.hooks
-            .pre_tool_call(name, &args_owned, &self.cancel)
-            .await;
         if self.cancel.is_cancelled() {
             anyhow::bail!("prompt cancelled");
         }
         let result = self.dispatch_named_tool(name, &args_owned).await?;
-        self.hooks
-            .post_tool_call(name, &result, &self.cancel)
-            .await;
-        let _ = self.hook_bus.fire(
+        let _ = self.fire_hook(
             ::hooks::POST_TOOL_CALL,
-            &::hooks::HookPayload {
+            ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
                 tool_name: Some(name.into()),
                 tool_result: Some(result.clone()),
@@ -761,12 +749,9 @@ impl AgentLoop {
                 .get("summary")
                 .and_then(|s| s.as_str())
                 .unwrap_or("");
-            self.hooks
-                .subagent_stop(child, summary, &self.cancel)
-                .await;
-            let _ = self.hook_bus.fire(
+            let _ = self.fire_hook(
                 ::hooks::SUBAGENT_STOP,
-                &::hooks::HookPayload {
+                ::hooks::HookPayload {
                     session_id: child.into(),
                     detail: summary.chars().take(200).collect(),
                     ..Default::default()
@@ -888,12 +873,17 @@ impl AgentLoop {
         self.session_messages.push(Message::user(user_message));
         self.increment_turn();
         let system_prompt = self.build_system_prompt();
-        self.hooks
-            .on_session_start(&self.session_id, &self.cancel)
-            .await;
-        let inject = self.hook_bus.fire(
+        let _ = self.fire_hook(
+            ::hooks::ON_SESSION_START,
+            ::hooks::HookPayload {
+                session_id: self.session_id.clone(),
+                detail: format!("session={}", self.session_id),
+                ..Default::default()
+            },
+        );
+        let inject = self.fire_hook(
             ::hooks::PRE_LLM_CALL,
-            &::hooks::HookPayload {
+            ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
                 system_prompt_chars: Some(system_prompt.len()),
                 detail: format!("system_prompt_chars={}", system_prompt.len()),
@@ -903,9 +893,6 @@ impl AgentLoop {
         if let ::hooks::HookOutcome::InjectContext(ctx) = inject {
             self.pending_inject_context = Some(ctx);
         }
-        self.hooks
-            .pre_llm_call(&system_prompt, &self.cancel)
-            .await;
         if self.cancel.is_cancelled() {
             return Ok(TurnResult::Interrupted);
         }

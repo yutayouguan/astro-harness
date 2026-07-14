@@ -54,10 +54,7 @@ pub use chat_fallback::{
 /// 上下文类型 re-export，便于调用方直接 `use agent::StaticContext`。
 pub use context::{DynamicContext, StaticContext};
 /// 钩子 trait 与常用实现 re-export。
-pub use hooks::{
-    CancelSignal, ChannelHooks, HookEvent, NoopHooks, PromptCancelled, PromptHooks,
-    RecordingHooks,
-};
+pub use hooks::{CancelSignal, PromptCancelled};
 /// HITL 闸门 re-export。
 pub use hitl::{
     is_exclusive_tool, is_interactive_tool, HitlGate, HitlRegistry, HitlRequest, HitlResolution,

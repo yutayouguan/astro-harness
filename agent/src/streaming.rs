@@ -665,11 +665,15 @@ async fn run_multi_turn_stream_inner(
         };
 
         {
-            let (hooks, cancel) = {
-                let agent = session.lock().await;
-                (agent.prompt_hooks(), agent.cancel_signal())
-            };
-            hooks.pre_api_request(&cancel).await;
+            let agent = session.lock().await;
+            let sid = agent.session_id().to_string();
+            let _ = agent.fire_hook(
+                ::hooks::PRE_API_REQUEST,
+                ::hooks::HookPayload {
+                    session_id: sid,
+                    ..Default::default()
+                },
+            );
         }
 
         let raw_stream = match streamer
@@ -677,21 +681,31 @@ async fn run_multi_turn_stream_inner(
             .await
         {
             Ok(s) => {
-                let (hooks, cancel) = {
-                    let agent = session.lock().await;
-                    (agent.prompt_hooks(), agent.cancel_signal())
-                };
-                hooks.post_api_request(None, &cancel).await;
+                let agent = session.lock().await;
+                let sid = agent.session_id().to_string();
+                let _ = agent.fire_hook(
+                    ::hooks::POST_API_REQUEST,
+                    ::hooks::HookPayload {
+                        session_id: sid,
+                        ..Default::default()
+                    },
+                );
+                drop(agent);
                 s
             }
             Err(err) => {
-                let (hooks, cancel) = {
-                    let agent = session.lock().await;
-                    (agent.prompt_hooks(), agent.cancel_signal())
-                };
-                hooks
-                    .post_api_request(Some(err.to_string().as_str()), &cancel)
-                    .await;
+                let agent = session.lock().await;
+                let sid = agent.session_id().to_string();
+                let _ = agent.fire_hook(
+                    ::hooks::POST_API_REQUEST,
+                    ::hooks::HookPayload {
+                        session_id: sid,
+                        error: Some(err.to_string()),
+                        detail: format!("error={err}"),
+                        ..Default::default()
+                    },
+                );
+                drop(agent);
                 finish_error(
                     &session,
                     &streamer,
@@ -856,12 +870,20 @@ async fn run_multi_turn_stream_inner(
         }
 
         {
-            let (hooks, cancel) = {
-                let agent = session.lock().await;
-                (agent.prompt_hooks(), agent.cancel_signal())
-            };
-            hooks.post_llm_call(&full_response, &cancel).await;
-            if cancel.is_cancelled() {
+            let agent = session.lock().await;
+            let sid = agent.session_id().to_string();
+            let _ = agent.fire_hook(
+                ::hooks::POST_LLM_CALL,
+                ::hooks::HookPayload {
+                    session_id: sid,
+                    assistant_chars: Some(full_response.len()),
+                    detail: format!("assistant_chars={}", full_response.len()),
+                    ..Default::default()
+                },
+            );
+            let cancelled = agent.cancel_signal().is_cancelled();
+            drop(agent);
+            if cancelled {
                 finish_usage_and_done(
                     &session,
                     &streamer,
@@ -1068,11 +1090,18 @@ async fn run_multi_turn_stream_inner(
     }
 
     {
-        let (hooks, cancel, turn) = {
-            let agent = session.lock().await;
-            (agent.prompt_hooks(), agent.cancel_signal(), agent.session_turn())
-        };
-        hooks.on_session_end(turn, &cancel).await;
+        let agent = session.lock().await;
+        let sid = agent.session_id().to_string();
+        let turn = agent.session_turn();
+        let _ = agent.fire_hook(
+            ::hooks::ON_SESSION_END,
+            ::hooks::HookPayload {
+                session_id: sid,
+                turn: Some(turn),
+                detail: format!("turn={turn}"),
+                ..Default::default()
+            },
+        );
     }
 
     finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;

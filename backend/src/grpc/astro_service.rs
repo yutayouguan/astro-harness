@@ -6,7 +6,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
-use agent::hooks::ChannelHooks;
 use agent::loop_::{AgentLoop, TurnResult};
 use agent::streaming::{
     stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
@@ -100,7 +99,7 @@ impl AstroServiceImpl {
         if let Ok(rt) = AgentRuntimeConfig::load(&self.memory_dir, &agent_id) {
             builder = builder.from_runtime_config(&rt);
         }
-        let (agent, _, _) = builder
+        let (agent, _) = builder
             .build_with_session_id(session_id.to_string())
             .map_err(|e| Status::internal(e.to_string()))?;
         let handle = Arc::new(Mutex::new(agent));
@@ -150,10 +149,14 @@ impl AstroServiceImpl {
         if let Some(handle) = removed {
             let agent = handle.lock().await;
             agent.cancel_signal().cancel();
-            let hooks = agent.prompt_hooks();
-            let cancel = agent.cancel_signal();
-            hooks.on_session_reset(session_id, &cancel).await;
-            hooks.on_session_finalize(session_id, &cancel).await;
+            let bus = agent.hook_bus();
+            let payload = ::hooks::HookPayload {
+                session_id: session_id.to_string(),
+                detail: format!("session={session_id}"),
+                ..Default::default()
+            };
+            let _ = bus.fire(::hooks::ON_SESSION_RESET, &payload);
+            let _ = bus.fire(::hooks::ON_SESSION_FINALIZE, &payload);
         }
     }
 }
@@ -497,13 +500,13 @@ impl AstroService for AstroServiceImpl {
                 },
             );
         }
-        let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel::<::hooks::UiHookEvent>();
         {
             let mut agent = session.lock().await;
             agent.set_image_gen_targets(image_targets);
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
-            agent.set_hooks(Arc::new(ChannelHooks::new(hook_tx)));
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
+            self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }
         let providers = self.providers.clone();
 
@@ -533,6 +536,7 @@ impl AstroService for AstroServiceImpl {
         let memory_dir = self.memory_dir.clone();
         let sid_cleanup = session_id.clone();
         let hook_runtime = Arc::clone(&self.hook_runtime);
+        let ui_slot = self.hook_runtime.ui_slot.clone();
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
         let hook_out = tx.clone();
@@ -541,7 +545,7 @@ impl AstroService for AstroServiceImpl {
                 let _ = hook_out
                     .send(Ok(ChatEvent {
                         payload: Some(proto::chat_event::Payload::Hook(proto::HookEvent {
-                            name: ev.kind,
+                            name: ev.name,
                             detail: ev.detail,
                             outcome: ev.outcome,
                         })),
@@ -552,6 +556,7 @@ impl AstroService for AstroServiceImpl {
 
         tokio::spawn(async move {
             let cleanup = || async {
+                ui_slot.set_tx(None);
                 let mut map = pause_controls.write().await;
                 map.remove(&sid_cleanup);
                 hitl_registry.cancel_and_remove(&sid_cleanup).await;

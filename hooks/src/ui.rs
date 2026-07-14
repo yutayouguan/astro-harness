@@ -1,5 +1,7 @@
 //! 将 Plugin 钩子推送到 UI 时间线（mpsc）。
 
+use std::sync::{Arc, Mutex};
+
 use crate::names::{
     ON_SESSION_END, ON_SESSION_FINALIZE, ON_SESSION_RESET, ON_SESSION_START, POST_API_REQUEST,
     POST_LLM_CALL, POST_TOOL_CALL, PRE_API_REQUEST, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL,
@@ -16,52 +18,97 @@ pub struct UiHookEvent {
     pub outcome: String,
 }
 
+const UI_HOOK_NAMES: &[&str] = &[
+    ON_SESSION_START,
+    PRE_LLM_CALL,
+    PRE_API_REQUEST,
+    POST_API_REQUEST,
+    PRE_TOOL_CALL,
+    POST_TOOL_CALL,
+    POST_LLM_CALL,
+    ON_SESSION_END,
+    ON_SESSION_FINALIZE,
+    ON_SESSION_RESET,
+    SUBAGENT_STOP,
+    PRE_GATEWAY_DISPATCH,
+];
+
+fn detail_from_payload(payload: &HookPayload) -> String {
+    if !payload.detail.is_empty() {
+        payload.detail.clone()
+    } else if let Some(t) = &payload.tool_name {
+        format!(
+            "{t} {}",
+            payload
+                .tool_args
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_default()
+        )
+    } else if let Some(n) = payload.system_prompt_chars {
+        format!("system_prompt_chars={n}")
+    } else if let Some(n) = payload.assistant_chars {
+        format!("assistant_chars={n}")
+    } else if let Some(t) = payload.turn {
+        format!("turn={t}")
+    } else {
+        String::new()
+    }
+}
+
+/// 可热替换 sender 的 UI 时间线槽：在 bus 上**只注册一次**，每轮 chat 换 `tx`。
+#[derive(Clone, Default)]
+pub struct UiTimelineSlot {
+    tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<UiHookEvent>>>>,
+}
+
+impl UiTimelineSlot {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 设置或清空当前 chat 的推送通道。
+    pub fn set_tx(&self, tx: Option<tokio::sync::mpsc::UnboundedSender<UiHookEvent>>) {
+        if let Ok(mut g) = self.tx.lock() {
+            *g = tx;
+        }
+    }
+
+    /// 在 bus 上注册观察型推送（幂等：每个 slot 只应调用一次）。
+    pub fn install(&self, bus: &PluginHookBus) {
+        for &name in UI_HOOK_NAMES {
+            let slot = Arc::clone(&self.tx);
+            let hook_name = name.to_string();
+            bus.register(name, move |payload: &HookPayload| {
+                if let Ok(g) = slot.lock() {
+                    if let Some(tx) = g.as_ref() {
+                        let _ = tx.send(UiHookEvent {
+                            name: hook_name.clone(),
+                            detail: detail_from_payload(payload),
+                            outcome: "continue".into(),
+                        });
+                    }
+                }
+                HookOutcome::Continue
+            });
+        }
+    }
+}
+
 /// 在 bus 上注册观察型推送（不影响 Continue）。
+///
+/// **注意：** 每次调用都会再注册一组 handler。进程级 UI 请用 [`UiTimelineSlot`]。
 pub fn install_ui_timeline(
     bus: &PluginHookBus,
     tx: tokio::sync::mpsc::UnboundedSender<UiHookEvent>,
 ) {
-    const NAMES: &[&str] = &[
-        ON_SESSION_START,
-        PRE_LLM_CALL,
-        PRE_API_REQUEST,
-        POST_API_REQUEST,
-        PRE_TOOL_CALL,
-        POST_TOOL_CALL,
-        POST_LLM_CALL,
-        ON_SESSION_END,
-        ON_SESSION_FINALIZE,
-        ON_SESSION_RESET,
-        SUBAGENT_STOP,
-        PRE_GATEWAY_DISPATCH,
-    ];
-    for &name in NAMES {
+    for &name in UI_HOOK_NAMES {
         let tx = tx.clone();
         let hook_name = name.to_string();
         bus.register(name, move |payload: &HookPayload| {
-            let detail = if !payload.detail.is_empty() {
-                payload.detail.clone()
-            } else if let Some(t) = &payload.tool_name {
-                format!(
-                    "{t} {}",
-                    payload
-                        .tool_args
-                        .as_ref()
-                        .map(|v| v.to_string())
-                        .unwrap_or_default()
-                )
-            } else if let Some(n) = payload.system_prompt_chars {
-                format!("system_prompt_chars={n}")
-            } else if let Some(n) = payload.assistant_chars {
-                format!("assistant_chars={n}")
-            } else if let Some(t) = payload.turn {
-                format!("turn={t}")
-            } else {
-                String::new()
-            };
             let _ = tx.send(UiHookEvent {
                 name: hook_name.clone(),
-                detail,
+                detail: detail_from_payload(payload),
                 outcome: "continue".into(),
             });
             HookOutcome::Continue
@@ -74,25 +121,15 @@ pub fn install_recording(
     bus: &PluginHookBus,
     log: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) {
-    const NAMES: &[&str] = &[
-        ON_SESSION_START,
-        PRE_LLM_CALL,
-        PRE_API_REQUEST,
-        POST_API_REQUEST,
-        PRE_TOOL_CALL,
-        POST_TOOL_CALL,
-        POST_LLM_CALL,
-        ON_SESSION_END,
-        ON_SESSION_FINALIZE,
-        ON_SESSION_RESET,
-        SUBAGENT_STOP,
-        PRE_GATEWAY_DISPATCH,
-    ];
-    for &name in NAMES {
+    for &name in UI_HOOK_NAMES {
         let log = std::sync::Arc::clone(&log);
         let hook_name = name.to_string();
         bus.register(name, move |payload: &HookPayload| {
-            let label = match (&payload.tool_name, payload.assistant_chars, payload.system_prompt_chars) {
+            let label = match (
+                &payload.tool_name,
+                payload.assistant_chars,
+                payload.system_prompt_chars,
+            ) {
                 (Some(t), _, _) => format!("{hook_name}:{t}"),
                 (_, Some(n), _) => format!("{hook_name}:{n}"),
                 (_, _, Some(n)) => format!("{hook_name}:{n}"),
@@ -103,5 +140,42 @@ pub fn install_recording(
             }
             HookOutcome::Continue
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slot_replaces_sender_without_restacking() {
+        let bus = PluginHookBus::new();
+        let slot = UiTimelineSlot::new();
+        slot.install(&bus);
+
+        let (tx1, mut rx1) = tokio::sync::mpsc::unbounded_channel();
+        slot.set_tx(Some(tx1));
+        let _ = bus.fire(
+            PRE_LLM_CALL,
+            &HookPayload {
+                system_prompt_chars: Some(3),
+                ..Default::default()
+            },
+        );
+        let ev = rx1.try_recv().expect("first tx");
+        assert_eq!(ev.name, PRE_LLM_CALL);
+
+        let (tx2, mut rx2) = tokio::sync::mpsc::unbounded_channel();
+        slot.set_tx(Some(tx2));
+        let _ = bus.fire(
+            PRE_LLM_CALL,
+            &HookPayload {
+                system_prompt_chars: Some(9),
+                ..Default::default()
+            },
+        );
+        assert!(rx1.try_recv().is_err(), "old tx must be inactive");
+        let ev2 = rx2.try_recv().expect("second tx");
+        assert!(ev2.detail.contains('9'));
     }
 }

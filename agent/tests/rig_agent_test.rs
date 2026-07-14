@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
 use agent::context::{DynamicContext, StaticContext};
-use agent::hooks::RecordingHooks;
 use agent::loop_::{AgentConfig, AgentLoop, MaxDepthError};
 use agent::prompt_builder::PromptBuilder;
 use common::message::Message;
@@ -108,10 +107,8 @@ async fn test_agent_builder_from_runtime_config() {
         created_at: String::new(),
     };
 
-    let hooks = Arc::new(RecordingHooks::new());
-    let (agent, spec, _) = AgentBuilder::new(dir.path())
+    let (agent, spec) = AgentBuilder::new(dir.path())
         .from_runtime_config(&cfg)
-        .hooks(hooks.clone())
         .static_context(StaticContext::from_workspace_files(
             "preamble",
             "mem",
@@ -133,22 +130,22 @@ async fn test_agent_builder_from_runtime_config() {
 #[tokio::test]
 async fn test_prompt_hooks_on_run_turn() {
     let dir = TempDir::new().unwrap();
-    let hooks = Arc::new(RecordingHooks::new());
-    let (mut agent, _, _) = AgentBuilder::new(dir.path())
+    let (mut agent, _) = AgentBuilder::new(dir.path())
         .preamble("你是测试助手")
-        .hooks(hooks.clone())
         .build()
         .unwrap();
+    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+    ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
 
     let _ = agent.run_turn("你好", "t1").await.unwrap();
-    let events = hooks.snapshot();
+    let events = log.lock().unwrap().clone();
     assert!(
         events.iter().any(|e| e.starts_with("pre_llm_call:")),
         "events={events:?}"
     );
     // on_session_end 在 streaming 收尾触发；run_turn 仅准备阶段
     assert!(
-        events.iter().any(|e| e.starts_with("on_session_start:")),
+        events.iter().any(|e| *e == "on_session_start"),
         "events={events:?}"
     );
 }

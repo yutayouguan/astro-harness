@@ -284,13 +284,11 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_fires_post_llm_call_after_model_stream() {
-    use agent::hooks::RecordingHooks;
-
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let mut agent = AgentLoop::with_session_id(config, "completion-hook".into()).unwrap();
-    let hooks = Arc::new(RecordingHooks::new());
-    agent.set_hooks(hooks.clone());
+    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+    ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
         .session_messages
         .push(common::message::Message::user("say hi"));
@@ -329,7 +327,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
         item.unwrap();
     }
 
-    let events = hooks.snapshot();
+    let events = log.lock().unwrap().clone();
     assert!(
         events.iter().any(|e| e == "post_llm_call:5"),
         "expected post_llm_call for \"hello\" (5 chars), events={events:?}"

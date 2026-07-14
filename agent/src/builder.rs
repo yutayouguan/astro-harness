@@ -1,17 +1,15 @@
-//! Agent 构建器：以链式 API 组装模型参数、静态/动态上下文、工具轮次与 Prompt Hooks。
+//! Agent 构建器：以链式 API 组装模型参数、静态/动态上下文与工具轮次。
 //!
 //! 设计对齐 Rig 的 Agent Builder：先通过 [`AgentBuilder`] 收集配置，再产出不可变的
 //! [`BuiltAgentSpec`] 或直接实例化 [`AgentLoop`]。未显式设置的字段会回落到工作区默认值
 //!（如 `SOUL.md`、活跃 agent id、内置温度与轮次上限）。
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use memory::AgentRuntimeConfig;
 use serde_json::Value;
 
 use crate::context::{DynamicContext, StaticContext};
-use crate::hooks::{NoopHooks, PromptHooks};
 use crate::loop_::{AgentConfig, AgentLoop};
 
 /// 构建完成的 Agent 运行时规格，可在不立即创建循环时持有或序列化传递。
@@ -44,9 +42,9 @@ pub struct BuiltAgentSpec {
 
 /// Rig 风格的链式 Agent 构建器。
 ///
-/// 通过 `new` 设定工作区后，以 `agent_id`、`preamble`、`hooks` 等方法逐项覆盖；
+/// 通过 `new` 设定工作区后，以 `agent_id`、`preamble` 等方法逐项覆盖；
 /// 最终调用 [`build`](Self::build) 或 [`build_spec`](Self::build_spec) 完成组装。
-/// 默认挂载 [`NoopHooks`]，工具轮次默认 8，近期历史默认 10 条。
+/// 工具轮次默认 8，近期历史默认 10 条。
 pub struct AgentBuilder {
     /// Agent 持久化数据根目录。
     memory_dir: PathBuf,
@@ -68,8 +66,6 @@ pub struct AgentBuilder {
     static_context: StaticContext,
     /// 动态上下文最大条目数，默认 3。
     dynamic_max_items: usize,
-    /// 可插拔的 Prompt 生命周期钩子，默认无操作实现。
-    hooks: Arc<dyn PromptHooks>,
 }
 
 impl AgentBuilder {
@@ -90,7 +86,6 @@ impl AgentBuilder {
             additional_params: Value::Null,
             static_context: StaticContext::default(),
             dynamic_max_items: 3,
-            hooks: Arc::new(NoopHooks),
         }
     }
 
@@ -151,15 +146,6 @@ impl AgentBuilder {
         self
     }
 
-    /// 挂载 Prompt 生命周期钩子，用于观测、取消或向外推送事件。
-    ///
-    /// 传入的 `Arc` 会在 [`build`](Self::build) 时同时绑定到 [`AgentLoop`] 并作为返回值之一，
-    /// 便于调用方持有同一实例。
-    pub fn hooks(mut self, hooks: Arc<dyn PromptHooks>) -> Self {
-        self.hooks = hooks;
-        self
-    }
-
     /// 从磁盘上的 `agents/{id}/config.json` 合并运行时配置。
     ///
     /// 会写入 `agent_id`；若 Builder 尚未设置 `temperature`、`max_turns`、`additional_params`，
@@ -214,42 +200,16 @@ impl AgentBuilder {
         }
     }
 
-    /// 构建可运行的 [`AgentLoop`]、对应规格与钩子引用。
-    ///
-    /// 内部生成随机 `session_id`；若需固定会话标识请使用 [`build_with_session_id`](Self::build_with_session_id)。
-    ///
-    /// # 返回
-    ///
-    /// 三元组：`(AgentLoop, BuiltAgentSpec, Arc<dyn PromptHooks>)`。
-    ///
-    /// # 错误
-    ///
-    /// 当 [`AgentLoop::with_session_id`] 初始化失败（如工作区或会话存储不可写）时返回 `Err`。
-    pub fn build(self) -> anyhow::Result<(AgentLoop, BuiltAgentSpec, Arc<dyn PromptHooks>)> {
+    /// 构建可运行的 [`AgentLoop`] 与对应规格。
+    pub fn build(self) -> anyhow::Result<(AgentLoop, BuiltAgentSpec)> {
         self.build_with_session_id(uuid::Uuid::new_v4().to_string())
     }
 
     /// 使用指定 `session_id` 构建 [`AgentLoop`] 并完成配置注入。
-    ///
-    /// 将 `BuiltAgentSpec` 中的 soul、轮次、温度、静态上下文等写入 [`AgentConfig`]；
-    /// 仅当静态上下文至少有一个非空字段时才设置 `static_override`，避免覆盖默认加载逻辑。
-    ///
-    /// # 参数
-    ///
-    /// - `session_id`：会话持久化标识，用于关联历史消息与存储路径。
-    ///
-    /// # 返回
-    ///
-    /// 与 [`build`](Self::build) 相同的三元组。
-    ///
-    /// # 错误
-    ///
-    /// [`AgentLoop::with_session_id`] 或底层存储初始化失败时返回 `Err`。
     pub fn build_with_session_id(
         self,
         session_id: String,
-    ) -> anyhow::Result<(AgentLoop, BuiltAgentSpec, Arc<dyn PromptHooks>)> {
-        let hooks = Arc::clone(&self.hooks);
+    ) -> anyhow::Result<(AgentLoop, BuiltAgentSpec)> {
         let spec = self.build_spec();
         let mut config = AgentConfig::with_defaults(spec.memory_dir.clone());
         config.soul = spec.preamble.clone();
@@ -265,9 +225,8 @@ impl AgentBuilder {
         {
             config.static_override = Some(spec.static_context.clone());
         }
-        let mut agent = AgentLoop::with_session_id(config, session_id)?;
-        agent.set_hooks(Arc::clone(&hooks));
-        Ok((agent, spec, hooks))
+        let agent = AgentLoop::with_session_id(config, session_id)?;
+        Ok((agent, spec))
     }
 }
 
