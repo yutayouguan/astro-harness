@@ -128,14 +128,26 @@
 }
 
 .msg-token-stats-usage,
-.msg-token-stats-speed {
+.msg-token-stats-speed,
+.msg-token-stats-duration {
   white-space: nowrap;
 }
 
-.msg-token-stats-speed {
+.msg-token-stats-speed,
+.msg-token-stats-duration + .msg-token-stats-usage {
   opacity: 0.9;
   padding-left: 8px;
   border-left: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.msg-gen-timer {
+  align-self: flex-start;
+  margin-top: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-mute);
+  letter-spacing: 0.01em;
+  user-select: none;
 }
 
 html[data-theme="dark"] .msg-token-stats {

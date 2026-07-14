@@ -84,6 +84,10 @@ export type ChatMessage = {
   reasoning?: string;
   /** 思考耗时（秒），用于折叠头展示 */
   reasoningDurationSec?: number;
+  /** 本轮生成起点（ms，助手气泡创建时），流式时供实时秒表 */
+  generationStartedAt?: number;
+  /** 本轮墙钟耗时（秒）：发起→结束，对齐 Hermes TUI 回合计时 */
+  generationDurationSec?: number;
   /** 本轮流式 usage，挂在助手消息上供气泡角标展示 */
   usage?: MessageTokenUsage;
   /**

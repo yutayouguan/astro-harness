@@ -76,7 +76,9 @@ import McpIcon from "./McpIcon";
 import MsgActivity from "./MsgActivity";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
+import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
+import { formatElapsedSec } from "../lib/elapsedSec";
 import {
   buildMentionCandidates,
   buildSlashPaletteEntries,
@@ -89,37 +91,72 @@ function formatTokenSpeed(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-/** 单条消息底部的 token 用量与生成速度 */
+/** 流式回合实时墙钟（Hermes TUI 风格） */
+function MsgGenerationTimer({
+  startedAtMs,
+  active,
+}: {
+  startedAtMs: number;
+  active: boolean;
+}) {
+  const { t } = useI18n();
+  const liveSec = useLiveElapsedSec(active, startedAtMs);
+  if (!active || liveSec == null) return null;
+  return (
+    <div className="msg-gen-timer" aria-live="polite">
+      {t("chat.generatingWithTime", { s: formatElapsedSec(liveSec) })}
+    </div>
+  );
+}
+
+/** 单条消息底部的 token 用量、回合耗时与生成速度 */
 function MessageTokenStats({
   usage,
   tokensPerSec,
+  generationDurationSec,
 }: {
-  usage: MessageTokenUsage;
+  usage?: MessageTokenUsage;
   tokensPerSec?: number;
+  generationDurationSec?: number;
 }) {
   const { t } = useI18n();
-  if (!usage.totalTokens && !usage.promptTokens && !usage.completionTokens) {
-    return null;
-  }
+  const hasUsage = Boolean(
+    usage &&
+      (usage.totalTokens || usage.promptTokens || usage.completionTokens),
+  );
+  const hasDuration =
+    generationDurationSec != null && generationDurationSec > 0;
+  if (!hasUsage && !hasDuration) return null;
+
   const speed =
     tokensPerSec != null && tokensPerSec > 0
       ? formatTokenSpeed(tokensPerSec)
       : null;
-  const label = t("chat.tokenStats", {
-    total: String(usage.totalTokens),
-    prompt: String(usage.promptTokens),
-    completion: String(usage.completionTokens),
-  });
+  const label = hasUsage
+    ? t("chat.tokenStats", {
+        total: String(usage!.totalTokens),
+        prompt: String(usage!.promptTokens),
+        completion: String(usage!.completionTokens),
+      })
+    : null;
+  const durationLabel = hasDuration
+    ? t("chat.generationDuration", {
+        s: formatElapsedSec(generationDurationSec!),
+      })
+    : null;
   const aria = t("chat.tokenStatsAria", {
-    total: String(usage.totalTokens),
-    prompt: String(usage.promptTokens),
-    completion: String(usage.completionTokens),
+    total: String(usage?.totalTokens ?? 0),
+    prompt: String(usage?.promptTokens ?? 0),
+    completion: String(usage?.completionTokens ?? 0),
     speed: speed ?? "—",
   });
 
   return (
     <div className="msg-token-stats" aria-label={aria}>
-      <span className="msg-token-stats-usage">{label}</span>
+      {durationLabel ? (
+        <span className="msg-token-stats-duration">{durationLabel}</span>
+      ) : null}
+      {label ? <span className="msg-token-stats-usage">{label}</span> : null}
       {speed != null ? (
         <span className="msg-token-stats-speed">
           {t("chat.tokenSpeed", { n: speed })}
@@ -1053,6 +1090,9 @@ export default function ChatView({
                                   reasoning={seg.text}
                                   active={active}
                                   durationSec={seg.durationSec}
+                                  startedAtMs={
+                                    active ? seg.at : undefined
+                                  }
                                 />
                               );
                             }
@@ -1147,11 +1187,21 @@ export default function ChatView({
                         )
                       )}
                       {m.role === "assistant" &&
+                      isStreamingBubble &&
+                      !reasoningActive &&
+                      m.generationStartedAt ? (
+                        <MsgGenerationTimer
+                          startedAtMs={m.generationStartedAt}
+                          active
+                        />
+                      ) : null}
+                      {m.role === "assistant" &&
                       !isStreamingBubble &&
-                      m.usage ? (
+                      (m.usage || m.generationDurationSec) ? (
                         <MessageTokenStats
                           usage={m.usage}
                           tokensPerSec={m.tokensPerSec}
+                          generationDurationSec={m.generationDurationSec}
                         />
                       ) : null}
                     </div>

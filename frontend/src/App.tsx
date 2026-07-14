@@ -50,6 +50,7 @@ import {
   applySurfaceUpsert,
   sealOpenReasoning,
 } from "./lib/chatTimeline";
+import { elapsedSecSince } from "./lib/elapsedSec";
 import { type ThinkingLevel } from "./lib/thinkingPrefs";
 import {
   loadModelPrefs,
@@ -560,7 +561,7 @@ export default function App() {
     toolDeltaIdsRef.current.clear();
   }, []);
 
-  /** 将 usage + 生成速度结算到助手消息；耗时优先首 token，否则流式起点 */
+  /** 将 usage + 生成速度 + 回合墙钟结算到助手消息；耗时优先首 token，否则流式起点 */
   const settleMessageUsage = useCallback((messageId: string, endedAt = Date.now()) => {
     const usage = pendingUsageRef.current.get(messageId);
     const start =
@@ -572,14 +573,28 @@ export default function App() {
     streamStartRef.current.delete(messageId);
     firstTokenRef.current.delete(messageId);
     pendingUsageRef.current.delete(messageId);
-    if (!usage && tokensPerSec == null) return;
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== messageId) return m;
+        const generationDurationSec =
+          m.generationDurationSec ??
+          (m.generationStartedAt != null
+            ? elapsedSecSince(m.generationStartedAt, endedAt)
+            : undefined);
+        if (
+          !usage &&
+          tokensPerSec == null &&
+          generationDurationSec == null
+        ) {
+          return m;
+        }
         return {
           ...m,
           usage: usage ?? m.usage,
           tokensPerSec: tokensPerSec ?? m.tokensPerSec,
+          generationDurationSec:
+            generationDurationSec ?? m.generationDurationSec,
+          generationStartedAt: undefined,
         };
       }),
     );
@@ -1118,13 +1133,10 @@ export default function App() {
         content: "",
         activities: [],
         createdAt: Date.now(),
+        generationStartedAt: Date.now(),
       });
       return next;
     });
-    streamStartRef.current.set(assistantId, Date.now());
-    firstTokenRef.current.delete(assistantId);
-    pendingUsageRef.current.delete(assistantId);
-    activeAssistantIdRef.current = assistantId;
     setEmptyMode(null);
     if (!opts?.skipUserAppend) {
       setInput("");
@@ -1137,6 +1149,10 @@ export default function App() {
     setStatusPhase("connecting");
     setStatusDetail(null);
     clearStreamBuffers();
+    activeAssistantIdRef.current = assistantId;
+    streamStartRef.current.set(assistantId, Date.now());
+    firstTokenRef.current.delete(assistantId);
+    pendingUsageRef.current.delete(assistantId);
 
     const contentForModel = `${
       isCreatingAgent
@@ -1440,6 +1456,17 @@ export default function App() {
                   reasoningDurationSec,
                   usage: usage ?? m.usage,
                   tokensPerSec: tokensPerSec ?? m.tokensPerSec,
+                  generationDurationSec:
+                    m.generationDurationSec ??
+                    (m.generationStartedAt != null
+                      ? elapsedSecSince(m.generationStartedAt, endedAt)
+                      : streamStartRef.current.has(assistantId)
+                        ? elapsedSecSince(
+                            streamStartRef.current.get(assistantId)!,
+                            endedAt,
+                          )
+                        : undefined),
+                  generationStartedAt: undefined,
                 },
                 reasoningDurationSec,
               );
@@ -1503,6 +1530,12 @@ export default function App() {
                   content: base ? `${base}\n\n⚠️ ${errMsg}` : errMsg,
                   error: true,
                   reasoningDurationSec,
+                  generationDurationSec:
+                    m.generationDurationSec ??
+                    (m.generationStartedAt != null
+                      ? elapsedSecSince(m.generationStartedAt)
+                      : undefined),
+                  generationStartedAt: undefined,
                 },
                 reasoningDurationSec,
               );
@@ -2042,7 +2075,14 @@ export default function App() {
     }
     const aid = activeAssistantIdRef.current;
     if (aid) {
-      settleMessageUsage(aid);
+      const endedAt = Date.now();
+      const usage = pendingUsageRef.current.get(aid);
+      const genStart =
+        firstTokenRef.current.get(aid) ?? streamStartRef.current.get(aid);
+      const tokensPerSec =
+        usage && genStart != null
+          ? calcTokensPerSec(usage.completionTokens, endedAt - genStart)
+          : undefined;
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id !== aid) return m;
@@ -2050,18 +2090,27 @@ export default function App() {
           if (m.reasoning && reasoningDurationSec == null) {
             const start = reasoningStartRef.current.get(aid);
             if (start != null) {
-              reasoningDurationSec = Math.max(
-                0.1,
-                Math.round(((Date.now() - start) / 1000) * 10) / 10,
-              );
+              reasoningDurationSec = elapsedSecSince(start, endedAt);
             }
           }
           return sealOpenReasoning(
-            { ...m, reasoningDurationSec },
+            {
+              ...m,
+              usage: usage ?? m.usage,
+              tokensPerSec: tokensPerSec ?? m.tokensPerSec,
+              reasoningDurationSec,
+              generationDurationSec:
+                m.generationDurationSec ??
+                (m.generationStartedAt != null
+                  ? elapsedSecSince(m.generationStartedAt, endedAt)
+                  : undefined),
+              generationStartedAt: undefined,
+            },
             reasoningDurationSec,
           );
         }),
       );
+      pendingUsageRef.current.delete(aid);
     }
     activeAssistantIdRef.current = null;
     clearStreamBuffers();
@@ -2075,7 +2124,6 @@ export default function App() {
     clearStreamBuffers,
     flushStreamTokens,
     flushToolDeltas,
-    settleMessageUsage,
   ]);
 
   const resetChatSurface = () => {
