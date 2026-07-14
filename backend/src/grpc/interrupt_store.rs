@@ -33,6 +33,7 @@ pub fn save_interrupt_file(
 ///
 /// 仅用于 UI/调试刷新旁路快照；**活路径以 [`agent::HitlRegistry`] 为准**，
 /// 生产 chat resume 不依赖本函数。
+#[allow(dead_code)]
 pub fn load_interrupt_file(memory_dir: &Path, session_id: &str) -> Option<InterruptPending> {
     let path = interrupt_file_path(memory_dir, session_id);
     let raw = std::fs::read_to_string(path).ok()?;
@@ -66,6 +67,7 @@ pub fn resume_items_from_proto(items: &[proto::InterruptResumeItem]) -> Vec<Resu
 }
 
 /// 解析 ChatRequest.resume_json / InterruptResume 列表（测试与兼容）。
+#[allow(dead_code)]
 pub fn parse_resume_items_json(raw: &str) -> Result<Vec<ResumeItem>, String> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| format!("resume_json 无效: {e}"))?;
