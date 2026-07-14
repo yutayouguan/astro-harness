@@ -60,6 +60,7 @@ fn graph_counts_end_phase_only_and_filters_agent() {
                 name: "orchestration_step".into(),
                 agent_id: "alice".into(),
                 session_id: None,
+                turn_id: None,
                 input_tokens: 0,
                 output_tokens: 0,
                 cache_read_tokens: 0,

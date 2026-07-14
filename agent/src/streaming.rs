@@ -424,6 +424,7 @@ async fn record_llm_usage(
     let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
     let session_id = agent.session_id().to_string();
+    let turn_id = agent.current_turn_id().map(str::to_string);
     let fallback_provider = agent.chat_provider().to_string();
     let fallback_base_url = agent.chat_base_url().to_string();
     let fallback_api_key = agent.chat_api_key().to_string();
@@ -449,6 +450,7 @@ async fn record_llm_usage(
     apply_llm_usage_dual_write(
         &agent_id,
         Some(&session_id),
+        turn_id.as_deref(),
         &model,
         usage,
         &provider,
@@ -534,6 +536,12 @@ pub async fn run_multi_turn_stream(
         agent.session_id().to_string()
     };
     let run_id = uuid::Uuid::new_v4().to_string();
+    let turn_id = run_id.clone();
+    {
+        let mut agent = session.lock().await;
+        agent.set_current_turn_id(turn_id.clone());
+    }
+    tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn started");
     if let Some(ref gate) = hitl_gate {
         register_live_parent_hitl(
             &session_id,
@@ -546,7 +554,7 @@ pub async fn run_multi_turn_stream(
         .await;
     }
     run_multi_turn_stream_inner(
-        session,
+        session.clone(),
         targets,
         registry,
         base_config,
@@ -555,9 +563,14 @@ pub async fn run_multi_turn_stream(
         hitl_gate,
         tx,
         session_id.clone(),
-        run_id,
+        run_id.clone(),
     )
     .await;
+    {
+        let mut agent = session.lock().await;
+        agent.clear_current_turn_id();
+    }
+    tracing::info!(session_id = %session_id, turn_id = %run_id, "turn finished");
     unregister_live_parent_hitl(&session_id).await;
 }
 
@@ -1262,6 +1275,7 @@ async fn execute_tools_concurrent(
             workspace_dir: agent.workspace_dir(),
             project_root: agent.project_root().cloned(),
             session_id: agent.session_id().to_string(),
+            turn_id: agent.current_turn_id().map(str::to_string),
             chat_api_key: agent.chat_api_key().to_string(),
             chat_base_url: agent.chat_base_url().to_string(),
             chat_provider: agent.chat_provider().to_string(),
@@ -1323,6 +1337,7 @@ struct ToolExecSnapshot {
     workspace_dir: std::path::PathBuf,
     project_root: Option<std::path::PathBuf>,
     session_id: String,
+    turn_id: Option<String>,
     chat_api_key: String,
     chat_base_url: String,
     chat_provider: String,
@@ -1360,6 +1375,7 @@ fn run_tool_on_snapshot(
             image_gen_targets: &snap.image_gen_targets,
             providers: snap.providers.as_ref(),
             session_id: snap.session_id.clone(),
+            turn_id: snap.turn_id.clone(),
             chat_api_key: snap.chat_api_key.clone(),
             chat_base_url: snap.chat_base_url.clone(),
             chat_provider: snap.chat_provider.clone(),

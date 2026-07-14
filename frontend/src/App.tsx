@@ -2531,6 +2531,7 @@ export default function App() {
                   chatDisplayPrefs={chatDisplayPrefs}
                   onChatVerbosityChange={setVerbosity}
                   onChatToggleChange={setToggle}
+                  activeSessionId={sessionId ?? undefined}
                 />
               )}
               {nav === "tools" && (

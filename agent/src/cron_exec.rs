@@ -220,6 +220,7 @@ pub async fn execute_job_with_roots(
             name: job.id.clone(),
             agent_id: job.agent_id.clone(),
             session_id: row.session_id.clone(),
+            turn_id: None,
             input_tokens: 0,
             output_tokens: 0,
             cache_read_tokens: 0,
@@ -244,6 +245,7 @@ pub async fn execute_job_with_roots(
         apply_llm_usage_dual_write(
             &job.agent_id,
             row.session_id.as_deref(),
+            None,
             &model_for_usage,
             &llm_usage,
             billing_provider.as_deref().unwrap_or(""),

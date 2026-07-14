@@ -113,6 +113,8 @@ pub struct AgentLoop {
     cancel: CancelSignal,
     /// 代码/项目根（委派 worktree 或会话级 ASTRO_PROJECT_ROOT）。
     project_root: Option<PathBuf>,
+    /// 当前多轮流式 run 的 turn_id（与 streaming `run_id` 相同）；未在 run 内为 None。
+    current_turn_id: Option<String>,
 }
 
 impl AgentLoop {
@@ -177,7 +179,23 @@ impl AgentLoop {
             pending_inject_context: None,
             cancel: CancelSignal::new(),
             project_root: resolve_session_project_root(),
+            current_turn_id: None,
         })
+    }
+
+    /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
+    pub fn set_current_turn_id(&mut self, turn_id: impl Into<String>) {
+        self.current_turn_id = Some(turn_id.into());
+    }
+
+    /// 清除当前 turn_id（run 结束或中断时调用）。
+    pub fn clear_current_turn_id(&mut self) {
+        self.current_turn_id = None;
+    }
+
+    /// 当前绑定的 turn_id（若有）。
+    pub fn current_turn_id(&self) -> Option<&str> {
+        self.current_turn_id.as_deref()
     }
 
     /// 注入生命周期 hooks（工具调用、prompt 构建、轮次结束等回调）。
@@ -487,12 +505,14 @@ impl AgentLoop {
                 anyhow::bail!("MCP 工具未启用或不存在: {name}");
             }
             let agent_id = self.memory.agent_id.clone();
+            let turn_id = self.current_turn_id.clone();
             let _ = memory::record_tool_call(&agent_id, name, args);
             let _ = memory::record_usage_tool_call(
                 &agent_id,
                 name,
                 args,
                 Some(self.session_id.as_str()),
+                turn_id.as_deref(),
             );
             memory::UsageDb::try_record(memory::NewUsageEvent {
                 ts: chrono::Utc::now().to_rfc3339(),
@@ -500,6 +520,7 @@ impl AgentLoop {
                 name: name.to_string(),
                 agent_id,
                 session_id: Some(self.session_id.clone()),
+                turn_id,
                 input_tokens: 0,
                 output_tokens: 0,
                 cache_read_tokens: 0,
@@ -523,6 +544,7 @@ impl AgentLoop {
         std::env::set_var("ASTRO_WORKSPACE", &workspace_dir);
         let image_gen_targets = self.image_gen_targets.clone();
         let session_id = self.session_id.clone();
+        let turn_id = self.current_turn_id.clone();
         let chat_api_key = self.chat_api_key.clone();
         let chat_base_url = self.chat_base_url.clone();
         let chat_provider = self.chat_provider.clone();
@@ -537,6 +559,7 @@ impl AgentLoop {
             image_gen_targets: &image_gen_targets,
             providers: &self.providers,
             session_id,
+            turn_id,
             chat_api_key,
             chat_base_url,
             chat_provider,

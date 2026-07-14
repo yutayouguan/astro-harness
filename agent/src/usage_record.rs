@@ -10,6 +10,7 @@ use providers::streaming::Usage;
 pub(crate) fn build_llm_usage_event(
     agent_id: &str,
     session_id: Option<&str>,
+    turn_id: Option<&str>,
     model: &str,
     usage: &Usage,
     provider: &str,
@@ -66,6 +67,7 @@ pub(crate) fn build_llm_usage_event(
         name: model.to_string(),
         agent_id: agent_id.to_string(),
         session_id: session_id.map(str::to_string),
+        turn_id: turn_id.map(str::to_string),
         input_tokens: i64::from(usage.input_tokens),
         output_tokens: i64::from(usage.output_tokens),
         cache_read_tokens: i64::from(usage.cache_read_tokens),
@@ -106,6 +108,7 @@ pub(crate) fn build_llm_usage_event(
 pub(crate) fn apply_llm_usage_dual_write(
     agent_id: &str,
     session_id: Option<&str>,
+    turn_id: Option<&str>,
     model: &str,
     usage: &Usage,
     provider: &str,
@@ -116,8 +119,16 @@ pub(crate) fn apply_llm_usage_dual_write(
     if usage.is_empty() {
         return;
     }
-    let (mut event, delta) =
-        build_llm_usage_event(agent_id, session_id, model, usage, provider, base_url, api_key);
+    let (mut event, delta) = build_llm_usage_event(
+        agent_id,
+        session_id,
+        turn_id,
+        model,
+        usage,
+        provider,
+        base_url,
+        api_key,
+    );
     if let Some(meta) = meta_json {
         event.meta_json = Some(meta);
     }
@@ -157,6 +168,7 @@ mod tests {
         let (event, delta) = build_llm_usage_event(
             "agent-1",
             Some("sess-1"),
+            None,
             "gpt-4o-mini",
             &usage,
             "openai",
@@ -167,6 +179,7 @@ mod tests {
         assert_eq!(event.name, "gpt-4o-mini");
         assert_eq!(event.agent_id, "agent-1");
         assert_eq!(event.session_id.as_deref(), Some("sess-1"));
+        assert_eq!(event.turn_id, None);
         assert_eq!(event.input_tokens, 1_000_000);
         assert_eq!(event.output_tokens, 1_000_000);
         assert_eq!(event.cost_status.as_deref(), Some("estimated"));
@@ -175,5 +188,26 @@ mod tests {
         assert_eq!(delta.cost_status.as_deref(), Some("estimated"));
         assert!(delta.estimated_cost_usd > 0.0);
         assert_eq!(delta.model.as_deref(), Some("gpt-4o-mini"));
+    }
+
+    #[test]
+    fn build_llm_usage_event_propagates_turn_id() {
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 5,
+            request_count: 1,
+            ..Default::default()
+        };
+        let (event, _) = build_llm_usage_event(
+            "agent-1",
+            Some("sess-1"),
+            Some("t1"),
+            "gpt-4o-mini",
+            &usage,
+            "openai",
+            "",
+            "",
+        );
+        assert_eq!(event.turn_id.as_deref(), Some("t1"));
     }
 }

@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-/// `usage.db` schema 版本；不兼容时摧毁重建。
-pub const USAGE_SCHEMA_VERSION: i32 = 3;
+/// `usage.db` schema 版本；v3→v4 使用 ADD COLUMN 非破坏性迁移。
+pub const USAGE_SCHEMA_VERSION: i32 = 4;
 
 /// 建表 DDL（`usage_events` 及 ts / agent / kind 索引）
 const DDL: &str = r#"
@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS usage_events (
     billing_provider TEXT,
     billing_base_url TEXT,
     billing_mode TEXT,
-    meta_json TEXT
+    meta_json TEXT,
+    turn_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts);
 CREATE INDEX IF NOT EXISTS idx_usage_agent_ts ON usage_events(agent_id, ts);
@@ -75,6 +76,7 @@ pub struct NewUsageEvent {
     pub name: String,
     pub agent_id: String,
     pub session_id: Option<String>,
+    pub turn_id: Option<String>,
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub cache_read_tokens: i64,
@@ -328,27 +330,54 @@ fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
 }
 
 impl UsageDb {
-    /// 打开或创建数据库并执行 DDL（WAL 模式）
+    /// 打开或创建数据库；v3→v4 非破坏性迁移，仅 version<3 或新库时重建
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let needs_rebuild = if path.exists() {
+        let exists = path.exists();
+        let version = if exists {
             let conn = Connection::open(&path)?;
-            let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            version != USAGE_SCHEMA_VERSION
+            conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0))?
         } else {
-            true
+            0
         };
-        if needs_rebuild {
-            if path.exists() {
-                tracing::warn!("usage.db rebuilt, prior events discarded");
-            }
+
+        if !exists || version == 0 {
             delete_usage_db_files(&path);
             let conn = open_and_init(&path)?;
             return Ok(Self { conn });
         }
-        let conn = open_and_init(&path)?;
+
+        if version > USAGE_SCHEMA_VERSION {
+            anyhow::bail!(
+                "usage.db schema version {version} is newer than supported {USAGE_SCHEMA_VERSION}"
+            );
+        }
+
+        if version < 3 {
+            tracing::warn!(version, "usage.db too old; rebuilding");
+            delete_usage_db_files(&path);
+            let conn = open_and_init(&path)?;
+            return Ok(Self { conn });
+        }
+
+        let conn = Connection::open(&path)?;
+        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+        if version < 4 {
+            let has_turn: bool = {
+                let mut stmt = conn.prepare("PRAGMA table_info(usage_events)")?;
+                let names: Vec<String> = stmt
+                    .query_map([], |r| r.get::<_, String>(1))?
+                    .filter_map(|x| x.ok())
+                    .collect();
+                names.iter().any(|n| n == "turn_id")
+            };
+            if !has_turn {
+                conn.execute("ALTER TABLE usage_events ADD COLUMN turn_id TEXT", [])?;
+            }
+            conn.execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
+        }
         Ok(Self { conn })
     }
 
@@ -363,12 +392,12 @@ impl UsageDb {
         let ts = normalize_event_ts(&row.ts);
         self.conn.execute(
             "INSERT INTO usage_events (
-                id, ts, kind, name, agent_id, session_id,
+                id, ts, kind, name, agent_id, session_id, turn_id,
                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
                 reasoning_tokens, total_tokens, cost_usd,
                 cost_status, cost_source, pricing_version,
                 billing_provider, billing_base_url, billing_mode, meta_json
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
                 id,
                 ts,
@@ -376,6 +405,7 @@ impl UsageDb {
                 row.name,
                 row.agent_id,
                 row.session_id,
+                row.turn_id,
                 row.input_tokens,
                 row.output_tokens,
                 row.cache_read_tokens,
@@ -781,6 +811,7 @@ mod tests {
             name: name.into(),
             agent_id: agent_id.into(),
             session_id: None,
+            turn_id: None,
             input_tokens: 0,
             output_tokens: 0,
             cache_read_tokens: 0,
@@ -883,6 +914,7 @@ mod tests {
             name: "gpt-5.6".into(),
             agent_id: "workspace".into(),
             session_id: None,
+            turn_id: None,
             input_tokens: 10,
             output_tokens: 5,
             cache_read_tokens: 0,

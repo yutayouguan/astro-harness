@@ -1,19 +1,28 @@
-/** 偏好设置（主题、语言、关于）。 */
+/** 偏好设置（主题、语言、日志诊断、关于）。 */
+import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   Brain,
   Clock,
   Plug,
+  ScrollText,
   Sparkles,
   Webhook,
   Wrench,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import type { ThemeMode } from "../hooks/useTheme";
 import type { ChatDisplayPrefs, ChatVerbosity } from "../hooks/useChatDisplayPrefs";
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "./NavIcons";
+
+/** 查询返回的单行日志 */
+type AgentLogLine = { raw: string; source: string };
+
+/** 日志来源过滤 */
+type LogSourceFilter = "both" | "agent" | "errors";
 
 /** 偏好设置入参 */
 type Props = {
@@ -28,6 +37,8 @@ type Props = {
     key: keyof Omit<ChatDisplayPrefs, "verbosity">,
     value: boolean,
   ) => void;
+  /** 当前聊天会话 ID，用于预填诊断过滤 */
+  activeSessionId?: string;
 };
 
 /** 聊天展示开关字段（不含 verbosity） */
@@ -90,8 +101,18 @@ export default function PreferencesPanel({
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
   onChatToggleChange,
+  activeSessionId,
 }: Props) {
   const { locale, setLocale, t } = useI18n();
+
+  const [sessionId, setSessionId] = useState(activeSessionId ?? "");
+  const [turnId, setTurnId] = useState("");
+  const [source, setSource] = useState<LogSourceFilter>("both");
+  const [lines, setLines] = useState(50);
+  const [rows, setRows] = useState<AgentLogLine[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [queried, setQueried] = useState(false);
 
   const themeOptions: {
     id: ThemeMode;
@@ -160,6 +181,37 @@ export default function PreferencesPanel({
 
   const ModeIcon =
     themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
+
+  async function refreshLogs() {
+    setBusy(true);
+    setErrorMsg("");
+    try {
+      const result = await invoke<AgentLogLine[]>("query_agent_logs", {
+        sessionId: sessionId.trim() || null,
+        turnId: turnId.trim() || null,
+        source,
+        lines,
+        minLevel: null,
+      });
+      setRows(result);
+      setQueried(true);
+    } catch (e) {
+      setRows([]);
+      setQueried(true);
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyLogs() {
+    const text = rows.map((r) => `[${r.source}] ${r.raw}`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   return (
     <div className="prefs-page" data-tone={tone}>
@@ -263,6 +315,100 @@ export default function PreferencesPanel({
               </button>
             </label>
           ))}
+        </div>
+      </section>
+
+      <section className="prefs-card">
+        <div className="prefs-card-head">
+          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+            <ScrollText width={22} height={22} />
+          </div>
+          <div>
+            <h2 className="prefs-card-title">{t("prefs.diag.title")}</h2>
+            <p className="prefs-card-sub">{t("prefs.diag.sub")}</p>
+          </div>
+        </div>
+
+        <div className="prefs-diag-form">
+          <label className="prefs-diag-row">
+            <span className="prefs-diag-label">{t("prefs.diag.session")}</span>
+            <input
+              className="prefs-diag-input"
+              type="text"
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </label>
+          <label className="prefs-diag-row">
+            <span className="prefs-diag-label">{t("prefs.diag.turn")}</span>
+            <input
+              className="prefs-diag-input"
+              type="text"
+              value={turnId}
+              onChange={(e) => setTurnId(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </label>
+          <label className="prefs-diag-row">
+            <span className="prefs-diag-label">{t("prefs.diag.source")}</span>
+            <select
+              className="prefs-diag-select"
+              value={source}
+              onChange={(e) => setSource(e.target.value as LogSourceFilter)}
+            >
+              <option value="both">{t("prefs.diag.source.both")}</option>
+              <option value="agent">{t("prefs.diag.source.agent")}</option>
+              <option value="errors">{t("prefs.diag.source.errors")}</option>
+            </select>
+          </label>
+          <label className="prefs-diag-row">
+            <span className="prefs-diag-label">{t("prefs.diag.lines")}</span>
+            <input
+              className="prefs-diag-input"
+              type="number"
+              min={1}
+              max={500}
+              value={lines}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setLines(Number.isFinite(n) ? Math.max(1, Math.min(500, n)) : 50);
+              }}
+            />
+          </label>
+
+          <div className="prefs-diag-actions">
+            <button
+              type="button"
+              className="prefs-diag-btn primary"
+              data-tone={tone}
+              disabled={busy}
+              onClick={() => void refreshLogs()}
+            >
+              {t("prefs.diag.refresh")}
+            </button>
+            <button
+              type="button"
+              className="prefs-diag-btn"
+              data-tone={tone}
+              disabled={busy || rows.length === 0}
+              onClick={() => void copyLogs()}
+            >
+              {t("prefs.diag.copy")}
+            </button>
+          </div>
+
+          {errorMsg && <p className="prefs-diag-error">{errorMsg}</p>}
+          {queried && !errorMsg && rows.length === 0 && (
+            <p className="prefs-diag-empty">{t("prefs.diag.empty")}</p>
+          )}
+          {rows.length > 0 && (
+            <pre className="prefs-diag-log">
+              {rows.map((r) => `[${r.source}] ${r.raw}`).join("\n")}
+            </pre>
+          )}
         </div>
       </section>
 
