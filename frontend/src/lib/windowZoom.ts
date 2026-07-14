@@ -6,6 +6,7 @@ import {
   LogicalSize,
   primaryMonitor,
 } from "@tauri-apps/api/window";
+import { syncWebviewToWindow, syncWebviewToWindowSoon } from "./webviewSync";
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -37,56 +38,79 @@ async function toLogicalRect(physical: {
   };
 }
 
-async function currentRect(): Promise<Rect> {
+/**
+ * 逻辑外框矩形（位置用 outer；尺寸换算成 setSize 所需的 inner）。
+ * Overlay 标题栏下 chrome 通常为 0，但显式扣除可避免把外框尺寸喂给 setSize。
+ */
+async function currentFrameRect(): Promise<Rect> {
   const win = getCurrentWindow();
-  const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
-  return toLogicalRect({
-    x: pos.x,
-    y: pos.y,
-    width: size.width,
-    height: size.height,
-  });
+  const [pos, outer, inner] = await Promise.all([
+    win.outerPosition(),
+    win.outerSize(),
+    win.innerSize(),
+  ]);
+  const factor = await win.scaleFactor();
+  const chromeW = Math.max(0, (outer.width - inner.width) / factor);
+  const chromeH = Math.max(0, (outer.height - inner.height) / factor);
+  return {
+    x: pos.x / factor,
+    y: pos.y / factor,
+    w: outer.width / factor - chromeW,
+    h: outer.height / factor - chromeH,
+  };
 }
 
-async function workAreaRect(): Promise<Rect | null> {
+async function workAreaInnerRect(): Promise<Rect | null> {
   const mon = (await currentMonitor()) ?? (await primaryMonitor());
   if (!mon) return null;
-  return toLogicalRect({
+  const win = getCurrentWindow();
+  const [outer, inner] = await Promise.all([win.outerSize(), win.innerSize()]);
+  const factor = await win.scaleFactor();
+  const chromeW = Math.max(0, (outer.width - inner.width) / factor);
+  const chromeH = Math.max(0, (outer.height - inner.height) / factor);
+  const wa = await toLogicalRect({
     x: mon.workArea.position.x,
     y: mon.workArea.position.y,
     width: mon.workArea.size.width,
     height: mon.workArea.size.height,
   });
+  return {
+    x: wa.x,
+    y: wa.y,
+    w: Math.max(1, wa.w - chromeW),
+    h: Math.max(1, wa.h - chromeH),
+  };
 }
 
-/** 逐帧插值位置+尺寸；动画期间加 html.zooming 关掉 CSS 过渡，减轻透明窗闪白 */
+/** 逐帧插值位置+尺寸；每帧强制 webview 跟窗，避免 macOS 白边。 */
 async function animateRect(from: Rect, to: Rect, durationMs = DURATION_MS) {
   const win = getCurrentWindow();
   const start = performance.now();
   document.documentElement.classList.add("zooming");
 
   try {
-    await new Promise<void>((resolve) => {
-      const step = async (now: number) => {
-        const t = Math.min(1, (now - start) / durationMs);
-        const e = easeOutCubic(t);
-        const x = Math.round(from.x + (to.x - from.x) * e);
-        const y = Math.round(from.y + (to.y - from.y) * e);
-        const w = Math.round(from.w + (to.w - from.w) * e);
-        const h = Math.round(from.h + (to.h - from.h) * e);
-        await Promise.all([
-          win.setPosition(new LogicalPosition(x, y)),
-          win.setSize(new LogicalSize(w, h)),
-        ]);
-        if (t < 1) requestAnimationFrame(step);
-        else resolve();
-      };
-      requestAnimationFrame(step);
-    });
+    for (;;) {
+      const now = await new Promise<number>((resolve) => {
+        requestAnimationFrame(resolve);
+      });
+      const t = Math.min(1, (now - start) / durationMs);
+      const e = easeOutCubic(t);
+      const x = Math.round(from.x + (to.x - from.x) * e);
+      const y = Math.round(from.y + (to.y - from.y) * e);
+      const w = Math.round(from.w + (to.w - from.w) * e);
+      const h = Math.round(from.h + (to.h - from.h) * e);
+      await Promise.all([
+        win.setPosition(new LogicalPosition(x, y)),
+        win.setSize(new LogicalSize(Math.max(1, w), Math.max(1, h))),
+      ]);
+      await syncWebviewToWindow();
+      if (t >= 1) break;
+    }
   } finally {
-    // 稍延后移除，避免最后一帧合成时闪一下
+    syncWebviewToWindowSoon();
     window.setTimeout(() => {
       document.documentElement.classList.remove("zooming");
+      void syncWebviewToWindow();
     }, 50);
   }
 }
@@ -99,16 +123,18 @@ export async function zoomOrRestore(optionKey: boolean) {
   const win = getCurrentWindow();
   if (optionKey) {
     await win.toggleMaximize();
+    syncWebviewToWindowSoon();
     return;
   }
 
-  const wa = await workAreaRect();
+  const wa = await workAreaInnerRect();
   if (!wa) {
     await win.toggleMaximize();
+    syncWebviewToWindowSoon();
     return;
   }
 
-  const current = await currentRect();
+  const current = await currentFrameRect();
   const nearWorkArea =
     near(current.x, wa.x) &&
     near(current.y, wa.y) &&

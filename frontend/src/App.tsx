@@ -81,6 +81,10 @@ import { resolveComposerTurn } from "./lib/composerResolve";
 import { zoomOrRestore } from "./lib/windowZoom";
 import { syncWindowUnderlay } from "./lib/windowUnderlay";
 import {
+  syncWebviewToWindow,
+  syncWebviewToWindowSoon,
+} from "./lib/webviewSync";
+import {
   clearChatSession,
   isChatCleared,
   isWelcomeOnly,
@@ -620,12 +624,15 @@ export default function App() {
         .isMaximized()
         .then(setWindowMaximized)
         .catch(() => {});
+      void syncWebviewToWindow();
       void win
         .onResized(() => {
           void win
             .isMaximized()
             .then(setWindowMaximized)
             .catch(() => {});
+          // macOS 程序化放大时常留下窗框与 WKWebView 白边缝
+          syncWebviewToWindowSoon();
         })
         .then((fn) => {
           unlisten = fn;

@@ -13,9 +13,11 @@
     "core:window:allow-set-position",
     "core:window:allow-outer-position",
     "core:window:allow-outer-size",
+    "core:window:allow-inner-size",
     "core:window:allow-current-monitor",
     "core:window:allow-primary-monitor",
     "core:webview:allow-set-webview-auto-resize",
+    "core:webview:allow-set-webview-size",
     "core:webview:allow-set-webview-background-color",
     "core:window:allow-set-background-color",
     "core:window:allow-set-theme"
