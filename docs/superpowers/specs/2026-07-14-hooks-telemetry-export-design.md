@@ -1,7 +1,7 @@
 # Hooks 遥测旁路导出设计（Shell → 外部 Webhook）
 
 **日期:** 2026-07-14  
-**状态:** 已批准（待实现）  
+**状态:** 已实现  
 **范围:** `HookPayload` / Shell env 贯通 `turn_id`；示例 `telemetry-webhook.sh` + 配置片段；文档说明  
 **依赖:** Hooks 系统（已实现）；可观测 S1 `turn_id`（已实现）  
 **相关：** [可观测性 S1](./2026-07-14-observability-alignment-design.md)、[Hooks 系统设计](./2026-07-14-hooks-system-design.md)
