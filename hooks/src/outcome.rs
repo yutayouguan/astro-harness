@@ -6,6 +6,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, Default)]
 pub struct HookPayload {
     pub session_id: String,
+    pub turn_id: Option<String>,
     pub detail: String,
     pub tool_name: Option<String>,
     pub tool_args: Option<Value>,

@@ -159,3 +159,49 @@ cargo test -p agent --test rig_agent_test test_prompt_hooks_on_run_turn
 cargo test -p agent --test rig_agent_test pre_tool_call_block_via_hook_bus
 cargo test -p agent --test rig_agent_test pre_llm_call_inject_context_via_hook_bus
 ```
+
+---
+
+## 7. 遥测旁路导出
+
+每条 `HookPayload` 都携带 `session_id` 与 `turn_id`（与 `UsageDb` / `agent.log` 里的 turn_id 一致），Shell Hook 会通过 `ASTRO_HOOK_SESSION` / `ASTRO_HOOK_TURN` 环境变量暴露给外部脚本。
+
+### 快速接入 Langfuse / 自建 Webhook
+
+1. 复制示例脚本并赋予执行权限：
+
+```bash
+cp docs/examples/hooks/telemetry-webhook.sh ~/.astro/hooks/
+chmod +x ~/.astro/hooks/telemetry-webhook.sh
+```
+
+2. 在 `~/.astro/config.yaml` 注册 Shell Hook：
+
+```yaml
+hooks:
+  post_tool_call:  '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+  post_llm_call:   '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+  on_session_end:  '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+```
+
+3. 设置目标端点：
+
+```bash
+export ASTRO_TELEMETRY_URL=https://your-endpoint/ingest
+export ASTRO_TELEMETRY_TOKEN=sk-...   # 可选
+```
+
+脚本未设 `ASTRO_TELEMETRY_URL` 时静默 `exit 0`，不影响 agent。Shell 执行失败只记 `tracing::warn`，**不**阻断主循环。
+
+### 环境变量一览
+
+| 变量 | 说明 |
+|------|------|
+| `ASTRO_HOOK_EVENT` | 事件名（如 `post_tool_call`） |
+| `ASTRO_HOOK_SESSION` | 会话 ID |
+| `ASTRO_HOOK_TURN` | turn_id（会话内唯一，仅当有值时设置） |
+| `ASTRO_HOOK_TOOL` | 工具名（`pre/post_tool_call` 时有值） |
+| `ASTRO_HOOK_DETAIL` | 事件摘要文本 |
+| `ASTRO_HOOK_MESSAGE` | 消息内容（Gateway 事件时有值） |
+
+> **安全提示**：`tool_args` / `tool_result` 不写入 env，避免命令行泄露 API 密钥或用户数据。如需完整 payload，可在脚本内读取 `agent.log` 中对应 `turn_id` 的行。

@@ -68,6 +68,9 @@ fn env_from_payload(event: &str, payload: &HookPayload) -> Vec<(String, String)>
         ("ASTRO_HOOK_SESSION".into(), payload.session_id.clone()),
         ("ASTRO_HOOK_DETAIL".into(), payload.detail.clone()),
     ];
+    if let Some(tid) = &payload.turn_id {
+        env.push(("ASTRO_HOOK_TURN".into(), tid.clone()));
+    }
     if let Some(t) = &payload.tool_name {
         env.push(("ASTRO_HOOK_TOOL".into(), t.clone()));
     }
