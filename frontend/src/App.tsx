@@ -116,6 +116,14 @@ const ACTIVITY_KINDS = new Set<ChatActivityKind>([
   "status",
 ]);
 
+/** 计 user/assistant 聊天气泡（排除 welcome） */
+function countChatBubbles(msgs: ChatMessage[]): number {
+  return msgs.filter(
+    (m) =>
+      m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
+  ).length;
+}
+
 /** 将 `get_chat_history` 富 DTO 映射为前端 ChatMessage（含 reasoning / activities） */
 function mapHistoryMessages(messages: ChatHistoryMessageDto[]): ChatMessage[] {
   return messages
@@ -347,6 +355,8 @@ export default function App() {
   const zoomingRef = useRef(false);
   /** 避免恢复过程中把空欢迎页写回覆盖已存会话 */
   const restoringRef = useRef(false);
+  /** 编辑/再生后下次 start_chat 应截断 DB 到的气泡数；普通发送为 null */
+  const pendingKeepChatBubblesRef = useRef<number | null>(null);
   /** 流式 token / reasoning 按帧合并，避免同 tick 批量 setState 导致整段弹出 */
   const streamPendingRef = useRef<Map<string, string>>(new Map());
   const streamReasoningPendingRef = useRef<Map<string, string>>(new Map());
@@ -1482,6 +1492,7 @@ export default function App() {
           )
         : { thinkingEnabled: false, reasoningEffort: "high" as const };
 
+      const keepChatBubbles = pendingKeepChatBubblesRef.current;
       await invoke<string>("start_chat", {
         content: contentForModel,
         provider: chatProvider.backend_id,
@@ -1492,6 +1503,8 @@ export default function App() {
         thinkingEnabled: modelApi.thinkingEnabled,
         reasoningEffort: modelApi.reasoningEffort,
         resumeJson: resumeJson || undefined,
+        keepChatBubbles:
+          keepChatBubbles != null ? keepChatBubbles : undefined,
         attachments: pending.map((a) => ({
           name: a.name,
           mime: a.mime,
@@ -1500,6 +1513,8 @@ export default function App() {
           dataBase64: a.dataBase64 ?? null,
         })),
       });
+      // 截断成功发起后才清掉；失败则保留以便重试
+      pendingKeepChatBubblesRef.current = null;
       setStatusPhase("generating");
     } catch (err) {
       clearStreamBuffers();
@@ -1611,6 +1626,9 @@ export default function App() {
       }
       if (userIdx < 0) return;
       const userMsg = messages[userIdx];
+      pendingKeepChatBubblesRef.current = countChatBubbles(
+        messages.slice(0, userIdx + 1),
+      );
       void send({
         text: userMsg.content,
         attachments: userMsg.attachments ?? [],
@@ -1629,13 +1647,16 @@ export default function App() {
     hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
   }, []);
 
-  /** 编辑用户消息：正文与附件填入输入框，截断该条及之后，改完后发送即重发 */
+  /** 编辑用户消息：正文与附件填入输入框，截断该条及之后；发送时再截断 DB */
   const editUserMessage = useCallback(
     (messageId: string) => {
       if (streaming) return;
       const idx = messages.findIndex((m) => m.id === messageId);
       if (idx < 0 || messages[idx]?.role !== "user") return;
       const userMsg = messages[idx];
+      pendingKeepChatBubblesRef.current = countChatBubbles(
+        messages.slice(0, idx),
+      );
       setInput(userMsg.content);
       setAttachments(
         (userMsg.attachments ?? []).map((a) => ({
@@ -1906,6 +1927,7 @@ export default function App() {
     unlistenRef.current = null;
     clearStreamBuffers();
     clearChatSession();
+    pendingKeepChatBubblesRef.current = null;
     setSessionId(null);
     setAttachments((prev) => {
       for (const a of prev) {

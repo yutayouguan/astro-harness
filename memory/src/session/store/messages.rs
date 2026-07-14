@@ -168,33 +168,9 @@ impl SessionStore {
         }
 
         let messages = self.get_messages(source_id)?;
-        if messages.is_empty() {
+        let Some(end) = end_inclusive_for_bubbles(&messages, keep_chat_bubbles) else {
             return Ok(());
-        }
-
-        let mut bubbles = 0usize;
-        let mut end = None;
-        for (i, m) in messages.iter().enumerate() {
-            match m.role.as_str() {
-                "user" | "assistant" => {
-                    bubbles += 1;
-                    if bubbles >= keep_chat_bubbles {
-                        let mut last = i;
-                        for (j, n) in messages.iter().enumerate().skip(i + 1) {
-                            if n.role == "tool" {
-                                last = j;
-                            } else {
-                                break;
-                            }
-                        }
-                        end = Some(last);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        let end = end.unwrap_or(messages.len() - 1);
+        };
 
         let tx = self.conn.unchecked_transaction()?;
         let mut message_count = 0i64;
@@ -254,6 +230,71 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 将本会话截断到第 `keep_chat_bubbles` 个 user/assistant 气泡（含其后紧跟的 tool 行）。
+    ///
+    /// `keep_chat_bubbles == 0` 时删除全部消息。会话不存在时返回错误。用于编辑重发 / 再生前对齐 DB。
+    pub fn truncate_session_to_bubbles(
+        &self,
+        session_id: &str,
+        keep_chat_bubbles: usize,
+    ) -> Result<()> {
+        if self.get_session(session_id)?.is_none() {
+            anyhow::bail!("truncate_session_to_bubbles: session not found");
+        }
+
+        let messages = self.get_messages(session_id)?;
+        let tx = self.conn.unchecked_transaction()?;
+
+        if keep_chat_bubbles == 0 || messages.is_empty() {
+            tx.execute(
+                "DELETE FROM messages WHERE session_id = ?1",
+                params![session_id],
+            )?;
+            tx.execute(
+                "UPDATE sessions
+                 SET message_count = 0, tool_call_count = 0
+                 WHERE id = ?1",
+                params![session_id],
+            )?;
+            tx.commit()?;
+            return Ok(());
+        }
+
+        let Some(end) = end_inclusive_for_bubbles(&messages, keep_chat_bubbles) else {
+            // 气泡不足 keep 时视为已满足前缀，无需删尾
+            tx.commit()?;
+            return Ok(());
+        };
+
+        if end + 1 >= messages.len() {
+            tx.commit()?;
+            return Ok(());
+        }
+
+        let last_kept_id = messages[end].id;
+        tx.execute(
+            "DELETE FROM messages WHERE session_id = ?1 AND id > ?2",
+            params![session_id, last_kept_id],
+        )?;
+
+        let mut message_count = 0i64;
+        let mut tool_call_count = 0i64;
+        for m in &messages[..=end] {
+            message_count += 1;
+            if m.role == "tool" {
+                tool_call_count += 1;
+            }
+        }
+        tx.execute(
+            "UPDATE sessions
+             SET message_count = ?1, tool_call_count = ?2
+             WHERE id = ?3",
+            params![message_count, tool_call_count, session_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// 重建 OpenAI conversation 形状（assistant 带 `tool_calls` / `reasoning*`）。
     pub fn get_messages_as_conversation(&self, session_id: &str) -> Result<Vec<Value>> {
         let messages = self.get_messages(session_id)?;
@@ -297,4 +338,35 @@ impl SessionStore {
         }
         Ok(out)
     }
+}
+
+/// 返回保留前缀的**含尾**下标：数到第 `keep` 个 user/assistant 后，再吞掉其后连续 tool 行。
+///
+/// `keep == 0` 或消息为空时返回 `None`（调用方视为无前缀）。
+fn end_inclusive_for_bubbles(messages: &[StoredMessage], keep: usize) -> Option<usize> {
+    if keep == 0 || messages.is_empty() {
+        return None;
+    }
+    let mut bubbles = 0usize;
+    for (i, m) in messages.iter().enumerate() {
+        match m.role.as_str() {
+            "user" | "assistant" => {
+                bubbles += 1;
+                if bubbles >= keep {
+                    let mut last = i;
+                    for (j, n) in messages.iter().enumerate().skip(i + 1) {
+                        if n.role == "tool" {
+                            last = j;
+                        } else {
+                            break;
+                        }
+                    }
+                    return Some(last);
+                }
+            }
+            _ => {}
+        }
+    }
+    // 气泡不足 keep：整段都算前缀
+    Some(messages.len() - 1)
 }

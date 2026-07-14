@@ -254,6 +254,12 @@ pub struct AgentInfoDto {
     pub path: String,
     pub is_default: bool,
     pub is_active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emoji: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vibe: Option<String>,
 }
 
 /// 返回本机 Astro 记忆根目录。
@@ -276,6 +282,9 @@ fn agent_info_dto(a: memory::AgentInfo) -> AgentInfoDto {
         path: a.path,
         is_default: a.is_default,
         is_active: a.is_active,
+        emoji: a.emoji,
+        avatar: a.avatar,
+        vibe: a.vibe,
     }
 }
 
@@ -438,6 +447,9 @@ pub async fn write_daily_memory(
 }
 
 /// 启动流式聊天（内部走 Agent / Provider）。
+///
+/// `keep_chat_bubbles`：若提供，则在开跑前将会话 DB 截断到该数量的 user/assistant 气泡
+///（编辑重发 / 再生用；缺失则不截断）。
 #[tauri::command]
 pub async fn start_chat(
     app: AppHandle,
@@ -451,6 +463,7 @@ pub async fn start_chat(
     thinking_enabled: Option<bool>,
     reasoning_effort: Option<String>,
     resume_json: Option<String>,
+    keep_chat_bubbles: Option<i32>,
 ) -> Result<String, String> {
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
@@ -468,6 +481,17 @@ pub async fn start_chat(
         "max" | "xhigh" => "max".to_string(),
         _ => "high".to_string(),
     };
+
+    if let Some(keep) = keep_chat_bubbles {
+        bootstrap_workspace()?;
+        let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+            .map_err(|e| e.to_string())?;
+        mgr.ensure_session(&sid, "tauri")
+            .map_err(|e| e.to_string())?;
+        mgr.session_store
+            .truncate_session_to_bubbles(&sid, keep.max(0) as usize)
+            .map_err(|e| e.to_string())?;
+    }
 
     // 从 providers.json + keyring 解析密钥与 endpoint
     let (api_key, base_url) = resolve_chat_credentials(provider_id.as_deref(), &provider)?;

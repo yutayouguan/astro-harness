@@ -652,3 +652,66 @@ fn fork_session_copies_bubbles_and_trailing_tools() {
     assert_eq!(meta.parent_session_id.as_deref(), Some("src"));
     assert!(meta.title.as_deref().unwrap_or("").contains("branch"));
 }
+
+#[test]
+fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("s1", "test", Some("gpt"), None, None)
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("u1".into()),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a1".into()),
+            tool_calls: Some(serde_json::json!([{ "id": "c1", "name": "x", "arguments": {} }])),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("tool-out".into()),
+            tool_call_id: Some("c1".into()),
+            tool_name: Some("x".into()),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("u2".into()),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("a2".into()),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+
+    // keep 1 bubble = only first user；后续 assistant/tool/u2/a2 全删
+    store.truncate_session_to_bubbles("s1", 1).unwrap();
+    let left = store.get_messages("s1").unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].content.as_deref(), Some("u1"));
+    let meta = store.get_session("s1").unwrap().unwrap();
+    assert_eq!(meta.message_count, 1);
+    assert_eq!(meta.tool_call_count, 0);
+
+    // keep 0 → 清空
+    store
+        .append_message(NewMessage {
+            content: Some("again".into()),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store.truncate_session_to_bubbles("s1", 0).unwrap();
+    assert!(store.get_messages("s1").unwrap().is_empty());
+    let meta = store.get_session("s1").unwrap().unwrap();
+    assert_eq!(meta.message_count, 0);
+}
