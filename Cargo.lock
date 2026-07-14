@@ -2337,6 +2337,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "common",
+ "memory-agent",
  "memory-paths",
  "reqwest 0.12.28",
  "rusqlite",
@@ -2350,6 +2351,18 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "memory-agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "memory-paths",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

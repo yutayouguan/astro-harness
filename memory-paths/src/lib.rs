@@ -5,6 +5,7 @@
 
 pub mod infra;
 pub mod spawn_depth;
+pub mod test_env;
 pub mod workspace;
 
 // ─── flat re-exports ─────────────────────────────────────────────────────────

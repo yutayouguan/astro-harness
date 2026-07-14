@@ -3,6 +3,7 @@ members = [
     "proto",
     "common",
     "memory-paths",
+    "memory-agent",
     "backend",
     "agent",
     "providers",
