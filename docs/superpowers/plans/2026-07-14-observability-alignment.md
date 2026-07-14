@@ -1,6 +1,6 @@
 # Observability Alignment (S1) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 贯通 `turn_id`、落地 `agent.log`/`errors.log` 分层，并在偏好设置提供按 `session_id`/`turn_id` 过滤的日志诊断面板。
 
@@ -42,7 +42,7 @@
 - Modify: `memory/tests/usage_db_test.rs`
 - Modify: 所有 `NewUsageEvent { ... }` 构造处（见下方 Step 4 清单）
 
-- [ ] **Step 1: Write failing migration + insert tests**
+- [x] **Step 1: Write failing migration + insert tests**
 
 在 `memory/tests/usage_db_test.rs` 追加：
 
@@ -153,7 +153,7 @@ fn migrate_v3_to_v4_keeps_rows_and_adds_turn_id() {
 
 （若 `USAGE_SCHEMA_VERSION` 未 export，在 `memory/src/lib.rs` 增加 `pub use usage::db::USAGE_SCHEMA_VERSION;`。）
 
-- [ ] **Step 2: Run test — expect FAIL**
+- [x] **Step 2: Run test — expect FAIL**
 
 ```bash
 cargo test -p memory migrate_v3_to_v4_keeps_rows_and_adds_turn_id -- --nocapture
@@ -161,7 +161,7 @@ cargo test -p memory migrate_v3_to_v4_keeps_rows_and_adds_turn_id -- --nocapture
 
 Expected: compile error（无 `turn_id` 字段）或打开库时毁掉 old1。
 
-- [ ] **Step 3: Implement schema + safe migrate**
+- [x] **Step 3: Implement schema + safe migrate**
 
 在 `memory/src/usage/db.rs`：
 
@@ -224,7 +224,7 @@ pub fn new(path: PathBuf) -> anyhow::Result<Self> {
 
 5. `insert` SQL 与 params 增加 `turn_id`（占位符顺延）
 
-- [ ] **Step 4: Fix all `NewUsageEvent` call sites**
+- [x] **Step 4: Fix all `NewUsageEvent` call sites**
 
 为每处结构体字面量补 `turn_id: None`（或有值则透传）：
 
@@ -237,7 +237,7 @@ pub fn new(path: PathBuf) -> anyhow::Result<Self> {
 - `agent/src/orchestration.rs`
 - `agent/src/cron_exec.rs`
 
-- [ ] **Step 5: Run tests — expect PASS**
+- [x] **Step 5: Run tests — expect PASS**
 
 ```bash
 cargo test -p memory --test usage_db_test
@@ -246,7 +246,7 @@ cargo test -p memory migrate_v3_to_v4
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add memory/src/usage/db.rs memory/tests/usage_db_test.rs memory/src/lib.rs \
@@ -271,7 +271,7 @@ EOF
 - Modify: `memory/src/lib.rs`
 - Test: 单元测试放在 `log_query.rs` 的 `#[cfg(test)]`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```rust
 #[cfg(test)]
@@ -335,13 +335,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run — expect FAIL (module missing)**
+- [x] **Step 2: Run — expect FAIL (module missing)**
 
 ```bash
 cargo test -p memory filters_by_session_and_turn_newest_first -- --nocapture
 ```
 
-- [ ] **Step 3: Implement `log_query.rs`**
+- [x] **Step 3: Implement `log_query.rs`**
 
 ```rust
 //! 扫描 `~/.astro/logs` 下 agent/errors 日志尾部并按 session/turn 过滤。
@@ -466,14 +466,14 @@ pub fn default_agent_log_query() -> AgentLogQuery {
 `infra/mod.rs`：`pub mod log_query;`  
 `lib.rs`：`pub use log_query::{query_agent_logs, AgentLogLine, AgentLogQuery, LogSource};`
 
-- [ ] **Step 4: Run tests — PASS**
+- [x] **Step 4: Run tests — PASS**
 
 ```bash
 cargo test -p memory filters_by_session_and_turn -- --nocapture
 cargo test -p memory errors_source_only -- --nocapture
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/infra/log_query.rs memory/src/infra/mod.rs memory/src/lib.rs
@@ -493,7 +493,7 @@ EOF
 - Modify: `frontend/src-tauri/src/lib.rs`（`init_logging("agent")`）
 - Modify: `backend/src/lib.rs`（`init_logging("agent")`，与桌面共用文件名语义；若 backend 独立部署可接受同名）
 
-- [ ] **Step 1: Rewrite `init_logging`**
+- [x] **Step 1: Rewrite `init_logging`**
 
 替换为双 non-blocking writer + 分层 level（示意，按现有 `OnceLock` 扩成存两个 guard 或元组）：
 
@@ -547,12 +547,12 @@ pub fn init_logging(_component: &str) -> anyhow::Result<()> {
 
 注意：`Layer` 的 `with_filter` 需要 `tracing-subscriber` 的 `registry` feature（通常已开）。若编译失败，改用 `filter::filter_fn` 包一层。
 
-- [ ] **Step 2: 统一调用方文件语义**
+- [x] **Step 2: 统一调用方文件语义**
 
 - `frontend/src-tauri/src/lib.rs`：`memory::init_logging("agent")`
 - `backend/src/lib.rs`：`init_logging("agent")`
 
-- [ ] **Step 3: Smoke**
+- [x] **Step 3: Smoke**
 
 ```bash
 cargo check -p memory -p frontend/src-tauri 2>/dev/null || cargo check -p memory
@@ -562,7 +562,7 @@ cargo check -p memory
 
 手动：启动一次 app 后确认 `~/.astro/logs/agent.log` 与 `errors.log` 出现（errors 可在触发 warn 后出现内容）。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add memory/src/infra/logging.rs frontend/src-tauri/src/lib.rs backend/src/lib.rs
@@ -585,7 +585,7 @@ EOF
 
 **约定：** `run_multi_turn_stream` 内已有 `run_id` —— **本轮 `turn_id` 与其相同**（同一 UUID）。`RunStarted.run_id` 值不变；Usage/logs 字段名用 `turn_id`。
 
-- [ ] **Step 1: `AgentLoop` 持有当前回合**
+- [x] **Step 1: `AgentLoop` 持有当前回合**
 
 在 `AgentLoop` 增加：
 
@@ -607,7 +607,7 @@ pub fn current_turn_id(&self) -> Option<&str> {
 }
 ```
 
-- [ ] **Step 2: streaming 入口设置并打日志**
+- [x] **Step 2: streaming 入口设置并打日志**
 
 在 `run_multi_turn_stream` 生成 `run_id` 之后：
 
@@ -636,7 +636,7 @@ tracing::info!(session_id = %session_id /* 用 thread_id */, turn_id = %run_id, 
 
 对已有 `tracing::warn!` 的 LLM/tool 失败处，尽量补 `session_id` / `turn_id` 字段。
 
-- [ ] **Step 3: `usage_record` 贯通**
+- [x] **Step 3: `usage_record` 贯通**
 
 ```rust
 pub(crate) fn build_llm_usage_event(
@@ -675,11 +675,11 @@ apply_llm_usage_dual_write(
 );
 ```
 
-- [ ] **Step 4: `loop_.rs` 工具 / 其它 `NewUsageEvent`**
+- [x] **Step 4: `loop_.rs` 工具 / 其它 `NewUsageEvent`**
 
 凡写入 UsageDb 的路径：`turn_id: self.current_turn_id.clone()`。
 
-- [ ] **Step 5: 单元测试 usage_record**
+- [x] **Step 5: 单元测试 usage_record**
 
 更新 `build_llm_usage_event_*` 测试调用签名；可选断言 `event.turn_id == Some(...)`。
 
@@ -688,7 +688,7 @@ cargo test -p agent build_llm_usage_event -- --nocapture
 cargo check -p agent
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add agent/src/loop_.rs agent/src/streaming.rs agent/src/usage_record.rs
@@ -707,7 +707,7 @@ EOF
 - Modify: `frontend/src-tauri/src/config_commands.rs`（或新建 `diagnostics_commands.rs` 并在 `lib.rs` mod）
 - Modify: `frontend/src-tauri/src/lib.rs`（`generate_handler!`）
 
-- [ ] **Step 1: Command**
+- [x] **Step 1: Command**
 
 ```rust
 #[derive(Debug, Deserialize)]
@@ -742,13 +742,13 @@ pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<memory::Ag
 
 注册到 `lib.rs` 的 `invoke_handler`。
 
-- [ ] **Step 2: Check**
+- [x] **Step 2: Check**
 
 ```bash
 cargo check -p astro-ui 2>/dev/null || cargo check --manifest-path frontend/src-tauri/Cargo.toml
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src-tauri/src/config_commands.rs frontend/src-tauri/src/lib.rs
@@ -769,7 +769,7 @@ EOF
 - Modify: `frontend/src/i18n/messages.ts`
 - Optional: `frontend/src/styles/` 下 prefs 相关 CSS（优先复用 `prefs-card`）
 
-- [ ] **Step 1: i18n keys**
+- [x] **Step 1: i18n keys**
 
 在 `messages.ts` 英/中（及现有其它 locale，若有对称结构）增加：
 
@@ -792,7 +792,7 @@ EOF
 // ...
 ```
 
-- [ ] **Step 2: Panel section**
+- [x] **Step 2: Panel section**
 
 在 `PreferencesPanel` 聊天偏好与语言之间（或语言之后）插入一节：
 
@@ -808,7 +808,7 @@ EOF
 type AgentLogLine = { raw: string; source: string };
 ```
 
-- [ ] **Step 3: 样式（最小）**
+- [x] **Step 3: 样式（最小）**
 
 ```css
 .prefs-diag-log {
@@ -823,14 +823,14 @@ type AgentLogLine = { raw: string; source: string };
 
 放入已有 prefs CSS 文件（搜 `.prefs-card` 所在 stylesheet）。
 
-- [ ] **Step 4: 手测清单**
+- [x] **Step 4: 手测清单**
 
 1. 跑一轮聊天 → `~/.astro/logs/agent.log` 出现 `session_id=` 与 `turn_id=`  
 2. 偏好设置粘贴该 session → 刷新看到行  
 3. 故意触发 warn（或看 errors）→ source=errors 有行  
 4. Usage：抽查 `usage.db` 新 llm 行 `turn_id` 非空  
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/PreferencesPanel.tsx frontend/src/i18n/messages.ts frontend/src/styles/*.css
@@ -845,7 +845,7 @@ EOF
 
 ## Task 7: 端到端验收 + 收尾
 
-- [ ] **Step 1: 回归测试**
+- [x] **Step 1: 回归测试**
 
 ```bash
 cargo test -p memory --test usage_db_test
@@ -853,11 +853,11 @@ cargo test -p memory filters_by_session
 cargo test -p agent build_llm_usage
 ```
 
-- [ ] **Step 2: Spec 勾对**
+- [x] **Step 2: Spec 勾对**
 
 对照 [`2026-07-14-observability-alignment-design.md`](../specs/2026-07-14-observability-alignment-design.md) S1：turn_id、双日志、query API、Preferences —— 均已落地；Insights 下钻未做。
 
-- [ ] **Step 3: 更新 spec 状态行（可选）**
+- [x] **Step 3: 更新 spec 状态行（可选）**
 
 将 spec 头部 `状态: 已批准（待实现）` 改为 `状态: 已批准 / S1 已实现`（若本批完成）。
 
