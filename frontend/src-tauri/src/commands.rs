@@ -825,8 +825,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::Done(true)) => {
+                // 不立即结束：Done 之后仍可能有 background review 的 MemoryUpdate
                 let _ = app.emit(event_name, ChatStreamEvent::Done);
-                break;
             }
             Some(proto::chat_event::Payload::Error(err)) => {
                 let _ = app.emit(

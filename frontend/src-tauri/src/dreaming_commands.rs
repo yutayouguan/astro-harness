@@ -3,6 +3,8 @@
 use futures::StreamExt;
 use serde::Serialize;
 
+use tauri::{AppHandle, Emitter};
+
 use memory::dreaming::{
     build_dream_extract_inputs, finalize_dream_job_from_update, load_dreaming_state,
     mark_agent_dream_error, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
@@ -259,7 +261,7 @@ fn resolve_dreaming_provider() -> Result<(UiProvider, String, String), String> {
 
 /// Tauri 命令：run_dreaming。
 #[tauri::command]
-pub async fn run_dreaming() -> Result<DreamRunReport, String> {
+pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
     let base = default_memory_dir();
     let mut state = load_dreaming_state(&base);
     if state.running {
@@ -354,6 +356,18 @@ pub async fn run_dreaming() -> Result<DreamRunReport, String> {
     state.last_run_at = Some(chrono::Utc::now().to_rfc3339());
     state.last_error = last_error.clone();
     save_dreaming_state(&base, &state).map_err(|e| e.to_string())?;
+
+    let new_memories: u64 = reports.iter().map(|r| r.new_memories).sum();
+    if new_memories > 0 {
+        let _ = app.emit(
+            "memory-updated",
+            serde_json::json!({
+                "op": "dreaming",
+                "new_memories": new_memories,
+                "content": format!("记忆已更新（入梦·{new_memories}）"),
+            }),
+        );
+    }
 
     Ok(DreamRunReport {
         ok: last_error.is_none(),

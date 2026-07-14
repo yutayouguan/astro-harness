@@ -52,7 +52,7 @@
 - `memory.write_approval` + pending 队列 + approve/reject（Tauri/设置最小 UI）  
 - 回合后 `auxiliary.background_review`  
 - 入梦强制 `auxiliary.dreaming`  
-- 可选聊天通知「记忆已更新」  
+- 可选聊天通知「记忆已更新」（已落地：background review 经 Chat 流 `Done` 后再推 `MemoryUpdate`；入梦成功 `memory-updated` toast；均受 `showMemory` 约束）  
 
 ### 明确不做
 

@@ -260,6 +260,8 @@ export default function App() {
   useBeautifyTips();
   const { t, locale } = useI18n();
   const { prefs: chatDisplayPrefs, setVerbosity, setToggle } = useChatDisplayPrefs();
+  const chatDisplayPrefsRef = useRef(chatDisplayPrefs);
+  chatDisplayPrefsRef.current = chatDisplayPrefs;
   const {
     thinkingPrefs,
     setLevel: setThinkingLevel,
@@ -715,6 +717,36 @@ export default function App() {
         const n = ev.payload?.installed?.length ?? 0;
         if (n <= 0) return;
         setToastMsg(t("skills.defaultSeeded").replace("{n}", String(n)));
+        setToastVisible(true);
+        if (hideTimer) window.clearTimeout(hideTimer);
+        hideTimer = window.setTimeout(() => setToastVisible(false), 4000);
+      },
+    )
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      unlisten?.();
+      if (hideTimer) window.clearTimeout(hideTimer);
+    };
+  }, [t]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+    let unlisten: UnlistenFn | undefined;
+    let hideTimer: number | undefined;
+    void listen<{ op?: string; content?: string; new_memories?: number }>(
+      "memory-updated",
+      (ev) => {
+        if (!chatDisplayPrefsRef.current.showMemory) return;
+        const n = ev.payload?.new_memories ?? 0;
+        const msg =
+          ev.payload?.content?.trim() ||
+          t("chat.toast.memoryUpdated").replace("{n}", String(n || 1));
+        setToastMsg(msg);
         setToastVisible(true);
         if (hideTimer) window.clearTimeout(hideTimer);
         hideTimer = window.setTimeout(() => setToastVisible(false), 4000);
@@ -1311,6 +1343,15 @@ export default function App() {
               m.id === assistantId ? applyActivityUpsert(m, activity) : m,
             ),
           );
+          if (
+            chatDisplayPrefsRef.current.showMemory &&
+            payload.operation === "background_review" &&
+            payload.content
+          ) {
+            setToastMsg(payload.content);
+            setToastVisible(true);
+            window.setTimeout(() => setToastVisible(false), 4000);
+          }
         } else if (payload.type === "hook") {
           const title = payload.name || "hook";
           const detail = [payload.detail, payload.outcome]

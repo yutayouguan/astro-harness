@@ -1,7 +1,7 @@
 //! 回合后记忆 background review：调用辅助模型并应用建议。
 //!
-//! 由 backend 在 Chat 流 `Done` 后 fire-and-forget；`auxiliary.background_review_enabled`
-//! 为 false 时直接跳过。
+//! 由 backend 在 Chat 流 `Done` 后等待本任务结束（可再推 `MemoryUpdate`）；
+//! `auxiliary.background_review_enabled` 为 false 时直接跳过。
 
 use std::path::PathBuf;
 
@@ -27,6 +27,13 @@ pub struct BackgroundReviewJob {
     pub session_model: String,
     pub api_key: String,
     pub base_url: String,
+}
+
+/// review 写盘后的轻量 UI 通知（`op` + `content`）。
+#[derive(Debug, Clone)]
+pub struct MemoryReviewNotify {
+    pub op: String,
+    pub content: String,
 }
 
 /// 从当前 [`AgentLoop`] 快照构造 review job（不含 system 消息）。
@@ -61,25 +68,59 @@ pub fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
     }
 }
 
-/// 若配置开启则异步 fire-and-forget；失败只打日志。
-pub fn spawn_background_review_after_turn(agent: &AgentLoop) {
+/// 生成面向 UI 的通知文案；无有效写入时返回 `None`。
+pub fn review_notify_from_applied(applied: &[String]) -> Option<MemoryReviewNotify> {
+    if applied.is_empty() {
+        return None;
+    }
+    let preview = applied
+        .iter()
+        .take(2)
+        .map(|s| {
+            let t = s.trim();
+            if t.chars().count() > 80 {
+                format!("{}…", t.chars().take(80).collect::<String>())
+            } else {
+                t.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("；");
+    Some(MemoryReviewNotify {
+        op: "background_review".into(),
+        content: format!("记忆已更新（{}）· {preview}", applied.len()),
+    })
+}
+
+/// 若配置开启则异步跑 review；完成后可选向 `notify` 推一条摘要。
+pub fn spawn_background_review_after_turn(
+    agent: &AgentLoop,
+    notify: Option<tokio::sync::mpsc::UnboundedSender<MemoryReviewNotify>>,
+) {
     let job = job_from_agent(agent);
     tokio::spawn(async move {
-        if let Err(e) = maybe_run_background_review(job).await {
-            warn!(error = %e, "memory background review failed");
+        match maybe_run_background_review(job).await {
+            Ok(applied) => {
+                if let (Some(tx), Some(n)) = (notify, review_notify_from_applied(&applied)) {
+                    let _ = tx.send(n);
+                }
+            }
+            Err(e) => warn!(error = %e, "memory background review failed"),
         }
     });
 }
 
-/// 若配置开启则跑 review；关闭则 Ok(())。
-pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Result<()> {
+/// 若配置开启则跑 review；关闭则 Ok(空)。
+///
+/// 返回值：实际应用的写入摘要行（含 pending 入队提示）。
+pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Result<Vec<String>> {
     let aux = load_auxiliary_config(&job.memory_dir);
     if !aux.background_review_enabled {
-        return Ok(());
+        return Ok(vec![]);
     }
     if job.api_key.is_empty() && job.session_provider != "ollama" {
         warn!("background review skipped: empty api_key");
-        return Ok(());
+        return Ok(vec![]);
     }
 
     let (provider, model) = resolve_auxiliary(
@@ -90,12 +131,12 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
     );
     if model.trim().is_empty() {
         warn!("background review skipped: empty model");
-        return Ok(());
+        return Ok(vec![]);
     }
 
     let digest = build_review_digest(&job.messages, 6);
     if digest.trim().is_empty() {
-        return Ok(());
+        return Ok(vec![]);
     }
 
     info!(
@@ -116,9 +157,13 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
     .await?;
 
     let output = parse_review_llm_output(&raw)?;
-    if output.suggestions.is_empty() && output.daily_note.as_ref().map_or(true, |s| s.trim().is_empty())
+    if output.suggestions.is_empty()
+        && output
+            .daily_note
+            .as_ref()
+            .map_or(true, |s| s.trim().is_empty())
     {
-        return Ok(());
+        return Ok(vec![]);
     }
 
     let mut mgr = MemoryManager::for_agent(job.memory_dir, &job.agent_id)?;
@@ -128,7 +173,7 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
         n = applied.len(),
         "memory background review applied"
     );
-    Ok(())
+    Ok(applied)
 }
 
 async fn complete_review_chat(
@@ -173,4 +218,26 @@ async fn complete_review_chat(
         anyhow::bail!("background review 模型未返回内容");
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notify_none_when_empty() {
+        assert!(review_notify_from_applied(&[]).is_none());
+    }
+
+    #[test]
+    fn notify_summarizes_count() {
+        let n = review_notify_from_applied(&[
+            "added memory entry".into(),
+            "added user profile".into(),
+        ])
+        .unwrap();
+        assert_eq!(n.op, "background_review");
+        assert!(n.content.contains("记忆已更新（2）"));
+        assert!(n.content.contains("added memory"));
+    }
 }

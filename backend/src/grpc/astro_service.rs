@@ -37,6 +37,35 @@ type SessionHandle = Arc<Mutex<AgentLoop>>;
 /// Chat RPC 返回的事件流类型别名。
 type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
 
+/// 启动 background review，并在写盘成功时于同一 Chat 流上再推一条 `MemoryUpdate`。
+///
+/// 在 `Done` 之后调用；最长等待 30s，超时或无写入则静默结束。
+async fn spawn_review_and_emit_update(
+    session: &SessionHandle,
+    tx: &tokio::sync::mpsc::Sender<Result<ChatEvent, Status>>,
+) {
+    let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
+    {
+        let agent = session.lock().await;
+        agent::spawn_background_review_after_turn(&agent, Some(notify_tx));
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(30), notify_rx.recv()).await {
+        Ok(Some(n)) => {
+            let _ = tx
+                .send(Ok(ChatEvent {
+                    payload: Some(proto::chat_event::Payload::MemoryUpdate(
+                        proto::MemoryUpdateEvent {
+                            operation: n.op,
+                            content: n.content,
+                        },
+                    )),
+                }))
+                .await;
+        }
+        _ => {}
+    }
+}
+
 /// Astro gRPC 服务实现：会话 Agent、流式聊天、记忆与技能等 RPC。
 pub struct AstroServiceImpl {
     /// session_id → Agent 循环句柄。
@@ -608,10 +637,7 @@ impl AstroService for AstroServiceImpl {
                             payload: Some(proto::chat_event::Payload::Done(true)),
                         }))
                         .await;
-                    {
-                        let agent = session.lock().await;
-                        agent::spawn_background_review_after_turn(&agent);
-                    }
+                    spawn_review_and_emit_update(&session, &tx).await;
                     cleanup().await;
                     return;
                 }
@@ -751,11 +777,8 @@ impl AstroService for AstroServiceImpl {
                             }
                         }
                         if is_done {
-                            // 回合成功结束后异步 memory background review（可配置关闭）
-                            {
-                                let agent = session_for_review.lock().await;
-                                agent::spawn_background_review_after_turn(&agent);
-                            }
+                            // Done 之后再等 review，可能再推 MemoryUpdate，然后结束流
+                            spawn_review_and_emit_update(&session_for_review, &tx).await;
                             break;
                         }
                     }
