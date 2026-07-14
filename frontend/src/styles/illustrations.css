@@ -141,6 +141,16 @@ html[data-theme="dark"] .astro-cover-swatch {
   z-index: 1;
 }
 
+.chat-welcome-empty {
+  padding: 0;
+  width: 100%;
+}
+
+.chat-welcome-empty .astro-empty-art {
+  width: 100%;
+  max-width: none;
+}
+
 .chat-welcome-illust svg {
   width: 100%;
   height: auto;
