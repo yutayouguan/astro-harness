@@ -23,6 +23,7 @@ import {
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
 import { useAgentsChanged } from "../lib/agentsChanged";
+import { groupEventsByTurn, shortTurnId } from "../lib/traceTurnGroups";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
@@ -104,6 +105,7 @@ type TraceEvent = {
   output_tokens: number;
   total_tokens: number;
   cost_usd: number;
+  turn_id?: string | null;
   parent_id?: string | null;
   status?: string | null;
   input?: string | null;
@@ -390,6 +392,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   const [traces, setTraces] = useState<TraceInsights | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -626,6 +629,14 @@ export default function InsightsPanel({ active }: { active: boolean }) {
     collab?.orchestrations.find((o) => o.id === selectedId) ?? null;
   const selectedTrace =
     traces?.traces.find((t) => t.session_id === selectedTraceId) ?? null;
+  const turnGroups = useMemo(
+    () => (selectedTrace ? groupEventsByTurn(selectedTrace.events) : []),
+    [selectedTrace],
+  );
+
+  useEffect(() => {
+    setExpandedTurns({});
+  }, [selectedTraceId]);
 
   return (
     <div className="insights-panel">
@@ -1202,33 +1213,76 @@ export default function InsightsPanel({ active }: { active: boolean }) {
               ) : selectedTrace.events.length === 0 ? (
                 <p className="insights-collab-hint">{t("insights.trace.listEmpty")}</p>
               ) : (
-                <ol className="insights-trace-timeline">
-                  {selectedTrace.events.map((ev, i) => (
-                    <li key={ev.id} className={`insights-trace-event kind-${ev.kind}`}>
-                      <span className="insights-trace-rail" aria-hidden>
-                        <span className="insights-trace-dot">
-                          <KindIcon kind={ev.kind} />
-                        </span>
-                        {i < selectedTrace.events.length - 1 && (
-                          <span className="insights-trace-line" />
+                <ol className="insights-turn-groups">
+                  {turnGroups.map((g) => {
+                    const open = !!expandedTurns[g.turnKey];
+                    return (
+                      <li key={g.turnKey} className="insights-turn-group">
+                        <button
+                          type="button"
+                          className="insights-turn-group-head"
+                          aria-expanded={open}
+                          onClick={() =>
+                            setExpandedTurns((s) => ({
+                              ...s,
+                              [g.turnKey]: !s[g.turnKey],
+                            }))
+                          }
+                        >
+                          <span className="insights-turn-group-label">
+                            {g.turn_id
+                              ? `${t("insights.trace.turnGroup")} ${shortTurnId(g.turn_id, t("insights.trace.unlabeledTurn"))}`
+                              : t("insights.trace.unlabeledTurn")}
+                          </span>
+                          <span className="insights-turn-group-meta">
+                            {g.events.length} · {formatTokens(g.tokens)} tok ·{" "}
+                            {formatCost(g.cost_usd)}
+                          </span>
+                        </button>
+                        {open && (
+                          <ol className="insights-trace-timeline insights-trace-timeline-nested">
+                            {g.events.map((ev, i) => (
+                              <li
+                                key={ev.id}
+                                className={`insights-trace-event kind-${ev.kind}`}
+                              >
+                                <span className="insights-trace-rail" aria-hidden>
+                                  <span className="insights-trace-dot">
+                                    <KindIcon kind={ev.kind} />
+                                  </span>
+                                  {i < g.events.length - 1 && (
+                                    <span className="insights-trace-line" />
+                                  )}
+                                </span>
+                                <div className="insights-trace-event-body">
+                                  <div className="insights-trace-event-head">
+                                    <span className="insights-trace-event-name">
+                                      {ev.name}
+                                    </span>
+                                    <span
+                                      className={`insights-trace-kind kind-${ev.kind}`}
+                                    >
+                                      {ev.kind}
+                                    </span>
+                                  </div>
+                                  <div className="insights-trace-event-meta">
+                                    <span>{formatTraceTime(ev.ts)}</span>
+                                    {ev.total_tokens > 0 && (
+                                      <span>{formatTokens(ev.total_tokens)} tok</span>
+                                    )}
+                                    {ev.cost_usd > 0 && (
+                                      <span>{formatCost(ev.cost_usd)}</span>
+                                    )}
+                                    {ev.agent_id && <span>{ev.agent_id}</span>}
+                                  </div>
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
                         )}
-                      </span>
-                      <div className="insights-trace-event-body">
-                        <div className="insights-trace-event-head">
-                          <span className="insights-trace-event-name">{ev.name}</span>
-                          <span className={`insights-trace-kind kind-${ev.kind}`}>{ev.kind}</span>
-                        </div>
-                        <div className="insights-trace-event-meta">
-                          <span>{formatTraceTime(ev.ts)}</span>
-                          {ev.total_tokens > 0 && (
-                            <span>{formatTokens(ev.total_tokens)} tok</span>
-                          )}
-                          {ev.cost_usd > 0 && <span>{formatCost(ev.cost_usd)}</span>}
-                          {ev.agent_id && <span>{ev.agent_id}</span>}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
             </section>
