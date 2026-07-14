@@ -1,7 +1,7 @@
 # HITL 加固（阻塞闸门后）
 
 **日期:** 2026-07-13  
-**状态:** 实现中  
+**状态:** 已实现  
 **前置:** [hitl-blocking-multitool](./2026-07-13-hitl-blocking-multitool-design.md)
 
 ## 范围
@@ -14,4 +14,23 @@
 
 ## 非目标
 
-辅模型 smart、子 Agent HITL 上浮父卡片、派生协作重写
+辅模型 smart、子 Agent HITL 上浮父卡片、派生协作重写  
+（辅模型降级见另文 [smart-approval](./2026-07-13-smart-approval-design.md)，非本规格强制项。）
+
+## 实现说明
+
+| 项 | 落地 |
+|----|------|
+| Schema 校验 | [`agent/src/schema_validate.rs`](../../../agent/src/schema_validate.rs)；`HitlGate::resolve` 对 `resolved` 强制校验 |
+| 同批多 HITL | `HitlGate` 多 oneshot；`begin_wait` 不取消 sibling；`interrupt_resume` 可一次 resolve 多 id；旁路 `interrupt.json` 仅写剩余 pending |
+| 编排 HITL | [`agent/src/orchestration.rs`](../../../agent/src/orchestration.rs) 遇 `astro_hitl` 改写为 cancelled 文案，不 park |
+| deny/ask/auto | [`tools/src/approval.rs`](../../../tools/src/approval.rs) + streaming terminal 路径 |
+| 活路径 | 生产 resume → `HitlRegistry`；`interrupt.json` 仅为 UI/调试旁路，不再作假续跑真相源 |
+
+## 验收
+
+- [x] schema 非法 resume 被拒绝  
+- [x] 一次 resume 可完成多个 pending；sibling 不被误清  
+- [x] 编排路径 HITL 不阻塞子步  
+- [x] `rm -rf node_modules` → Auto；`mkfs` → Deny；一般 `rm -rf` → Ask  
+- [x] cancel / timeout 清理 waiting

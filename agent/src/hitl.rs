@@ -370,9 +370,86 @@ mod tests {
         assert_eq!(gate.pending_interrupts().await.len(), 1);
     }
 
+    #[tokio::test]
+    async fn resolve_multiple_ids_at_once() {
+        let gate = HitlGate::new("s-multi");
+        let schema = r#"{"type":"object","required":["approved"],"properties":{"approved":{"type":"boolean"}}}"#;
+        let i1 = Interrupt {
+            id: "a".into(),
+            reason: "confirmation".into(),
+            response_schema_json: schema.into(),
+            ..Default::default()
+        };
+        let i2 = Interrupt {
+            id: "b".into(),
+            reason: "confirmation".into(),
+            response_schema_json: schema.into(),
+            ..Default::default()
+        };
+        let rx1 = gate.begin_wait(i1).await;
+        let rx2 = gate.begin_wait(i2).await;
+        gate.resolve(&[
+            ResumeItem {
+                interrupt_id: "a".into(),
+                status: "resolved".into(),
+                payload_json: r#"{"approved":true}"#.into(),
+            },
+            ResumeItem {
+                interrupt_id: "b".into(),
+                status: "cancelled".into(),
+                payload_json: String::new(),
+            },
+        ])
+        .await
+        .unwrap();
+        assert_eq!(rx1.await.unwrap().status, "resolved");
+        assert_eq!(rx2.await.unwrap().status, "cancelled");
+        assert!(!gate.is_waiting().await);
+    }
+
+    #[tokio::test]
+    async fn finish_wait_timeout_clears_pending() {
+        let gate = HitlGate::new("s-timeout");
+        let interrupt = Interrupt {
+            id: "t1".into(),
+            reason: "confirmation".into(),
+            ..Default::default()
+        };
+        let rx = gate.begin_wait(interrupt).await;
+        let res = gate
+            .finish_wait("t1", rx, Duration::from_millis(30))
+            .await;
+        assert_eq!(res.status, "timeout");
+        assert!(!gate.is_waiting().await);
+    }
+
+    #[tokio::test]
+    async fn cancel_all_drains_pending() {
+        let gate = HitlGate::new("s-cancel");
+        let rx1 = gate
+            .begin_wait(Interrupt {
+                id: "a".into(),
+                ..Default::default()
+            })
+            .await;
+        let rx2 = gate
+            .begin_wait(Interrupt {
+                id: "b".into(),
+                ..Default::default()
+            })
+            .await;
+        gate.cancel_all().await;
+        assert!(!gate.is_waiting().await);
+        assert_eq!(rx1.await.unwrap().status, "cancelled");
+        assert_eq!(rx2.await.unwrap().status, "cancelled");
+    }
+
     #[test]
     fn delegate_is_exclusive() {
         assert!(is_exclusive_tool("delegate"));
         assert!(!is_exclusive_tool("web_search"));
+        assert!(is_interactive_tool("confirm"));
+        assert!(is_interactive_tool("clarify"));
+        assert!(!is_interactive_tool("terminal"));
     }
 }

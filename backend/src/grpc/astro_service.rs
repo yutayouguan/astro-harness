@@ -397,7 +397,13 @@ impl AstroService for AstroServiceImpl {
         gate.resolve(&items)
             .await
             .map_err(|e| Status::invalid_argument(format!("interrupt resume 无效: {e}")))?;
-        clear_interrupt_file(&self.memory_dir, &req.session_id);
+        // 同批多 HITL：只清已解决项，保留 sibling waiting 的旁路文件
+        let remaining = gate.pending_interrupts().await;
+        if remaining.is_empty() {
+            clear_interrupt_file(&self.memory_dir, &req.session_id);
+        } else {
+            let _ = save_interrupt_file(&self.memory_dir, &req.session_id, &remaining);
+        }
         Ok(Response::new(Empty {}))
     }
 

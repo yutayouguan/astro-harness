@@ -30,6 +30,9 @@ pub fn save_interrupt_file(
 }
 
 /// 读取旁路文件；无效或缺失返回 None。
+///
+/// 仅用于 UI/调试刷新旁路快照；**活路径以 [`agent::HitlRegistry`] 为准**，
+/// 生产 chat resume 不依赖本函数。
 pub fn load_interrupt_file(memory_dir: &Path, session_id: &str) -> Option<InterruptPending> {
     let path = interrupt_file_path(memory_dir, session_id);
     let raw = std::fs::read_to_string(path).ok()?;

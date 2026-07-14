@@ -1,7 +1,7 @@
 # 真委派 Delegate（Hermes 对齐 · 同步 MVP）
 
 **日期:** 2026-07-13  
-**状态:** 实现中  
+**状态:** 已实现  
 **范围:** 升级 `delegate` 为同步真 spawn 子 AgentLoop；可并行最多 3 个子任务；摘要回父  
 **非目标:** 异步 task_id、嵌套 orchestrator、子 HITL 上浮、durable 队列
 
@@ -16,7 +16,7 @@
 
 | 位置 | 职责 |
 |------|------|
-| `memory/delegate_spawn.rs` | sync runner OnceLock |
+| `memory/delegate_spawn.rs` | sync runner（经 `ToolContext` 注入，非全局 OnceLock） |
 | `agent/delegate_exec.rs` | 真执行 |
 | `tools/builtins/delegate.rs` | 参数 + 调 runner |
 | `agent/multi_agent.rs` | Orchestrator 接真执行器 |

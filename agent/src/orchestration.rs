@@ -448,11 +448,28 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
 }
 
 /// 编排路径检测 confirm/clarify 的 `astro_hitl` 载荷。
-fn is_orchestration_hitl_payload(result: &str) -> bool {
+pub(crate) fn is_orchestration_hitl_payload(result: &str) -> bool {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(result) else {
         return false;
     };
     value.get("astro_hitl").and_then(|v| v.as_bool()) == Some(true)
+}
+
+#[cfg(test)]
+mod hitl_skip_tests {
+    use super::is_orchestration_hitl_payload;
+
+    #[test]
+    fn detects_astro_hitl_confirm_payload() {
+        let raw = r#"{"astro_hitl":true,"kind":"confirm","message":"ok?"}"#;
+        assert!(is_orchestration_hitl_payload(raw));
+    }
+
+    #[test]
+    fn ignores_plain_tool_result() {
+        assert!(!is_orchestration_hitl_payload("ok"));
+        assert!(!is_orchestration_hitl_payload(r#"{"status":"done"}"#));
+    }
 }
 
 /// 写入 handoff 遥测边；`kind=orchestration` 不计入 Insights calls KPI。
