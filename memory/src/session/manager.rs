@@ -210,7 +210,35 @@ impl MemoryManager {
     }
 
     /// 统一处理 `memory` 工具的 action / target。
+    ///
+    /// 当 [`MemoryConfig::write_approval`] 为 true 时，将变更入 pending 队列而不改 live。
     pub fn handle_memory_op(
+        &mut self,
+        action: &str,
+        target: MemoryTarget,
+        content: Option<&str>,
+        old_text: Option<&str>,
+    ) -> anyhow::Result<String> {
+        self.handle_memory_op_with_source(action, target, content, old_text, "tool")
+    }
+
+    /// 同 [`handle_memory_op`]，可指定 pending 的 `source`（`tool` / `review`）。
+    pub fn handle_memory_op_with_source(
+        &mut self,
+        action: &str,
+        target: MemoryTarget,
+        content: Option<&str>,
+        old_text: Option<&str>,
+        source: &str,
+    ) -> anyhow::Result<String> {
+        if self.config.write_approval {
+            return self.enqueue_memory_op(action, target, content, old_text, source);
+        }
+        self.apply_memory_op_direct(action, target, content, old_text)
+    }
+
+    /// 直接写 live（供 approve / `write_approval=false` 使用；不经 pending）。
+    pub fn apply_memory_op_direct(
         &mut self,
         action: &str,
         target: MemoryTarget,
@@ -239,6 +267,52 @@ impl MemoryManager {
             }
             other => anyhow::bail!("未知 memory action: {other}（期望 add|replace|remove）"),
         }
+    }
+
+    fn enqueue_memory_op(
+        &self,
+        action: &str,
+        target: MemoryTarget,
+        content: Option<&str>,
+        old_text: Option<&str>,
+        source: &str,
+    ) -> anyhow::Result<String> {
+        // 参数校验与直接写入路径对齐（扫描在 pending::enqueue 内完成）
+        match action {
+            "add" => {
+                let _ = content
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("缺少 content 参数"))?;
+            }
+            "replace" => {
+                let _ = old_text.ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
+                let _ = content.ok_or_else(|| anyhow::anyhow!("缺少 content 参数"))?;
+            }
+            "remove" => {
+                let _ = old_text.ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
+            }
+            other => anyhow::bail!("未知 memory action: {other}（期望 add|replace|remove）"),
+        }
+
+        let pending = crate::pending::enqueue(
+            &self.base_dir,
+            crate::pending::PendingMemoryWrite {
+                id: String::new(),
+                agent_id: self.agent_id.clone(),
+                target,
+                action: action.to_string(),
+                content: content.map(|s| s.to_string()),
+                old_text: old_text.map(|s| s.to_string()),
+                source: source.to_string(),
+                created_at: String::new(),
+            },
+        )?;
+
+        Ok(format!(
+            "写入已入队待审批（id={}，action={}，target={:?}）；未改动 live",
+            pending.id, pending.action, pending.target
+        ))
     }
 
     /// 向指定目标追加一条记忆；返回面向用户的中文操作结果（含用量）。

@@ -16,7 +16,7 @@ memory:
   user_profile_enabled: true    # 是否注入 USER.md 快照
   memory_char_limit: 2200       # MEMORY.md 字符上限（默认 2200）
   user_char_limit: 1375         # USER.md 字符上限（默认 1375）
-  write_approval: false         # P2：写入审批（P1 仅解析占位）
+  write_approval: false         # 开启后 MEMORY/USER 写入进入 pending 审批队列
   daily_prompt_max_chars: 1024  # 今日日记注入 prompt 的最大字符数
 ```
 
@@ -26,10 +26,27 @@ memory:
 | `user_profile_enabled` | `true` | 关闭后不注入 USER 档案；对称控制 USER 写入 |
 | `memory_char_limit` | `2200` | 条目合计字符上限（含 `§` 分隔开销）；超限**报错**，不做 FIFO 淘汰 |
 | `user_char_limit` | `1375` | 同上，作用于 USER.md |
-| `write_approval` | `false` | P2 功能：开启后 MEMORY/USER 写入进入 pending 队列 |
+| `write_approval` | `false` | 开启后 MEMORY/USER 写入（工具 / 入梦 / 未来 review）进入 pending 队列，批准后才改 live |
 | `daily_prompt_max_chars` | `1024` | 每轮可读盘的今日日记截断上限；**不属于**长期记忆 |
 
 P2 还将增加 `auxiliary.background_review` / `auxiliary.dreaming` 模型路由，见设计 spec。
+
+### `write_approval` pending 队列
+
+路径：`~/.astro/pending/memory/{id}.json`。
+
+- `write_approval: false`（默认）：过 Store 门禁后直接写 live
+- `true`：`memory` 工具与入梦 MEMORY 写回**入队不改 live**；安全扫描失败**不入队**
+- **日记** `append_daily` **不受**审批门禁
+- 批准经 `MemoryStore` / `handle_memory_op` 等价路径落盘；拒绝即删除 pending 文件
+
+Tauri 命令（设置页 UI 可后续接）：
+
+| 命令 | 作用 |
+|------|------|
+| `list_pending_memory_writes` | 列出 pending |
+| `approve_pending_memory_write(id)` | 批准并写 live |
+| `reject_pending_memory_write(id)` | 拒绝并丢弃 |
 
 ---
 

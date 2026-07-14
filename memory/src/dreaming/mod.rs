@@ -363,6 +363,9 @@ pub fn finalize_dream_job_from_update(
 /// 将清洗后的 MEMORY 经 MemoryStore 写盘并更新全局/Agent 统计（内部共用）。
 ///
 /// 超限 / 扫描失败直接返回 Err，不做静默截断。不触碰任何 AgentLoop snapshot。
+///
+/// 当 `write_approval` 开启时：扫描通过后入 pending（`action=replace_all`），**不**改 live MEMORY；
+/// 仍更新 dreamed_dates / 统计，避免重复入梦。
 fn finalize_dream_job_with_memory(
     state: &mut DreamingState,
     job: &DreamJob,
@@ -383,8 +386,36 @@ fn finalize_dream_job_with_memory(
         .unwrap_or_else(|| job.workspace.clone());
     let cfg = load_memory_config(&base);
     let memory_path = job.workspace.join("MEMORY.md");
-    let mut store = MemoryStore::open(memory_path, cfg.memory_char_limit)?;
-    store.replace_all_entries(entries)?;
+
+    if cfg.write_approval {
+        // 超限也要在 finalize 失败（与直写路径一致）；扫描在 enqueue 内完成
+        let used = entries
+            .join(crate::agent::store::ENTRY_DELIMITER)
+            .chars()
+            .count();
+        if used > cfg.memory_char_limit {
+            anyhow::bail!(
+                "记忆内容超过字符上限（{used}/{}）；无法入队审批",
+                cfg.memory_char_limit
+            );
+        }
+        crate::pending::enqueue(
+            &base,
+            crate::pending::PendingMemoryWrite {
+                id: String::new(),
+                agent_id: job.agent_id.clone(),
+                target: crate::MemoryTarget::Memory,
+                action: "replace_all".into(),
+                content: Some(cleaned.to_string()),
+                old_text: None,
+                source: "dreaming".into(),
+                created_at: String::new(),
+            },
+        )?;
+    } else {
+        let mut store = MemoryStore::open(memory_path, cfg.memory_char_limit)?;
+        store.replace_all_entries(entries)?;
+    }
 
     let before_n = count_memory_bullets(&job.memory_before);
     let after_n = count_memory_bullets(cleaned);

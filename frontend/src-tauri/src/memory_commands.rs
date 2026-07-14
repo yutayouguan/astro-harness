@@ -23,6 +23,38 @@ pub struct RefreshMemoryDto {
     pub user_content: String,
 }
 
+/// Pending 记忆写入（供设置页列表）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingMemoryWriteDto {
+    pub id: String,
+    pub agent_id: String,
+    pub target: String,
+    pub action: String,
+    pub content: Option<String>,
+    pub old_text: Option<String>,
+    pub source: String,
+    pub created_at: String,
+}
+
+impl From<memory::PendingMemoryWrite> for PendingMemoryWriteDto {
+    fn from(p: memory::PendingMemoryWrite) -> Self {
+        Self {
+            id: p.id,
+            agent_id: p.agent_id,
+            target: match p.target {
+                memory::MemoryTarget::Memory => "memory".into(),
+                memory::MemoryTarget::User => "user".into(),
+            },
+            action: p.action,
+            content: p.content,
+            old_text: p.old_text,
+            source: p.source,
+            created_at: p.created_at,
+        }
+    }
+}
+
 /// 从磁盘重载当前活跃 Agent 的 MEMORY / USER 到 MemoryManager snapshot。
 ///
 /// 见模块文档：不触碰 backend 侧已冻结的 AgentLoop；新会话会读到最新盘文件。
@@ -41,4 +73,27 @@ pub async fn refresh_memory(agent_id: Option<String>) -> Result<RefreshMemoryDto
         memory_content,
         user_content,
     })
+}
+
+/// 列出 `write_approval` pending 队列。
+#[tauri::command]
+pub async fn list_pending_memory_writes() -> Result<Vec<PendingMemoryWriteDto>, String> {
+    let root = memory::default_memory_dir();
+    memory::list_pending(&root)
+        .map(|items| items.into_iter().map(PendingMemoryWriteDto::from).collect())
+        .map_err(|e| e.to_string())
+}
+
+/// 批准并应用一条 pending（写 live）。
+#[tauri::command]
+pub async fn approve_pending_memory_write(id: String) -> Result<String, String> {
+    let root = memory::default_memory_dir();
+    memory::approve_pending_memory(&root, &id).map_err(|e| e.to_string())
+}
+
+/// 拒绝并丢弃一条 pending。
+#[tauri::command]
+pub async fn reject_pending_memory_write(id: String) -> Result<(), String> {
+    let root = memory::default_memory_dir();
+    memory::reject_pending_memory(&root, &id).map_err(|e| e.to_string())
 }

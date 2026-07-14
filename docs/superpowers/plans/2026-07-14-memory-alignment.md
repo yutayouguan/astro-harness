@@ -440,10 +440,10 @@ pub struct PendingMemoryWrite {
 
 路径：`{base}/pending/memory/{id}.json`
 
-- [ ] **Step 2: `config.write_approval == true` 时** `handle_memory_op` / dreaming / review → `enqueue` 不改 live  
-- [ ] **Step 3: `approve(id)` / `reject(id)` / `list_pending()`  
-- [ ] **Step 4: UI 最小列表  
-- [ ] **Step 5: Tests + commit**
+- [x] **Step 2: `config.write_approval == true` 时** `handle_memory_op` / dreaming → `enqueue` 不改 live  
+- [x] **Step 3: `approve(id)` / `reject(id)` / `list_pending()`  
+- [x] **Step 4: Tauri 命令**（`list_pending_memory_writes` / approve / reject；UI 留待设置页）  
+- [x] **Step 5: Tests + commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
