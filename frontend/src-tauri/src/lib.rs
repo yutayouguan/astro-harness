@@ -154,39 +154,11 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> 
     Ok(())
 }
 
-/// macOS：透明窗；屏蔽原生 zoom（标题栏双击 / 绿钮），改由前端自定义贴齐。
+/// macOS：透明窗；关闭原生动画。标题栏双击走 JS → toggleMaximize（与绿灯同路径）。
 #[cfg(target_os = "macos")]
 fn configure_macos_window(win: &tauri::WebviewWindow) {
-    use objc::runtime::{Class, Object, BOOL, NO, YES, Sel};
+    use objc::runtime::{Class, Object, BOOL, NO, YES};
     use objc::{msg_send, sel, sel_impl};
-    use std::os::raw::c_void;
-    use std::sync::Once;
-
-    type Imp = unsafe extern "C" fn(*mut Object, Sel, *mut Object);
-
-    #[link(name = "objc")]
-    extern "C" {
-        fn class_getInstanceMethod(cls: *const Class, name: Sel) -> *mut c_void;
-        fn method_setImplementation(method: *mut c_void, imp: Imp) -> Imp;
-    }
-
-    /// 吞掉 `-[NSWindow zoom:]`，避免与自定义双击贴齐抢跑导致白边闪烁。
-    unsafe extern "C" fn ns_window_zoom_noop(
-        _this: *mut Object,
-        _cmd: Sel,
-        _sender: *mut Object,
-    ) {
-    }
-
-    static PATCH_ZOOM: Once = Once::new();
-    PATCH_ZOOM.call_once(|| unsafe {
-        if let Some(cls) = Class::get("NSWindow") {
-            let method = class_getInstanceMethod(cls, sel!(zoom:));
-            if !method.is_null() {
-                let _ = method_setImplementation(method, ns_window_zoom_noop);
-            }
-        }
-    });
 
     if let Ok(ns_window) = win.ns_window() {
         unsafe {
@@ -195,7 +167,7 @@ fn configure_macos_window(win: &tauri::WebviewWindow) {
                 msg_send![Class::get("NSColor").unwrap(), clearColor];
             let _: () = msg_send![ns_window, setOpaque: NO];
             let _: () = msg_send![ns_window, setBackgroundColor: clear];
-            // NSWindowAnimationBehaviorNone = 0
+            // NSWindowAnimationBehaviorNone = 0 — 关掉系统缩放动画闪白
             let _: () = msg_send![ns_window, setAnimationBehavior: 0i64];
 
             let content_view: *mut Object = msg_send![ns_window, contentView];
