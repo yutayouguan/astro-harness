@@ -2,6 +2,8 @@
 
 use std::sync::{Arc, OnceLock};
 
+use common::ChatTarget;
+
 pub struct OrchestrationSpawnRequest {
     pub orchestration_id: String,
     pub parent_agent_id: String,
@@ -9,6 +11,8 @@ pub struct OrchestrationSpawnRequest {
     pub model: String,
     pub api_key: String,
     pub base_url: String,
+    /// 含 primary 的聊天 fallback 链；空则由四字段合成。
+    pub chat_targets: Vec<ChatTarget>,
     /// 发起方当前嵌套深度（顶层 0）。
     pub caller_depth: u32,
     /// 允许发起嵌套的最大 caller depth（默认 1）。

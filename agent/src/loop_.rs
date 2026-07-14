@@ -115,6 +115,12 @@ pub struct AgentLoop {
     project_root: Option<PathBuf>,
     /// 当前多轮流式 run 的 turn_id（与 streaming `run_id` 相同）；未在 run 内为 None。
     current_turn_id: Option<String>,
+    /// 同步委派执行器（由 from_memory 构造）。
+    delegate_runner: memory::DelegateRunner,
+    /// 异步委派 spawner（由 from_memory 构造）。
+    async_spawner: memory::DelegateAsyncSpawner,
+    /// 编排 spawner（由 from_memory 构造）。
+    orchestration_spawner: memory::OrchestrationSpawner,
 }
 
 impl AgentLoop {
@@ -156,9 +162,54 @@ impl AgentLoop {
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
         let mut mcp_hub = McpHub::new();
         mcp_hub.set_agent_id(Some(agent_id));
-        ensure_orchestration_spawner_registered();
-        ensure_delegate_runner_registered();
-        ensure_delegate_async_spawner_registered();
+
+        let orchestration_spawner: memory::OrchestrationSpawner = Arc::new(|req| {
+            tokio::spawn(async move {
+                if let Err(e) = crate::orchestration::run_orchestration(req).await {
+                    tracing::warn!(error = %e, "orchestration failed");
+                }
+            });
+        });
+        let delegate_runner: memory::DelegateRunner = Arc::new(|req| {
+            crate::delegate_exec::run_delegate_blocking(req)
+        });
+        let async_spawner: memory::DelegateAsyncSpawner = Arc::new(|task_id, req| {
+            tokio::spawn(async move {
+                let reg = memory::AsyncDelegateRegistry::global();
+                if reg.is_cancel_requested(&task_id) {
+                    return;
+                }
+                match crate::delegate_exec::run_delegate(req).await {
+                    Ok(json) => {
+                        if !reg.is_cancel_requested(&task_id) {
+                            reg.finish_ok(&task_id, json);
+                        }
+                    }
+                    Err(e) => {
+                        if !reg.is_cancel_requested(&task_id) {
+                            reg.finish_err(&task_id, e.to_string());
+                        }
+                    }
+                }
+            });
+        });
+        static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
+        let async_spawner_resume = async_spawner.clone();
+        let orch_spawner_resume = orchestration_spawner.clone();
+        RESUME_ONCE.call_once(move || {
+            memory::resume_incomplete_async_delegates(&async_spawner_resume);
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                handle.spawn(async move {
+                    if let Err(e) =
+                        crate::orchestration::resume_incomplete_orchestrations(&orch_spawner_resume)
+                            .await
+                    {
+                        tracing::warn!(error = %e, "orchestration resume failed");
+                    }
+                });
+            }
+        });
+
         Ok(AgentLoop {
             config,
             session_id,
@@ -182,6 +233,9 @@ impl AgentLoop {
             cancel: CancelSignal::new(),
             project_root: resolve_session_project_root(),
             current_turn_id: None,
+            delegate_runner,
+            async_spawner,
+            orchestration_spawner,
         })
     }
 
@@ -198,6 +252,21 @@ impl AgentLoop {
     /// 当前绑定的 turn_id（若有）。
     pub fn current_turn_id(&self) -> Option<&str> {
         self.current_turn_id.as_deref()
+    }
+
+    /// 克隆同步委派执行器，供 streaming 快照使用。
+    pub fn delegate_runner(&self) -> memory::DelegateRunner {
+        Arc::clone(&self.delegate_runner)
+    }
+
+    /// 克隆异步委派 spawner，供 streaming 快照使用。
+    pub fn async_spawner(&self) -> memory::DelegateAsyncSpawner {
+        Arc::clone(&self.async_spawner)
+    }
+
+    /// 克隆编排 spawner，供 streaming 快照使用。
+    pub fn orchestration_spawner(&self) -> memory::OrchestrationSpawner {
+        Arc::clone(&self.orchestration_spawner)
     }
 
     /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。
@@ -559,6 +628,9 @@ impl AgentLoop {
         let chat_model = self.chat_model.clone();
         let chat_targets = self.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
+        let delegate_runner = Some(self.delegate_runner());
+        let async_spawner = Some(self.async_spawner());
+        let orchestration_spawner = Some(self.orchestration_spawner());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
             memory_dir,
@@ -573,6 +645,9 @@ impl AgentLoop {
             chat_provider,
             chat_model,
             chat_targets,
+            delegate_runner,
+            async_spawner,
+            orchestration_spawner,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args).await
     }
@@ -941,27 +1016,6 @@ fn stored_message_to_runtime(
     Ok(Some(msg))
 }
 
-/// 注册编排 spawner（OnceLock，仅首次生效）。由 tools 落库后回调。
-fn ensure_orchestration_spawner_registered() {
-    memory::set_orchestration_spawner(Arc::new(|req| {
-        tokio::spawn(async move {
-            if let Err(e) = crate::orchestration::run_orchestration(req).await {
-                tracing::warn!(error = %e, "orchestration failed");
-            }
-        });
-    }));
-    static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
-    RESUME_ONCE.call_once(|| {
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.spawn(async {
-                if let Err(e) = crate::orchestration::resume_incomplete_orchestrations().await {
-                    tracing::warn!(error = %e, "orchestration resume failed");
-                }
-            });
-        }
-    });
-}
-
 /// 会话级项目根：`ASTRO_SESSION_WORKTREE=1` 且存在 `ASTRO_PROJECT_ROOT`（或 cwd git root）时启用。
 fn resolve_session_project_root() -> Option<PathBuf> {
     let flag = std::env::var("ASTRO_SESSION_WORKTREE").unwrap_or_default();
@@ -971,37 +1025,3 @@ fn resolve_session_project_root() -> Option<PathBuf> {
     memory::resolve_project_root(None).filter(|p| memory::find_git_root(p).is_some() || p.is_dir())
 }
 
-/// 注册同步委派 runner（OnceLock，仅首次生效）。
-fn ensure_delegate_runner_registered() {
-    memory::set_delegate_runner(Arc::new(|req| {
-        crate::delegate_exec::run_delegate_blocking(req)
-    }));
-}
-
-/// 注册异步委派 spawner（OnceLock，仅首次生效）。
-fn ensure_delegate_async_spawner_registered() {
-    memory::set_delegate_async_spawner(Arc::new(|task_id, req| {
-        tokio::spawn(async move {
-            let reg = memory::AsyncDelegateRegistry::global();
-            if reg.is_cancel_requested(&task_id) {
-                return;
-            }
-            match crate::delegate_exec::run_delegate(req).await {
-                Ok(json) => {
-                    if !reg.is_cancel_requested(&task_id) {
-                        reg.finish_ok(&task_id, json);
-                    }
-                }
-                Err(e) => {
-                    if !reg.is_cancel_requested(&task_id) {
-                        reg.finish_err(&task_id, e.to_string());
-                    }
-                }
-            }
-        });
-    }));
-    static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
-    RESUME_ONCE.call_once(|| {
-        memory::resume_incomplete_async_delegates();
-    });
-}

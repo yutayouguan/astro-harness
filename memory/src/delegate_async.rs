@@ -252,31 +252,16 @@ fn take_async_spawner() -> Option<DelegateAsyncSpawner> {
 }
 
 /// 创建 running 记录并触发后台执行；立即返回 `task_id`。
-pub fn start_delegate_async(req: DelegateRunRequest) -> anyhow::Result<String> {
+pub fn start_delegate_async(req: DelegateRunRequest, spawner: &DelegateAsyncSpawner) -> anyhow::Result<String> {
     let reg = AsyncDelegateRegistry::global();
     let task_id = reg.insert_running(&req.parent_session_id, &req.parent_agent_id);
     let _ = save_request_file(&task_id, &req);
-    match take_async_spawner() {
-        Some(f) => {
-            f(task_id.clone(), req);
-            Ok(task_id)
-        }
-        None => {
-            reg.finish_err(
-                &task_id,
-                "delegate async spawner not registered".into(),
-            );
-            anyhow::bail!("delegate async spawner not registered")
-        }
-    }
+    spawner(task_id.clone(), req);
+    Ok(task_id)
 }
 
 /// 重启后续跑：装入 running 记录并再次交给 spawner。
-pub fn resume_incomplete_async_delegates() {
-    let Some(spawner) = take_async_spawner() else {
-        tracing::warn!("async delegate resume skipped: spawner not registered");
-        return;
-    };
+pub fn resume_incomplete_async_delegates(spawner: &DelegateAsyncSpawner) {
     let reg = AsyncDelegateRegistry::global();
     for (task_id, req) in list_persisted_running() {
         if reg.get(&task_id).is_none() {
@@ -358,7 +343,7 @@ mod tests {
     fn persist_request_and_list_running() {
         let dir = tempfile::tempdir().unwrap();
         let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
-        set_delegate_async_spawner(Arc::new(|_id, _req| {}));
+        let spawner: DelegateAsyncSpawner = Arc::new(|_id, _req| {});
         let req = DelegateRunRequest {
             parent_agent_id: "a".into(),
             parent_session_id: "s".into(),
@@ -373,7 +358,7 @@ mod tests {
             max_spawn_depth: 1,
             project_root: None,
         };
-        let id = start_delegate_async(req).unwrap();
+        let id = start_delegate_async(req, &spawner).unwrap();
         let listed = list_persisted_running();
         assert!(
             listed

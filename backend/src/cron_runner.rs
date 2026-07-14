@@ -1,22 +1,157 @@
 //! 后台 cron ticker：认领到期任务并调用 `agent::cron_exec`。
 //!
 //! 注意：`rusqlite::Connection` 不可跨 `.await`，故先同步 `claim_due` 再异步执行。
+//!
+//! 凭据解析：读 `providers.json` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
 
 use agent::cron_exec::{self, CronExecCredentials};
-use memory::{CronJob, CronStore};
+use common::{expand_chat_targets, ChatTarget, FallbackRef};
+use memory::{default_memory_dir, CronJob, CronStore};
+use serde::Deserialize;
 
-/// 从任务字段与环境变量解析执行凭据；缺省 provider 为 `ollama`。
+#[derive(Debug, Deserialize)]
+struct ProvidersFile {
+    #[serde(default)]
+    active_provider_id: Option<String>,
+    #[serde(default)]
+    providers: Vec<ProviderEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ProviderEntry {
+    id: String,
+    kind: String,
+    #[serde(default)]
+    endpoint: String,
+    #[serde(default)]
+    model: String,
+    #[serde(default = "default_true")]
+    enabled: bool,
+    #[serde(default)]
+    fallback: Vec<FallbackEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct FallbackEntry {
+    provider_id: String,
+    #[serde(default)]
+    model: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// `providers.json` 的 kind → providers crate backend id。
+fn kind_to_backend(kind: &str) -> &str {
+    match kind.trim() {
+        "anthropic" => "claude",
+        "custom" => "openai",
+        "minmax" => "minimax",
+        other => other,
+    }
+}
+
+fn load_providers_file() -> Option<ProvidersFile> {
+    let path = default_memory_dir().join("providers.json");
+    let raw = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
+    if !entry.enabled {
+        return None;
+    }
+    let backend_id = kind_to_backend(&entry.kind).to_string();
+    let api_key = providers::client::read_env_api_key(&backend_id).unwrap_or_default();
+    let allow_empty_key = backend_id == "ollama";
+    if api_key.trim().is_empty() && !allow_empty_key {
+        return None;
+    }
+    let base_url = if entry.endpoint.trim().is_empty() {
+        std::env::var(format!("{}_BASE_URL", backend_id.to_uppercase())).unwrap_or_default()
+    } else {
+        entry.endpoint.clone()
+    };
+    Some(ChatTarget {
+        provider_id: entry.id.clone(),
+        backend_id,
+        model: entry.model.clone(),
+        api_key,
+        base_url,
+    })
+}
+
+fn find_primary_entry<'a>(file: &'a ProvidersFile, job: &CronJob) -> Option<&'a ProviderEntry> {
+    if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
+        if let Some(p) = file.providers.iter().find(|p| p.id == id) {
+            return Some(p);
+        }
+        if let Some(p) = file
+            .providers
+            .iter()
+            .find(|p| p.enabled && (kind_to_backend(&p.kind) == id || p.kind == id))
+        {
+            return Some(p);
+        }
+        return None;
+    }
+    if let Some(active) = file
+        .active_provider_id
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|id| file.providers.iter().find(|p| p.id == id))
+    {
+        return Some(active);
+    }
+    file.providers.iter().find(|p| p.enabled)
+}
+
+/// 从任务字段、`providers.json` 与环境变量解析执行凭据（含 fallback 链）。
 fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
+    if let Some(file) = load_providers_file() {
+        if let Some(primary_entry) = find_primary_entry(&file, job) {
+            if let Some(mut primary) = entry_to_target(primary_entry) {
+                if let Some(m) = job.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                    primary.model = m.to_string();
+                }
+                let refs: Vec<FallbackRef> = primary_entry
+                    .fallback
+                    .iter()
+                    .map(|e| FallbackRef {
+                        provider_id: e.provider_id.clone(),
+                        model: e.model.clone(),
+                    })
+                    .collect();
+                let targets = expand_chat_targets(&primary, &refs, |id| {
+                    file.providers
+                        .iter()
+                        .find(|p| p.id == id)
+                        .and_then(entry_to_target)
+                });
+                return CronExecCredentials {
+                    provider: primary.backend_id.clone(),
+                    model: primary.model.clone(),
+                    api_key: primary.api_key.clone(),
+                    base_url: primary.base_url.clone(),
+                    targets,
+                };
+            }
+        }
+    }
+
     let provider = job
         .provider_id
         .clone()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "ollama".into());
+    let backend = kind_to_backend(&provider).to_string();
     let model = job.model.clone().unwrap_or_default();
-    let api_key = providers::client::read_env_api_key(&provider).unwrap_or_default();
-    let base_url = std::env::var(format!("{}_BASE_URL", provider.to_uppercase())).unwrap_or_default();
+    let api_key = providers::client::read_env_api_key(&backend).unwrap_or_default();
+    let base_url =
+        std::env::var(format!("{}_BASE_URL", backend.to_uppercase())).unwrap_or_default();
     CronExecCredentials {
-        provider,
+        provider: backend,
         model,
         api_key,
         base_url,
@@ -26,7 +161,6 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
 
 /// 认领到期任务并逐个执行；打开 store / claim 失败时提前返回。
 pub async fn tick_and_execute() {
-    // 先同步 claim，再 await 执行，避免 rusqlite Connection 跨 .await 导致 Future !Send
     let jobs = {
         let store = match CronStore::open_default() {
             Ok(store) => store,
@@ -66,5 +200,46 @@ pub async fn tick_and_execute() {
                 "cron job execution failed"
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kind_maps_anthropic_to_claude() {
+        assert_eq!(kind_to_backend("anthropic"), "claude");
+        assert_eq!(kind_to_backend("openai"), "openai");
+    }
+
+    #[test]
+    fn expand_from_file_entries_env_only() {
+        let primary = ChatTarget {
+            provider_id: "p0".into(),
+            backend_id: "openai".into(),
+            model: "gpt".into(),
+            api_key: "k0".into(),
+            base_url: "https://api.openai.com/v1".into(),
+        };
+        let refs = vec![FallbackRef {
+            provider_id: "p1".into(),
+            model: Some("opus".into()),
+        }];
+        let chain = expand_chat_targets(&primary, &refs, |id| {
+            if id == "p1" {
+                Some(ChatTarget {
+                    provider_id: "p1".into(),
+                    backend_id: "claude".into(),
+                    model: "claude".into(),
+                    api_key: "k1".into(),
+                    base_url: "https://api.anthropic.com".into(),
+                })
+            } else {
+                None
+            }
+        });
+        assert_eq!(chain.len(), 2);
+        assert_eq!(chain[1].model, "opus");
     }
 }

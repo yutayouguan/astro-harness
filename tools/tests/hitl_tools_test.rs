@@ -36,6 +36,9 @@ async fn confirm_emits_valid_a2ui_hitl() {
         chat_provider: String::new(),
         chat_model: String::new(),
         chat_targets: vec![],
+    delegate_runner: None,
+    async_spawner: None,
+    orchestration_spawner: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -74,6 +77,9 @@ async fn clarify_emits_valid_a2ui_hitl() {
         chat_provider: String::new(),
         chat_model: String::new(),
         chat_targets: vec![],
+    delegate_runner: None,
+    async_spawner: None,
+    orchestration_spawner: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -112,6 +118,9 @@ async fn present_ui_emits_valid_astro_ui() {
         chat_provider: String::new(),
         chat_model: String::new(),
         chat_targets: vec![],
+    delegate_runner: None,
+    async_spawner: None,
+    orchestration_spawner: None,
     };
 
     let raw = tools::dispatch_tool(

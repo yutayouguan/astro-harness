@@ -12,6 +12,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
+use common::ChatTarget;
 use futures::StreamExt;
 use memory::{
     default_memory_dir, AgentRuntimeConfig, NewUsageEvent, OrchestrationDb, OrchestrationRow,
@@ -22,6 +23,7 @@ use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
 use uuid::Uuid;
 
+use crate::chat_fallback::try_stream_completion_with_fallback;
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
 use crate::messages::to_provider_messages;
 
@@ -134,7 +136,9 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
 }
 
 /// 进程启动后：对 DB 中未完成编排重新 spawn（允许 reclaim）。
-pub async fn resume_incomplete_orchestrations() -> anyhow::Result<()> {
+pub async fn resume_incomplete_orchestrations(
+    spawner: &memory::OrchestrationSpawner,
+) -> anyhow::Result<()> {
     let db = OrchestrationDb::open_default()?;
     let ids = db.list_incomplete_ids()?;
     for id in ids {
@@ -145,13 +149,14 @@ pub async fn resume_incomplete_orchestrations() -> anyhow::Result<()> {
             tracing::warn!(id = %id, "skip orchestration resume: empty api_key");
             continue;
         }
-        memory::request_orchestration_spawn(OrchestrationSpawnRequest {
+        spawner(OrchestrationSpawnRequest {
             orchestration_id: id,
             parent_agent_id: row.parent_agent_id,
             provider: row.provider,
             model: row.model,
             api_key: row.api_key,
             base_url: row.base_url,
+            chat_targets: vec![],
             caller_depth: 0,
             max_spawn_depth: memory::DEFAULT_MAX_SPAWN_DEPTH,
             allow_reclaim: true,
@@ -222,22 +227,17 @@ async fn run_step(
         depth_ctx,
     );
     agent.set_chat_credentials(&provider, &model, &api_key, &base_url);
+    let registry = ProviderRegistry::new();
+    let targets = effective_chat_targets(req, &provider, &model, &api_key, &base_url, &registry);
+    agent.set_chat_targets(targets);
 
     let result = memory::scope_spawn_depth(depth_ctx, async {
         let turn_result = agent.run_turn(&user_message, "orchestration").await?;
         match turn_result {
             TurnResult::Finished(message) => Ok(message),
             TurnResult::Continue { system_prompt, .. } => {
-                let (output, _) = run_provider_loop(
-                    &mut agent,
-                    &provider,
-                    &model,
-                    &api_key,
-                    &base_url,
-                    &system_prompt,
-                    depth_ctx,
-                )
-                .await?;
+                let (output, _) =
+                    run_provider_loop(&mut agent, &system_prompt, depth_ctx).await?;
                 Ok(output)
             }
             TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
@@ -280,39 +280,48 @@ fn resolve_creds(
     )
 }
 
-async fn run_provider_loop(
-    agent: &mut AgentLoop,
-    provider_name: &str,
+/// 有效聊天目标：优先 `req.chat_targets`，否则由四字段合成单元素链。
+fn effective_chat_targets(
+    req: &OrchestrationSpawnRequest,
+    provider: &str,
     model: &str,
     api_key: &str,
     base_url: &str,
+    registry: &ProviderRegistry,
+) -> Vec<ChatTarget> {
+    if !req.chat_targets.is_empty() {
+        return req.chat_targets.clone();
+    }
+    let backend = if provider.trim().is_empty() {
+        "openai".to_string()
+    } else {
+        provider.to_string()
+    };
+    let model = if model.trim().is_empty() {
+        registry
+            .get(&backend)
+            .map(|p| p.default_model().to_string())
+            .unwrap_or_default()
+    } else {
+        model.to_string()
+    };
+    vec![ChatTarget {
+        provider_id: backend.clone(),
+        backend_id: backend,
+        model,
+        api_key: api_key.to_string(),
+        base_url: base_url.to_string(),
+    }]
+}
+
+async fn run_provider_loop(
+    agent: &mut AgentLoop,
     initial_system_prompt: &str,
     depth_ctx: memory::SpawnDepthCtx,
 ) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
-    let name = if provider_name.trim().is_empty() {
-        "openai"
-    } else {
-        provider_name
-    };
-    let provider = providers
-        .get(name)
-        .ok_or_else(|| anyhow::anyhow!("未知 Provider: {name}"))?;
-
-    let config = ProviderConfig {
-        model: if model.trim().is_empty() {
-            provider.default_model().to_string()
-        } else {
-            model.to_string()
-        },
-        api_key: api_key.to_string(),
-        base_url: if base_url.trim().is_empty() {
-            None
-        } else {
-            Some(base_url.to_string())
-        },
-        ..ProviderConfig::default()
-    };
+    let targets = agent.chat_targets().to_vec();
+    let base_config = ProviderConfig::default();
 
     let mut system_prompt = initial_system_prompt.to_string();
     let mut last_response = String::new();
@@ -321,17 +330,31 @@ async fn run_provider_loop(
     for _round in 0..PROVIDER_MAX_ROUNDS {
         agent.reload_tools_and_mcp().await;
         crate::delegate_exec::apply_nested_agent_tool_strips_depth_only(
-        agent.tool_registry_mut(),
-        depth_ctx,
-    );
+            agent.tool_registry_mut(),
+            depth_ctx,
+        );
 
         let messages = to_provider_messages(&system_prompt, &agent.session_messages);
         let tools = agent.tool_registry().schemas_for_api();
 
-        let mut stream = provider
-            .chat_stream(messages, tools, &config)
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let (mut stream, _meta) = try_stream_completion_with_fallback(
+            &targets,
+            &providers,
+            messages,
+            tools,
+            &base_config,
+            |from, to, err| {
+                tracing::warn!(
+                    from_backend = %from.backend_id,
+                    from_model = %from.model,
+                    to_backend = %to.backend_id,
+                    to_model = %to.model,
+                    error = %err,
+                    "orchestration chat failover: switching target before first content"
+                );
+            },
+        )
+        .await?;
 
         let mut full_response = String::new();
         let mut round_usage: Option<Usage> = None;

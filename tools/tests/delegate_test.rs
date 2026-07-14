@@ -21,11 +21,15 @@ fn make_ctx<'a>(
         image_gen_targets: targets,
         providers,
         session_id: "s".into(),
+        turn_id: None,
         chat_api_key: "k".into(),
         chat_base_url: String::new(),
         chat_provider: "openai".into(),
         chat_model: "test".into(),
         chat_targets: vec![],
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
     }
 }
 
@@ -68,7 +72,7 @@ async fn delegate_goal_hits_runner_or_key() {
 #[tokio::test]
 async fn delegate_async_status_collect_cancel_flow() {
     let _guard = ASYNC_TEST_LOCK.lock().unwrap();
-    memory::set_delegate_async_spawner(Arc::new(|task_id, _req| {
+    let spawner: memory::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -77,13 +81,14 @@ async fn delegate_async_status_collect_cancel_flow() {
                 serde_json::json!({"ok": true, "summary": "done"}).to_string(),
             );
         });
-    }));
+    });
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
+    ctx.async_spawner = Some(spawner);
 
     let started = tools::dispatch_tool(
         |_| true,
@@ -127,20 +132,21 @@ async fn delegate_async_status_collect_cancel_flow() {
 #[tokio::test]
 async fn delegate_async_cancel_marks_cancelled() {
     let _guard = ASYNC_TEST_LOCK.lock().unwrap();
-    memory::set_delegate_async_spawner(Arc::new(|task_id, _req| {
+    let spawner: memory::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(500)).await;
             memory::AsyncDelegateRegistry::global()
                 .finish_ok(&tid, r#"{"late":true}"#.into());
         });
-    }));
+    });
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
+    ctx.async_spawner = Some(spawner);
 
     let started = tools::dispatch_tool(
         |_| true,

@@ -79,17 +79,23 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         base_url: ctx.chat_base_url.clone(),
     })?;
 
-    memory::request_orchestration_spawn(memory::OrchestrationSpawnRequest {
+    let spawn_req = memory::OrchestrationSpawnRequest {
         orchestration_id: orchestration_id.clone(),
         parent_agent_id: ctx.memory.agent_id.clone(),
         provider: ctx.chat_provider.clone(),
         model: ctx.chat_model.clone(),
         api_key: ctx.chat_api_key.clone(),
         base_url: ctx.chat_base_url.clone(),
+        chat_targets: ctx.chat_targets.clone(),
         caller_depth: memory::current_spawn_depth(),
         max_spawn_depth: memory::effective_max_spawn_depth(),
         allow_reclaim: false,
-    });
+    };
+    if let Some(spawner) = &ctx.orchestration_spawner {
+        spawner(spawn_req);
+    } else {
+        memory::request_orchestration_spawn(spawn_req);
+    }
 
     Ok(serde_json::json!({
         "orchestration_id": orchestration_id,

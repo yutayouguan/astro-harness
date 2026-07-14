@@ -1281,6 +1281,9 @@ async fn execute_tools_concurrent(
             chat_targets: agent.chat_targets().to_vec(),
             image_gen_targets: agent.image_gen_targets().clone(),
             providers: agent.providers_arc(),
+            delegate_runner: agent.delegate_runner(),
+            async_spawner: agent.async_spawner(),
+            orchestration_spawner: agent.orchestration_spawner(),
         }
     };
 
@@ -1343,6 +1346,9 @@ struct ToolExecSnapshot {
     chat_targets: Vec<common::ChatTarget>,
     image_gen_targets: tools::ImageGenTargets,
     providers: Arc<providers::registry::ProviderRegistry>,
+    delegate_runner: memory::DelegateRunner,
+    async_spawner: memory::DelegateAsyncSpawner,
+    orchestration_spawner: memory::OrchestrationSpawner,
 }
 
 fn run_tool_on_snapshot(
@@ -1379,6 +1385,9 @@ fn run_tool_on_snapshot(
             chat_provider: snap.chat_provider.clone(),
             chat_model: snap.chat_model.clone(),
             chat_targets: snap.chat_targets.clone(),
+            delegate_runner: Some(snap.delegate_runner.clone()),
+            async_spawner: Some(snap.async_spawner.clone()),
+            orchestration_spawner: Some(snap.orchestration_spawner.clone()),
         };
         tools::dispatch_tool(|_| true, &mut ctx, name, args)
             .await

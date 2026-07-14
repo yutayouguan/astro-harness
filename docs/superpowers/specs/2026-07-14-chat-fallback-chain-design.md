@@ -14,10 +14,8 @@
 | Cron（Tauri `run_cron_job_now` / `resolve_creds_for_job`） | 已接线 `resolve_chat_targets` |
 | Delegate / 子 Agent | 已下传 `chat_targets`，走 `try_stream_completion_with_fallback` |
 | Providers 面板 MVP | 可编辑最多 3 条后备 |
-| **Backend `cron_runner`** | **仍为单目标**：`resolve_cron_credentials` 仅填 primary 四字段，`targets` 为空 |
-| **Orchestration（`orchestration_run`）** | **仍为单目标**：`run_provider_loop` 直接 `chat_stream`，未设 `chat_targets` |
-
-后续若要让后台定时调度与编排也 failover，需在 `backend/src/cron_runner.rs` 解析 `providers.json`+keyring 展开链，并在 `agent/src/orchestration.rs` 改用 helper / `set_chat_targets`。
+| **Backend `cron_runner`** | 已接线：读 `providers.json` + **仅环境变量** Key 展开链（无 keyring；与 Tauri 手动跑互补） |
+| **Orchestration（`orchestration_run`）** | 已接线：下传 `chat_targets`，`run_provider_loop` 走 `try_stream_completion_with_fallback` |
 
 ## 决策摘要
 

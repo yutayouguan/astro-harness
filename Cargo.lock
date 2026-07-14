@@ -278,6 +278,7 @@ dependencies = [
  "permissions",
  "proto",
  "providers",
+ "serde",
  "serde_json",
  "skills",
  "tempfile",
