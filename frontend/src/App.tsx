@@ -17,6 +17,7 @@ import SkillsPanel from "./components/SkillsPanel";
 import ToolsPanel from "./components/ToolsPanel";
 import { Toast } from "./components/Toast";
 import WorkspacePanel from "./components/WorkspacePanel";
+import { MSG_DISSOLVE_MS } from "./components/MsgDissolveOverlay";
 import {
   IconChat,
   IconCollapse,
@@ -345,6 +346,8 @@ export default function App() {
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  /** 编辑截断时正在粒子消散的消息 */
+  const [dissolvingIds, setDissolvingIds] = useState<string[]>([]);
   /** 记忆 pending 角标 */
   const [memoryPendingCount, setMemoryPendingCount] = useState(0);
   const memoryToastDedupeRef = useRef<{ key: string; at: number } | null>(null);
@@ -360,6 +363,9 @@ export default function App() {
   /** 当前回合 turn_id（run_started，会话切换时清空） */
   const [currentTurnId, setCurrentTurnId] = useState<string | null>(null);
   const hideTimerRef = useRef<number | null>(null);
+  const dissolveTimerRef = useRef<number | null>(null);
+  const dissolvingIdsRef = useRef<string[]>([]);
+  dissolvingIdsRef.current = dissolvingIds;
   const zoomingRef = useRef(false);
   /** 避免恢复过程中把空欢迎页写回覆盖已存会话 */
   const restoringRef = useRef(false);
@@ -985,6 +991,20 @@ export default function App() {
       !activeProvider
     ) {
       return;
+    }
+
+    // 编辑消散未完成时先截断，避免把旧气泡带进下一轮
+    if (dissolveTimerRef.current != null) {
+      window.clearTimeout(dissolveTimerRef.current);
+      dissolveTimerRef.current = null;
+    }
+    if (dissolvingIdsRef.current.length > 0) {
+      const cutId = dissolvingIdsRef.current[0];
+      setDissolvingIds([]);
+      setMessages((prev) => {
+        const cut = prev.findIndex((m) => m.id === cutId);
+        return cut < 0 ? prev : prev.slice(0, cut);
+      });
     }
 
     // Hermes 对齐：解析 /技能 与 @提及，注入 SKILL.md / 切 Agent / 启用 MCP
@@ -1814,13 +1834,22 @@ export default function App() {
     };
   }, [sessionId, showTransientToast, t]);
 
-  /** 编辑用户消息：正文与附件填入输入框，截断该条及之后；发送时再截断 DB */
+  useEffect(() => {
+    return () => {
+      if (dissolveTimerRef.current != null) {
+        window.clearTimeout(dissolveTimerRef.current);
+      }
+    };
+  }, []);
+
+  /** 编辑用户消息：正文与附件填入输入框；下方气泡粒子消散后再截断 */
   const editUserMessage = useCallback(
     (messageId: string) => {
-      if (streaming) return;
+      if (streaming || dissolvingIds.length > 0) return;
       const idx = messages.findIndex((m) => m.id === messageId);
       if (idx < 0 || messages[idx]?.role !== "user") return;
       const userMsg = messages[idx];
+      const victimIds = messages.slice(idx).map((m) => m.id);
       pendingKeepChatBubblesRef.current = countChatBubbles(
         messages.slice(0, idx),
       );
@@ -1830,8 +1859,31 @@ export default function App() {
           ...a,
         })),
       );
-      setMessages((prev) => prev.slice(0, idx));
       setSessionPendingInterrupts([]);
+
+      const reduced =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      const finishCut = () => {
+        setMessages((prev) => {
+          const cut = prev.findIndex((m) => m.id === messageId);
+          return cut < 0 ? prev : prev.slice(0, cut);
+        });
+        setDissolvingIds([]);
+        dissolveTimerRef.current = null;
+      };
+
+      if (reduced) {
+        finishCut();
+      } else {
+        setDissolvingIds(victimIds);
+        if (dissolveTimerRef.current != null) {
+          window.clearTimeout(dissolveTimerRef.current);
+        }
+        dissolveTimerRef.current = window.setTimeout(finishCut, MSG_DISSOLVE_MS);
+      }
+
       queueMicrotask(() => {
         const el = document.querySelector<HTMLTextAreaElement>(
           ".composer-shell textarea",
@@ -1843,7 +1895,7 @@ export default function App() {
         }
       });
     },
-    [messages, streaming],
+    [messages, streaming, dissolvingIds.length],
   );
 
   const deleteMessage = useCallback(
@@ -2786,6 +2838,7 @@ export default function App() {
                       }}
                       onRegenerateMessage={regenerateMessage}
                       onEditUserMessage={editUserMessage}
+                      dissolvingIds={dissolvingIds}
                       onDeleteMessage={deleteMessage}
                       onBranchMessage={(id) => void branchMessage(id)}
                       onSlashAction={handleSlashAction}

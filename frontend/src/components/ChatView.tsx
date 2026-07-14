@@ -74,6 +74,7 @@ import {
 import ComposerMcpMenu from "./ComposerMcpMenu";
 import McpIcon from "./McpIcon";
 import MsgActivity from "./MsgActivity";
+import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";
 import { useMcpTools } from "../hooks/useMcpTools";
 import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
@@ -227,6 +228,8 @@ type Props = {
   onRegenerateMessage?: (messageId: string) => void;
   /** 编辑用户消息并重发（内容填回输入框，截断该条及之后） */
   onEditUserMessage?: (messageId: string) => void;
+  /** 正在粒子消散的消息 id（编辑截断中） */
+  dissolvingIds?: string[];
   /** 删除该条消息 */
   onDeleteMessage?: (messageId: string) => void;
   /** 从该条消息分支新会话（复制历史到新 session） */
@@ -539,11 +542,13 @@ export default function ChatView({
   contextUsagePercent = null,
   onRegenerateMessage,
   onEditUserMessage,
+  dissolvingIds = [],
   onDeleteMessage,
   onBranchMessage,
   onSlashAction,
 }: Props) {
   const { t } = useI18n();
+  const dissolvingSet = useMemo(() => new Set(dissolvingIds), [dissolvingIds]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1047,13 +1052,26 @@ export default function ChatView({
               const reasoningActive = Boolean(
                 isStreamingBubble && m.reasoning && !m.content,
               );
+              const dissolving = dissolvingSet.has(m.id);
+              const dissolveStagger = dissolving
+                ? Math.max(0, dissolvingIds.indexOf(m.id))
+                : 0;
               return (
                 <div
                   key={m.id}
                   id={`msg-${m.id}`}
                   data-msg-id={m.id}
-                  className={`msg-row ${m.role === "user" ? "user" : "assistant"}`}
+                  className={`msg-row ${m.role === "user" ? "user" : "assistant"}${
+                    dissolving ? " is-dissolving" : ""
+                  }`}
                 >
+                  {dissolving ? (
+                    <MsgDissolveOverlay
+                      messageId={m.id}
+                      text={`${m.content || ""}${m.reasoning || ""}`}
+                      staggerIndex={dissolveStagger}
+                    />
+                  ) : null}
                   {m.role === "assistant" && (
                     <div className={`avatar ${m.error ? "error" : ""}`}>
                       {m.error ? "!" : "iC"}
@@ -1206,13 +1224,14 @@ export default function ChatView({
                       ) : null}
                     </div>
                     {!isStreamingBubble &&
+                    !dissolving &&
                     m.id !== "welcome" &&
                     (m.role === "user" || m.role === "assistant") ? (
                       <MessageActions
                         messageId={m.id}
                         content={m.content}
                         role={m.role}
-                        disabled={streaming}
+                        disabled={streaming || dissolvingIds.length > 0}
                         onRegenerate={
                           m.role === "assistant" ? onRegenerateMessage : undefined
                         }

@@ -76,6 +76,106 @@
   justify-content: flex-start;
 }
 
+/* 编辑截断：气泡与文字粒子消散 */
+.msg-row.is-dissolving {
+  position: relative;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.msg-row.is-dissolving .avatar,
+.msg-row.is-dissolving .msg-stack {
+  animation: msg-dissolve-fade 0.85s ease-out forwards;
+}
+
+.msg-row.is-dissolving .msg-actions {
+  opacity: 0 !important;
+}
+
+.msg-dissolve-layer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.msg-dissolve-particle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  animation: msg-dissolve-fly 0.88s cubic-bezier(0.2, 0.7, 0.25, 1) forwards;
+  will-change: transform, opacity, filter;
+}
+
+.msg-dissolve-particle.is-char {
+  font-weight: 600;
+  line-height: 1;
+  color: color-mix(in srgb, var(--tone, #60a5fa) 35%, var(--ink));
+  text-shadow: 0 0 8px color-mix(in srgb, var(--tone, #60a5fa) 25%, transparent);
+  user-select: none;
+}
+
+.msg-dissolve-particle.is-dust {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone, #60a5fa) 55%, #fff);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tone, #60a5fa) 40%, transparent);
+}
+
+@keyframes msg-dissolve-fade {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+  35% {
+    opacity: 0.55;
+    filter: blur(0.6px);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.96) translateY(-6px);
+  }
+}
+
+@keyframes msg-dissolve-fly {
+  0% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+        calc(-50% + var(--dx, 0px)),
+        calc(-50% + var(--dy, 0px))
+      )
+      scale(0.25)
+      rotate(var(--rot, 0deg));
+    filter: blur(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-row.is-dissolving .avatar,
+  .msg-row.is-dissolving .msg-stack,
+  .msg-dissolve-particle {
+    animation: none !important;
+  }
+
+  .msg-row.is-dissolving .avatar,
+  .msg-row.is-dissolving .msg-stack {
+    opacity: 0;
+  }
+
+  .msg-dissolve-layer {
+    display: none;
+  }
+}
+
 .msg-stack {
   display: flex;
   flex-direction: column;
