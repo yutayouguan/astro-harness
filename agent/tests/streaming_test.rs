@@ -669,3 +669,85 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn multi_turn_budget_exhausted_forces_toolless_summary() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.multi_turn = 1;
+    let agent = AgentLoop::with_session_id(config, "budget-session".into()).unwrap();
+    let session = Arc::new(Mutex::new(agent));
+    {
+        let mut a = session.lock().await;
+        a.session_messages
+            .push(common::message::Message::user("keep using tools"));
+    }
+
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![
+            vec![ChatChunk {
+                tool_call_deltas: vec![ToolCallDeltaChunk {
+                    index: 0,
+                    id: Some("call_b".into()),
+                    name: Some("echo".into()),
+                    arguments: Some(r#"{"text":"x"}"#.into()),
+                }],
+                finish_reason: Some("tool_calls".into()),
+                usage: Some(Usage::from_parts(5, 2)),
+                ..Default::default()
+            }],
+            // 预算耗尽后的无工具总结轮
+            vec![ChatChunk {
+                token: Some("summary-after-budget".into()),
+                finish_reason: Some("stop".into()),
+                usage: Some(Usage::from_parts(6, 4)),
+                ..Default::default()
+            }],
+        ]),
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    tokio::spawn(async move {
+        run_multi_turn_stream_from_provider(
+            session,
+            provider,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            pause,
+            None,
+            tx,
+        )
+        .await;
+    });
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.expect("stream item"));
+    }
+
+    assert!(
+        !items
+            .iter()
+            .any(|i| matches!(i, MultiTurnStreamItem::Error(e) if e.contains("轮次已用尽"))),
+        "budget exhaustion should not hard-error"
+    );
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t))
+        if t.contains("迭代预算已用尽")
+    )));
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t))
+        if t == "summary-after-budget"
+    )));
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+    )));
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+}
