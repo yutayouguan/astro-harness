@@ -515,22 +515,14 @@ impl AgentLoop {
         context_ratio > 0.5
     }
 
-    /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
-    ///
-    /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
-    /// 副作用：设置 `ASTRO_WORKSPACE` 环境变量供工具读取。
-    pub fn build_system_prompt(&self) -> String {
+    /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。
+    fn system_prompt_parts(&self) -> (StaticContext, DynamicContext, Vec<(String, String)>) {
         let (project_memory, user_profile, daily) = self.memory.prompt_snapshot_with_daily();
-        std::env::set_var("ASTRO_WORKSPACE", &self.memory.workspace_dir);
         let skill_pairs = if self.tool_registry.is_toolset_enabled("skills") {
             skills::list_enabled_for_prompt()
         } else {
             Vec::new()
         };
-        let skill_index: Vec<(&str, &str)> = skill_pairs
-            .iter()
-            .map(|(name, desc)| (name.as_str(), desc.as_str()))
-            .collect();
 
         let static_ctx = if let Some(ref over) = self.config.static_override {
             over.clone()
@@ -546,6 +538,20 @@ impl AgentLoop {
             self.config.dynamic_max_items,
             &self.last_recalled_context,
         );
+        (static_ctx, dynamic_ctx, skill_pairs)
+    }
+
+    /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
+    ///
+    /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
+    /// 副作用：设置 `ASTRO_WORKSPACE` 环境变量供工具读取。
+    pub fn build_system_prompt(&self) -> String {
+        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
+        std::env::set_var("ASTRO_WORKSPACE", &self.memory.workspace_dir);
+        let skill_index: Vec<(&str, &str)> = skill_pairs
+            .iter()
+            .map(|(name, desc)| (name.as_str(), desc.as_str()))
+            .collect();
 
         PromptBuilder::new()
             .with_static_context(&static_ctx)
@@ -554,6 +560,28 @@ impl AgentLoop {
             .with_tool_guidance()
             .with_timestamp()
             .build()
+    }
+
+    /// 与 `build_system_prompt` 同源的分层字符数，供上下文占用估算。
+    /// 返回 (system, memory, skills, recall)。
+    pub fn system_prompt_layer_chars(&self) -> (usize, usize, usize, usize) {
+        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
+        let skill_index: Vec<(&str, &str)> = skill_pairs
+            .iter()
+            .map(|(name, desc)| (name.as_str(), desc.as_str()))
+            .collect();
+
+        let guidance_ts = PromptBuilder::new().with_tool_guidance().with_timestamp().build();
+        let mut system_chars = guidance_ts.len();
+        for part in [&static_ctx.soul, &static_ctx.identity, &static_ctx.agent_md] {
+            system_chars += part.trim().len();
+        }
+        let memory_chars = static_ctx.memory.trim().len()
+            + static_ctx.user_profile.trim().len()
+            + static_ctx.daily.trim().len();
+        let skills_chars = PromptBuilder::new().with_skills_index(&skill_index).build().len();
+        let recall_chars = dynamic_ctx.render().len();
+        (system_chars, memory_chars, skills_chars, recall_chars)
     }
 
     /// 解析当前 Agent 工作区目录，供工具上下文注入。

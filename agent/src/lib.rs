@@ -9,6 +9,8 @@ pub mod builder;
 pub mod chat_fallback;
 /// 静态/动态上下文分层，用于 system prompt 组装。
 pub mod context;
+/// 上下文占用分层估算（ceil(chars/4)）。
+pub mod context_usage;
 /// 定时任务执行逻辑。
 pub mod cron_exec;
 /// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。
@@ -55,6 +57,8 @@ pub use chat_fallback::{
 };
 /// 上下文类型 re-export，便于调用方直接 `use agent::StaticContext`。
 pub use context::{DynamicContext, StaticContext};
+/// 上下文占用快照 re-export。
+pub use context_usage::{build_snapshot, ContextUsageSegment, ContextUsageSnapshot};
 /// 钩子 trait 与常用实现 re-export。
 pub use hooks::{CancelSignal, PromptCancelled};
 /// HITL 闸门 re-export。

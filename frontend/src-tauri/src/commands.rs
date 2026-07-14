@@ -12,6 +12,13 @@ use crate::providers_commands::{
 };
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ContextUsageSegmentDto {
+    pub id: String,
+    pub tokens: u32,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatStreamEvent {
     Token { content: String },
@@ -41,6 +48,12 @@ pub enum ChatStreamEvent {
         prompt_tokens: u32,
         completion_tokens: u32,
         total_tokens: u32,
+    },
+    ContextUsage {
+        context_window: u32,
+        total_tokens: u32,
+        segments: Vec<ContextUsageSegmentDto>,
+        updated_at: i64,
     },
     RunStarted {
         thread_id: String,
@@ -791,6 +804,25 @@ async fn run_chat_stream(
                         prompt_tokens: u.prompt_tokens,
                         completion_tokens: u.completion_tokens,
                         total_tokens: u.total_tokens,
+                    },
+                );
+            }
+            Some(proto::chat_event::Payload::ContextUsage(cu)) => {
+                let _ = app.emit(
+                    event_name,
+                    ChatStreamEvent::ContextUsage {
+                        context_window: cu.context_window,
+                        total_tokens: cu.total_tokens,
+                        segments: cu
+                            .segments
+                            .into_iter()
+                            .map(|s| ContextUsageSegmentDto {
+                                id: s.id,
+                                tokens: s.tokens,
+                                count: s.count,
+                            })
+                            .collect(),
+                        updated_at: cu.updated_at,
                     },
                 );
             }

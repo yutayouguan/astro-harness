@@ -4,9 +4,11 @@ import { X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
 import type { ChatMessage } from "../types";
+import type { ContextUsageSnapshot } from "../lib/contextUsage";
 import ChatSessionList from "./ChatSessionList";
 import ChatContextTimeline from "./ChatContextTimeline";
 import ChatAgentInfo from "./ChatAgentInfo";
+import ContextExplorer from "./ContextExplorer";
 import AnimatedSwitch from "./AnimatedSwitch";
 
 /** 聊天右侧栏 Tab */
@@ -26,6 +28,10 @@ type Props = {
     completionTokens: number;
     totalTokens: number;
   } | null;
+  /** 分层上下文占用快照（Context Explorer） */
+  contextUsage?: ContextUsageSnapshot | null;
+  /** 模型上下文窗口；未知时回落 128000 */
+  contextWindow?: number;
   onOpenSession: (sessionId: string) => void;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
@@ -44,7 +50,9 @@ export default function ChatRightPanel({
   sessionId,
   turnId = null,
   messages,
-  tokenUsage = null,
+  tokenUsage: _tokenUsage = null,
+  contextUsage = null,
+  contextWindow = 128_000,
   onOpenSession,
   onOpenMemory,
   onOpenSkills,
@@ -103,14 +111,23 @@ export default function ChatRightPanel({
                 onOpenSession={onOpenSession}
               />
             )}
-            {tab === "context" && <ChatContextTimeline messages={messages} />}
+            {tab === "context" && (
+              <>
+                <ContextExplorer
+                  snapshot={contextUsage}
+                  windowTokens={contextWindow}
+                  sessionLabel={sessionId ?? "—"}
+                />
+                <ChatContextTimeline messages={messages} />
+              </>
+            )}
             {tab === "agent" && (
               <ChatAgentInfo
                 sessionId={sessionId}
                 turnId={turnId}
                 onOpenMemory={onOpenMemory}
                 onOpenSkills={onOpenSkills}
-                tokenUsage={tokenUsage}
+                onOpenContextTab={() => onTabChange("context")}
               />
             )}
           </AnimatedSwitch>

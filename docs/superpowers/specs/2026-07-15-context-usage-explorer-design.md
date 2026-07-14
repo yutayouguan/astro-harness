@@ -1,7 +1,7 @@
 # 上下文用量 Explorer 设计
 
 **日期:** 2026-07-15  
-**状态:** 已批准  
+**状态:** 已实现  
 **范围:** Composer 上下文浮层 + 右栏「上下文」Tab 的用量 Explorer；Agent 组装时分层 token 快照  
 **参考:** Cursor Context Usage 弹层、Context Explorer 页（视觉语言映射到 Astro 主题变量）
 

@@ -141,6 +141,8 @@ pub enum MultiTurnStreamItem {
         /// 结果预览（最长 240 字符）。
         content: String,
     },
+    /// 本轮 API 请求前的上下文占用估算（分层 token 快照）。
+    ContextUsage(crate::context_usage::ContextUsageSnapshot),
     /// AG-UI `RUN_STARTED`：一次用户发送对应一个 run。
     RunStarted {
         thread_id: String,
@@ -690,6 +692,24 @@ async fn run_multi_turn_stream_inner(
                     ..Default::default()
                 },
             );
+        }
+
+        {
+            let agent = session.lock().await;
+            let (system_chars, memory_chars, skills_chars, recall_chars) =
+                agent.system_prompt_layer_chars();
+            let snap = crate::context_usage::build_snapshot(crate::context_usage::ContextUsageInput {
+                system_chars,
+                memory_chars,
+                skills_chars,
+                recall_chars,
+                tools: &tools,
+                messages: &history,
+                context_window: 0, // 前端用模型窗口覆盖
+                updated_at_ms: chrono::Utc::now().timestamp_millis(),
+            });
+            drop(agent);
+            let _ = emit(&tx, MultiTurnStreamItem::ContextUsage(snap)).await;
         }
 
         let raw_stream = match streamer

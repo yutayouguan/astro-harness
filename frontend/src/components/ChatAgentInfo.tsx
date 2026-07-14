@@ -7,20 +7,14 @@ import type { AgentInfo } from "../types/agent";
 import type { InstalledSkill } from "../types";
 import AgentAvatar from "./AgentAvatar";
 
-export type TokenUsage = {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-};
-
 /** 当前 Agent 信息条入参 */
 type Props = {
   sessionId?: string | null;
   turnId?: string | null;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
-  /** 本轮 token 用量摘要 */
-  tokenUsage?: TokenUsage | null;
+  /** 打开右侧「上下文」Tab 查看分层占用 */
+  onOpenContextTab: () => void;
 };
 
 const MEMORY_PREVIEW_LEN = 280;
@@ -30,7 +24,7 @@ export default function ChatAgentInfo({
   turnId = null,
   onOpenMemory,
   onOpenSkills,
-  tokenUsage = null,
+  onOpenContextTab,
 }: Props) {
   const { t } = useI18n();
   const [agent, setAgent] = useState<AgentInfo | null>(null);
@@ -121,11 +115,6 @@ export default function ChatAgentInfo({
     return <p className="muted">{t("chat.rightPanel.agentUnavailable")}</p>;
   }
 
-  const hasUsage = !!tokenUsage && tokenUsage.totalTokens > 0;
-  const usageRatio = hasUsage
-    ? Math.min(1, tokenUsage.totalTokens / 128_000)
-    : 0;
-
   return (
     <div className="chat-agent-info">
       <header className="chat-agent-hero">
@@ -142,39 +131,13 @@ export default function ChatAgentInfo({
 
       <section className="chat-agent-card">
         <h4>{t("chat.rightPanel.usageTitle")}</h4>
-        {hasUsage ? (
-          <ul className="chat-agent-usage-stats">
-            <li>
-              <span>{t("chat.rightPanel.usagePrompt")}</span>
-              <strong>{tokenUsage.promptTokens}</strong>
-            </li>
-            <li>
-              <span>{t("chat.rightPanel.usageCompletion")}</span>
-              <strong>{tokenUsage.completionTokens}</strong>
-            </li>
-            <li>
-              <span>{t("chat.rightPanel.usageTotal")}</span>
-              <strong>{tokenUsage.totalTokens}</strong>
-            </li>
-          </ul>
-        ) : (
-          <p className="muted">{t("chat.rightPanel.usagePlaceholder")}</p>
-        )}
-        <div
-          className="chat-agent-usage-bar"
-          aria-hidden
-          style={
-            hasUsage
-              ? {
-                  background: `linear-gradient(90deg, var(--tone-blue, #2563eb) ${
-                    usageRatio * 100
-                  }%, color-mix(in srgb, var(--ink) 8%, transparent) ${
-                    usageRatio * 100
-                  }%)`,
-                }
-              : undefined
-          }
-        />
+        <button
+          type="button"
+          className="chat-agent-view-all"
+          onClick={onOpenContextTab}
+        >
+          {t("chat.rightPanel.viewContextUsage")}
+        </button>
         {turnId && sessionId ? (
           <div className="chat-agent-turn">
             <span>{t("chat.rightPanel.turnLabel")}</span>

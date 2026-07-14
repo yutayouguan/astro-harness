@@ -78,6 +78,12 @@ import {
 } from "./lib/chatMode";
 import type { SlashAction } from "./lib/composerCommands";
 import { resolveComposerTurn } from "./lib/composerResolve";
+import {
+  normalizeContextUsageEvent,
+  resolveContextWindow,
+  usagePercent,
+  type ContextUsageSnapshot,
+} from "./lib/contextUsage";
 import { zoomOrRestore } from "./lib/windowZoom";
 import { syncWindowUnderlay } from "./lib/windowUnderlay";
 import {
@@ -100,6 +106,7 @@ import type {
   MessageTokenUsage,
   PendingInterrupt,
   ProviderDto,
+  ProviderModelsResult,
   ProvidersStateDto,
   UiSurface,
 } from "./types";
@@ -325,6 +332,12 @@ export default function App() {
     completionTokens: number;
     totalTokens: number;
   } | null>(null);
+  const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
+    null,
+  );
+  const [modelContextWindow, setModelContextWindow] = useState<number | null>(
+    null,
+  );
   const [providers, setProviders] = useState<ProviderDto[]>([]);
   const [activeProviderId, setActiveProviderId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(() => {
@@ -924,6 +937,41 @@ export default function App() {
   const activeProvider =
     providers.find((p) => p.id === activeProviderId) ?? providers[0];
 
+  // 从缓存模型列表解析当前模型的 context_window
+  useEffect(() => {
+    const providerId = activeProvider?.id;
+    const modelId = activeProvider?.model;
+    if (!providerId || !modelId) {
+      setModelContextWindow(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cached = await invoke<ProviderModelsResult | null>(
+          "get_cached_provider_models",
+          { id: providerId },
+        );
+        if (cancelled) return;
+        const match = cached?.models?.find((m) => m.id === modelId);
+        const win = match?.context_window;
+        setModelContextWindow(
+          typeof win === "number" && win > 0 ? win : null,
+        );
+      } catch {
+        if (!cancelled) setModelContextWindow(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProvider?.id, activeProvider?.model]);
+
+  const contextWindow = resolveContextWindow(
+    modelContextWindow,
+    contextUsage?.contextWindow,
+  );
+
   // caps 未知时回退 deepseek 白名单（有列表命中再传 capabilities）
   const showThinking = shouldShowThinkingControls({
     capabilities: null,
@@ -1158,6 +1206,7 @@ export default function App() {
     setStreaming(true);
     setStreamPaused(false);
     setTokenUsage(null);
+    setContextUsage(null);
     setStatus("busy");
     setStatusPhase("connecting");
     setStatusDetail(null);
@@ -1195,6 +1244,9 @@ export default function App() {
         prompt_tokens?: number;
         completion_tokens?: number;
         total_tokens?: number;
+        context_window?: number;
+        segments?: Array<{ id: string; tokens: number; count?: number | null }>;
+        updated_at?: number;
         thread_id?: string;
         run_id?: string;
         message_id?: string;
@@ -1222,6 +1274,8 @@ export default function App() {
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantId ? { ...m, usage } : m)),
           );
+        } else if (payload.type === "context_usage") {
+          setContextUsage(normalizeContextUsageEvent(payload));
         } else if (payload.type === "run_started") {
           const runId = payload.run_id ?? null;
           currentRunIdRef.current = runId;
@@ -2307,6 +2361,7 @@ export default function App() {
     setStreaming(false);
     setStreamPaused(false);
     setTokenUsage(null);
+    setContextUsage(null);
     activeAssistantIdRef.current = null;
     setStatus("ready");
     setStatusPhase("ready");
@@ -2953,21 +3008,13 @@ export default function App() {
                       onDeleteMessage={deleteMessage}
                       onBranchMessage={(id) => void branchMessage(id)}
                       onSlashAction={handleSlashAction}
-                      contextUsagePercent={(() => {
-                        if (tokenUsage && tokenUsage.totalTokens > 0) {
-                          return Math.min(
-                            99,
-                            Math.round((tokenUsage.totalTokens / 128_000) * 100),
-                          );
-                        }
-                        const chars = messages.reduce(
-                          (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
-                          0,
-                        );
-                        // 回退粗估：4 chars ≈ 1 token，默认窗口 128k
-                        const tokens = Math.ceil(chars / 4);
-                        return Math.min(99, Math.round((tokens / 128_000) * 100));
-                      })()}
+                      contextUsage={contextUsage}
+                      contextWindow={contextWindow}
+                      contextUsagePercent={
+                        contextUsage
+                          ? usagePercent(contextUsage.totalTokens, contextWindow)
+                          : null
+                      }
                     />
                   </div>
                   {chatRightOpen && (
@@ -2979,6 +3026,8 @@ export default function App() {
                       turnId={currentTurnId}
                       messages={messages}
                       tokenUsage={tokenUsage}
+                      contextUsage={contextUsage}
+                      contextWindow={contextWindow}
                       onOpenSession={(id) => void openSessionFromFilespace(id)}
                       onOpenMemory={() => setNav("memory")}
                       onOpenSkills={() => setNav("skills")}

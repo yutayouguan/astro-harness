@@ -15,10 +15,10 @@ use futures::StreamExt;
 use memory::{AgentRuntimeConfig, MemoryManager};
 use proto::astro_service_server::AstroService;
 use proto::{
-    ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, Empty, FileListRequest,
-    FileListResponse, ImageEvent, ImageRequest, MemoryQuery, MemoryResult, McpServerList,
-    SessionEvent, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillList, SkillRequest,
-    SkillInfo, SubscribeSessionEventsRequest, UsageEvent,
+    ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
+    ContextUsageSegment, Empty, FileListRequest, FileListResponse, ImageEvent, ImageRequest,
+    MemoryQuery, MemoryResult, McpServerList, SessionEvent, SessionSnippet as ProtoSessionSnippet,
+    SkillEvent, SkillList, SkillRequest, SkillInfo, SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::registry::ProviderRegistry;
 use providers::trait_::ProviderConfig;
@@ -360,6 +360,22 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                     content,
                 },
             )),
+        }),
+        MultiTurnStreamItem::ContextUsage(snap) => Some(ChatEvent {
+            payload: Some(proto::chat_event::Payload::ContextUsage(ContextUsageEvent {
+                context_window: snap.context_window,
+                total_tokens: snap.total_tokens,
+                segments: snap
+                    .segments
+                    .into_iter()
+                    .map(|s| ContextUsageSegment {
+                        id: s.id,
+                        tokens: s.tokens,
+                        count: s.meta.and_then(|m| m.count).unwrap_or(0),
+                    })
+                    .collect(),
+                updated_at: snap.updated_at,
+            })),
         }),
         MultiTurnStreamItem::RunStarted { thread_id, run_id } => Some(ChatEvent {
             payload: Some(proto::chat_event::Payload::RunStarted(
