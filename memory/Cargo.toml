@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { workspace = true }
-common = { path = "../common" }
+anyhow          = { workspace = true }
+common          = { path = "../common" }
+memory-paths    = { path = "../memory-paths" }
 tokio = { workspace = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }

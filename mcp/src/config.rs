@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use memory::{
-    active_agent_id, agent_config_dir, default_memory_dir, ensure_default_workspace,
+use memory_paths::{
+    active_agent_id, agent_config_dir, default_memory_dir, ensure_default_workspace_dirs,
     DEFAULT_AGENT_ID,
 };
 
@@ -197,7 +197,7 @@ fn write_file(path: &Path, file: &McpFile) -> anyhow::Result<()> {
 
 /// 读取 Agent MCP 配置；专属文件不存在时回退全局
 pub fn load_mcp_servers(agent_id: Option<&str>) -> anyhow::Result<Vec<McpServerConfig>> {
-    let _ = ensure_default_workspace();
+    let _ = ensure_default_workspace_dirs();
     let path = mcp_path_for_agent(agent_id);
     let file = if path.exists() {
         read_file(&path)?
@@ -221,7 +221,7 @@ pub fn save_mcp_servers(
     agent_id: Option<&str>,
     servers: &[McpServerConfig],
 ) -> anyhow::Result<()> {
-    let _ = ensure_default_workspace()?;
+    let _ = ensure_default_workspace_dirs()?;
     let id = agent_id
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -295,7 +295,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-        let _ = ensure_default_workspace();
+        let _ = ensure_default_workspace_dirs();
         let servers = vec![McpServerConfig {
             id: "s1".into(),
             name: "demo".into(),
@@ -322,7 +322,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-        let _ = ensure_default_workspace();
+        let _ = ensure_default_workspace_dirs();
         let servers = vec![McpServerConfig {
             id: "s1".into(),
             name: "demo".into(),
