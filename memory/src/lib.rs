@@ -97,7 +97,7 @@ pub use usage_stats::{
 };
 pub use usage_db::{
     period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
-    UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint,
+    UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint, USAGE_SCHEMA_VERSION,
 };
 pub use usage_pricing::{
     estimate_usage_cost, resolve_billing_route, BillingRoute, CostResult, CostStatus, UsageTokens,

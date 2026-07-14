@@ -386,6 +386,7 @@ mod tests {
             name: name.into(),
             agent_id: agent_id.into(),
             session_id: Some(session_id.into()),
+            turn_id: None,
             input_tokens,
             output_tokens,
             cache_read_tokens: 0,

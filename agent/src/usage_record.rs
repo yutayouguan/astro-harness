@@ -66,6 +66,7 @@ pub(crate) fn build_llm_usage_event(
         name: model.to_string(),
         agent_id: agent_id.to_string(),
         session_id: session_id.map(str::to_string),
+        turn_id: None,
         input_tokens: i64::from(usage.input_tokens),
         output_tokens: i64::from(usage.output_tokens),
         cache_read_tokens: i64::from(usage.cache_read_tokens),

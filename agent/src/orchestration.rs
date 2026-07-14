@@ -466,6 +466,7 @@ fn record_orchestration_edge(
         name: "orchestration_step".into(),
         agent_id: orch.parent_agent_id.clone(),
         session_id: orch.session_id.clone(),
+        turn_id: None,
         input_tokens: 0,
         output_tokens: 0,
         cache_read_tokens: 0,

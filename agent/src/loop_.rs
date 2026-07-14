@@ -500,6 +500,7 @@ impl AgentLoop {
                 name: name.to_string(),
                 agent_id,
                 session_id: Some(self.session_id.clone()),
+                turn_id: None,
                 input_tokens: 0,
                 output_tokens: 0,
                 cache_read_tokens: 0,

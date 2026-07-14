@@ -1,7 +1,7 @@
 //! usage.db 事件写入与聚合查询测试。
 
 use memory::usage_db::{
-    usage_db_path, NewUsageEvent, UsageDb, UsageInsightsQuery, UsagePeriod,
+    usage_db_path, NewUsageEvent, UsageDb, UsageInsightsQuery, UsagePeriod, USAGE_SCHEMA_VERSION,
 };
 use std::sync::Mutex;
 use tempfile::TempDir;
@@ -41,7 +41,103 @@ fn zero_billing_event(
         billing_base_url: None,
         billing_mode: None,
         meta_json,
+        turn_id: None,
     }
+}
+
+#[test]
+fn migrate_v3_to_v4_keeps_rows_and_adds_turn_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("usage.db");
+
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            r#"
+            PRAGMA journal_mode=WAL;
+            CREATE TABLE usage_events (
+                id TEXT PRIMARY KEY,
+                ts TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                name TEXT NOT NULL,
+                agent_id TEXT NOT NULL,
+                session_id TEXT,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                cost_usd REAL NOT NULL DEFAULT 0,
+                cost_status TEXT,
+                cost_source TEXT,
+                pricing_version TEXT,
+                billing_provider TEXT,
+                billing_base_url TEXT,
+                billing_mode TEXT,
+                meta_json TEXT
+            );
+            PRAGMA user_version = 3;
+            "#,
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO usage_events (id, ts, kind, name, agent_id, total_tokens, cost_usd)
+             VALUES ('old1', '2026-01-01T00:00:00Z', 'llm', 'm', 'a', 10, 0.0)",
+            [],
+        )
+        .unwrap();
+    }
+
+    let db = memory::UsageDb::new(path.clone()).unwrap();
+
+    let id = db
+        .insert(memory::NewUsageEvent {
+            ts: "2026-07-14T00:00:00Z".into(),
+            kind: "llm".into(),
+            name: "m2".into(),
+            agent_id: "a".into(),
+            session_id: Some("s1".into()),
+            turn_id: Some("turn-abc".into()),
+            input_tokens: 1,
+            output_tokens: 2,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
+            total_tokens: 3,
+            cost_usd: 0.0,
+            cost_status: None,
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
+            meta_json: None,
+        })
+        .unwrap();
+    assert!(!id.is_empty());
+
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let ver: i32 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(ver, USAGE_SCHEMA_VERSION);
+    let turn: Option<String> = conn
+        .query_row(
+            "SELECT turn_id FROM usage_events WHERE id = ?1",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(turn.as_deref(), Some("turn-abc"));
+    let old_ok: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM usage_events WHERE id = 'old1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(old_ok, 1);
 }
 
 #[test]
@@ -241,6 +337,7 @@ fn usage_db_rebuilds_incompatible_schema_and_ignores_unknown_cost() {
         name: "m".into(),
         agent_id: "a".into(),
         session_id: None,
+        turn_id: None,
         input_tokens: 10,
         output_tokens: 5,
         cache_read_tokens: 0,
@@ -263,6 +360,7 @@ fn usage_db_rebuilds_incompatible_schema_and_ignores_unknown_cost() {
         name: "m2".into(),
         agent_id: "a".into(),
         session_id: None,
+        turn_id: None,
         input_tokens: 10,
         output_tokens: 5,
         cache_read_tokens: 0,
