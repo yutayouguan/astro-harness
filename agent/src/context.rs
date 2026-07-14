@@ -61,7 +61,7 @@ impl StaticContext {
             layers.push(format!("# 长期记忆（MEMORY.md）\n{}", self.memory.trim()));
         }
         if !self.daily.trim().is_empty() {
-            layers.push(format!("# 今日记忆\n{}", self.daily.trim()));
+            layers.push(format!("# 今日记忆（流水截断）\n{}", self.daily.trim()));
         }
         layers.join("\n\n---\n\n")
     }

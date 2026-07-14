@@ -71,7 +71,7 @@ async fn test_agent_loop_memory_injection() {
         .unwrap();
     assert!(wrote.contains("已写盘（live）") || wrote.contains("已存在"));
 
-    // 新会话 reopen 会从盘加载进 snapshot（同会话冻结由后续 task 覆盖）
+    // 工具写入只改 live；新 AgentLoop（新 session）open/reload 会把盘上内容固化进 snapshot
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     let result = agent.run_turn("你好", "task-1").await.unwrap();
     match result {
