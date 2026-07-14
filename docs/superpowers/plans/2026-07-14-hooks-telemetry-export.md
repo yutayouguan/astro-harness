@@ -1,6 +1,6 @@
 # Hooks Telemetry Export Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 让 Shell Hook 能读到 `ASTRO_HOOK_TURN`（= turn_id），并提供可配置 URL 的示例 webhook 脚本；默认不引入 OTEL/Langfuse SDK。
 
@@ -38,7 +38,7 @@
 - Modify: `hooks/src/shell.rs`
 - Modify: `hooks/src/lib.rs`、`plugin.rs`、`ui.rs`（测试/字面量）
 
-- [ ] **Step 1: Write failing tests in `shell.rs` `#[cfg(test)]`**
+- [x] **Step 1: Write failing tests in `shell.rs` `#[cfg(test)]`**
 
 先把 `env_from_payload` 保持 `pub(crate)`（或 `cfg(test)` 可见）以便测：
 
@@ -79,7 +79,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 ```bash
 cargo test -p hooks env_includes_turn -- --nocapture
@@ -87,7 +87,7 @@ cargo test -p hooks env_includes_turn -- --nocapture
 
 Expected: missing field `turn_id` or test fail.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `outcome.rs`:
 
@@ -113,7 +113,7 @@ if let Some(tid) = payload.turn_id.as_ref().filter(|s| !s.is_empty()) {
 
 Fix all in-crate `HookPayload { ... }` to include `turn_id: None` (or `..Default::default()` where possible).
 
-- [ ] **Step 4: Tests PASS**
+- [x] **Step 4: Tests PASS**
 
 ```bash
 cargo test -p hooks env_includes_turn
@@ -121,7 +121,7 @@ cargo test -p hooks env_omits_turn
 cargo test -p hooks
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add hooks/
@@ -142,13 +142,13 @@ EOF
 - Modify: `backend/src/grpc/astro_service.rs`
 - 其它 `HookPayload {` 编译失败处（`rg 'HookPayload \{'`）
 
-- [ ] **Step 1: Compile after Task 1 — list breakages**
+- [x] **Step 1: Compile after Task 1 — list breakages**
 
 ```bash
 cargo check -p agent -p backend 2>&1 | head -80
 ```
 
-- [ ] **Step 2: Fill turn_id at fire sites**
+- [x] **Step 2: Fill turn_id at fire sites**
 
 规则：
 
@@ -184,14 +184,14 @@ let turn_id = {
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 ```bash
 cargo check -p agent -p backend -p hooks
 cargo test -p hooks
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add agent/src/loop_.rs agent/src/streaming.rs backend/src/grpc/astro_service.rs
@@ -213,7 +213,7 @@ EOF
 - Modify: `docs/examples/hooks/README.md`
 - Modify: `docs/hooks.md`
 
-- [ ] **Step 1: Script**（POSIX sh / bash；`set -eu` 可选；**恒 exit 0**）
+- [x] **Step 1: Script**（POSIX sh / bash；`set -eu` 可选；**恒 exit 0**）
 
 ```bash
 #!/usr/bin/env bash
@@ -255,7 +255,7 @@ exit 0
 
 更稳的无 jq 最小转义函数写进脚本注释块；实现时加 3～5 行 escape。
 
-- [ ] **Step 2: config snippet + README**
+- [x] **Step 2: config snippet + README**
 
 `config.yaml.snippet` 追加注释块：
 
@@ -271,7 +271,7 @@ README 增加「Telemetry webhook」：`ASTRO_TELEMETRY_URL` / TOKEN、chmod、�
 
 `docs/hooks.md` 增加小节 **遥测旁路（Shell）**：链到示例；说明 `ASTRO_HOOK_TURN` vs `turn` 轮次字段。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/examples/hooks/ docs/hooks.md
@@ -286,19 +286,19 @@ EOF
 
 ## Task 4: 验收 + 标记 spec
 
-- [ ] **Step 1: Regressions**
+- [x] **Step 1: Regressions**
 
 ```bash
 cargo test -p hooks
 cargo check -p agent -p backend
 ```
 
-- [ ] **Step 2: Spec status**
+- [x] **Step 2: Spec status**
 
 `docs/superpowers/specs/2026-07-14-hooks-telemetry-export-design.md`：`已批准（待实现）` → `已批准 / 已实现`  
 计划 Tasks 勾选。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
