@@ -344,7 +344,6 @@ export default function App() {
   const [toastVisible, setToastVisible] = useState(false);
   /** 记忆 pending 角标 */
   const [memoryPendingCount, setMemoryPendingCount] = useState(0);
-  const [autoRefreshOnUpdate, setAutoRefreshOnUpdate] = useState(true);
   const memoryToastDedupeRef = useRef<{ key: string; at: number } | null>(null);
   /** 会话级未决 HITL interrupt（有则拒发普通消息） */
   const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<
@@ -713,16 +712,6 @@ export default function App() {
       return;
     }
     void (async () => {
-      try {
-        const settings = await invoke<{
-          writeApproval: boolean;
-          backgroundReviewEnabled: boolean;
-          autoRefreshOnUpdate: boolean;
-        }>("get_memory_settings");
-        setAutoRefreshOnUpdate(settings.autoRefreshOnUpdate !== false);
-      } catch {
-        // ignore
-      }
       try {
         const rows = await invoke<{ id: string }[]>("list_pending_memory_writes");
         setMemoryPendingCount(rows?.length ?? 0);
@@ -1749,7 +1738,7 @@ export default function App() {
     return () => {
       unlisten?.();
     };
-  }, [autoRefreshOnUpdate, sessionId, showTransientToast, t]);
+  }, [sessionId, showTransientToast, t]);
 
   /** 编辑用户消息：正文与附件填入输入框，截断该条及之后；发送时再截断 DB */
   const editUserMessage = useCallback(
@@ -2167,6 +2156,99 @@ export default function App() {
           break;
         case "nav_memory":
           setNav("memory");
+          break;
+        case "memory_list": {
+          void (async () => {
+            try {
+              const rows = await invoke<
+                {
+                  id: string;
+                  action: string;
+                  target: string;
+                  source: string;
+                }[]
+              >("list_pending_memory_writes");
+              if (!rows?.length) {
+                showTransientToast(t("memory.pending.emptyTitle"));
+                setMemoryPendingCount(0);
+                return;
+              }
+              setMemoryPendingCount(rows.length);
+              const lines = rows
+                .slice(0, 5)
+                .map((r) => `${r.id.slice(0, 8)} ${r.action}/${r.target} (${r.source})`);
+              const more =
+                rows.length > 5 ? ` …+${rows.length - 5}` : "";
+              showTransientToast(`${lines.join(" · ")}${more}`);
+            } catch (e) {
+              showTransientToast(String(e));
+            }
+          })();
+          break;
+        }
+        case "memory_approve": {
+          void (async () => {
+            try {
+              const id = (_args ?? "").trim();
+              const msg =
+                !id || id === "all"
+                  ? await invoke<string>("approve_all_pending_memory_writes")
+                  : await invoke<string>("approve_pending_memory_write", { id });
+              showTransientToast(msg || t("memory.pending.approved"));
+              if (sessionId) {
+                try {
+                  const settings = await invoke<{ autoRefreshOnUpdate: boolean }>(
+                    "get_memory_settings",
+                  );
+                  if (settings.autoRefreshOnUpdate !== false) {
+                    await invoke("refresh_memory", {
+                      agentId: null,
+                      sessionId,
+                    });
+                  }
+                } catch {
+                  // ignore refresh errors
+                }
+              }
+            } catch (e) {
+              showTransientToast(String(e));
+            }
+          })();
+          break;
+        }
+        case "memory_reject": {
+          void (async () => {
+            try {
+              const id = (_args ?? "").trim();
+              if (!id || id === "all") {
+                const msg = await invoke<string>("reject_all_pending_memory_writes");
+                showTransientToast(msg);
+              } else {
+                await invoke("reject_pending_memory_write", { id });
+                showTransientToast(t("memory.pending.rejected"));
+              }
+            } catch (e) {
+              showTransientToast(String(e));
+            }
+          })();
+          break;
+        }
+        case "memory_refresh": {
+          void (async () => {
+            try {
+              await invoke("refresh_memory", {
+                agentId: null,
+                sessionId: sessionId ?? null,
+              });
+              showTransientToast(t("memory.refresh.done"));
+            } catch (e) {
+              showTransientToast(String(e));
+            }
+          })();
+          break;
+        }
+        case "memory_help":
+          showTransientToast(t("memory.slash.help"));
           break;
         case "nav_insights":
           setNav("insights");

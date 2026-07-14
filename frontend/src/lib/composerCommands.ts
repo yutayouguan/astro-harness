@@ -22,6 +22,11 @@ export type SlashAction =
   | "nav_skills"
   | "nav_mcp"
   | "nav_memory"
+  | "memory_list"
+  | "memory_approve"
+  | "memory_reject"
+  | "memory_refresh"
+  | "memory_help"
   | "nav_insights"
   | "nav_providers"
   | "nav_settings"
@@ -242,6 +247,28 @@ export function parseSlashInput(
 
   const builtin = resolveBuiltinSlash(name);
   if (!builtin) return null;
+
+  // `/memory <sub>` 子命令；裸 `/memory` 仍导航记忆页
+  if (builtin.name === "memory" && args) {
+    const sp = args.search(/\s/);
+    const sub = (sp >= 0 ? args.slice(0, sp) : args).toLowerCase();
+    const rest = sp >= 0 ? args.slice(sp + 1).trim() : "";
+    switch (sub) {
+      case "list":
+        return { name: "memory", args: rest, action: "memory_list" };
+      case "approve":
+        return { name: "memory", args: rest, action: "memory_approve" };
+      case "reject":
+        return { name: "memory", args: rest, action: "memory_reject" };
+      case "refresh":
+        return { name: "memory", args: "", action: "memory_refresh" };
+      case "help":
+        return { name: "memory", args: "", action: "memory_help" };
+      default:
+        return { name: "memory", args, action: "memory_help" };
+    }
+  }
+
   return { name: builtin.name, args, action: builtin.action };
 }
 

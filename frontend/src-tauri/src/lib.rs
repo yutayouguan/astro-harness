@@ -244,6 +244,8 @@ pub fn run() {
             memory_commands::list_pending_memory_writes,
             memory_commands::approve_pending_memory_write,
             memory_commands::reject_pending_memory_write,
+            memory_commands::approve_all_pending_memory_writes,
+            memory_commands::reject_all_pending_memory_writes,
             memory_commands::get_memory_settings,
             memory_commands::set_memory_write_approval,
             memory_commands::set_memory_auto_refresh,

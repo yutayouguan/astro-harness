@@ -228,3 +228,79 @@ pub async fn set_background_review_enabled(enabled: bool) -> Result<MemorySettin
     memory::set_background_review_enabled(&root, enabled).map_err(|e| e.to_string())?;
     get_memory_settings().await
 }
+
+/// 批准全部 pending；逐条 emit（末条角标为准）。
+#[tauri::command]
+pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String, String> {
+    let root = memory::default_memory_dir();
+    let items = memory::list_pending(&root).map_err(|e| e.to_string())?;
+    let mut ok = 0usize;
+    let mut err = 0usize;
+    let mut last_agent = memory::active_agent_id(&root);
+    for p in items {
+        last_agent = p.agent_id.clone();
+        match memory::approve_pending_memory(&root, &p.id) {
+            Ok(msg) => {
+                ok += 1;
+                let pending_count = memory::list_pending(&root)
+                    .map(|v| v.len() as u32)
+                    .unwrap_or(0);
+                emit_session_event(
+                    &app,
+                    SessionEventDto {
+                        session_id: None,
+                        agent_id: p.agent_id,
+                        ts_ms: now_ts_ms(),
+                        memory_updated: Some(MemoryUpdatedDto {
+                            source: "approve".into(),
+                            target: pending_target_str(p.target).into(),
+                            summary: msg,
+                            live_written: true,
+                        }),
+                        pending_changed: Some(PendingChangedDto {
+                            pending_count,
+                            reason: "approved".into(),
+                        }),
+                    },
+                );
+            }
+            Err(_) => err += 1,
+        }
+    }
+    let _ = last_agent;
+    Ok(format!("approved={ok} failed={err}"))
+}
+
+/// 拒绝全部 pending。
+#[tauri::command]
+pub async fn reject_all_pending_memory_writes(app: AppHandle) -> Result<String, String> {
+    let root = memory::default_memory_dir();
+    let items = memory::list_pending(&root).map_err(|e| e.to_string())?;
+    let mut ok = 0usize;
+    let mut err = 0usize;
+    for p in items {
+        match memory::reject_pending_memory(&root, &p.id) {
+            Ok(()) => {
+                ok += 1;
+                let pending_count = memory::list_pending(&root)
+                    .map(|v| v.len() as u32)
+                    .unwrap_or(0);
+                emit_session_event(
+                    &app,
+                    SessionEventDto {
+                        session_id: None,
+                        agent_id: p.agent_id,
+                        ts_ms: now_ts_ms(),
+                        memory_updated: None,
+                        pending_changed: Some(PendingChangedDto {
+                            pending_count,
+                            reason: "rejected".into(),
+                        }),
+                    },
+                );
+            }
+            Err(_) => err += 1,
+        }
+    }
+    Ok(format!("rejected={ok} failed={err}"))
+}
