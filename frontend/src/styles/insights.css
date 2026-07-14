@@ -1082,3 +1082,54 @@ html.dark .insights-collab-label {
   color: var(--ink-mute);
   font-variant-numeric: tabular-nums;
 }
+
+.insights-kpis-overview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.insights-overview-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .insights-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insights-kpis-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+.insights-rank-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.insights-rank-title-row .insights-rank-title {
+  margin: 0;
+}
+
+.insights-more-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--tone);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.insights-more-btn:hover {
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}

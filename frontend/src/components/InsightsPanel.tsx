@@ -28,6 +28,7 @@ import {
   DEFAULT_INSIGHTS_VIEW,
   INSIGHTS_VIEW_ORDER,
   needsUsageInsights,
+  providerSpendTop,
   type InsightsViewMode,
 } from "../lib/insightsView";
 import type { AgentInfo } from "../types/agent";
@@ -561,6 +562,15 @@ export default function InsightsPanel({ active }: { active: boolean }) {
     const max = Math.max(1, ...items.map((r) => (r.cost_usd > 0 ? r.cost_usd : r.tokens)));
     return { items, max, useCost: items.some((r) => r.cost_usd > 0) };
   }, [byProvider]);
+  const overviewProviderTop = useMemo(
+    () => providerSpendTop(byProvider, 5),
+    [byProvider],
+  );
+  const overviewProviderMax = Math.max(
+    1,
+    ...overviewProviderTop.map((r) => (r.cost_usd > 0 ? r.cost_usd : r.tokens)),
+  );
+  const overviewUseCost = overviewProviderTop.some((r) => r.cost_usd > 0);
   const modelBars = useMemo(() => {
     const items = [...(data?.rankings.by_model ?? [])]
       .sort((a, b) => b.tokens - a.tokens || b.calls - a.calls)
@@ -689,6 +699,135 @@ export default function InsightsPanel({ active }: { active: boolean }) {
       </div>
 
       {error && <p className="insights-error">{error}</p>}
+
+      {view === "overview" && data && (
+        <>
+          {hasUnpriced && (
+            <p className="insights-unpriced">
+              <AlertTriangle size={14} strokeWidth={2.25} aria-hidden />
+              {t("insights.unpriced")}
+            </p>
+          )}
+
+          <div className="insights-kpis insights-kpis-overview">
+            <KpiCard
+              icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.cost")}
+              value={formatCost(data.kpis.cost_usd)}
+            />
+            <KpiCard
+              icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.tokens")}
+              value={formatTokens(data.kpis.tokens)}
+            />
+            <KpiCard
+              icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
+              label={t("insights.kpi.calls")}
+              value={String(data.kpis.calls)}
+            />
+          </div>
+
+          <div className="insights-overview-grid">
+            <div className="insights-chart-wrap insights-models-chart">
+              <div className="insights-chart-heading">
+                <div className="insights-chart-heading-label">
+                  <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
+                  <span>{t("insights.chart.usageTrend")}</span>
+                </div>
+                <div className="insights-metric-tabs" role="tablist">
+                  {METRIC_TABS.map(({ id, labelKey }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      className={`insights-metric-tab${metric === id ? " active" : ""}`}
+                      aria-selected={metric === id}
+                      onClick={() => setMetric(id)}
+                    >
+                      {t(labelKey)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {data.series.length > 0 ? (
+                <div className="insights-chart" aria-label={`${metric} trend`}>
+                  {data.series.map((s) => (
+                    <div
+                      key={s.bucket}
+                      className="insights-bar-col"
+                      title={formatSeriesTip(s, metric)}
+                    >
+                      <div
+                        className="insights-bar"
+                        style={{
+                          height: `${(seriesValue(s, metric) / maxVal) * 100}%`,
+                        }}
+                      />
+                      <span className="insights-bar-label">
+                        {formatBucketLabel(s.bucket, period, locale)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="insights-panel-empty insights-chart-empty" />
+              )}
+            </div>
+
+            <section className="insights-hbar-panel">
+              <div className="insights-rank-title-row">
+                <h3 className="insights-rank-title">
+                  <Building2 size={14} strokeWidth={2.25} aria-hidden />
+                  {t("insights.rank.providerSpend")}
+                </h3>
+                <button
+                  type="button"
+                  className="insights-more-btn"
+                  onClick={() => setView("models")}
+                >
+                  {t("insights.rank.more")}
+                </button>
+              </div>
+              {overviewProviderTop.length === 0 ? (
+                <p className="insights-rank-empty">{t("insights.rank.empty")}</p>
+              ) : (
+                <ul className="insights-hbar-list">
+                  {overviewProviderTop.map((r) => {
+                    const val = overviewUseCost ? r.cost_usd : r.tokens;
+                    return (
+                      <li key={r.name} className="insights-hbar-item">
+                        <span className="insights-hbar-label">
+                          <span className="insights-rank-kind-icon" title="provider">
+                            <KindIcon kind="provider" />
+                          </span>
+                          {r.name}
+                        </span>
+                        <div className="insights-hbar-track">
+                          <div
+                            className="insights-hbar-fill"
+                            style={{
+                              width: `${(val / overviewProviderMax) * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="insights-hbar-value">
+                          {overviewUseCost
+                            ? formatCost(r.cost_usd)
+                            : formatTokens(r.tokens)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
+
+          {data.series.length === 0 && overviewProviderTop.length === 0 && (
+            <p className="insights-panel-hint">{t("insights.empty.overview")}</p>
+          )}
+        </>
+      )}
 
       {view === "models" && data && (
         <>
