@@ -18,6 +18,7 @@ type Props = {
   onTabChange: (t: ChatRightTab) => void;
   onClose: () => void;
   sessionId: string | null;
+  turnId?: string | null;
   messages: ChatMessage[];
   /** 当前会话累计 token（可选展示） */
   tokenUsage?: {
@@ -41,6 +42,7 @@ export default function ChatRightPanel({
   onTabChange,
   onClose,
   sessionId,
+  turnId = null,
   messages,
   tokenUsage = null,
   onOpenSession,
@@ -104,6 +106,8 @@ export default function ChatRightPanel({
             {tab === "context" && <ChatContextTimeline messages={messages} />}
             {tab === "agent" && (
               <ChatAgentInfo
+                sessionId={sessionId}
+                turnId={turnId}
                 onOpenMemory={onOpenMemory}
                 onOpenSkills={onOpenSkills}
                 tokenUsage={tokenUsage}
