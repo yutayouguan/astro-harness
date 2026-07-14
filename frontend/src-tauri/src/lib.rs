@@ -246,6 +246,7 @@ pub fn run() {
             memory_commands::reject_pending_memory_write,
             memory_commands::get_memory_settings,
             memory_commands::set_memory_write_approval,
+            memory_commands::set_memory_auto_refresh,
             memory_commands::set_background_review_enabled,
             commands::get_chat_history,
             commands::fork_chat_session,

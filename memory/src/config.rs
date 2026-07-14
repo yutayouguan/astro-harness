@@ -47,6 +47,9 @@ pub struct MemoryConfig {
     /// 写入审批开关（P2）。
     #[serde(default)]
     pub write_approval: bool,
+    /// 收到 live 记忆更新 SessionEvent 时是否自动 `refresh_memory`（P3，默认开）。
+    #[serde(default = "default_true")]
+    pub auto_refresh_on_update: bool,
     /// 注入 prompt 时今日日记的最大字符数。
     #[serde(default = "default_daily_max")]
     pub daily_prompt_max_chars: usize,
@@ -60,6 +63,7 @@ impl Default for MemoryConfig {
             memory_char_limit: 2200,
             user_char_limit: 1375,
             write_approval: false,
+            auto_refresh_on_update: true,
             daily_prompt_max_chars: 1024,
         }
     }
@@ -220,6 +224,12 @@ pub fn set_write_approval(base: &Path, enabled: bool) -> anyhow::Result<MemoryCo
     Ok(load_memory_config(base))
 }
 
+/// 设置 `memory.auto_refresh_on_update` 并返回最新配置。
+pub fn set_auto_refresh_on_update(base: &Path, enabled: bool) -> anyhow::Result<MemoryConfig> {
+    set_nested_bool(base, &["memory"], "auto_refresh_on_update", enabled)?;
+    Ok(load_memory_config(base))
+}
+
 /// 设置 `auxiliary.background_review_enabled` 并返回最新辅助配置。
 pub fn set_background_review_enabled(
     base: &Path,
@@ -272,9 +282,23 @@ mod tests {
         assert_eq!(cfg.memory_char_limit, 2200);
         assert_eq!(cfg.user_char_limit, 1375);
         assert!(!cfg.write_approval);
+        assert!(cfg.auto_refresh_on_update);
         assert_eq!(cfg.daily_prompt_max_chars, 1024);
         let aux = load_auxiliary_config(dir.path());
         assert_eq!(aux, AuxiliaryConfig::default());
+    }
+
+    #[test]
+    fn auto_refresh_defaults_true() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(load_memory_config(dir.path()).auto_refresh_on_update);
+    }
+
+    #[test]
+    fn set_auto_refresh_false() {
+        let dir = tempfile::tempdir().unwrap();
+        set_auto_refresh_on_update(dir.path(), false).unwrap();
+        assert!(!load_memory_config(dir.path()).auto_refresh_on_update);
     }
 
     #[test]

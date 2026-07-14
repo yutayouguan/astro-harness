@@ -189,6 +189,7 @@ pub async fn reject_pending_memory_write(app: AppHandle, id: String) -> Result<(
 pub struct MemorySettingsDto {
     pub write_approval: bool,
     pub background_review_enabled: bool,
+    pub auto_refresh_on_update: bool,
 }
 
 /// 读取记忆相关开关。
@@ -200,6 +201,7 @@ pub async fn get_memory_settings() -> Result<MemorySettingsDto, String> {
     Ok(MemorySettingsDto {
         write_approval: mem.write_approval,
         background_review_enabled: aux.background_review_enabled,
+        auto_refresh_on_update: mem.auto_refresh_on_update,
     })
 }
 
@@ -208,6 +210,14 @@ pub async fn get_memory_settings() -> Result<MemorySettingsDto, String> {
 pub async fn set_memory_write_approval(enabled: bool) -> Result<MemorySettingsDto, String> {
     let root = memory::default_memory_dir();
     memory::set_write_approval(&root, enabled).map_err(|e| e.to_string())?;
+    get_memory_settings().await
+}
+
+/// 设置 `memory.auto_refresh_on_update`。
+#[tauri::command]
+pub async fn set_memory_auto_refresh(enabled: bool) -> Result<MemorySettingsDto, String> {
+    let root = memory::default_memory_dir();
+    memory::set_auto_refresh_on_update(&root, enabled).map_err(|e| e.to_string())?;
     get_memory_settings().await
 }
 
