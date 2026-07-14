@@ -50,7 +50,7 @@ export default function ChatRightPanel({
   sessionId,
   turnId = null,
   messages,
-  tokenUsage = null,
+  tokenUsage: _tokenUsage = null,
   contextUsage = null,
   contextWindow = 128_000,
   onOpenSession,
@@ -127,7 +127,7 @@ export default function ChatRightPanel({
                 turnId={turnId}
                 onOpenMemory={onOpenMemory}
                 onOpenSkills={onOpenSkills}
-                tokenUsage={tokenUsage}
+                onOpenContextTab={() => onTabChange("context")}
               />
             )}
           </AnimatedSwitch>
