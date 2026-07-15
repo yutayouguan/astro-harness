@@ -1,6 +1,6 @@
 /** 文件空间：沙箱目录浏览、多选与批量操作。 */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import {
   ExternalLink,
   History,
@@ -32,14 +32,14 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "./WorkspaceIcons";
-import { mediaKindOf, resolveFileType } from "../lib/fileTypeIcon";
+import { resolveFileType } from "../lib/fileTypeIcon";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceBatchBar from "./FileSpaceBatchBar";
 import FileSpaceConfirm from "./FileSpaceConfirm";
-import MediaPreview from "./media/MediaPreview";
+import FileSpaceViewer from "./FileSpaceViewer";
 import { EmptyIllustration } from "../illustrations";
 import { useFileSelection } from "../hooks/useFileSelection";
 import { useAgentsChanged } from "../lib/agentsChanged";
@@ -60,17 +60,6 @@ type Props = {
 
 /** 列表 / 网格布局 */
 type LayoutMode = "list" | "grid";
-/** 右侧预览态 */
-type PreviewState =
-  | { kind: "text"; content: string }
-  | { kind: "image"; src: string }
-  | { kind: "video"; src: string; path: string }
-  | { kind: "audio"; src: string; path: string }
-  | { kind: "html"; path: string; content: string }
-  | { kind: "missing" }
-  | { kind: "unsupported" }
-  | { kind: "loading" }
-  | null;
 
 const CATEGORIES: ArtifactCategory[] = [
   "all",
@@ -108,62 +97,9 @@ const CAT_ICONS: Record<
   other: IconWsFile,
 };
 
-const TEXT_EXTS = new Set([
-  "txt",
-  "md",
-  "markdown",
-  "json",
-  "csv",
-  "tsv",
-  "xml",
-  "yaml",
-  "yml",
-  "toml",
-  "rs",
-  "ts",
-  "tsx",
-  "js",
-  "jsx",
-  "py",
-  "css",
-  "scss",
-  "less",
-  "sh",
-  "bash",
-  "zsh",
-  "sql",
-  "log",
-  "ini",
-  "cfg",
-  "conf",
-  "env",
-  "gitignore",
-  "dockerfile",
-]);
-
-const IMAGE_EXTS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "svg",
-  "bmp",
-  "ico",
-  "avif",
-  "heic",
-  "heif",
-]);
-
 /** 是否运行在 Tauri 壳内 */
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-/** 小写扩展名（无点） */
-function fileExt(name: string): string {
-  const i = name.lastIndexOf(".");
-  return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
 }
 
 /** 人类可读文件大小 */
@@ -241,7 +177,6 @@ export default function FileSpacePanel({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<ArtifactDto | null>(null);
-  const [preview, setPreview] = useState<PreviewState>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [menuFiles, setMenuFiles] = useState<ArtifactDto[]>([]);
   const [trashConfirm, setTrashConfirm] = useState<ArtifactDto[] | null>(null);
@@ -351,96 +286,6 @@ export default function FileSpacePanel({
     if (!active) return;
     void load();
   }, [active, load]);
-
-  useEffect(() => {
-    if (!selected) {
-      setPreview(null);
-      return;
-    }
-    if (selected.missing) {
-      setPreview({ kind: "missing" });
-      return;
-    }
-
-    let cancelled = false;
-    const run = async () => {
-      setPreview({ kind: "loading" });
-      const ext = fileExt(selected.name);
-      const media = mediaKindOf(selected.name);
-      const isImage =
-        media === "image" ||
-        selected.category === "image" ||
-        IMAGE_EXTS.has(ext) ||
-        (selected.mime?.startsWith("image/") ?? false);
-      const isText =
-        TEXT_EXTS.has(ext) ||
-        selected.category === "code" ||
-        selected.category === "doc" ||
-        selected.category === "sheet" ||
-        (selected.mime?.startsWith("text/") ?? false) ||
-        selected.mime === "application/json";
-
-      if (media === "html" && isTauri()) {
-        try {
-          const content = await invoke<string>("read_file", {
-            path: selected.path,
-          });
-          if (!cancelled) {
-            setPreview({ kind: "html", path: selected.path, content });
-          }
-          return;
-        } catch {
-          if (!cancelled) setPreview({ kind: "unsupported" });
-          return;
-        }
-      }
-
-      if ((media === "video" || media === "audio") && isTauri()) {
-        try {
-          const src = convertFileSrc(selected.path);
-          if (!cancelled) {
-            setPreview(
-              media === "video"
-                ? { kind: "video", src, path: selected.path }
-                : { kind: "audio", src, path: selected.path },
-            );
-          }
-          return;
-        } catch {
-          if (!cancelled) setPreview({ kind: "unsupported" });
-          return;
-        }
-      }
-
-      if (isImage && isTauri()) {
-        try {
-          const src = convertFileSrc(selected.path);
-          if (!cancelled) setPreview({ kind: "image", src });
-          return;
-        } catch {
-          // fall through
-        }
-      }
-
-      if (isText && isTauri()) {
-        try {
-          const content = await invoke<string>("read_file", { path: selected.path });
-          if (!cancelled) setPreview({ kind: "text", content });
-          return;
-        } catch {
-          // 非 UTF-8 / 二进制：不报错，标记为不支持预览（可点系统打开）
-          if (!cancelled) setPreview({ kind: "unsupported" });
-          return;
-        }
-      }
-
-      if (!cancelled) setPreview({ kind: "unsupported" });
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
 
   const openSelectedExternally = async () => {
     if (!selected?.path || selected.missing) return;
@@ -1127,48 +972,14 @@ export default function FileSpacePanel({
                 </div>
 
                 <div className="fs-preview-body">
-                  {preview?.kind === "loading" && (
-                    <div className="fs-status">…</div>
-                  )}
-                  {preview?.kind === "missing" && (
-                    <div className="fs-empty">{t("filespace.missing")}</div>
-                  )}
-                  {preview?.kind === "unsupported" && (
-                    <div className="fs-empty">
-                      <p>{t("filespace.unsupportedHint")}</p>
-                      <p className="fs-preview-path">{selected.path}</p>
-                      <button
-                        type="button"
-                        className="fs-action-btn is-primary"
-                        onClick={() => void openSelectedExternally()}
-                      >
-                        {t("workspace.openExternally")}
-                      </button>
-                    </div>
-                  )}
-                  {preview?.kind === "text" && (
-                    <pre className="fs-preview-text">{preview.content}</pre>
-                  )}
-                  {preview?.kind === "image" && (
-                    <MediaPreview
-                      kind="image"
-                      path={selected.path}
-                      alt={selected.name}
-                    />
-                  )}
-                  {preview?.kind === "video" && (
-                    <MediaPreview kind="video" path={preview.path} />
-                  )}
-                  {preview?.kind === "audio" && (
-                    <MediaPreview kind="audio" path={preview.path} />
-                  )}
-                  {preview?.kind === "html" && (
-                    <MediaPreview
-                      kind="html"
-                      path={preview.path}
-                      htmlSource={preview.content}
-                    />
-                  )}
+                  <FileSpaceViewer
+                    path={selected.path}
+                    name={selected.name}
+                    missing={selected.missing}
+                    mime={selected.mime}
+                    category={selected.category}
+                    onOpenExternally={() => void openSelectedExternally()}
+                  />
                 </div>
               </>
             )}

@@ -864,8 +864,129 @@ html[data-theme="dark"] .fs-layout-btn:hover {
 .fs-preview-body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: 0 14px 14px;
+}
+
+.fs-viewer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fs-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.fs-viewer-toolbar-spacer {
+  flex: 1;
+  min-width: 4px;
+}
+
+.fs-viewer-saving {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-mute);
+}
+
+.fs-viewer-error {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #b91c1c;
+  background: color-mix(in srgb, #ef4444 12%, white);
+  border: 1px solid color-mix(in srgb, #ef4444 28%, transparent);
+}
+
+html[data-theme="dark"] .fs-viewer-error {
+  color: #fecaca;
+  background: color-mix(in srgb, #ef4444 18%, transparent);
+}
+
+.fs-viewer-editor-wrap,
+.fs-viewer-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--chip-border);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.fs-viewer-split {
+  flex-direction: column;
+}
+
+@media (min-width: 1100px) {
+  .fs-viewer-split {
+    flex-direction: row;
+  }
+
+  .fs-viewer-split .fs-viewer-editor,
+  .fs-viewer-split .fs-viewer-live-preview {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .fs-viewer-split .fs-viewer-live-preview {
+    border-left: 1px solid var(--chip-border);
+  }
+}
+
+.fs-viewer-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fs-viewer-editor .ws-codemirror,
+.fs-viewer-editor .cm-editor {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.fs-viewer-preview,
+.fs-viewer-live-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.fs-viewer-media,
+.fs-viewer-html {
+  flex: 1;
+  min-height: 0;
+}
+
+.fs-preview-pdf-wrap {
+  flex: 1;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--chip-border);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.fs-preview-pdf {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  border: 0;
 }
 
 .fs-preview-text {
