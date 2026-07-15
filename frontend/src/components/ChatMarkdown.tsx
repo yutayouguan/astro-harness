@@ -1,4 +1,4 @@
-/** 助手消息 Markdown 渲染。 */
+/** 聊天消息 Markdown 渲染（用户 / 助手共用）。 */
 import {
   useCallback,
   useMemo,

@@ -446,6 +446,28 @@ html[data-theme="dark"] .bubble.user {
   color: color-mix(in srgb, currentColor 52%, transparent);
 }
 
+/* 用户气泡走 Markdown 时取消 pre-wrap，颜色跟气泡主题 */
+.bubble.user .msg-md {
+  white-space: normal;
+  color: inherit;
+}
+
+.bubble.user .msg-md h1,
+.bubble.user .msg-md h2,
+.bubble.user .msg-md h3,
+.bubble.user .msg-md h4,
+.bubble.user .msg-md strong {
+  color: inherit;
+}
+
+.bubble.user .msg-md em {
+  color: color-mix(in srgb, currentColor 78%, transparent);
+}
+
+.bubble.user .msg-md a {
+  color: color-mix(in srgb, var(--tone, #2563eb) 72%, currentColor);
+}
+
 .bubble.assistant {
   background:
     linear-gradient(

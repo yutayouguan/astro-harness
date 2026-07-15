@@ -1226,7 +1226,7 @@ export default function ChatView({
                                   content={m.content}
                                   streaming={isStreamingBubble}
                                   compact={displayPrefs.verbosity === "compact"}
-                                  plain={m.role === "user" || Boolean(m.error)}
+                                  plain={Boolean(m.error)}
                                   caret={isStreamingBubble}
                                 />
                                 {isStreamingBubble ? <MsgStreamLoader /> : null}
