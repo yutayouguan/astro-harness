@@ -1,4 +1,4 @@
-//! Google OpenAI 兼容出图/视频，以及 Gemini 原生 TTS。
+//! Google OpenAI 兼容出图/视频/视觉，以及 Gemini 原生 TTS。
 
 use std::time::Duration;
 
@@ -62,6 +62,109 @@ pub fn default_video_model() -> &'static str {
 /// 默认 Gemini TTS 模型。
 pub fn default_tts_model() -> &'static str {
     "gemini-3.1-flash-tts-preview"
+}
+
+/// 默认视觉（图片理解）模型。
+pub fn default_vision_model(provider: &str) -> &'static str {
+    match provider {
+        "google" => "gemini-3.5-flash",
+        "openai" => "gpt-4o",
+        _ => "gpt-4o",
+    }
+}
+
+/// OpenAI 兼容视觉：`POST …/chat/completions`，content 含 text + image_url。
+///
+/// `image_url` 可为 `data:image/...;base64,...` 或 `http(s)://`。
+/// `provider` 为 `"google"` 时走 [`google_openai_base`]，否则走 OpenAI 兼容 base。
+pub async fn openai_vision_completions(
+    client: &Client,
+    provider: &str,
+    prompt: &str,
+    image_url: &str,
+    config: &ProviderConfig,
+) -> Result<String> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("API Key 为空");
+    }
+    let model = if config.model.trim().is_empty() {
+        default_vision_model(provider)
+    } else {
+        config.model.trim()
+    };
+
+    let base = if provider == "google"
+        || config
+            .base_url
+            .as_deref()
+            .map(|u| u.contains("generativelanguage.googleapis.com"))
+            .unwrap_or(false)
+    {
+        google_openai_base(config)
+    } else {
+        let raw = config
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("https://api.openai.com/v1");
+        openai_compatible_base(raw)
+    };
+    let url = format!("{base}/chat/completions");
+    let body = json!({
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                { "type": "text", "text": prompt },
+                {
+                    "type": "image_url",
+                    "image_url": { "url": image_url }
+                }
+            ]
+        }]
+    });
+
+    let response = client
+        .post(&url)
+        .bearer_auth(&config.api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("连接视觉接口失败: {url}"))?;
+    let status = response.status();
+    let v: Value = response.json().await.context("解析视觉响应失败")?;
+    if !status.is_success() {
+        let msg = v
+            .pointer("/error/message")
+            .and_then(|m| m.as_str())
+            .or_else(|| v.get("error").and_then(|e| e.as_str()))
+            .unwrap_or("视觉请求失败");
+        anyhow::bail!("视觉 HTTP {status}: {msg}");
+    }
+
+    let content = v
+        .pointer("/choices/0/message/content")
+        .ok_or_else(|| anyhow!("视觉响应无 choices[0].message.content"))?;
+    if let Some(s) = content.as_str() {
+        return Ok(s.to_string());
+    }
+    // 部分兼容层可能返回 content 数组
+    if let Some(arr) = content.as_array() {
+        let mut parts = Vec::new();
+        for item in arr {
+            if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
+                parts.push(t.to_string());
+            } else if let Some(t) = item.as_str() {
+                parts.push(t.to_string());
+            }
+        }
+        if !parts.is_empty() {
+            return Ok(parts.join("\n"));
+        }
+    }
+    anyhow::bail!("视觉响应 content 格式无法解析")
 }
 
 /// 默认 Google 图片兼容模型。
@@ -419,5 +522,11 @@ mod tests {
         assert_eq!(&wav[0..4], b"RIFF");
         assert_eq!(&wav[8..12], b"WAVE");
         assert_eq!(wav.len(), 48);
+    }
+
+    #[test]
+    fn default_vision_models() {
+        assert_eq!(default_vision_model("google"), "gemini-3.5-flash");
+        assert_eq!(default_vision_model("openai"), "gpt-4o");
     }
 }

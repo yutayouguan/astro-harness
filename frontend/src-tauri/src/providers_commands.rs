@@ -245,6 +245,9 @@ pub struct ProviderConfig {
     /// 生音频 / TTS 模型（空=内置默认）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tts_model: String,
+    /// 视觉（图片理解）模型（空=内置默认）。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub vision_model: String,
 }
 
 impl ProviderConfig {
@@ -261,6 +264,7 @@ impl ProviderConfig {
             image_model: String::new(),
             video_model: String::new(),
             tts_model: String::new(),
+            vision_model: String::new(),
         }
     }
 
@@ -407,6 +411,7 @@ pub struct ProviderConfigDto {
     pub image_model: String,
     pub video_model: String,
     pub tts_model: String,
+    pub vision_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -431,6 +436,8 @@ pub struct ProviderConfigInput {
     pub video_model: String,
     #[serde(default)]
     pub tts_model: String,
+    #[serde(default)]
+    pub vision_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -596,6 +603,7 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         image_model: p.image_model.clone(),
         video_model: p.video_model.clone(),
         tts_model: p.tts_model.clone(),
+        vision_model: p.vision_model.clone(),
     }
 }
 
@@ -709,6 +717,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             image_model: provider.image_model.trim().to_string(),
             video_model: provider.video_model.trim().to_string(),
             tts_model: provider.tts_model.trim().to_string(),
+            vision_model: provider.vision_model.trim().to_string(),
         };
         Ok(to_state_dto(s))
     })
@@ -951,6 +960,7 @@ pub struct ImageGenTarget {
     pub display_name: String,
     pub video_model: String,
     pub tts_model: String,
+    pub vision_model: String,
 }
 
 const IMAGE_GEN_NO_PROVIDER_MSG: &str =
@@ -976,6 +986,14 @@ fn default_tts_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Google => "gemini-3.1-flash-tts-preview",
         ProviderKind::Openai => "gpt-4o-mini-tts",
+        _ => "",
+    }
+}
+
+fn default_vision_model_for_kind(kind: &ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::Google => "gemini-3.5-flash",
+        ProviderKind::Openai => "gpt-4o",
         _ => "",
     }
 }
@@ -1020,6 +1038,10 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
                     default_video_model_for_kind(&p.kind),
                 ),
                 tts_model: resolve_media_model(&p.tts_model, default_tts_model_for_kind(&p.kind)),
+                vision_model: resolve_media_model(
+                    &p.vision_model,
+                    default_vision_model_for_kind(&p.kind),
+                ),
             };
             match p.kind {
                 ProviderKind::Google if google.is_none() => google = Some(target),
@@ -1622,6 +1644,7 @@ mod tests {
                     image_model: String::new(),
                     video_model: String::new(),
                     tts_model: String::new(),
+                    vision_model: String::new(),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -1634,6 +1657,7 @@ mod tests {
                     image_model: String::new(),
                     video_model: String::new(),
                     tts_model: String::new(),
+                    vision_model: String::new(),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -1646,6 +1670,7 @@ mod tests {
                     image_model: String::new(),
                     video_model: String::new(),
                     tts_model: String::new(),
+                    vision_model: String::new(),
                 },
             ],
         };

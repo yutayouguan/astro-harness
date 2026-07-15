@@ -1,7 +1,7 @@
 # Vision 工具：OpenAI 兼容图片理解
 
 日期：2026-07-15  
-状态：已批准（待实现）  
+状态：已实现  
 参考：[Gemini OpenAI 兼容性 — 图片理解](https://ai.google.dev/gemini-api/docs/openai?hl=zh-cn#javascript_4)
 
 ## 背景

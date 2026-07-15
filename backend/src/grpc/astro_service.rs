@@ -620,6 +620,8 @@ impl AstroService for AstroServiceImpl {
             &req.image_gen_video_model,
             &req.image_gen_tts_model,
             &req.image_gen_fallback_tts_model,
+            &req.image_gen_vision_model,
+            &req.image_gen_fallback_vision_model,
         );
 
         let session = self.get_session(&session_id).await?;

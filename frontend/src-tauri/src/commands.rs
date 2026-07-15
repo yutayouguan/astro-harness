@@ -762,6 +762,12 @@ async fn run_chat_stream(
             image_gen_fallback_tts_model: fallback
                 .map(|t| t.tts_model.clone())
                 .unwrap_or_default(),
+            image_gen_vision_model: primary
+                .map(|t| t.vision_model.clone())
+                .unwrap_or_default(),
+            image_gen_fallback_vision_model: fallback
+                .map(|t| t.vision_model.clone())
+                .unwrap_or_default(),
             thinking_enabled,
             reasoning_effort: reasoning_effort.to_string(),
             resume_json: resume_json.to_string(),

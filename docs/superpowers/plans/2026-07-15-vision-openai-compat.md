@@ -43,7 +43,7 @@
   - `pub fn default_vision_model(provider: &str) -> &'static str`
   - `pub async fn openai_vision_completions(client: &Client, prompt: &str, image_url: &str, config: &ProviderConfig) -> Result<String>`
 
-- [ ] **Step 1: 在 `media_http.rs` 增加默认与调用**
+- [x] **Step 1: 在 `media_http.rs` 增加默认与调用**
 
 在 `default_tts_model` 附近：
 

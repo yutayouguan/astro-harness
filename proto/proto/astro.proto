@@ -71,6 +71,8 @@ message ChatRequest {
   string image_gen_video_model = 21;
   string image_gen_tts_model = 22;
   string image_gen_fallback_tts_model = 23;
+  string image_gen_vision_model = 24;
+  string image_gen_fallback_vision_model = 25;
 }
 
 // Chat 流控制动作。

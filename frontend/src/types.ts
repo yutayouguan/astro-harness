@@ -189,6 +189,8 @@ export type ProviderDto = {
   video_model?: string;
   /** 生音频 / TTS 模型（空=内置默认） */
   tts_model?: string;
+  /** 视觉（图片理解）模型（空=内置默认） */
+  vision_model?: string;
 };
 
 /** 全部供应商 + 当前激活 id */

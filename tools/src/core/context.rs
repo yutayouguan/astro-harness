@@ -12,7 +12,7 @@ use providers::registry::ProviderRegistry;
 /// 单个媒体生成 Provider 的调用凭证。
 ///
 /// 由 Tauri 前端从「模型提供商」面板注入，经 [`ImageGenTargets`] 传给
-/// `image_gen` / `video_gen` / `tts` 工具。
+/// `image_gen` / `video_gen` / `tts` / `vision` 工具。
 #[derive(Debug, Clone, Default)]
 pub struct ImageGenCreds {
     /// Provider id，如 `"google"`、`"openai"`。
@@ -27,6 +27,8 @@ pub struct ImageGenCreds {
     pub video_model: String,
     /// 生音频 / TTS 模型；空则用供应商默认。
     pub tts_model: String,
+    /// 视觉（图片理解）模型；空则用 `default_vision_model`。
+    pub vision_model: String,
 }
 
 /// 主备媒体凭证对：主 Provider 失败时自动尝试备用（图 / 音）。
@@ -56,6 +58,8 @@ impl ImageGenTargets {
         video_model: &str,
         tts_model: &str,
         fb_tts_model: &str,
+        vision_model: &str,
+        fb_vision_model: &str,
     ) -> Self {
         let primary = if !provider.is_empty() && !api_key.is_empty() {
             Some(ImageGenCreds {
@@ -69,6 +73,7 @@ impl ImageGenTargets {
                 base_url: base_url.to_string(),
                 video_model: video_model.trim().to_string(),
                 tts_model: tts_model.trim().to_string(),
+                vision_model: vision_model.trim().to_string(),
             })
         } else {
             None
@@ -85,6 +90,7 @@ impl ImageGenTargets {
                 base_url: fb_base_url.to_string(),
                 video_model: String::new(),
                 tts_model: fb_tts_model.trim().to_string(),
+                vision_model: fb_vision_model.trim().to_string(),
             })
         } else {
             None

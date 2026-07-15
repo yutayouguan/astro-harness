@@ -116,23 +116,26 @@ type Draft = {
   image_model: string;
   video_model: string;
   tts_model: string;
+  vision_model: string;
 };
 
 type DetailTab = "chat" | "media";
 
 const MEDIA_MODEL_DEFAULTS: Record<
   string,
-  { image: string; video: string; tts: string }
+  { image: string; video: string; tts: string; vision: string }
 > = {
   google: {
     image: "gemini-3.1-flash-image",
     video: "veo-3.1-generate-preview",
     tts: "gemini-3.1-flash-tts-preview",
+    vision: "gemini-3.5-flash",
   },
   openai: {
     image: "gpt-image-2",
     video: "",
     tts: "gpt-4o-mini-tts",
+    vision: "gpt-4o",
   },
 };
 
@@ -150,6 +153,7 @@ function draftFromProvider(p: ProviderDto): Draft {
     image_model: p.image_model?.trim() ?? "",
     video_model: p.video_model?.trim() ?? "",
     tts_model: p.tts_model?.trim() ?? "",
+    vision_model: p.vision_model?.trim() ?? "",
   };
 }
 
@@ -169,6 +173,7 @@ function providerSaveInput(
     image_model: draft.image_model.trim(),
     video_model: draft.video_model.trim(),
     tts_model: draft.tts_model.trim(),
+    vision_model: draft.vision_model.trim(),
   };
 }
 
@@ -490,6 +495,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     selected?.image_model,
     selected?.video_model,
     selected?.tts_model,
+    selected?.vision_model,
   ]);
 
   const saveDraft = async () => {
@@ -1988,6 +1994,24 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         onChange={(e) =>
                           setDraft((d) =>
                             d ? { ...d, tts_model: e.target.value } : d,
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="providers-field providers-field-span">
+                      <span className="providers-field-label">
+                        <IconBox />
+                        {t("providers.visionModel")}
+                      </span>
+                      <input
+                        type="text"
+                        value={draft.vision_model}
+                        placeholder={
+                          MEDIA_MODEL_DEFAULTS[selected.kind]?.vision ?? ""
+                        }
+                        onChange={(e) =>
+                          setDraft((d) =>
+                            d ? { ...d, vision_model: e.target.value } : d,
                           )
                         }
                       />
