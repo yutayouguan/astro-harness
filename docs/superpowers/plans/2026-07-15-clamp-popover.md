@@ -78,6 +78,17 @@
 - [x] Cron 更多菜单 / Schedule 日期弹层改用共享 API
 - [x] 测试 + Commit
 
+### Task 7: 四向 tip 扩展
+
+**Files:**
+- Modify: `clampPopover.ts`（`clampFloatingTip`）
+- Modify: `useBeautifyTips.ts`, `ChatMessageNav.tsx`, `chat.css`
+
+- [x] `clampFloatingTip` + 单测（顶/左翻侧、水平钳位与箭头）
+- [x] `useBeautifyTips` 改用共享 tip 钳制（含 content-pane bounds）
+- [x] ChatMessageNav 预览标签改 left/top + 可 flip 右侧
+- [x] Commit
+
 ---
 
 ## 验证
