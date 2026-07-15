@@ -2255,17 +2255,28 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               aria-labelledby="skills-preview-title"
             >
               <header className="skills-preview-head">
-                <div>
-                  <h3 id="skills-preview-title">
-                    <FileText size={16} strokeWidth={2.3} aria-hidden />
-                    {preview.name}
-                  </h3>
-                  {preview.description ? (
-                    <p className="skills-preview-desc">{preview.description}</p>
-                  ) : null}
+                <div className="skills-preview-head-main">
+                  <div className="skills-preview-title-row">
+                    <span className="skills-preview-mark" aria-hidden>
+                      <span className="skills-preview-mark-lens" />
+                      <Sparkles size={20} strokeWidth={2.1} />
+                    </span>
+                    <div className="skills-preview-title-block">
+                      <p className="skills-preview-kicker">
+                        {t("skills.previewKicker")}
+                      </p>
+                      <h3 id="skills-preview-title">{preview.name}</h3>
+                      {preview.description ? (
+                        <p className="skills-preview-desc">
+                          {preview.description}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
                   <div className="skills-preview-root-row">
                     <p className="skills-preview-root" title={preview.root}>
-                      {preview.root}
+                      <HardDrive size={12} strokeWidth={2.3} aria-hidden />
+                      <span>{preview.root}</span>
                     </p>
                     <button
                       type="button"
