@@ -80,6 +80,17 @@ export function IconEye(props: IconProps) {
   );
 }
 
+export function IconRobotics(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <rect x="7" y="9" width="10" height="8" rx="1.5" />
+      <circle cx="10" cy="13" r="1" />
+      <circle cx="14" cy="13" r="1" />
+      <path d="M12 5v4M9 17v2M15 17v2M5 12H3M21 12h-2" />
+    </svg>
+  );
+}
+
 export function IconImageGen(props: IconProps) {
   return (
     <IconBase {...props}>

@@ -15,6 +15,7 @@ import {
   IconMemoryTool,
   IconMultiAgent,
   IconMusic,
+  IconRobotics,
   IconVideoGen,
   IconPresentUi,
   IconScheduled,
@@ -38,6 +39,7 @@ export type AgentToolId =
   | "file_ops"
   | "code_exec"
   | "vision"
+  | "robotics"
   | "image_gen"
   | "video_gen"
   | "tts"
@@ -174,6 +176,20 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "image_url", type: "string" },
       { name: "prompt", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "robotics",
+    titleKey: "agentTools.robotics.title",
+    descKey: "agentTools.robotics.desc",
+    Icon: IconRobotics,
+    tone: "pink",
+    params: [
+      { name: "image_url", type: "string" },
+      { name: "mode", type: "string", optional: true },
+      { name: "prompt", type: "string", optional: true },
+      { name: "queries", type: "string", optional: true },
+      { name: "robot_api", type: "string", optional: true },
     ],
   },
   {
