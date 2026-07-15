@@ -1,5 +1,6 @@
 /** Lucide 图标选择器。 */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import {
   applyPaintToSvg,
@@ -30,6 +31,10 @@ type Props = {
   initialStyle?: LucideRenderStyle;
   onClose: () => void;
   onSelect: (icon: LucideAgentIcon, paint: LucidePaint, style: LucideRenderStyle) => void;
+  /** 若提供，抽屉内显示上传按钮并回调 File */
+  onUploadImage?: (file: File) => void;
+  /** 异步操作进行中时禁止关闭与上传 */
+  busy?: boolean;
 };
 
 function paintKey(paint: LucidePaint): string {
@@ -77,6 +82,8 @@ export default function LucideIconPicker({
   initialStyle,
   onClose,
   onSelect,
+  onUploadImage,
+  busy,
 }: Props) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -87,7 +94,7 @@ export default function LucideIconPicker({
   const [customFrom, setCustomFrom] = useState("#2563eb");
   const [customTo, setCustomTo] = useState("#06b6d4");
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const uploadRef = useRef<HTMLInputElement | null>(null);
 
   const icons = useMemo(() => filterLucideAgentIcons(query), [query]);
 
@@ -108,11 +115,11 @@ export default function LucideIconPicker({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !busy) onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, busy, onClose]);
 
   if (!open) return null;
 
@@ -126,20 +133,23 @@ export default function LucideIconPicker({
 
   return (
     <div
-      className="lucide-picker-backdrop"
+      className="agent-icon-drawer-backdrop"
       role="presentation"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !busy) onClose();
       }}
     >
       <div
-        ref={panelRef}
-        className="lucide-picker-panel"
+        className="agent-icon-drawer lucide-picker-drawer"
+        style={{
+          ["--tone" as string]: "var(--tone-blue)",
+          ["--tone-soft" as string]: "var(--tone-blue-soft)",
+        }}
         role="dialog"
         aria-modal="true"
         aria-label={t("chat.lucidePickerTitle")}
       >
-        <header className="lucide-picker-head">
+        <header className="agent-icon-drawer-head lucide-picker-head">
           <div>
             <h3 className="lucide-picker-title">{t("chat.lucidePickerTitle")}</h3>
             <p className="lucide-picker-sub">{t("chat.lucidePickerSub")}</p>
@@ -148,173 +158,201 @@ export default function LucideIconPicker({
             type="button"
             className="lucide-picker-close"
             onClick={onClose}
+            disabled={busy}
             aria-label={t("chat.lucidePickerClose")}
           >
-            ×
+            <X size={16} />
           </button>
         </header>
 
-        <div className="lucide-picker-search-wrap">
-          <input
-            ref={inputRef}
-            className="lucide-picker-search"
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("chat.lucidePickerSearch")}
-            aria-label={t("chat.lucidePickerSearch")}
-          />
-        </div>
-
-        <div className="lucide-picker-style" role="group" aria-label={t("chat.lucidePickerStyle")}>
-          <span className="lucide-picker-colors-label">{t("chat.lucidePickerStyle")}</span>
-          <div className="lucide-picker-style-toggle">
-            <button
-              type="button"
-              className={renderStyle === "stroke" ? "is-active" : ""}
-              aria-pressed={renderStyle === "stroke"}
-              onClick={() => setRenderStyle("stroke")}
-            >
-              {t("chat.lucidePickerStyleStroke")}
-            </button>
-            <button
-              type="button"
-              className={renderStyle === "fillCutout" ? "is-active" : ""}
-              aria-pressed={renderStyle === "fillCutout"}
-              onClick={() => setRenderStyle("fillCutout")}
-            >
-              {t("chat.lucidePickerStyleFillCutout")}
-            </button>
-          </div>
-        </div>
-
-        <div className="lucide-picker-colors" role="group" aria-label={t("chat.lucidePickerColor")}>
-          <span className="lucide-picker-colors-label">{t("chat.lucidePickerColor")}</span>
-          <div className="lucide-picker-swatches">
-            {LUCIDE_ICON_COLORS.map((c) => {
-              const next = solidPaint(c.value);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`lucide-picker-swatch ${paintsEqual(paint, next) ? "is-active" : ""}`}
-                  style={{ background: c.value }}
-                  title={c.label}
-                  aria-label={c.label}
-                  aria-pressed={paintsEqual(paint, next)}
-                  onClick={() => setPaint(next)}
-                />
-              );
-            })}
-            <label className="lucide-picker-custom-color" title={t("chat.lucidePickerCustomColor")}>
+        <div className="agent-icon-drawer-scroll lucide-picker-scroll">
+          {onUploadImage ? (
+            <div className="lucide-picker-upload-wrap">
+              <button
+                type="button"
+                className="chat-agent-icon-btn"
+                disabled={busy}
+                onClick={() => uploadRef.current?.click()}
+              >
+                {t("chat.agentIconUpload")}
+              </button>
               <input
-                type="color"
-                value={
-                  paint.kind === "solid" && /^#[0-9a-fA-F]{6}$/.test(paint.color)
-                    ? paint.color
-                    : DEFAULT_LUCIDE_ICON_COLOR
-                }
-                onChange={(e) => setPaint(solidPaint(e.target.value))}
-                aria-label={t("chat.lucidePickerCustomColor")}
+                ref={uploadRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg"
+                hidden
+                disabled={busy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  e.target.value = "";
+                  if (file) onUploadImage(file);
+                }}
               />
-            </label>
-          </div>
-        </div>
+            </div>
+          ) : null}
 
-        <div
-          className="lucide-picker-colors lucide-picker-gradients"
-          role="group"
-          aria-label={t("chat.lucidePickerGradient")}
-        >
-          <span className="lucide-picker-colors-label">{t("chat.lucidePickerGradient")}</span>
-          <div className="lucide-picker-swatches">
-            {LUCIDE_ICON_GRADIENTS.map((g) => {
-              const next = gradientPaint(g);
-              return (
-                <button
-                  key={g.id}
-                  type="button"
-                  className={`lucide-picker-swatch lucide-picker-swatch--grad ${
-                    paintsEqual(paint, next) ? "is-active" : ""
-                  }`}
-                  style={{ background: paintCssBackground(next) }}
-                  title={g.label}
-                  aria-label={g.label}
-                  aria-pressed={paintsEqual(paint, next)}
-                  onClick={() => setPaint(next)}
-                />
-              );
-            })}
-            <button
-              type="button"
-              className={`lucide-picker-swatch lucide-picker-swatch--grad ${
-                paint.kind === "gradient" && paint.id === "custom" ? "is-active" : ""
-              }`}
-              style={{ background: paintCssBackground(customGradient) }}
-              title={t("chat.lucidePickerCustomGradient")}
-              aria-label={t("chat.lucidePickerCustomGradient")}
-              aria-pressed={paint.kind === "gradient" && paint.id === "custom"}
-              onClick={() => setPaint(customGradient)}
+          <div className="lucide-picker-search-wrap">
+            <input
+              ref={inputRef}
+              className="lucide-picker-search"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("chat.lucidePickerSearch")}
+              aria-label={t("chat.lucidePickerSearch")}
             />
           </div>
-        </div>
 
-        {paint.kind === "gradient" && paint.id === "custom" ? (
-          <div className="lucide-picker-custom-grad-row">
-            <label className="lucide-picker-custom-grad-stop">
-              <span>{t("chat.lucidePickerGradFrom")}</span>
-              <input
-                type="color"
-                value={customFrom}
-                onChange={(e) => {
-                  const from = e.target.value;
-                  setCustomFrom(from);
-                  setPaint({ kind: "gradient", id: "custom", from, to: customTo, angle: 135 });
-                }}
-              />
-            </label>
-            <label className="lucide-picker-custom-grad-stop">
-              <span>{t("chat.lucidePickerGradTo")}</span>
-              <input
-                type="color"
-                value={customTo}
-                onChange={(e) => {
-                  const to = e.target.value;
-                  setCustomTo(to);
-                  setPaint({ kind: "gradient", id: "custom", from: customFrom, to, angle: 135 });
-                }}
-              />
-            </label>
+          <div className="lucide-picker-style" role="group" aria-label={t("chat.lucidePickerStyle")}>
+            <span className="lucide-picker-colors-label">{t("chat.lucidePickerStyle")}</span>
+            <div className="lucide-picker-style-toggle">
+              <button
+                type="button"
+                className={renderStyle === "stroke" ? "is-active" : ""}
+                aria-pressed={renderStyle === "stroke"}
+                onClick={() => setRenderStyle("stroke")}
+              >
+                {t("chat.lucidePickerStyleStroke")}
+              </button>
+              <button
+                type="button"
+                className={renderStyle === "fillCutout" ? "is-active" : ""}
+                aria-pressed={renderStyle === "fillCutout"}
+                onClick={() => setRenderStyle("fillCutout")}
+              >
+                {t("chat.lucidePickerStyleFillCutout")}
+              </button>
+            </div>
           </div>
-        ) : null}
 
-        <div className="lucide-picker-grid" role="listbox" aria-label={t("chat.lucidePickerTitle")}>
-          {icons.length === 0 ? (
-            <p className="lucide-picker-empty">{t("chat.lucidePickerEmpty")}</p>
-          ) : (
-            icons.map((item) => {
-              const active = selectedId === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  className={`lucide-picker-item ${active ? "is-active" : ""}`}
-                  title={item.label}
-                  onClick={() => onSelect(item, paint, renderStyle)}
-                >
-                  <PaintedLucideIcon
-                    Icon={item.Icon}
-                    paint={paint}
-                    style={renderStyle}
-                    size={20}
+          <div className="lucide-picker-colors" role="group" aria-label={t("chat.lucidePickerColor")}>
+            <span className="lucide-picker-colors-label">{t("chat.lucidePickerColor")}</span>
+            <div className="lucide-picker-swatches">
+              {LUCIDE_ICON_COLORS.map((c) => {
+                const next = solidPaint(c.value);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`lucide-picker-swatch ${paintsEqual(paint, next) ? "is-active" : ""}`}
+                    style={{ background: c.value }}
+                    title={c.label}
+                    aria-label={c.label}
+                    aria-pressed={paintsEqual(paint, next)}
+                    onClick={() => setPaint(next)}
                   />
-                  <span className="lucide-picker-item-label">{item.label}</span>
-                </button>
-              );
-            })
-          )}
+                );
+              })}
+              <label className="lucide-picker-custom-color" title={t("chat.lucidePickerCustomColor")}>
+                <input
+                  type="color"
+                  value={
+                    paint.kind === "solid" && /^#[0-9a-fA-F]{6}$/.test(paint.color)
+                      ? paint.color
+                      : DEFAULT_LUCIDE_ICON_COLOR
+                  }
+                  onChange={(e) => setPaint(solidPaint(e.target.value))}
+                  aria-label={t("chat.lucidePickerCustomColor")}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div
+            className="lucide-picker-colors lucide-picker-gradients"
+            role="group"
+            aria-label={t("chat.lucidePickerGradient")}
+          >
+            <span className="lucide-picker-colors-label">{t("chat.lucidePickerGradient")}</span>
+            <div className="lucide-picker-swatches">
+              {LUCIDE_ICON_GRADIENTS.map((g) => {
+                const next = gradientPaint(g);
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    className={`lucide-picker-swatch lucide-picker-swatch--grad ${
+                      paintsEqual(paint, next) ? "is-active" : ""
+                    }`}
+                    style={{ background: paintCssBackground(next) }}
+                    title={g.label}
+                    aria-label={g.label}
+                    aria-pressed={paintsEqual(paint, next)}
+                    onClick={() => setPaint(next)}
+                  />
+                );
+              })}
+              <button
+                type="button"
+                className={`lucide-picker-swatch lucide-picker-swatch--grad ${
+                  paint.kind === "gradient" && paint.id === "custom" ? "is-active" : ""
+                }`}
+                style={{ background: paintCssBackground(customGradient) }}
+                title={t("chat.lucidePickerCustomGradient")}
+                aria-label={t("chat.lucidePickerCustomGradient")}
+                aria-pressed={paint.kind === "gradient" && paint.id === "custom"}
+                onClick={() => setPaint(customGradient)}
+              />
+            </div>
+          </div>
+
+          {paint.kind === "gradient" && paint.id === "custom" ? (
+            <div className="lucide-picker-custom-grad-row">
+              <label className="lucide-picker-custom-grad-stop">
+                <span>{t("chat.lucidePickerGradFrom")}</span>
+                <input
+                  type="color"
+                  value={customFrom}
+                  onChange={(e) => {
+                    const from = e.target.value;
+                    setCustomFrom(from);
+                    setPaint({ kind: "gradient", id: "custom", from, to: customTo, angle: 135 });
+                  }}
+                />
+              </label>
+              <label className="lucide-picker-custom-grad-stop">
+                <span>{t("chat.lucidePickerGradTo")}</span>
+                <input
+                  type="color"
+                  value={customTo}
+                  onChange={(e) => {
+                    const to = e.target.value;
+                    setCustomTo(to);
+                    setPaint({ kind: "gradient", id: "custom", from: customFrom, to, angle: 135 });
+                  }}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          <div className="lucide-picker-grid" role="listbox" aria-label={t("chat.lucidePickerTitle")}>
+            {icons.length === 0 ? (
+              <p className="lucide-picker-empty">{t("chat.lucidePickerEmpty")}</p>
+            ) : (
+              icons.map((item) => {
+                const active = selectedId === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    className={`lucide-picker-item ${active ? "is-active" : ""}`}
+                    title={item.label}
+                    onClick={() => onSelect(item, paint, renderStyle)}
+                  >
+                    <PaintedLucideIcon
+                      Icon={item.Icon}
+                      paint={paint}
+                      style={renderStyle}
+                      size={20}
+                    />
+                    <span className="lucide-picker-item-label">{item.label}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>
