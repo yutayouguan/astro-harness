@@ -1,6 +1,8 @@
-/** Composer 上下文占用浮层：分段条、图例与「查看详情」。 */
+/** Composer 上下文占用浮层：分段条、图例与「查看详情」（portal + 启发式定位）。 */
 import { useEffect, useRef, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useClampPopover } from "../hooks/useClampPopover";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
 import {
@@ -29,7 +31,7 @@ type Props = {
   windowTokens: number;
   onClose: () => void;
   onViewDetails: () => void;
-  /** 含触发按钮的外层；用于 click-outside，避免点按钮时先关再开 */
+  /** 含触发按钮的外层；用于 click-outside 与锚点定位 */
   containRef?: RefObject<HTMLElement | null>;
 };
 
@@ -43,6 +45,21 @@ export default function ContextUsagePopover({
 }: Props) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
+  const fallbackAnchor = useRef<HTMLElement | null>(null);
+  const anchorRef = containRef ?? fallbackAnchor;
+
+  const style = useClampPopover({
+    open,
+    anchorRef,
+    popoverRef: rootRef,
+    mode: "fixed",
+    preferAlign: "end",
+    placement: "above",
+    gap: 8,
+    maxHeightCap: 480,
+    minMaxHeight: 120,
+    sizeKey: snapshot?.totalTokens ?? "empty",
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -50,8 +67,10 @@ export default function ContextUsagePopover({
       if (e.key === "Escape") onClose();
     };
     const onPointer = (e: MouseEvent) => {
-      const boundary = containRef?.current ?? rootRef.current;
-      if (!boundary?.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (anchorRef.current?.contains(target)) return;
+      onClose();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onPointer);
@@ -59,21 +78,22 @@ export default function ContextUsagePopover({
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onPointer);
     };
-  }, [open, onClose, containRef]);
+  }, [open, onClose, anchorRef]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   const win = windowTokens > 0 ? windowTokens : 128_000;
   const used = snapshot?.totalTokens ?? 0;
   const pct = usagePercent(used, win);
   const segs = snapshot ? visibleSegments(snapshot) : [];
 
-  return (
+  return createPortal(
     <div
       className="ctx-usage-popover"
       ref={rootRef}
       role="dialog"
       aria-label={t("chat.contextUsage")}
+      style={style ?? { visibility: "hidden" }}
     >
       <div className="ctx-usage-popover-header">
         <span className="ctx-usage-popover-title">{t("chat.contextUsage")}</span>
@@ -133,6 +153,7 @@ export default function ContextUsagePopover({
       ) : (
         <p className="ctx-usage-popover-empty">{t("chat.contextUsageEmpty")}</p>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

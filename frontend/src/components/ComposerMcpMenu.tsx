@@ -1,12 +1,22 @@
-/** Composer MCP 快捷菜单：搜索、开关服务、跳转设置。 */
-import { useEffect, useMemo, useRef, useState } from "react";
+/** Composer MCP 快捷菜单：搜索、开关服务、跳转设置（portal + 启发式定位）。 */
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import { createPortal } from "react-dom";
 import { Settings2 } from "lucide-react";
+import { useClampPopover } from "../hooks/useClampPopover";
 import { useMcpTools } from "../hooks/useMcpTools";
 import { useI18n } from "../i18n/LocaleContext";
 import McpIcon from "./McpIcon";
 
 type Props = {
   open: boolean;
+  /** 触发按钮外层（composer-mcp-wrap） */
+  anchorRef: RefObject<HTMLElement | null>;
   agentId?: string | null;
   onClose: () => void;
   onOpenSettings: () => void;
@@ -14,6 +24,7 @@ type Props = {
 
 export default function ComposerMcpMenu({
   open,
+  anchorRef,
   agentId,
   onClose,
   onOpenSettings,
@@ -21,7 +32,7 @@ export default function ComposerMcpMenu({
   const { t } = useI18n();
   const { servers, toggleServer } = useMcpTools(agentId);
   const [query, setQuery] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -34,14 +45,33 @@ export default function ComposerMcpMenu({
     );
   }, [servers, query]);
 
+  const style = useClampPopover({
+    open,
+    anchorRef,
+    popoverRef: menuRef,
+    mode: "fixed",
+    preferAlign: "start",
+    placement: "above",
+    gap: 8,
+    maxHeightCap: 420,
+    minMaxHeight: 120,
+    sizeKey: `${filtered.length}:${query}`,
+  });
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuery("");
+      return;
+    }
     inputRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     const onPointer = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (anchorRef.current?.contains(target)) return;
+      onClose();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onPointer);
@@ -49,16 +79,17 @@ export default function ComposerMcpMenu({
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onPointer);
     };
-  }, [open, onClose]);
+  }, [open, onClose, anchorRef]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
       className="composer-mcp-menu"
-      ref={rootRef}
+      ref={menuRef}
       role="dialog"
       aria-label={t("chat.mcpMenu")}
+      style={style ?? { visibility: "hidden" }}
     >
       <div className="composer-mcp-menu-search">
         <input
@@ -109,6 +140,7 @@ export default function ComposerMcpMenu({
         <Settings2 size={14} strokeWidth={2} aria-hidden />
         {t("chat.mcpMenuOpenSettings")}
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }

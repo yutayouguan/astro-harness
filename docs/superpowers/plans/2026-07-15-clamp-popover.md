@@ -64,7 +64,9 @@
 - Create: `frontend/src/hooks/useClampPopover.ts`
 - Modify: Composer 相关（`ChatView.tsx` 模式/MCP/palette）
 
-- [x] hook 已建；Composer 阶段 B 记 follow-up
+- [x] hook 已建
+- [x] Composer 模式 / MCP / 上下文用量：portal + `useClampPopover`（`placement: above`）
+- [x] Palette 仍为输入区上方文档流布局（自带 max-height），本轮不改
 
 ---
 
