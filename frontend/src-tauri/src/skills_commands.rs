@@ -2,7 +2,7 @@
 
 use skills::{
     fetch_detail, install_from_ref, link_skill_to_agent, list_installed_for_agent,
-    list_skill_files, load_skill_by_name, read_skill_file, search, set_enabled_for_agent,
+    list_skill_files_ex, load_skill_by_name, read_skill_file_ex, search, set_enabled_for_agent,
     InstalledSkill, SkillBundle, SkillStoreFilter, StoreSkill, StoreSkillDetail,
 };
 use serde::Serialize;
@@ -119,12 +119,19 @@ pub async fn get_skill_content(name: String) -> Result<SkillContentDto, String> 
 
 /// 列出技能目录下的全部相关文件。
 #[tauri::command]
-pub async fn list_skill_bundle(name: String) -> Result<SkillBundle, String> {
-    list_skill_files(&name).map_err(|e| e.to_string())
+pub async fn list_skill_bundle(
+    name: String,
+    id: Option<String>,
+) -> Result<SkillBundle, String> {
+    list_skill_files_ex(&name, id.as_deref()).map_err(|e| e.to_string())
 }
 
 /// 读取技能目录内某个相对路径的文本文件。
 #[tauri::command]
-pub async fn get_skill_file(name: String, relative_path: String) -> Result<String, String> {
-    read_skill_file(&name, &relative_path).map_err(|e| e.to_string())
+pub async fn get_skill_file(
+    name: String,
+    relative_path: String,
+    id: Option<String>,
+) -> Result<String, String> {
+    read_skill_file_ex(&name, &relative_path, id.as_deref()).map_err(|e| e.to_string())
 }

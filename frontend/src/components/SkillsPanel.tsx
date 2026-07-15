@@ -286,6 +286,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
   const [preview, setPreview] = useState<SkillBundle | null>(null);
+  const [previewSkillId, setPreviewSkillId] = useState<string | null>(null);
   const [previewTab, setPreviewTab] = useState<SkillPreviewCategory>("overview");
   const [previewFile, setPreviewFile] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
@@ -649,12 +650,17 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     await copyText(`${skill.id}:cmd`, storeInstallCommand(skill));
   };
 
-  const viewSkill = async (name: string) => {
+  const viewSkill = async (skill: InstalledSkill | string) => {
     if (!isTauri()) return;
-    setLoadingPreview(name);
+    const name = typeof skill === "string" ? skill : skill.name;
+    const id = typeof skill === "string" ? undefined : skill.id;
+    setLoadingPreview(id ?? name);
     setError(null);
     try {
-      const bundle = await invoke<SkillBundle>("list_skill_bundle", { name });
+      const bundle = await invoke<SkillBundle>("list_skill_bundle", {
+        name,
+        id: id ?? null,
+      });
       const tabs = PREVIEW_TABS.filter((tab) =>
         bundle.files.some((f) => f.category === tab.id),
       );
@@ -664,6 +670,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         bundle.files[0]?.relative_path ??
         null;
       setPreview(bundle);
+      setPreviewSkillId(id ?? null);
       setPreviewTab(firstTab);
       setPreviewFile(firstFile);
       setPreviewContent(null);
@@ -676,7 +683,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   };
 
   const loadPreviewFile = useCallback(
-    async (name: string, file: SkillFileEntry) => {
+    async (name: string, file: SkillFileEntry, skillId: string | null) => {
       setPreviewBinaryHint(false);
       setPreviewContent(null);
       if (!file.is_text) {
@@ -688,6 +695,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         const content = await invoke<string>("get_skill_file", {
           name,
           relativePath: file.relative_path,
+          id: skillId,
         });
         setPreviewContent(content);
       } catch (err) {
@@ -703,8 +711,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     if (!preview || !previewFile) return;
     const file = preview.files.find((f) => f.relative_path === previewFile);
     if (!file) return;
-    void loadPreviewFile(preview.name, file);
-  }, [preview, previewFile, loadPreviewFile]);
+    void loadPreviewFile(preview.name, file, previewSkillId);
+  }, [preview, previewFile, previewSkillId, loadPreviewFile]);
 
   useEffect(() => {
     if (!preview) return;
@@ -735,6 +743,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   const closePreview = () => {
     setPreview(null);
+    setPreviewSkillId(null);
     setPreviewFile(null);
     setPreviewContent(null);
     setPreviewBinaryHint(false);
@@ -963,16 +972,20 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         <button
           type="button"
           className="skills-action-btn is-icon primary"
-          disabled={loadingPreview === skill.name}
-          onClick={() => void viewSkill(skill.name)}
+          disabled={loadingPreview === skill.id || loadingPreview === skill.name}
+          onClick={() => void viewSkill(skill)}
           title={
-            loadingPreview === skill.name ? t("skills.viewing") : t("skills.view")
+            loadingPreview === skill.id || loadingPreview === skill.name
+              ? t("skills.viewing")
+              : t("skills.view")
           }
           aria-label={
-            loadingPreview === skill.name ? t("skills.viewing") : t("skills.view")
+            loadingPreview === skill.id || loadingPreview === skill.name
+              ? t("skills.viewing")
+              : t("skills.view")
           }
         >
-          {loadingPreview === skill.name ? (
+          {loadingPreview === skill.id || loadingPreview === skill.name ? (
             <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
           ) : (
             <Eye size={15} strokeWidth={2.25} aria-hidden />
@@ -1032,6 +1045,28 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         </span>
       </div>
       <div className="skill-card-actions">
+        <button
+          type="button"
+          className="skills-action-btn is-icon"
+          disabled={loadingPreview === skill.id || loadingPreview === skill.name}
+          onClick={() => void viewSkill(skill)}
+          title={
+            loadingPreview === skill.id || loadingPreview === skill.name
+              ? t("skills.viewing")
+              : t("skills.view")
+          }
+          aria-label={
+            loadingPreview === skill.id || loadingPreview === skill.name
+              ? t("skills.viewing")
+              : t("skills.view")
+          }
+        >
+          {loadingPreview === skill.id || loadingPreview === skill.name ? (
+            <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+          ) : (
+            <Eye size={15} strokeWidth={2.25} aria-hidden />
+          )}
+        </button>
         <button
           type="button"
           className={`skills-action-btn is-icon ${skill.linked ? "" : "primary"}`}
@@ -1268,15 +1303,20 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 <button
                   type="button"
                   className="skills-action-btn primary"
-                  disabled={loadingPreview === selectedInstalled.name}
-                  onClick={() => void viewSkill(selectedInstalled.name)}
+                  disabled={
+                    loadingPreview === selectedInstalled.id ||
+                    loadingPreview === selectedInstalled.name
+                  }
+                  onClick={() => void viewSkill(selectedInstalled)}
                 >
-                  {loadingPreview === selectedInstalled.name ? (
+                  {loadingPreview === selectedInstalled.id ||
+                  loadingPreview === selectedInstalled.name ? (
                     <LoaderCircle size={14} strokeWidth={2.25} className="is-spin" aria-hidden />
                   ) : (
                     <Eye size={14} strokeWidth={2.25} aria-hidden />
                   )}
-                  {loadingPreview === selectedInstalled.name
+                  {loadingPreview === selectedInstalled.id ||
+                  loadingPreview === selectedInstalled.name
                     ? t("skills.viewing")
                     : t("skills.view")}
                 </button>
@@ -1388,6 +1428,26 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 </span>
               </div>
               <div className="skills-detail-actions">
+                <button
+                  type="button"
+                  className="skills-action-btn primary"
+                  disabled={
+                    loadingPreview === selectedMachine.id ||
+                    loadingPreview === selectedMachine.name
+                  }
+                  onClick={() => void viewSkill(selectedMachine)}
+                >
+                  {loadingPreview === selectedMachine.id ||
+                  loadingPreview === selectedMachine.name ? (
+                    <LoaderCircle size={14} strokeWidth={2.25} className="is-spin" aria-hidden />
+                  ) : (
+                    <Eye size={14} strokeWidth={2.25} aria-hidden />
+                  )}
+                  {loadingPreview === selectedMachine.id ||
+                  loadingPreview === selectedMachine.name
+                    ? t("skills.viewing")
+                    : t("skills.view")}
+                </button>
                 <button
                   type="button"
                   className={`skills-action-btn ${selectedMachine.linked ? "" : "primary"}`}

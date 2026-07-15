@@ -493,9 +493,16 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
 
 const MAX_SKILL_FILE_PREVIEW_BYTES: u64 = 512 * 1024;
 
-fn find_installed_by_name(name: &str) -> Result<InstalledSkill> {
-    list_installed()
-        .into_iter()
+/// 预览用：可按 id 精确定位（本机/Astro），否则按名称在全部范围查找。
+fn find_installed_for_preview(name: &str, id: Option<&str>) -> Result<InstalledSkill> {
+    let agent = active_agent_id();
+    let all = list_installed_for_agent(agent.as_deref(), Some("all"));
+    if let Some(id) = id.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(skill) = all.iter().find(|s| s.id == id) {
+            return Ok(skill.clone());
+        }
+    }
+    all.into_iter()
         .find(|s| s.name == name)
         .with_context(|| format!("未找到技能: {name}"))
 }
@@ -618,9 +625,17 @@ fn category_rank(cat: &str) -> u8 {
     }
 }
 
-/// 列出技能目录内全部文件（含禁用技能，供 UI 预览）。
+/// 列出技能目录内全部文件（含禁用/本机技能，供 UI 预览）。
 pub fn list_skill_files(name: &str) -> Result<crate::models::SkillBundle> {
-    let installed = find_installed_by_name(name)?;
+    list_skill_files_ex(name, None)
+}
+
+/// 同上，可选 skill id（本机与 Astro 重名时用）。
+pub fn list_skill_files_ex(
+    name: &str,
+    id: Option<&str>,
+) -> Result<crate::models::SkillBundle> {
+    let installed = find_installed_for_preview(name, id)?;
     let root = skill_root_of(&installed)?;
     let mut files = Vec::new();
     walk_skill_files(&root, &root, &mut files);
@@ -639,7 +654,16 @@ pub fn list_skill_files(name: &str) -> Result<crate::models::SkillBundle> {
 
 /// 读取技能目录内某个相对路径的文本内容（防穿越）。
 pub fn read_skill_file(name: &str, relative_path: &str) -> Result<String> {
-    let installed = find_installed_by_name(name)?;
+    read_skill_file_ex(name, relative_path, None)
+}
+
+/// 同上，可选 skill id。
+pub fn read_skill_file_ex(
+    name: &str,
+    relative_path: &str,
+    id: Option<&str>,
+) -> Result<String> {
+    let installed = find_installed_for_preview(name, id)?;
     let root = skill_root_of(&installed)?.canonicalize()?;
     let rel = relative_path.trim().trim_start_matches('/');
     if rel.is_empty() || rel.contains("..") {
