@@ -2668,9 +2668,9 @@ html[data-theme="dark"] .skills-preview-mark {
   z-index: 1;
   display: flex;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 2px;
   /* 底部留白：overflow-x 会裁切纵向阴影，避免选中胶囊底边成硬切 */
-  padding: 10px 14px 10px;
+  padding: 6px 14px 8px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -2679,9 +2679,9 @@ html[data-theme="dark"] .skills-preview-mark {
 .skills-preview-tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-shrink: 0;
-  padding: 7px 12px;
+  padding: 6px 10px;
   border: 1px solid transparent;
   border-radius: 999px;
   font-size: 12px;
