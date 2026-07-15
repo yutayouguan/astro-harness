@@ -1787,6 +1787,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         createPortal(
           <div
             className="skills-preview-backdrop"
+            data-tone="indigo"
             onClick={(e) => {
               if (e.target === e.currentTarget) setPreview(null);
             }}
