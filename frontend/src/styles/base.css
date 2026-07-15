@@ -199,15 +199,16 @@ html[data-theme="light"] {
       0 0 0 1px rgba(255, 255, 255, 0.45) inset,
       0 1px 0 rgba(255, 255, 255, 0.85) inset;
     --backdrop-glass: blur(var(--blur-glass, 20px)) saturate(1.25);
+    /* 浮层下拉：白色调半透明毛玻璃（靠 blur 保证可读，避免实底白块） */
     --menu-glass-bg:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.86) 100%),
-      rgba(248, 250, 252, 0.82);
-    --menu-glass-border: rgba(255, 255, 255, 0.88);
+      linear-gradient(165deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.4) 100%),
+      rgba(255, 255, 255, 0.48);
+    --menu-glass-border: rgba(255, 255, 255, 0.7);
     --menu-glass-shadow:
-      0 16px 40px rgba(15, 23, 42, 0.14),
-      0 2px 8px rgba(15, 23, 42, 0.06),
-      inset 0 1px 0 rgba(255, 255, 255, 0.98);
-    --menu-glass-blur: blur(28px) saturate(1.45);
+      0 16px 40px rgba(15, 23, 42, 0.12),
+      0 2px 8px rgba(15, 23, 42, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    --menu-glass-blur: blur(24px) saturate(1.35);
     --lens-bg:
       radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.28) 48%, transparent 78%),
       linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.22)),

@@ -9,24 +9,24 @@
   isolation: isolate;
 }
 
-/* 表单用自定义下拉 — 全宽可点 + 单箭头 chevron；亮/暗液态玻璃 */
+/* 表单用自定义下拉 — 全宽可点 + 单箭头 chevron；与输入框统一白色调毛玻璃 */
 .select-menu {
   --select-tone: var(--tone, var(--tone-orange, #f59e0b));
   --select-tone-soft: var(--tone-soft, var(--tone-orange-soft, rgba(245, 158, 11, 0.14)));
   --select-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--select-tone-soft) 45%, rgba(255, 255, 255, 0.18));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    rgba(255, 255, 255, 0.38);
   --select-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-    color-mix(in srgb, var(--select-tone-soft) 58%, rgba(255, 255, 255, 0.22));
-  --select-glass-edge: color-mix(in srgb, var(--select-tone) 16%, rgba(255, 255, 255, 0.5));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.38)),
+    rgba(255, 255, 255, 0.44);
+  --select-glass-edge: color-mix(in srgb, var(--select-tone) 14%, rgba(255, 255, 255, 0.55));
   --select-glass-rim:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.28);
   --select-glass-shadow:
     0 6px 16px color-mix(in srgb, var(--select-tone) 8%, rgba(15, 23, 42, 0.05)),
     0 1px 3px rgba(15, 23, 42, 0.03);
-  --select-glass-blur: blur(16px) saturate(1.2);
+  --select-glass-blur: blur(16px) saturate(1.25);
   position: relative;
   width: 100%;
   min-width: 0;
@@ -169,19 +169,17 @@
   overflow: auto;
   max-height: min(260px, 42vh);
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--select-tone) 14%, var(--menu-glass-border));
+  border: 1px solid color-mix(in srgb, var(--select-tone) 14%, rgba(255, 255, 255, 0.6));
   background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--select-tone-soft) 35%, transparent) 0%,
-      transparent 55%
-    ),
-    var(--menu-glass-bg);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.4)),
+    rgba(255, 255, 255, 0.48);
   box-shadow:
-    var(--menu-glass-shadow),
+    0 16px 40px rgba(15, 23, 42, 0.12),
+    0 2px 8px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
     0 0 0 1px color-mix(in srgb, var(--select-tone) 6%, transparent);
-  backdrop-filter: var(--menu-glass-blur);
-  -webkit-backdrop-filter: var(--menu-glass-blur);
+  backdrop-filter: blur(24px) saturate(1.35);
+  -webkit-backdrop-filter: blur(24px) saturate(1.35);
   isolation: isolate;
 }
 
@@ -250,12 +248,12 @@
 
 html[data-theme="dark"] .select-menu {
   --select-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
-    color-mix(in srgb, var(--select-tone-soft) 28%, rgba(8, 6, 18, 0.55));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.04);
   --select-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
-    color-mix(in srgb, var(--select-tone-soft) 42%, rgba(8, 6, 18, 0.52));
-  --select-glass-edge: color-mix(in srgb, var(--select-tone) 22%, rgba(255, 255, 255, 0.08));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    rgba(255, 255, 255, 0.06);
+  --select-glass-edge: color-mix(in srgb, var(--select-tone) 22%, rgba(255, 255, 255, 0.12));
   --select-glass-rim:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
@@ -274,13 +272,12 @@ html[data-theme="dark"] .select-menu.is-open .select-menu-trigger {
 }
 
 html[data-theme="dark"] .select-menu-list {
-  border-color: color-mix(in srgb, var(--select-tone) 22%, var(--menu-glass-border));
+  border-color: color-mix(in srgb, var(--select-tone) 22%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--select-tone-soft) 40%, transparent) 0%,
-      transparent 55%
-    ),
-    var(--menu-glass-bg);
-  box-shadow: var(--menu-glass-shadow);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    rgba(14, 12, 28, 0.72);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }

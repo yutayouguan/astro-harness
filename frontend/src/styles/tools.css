@@ -1032,12 +1032,6 @@ html[data-theme="dark"] .mcp-field-textarea {
 .mcp-type-select {
   width: 100%;
   min-width: 0;
-  --select-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.64) 0%, rgba(255, 255, 255, 0.3) 100%),
-    rgba(255, 255, 255, 0.38);
-  --select-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.38) 100%),
-    rgba(255, 255, 255, 0.44);
 }
 
 .mcp-type-select .select-menu-value-icon,
