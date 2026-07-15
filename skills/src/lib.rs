@@ -10,6 +10,7 @@
 //! ```
 
 pub mod check;
+pub mod digest;
 pub mod install;
 pub mod installed;
 pub mod models;
