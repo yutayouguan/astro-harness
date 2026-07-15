@@ -751,7 +751,8 @@ fn open_path_with_system(path: &Path) -> Result<()> {
     }
 }
 
-fn reveal_path_in_folder(path: &Path) -> Result<()> {
+/// 在系统文件管理器中定位路径（供 `backups` 等模块复用）。
+pub(crate) fn reveal_path_in_file_manager(path: &Path) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -795,7 +796,7 @@ pub fn reveal_skill_file(
     id: Option<&str>,
 ) -> Result<()> {
     let path = resolve_skill_abs_path(name, Some(relative_path), id)?;
-    reveal_path_in_folder(&path)
+    reveal_path_in_file_manager(&path)
 }
 
 /// 用系统默认应用打开技能内某个文件。

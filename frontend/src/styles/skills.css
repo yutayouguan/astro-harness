@@ -267,6 +267,19 @@ html[data-theme="dark"] .skills-main-tab.active {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber, #d97706) 28%, transparent);
 }
 
+.skill-card-link-badge.is-current {
+  color: var(--tone);
+  background: var(--tone-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+.skill-card-status-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute);
+}
+
 .skill-card-link-badge.is-on,
 .skills-detail-item-badge.is-on {
   color: var(--tone);
@@ -2160,6 +2173,89 @@ html[data-theme="dark"] .skills-end-hint {
   align-items: center;
   flex-shrink: 0;
   margin-bottom: 4px;
+}
+
+.skills-backups {
+  margin-top: 12px;
+  border-top: 1px solid var(--chip-border);
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+
+.skills-backups-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.skills-backups-chevron {
+  color: var(--ink-mute);
+  transition: transform 0.15s ease;
+}
+
+.skills-backups-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.skills-backups-body {
+  padding: 0 4px 8px;
+}
+
+.skills-backups-empty {
+  margin: 0;
+  padding: 12px 8px;
+  font-size: 12.5px;
+  color: var(--ink-mute);
+}
+
+.skills-backups-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skills-backup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  font-size: 12.5px;
+}
+
+.skills-backup-folder {
+  font-weight: 600;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+.skills-backup-sep {
+  color: var(--ink-mute);
+}
+
+.skills-backup-time {
+  flex: 1;
+  color: var(--ink-mute);
+  min-width: 0;
+}
+
+.skills-backup-row .skills-action-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .skills-update-filters {

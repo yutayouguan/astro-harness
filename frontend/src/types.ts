@@ -345,6 +345,7 @@ export type SkillOriginRecord = {
   last_updated_at?: number | null;
   remote_version?: string | null;
   remote_updated_at?: number | null;
+  content_digest?: string | null;
 };
 
 /** 更新前本地改动预览（与 Rust `SkillUpdatePreview` 对齐） */
@@ -373,6 +374,15 @@ export type SkillUpdateCheckResult = {
   remote_version: string | null;
   remote_updated_at: number | null;
   message: string;
+};
+
+/** 技能更新本地备份条目（与 Rust `SkillBackupEntry` 对齐） */
+export type SkillBackupEntry = {
+  agent_id: string;
+  folder: string;
+  timestamp: string;
+  path: string;
+  created_at: number | null;
 };
 
 /** 「更新」Tab 筛选：v2 中 `updatable` 仅含 `outdated` */

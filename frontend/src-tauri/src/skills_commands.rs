@@ -2,12 +2,14 @@
 
 use skills::{
     check_updates_for_agent, fetch_detail, install_from_ref, link_skill_to_agent,
-    list_installed_for_agent, list_skill_files_ex, load_skill_by_name,
-    preview_skill_update as skills_preview_skill_update, update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
+    list_installed_for_agent, list_skill_backups as skills_list_skill_backups,
+    list_skill_files_ex, load_skill_by_name,
+    preview_skill_update as skills_preview_skill_update, reveal_skill_backup as skills_reveal_skill_backup,
+    update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
     open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
     read_skill_file_ex, reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
-    InstalledSkill, SkillBundle, SkillStoreFilter, SkillUpdateCheckResult, SkillUpdateItemResult,
-    SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
+    InstalledSkill, SkillBackupEntry, SkillBundle, SkillStoreFilter, SkillUpdateCheckResult,
+    SkillUpdateItemResult, SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
 };
 use skills::models::SkillOriginRecord;
 use skills::origins::load_origins;
@@ -265,4 +267,17 @@ pub async fn open_skill_file(
     id: Option<String>,
 ) -> Result<(), String> {
     open_skill_file_fs(&name, &relative_path, id.as_deref()).map_err(|e| e.to_string())
+}
+
+/// 列举技能更新备份（可选按 Agent 过滤）。
+#[tauri::command]
+pub fn list_skill_backups(agent_id: Option<String>) -> Result<Vec<SkillBackupEntry>, String> {
+    let agent = normalize_agent_id(agent_id);
+    skills_list_skill_backups(agent.as_deref()).map_err(|e| e.to_string())
+}
+
+/// 在文件管理器中显示备份目录。
+#[tauri::command]
+pub fn reveal_skill_backup(path: String) -> Result<(), String> {
+    skills_reveal_skill_backup(&path).map_err(|e| e.to_string())
 }

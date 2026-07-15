@@ -133,6 +133,10 @@ v1 **尚无**可靠「远端是否更新」时：
 | **v2** | 远端对比；真正 outdated 角标与默认筛选 | 有新版本时角标 > 0；已最新不出现在默认列表 |
 | **v3** | 本地改动检测/确认或备份；失败重试细化 | 有未提交改动时更新前有明确提示 |
 
+## 体验打磨
+
+v3 落地后的增量打磨见实现计划 [`2026-07-15-skills-update-polish.md`](../plans/2026-07-15-skills-update-polish.md)。进入「更新」Tab 时按当前 Agent 自动触发一次 `check_skill_updates`（同 Agent 会话内去重，手动「检查更新」可强制）；`current` 技能展示「已是最新」徽章；`SkillOriginRecord` 对齐可选 `content_digest`。Updates 页底部提供「本地备份」区：列出 `~/.astro/skill-backups` 下按 Agent 过滤的备份目录（新→旧），支持在文件管理器中打开；检查/更新成功后刷新列表。本期不做备份删除、定时轮询或补录 `install_ref`。
+
 ## 非目标（本期）
 
 - 手动「补录 install_ref」UI（可后续加）

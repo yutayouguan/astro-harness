@@ -9,6 +9,7 @@
 //! ├── skill / registry   运行时 LoadedSkill
 //! ```
 
+pub mod backups;
 pub mod check;
 pub mod digest;
 pub mod install;
@@ -22,6 +23,7 @@ pub mod skill;
 pub mod store;
 pub mod update;
 
+pub use backups::{list_skill_backups, reveal_skill_backup, SkillBackupEntry};
 pub use install::{install_from_ref, InstallOriginHint};
 pub use update::{
     backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,

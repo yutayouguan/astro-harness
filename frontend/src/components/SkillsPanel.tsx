@@ -11,6 +11,7 @@ import {
   BookOpen,
   Bot,
   Check,
+  ChevronDown,
   CloudDownload,
   Code2,
   Columns2,
@@ -42,7 +43,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
+import type { Locale, MessageKey } from "../i18n/messages";
 import {
   storeCardDescription,
   storeInstallCommand,
@@ -87,6 +88,7 @@ import {
 import type {
   InstalledSkill,
   SkillBundle,
+  SkillBackupEntry,
   SkillFileEntry,
   SkillOriginRecord,
   SkillUpdateCheckResult,
@@ -298,6 +300,24 @@ function formatTildePath(path: string): string {
   return path;
 }
 
+/** 备份目录时间戳 → 本地化日期时间 */
+function formatBackupTime(entry: SkillBackupEntry, locale: Locale): string {
+  const secs =
+    entry.created_at ??
+    (Number.isFinite(Number(entry.timestamp)) ? Number(entry.timestamp) : null);
+  if (secs == null) return entry.timestamp;
+  return new Date(secs * 1000).toLocaleString(
+    locale === "zh" ? "zh-CN" : "en-US",
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  );
+}
+
 /** 加载中旋转图标 */
 /** 加载中旋转图标 */
 function IconLoader(props: SVGProps<SVGSVGElement>) {
@@ -350,7 +370,7 @@ type SkillUpdateConfirmState =
     };
 
 export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { showToast, toastHost } = useTransientToast();
   const [tab, setTab] = useState<SkillsTab>("installed");
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
@@ -403,6 +423,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [updateConfirm, setUpdateConfirm] = useState<SkillUpdateConfirmState | null>(
     null,
   );
+  const [skillBackups, setSkillBackups] = useState<SkillBackupEntry[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [backupsOpen, setBackupsOpen] = useState(true);
 
   const loadMoreLock = useRef(false);
   /** 递增以丢弃切换 Tab / 重新搜索后的过期响应 */
@@ -421,6 +444,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const originsMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
     null,
   );
+  const updateCheckMetaRef = useRef<{ agentId: string; checkedAt: number } | null>(
+    null,
+  );
+  const updateCheckInFlightRef = useRef(false);
   const skillCallsMetaRef = useRef<{
     agentId: string;
     fetchedAt: number;
@@ -460,6 +487,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   useEffect(() => {
     setLastCheckResults([]);
+    updateCheckMetaRef.current = null;
+    setSkillBackups([]);
   }, [agentId]);
 
   const refreshInstalled = useCallback(
@@ -588,6 +617,67 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       }
     },
     [agentId],
+  );
+
+  const loadSkillBackups = useCallback(async () => {
+    if (!isTauri()) {
+      setSkillBackups([]);
+      return;
+    }
+    setLoadingBackups(true);
+    try {
+      const list = await invoke<SkillBackupEntry[]>("list_skill_backups", {
+        agentId,
+      });
+      setSkillBackups(list);
+    } catch {
+      setSkillBackups([]);
+    } finally {
+      setLoadingBackups(false);
+    }
+  }, [agentId]);
+
+  const checkSkillUpdates = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!isTauri()) return;
+      const force = opts?.force ?? false;
+      const meta = updateCheckMetaRef.current;
+      if (!force && meta?.agentId === agentId) return;
+      if (updateCheckInFlightRef.current) return;
+      updateCheckInFlightRef.current = true;
+      setCheckingUpdates(true);
+      setError(null);
+      try {
+        const checks = await invoke<SkillUpdateCheckResult[]>("check_skill_updates", {
+          agentId,
+        });
+        setLastCheckResults(checks);
+        updateCheckMetaRef.current = { agentId, checkedAt: Date.now() };
+        const count = checks.filter((c) => c.status === "outdated").length;
+        if (force) {
+          showToast(
+            count > 0
+              ? t("skills.checkUpdatesDone").replace("{count}", String(count))
+              : t("skills.upToDate"),
+            { tone: count > 0 ? "info" : "success" },
+          );
+        } else if (count > 0) {
+          showToast(
+            t("skills.checkUpdatesDone").replace("{count}", String(count)),
+            { tone: "info" },
+          );
+        }
+        void loadSkillBackups();
+      } catch (err) {
+        const msg = String(err);
+        setError(msg);
+        showToast(msg, { error: true });
+      } finally {
+        updateCheckInFlightRef.current = false;
+        setCheckingUpdates(false);
+      }
+    },
+    [agentId, loadSkillBackups, showToast, t],
   );
 
   /** 切 Tab：新鲜则跳过；过期则静默刷新；Agent 变更/无数据则硬刷 */
@@ -841,6 +931,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const switchAgent = async (id: string) => {
     setAgentId(id);
     setLastCheckResults([]);
+    updateCheckMetaRef.current = null;
     if (!isTauri()) return;
     try {
       await invoke("set_active_agent", { agentId: id });
@@ -867,6 +958,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     ensureMachine();
     void refreshOrigins();
     void refreshSkillCalls();
+    void checkSkillUpdates();
+    void loadSkillBackups();
   }, [
     active,
     tab,
@@ -875,6 +968,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     ensureMachine,
     refreshOrigins,
     refreshSkillCalls,
+    checkSkillUpdates,
+    loadSkillBackups,
   ]);
 
   useEffect(() => {
@@ -1041,6 +1136,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       refreshMachine({ mode: "hard" }),
       refreshOrigins({ mode: "hard" }),
     ]);
+    await loadSkillBackups();
   };
 
   const updateSkillRow = async (row: SkillUpdateRow) => {
@@ -1156,31 +1252,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     setUpdateConfirm(null);
     if (!confirmed) return;
     void runBatchUpdate(targets);
-  };
-
-  const checkSkillUpdates = async () => {
-    if (!isTauri()) return;
-    setCheckingUpdates(true);
-    setError(null);
-    try {
-      const checks = await invoke<SkillUpdateCheckResult[]>("check_skill_updates", {
-        agentId,
-      });
-      setLastCheckResults(checks);
-      const count = checks.filter((c) => c.status === "outdated").length;
-      showToast(
-        count > 0
-          ? t("skills.checkUpdatesDone").replace("{count}", String(count))
-          : t("skills.upToDate"),
-        { tone: count > 0 ? "info" : "success" },
-      );
-    } catch (err) {
-      const msg = String(err);
-      setError(msg);
-      showToast(msg, { error: true });
-    } finally {
-      setCheckingUpdates(false);
-    }
   };
 
   const updateAllSkills = async () => {
@@ -1914,6 +1985,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   {t("skills.outdatedBadge")}
                 </span>
               )}
+              {row.status === "current" && (
+                <span
+                  className="skill-card-link-badge is-current"
+                  title={t("skills.upToDate")}
+                >
+                  {t("skills.upToDate")}
+                </span>
+              )}
               <span className="skill-card-tag" title={origin.install_ref}>
                 {storeBadge(origin.store)} {origin.store}
               </span>
@@ -1924,6 +2003,17 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         </header>
         <div className="skill-card-desc">
           <p>{skill.description || skill.path}</p>
+          {origin &&
+            updateFilter === "with_origin" &&
+            (row.status === "unknown" || row.status === "error") && (
+              <p className="skill-card-status-hint">
+                {t(
+                  row.status === "error"
+                    ? "skills.updateCheckFailed"
+                    : "skills.updateStatusUnknown",
+                )}
+              </p>
+            )}
           <span className="skill-card-tag" title={skill.source_dir}>
             {formatTildePath(skill.source_dir)}
           </span>
@@ -2856,7 +2946,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 disabled={
                   checkingUpdates || updatingAll || updatingFolder !== null
                 }
-                onClick={() => void checkSkillUpdates()}
+                onClick={() => void checkSkillUpdates({ force: true })}
                 title={t("skills.checkUpdates")}
               >
                 {checkingUpdates ? (
@@ -2961,13 +3051,72 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               !loadingOrigins && (
                 <p className="skills-empty" role="listitem">
                   {updateFilter === "updatable"
-                    ? lastCheckResults.length === 0
-                      ? t("skills.updatesNeedCheck")
-                      : t("skills.upToDate")
+                    ? checkingUpdates
+                      ? t("skills.checkingUpdates")
+                      : lastCheckResults.length === 0
+                        ? t("skills.updatesNeedCheck")
+                        : t("skills.upToDate")
                     : t("skills.installedSearchEmpty")}
                 </p>
               )}
             {filteredUpdateRows.map(renderUpdateCard)}
+          </div>
+
+          <div className="skills-backups">
+            <button
+              type="button"
+              className="skills-backups-head"
+              aria-expanded={backupsOpen}
+              onClick={() => setBackupsOpen((open) => !open)}
+            >
+              <ChevronDown
+                size={16}
+                strokeWidth={2.25}
+                className={`skills-backups-chevron ${backupsOpen ? "is-open" : ""}`}
+                aria-hidden
+              />
+              <span>{t("skills.backupsTitle")}</span>
+              {loadingBackups && (
+                <LoaderCircle
+                  size={14}
+                  strokeWidth={2.25}
+                  className="is-spin"
+                  aria-hidden
+                />
+              )}
+            </button>
+            {backupsOpen && (
+              <div className="skills-backups-body">
+                {!loadingBackups && skillBackups.length === 0 ? (
+                  <p className="skills-backups-empty">{t("skills.backupsEmpty")}</p>
+                ) : (
+                  <ul className="skills-backups-list">
+                    {skillBackups.map((entry) => (
+                      <li key={entry.path} className="skills-backup-row">
+                        <span className="skills-backup-folder">{entry.folder}</span>
+                        <span className="skills-backup-sep" aria-hidden>
+                          ·
+                        </span>
+                        <span className="skills-backup-time">
+                          {formatBackupTime(entry, locale)}
+                        </span>
+                        <button
+                          type="button"
+                          className="skills-action-btn"
+                          title={t("skills.backupOpen")}
+                          onClick={() =>
+                            void invoke("reveal_skill_backup", { path: entry.path })
+                          }
+                        >
+                          <FolderOpen size={14} strokeWidth={2.25} aria-hidden />
+                          <span>{t("skills.backupOpen")}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         </section>
       )}
