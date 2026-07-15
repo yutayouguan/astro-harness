@@ -810,7 +810,7 @@ impl AgentLoop {
     /// 将 assistant 回复（可含 tool_calls / reasoning / reasoning_details）写入记忆与会话镜像。
     ///
     /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息；
-    /// 落盘通过 [`MemoryManager::record_message_ex`] 写入富字段。
+    /// 落盘通过 `SessionStore::append_message` 写入富字段。
     pub fn record_assistant_message_with_tools(
         &mut self,
         content: &str,

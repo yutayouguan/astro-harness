@@ -1205,7 +1205,7 @@ impl AstroService for AstroServiceImpl {
     /// 召回 MEMORY.md / USER.md 文本，并按 `query` 搜索历史消息（`limit` 至少 1）。
     ///
     /// # 错误
-    /// MemoryManager 或 session_store 失败 → `internal`。
+    /// SessionStore 失败 → `internal`。
     async fn query_memory(
         &self,
         request: Request<MemoryQuery>,
