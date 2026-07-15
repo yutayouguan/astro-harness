@@ -52,35 +52,33 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    const ALL_KINDS: [GeneratedKind; 8] = [
+        GeneratedKind::Images,
+        GeneratedKind::Videos,
+        GeneratedKind::Audio,
+        GeneratedKind::Code,
+        GeneratedKind::Project,
+        GeneratedKind::Docs,
+        GeneratedKind::Html,
+        GeneratedKind::Other,
+    ];
+
     #[test]
     fn generated_dir_joins_kind_subdir() {
         let ws = Path::new("/Users/a/.astro/workspace");
-        assert_eq!(
-            generated_dir(ws, GeneratedKind::Images),
-            Path::new("/Users/a/.astro/workspace/generated/images")
-        );
-        assert_eq!(
-            generated_dir(ws, GeneratedKind::Videos),
-            Path::new("/Users/a/.astro/workspace/generated/videos")
-        );
-        assert_eq!(
-            generated_dir(ws, GeneratedKind::Audio),
-            Path::new("/Users/a/.astro/workspace/generated/audio")
-        );
+        for kind in ALL_KINDS {
+            let expected = ws
+                .join("generated")
+                .join(kind.dir_name());
+            assert_eq!(generated_dir(ws, kind), expected);
+        }
     }
 
     #[test]
-    fn generated_subdirs_lists_all_seed_folders() {
-        let expected = [
-            "generated/images",
-            "generated/videos",
-            "generated/audio",
-            "generated/code",
-            "generated/project",
-            "generated/docs",
-            "generated/html",
-            "generated/other",
-        ];
-        assert_eq!(GENERATED_SUBDIRS, &expected);
+    fn generated_subdirs_matches_kind_dir_names() {
+        assert_eq!(GENERATED_SUBDIRS.len(), ALL_KINDS.len());
+        for (kind, rel) in ALL_KINDS.iter().zip(GENERATED_SUBDIRS.iter()) {
+            assert_eq!(*rel, format!("generated/{}", kind.dir_name()));
+        }
     }
 }

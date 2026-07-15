@@ -613,6 +613,22 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    fn memory_reexports_generated_paths() {
+        use crate::{generated_dir, GeneratedKind, GENERATED_SUBDIRS};
+        use std::path::Path;
+
+        let ws = Path::new("/agent/ws");
+        assert_eq!(
+            generated_dir(ws, GeneratedKind::Videos),
+            Path::new("/agent/ws/generated/videos")
+        );
+        assert_eq!(GENERATED_SUBDIRS.len(), 8);
+        for rel in GENERATED_SUBDIRS {
+            assert!(rel.starts_with("generated/"));
+        }
+    }
+
+    #[test]
     fn ensure_workspace_creates_core_layout() {
         let dir = TempDir::new().unwrap();
         let report = ensure_workspace(dir.path()).unwrap();

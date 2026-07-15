@@ -75,7 +75,7 @@ resolve_media_targets / 扩展 ImageGenTargets
   → gRPC / ToolContext
       → image_gen | video_gen | tts
           → providers HTTP helpers
-              → workspace/generated/
+              → workspace/generated/{images|videos|audio}/
 ```
 
 ### providers
