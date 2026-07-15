@@ -250,13 +250,9 @@
   font-weight: 650;
   cursor: pointer;
   color: var(--ink-soft);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72)),
-    color-mix(in srgb, #fff 86%, var(--glass-fill, #f8fafc));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 1px 2px rgba(15, 23, 42, 0.04);
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  background: transparent;
+  box-shadow: none;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .mem-view-tab svg {
@@ -264,15 +260,11 @@
   color: inherit;
 }
 
-/* 做梦盖在圆点走线之上 */
+/* 做梦盖在圆点走线之上（未选中同样无底） */
 .mem-view-tab--dream {
   z-index: 2;
-  background:
-    linear-gradient(165deg, #fff, rgba(255, 255, 255, 0.88)),
-    color-mix(in srgb, #fff 96%, var(--glass-fill, #f8fafc));
-  box-shadow:
-    0 4px 14px color-mix(in srgb, var(--tone-green) 8%, rgba(15, 23, 42, 0.05)),
-    inset 0 1px 0 #fff;
+  background: transparent;
+  box-shadow: none;
 }
 
 .mem-view-tab--pending {
@@ -300,39 +292,24 @@ html[data-theme="dark"] .mem-view-nav {
 
 html[data-theme="dark"] .mem-view-tab {
   color: var(--ink-soft);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
-    color-mix(in srgb, rgba(10, 18, 16, 0.82) 70%, var(--glass-fill, #1a1528));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
 }
 
 html[data-theme="dark"] .mem-view-tab svg {
-  opacity: 0.95;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+  opacity: 0.92;
+  filter: none;
 }
 
 html[data-theme="dark"] .mem-view-tab--dream {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
-    color-mix(in srgb, rgba(10, 18, 16, 0.88) 72%, var(--glass-fill, #1a1528));
-  box-shadow:
-    0 6px 16px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  background: transparent;
+  box-shadow: none;
 }
 
-html[data-theme="dark"] .mem-view-tab:hover:not(.active):not(.mem-view-tab--dream) {
+html[data-theme="dark"] .mem-view-tab:hover:not(.active) {
   color: var(--ink);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
-    color-mix(in srgb, var(--tone, var(--tone-green)) 14%, transparent);
-}
-
-html[data-theme="dark"] .mem-view-tab--dream:hover:not(.active) {
-  color: var(--ink);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
-    color-mix(in srgb, var(--tone-green) 12%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--tone-green)) 10%, transparent);
 }
 
 html[data-theme="dark"] .mem-view-tab.active {
@@ -352,18 +329,9 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 60%, transparent);
 }
 
-.mem-view-tab:hover:not(.active):not(.mem-view-tab--dream) {
+.mem-view-tab:hover:not(.active) {
   color: var(--ink);
-  background:
-    linear-gradient(165deg, #fff, rgba(255, 255, 255, 0.82)),
-    color-mix(in srgb, var(--tone, var(--tone-green)) 8%, #fff);
-}
-
-.mem-view-tab--dream:hover:not(.active) {
-  color: var(--ink);
-  background:
-    linear-gradient(165deg, #fff, rgba(255, 255, 255, 0.9)),
-    color-mix(in srgb, var(--tone-green) 6%, #fff);
+  background: color-mix(in srgb, var(--tone, var(--tone-green)) 8%, transparent);
 }
 
 .mem-view-tab.active {
@@ -383,7 +351,7 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
   opacity: 1;
 }
 
-/* 选中做梦时仍盖住细线 */
+/* 选中做梦时仍盖住圆点走线 */
 .mem-view-tab--dream.active {
   background:
     linear-gradient(165deg, #fff, rgba(255, 255, 255, 0.82)),
