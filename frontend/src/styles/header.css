@@ -377,7 +377,7 @@ html[data-theme="dark"] .model-picker.is-empty {
 }
 
 .model-picker-option.is-selected .model-picker-option-badge {
-  color: rgba(255, 255, 255, 0.78);
+  color: color-mix(in srgb, var(--accent) 72%, var(--ink-mute));
 }
 
 .mp-toggle {
