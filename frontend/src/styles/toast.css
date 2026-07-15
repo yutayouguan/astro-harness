@@ -1,5 +1,6 @@
 .astro-toast {
-  --toast-tone: #3b82f6;
+  /* info 跟随当前 Tab 的 shell --tone；语义态另覆盖 */
+  --toast-tone: var(--tone, var(--tone-blue, #3b82f6));
   position: fixed;
   right: 20px;
   bottom: 24px;
@@ -29,7 +30,7 @@
 }
 
 .astro-toast.tone-info {
-  --toast-tone: #3b82f6;
+  --toast-tone: var(--tone, var(--tone-blue, #3b82f6));
 }
 
 .astro-toast.tone-success {
@@ -60,7 +61,7 @@ html[data-theme="dark"] .astro-toast {
 }
 
 html[data-theme="dark"] .astro-toast.tone-info {
-  --toast-tone: #60a5fa;
+  --toast-tone: var(--tone, var(--tone-blue, #60a5fa));
 }
 
 html[data-theme="dark"] .astro-toast.tone-success {

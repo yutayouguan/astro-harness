@@ -3236,7 +3236,7 @@ html[data-theme="light"] .send-btn--round {
 
 .chat-welcome-mark {
   position: relative;
-  width: min(112px, 28vw);
+  width: min(148px, 36vw);
   aspect-ratio: 4 / 3;
   margin-inline: auto;
   display: grid;
