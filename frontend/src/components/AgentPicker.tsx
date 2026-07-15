@@ -11,6 +11,11 @@ import {
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
+import {
+  clampPopover,
+  measurePopoverSize,
+  resolveClipBounds,
+} from "../lib/clampPopover";
 import type { AgentInfo } from "../types/agent";
 import AgentAvatar from "./AgentAvatar";
 
@@ -29,8 +34,6 @@ type Props = {
   /** 新建项文案；默认 chat.newAgent */
   createLabelKey?: MessageKey;
 };
-
-const VIEWPORT_PAD = 8;
 
 /** 下拉菜单 fixed 定位 */
 type MenuPos = {
@@ -77,34 +80,31 @@ function computePos(
   menuEl?: HTMLElement | null,
 ): MenuPos {
   const rect = trigger.getBoundingClientRect();
-  const gap = 6;
-  const maxH = Math.min(300, window.innerHeight * 0.42);
-  const spaceBelow = window.innerHeight - rect.bottom - gap;
-  const spaceAbove = rect.top - gap;
-  const openUp = spaceBelow < Math.min(maxH, 160) && spaceAbove > spaceBelow;
-
+  const bounds = resolveClipBounds(trigger);
   const minW = Math.max(rect.width, 220);
-  const maxW = Math.min(340, window.innerWidth - VIEWPORT_PAD * 2);
-  const measuredW = menuEl
-    ? Math.min(Math.max(menuEl.getBoundingClientRect().width, minW), maxW)
-    : Math.min(minW, maxW);
+  const maxW = Math.min(340, bounds.right - bounds.left - 16);
+  const size = menuEl
+    ? measurePopoverSize(menuEl)
+    : { width: minW, height: 160 };
+  const measuredW = Math.min(Math.max(size.width, minW), maxW);
+  const maxHeightCap = Math.min(300, (bounds.bottom - bounds.top) * 0.42);
 
-  let left = rect.left;
-  if (left + measuredW > window.innerWidth - VIEWPORT_PAD) {
-    left = rect.right - measuredW;
-  }
-  left = Math.min(
-    Math.max(left, VIEWPORT_PAD),
-    window.innerWidth - VIEWPORT_PAD - measuredW,
-  );
+  const clamped = clampPopover({
+    anchorRect: rect,
+    popoverSize: { width: measuredW, height: size.height },
+    bounds,
+    preferAlign: "start",
+    placement: "auto",
+    maxHeightCap,
+    minMaxHeight: 96,
+  });
 
-  const availH = openUp ? spaceAbove : spaceBelow;
   return {
-    top: openUp ? rect.top - gap : rect.bottom + gap,
-    left,
+    top: clamped.top,
+    left: clamped.left,
     width: measuredW,
-    openUp,
-    maxHeight: Math.min(maxH, Math.max(96, availH)),
+    openUp: clamped.placement === "above",
+    maxHeight: clamped.maxHeight,
   };
 }
 
@@ -224,10 +224,7 @@ export default function AgentPicker({
               ...menuToneStyle,
               ...(pos
                 ? {
-                    top: pos.openUp ? undefined : pos.top,
-                    bottom: pos.openUp
-                      ? window.innerHeight - pos.top
-                      : undefined,
+                    top: pos.top,
                     left: pos.left,
                     width: pos.width,
                     maxHeight: pos.maxHeight,

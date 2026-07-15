@@ -13,9 +13,10 @@ import { Check, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
 import {
-  clampModelPickerFlyout,
-  resolveFlyoutBounds,
-} from "../lib/modelPickerFlyout";
+  clampPopover,
+  measurePopoverSize,
+  resolveClipBounds,
+} from "../lib/clampPopover";
 import {
   DEFAULT_MODEL_PREFS,
   loadAllModelPrefs,
@@ -30,8 +31,6 @@ import {
 } from "../lib/modelPrefs";
 import type { ModelInfo, ProviderDto, ProviderModelsResult } from "../types";
 import { ModelBrandIcon } from "./ProviderIcons";
-
-const FLYOUT_VIEWPORT_PAD = 8;
 
 /** 模型选择器入参 */
 type Props = {
@@ -240,18 +239,19 @@ export default function ModelPicker({
       const flyout = flyoutRef.current;
       if (!root || !flyout) return;
       const rootRect = root.getBoundingClientRect();
-      // scrollWidth：不受父级 overflow:hidden 裁切影响，避免低估「列表+编辑」总宽
-      const flyoutWidth = Math.max(flyout.scrollWidth, flyout.offsetWidth);
-      const bounds = resolveFlyoutBounds(root, window.innerWidth);
-      const pos = clampModelPickerFlyout(
-        rootRect,
-        flyoutWidth,
+      const size = measurePopoverSize(flyout);
+      const bounds = resolveClipBounds(root);
+      const pos = clampPopover({
+        anchorRect: rootRect,
+        popoverSize: size,
         bounds,
-        FLYOUT_VIEWPORT_PAD,
-      );
+        preferAlign: "end",
+        placement: "below",
+        gap: 8,
+      });
       setFlyoutStyle({
-        left: pos.left,
-        right: pos.right,
+        left: pos.offsetLeft,
+        right: "auto",
       });
     };
     clamp();

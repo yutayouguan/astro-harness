@@ -10,6 +10,11 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  clampPopover,
+  measurePopoverSize,
+  resolveClipBounds,
+} from "../lib/clampPopover";
 
 /** 下拉选项 */
 export type SelectOption = {
@@ -87,7 +92,7 @@ function CheckIcon() {
 
 /**
  * 按触发器位置计算菜单坐标。
- * 上下：空间不足时向上展开；左右：夹紧在视口内，避免溢出 APP 窗口。
+ * 上下：空间不足时向上展开；左右：夹紧在裁切盒内，避免溢出。
  */
 function computePos(
   trigger: HTMLElement,
@@ -95,40 +100,37 @@ function computePos(
   forceDirection?: "up" | "down",
 ): MenuPos {
   const rect = trigger.getBoundingClientRect();
-  const gap = 6;
-  const maxH = Math.min(260, window.innerHeight * 0.42);
-  const spaceBelow = window.innerHeight - rect.bottom - gap;
-  const spaceAbove = rect.top - gap;
-  const openUp =
-    forceDirection === "up"
-      ? true
-      : forceDirection === "down"
-        ? false
-        : spaceBelow < Math.min(maxH, 160) && spaceAbove > spaceBelow;
-
+  const bounds = resolveClipBounds(trigger);
   const minW = Math.max(rect.width, 140);
-  const maxW = Math.min(280, window.innerWidth - VIEWPORT_PAD * 2);
-  const measuredW = menuEl
-    ? Math.min(Math.max(menuEl.getBoundingClientRect().width, minW), maxW)
-    : Math.min(minW, maxW);
+  const maxW = Math.min(280, bounds.right - bounds.left - VIEWPORT_PAD * 2);
+  const size = menuEl
+    ? measurePopoverSize(menuEl)
+    : { width: minW, height: 160 };
+  const measuredW = Math.min(Math.max(size.width, minW), maxW);
+  const maxHeightCap = Math.min(260, (bounds.bottom - bounds.top) * 0.42);
+  const placement =
+    forceDirection === "up"
+      ? "above"
+      : forceDirection === "down"
+        ? "below"
+        : "auto";
 
-  // 优先与触发器左对齐；右侧溢出时改为右对齐触发器，再夹紧视口
-  let left = rect.left;
-  if (left + measuredW > window.innerWidth - VIEWPORT_PAD) {
-    left = rect.right - measuredW;
-  }
-  left = Math.min(
-    Math.max(left, VIEWPORT_PAD),
-    window.innerWidth - VIEWPORT_PAD - measuredW,
-  );
+  const clamped = clampPopover({
+    anchorRect: rect,
+    popoverSize: { width: measuredW, height: size.height },
+    bounds,
+    preferAlign: "start",
+    placement,
+    maxHeightCap,
+    minMaxHeight: 96,
+  });
 
-  const availH = openUp ? spaceAbove : spaceBelow;
   return {
-    top: openUp ? rect.top - gap : rect.bottom + gap,
-    left,
+    top: clamped.top,
+    left: clamped.left,
     width: measuredW,
-    openUp,
-    maxHeight: Math.min(maxH, Math.max(96, availH)),
+    openUp: clamped.placement === "above",
+    maxHeight: clamped.maxHeight,
   };
 }
 
@@ -303,10 +305,7 @@ export function SelectMenu({
             role="listbox"
             aria-label={ariaLabel}
             style={{
-              top: pos.openUp ? undefined : pos.top,
-              bottom: pos.openUp
-                ? `${window.innerHeight - pos.top}px`
-                : undefined,
+              top: pos.top,
               left: pos.left,
               width: "max-content",
               minWidth: Math.max(pos.width, 140),
