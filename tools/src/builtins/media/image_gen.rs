@@ -258,7 +258,7 @@ async fn generate_one_google(
         out.push_str(&format!("\nsearch_suggestions: {sug}"));
     }
     out.push_str(&format!(
-        "\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）；多轮编辑可传 previous_interaction_id=\"{}\"",
+        "\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）；多轮编辑可传 previous_interaction_id=\"{}\"",
         result.interaction_id
     ));
     Ok(out)
@@ -294,7 +294,7 @@ async fn generate_one_openai_compat(
 
     let rel = save_generated_image(ctx, &img)?;
     let mut out = format!(
-        "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）",
+        "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）",
         creds.provider, creds.model
     );
     if has_advanced_interactions_args(args) {
