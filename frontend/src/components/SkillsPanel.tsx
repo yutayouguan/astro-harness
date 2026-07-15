@@ -29,6 +29,7 @@ import {
   LoaderCircle,
   MoreHorizontal,
   Package,
+  RefreshCw,
   Sparkles,
   Star,
   Terminal,
@@ -59,8 +60,15 @@ import {
 } from "../lib/skillsLazyLoad";
 import {
   collectInstalledSkillKeys,
+  inferFolderFromInstallRef,
   isStoreSkillInstalled as matchStoreSkillInstalled,
 } from "../lib/skillInstalledMatch";
+import {
+  canUpdateSkillFromOrigin,
+  filterUpdateRows,
+  mergeUpdateRows,
+  originMatchesSkill,
+} from "../lib/skillUpdateRows";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agentsChanged";
@@ -79,6 +87,10 @@ import type {
   InstalledSkill,
   SkillBundle,
   SkillFileEntry,
+  SkillOriginRecord,
+  SkillUpdateFilter,
+  SkillUpdateItemResult,
+  SkillUpdateRow,
   StoreSkill,
   StoreSkillDetail,
   SkillStoreId,
@@ -122,8 +134,8 @@ type Props = {
   onInstallWithAgent?: (prompt: string) => void;
 };
 
-/** 顶栏 Tab：已安装 / 本机 / 商店 */
-type SkillsTab = "installed" | "machine" | "online";
+/** 顶栏 Tab：已安装 / 本机 / 更新 / 商店 */
+type SkillsTab = "installed" | "machine" | "updates" | "online";
 /** 内容布局：画廊 / 列表 / 详情 */
 type SkillsView = "gallery" | "list" | "detail";
 /** 已安装列表排序 */
@@ -132,6 +144,15 @@ type CallSort = "name" | "calls";
 type MachineLinkFilter = "all" | "linked" | "unlinked";
 /** 商店列表排序 */
 type StoreSort = "default" | "installs";
+
+const UPDATE_FILTERS: {
+  id: SkillUpdateFilter;
+  labelKey: MessageKey;
+}[] = [
+  { id: "updatable", labelKey: "skills.updatesFilter.updatable" },
+  { id: "with_origin", labelKey: "skills.updatesFilter.withOrigin" },
+  { id: "no_origin", labelKey: "skills.updatesFilter.noOrigin" },
+];
 
 /** 按 Agent 汇总的工具/技能调用次数 */
 type AgentUsageSummary = {
@@ -354,6 +375,12 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [storeSort, setStoreSort] = useState<StoreSort>("default");
   const [storeDetail, setStoreDetail] = useState<StoreSkillDetail | null>(null);
   const [loadingStoreDetail, setLoadingStoreDetail] = useState(false);
+  const [origins, setOrigins] = useState<SkillOriginRecord[]>([]);
+  const [loadingOrigins, setLoadingOrigins] = useState(false);
+  const [updateFilter, setUpdateFilter] =
+    useState<SkillUpdateFilter>("with_origin");
+  const [updatingFolder, setUpdatingFolder] = useState<string | null>(null);
+  const [updatingAll, setUpdatingAll] = useState(false);
 
   const loadMoreLock = useRef(false);
   /** 递增以丢弃切换 Tab / 重新搜索后的过期响应 */
@@ -369,12 +396,16 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const machineMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
     null,
   );
+  const originsMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
+    null,
+  );
   const skillCallsMetaRef = useRef<{
     agentId: string;
     fetchedAt: number;
   } | null>(null);
   const installedRef = useRef<InstalledSkill[]>([]);
   const machineRef = useRef<InstalledSkill[]>([]);
+  const originsRef = useRef<SkillOriginRecord[]>([]);
   const lazyGateRef = useRef<LazyLoadGate>(createLazyLoadGate());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const onlinePaneRef = useRef<HTMLElement | null>(null);
@@ -395,6 +426,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   selectedDetailIdRef.current = selectedDetailId;
   installedRef.current = installed;
   machineRef.current = machineSkills;
+  originsRef.current = origins;
 
   useEffect(() => {
     try {
@@ -467,6 +499,39 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         setError(String(err));
       } finally {
         if (!silent) setLoadingMachine(false);
+      }
+    },
+    [agentId],
+  );
+
+  const refreshOrigins = useCallback(
+    async (opts?: { mode?: "hard" | "silent" }) => {
+      if (!isTauri()) {
+        setOrigins([]);
+        originsRef.current = [];
+        return;
+      }
+      const agentChanged = originsMetaRef.current?.agentId !== agentId;
+      if (agentChanged) {
+        setOrigins([]);
+        originsRef.current = [];
+        originsMetaRef.current = null;
+      }
+      const silent =
+        opts?.mode === "silent" && originsRef.current.length > 0 && !agentChanged;
+      if (!silent) setLoadingOrigins(true);
+      setError(null);
+      try {
+        const list = await invoke<SkillOriginRecord[]>("list_skill_origins", {
+          agentId,
+        });
+        setOrigins(list);
+        originsRef.current = list;
+        originsMetaRef.current = { agentId, fetchedAt: Date.now() };
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        if (!silent) setLoadingOrigins(false);
       }
     },
     [agentId],
@@ -770,6 +835,22 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   }, [active, tab, ensureMachine, refreshSkillCalls]);
 
   useEffect(() => {
+    if (!active || tab !== "updates") return;
+    ensureInstalled();
+    ensureMachine();
+    void refreshOrigins();
+    void refreshSkillCalls();
+  }, [
+    active,
+    tab,
+    agentId,
+    ensureInstalled,
+    ensureMachine,
+    refreshOrigins,
+    refreshSkillCalls,
+  ]);
+
+  useEffect(() => {
     if (!active || tab !== "online") return;
     // 在线安装态依赖本机/Astro 列表：有缓存则轻量保证新鲜，不硬刷
     ensureInstalled();
@@ -900,6 +981,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       await invoke<string>("install_store_skill", {
         installRef: skill.install_ref,
         agentId,
+        name: skill.name,
+        store: skill.store,
+        folder: inferFolderFromInstallRef(skill.install_ref),
       });
       // 留在商店：刷新已安装态后卡片按钮变为「已安装」
       await refreshInstalled({ mode: "hard" });
@@ -916,6 +1000,66 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   const installWithAgent = (skill: StoreSkill) => {
     onInstallWithAgent?.(storeInstallCommand(skill));
+  };
+
+  const updateFolderForRow = (row: SkillUpdateRow): string =>
+    row.origin?.folder?.trim() ||
+    inferFolderFromInstallRef(row.origin?.install_ref ?? "") ||
+    row.skill.id.split(/[/\\]/).filter(Boolean).pop() ||
+    row.skill.name;
+
+  const refreshUpdatesData = async () => {
+    await Promise.all([
+      refreshInstalled({ mode: "hard" }),
+      refreshMachine({ mode: "hard" }),
+      refreshOrigins({ mode: "hard" }),
+    ]);
+  };
+
+  const updateSkillRow = async (row: SkillUpdateRow) => {
+    if (!isTauri() || !row.origin) return;
+    const folder = updateFolderForRow(row);
+    setUpdatingFolder(folder);
+    setError(null);
+    try {
+      await invoke<string>("update_installed_skill", { folder, agentId });
+      await refreshUpdatesData();
+      showToast(t("skills.updateDone").replace("{name}", row.skill.name), {
+        tone: "success",
+      });
+    } catch (err) {
+      const msg = String(err);
+      setError(msg);
+      showToast(msg, { error: true });
+    } finally {
+      setUpdatingFolder(null);
+    }
+  };
+
+  const updateAllSkills = async () => {
+    if (!isTauri()) return;
+    setUpdatingAll(true);
+    setError(null);
+    try {
+      const results = await invoke<SkillUpdateItemResult[]>("update_all_skills", {
+        agentId,
+      });
+      await refreshUpdatesData();
+      const ok = results.filter((r) => r.ok).length;
+      const fail = results.length - ok;
+      showToast(
+        t("skills.updateAllDone")
+          .replace("{ok}", String(ok))
+          .replace("{fail}", String(fail)),
+        { tone: fail > 0 ? "warning" : "success" },
+      );
+    } catch (err) {
+      const msg = String(err);
+      setError(msg);
+      showToast(msg, { error: true });
+    } finally {
+      setUpdatingAll(false);
+    }
   };
 
   const flashCopied = (id: string) => {
@@ -1188,6 +1332,67 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     skillCalls,
   ]);
 
+  const updateRows = useMemo(
+    () => mergeUpdateRows(installed, machineSkills, origins, agentId),
+    [installed, machineSkills, origins, agentId],
+  );
+
+  const filteredUpdateRows = useMemo(
+    () =>
+      [...filterUpdateRows(updateRows, updateFilter)].sort((a, b) =>
+        a.skill.name.toLowerCase().localeCompare(b.skill.name.toLowerCase()),
+      ),
+    [updateRows, updateFilter],
+  );
+
+  const withOriginCount = useMemo(
+    () => updateRows.filter((row) => row.status === "with_origin").length,
+    [updateRows],
+  );
+
+  const agentOrigins = useMemo(
+    () =>
+      origins.filter(
+        (origin) =>
+          normalizeAgentId(origin.agent_id ?? null) === normalizeAgentId(agentId),
+      ),
+    [origins, agentId],
+  );
+
+  const originForSkill = useCallback(
+    (skill: InstalledSkill): SkillOriginRecord | null => {
+      for (const origin of agentOrigins) {
+        if (originMatchesSkill(origin, skill)) return origin;
+      }
+      return null;
+    },
+    [agentOrigins],
+  );
+
+  const renderSkillUpdateButton = (skill: InstalledSkill) => {
+    const origin = originForSkill(skill);
+    if (!canUpdateSkillFromOrigin(skill, origin)) return null;
+    const row: SkillUpdateRow = { skill, origin, status: "with_origin" };
+    const folder = updateFolderForRow(row);
+    const isUpdating = updatingFolder === folder || updatingAll;
+    return (
+      <button
+        type="button"
+        className="skills-action-btn"
+        disabled={isUpdating}
+        onClick={() => void updateSkillRow(row)}
+        title={t("skills.update")}
+      >
+        {isUpdating ? (
+          <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+        ) : (
+          <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+        )}
+        <span>{isUpdating ? t("skills.updating") : t("skills.update")}</span>
+      </button>
+    );
+  };
+
   const sortedStoreResults = useMemo(() => {
     if (storeSort !== "installs") return storeResults;
     return [...storeResults].sort((a, b) => {
@@ -1367,6 +1572,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               : t("skills.view")}
           </span>
         </button>
+        {renderSkillUpdateButton(skill)}
         <div className="skill-card-action-icons">
           <button
             type="button"
@@ -1454,6 +1660,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
             {skill.linked ? t("skills.unlink") : t("skills.link")}
           </span>
         </button>
+        {renderSkillUpdateButton(skill)}
         <div className="skill-card-action-icons">
           <button
             type="button"
@@ -1507,6 +1714,61 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       </div>
     </article>
   );
+
+  const renderUpdateCard = (row: SkillUpdateRow) => {
+    const { skill, origin } = row;
+    const folder = updateFolderForRow(row);
+    const canUpdate = canUpdateSkillFromOrigin(skill, origin);
+    const isUpdating =
+      updatingFolder === folder || (updatingAll && canUpdate);
+    return (
+      <article
+        key={skill.id}
+        role="listitem"
+        className={`tool-card skill-card ${canUpdate ? "is-enabled" : "is-disabled"}`}
+        data-tone={skillTone(skill.id)}
+      >
+        <header className="skill-card-top">
+          <div className="tool-icon skill-card-icon" aria-hidden>
+            <span className="tool-icon-lens" />
+            <span className="tool-icon-glyph">
+              <RefreshCw size={22} strokeWidth={2} />
+            </span>
+          </div>
+          <h3 className="skill-card-title">{skill.name}</h3>
+          {origin ? (
+            <span className="skill-card-tag" title={origin.install_ref}>
+              {storeBadge(origin.store)} {origin.store}
+            </span>
+          ) : (
+            <span className="skill-card-link-badge">{t("skills.updatesFilter.noOrigin")}</span>
+          )}
+        </header>
+        <div className="skill-card-desc">
+          <p>{skill.description || skill.path}</p>
+          <span className="skill-card-tag" title={skill.source_dir}>
+            {formatTildePath(skill.source_dir)}
+          </span>
+        </div>
+        <div className="skill-card-actions">
+          <button
+            type="button"
+            className="skills-action-btn primary skill-card-primary"
+            disabled={!canUpdate || isUpdating || updatingAll}
+            onClick={() => void updateSkillRow(row)}
+            title={canUpdate ? t("skills.update") : t("skills.noOriginHint")}
+          >
+            {isUpdating ? (
+              <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+            ) : (
+              <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+            )}
+            <span>{isUpdating ? t("skills.updating") : t("skills.update")}</span>
+          </button>
+        </div>
+      </article>
+    );
+  };
 
   const renderStoreCard = (skill: StoreSkill) => {
     const already = isStoreSkillInstalled(skill);
@@ -2193,6 +2455,16 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         <button
           type="button"
           role="tab"
+          aria-selected={tab === "updates"}
+          className={`skills-main-tab ${tab === "updates" ? "active" : ""}`}
+          onClick={() => setTab("updates")}
+        >
+          <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+          {t("skills.tab.updates")}
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={tab === "online"}
           className={`skills-main-tab ${tab === "online" ? "active" : ""}`}
           onClick={() => setTab("online")}
@@ -2377,6 +2649,118 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               {filteredMachine.map(renderMachineCard)}
             </div>
           )}
+        </section>
+      )}
+
+      {tab === "updates" && (
+        <section className="skills-pane" role="tabpanel">
+          <header className="skills-pane-head">
+            <div>
+              <h2>{t("skills.updatesTitle")}</h2>
+              <p>{t("skills.updatesSub")}</p>
+              <p className="skills-updates-hint">
+                {t("skills.updateOverwriteHint")}
+              </p>
+            </div>
+            <div className="skills-pane-actions">
+              <AgentPicker
+                agents={agents}
+                value={agentId}
+                onChange={(id) => void switchAgent(id)}
+                labelKey="filespace.agentFilter"
+              />
+              <button
+                type="button"
+                className="skills-action-btn primary"
+                disabled={
+                  withOriginCount === 0 || updatingAll || updatingFolder !== null
+                }
+                onClick={() => void updateAllSkills()}
+                title={t("skills.updateAll")}
+              >
+                {updatingAll ? (
+                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+                ) : (
+                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+                )}
+                <span>{updatingAll ? t("skills.updating") : t("skills.updateAll")}</span>
+              </button>
+              <button
+                type="button"
+                className="skills-icon-btn"
+                onClick={() => {
+                  void refreshInstalled({ mode: "hard" });
+                  void refreshMachine({ mode: "hard" });
+                  void refreshOrigins({ mode: "hard" });
+                }}
+                disabled={loadingInstalled || loadingMachine || loadingOrigins}
+                title={
+                  loadingInstalled || loadingMachine || loadingOrigins
+                    ? t("skills.refreshing")
+                    : t("skills.refresh")
+                }
+                aria-label={
+                  loadingInstalled || loadingMachine || loadingOrigins
+                    ? t("skills.refreshing")
+                    : t("skills.refresh")
+                }
+              >
+                <IconRefresh
+                  width={16}
+                  height={16}
+                  className={
+                    loadingInstalled || loadingMachine || loadingOrigins
+                      ? "is-spin"
+                      : undefined
+                  }
+                />
+              </button>
+            </div>
+          </header>
+
+          <div className="skills-updates-toolbar">
+            <div
+              className="skills-update-filters"
+              role="tablist"
+              aria-label={t("skills.updatesTitle")}
+            >
+              {UPDATE_FILTERS.map(({ id, labelKey }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={updateFilter === id}
+                  className={`skills-update-filter ${updateFilter === id ? "active" : ""}`}
+                  onClick={() => setUpdateFilter(id)}
+                >
+                  {t(labelKey)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="skills-error">{error}</p>}
+
+          <div className="skills-gallery is-list" role="list">
+            {updateRows.length === 0 &&
+              !loadingInstalled &&
+              !loadingMachine &&
+              !loadingOrigins && (
+                <p className="skills-empty" role="listitem">
+                  {t("skills.installedEmpty")}
+                </p>
+              )}
+            {updateRows.length > 0 &&
+              filteredUpdateRows.length === 0 &&
+              !loadingInstalled &&
+              !loadingMachine &&
+              !loadingOrigins && (
+                <p className="skills-empty" role="listitem">
+                  {t("skills.installedSearchEmpty")}
+                </p>
+              )}
+            {filteredUpdateRows.map(renderUpdateCard)}
+          </div>
         </section>
       )}
 

@@ -1,0 +1,292 @@
+//! 技能安装来源持久化（`skill-origins.json`）。
+
+use std::fs;
+use std::path::PathBuf;
+
+use anyhow::{Context, Result};
+
+use crate::models::{SkillOriginRecord, SkillOriginsFile};
+
+const ORIGINS_FILE: &str = "skill-origins.json";
+
+/// 解析本机 Astro 数据根目录。
+fn memory_dir() -> PathBuf {
+    std::env::var("ASTRO_MEMORY_DIR")
+        .map(PathBuf::from)
+        .or_else(|_| {
+            std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .map(|h| PathBuf::from(h).join(".astro"))
+        })
+        .unwrap_or_else(|_| PathBuf::from(".astro"))
+}
+
+/// 规范化 Agent id：空/`default` → `workspace`（与 `install` 一致）。
+fn normalize_agent_id(agent_id: Option<&str>) -> String {
+    match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some("default") | None => "workspace".to_string(),
+        Some(id) => id.to_string(),
+    }
+}
+
+fn origin_key(agent_id: Option<&str>, folder: &str) -> (String, String) {
+    (normalize_agent_id(agent_id), folder.to_string())
+}
+
+/// `skill-origins.json` 路径。
+pub fn origins_path() -> PathBuf {
+    memory_dir().join(ORIGINS_FILE)
+}
+
+/// 读取来源清单；缺失或空文件时返回默认空清单。
+pub fn load_origins() -> Result<SkillOriginsFile> {
+    let path = origins_path();
+    if !path.exists() {
+        return Ok(SkillOriginsFile {
+            version: 1,
+            records: Vec::new(),
+        });
+    }
+    let text = fs::read_to_string(&path)
+        .with_context(|| format!("read {}", path.display()))?;
+    if text.trim().is_empty() {
+        return Ok(SkillOriginsFile {
+            version: 1,
+            records: Vec::new(),
+        });
+    }
+    serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))
+}
+
+/// 写入来源清单。
+pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
+    let path = origins_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(file)?;
+    fs::write(&path, json).with_context(|| format!("write {}", path.display()))?;
+    Ok(())
+}
+
+/// 按 `(agent_id, folder)` 插入或更新；更新时写入新记录的 `last_updated_at`。
+pub fn upsert_origin(record: SkillOriginRecord) -> Result<()> {
+    let key = origin_key(record.agent_id.as_deref(), &record.folder);
+    let mut file = load_origins()?;
+    if let Some(existing) = file.records.iter_mut().find(|r| {
+        origin_key(r.agent_id.as_deref(), &r.folder) == key
+    }) {
+        *existing = record;
+    } else {
+        file.records.push(record);
+    }
+    save_origins(&file)
+}
+
+/// 按 Agent 与文件夹名查找来源记录。
+pub fn find_origin(
+    agent_id: Option<&str>,
+    folder: &str,
+) -> Result<Option<SkillOriginRecord>> {
+    let key = origin_key(agent_id, folder);
+    let file = load_origins()?;
+    Ok(file
+        .records
+        .into_iter()
+        .find(|r| origin_key(r.agent_id.as_deref(), &r.folder) == key))
+}
+
+/// 从 `install_ref` 推断商店名（`skillhub:` / `clawhub:` 等前缀）。
+pub fn infer_store(install_ref: &str) -> String {
+    let r = install_ref.trim();
+    if let Some(rest) = r.strip_prefix("skillhub:") {
+        let _ = rest;
+        return "skillhub".to_string();
+    }
+    if let Some(rest) = r.strip_prefix("clawhub:") {
+        let _ = rest;
+        return "clawhub".to_string();
+    }
+    if r.contains("api.skillhub.cn/") || r.contains("skillhub.cn/") {
+        return "skillhub".to_string();
+    }
+    if r.contains("skills.sh/") {
+        return "skillsdotsh".to_string();
+    }
+    if let Some((prefix, _)) = r.split_once(':') {
+        if !prefix.is_empty() {
+            return prefix.to_string();
+        }
+    }
+    "unknown".to_string()
+}
+
+/// 从 `install_ref` 推断本地技能文件夹名。
+pub fn infer_folder(install_ref: &str) -> Option<String> {
+    let r = install_ref.trim();
+    if let Some(rest) = r.strip_prefix("skillhub:") {
+        let slug = rest.rsplit('/').next().unwrap_or(rest).trim();
+        return (!slug.is_empty()).then(|| slug.to_string());
+    }
+    if let Some(rest) = r.strip_prefix("clawhub:") {
+        let slug = rest.trim();
+        if let Some((_, folder)) = slug.rsplit_once("--") {
+            let folder = folder.trim();
+            return (!folder.is_empty()).then(|| folder.to_string());
+        }
+        return None;
+    }
+    if r.contains("api.skillhub.cn/") || r.contains("skillhub.cn/") {
+        let slug = r.trim_end_matches('/').rsplit('/').next()?.trim();
+        return (!slug.is_empty()).then(|| slug.to_string());
+    }
+    if let Some((_, path)) = r.split_once(':') {
+        let segment = path.trim_end_matches('/').rsplit('/').next()?.trim();
+        return (!segment.is_empty()).then(|| segment.to_string());
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::SkillOriginRecord;
+    use std::sync::Mutex;
+    use tempfile::tempdir;
+
+    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn upsert_same_folder_updates_not_duplicates() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        upsert_origin(SkillOriginRecord {
+            folder: "ppt-generator-skill".into(),
+            skill_id: None,
+            name: "a".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:x/ppt-generator-skill".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 1,
+            last_updated_at: None,
+            remote_version: None,
+            remote_updated_at: None,
+        })
+        .unwrap();
+        upsert_origin(SkillOriginRecord {
+            folder: "ppt-generator-skill".into(),
+            skill_id: None,
+            name: "a".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:x/ppt-generator-skill".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 1,
+            last_updated_at: Some(2),
+            remote_version: None,
+            remote_updated_at: None,
+        })
+        .unwrap();
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 1);
+        assert_eq!(file.records[0].last_updated_at, Some(2));
+    }
+
+    #[test]
+    fn infer_folder_from_skillhub_and_clawhub() {
+        assert_eq!(
+            infer_folder("skillhub:owner/ppt-generator-skill").as_deref(),
+            Some("ppt-generator-skill")
+        );
+        assert_eq!(
+            infer_folder("clawhub:steipete--weather").as_deref(),
+            Some("weather")
+        );
+    }
+
+    #[test]
+    fn missing_file_returns_empty_origins() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.version, 1);
+        assert!(file.records.is_empty());
+    }
+
+    #[test]
+    fn upsert_none_agent_id_matches_workspace() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        upsert_origin(SkillOriginRecord {
+            folder: "demo".into(),
+            skill_id: None,
+            name: "demo".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:x/demo".into(),
+            agent_id: None,
+            scope: None,
+            installed_at: 1,
+            last_updated_at: None,
+            remote_version: None,
+            remote_updated_at: None,
+        })
+        .unwrap();
+        upsert_origin(SkillOriginRecord {
+            folder: "demo".into(),
+            skill_id: None,
+            name: "demo".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:x/demo".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 1,
+            last_updated_at: Some(9),
+            remote_version: None,
+            remote_updated_at: None,
+        })
+        .unwrap();
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 1);
+        assert_eq!(file.records[0].last_updated_at, Some(9));
+    }
+
+    #[test]
+    fn infer_store_from_prefix() {
+        assert_eq!(infer_store("skillhub:owner/slug"), "skillhub");
+        assert_eq!(infer_store("clawhub:owner--slug"), "clawhub");
+    }
+
+    #[test]
+    fn record_after_install_upserts() {
+        use crate::install::{record_after_install, InstallOriginHint};
+
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        record_after_install(
+            "skillhub:owner/demo-skill",
+            Some("workspace"),
+            &InstallOriginHint {
+                name: Some("Demo".into()),
+                store: Some("skillhub".into()),
+                folder: Some("demo-skill".into()),
+            },
+        )
+        .unwrap();
+        let o = find_origin(Some("workspace"), "demo-skill")
+            .unwrap()
+            .unwrap();
+        assert_eq!(o.install_ref, "skillhub:owner/demo-skill");
+        assert_eq!(o.store, "skillhub");
+        assert_eq!(o.name, "Demo");
+    }
+}

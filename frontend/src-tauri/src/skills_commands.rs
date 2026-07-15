@@ -2,11 +2,15 @@
 
 use skills::{
     fetch_detail, install_from_ref, link_skill_to_agent, list_installed_for_agent,
-    list_skill_files_ex, load_skill_by_name,
+    list_skill_files_ex, load_skill_by_name, update_all_with_origin,
+    update_installed_skill as skills_update_installed_skill, InstallOriginHint,
     open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
     read_skill_file_ex, reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
-    InstalledSkill, SkillBundle, SkillStoreFilter, StoreSkill, StoreSkillDetail,
+    InstalledSkill, SkillBundle, SkillStoreFilter, SkillUpdateItemResult, StoreSkill,
+    StoreSkillDetail,
 };
+use skills::models::SkillOriginRecord;
+use skills::origins::load_origins;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -33,6 +37,59 @@ fn normalize_agent_id(agent_id: Option<String>) -> Option<String> {
                 s
             }
         })
+}
+
+fn origin_agent_id(record: &SkillOriginRecord) -> String {
+    match record
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some("default") | None => "workspace".to_string(),
+        Some(id) => id.to_string(),
+    }
+}
+
+/// Tauri 命令：list_skill_origins。
+#[tauri::command]
+pub async fn list_skill_origins(
+    agent_id: Option<String>,
+) -> Result<Vec<SkillOriginRecord>, String> {
+    let file = load_origins().map_err(|e| e.to_string())?;
+    let filter_agent = normalize_agent_id(agent_id);
+    let records = match filter_agent.as_deref() {
+        Some(target) => file
+            .records
+            .into_iter()
+            .filter(|r| origin_agent_id(r) == target)
+            .collect(),
+        None => file.records,
+    };
+    Ok(records)
+}
+
+/// Tauri 命令：update_installed_skill。
+#[tauri::command]
+pub async fn update_installed_skill(
+    folder: String,
+    agent_id: Option<String>,
+) -> Result<String, String> {
+    let agent = normalize_agent_id(agent_id);
+    skills_update_installed_skill(agent.as_deref(), &folder)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Tauri 命令：update_all_skills。
+#[tauri::command]
+pub async fn update_all_skills(
+    agent_id: Option<String>,
+) -> Result<Vec<SkillUpdateItemResult>, String> {
+    let agent = normalize_agent_id(agent_id);
+    update_all_with_origin(agent.as_deref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：list_installed_skills。
@@ -98,9 +155,17 @@ pub async fn link_machine_skill(
 pub async fn install_store_skill(
     install_ref: String,
     agent_id: Option<String>,
+    name: Option<String>,
+    store: Option<String>,
+    folder: Option<String>,
 ) -> Result<String, String> {
     let agent = normalize_agent_id(agent_id);
-    install_from_ref(&install_ref, agent.as_deref())
+    let hint = InstallOriginHint {
+        name,
+        store,
+        folder,
+    };
+    install_from_ref(&install_ref, agent.as_deref(), Some(hint))
         .await
         .map_err(|e| e.to_string())
 }
