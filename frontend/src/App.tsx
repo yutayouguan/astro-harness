@@ -1157,18 +1157,10 @@ export default function App() {
               servers: next,
               agentId: null,
             });
-            setToastMsg(
+            showTransientToast(
               t("chat.mentionMcpEnabled", {
                 names: resolved.enableMcpNames.join(", "),
               }),
-            );
-            setToastVisible(true);
-            if (hideTimerRef.current != null) {
-              window.clearTimeout(hideTimerRef.current);
-            }
-            hideTimerRef.current = window.setTimeout(
-              () => setToastVisible(false),
-              4000,
             );
           } catch (e) {
             console.warn("enable mcp failed", e);
@@ -1176,18 +1168,10 @@ export default function App() {
         }
 
         if (resolved.loadedSkills.length > 0) {
-          setToastMsg(
+          showTransientToast(
             t("chat.skillLoaded", {
               names: resolved.loadedSkills.join(", "),
             }),
-          );
-          setToastVisible(true);
-          if (hideTimerRef.current != null) {
-            window.clearTimeout(hideTimerRef.current);
-          }
-          hideTimerRef.current = window.setTimeout(
-            () => setToastVisible(false),
-            3500,
           );
         }
       } catch (e) {
@@ -1477,9 +1461,7 @@ export default function App() {
             payload.operation === "background_review" &&
             payload.content
           ) {
-            setToastMsg(payload.content);
-            setToastVisible(true);
-            window.setTimeout(() => setToastVisible(false), 4000);
+            showTransientToast(payload.content);
           }
         } else if (payload.type === "hook") {
           const title = payload.name || "hook";
@@ -1720,6 +1702,7 @@ export default function App() {
     flushStreamTokens,
     flushToolDeltas,
     settleMessageUsage,
+    showTransientToast,
   ]);
 
   const onUiAction = useCallback(
@@ -3126,7 +3109,12 @@ export default function App() {
           </div>
         </section>
       </div>
-      <Toast message={toastMsg} visible={toastVisible} />
+      <Toast
+        key={toastEpoch}
+        message={toastMsg}
+        visible={toastVisible}
+        onDismiss={dismissToast}
+      />
     </div>
   );
 }
