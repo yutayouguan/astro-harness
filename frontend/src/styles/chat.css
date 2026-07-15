@@ -4447,10 +4447,6 @@ html[data-theme="dark"] .agent-icon-drawer-foot {
 }
 
 /* ── Lucide emoji picker ── */
-.lucide-picker-head {
-  padding: 0;
-}
-
 .lucide-picker-title {
   margin: 0;
   font-size: 0.92rem;

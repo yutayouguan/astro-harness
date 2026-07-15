@@ -92,7 +92,6 @@ export default function LucideIconPicker({
   const [customTo, setCustomTo] = useState("#06b6d4");
   const inputRef = useRef<HTMLInputElement | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const icons = useMemo(() => filterLucideAgentIcons(query), [query]);
 
@@ -138,7 +137,6 @@ export default function LucideIconPicker({
       }}
     >
       <div
-        ref={panelRef}
         className="agent-icon-drawer lucide-picker-drawer"
         style={{
           ["--tone" as string]: "var(--tone-blue)",
