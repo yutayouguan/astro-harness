@@ -1,7 +1,7 @@
 .agent-tools-page {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 4px 2px 8px;
   display: flex;
   flex-direction: column;
@@ -10,8 +10,35 @@
   --tone-soft: var(--tone-orange-soft);
 }
 
-.agent-tools-page:has(.tools-detail) {
+/* 工具内容区：独立滚动，固定圆角裁切 */
+.agent-tools-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
   overflow: hidden;
+}
+
+.agent-tools-body > .anim-switch {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: inherit;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 详情双栏：内层自滚，外层不抢滚 */
+.agent-tools-body:has(.tools-detail) > .anim-switch {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-tools-body:has(.tools-detail) > .anim-switch > .tools-detail {
+  flex: 1;
+  min-height: 0;
 }
 
 .tool-main-tabs {

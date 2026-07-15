@@ -839,6 +839,7 @@ export default function ToolsPanel({
         </button>
       </div>
 
+      <div className="agent-tools-body">
       <AnimatedSwitch switchKey={tab} className="anim-switch--fill">
       {tab === "builtin" && (
         <>
@@ -1229,6 +1230,7 @@ export default function ToolsPanel({
         </>
       )}
       </AnimatedSwitch>
+      </div>
 
       {showAdd && (
         <McpAddDialog
