@@ -90,7 +90,7 @@ async fn synthesize_google(
     };
     let client = reqwest::Client::new();
     let wav = google_tts_generate(&client, text, voice, &config).await?;
-    let dir = ctx.workspace_dir.join("generated");
+    let dir = ctx.workspace_dir.join("generated").join("audio");
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(format!(
         "tts-{}-{}.wav",
@@ -98,9 +98,12 @@ async fn synthesize_google(
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     ));
     std::fs::write(&path, &wav)?;
+    let rel = path
+        .strip_prefix(&ctx.workspace_dir)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.display().to_string());
     Ok(format!(
-        "语音已生成：{}\nprovider=google\nmodel={model}",
-        path.display()
+        "语音已生成：{rel}\nprovider=google\nmodel={model}"
     ))
 }
 
@@ -130,7 +133,7 @@ async fn synthesize_openai(
         anyhow::bail!("OpenAI TTS HTTP {status}: {err}");
     }
     let bytes = resp.bytes().await?;
-    let dir = ctx.workspace_dir.join("generated");
+    let dir = ctx.workspace_dir.join("generated").join("audio");
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(format!(
         "tts-{}-{}.mp3",
@@ -138,9 +141,12 @@ async fn synthesize_openai(
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     ));
     std::fs::write(&path, &bytes)?;
+    let rel = path
+        .strip_prefix(&ctx.workspace_dir)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.display().to_string());
     Ok(format!(
-        "语音已生成：{}\nprovider=openai\nmodel=gpt-4o-mini-tts",
-        path.display()
+        "语音已生成：{rel}\nprovider=openai\nmodel=gpt-4o-mini-tts"
     ))
 }
 

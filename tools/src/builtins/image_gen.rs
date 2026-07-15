@@ -1,7 +1,7 @@
 //! 图片生成工具：按文本提示调用 Google / OpenAI 等图片 Provider。
 //!
 //! 凭据来自 [`ToolContext::image_gen_targets`]：先试 primary，失败再试 fallback。
-//! 成功图片写入工作区 `generated/`。
+//! 成功图片写入工作区 `generated/images/`。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -68,7 +68,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         match generate_one(ctx, prompt, aspect_ratio, creds).await {
             Ok(path) => {
                 return Ok(format!(
-                    "图片已生成：{path}\nprovider={}\nmodel={}",
+                    "图片已生成：{path}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）",
                     creds.provider, creds.model
                 ));
             }
@@ -120,7 +120,7 @@ async fn generate_one(
         .next()
         .ok_or_else(|| anyhow::anyhow!("未返回图片数据"))?;
 
-    let dir = ctx.workspace_dir.join("generated");
+    let dir = ctx.workspace_dir.join("generated").join("images");
     std::fs::create_dir_all(&dir)?;
     let ext = if img.mime_type.contains("jpeg") || img.mime_type.contains("jpg") {
         "jpg"
@@ -137,5 +137,9 @@ async fn generate_one(
     );
     let path = dir.join(filename);
     std::fs::write(&path, &img.data)?;
-    Ok(path.display().to_string())
+    let rel = path
+        .strip_prefix(&ctx.workspace_dir)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.display().to_string());
+    Ok(rel)
 }

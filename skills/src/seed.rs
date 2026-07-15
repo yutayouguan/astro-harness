@@ -169,17 +169,41 @@ const BUNDLED_STORYBOARD_VIDEO_MD: &str =
 /// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
 pub const BUNDLED_SKILLS: &[(&str, &str)] = &[("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD)];
 
-/// 将内置 Skill 复制到 `base/skills/<name>/`（已存在则跳过）。
+/// 从 SKILL.md frontmatter 解析 `astro_bundled_rev`（缺省 0）。
+fn bundled_rev_in(body: &str) -> u32 {
+    for line in body.lines().take(40) {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("astro_bundled_rev:") {
+            if let Ok(n) = rest.trim().parse::<u32>() {
+                return n;
+            }
+        }
+    }
+    0
+}
+
+/// 将内置 Skill 写入 `base/skills/<name>/`。
+///
+/// - 不存在 → 安装  
+/// - 已存在且 `astro_bundled_rev` ≥ 内置版本 → 跳过  
+/// - 已存在但版本落后或无 rev → 覆盖更新 SKILL.md（便于补装新版分镜 Skill）
 pub fn seed_bundled_into(base: &Path) -> SeedReport {
     let _ = fs::create_dir_all(base.join("skills"));
     let mut report = SeedReport::default();
     for &(name, body) in BUNDLED_SKILLS {
-        if is_public_skill_installed(base, name) {
-            report.skipped.push(name.to_string());
-            continue;
-        }
         let dest = base.join("skills").join(name);
-        match fs::create_dir_all(&dest).and_then(|_| fs::write(dest.join("SKILL.md"), body)) {
+        let skill_md = dest.join("SKILL.md");
+        let want = bundled_rev_in(body);
+        if skill_md.is_file() {
+            let have = fs::read_to_string(&skill_md)
+                .map(|s| bundled_rev_in(&s))
+                .unwrap_or(0);
+            if have >= want && want > 0 {
+                report.skipped.push(name.to_string());
+                continue;
+            }
+        }
+        match fs::create_dir_all(&dest).and_then(|_| fs::write(&skill_md, body)) {
             Ok(()) => report.installed.push(name.to_string()),
             Err(_) => report.failed.push(name.to_string()),
         }
@@ -251,9 +275,27 @@ mod tests {
         )
         .unwrap();
         assert!(body.contains("storyboard-video"));
+        assert!(body.contains("astro_bundled_rev:"));
         let r2 = seed_bundled_into(dir.path());
         assert!(r2.installed.is_empty());
         assert_eq!(r2.skipped, vec!["storyboard-video".to_string()]);
+    }
+
+    #[test]
+    fn seed_bundled_upgrades_stale_rev() {
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("skills/storyboard-video");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(
+            dest.join("SKILL.md"),
+            "---\nname: storyboard-video\nastro_bundled_rev: 1\n---\nold\n",
+        )
+        .unwrap();
+        let r = seed_bundled_into(dir.path());
+        assert_eq!(r.installed, vec!["storyboard-video".to_string()]);
+        let body = fs::read_to_string(dest.join("SKILL.md")).unwrap();
+        assert!(bundled_rev_in(&body) >= 2);
+        assert!(body.contains("先出图再出视频"));
     }
 
     #[test]

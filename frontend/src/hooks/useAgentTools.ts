@@ -204,6 +204,8 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "reference_image", type: "string", optional: true },
       { name: "image", type: "string", optional: true },
       { name: "last_frame", type: "string", optional: true },
+      { name: "person_generation", type: "string", optional: true },
+      { name: "seed", type: "number", optional: true },
     ],
   },
   {

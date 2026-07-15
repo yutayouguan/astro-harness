@@ -1,7 +1,7 @@
 # 分镜短视频：扩 `video_gen` + 内置 Skill
 
 日期：2026-07-15  
-状态：已实现  
+状态：已实现（含校验/相对路径/进度文件/分目录/Skill rev 补装）  
 关联：[Gemini 媒体扩展参数](./2026-07-15-gemini-media-extra-params-design.md)；[OpenAI 兼容视频字段](https://ai.google.dev/gemini-api/docs/openai)
 
 ## 背景

@@ -275,6 +275,9 @@ pub struct VideoGenExtras {
     pub negative_prompt: Option<String>,
     pub style: Option<String>,
     pub extend_video_id: Option<String>,
+    /// `allow_adult` / `allow_all` / `dont_allow`
+    pub person_generation: Option<String>,
+    pub seed: Option<i64>,
     pub image: Option<VideoImagePart>,
     pub last_frame: Option<VideoImagePart>,
     pub reference_image: Option<VideoImagePart>,
@@ -289,11 +292,14 @@ fn multipart_image(field: &str, img: VideoImagePart) -> Result<(String, reqwest:
 }
 
 /// 创建并轮询 Google OpenAI 兼容视频，完成后下载字节。
+///
+/// `on_progress` 在创建成功与每次轮询时回调（如 `status=processing`）。
 pub async fn google_openai_generate_video(
     client: &Client,
     prompt: &str,
     config: &ProviderConfig,
     extras: &VideoGenExtras,
+    mut on_progress: Option<&mut dyn FnMut(&str)>,
 ) -> Result<GeneratedVideo> {
     if config.api_key.trim().is_empty() {
         anyhow::bail!("Google API Key 为空");
@@ -352,6 +358,17 @@ pub async fn google_openai_generate_video(
     {
         form = form.text("extend_video_id", id.to_string());
     }
+    if let Some(pg) = extras
+        .person_generation
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        form = form.text("person_generation", pg.to_string());
+    }
+    if let Some(seed) = extras.seed {
+        form = form.text("seed", seed.to_string());
+    }
     if let Some(img) = extras.image.clone() {
         let (name, part) = multipart_image("image", img)?;
         form = form.part(name, part);
@@ -365,6 +382,13 @@ pub async fn google_openai_generate_video(
         form = form.part(name, part);
     }
 
+    let emit = |cb: &mut Option<&mut dyn FnMut(&str)>, msg: &str| {
+        if let Some(f) = cb.as_mut() {
+            f(msg);
+        }
+    };
+
+    emit(&mut on_progress, "status=creating");
     let create_resp = client
         .post(&create_url)
         .bearer_auth(&config.api_key)
@@ -390,9 +414,13 @@ pub async fn google_openai_generate_video(
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow!("视频响应缺少 id"))?
         .to_string();
+    emit(
+        &mut on_progress,
+        &format!("status=queued operation_id={op_id}"),
+    );
 
     let poll_url = format!("{base}/videos/{op_id}");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(8 * 60);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10 * 60);
     loop {
         if tokio::time::Instant::now() > deadline {
             anyhow::bail!("视频生成超时（operation id={op_id}）");
@@ -416,12 +444,17 @@ pub async fn google_openai_generate_video(
             .get("status")
             .and_then(|s| s.as_str())
             .unwrap_or("processing");
+        emit(
+            &mut on_progress,
+            &format!("status={state} operation_id={op_id}"),
+        );
         match state {
             "completed" => {
                 let url = body
                     .get("url")
                     .and_then(|u| u.as_str())
                     .ok_or_else(|| anyhow!("视频已完成但缺少 url（id={op_id}）"))?;
+                emit(&mut on_progress, "status=downloading");
                 let bytes = client
                     .get(url)
                     .bearer_auth(&config.api_key)
@@ -433,6 +466,7 @@ pub async fn google_openai_generate_video(
                     .bytes()
                     .await
                     .context("读取视频字节失败")?;
+                emit(&mut on_progress, "status=completed");
                 return Ok(GeneratedVideo {
                     data: bytes.to_vec(),
                     mime_type: "video/mp4".to_string(),
