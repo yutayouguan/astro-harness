@@ -3354,13 +3354,6 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   background-clip: text;
 }
 
-html[data-theme="dark"] .chat-welcome-mark-ring {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    color-mix(in srgb, var(--glass-bg, rgba(28, 20, 48, 0.85)) 88%, transparent);
-  border-color: color-mix(in srgb, var(--tone-blue) 34%, rgba(255, 255, 255, 0.14));
-}
-
 html[data-theme="dark"] .chat-welcome-wordmark-agent {
   color: color-mix(in srgb, var(--ink-mute) 90%, #fff);
 }
