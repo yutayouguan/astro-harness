@@ -908,6 +908,17 @@ html[data-theme="dark"] .cron-sched-modes {
     0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
+html[data-theme="dark"] .cron-sched-mode:hover:not(.active) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+html[data-theme="dark"] .cron-sched-mode.active {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
 .cron-sched-mode.active > svg {
   opacity: 1;
 }
@@ -1167,6 +1178,13 @@ html[data-theme="dark"] .cron-sched-wd {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
+html[data-theme="dark"] .cron-sched-wd.active {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.12));
+  box-shadow: none;
+}
+
 /* 玻璃日期时间弹层（紧凑尺寸） */
 .cron-dt-pop {
   --tone: var(--tone-teal);
@@ -1297,6 +1315,12 @@ html[data-theme="dark"] .cron-dt-pop {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
 }
 
+html[data-theme="dark"] .cron-dt-day.is-selected {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 32%, transparent);
+}
+
 .cron-dt-time {
   display: flex;
   align-items: center;
@@ -1329,7 +1353,8 @@ html[data-theme="dark"] .cron-dt-pop {
 }
 
 html[data-theme="dark"] .cron-dt-time-input {
-  background: color-mix(in srgb, #fff 8%, transparent);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .cron-dt-time-sep {

@@ -469,6 +469,19 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   background: color-mix(in srgb, #ef4444 10%, transparent);
 }
 
+html[data-theme="dark"] .mcp-server-remove {
+  color: var(--ink-mute);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .mcp-server-remove:hover {
+  color: #f87171;
+  border-color: color-mix(in srgb, #ef4444 32%, transparent);
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+}
+
 .mcp-tool-list {
   display: flex;
   flex-direction: column;
@@ -813,6 +826,17 @@ html[data-theme="dark"] .mcp-add-drawer-tabs {
     0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
+html[data-theme="dark"] .mcp-add-drawer-tab:hover:not(.active) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+html[data-theme="dark"] .mcp-add-drawer-tab.active {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
 .mcp-add-drawer-tab.active > svg {
   opacity: 1;
 }
@@ -1075,6 +1099,22 @@ html[data-theme="dark"] .mcp-field-textarea {
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone) 16%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+html[data-theme="dark"] .mcp-btn-primary {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
+  color: color-mix(in srgb, #fff 36%, var(--tone));
+  border-color: color-mix(in srgb, var(--tone) 42%, rgba(255, 255, 255, 0.16));
+  background: color-mix(in srgb, var(--tone) 24%, transparent);
+  box-shadow: none;
 }
 
 .mcp-btn-primary:disabled {

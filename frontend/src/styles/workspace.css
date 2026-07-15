@@ -100,12 +100,28 @@
 }
 
 html[data-theme="dark"] .ws-tool-btn {
+  color: color-mix(in srgb, #fff 28%, var(--tone, var(--tone-purple, #8b5cf6)));
   background: color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 14%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="dark"] .ws-tool-btn:hover:not(:disabled) {
+  color: color-mix(in srgb, #fff 36%, var(--tone, var(--tone-purple, #8b5cf6)));
+  background: color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 22%, transparent);
   box-shadow: none;
 }
 
 html[data-theme="dark"] .ws-tool-btn.ws-delete-btn {
+  color: #f87171;
   background: color-mix(in srgb, #ef4444 16%, transparent);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .ws-tool-btn.ws-delete-btn:hover:not(:disabled) {
+  color: #fca5a5;
+  background: color-mix(in srgb, #ef4444 24%, transparent);
   box-shadow: none;
 }
 
