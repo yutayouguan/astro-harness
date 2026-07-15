@@ -29,7 +29,7 @@ impl ImageGenRequest {
 /// 按 provider 返回默认图片模型。
 pub fn default_image_model(provider: &str) -> &'static str {
     match provider {
-        "google" => "gemini-3-pro-image-preview",
+        "google" => "gemini-2.5-flash-image",
         "openai" => "gpt-image-2",
         _ => "gpt-image-2",
     }

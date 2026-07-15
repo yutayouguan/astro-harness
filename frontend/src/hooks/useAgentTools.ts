@@ -15,6 +15,7 @@ import {
   IconMemoryTool,
   IconMultiAgent,
   IconMusic,
+  IconVideoGen,
   IconPresentUi,
   IconScheduled,
   IconSessionSearch,
@@ -38,6 +39,7 @@ export type AgentToolId =
   | "code_exec"
   | "vision"
   | "image_gen"
+  | "video_gen"
   | "tts"
   | "music"
   | "skills"
@@ -182,6 +184,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     tone: "indigo",
     params: [
       { name: "prompt", type: "string" },
+    ],
+  },
+  {
+    id: "video_gen",
+    titleKey: "agentTools.videoGen.title",
+    descKey: "agentTools.videoGen.desc",
+    Icon: IconVideoGen,
+    tone: "rose",
+    params: [
+      { name: "prompt", type: "string" },
+      { name: "aspect_ratio", type: "string", optional: true },
+      { name: "duration_seconds", type: "number", optional: true },
     ],
   },
   {

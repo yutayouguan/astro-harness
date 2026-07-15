@@ -82,6 +82,28 @@ impl ImageGenTargets {
     pub fn is_empty(&self) -> bool {
         self.primary.is_none() && self.fallback.is_none()
     }
+
+    /// 按 provider id 查找主或备凭证。
+    pub fn find_provider(&self, provider: &str) -> Option<&ImageGenCreds> {
+        self.primary
+            .as_ref()
+            .filter(|c| c.provider == provider)
+            .or_else(|| {
+                self.fallback
+                    .as_ref()
+                    .filter(|c| c.provider == provider)
+            })
+    }
+
+    /// Google 媒体生成凭证（图 / 视频 / TTS 共用 key）。
+    pub fn google(&self) -> Option<&ImageGenCreds> {
+        self.find_provider("google")
+    }
+
+    /// OpenAI 备用凭证。
+    pub fn openai(&self) -> Option<&ImageGenCreds> {
+        self.find_provider("openai")
+    }
 }
 
 /// 单次工具调用的共享运行时上下文，由 AgentLoop 在每次 `dispatch_tool` 前构造。

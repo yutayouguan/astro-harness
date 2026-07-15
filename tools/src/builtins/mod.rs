@@ -3,6 +3,7 @@
 pub mod memory_tools;
 pub mod scheduled;
 pub mod image_gen;
+pub mod video_gen;
 pub mod file_ops;
 pub mod terminal;
 pub mod web_search;

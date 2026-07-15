@@ -90,6 +90,15 @@ export function IconImageGen(props: IconProps) {
   );
 }
 
+export function IconVideoGen(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+      <path d="m16 10 6-3v10l-6-3v-4z" />
+    </IconBase>
+  );
+}
+
 export function IconTts(props: IconProps) {
   return (
     <IconBase {...props}>

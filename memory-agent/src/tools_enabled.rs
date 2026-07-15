@@ -22,6 +22,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "code_exec",
     "vision",
     "image_gen",
+    "video_gen",
     "tts",
     "skills",
     "memory",
@@ -189,6 +190,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
         | "scheduled" => "scheduled",
         "image_gen" => "image_gen",
+        "video_gen" => "video_gen",
         "file_ops" => "file_ops",
         "terminal" => "terminal",
         "web_search" => "web_search",

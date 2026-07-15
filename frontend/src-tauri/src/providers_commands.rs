@@ -930,7 +930,7 @@ const IMAGE_GEN_NO_PROVIDER_MSG: &str =
 /// 按供应商类型选择默认图片模型。
 fn image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
     match kind {
-        ProviderKind::Google => Some("gemini-3-pro-image-preview"),
+        ProviderKind::Google => Some("gemini-2.5-flash-image"),
         ProviderKind::Openai => Some("gpt-image-2"),
         _ => None,
     }

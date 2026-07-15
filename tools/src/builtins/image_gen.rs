@@ -23,7 +23,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate an image from a text prompt. Uses Gemini image model when Google is enabled, otherwise OpenAI gpt-image-2."
+        description: "Generate an image from a text prompt. Uses Gemini OpenAI-compatible images API when Google is enabled, otherwise OpenAI gpt-image-2."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,

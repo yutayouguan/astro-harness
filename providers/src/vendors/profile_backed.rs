@@ -2,6 +2,7 @@
 
 use crate::http_stream::chat_stream_for_provider;
 use crate::image_http::{google_generate_image, openai_generate_image};
+use crate::media_http::google_openai_generate_image;
 use crate::profile::{resolve, ProviderProfile};
 use crate::trait_::*;
 use crate::verify;
@@ -83,7 +84,16 @@ impl AiProvider for ProfileBackedProvider {
         }
         match self.profile.id {
             "openai" => openai_generate_image(&self.client, prompt, &cfg).await,
-            "google" => google_generate_image(&self.client, prompt, &cfg).await,
+            "google" => match google_openai_generate_image(&self.client, prompt, &cfg).await {
+                Ok(images) => Ok(images),
+                Err(compat_err) => google_generate_image(&self.client, prompt, &cfg)
+                    .await
+                    .map_err(|native_err| {
+                        anyhow::anyhow!(
+                            "Google 兼容出图失败: {compat_err}; 原生回退失败: {native_err}"
+                        )
+                    }),
+            },
             other => anyhow::bail!("{other} 不支持图片生成"),
         }
     }

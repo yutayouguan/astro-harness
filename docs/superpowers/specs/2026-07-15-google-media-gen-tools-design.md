@@ -1,7 +1,7 @@
 # Google 媒体生成内置工具（图 / 视频 / 音频）
 
 日期：2026-07-15  
-状态：设计已确认，待实现计划  
+状态：已实现（核心工具路径）  
 参考：[Gemini OpenAI 兼容性](https://ai.google.dev/gemini-api/docs/openai?hl=zh-cn#rest)（图 / 视频）；音频为 Gemini TTS 原生 `generateContent`（不在该兼容页）
 
 ## 背景

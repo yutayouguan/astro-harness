@@ -52,7 +52,7 @@ pub async fn google_generate_image(
         anyhow::bail!("Google API Key 为空");
     }
     let model = if config.model.trim().is_empty() {
-        "gemini-3-pro-image-preview"
+        "gemini-2.5-flash-image"
     } else {
         config.model.trim()
     };

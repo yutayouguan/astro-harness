@@ -18,6 +18,7 @@ async fn register_all_includes_panel_tools() {
         "session_search",
         "cron_add",
         "image_gen",
+        "video_gen",
         "file_ops",
         "terminal",
         "web_search",

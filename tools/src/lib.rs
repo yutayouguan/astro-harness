@@ -19,7 +19,8 @@ pub(crate) use core::path_safe;
 pub(crate) use builtins::{
     browser, clarify, code_exec, confirm, create_agent, delegate, file_ops, image_gen, memory_tools,
     multi_agent, music, orchestration, present_callout, present_metrics, present_result, present_ui,
-    request_user_location, scheduled, skills_tool, task_plan, terminal, tts, vision, web_search,
+    request_user_location, scheduled, skills_tool, task_plan, terminal, tts, video_gen, vision,
+    web_search,
 };
 
 pub use catalog::{
@@ -47,6 +48,7 @@ pub fn register_all(registry: &mut ToolRegistry) {
     memory_tools::register(registry);
     scheduled::register(registry);
     image_gen::register(registry);
+    video_gen::register(registry);
     file_ops::register(registry);
     terminal::register(registry);
     web_search::register(registry);
