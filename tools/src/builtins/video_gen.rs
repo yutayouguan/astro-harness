@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use memory::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::media_http::{
@@ -146,7 +147,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
             .transpose()?,
     };
 
-    let dir = ctx.workspace_dir.join("generated").join("videos");
+    let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Videos);
     std::fs::create_dir_all(&dir)?;
     let progress_path = dir.join("progress-latest.txt");
 

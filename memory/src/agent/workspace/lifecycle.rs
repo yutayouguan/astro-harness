@@ -3,6 +3,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use memory_paths::GENERATED_SUBDIRS;
+
 use crate::session_store::SessionStore;
 
 use super::paths::{
@@ -473,6 +475,10 @@ pub fn ensure_agent_space(
         fs::create_dir_all(workspace.join(sub))?;
     }
 
+    for rel in GENERATED_SUBDIRS {
+        fs::create_dir_all(workspace.join(rel))?;
+    }
+
     let name = display_name
         .map(|s| s.to_string())
         .unwrap_or_else(|| {
@@ -607,6 +613,22 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    fn memory_reexports_generated_paths() {
+        use crate::{generated_dir, GeneratedKind, GENERATED_SUBDIRS};
+        use std::path::Path;
+
+        let ws = Path::new("/agent/ws");
+        assert_eq!(
+            generated_dir(ws, GeneratedKind::Videos),
+            Path::new("/agent/ws/generated/videos")
+        );
+        assert_eq!(GENERATED_SUBDIRS.len(), 8);
+        for rel in GENERATED_SUBDIRS {
+            assert!(rel.starts_with("generated/"));
+        }
+    }
+
+    #[test]
     fn ensure_workspace_creates_core_layout() {
         let dir = TempDir::new().unwrap();
         let report = ensure_workspace(dir.path()).unwrap();
@@ -615,6 +637,12 @@ mod tests {
         assert!(ws.is_dir());
         assert!(ws.join("mermaid").is_dir());
         assert!(ws.join("skills").is_dir());
+        for rel in memory_paths::GENERATED_SUBDIRS {
+            assert!(
+                ws.join(rel).is_dir(),
+                "missing workspace/{rel}"
+            );
+        }
         for rel in ENSURED_DIRS {
             assert!(dir.path().join(rel).is_dir(), "missing dir {rel}");
         }

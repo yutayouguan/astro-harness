@@ -1,7 +1,7 @@
 # generated 按类型分子目录
 
 日期：2026-07-15  
-状态：草案（待实现）  
+状态：已实现  
 相关：[Google 媒体生成工具](./2026-07-15-google-media-gen-tools-design.md)、[聊天媒体预览](./2026-07-15-chat-media-preview-design.md)
 
 ## 背景

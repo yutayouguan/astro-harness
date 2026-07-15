@@ -1001,7 +1001,7 @@ pub struct GenerateImageResult {
     pub model: String,
 }
 
-/// 按 providers 面板已开启的 Google→OpenAI 主备生成图片，写入 workspace/generated/
+/// 按 providers 面板已开启的 Google→OpenAI 主备生成图片，写入 workspace/generated/images/
 #[tauri::command]
 pub async fn generate_image(
     prompt: String,
@@ -1019,7 +1019,10 @@ pub async fn generate_image(
     for target in &targets {
         match generate_image_via_grpc(target, &prompt, width, height).await {
             Ok((data, mime)) => {
-                let dir = memory::default_agent_workspace_dir().join("generated");
+                let dir = memory::generated_dir(
+                    &memory::default_agent_workspace_dir(),
+                    memory::GeneratedKind::Images,
+                );
                 std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
                 let filename = format!(
                     "img-{}-{}.{}",
