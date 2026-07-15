@@ -13,7 +13,7 @@
 | **1 ✅** | `session` | `SessionStore` + `message_db` | `MemoryManager`、记忆等 |
 | **2 ✅** | `usage` | usage db/pricing/stats/trace | — |
 | **3 ✅** | `orchestration` | orchestration db/spawn/collab | 执行仍在 `agent` |
-| 4 | （可选）`cron` 持久化 | cron store/run_db | tick 仍 backend |
+| **4 ✅** | `cron` | jobs.json + cron.db + tick/dispatch | 执行仍 backend/agent |
 | 5 | 瘦身 | — | 仅 store/pending/review/dreaming/config |
 
 ---

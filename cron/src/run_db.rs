@@ -158,7 +158,7 @@ impl CronRunDb {
 
     /// 打开默认 `~/.astro/cron/cron.db`
     pub fn open_default() -> anyhow::Result<Self> {
-        let root = crate::cron::cron_dir();
+        let root = crate::cron_dir();
         std::fs::create_dir_all(&root)?;
         Self::new(cron_db_path(&root))
     }

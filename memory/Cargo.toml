@@ -11,6 +11,7 @@ home            = { path = "../home" }
 session         = { path = "../session" }
 usage           = { path = "../usage" }
 orchestration   = { path = "../orchestration" }
+cron            = { path = "../cron" }
 tokio = { workspace = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }

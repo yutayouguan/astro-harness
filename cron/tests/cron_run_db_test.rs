@@ -1,6 +1,6 @@
 //! 定时任务运行记录库（`CronRunDb`）读写与过滤测试。
 
-use memory::cron_run_db::{CronRunDb, CronRunFilters, NewCronRun};
+use cron::run_db::{CronRunDb, CronRunFilters, NewCronRun};
 use tempfile::TempDir;
 
 #[test]

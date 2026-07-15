@@ -6,6 +6,7 @@ members = [
     "session",
     "usage",
     "orchestration",
+    "cron",
     "backend",
     "agent",
     "providers",

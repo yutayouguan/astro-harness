@@ -1,13 +1,12 @@
-//! Astro 记忆子系统 facade：精炼记忆、会话 / 用量 / 编排等入口。
+//! Astro 记忆子系统 facade：精炼记忆与其它本机域入口。
 //!
-//! 精炼记忆为 Markdown（`MEMORY.md` / `USER.md`）；会话、用量、编排在独立 crate，
+//! 精炼记忆为 Markdown（`MEMORY.md` / `USER.md`）；会话、用量、编排、定时任务在独立 crate，
 //! 本包继续 `pub use` 以保持既有 `memory::*` 调用方不变。
 //! 数据根目录默认为 `~/.astro`（可通过 `ASTRO_MEMORY_DIR` 覆盖）。
 
 pub mod agent;
 pub mod artifacts;
 pub mod config;
-pub mod cron;
 pub mod dreaming;
 pub mod infra;
 pub mod pending;
@@ -47,7 +46,7 @@ pub use session::manager;
 pub use session::message_db;
 pub use session::store as session_store;
 
-pub use cron::run_db as cron_run_db;
+pub use ::cron::run_db as cron_run_db;
 
 pub use ::usage::db as usage_db;
 pub use ::usage::pricing as usage_pricing;
@@ -94,7 +93,7 @@ pub use logging::{init_logging, logs_dir};
 pub use log_query::{
     default_agent_log_query, query_agent_logs, AgentLogLine, AgentLogQuery, LogSource,
 };
-pub use cron::{
+pub use ::cron::{
     cron_dir, cron_extract_preamble, dispatch_cron_tool, normalize_cron_extract, tick_default,
     CronJob, CronJobExtract, CronStore, NewCronJob,
 };

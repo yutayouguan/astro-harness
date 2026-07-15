@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, Local, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::workspace::{default_memory_dir, ensure_default_workspace};
+use home::{default_memory_dir, ensure_default_workspace_dirs};
 
 use super::model::{default_agent_id, title_from_task, CronJob, NewCronJob};
 use super::schedule::compute_next_run;
@@ -34,7 +34,7 @@ impl CronStore {
 
     /// 打开默认 `~/.astro/cron`（会先确保工作区存在）
     pub fn open_default() -> anyhow::Result<Self> {
-        let _ = ensure_default_workspace()?;
+        let _ = ensure_default_workspace_dirs()?;
         Self::open(default_memory_dir().join("cron"))
     }
 
