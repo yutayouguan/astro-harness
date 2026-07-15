@@ -1,6 +1,7 @@
 .memory-panel {
   --tone: var(--tone-green);
   --tone-soft: var(--tone-green-soft);
+  --mem-top-ctrl-h: 42px;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -40,6 +41,8 @@
   gap: 40px;
   margin: 0;
   padding: 4px 7px;
+  height: var(--mem-top-ctrl-h);
+  box-sizing: border-box;
   border-radius: 14px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
@@ -357,12 +360,15 @@ html[data-theme="dark"] .mem-view-tab--dream {
   padding: 0;
   flex-shrink: 0;
   margin-left: auto;
+  height: var(--mem-top-ctrl-h);
+  box-sizing: border-box;
 }
 
 .mem-enhance {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  height: 100%;
   cursor: pointer;
   user-select: none;
 }
@@ -377,9 +383,11 @@ html[data-theme="dark"] .mem-view-tab--dream {
 .mem-stat {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 10px 3px 3px;
-  border-radius: 12px;
+  gap: 7px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 10px 0 4px;
+  border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 18%, rgba(255, 255, 255, 0.55));
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
@@ -395,8 +403,9 @@ html[data-theme="dark"] .mem-view-tab--dream {
 .mem-stat-icon {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
   border-radius: 9px;
   color: var(--tone, var(--tone-green));
   background:
@@ -410,24 +419,27 @@ html[data-theme="dark"] .mem-view-tab--dream {
 .mem-stat-body {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0;
   min-width: 0;
-  line-height: 1.1;
+  line-height: 1.05;
 }
 
 .mem-stat strong {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 750;
   letter-spacing: -0.02em;
   margin: 0;
+  line-height: 1.05;
 }
 
 .mem-stat-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 550;
   color: var(--ink-mute);
   white-space: nowrap;
+  line-height: 1.05;
 }
 
 .mem-loading {
