@@ -2,12 +2,10 @@
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ComponentType,
-  type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -25,10 +23,7 @@ import type { ScheduleDraft, ScheduleMode, Weekday } from "../lib/cronSchedule";
 import { UI_WEEKDAYS } from "../lib/cronSchedule";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
-import {
-  clampPopover,
-  resolveClipBounds,
-} from "../lib/clampPopover";
+import { useAnchoredMenu } from "../hooks/useAnchoredMenu";
 import { SelectMenu } from "./SelectMenu";
 
 /** 调度表达式编辑器入参 */
@@ -259,10 +254,27 @@ function OnceDateTimePicker({
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(parts.year);
   const [viewMonth, setViewMonth] = useState(parts.month);
-  const [popStyle, setPopStyle] = useState<CSSProperties | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+
+  const pos = useAnchoredMenu({
+    open,
+    anchorRef: triggerRef,
+    menuRef: popRef,
+    fixedWidth: 248,
+    preferAlign: "start",
+    placement: "auto",
+    gap: 8,
+    maxHeightCap: 292,
+    maxHeightRatio: 1,
+    minMaxHeight: 120,
+  });
+
+  const closePop = (restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -270,54 +282,19 @@ function OnceDateTimePicker({
     setViewMonth(parts.month);
   }, [open, parts.year, parts.month]);
 
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) {
-      setPopStyle(null);
-      return;
-    }
-    const update = () => {
-      const trigger = triggerRef.current;
-      if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      const bounds = resolveClipBounds(trigger);
-      const width = Math.min(248, bounds.right - bounds.left - 16);
-      const popH = 292;
-      const pos = clampPopover({
-        anchorRect: rect,
-        popoverSize: { width, height: popH },
-        bounds,
-        preferAlign: "start",
-        placement: "auto",
-        gap: 8,
-        maxHeightCap: popH,
-        minMaxHeight: 120,
-      });
-      setPopStyle({
-        top: pos.top,
-        left: pos.left,
-        width,
-        maxHeight: pos.maxHeight,
-      });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open]);
-
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (triggerRef.current?.contains(target)) return;
       if (popRef.current?.contains(target)) return;
-      setOpen(false);
+      closePop();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closePop(true);
+      }
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -384,7 +361,7 @@ function OnceDateTimePicker({
   };
 
   const pop =
-    open && popStyle
+    open
       ? createPortal(
           <div
             ref={popRef}
@@ -392,7 +369,16 @@ function OnceDateTimePicker({
             className="cron-dt-pop"
             role="dialog"
             aria-label={t("cron.mode.once")}
-            style={popStyle}
+            style={
+              pos
+                ? {
+                    top: pos.top,
+                    left: pos.left,
+                    width: pos.width,
+                    maxHeight: pos.maxHeight,
+                  }
+                : { visibility: "hidden", width: 248 }
+            }
           >
             <div className="cron-dt-pop-head">
               <button

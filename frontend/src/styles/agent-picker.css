@@ -186,6 +186,10 @@
   background: color-mix(in srgb, rgba(255, 255, 255, 0.55) 70%, transparent);
 }
 
+.agent-picker-option.is-highlighted {
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.55) 70%, transparent);
+}
+
 .agent-picker-option.is-active {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
@@ -309,6 +313,10 @@ html[data-theme="dark"] .agent-picker-menu {
 }
 
 html[data-theme="dark"] .agent-picker-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .agent-picker-option.is-highlighted {
   background: rgba(255, 255, 255, 0.08);
 }
 

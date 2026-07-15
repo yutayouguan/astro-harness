@@ -407,9 +407,11 @@ export default function CronPanel({
     maxHeightCap: 280,
   });
 
-  const closeMenu = useCallback(() => {
+  const closeMenu = useCallback((restoreFocus = false) => {
+    const btn = moreBtnRef.current;
     setMenuJobId(null);
     moreBtnRef.current = null;
+    if (restoreFocus) btn?.focus();
   }, []);
 
   const openMenu = (jobId: string, btn: HTMLButtonElement) => {
@@ -523,11 +525,44 @@ export default function CronPanel({
       closeMenu();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeMenu();
+      const items = menuRef.current
+        ? Array.from(
+            menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+          )
+        : [];
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMenu(true);
+        return;
+      }
+      if (items.length === 0) return;
+      const active = document.activeElement as HTMLElement | null;
+      let idx = items.indexOf(active as HTMLElement);
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        idx = idx < 0 ? 0 : Math.min(idx + 1, items.length - 1);
+        items[idx]?.focus();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        idx = idx < 0 ? items.length - 1 : Math.max(idx - 1, 0);
+        items[idx]?.focus();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        items[0]?.focus();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        items[items.length - 1]?.focus();
+      }
     };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
+    const raf = requestAnimationFrame(() => {
+      menuRef.current
+        ?.querySelector<HTMLElement>('[role="menuitem"]')
+        ?.focus();
+    });
     return () => {
+      cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
     };

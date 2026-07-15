@@ -426,7 +426,16 @@ html[data-theme="dark"] .cron-more-menu {
   background: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
+.cron-more-item:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
 .cron-more-item:hover svg {
+  color: var(--tone);
+}
+
+.cron-more-item:focus-visible svg {
   color: var(--tone);
 }
 

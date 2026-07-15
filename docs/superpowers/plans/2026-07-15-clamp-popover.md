@@ -102,11 +102,23 @@
 - [x] CSS 叠放 token；Skills/MCP 全屏抽屉与 Providers 拖拽 ghost 不迁 clamp
 - [x] 测试 + Commit
 
+### Task 9: 随访收口（二）
+
+**Files:**
+- Create: `frontend/src/lib/anchoredMenuLayout.ts` + `.test.ts`
+- Modify: `ScheduleEditor.tsx`, `SelectMenu.tsx`, `AgentPicker.tsx`, `CronPanel.tsx`
+
+- [x] ScheduleEditor 日期弹层改用 `useAnchoredMenu`
+- [x] SelectMenu `maxWidth` 用 `pos.widthCap`（content-pane bounds）
+- [x] AgentPicker / Cron 更多菜单：方向键、Escape 回焦点
+- [x] `layoutAnchoredMenu` 单测
+- [x] Commit
+
 ---
 
 ## 验证
 
 ```bash
-cd frontend && node --experimental-strip-types --test src/lib/clampPopover.test.ts
+cd frontend && node --experimental-strip-types --test src/lib/clampPopover.test.ts src/lib/anchoredMenuLayout.test.ts
 npx tsc -b --pretty false
 ```

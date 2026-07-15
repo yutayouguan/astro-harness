@@ -34,8 +34,6 @@ type Props = {
   openDirection?: "auto" | "up" | "down";
 };
 
-const VIEWPORT_PAD = 8;
-
 /** 触发器右侧展开箭头 */
 function ChevronDown({ open }: { open: boolean }) {
   return (
@@ -125,15 +123,16 @@ export function SelectMenu({
     setOpen(true);
   };
 
-  const closeMenu = () => {
+  const closeMenu = (restoreFocus = false) => {
     setOpen(false);
     setHighlightedIndex(-1);
+    if (restoreFocus) triggerRef.current?.focus();
   };
 
   const selectHighlighted = () => {
     if (highlightedIndex >= 0 && highlightedIndex < options.length) {
       const opt = options[highlightedIndex]!;
-      closeMenu();
+      closeMenu(true);
       if (opt.value !== value) onChange(opt.value);
     }
   };
@@ -177,8 +176,7 @@ export function SelectMenu({
       case "Escape":
         if (open) {
           e.preventDefault();
-          closeMenu();
-          triggerRef.current?.focus();
+          closeMenu(true);
         }
         break;
       default:
@@ -243,7 +241,7 @@ export function SelectMenu({
               left: pos.left,
               width: "max-content",
               minWidth: Math.max(pos.width, 140),
-              maxWidth: `min(280px, calc(100vw - ${VIEWPORT_PAD * 2}px))`,
+              maxWidth: pos.widthCap,
               maxHeight: pos.maxHeight,
               ...menuToneStyle,
             }}
@@ -264,9 +262,8 @@ export function SelectMenu({
                     tabIndex={-1}
                     onMouseEnter={() => setHighlightedIndex(i)}
                     onClick={() => {
-                      closeMenu();
+                      closeMenu(true);
                       if (opt.value !== value) onChange(opt.value);
-                      triggerRef.current?.focus();
                     }}
                   >
                     {opt.icon ? (

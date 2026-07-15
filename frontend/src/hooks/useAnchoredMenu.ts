@@ -1,23 +1,20 @@
-/** 锚定菜单：测量宽度 + clampPopover + rAF 二次夹紧。 */
+/** 锚定菜单：测量宽度 + layoutAnchoredMenu + rAF 二次夹紧。 */
 import {
   useLayoutEffect,
   useState,
   type RefObject,
 } from "react";
 import {
-  clampPopover,
+  layoutAnchoredMenu,
+  type AnchoredMenuLayout,
+} from "../lib/anchoredMenuLayout";
+import {
   measurePopoverSize,
   resolveClipBounds,
   type ClampPopoverInput,
 } from "../lib/clampPopover";
 
-export type AnchoredMenuPos = {
-  top: number;
-  left: number;
-  width: number;
-  openUp: boolean;
-  maxHeight: number;
-};
+export type AnchoredMenuPos = AnchoredMenuLayout;
 
 type Opts = {
   open: boolean;
@@ -68,50 +65,26 @@ export function useAnchoredMenu({
     const update = () => {
       const anchor = anchorRef.current;
       if (!anchor) return;
-      const rect = anchor.getBoundingClientRect();
-      const bounds = resolveClipBounds(anchor);
-      const boundsW = Math.max(0, bounds.right - bounds.left - (pad ?? 8) * 2);
-      const heightCap = Math.min(
-        maxHeightCap,
-        Math.max(0, (bounds.bottom - bounds.top) * maxHeightRatio),
+      const measured = menuRef.current
+        ? measurePopoverSize(menuRef.current)
+        : null;
+      setPos(
+        layoutAnchoredMenu({
+          anchorRect: anchor.getBoundingClientRect(),
+          bounds: resolveClipBounds(anchor),
+          measured,
+          minWidth,
+          maxWidth,
+          fixedWidth,
+          maxHeightCap,
+          maxHeightRatio,
+          minMaxHeight,
+          pad,
+          gap,
+          preferAlign,
+          placement,
+        }),
       );
-
-      let width: number;
-      let height: number;
-      if (fixedWidth != null) {
-        width = Math.min(fixedWidth, boundsW);
-        height = menuRef.current
-          ? measurePopoverSize(menuRef.current).height
-          : 160;
-      } else {
-        const floor = Math.max(rect.width, minWidth);
-        const ceil = Math.min(maxWidth, boundsW);
-        const measured = menuRef.current
-          ? measurePopoverSize(menuRef.current)
-          : { width: floor, height: 160 };
-        width = Math.min(Math.max(measured.width, floor), ceil);
-        height = measured.height;
-      }
-
-      const clamped = clampPopover({
-        anchorRect: rect,
-        popoverSize: { width, height },
-        bounds,
-        pad,
-        gap,
-        preferAlign,
-        placement,
-        maxHeightCap: heightCap,
-        minMaxHeight,
-      });
-
-      setPos({
-        top: clamped.top,
-        left: clamped.left,
-        width,
-        openUp: clamped.placement === "above",
-        maxHeight: clamped.maxHeight,
-      });
     };
 
     update();

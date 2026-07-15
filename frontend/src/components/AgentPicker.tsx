@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type SVGProps,
 } from "react";
 import { createPortal } from "react-dom";
@@ -70,12 +71,15 @@ export default function AgentPicker({
 }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
   const listId = useId();
   const active = agents.find((a) => a.id === value) ?? agents[0];
   const defaultLabel = t("workspace.defaultAgent");
+  const itemCount = agents.length + (onCreateNew ? 1 : 0);
+  const createIndex = onCreateNew ? agents.length : -1;
 
   const pos = useAnchoredMenu({
     open,
@@ -90,22 +94,92 @@ export default function AgentPicker({
     placement: "auto",
   });
 
+  const optionId = (i: number) => `${listId}-opt-${i}`;
+
+  const openMenu = (initialIndex?: number) => {
+    const idx =
+      initialIndex ?? agents.findIndex((a) => a.id === value);
+    setHighlightedIndex(idx >= 0 ? idx : 0);
+    setOpen(true);
+  };
+
+  const closeMenu = (restoreFocus = false) => {
+    setOpen(false);
+    setHighlightedIndex(-1);
+    if (restoreFocus) triggerRef.current?.focus();
+  };
+
+  const activateHighlighted = () => {
+    if (highlightedIndex < 0 || highlightedIndex >= itemCount) return;
+    if (highlightedIndex === createIndex) {
+      closeMenu(true);
+      onCreateNew?.();
+      return;
+    }
+    const agent = agents[highlightedIndex];
+    if (!agent) return;
+    closeMenu(true);
+    if (agent.id !== value) onChange(agent.id);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (disabled || agents.length === 0) return;
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        if (!open) openMenu();
+        else
+          setHighlightedIndex((i) =>
+            Math.min(Math.max(i, 0) + 1, itemCount - 1),
+          );
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        if (!open) openMenu(itemCount - 1);
+        else setHighlightedIndex((i) => Math.max(i - 1, 0));
+        break;
+      case "Home":
+        e.preventDefault();
+        if (open) setHighlightedIndex(0);
+        break;
+      case "End":
+        e.preventDefault();
+        if (open) setHighlightedIndex(itemCount - 1);
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (!open) openMenu();
+        else activateHighlighted();
+        break;
+      case "Escape":
+        if (open) {
+          e.preventDefault();
+          closeMenu(true);
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
+  useEffect(() => {
+    if (!open || highlightedIndex < 0 || !menuRef.current) return;
+    const items = menuRef.current.querySelectorAll<HTMLElement>("[data-menu-index]");
+    items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
+  }, [open, highlightedIndex]);
+
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (rootRef.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      closeMenu();
     };
     document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
     };
   }, [open]);
 
@@ -173,15 +247,24 @@ export default function AgentPicker({
                 : { visibility: "hidden" as const }),
             }}
           >
-            {agents.map((a) => {
+            {agents.map((a, i) => {
               const sub = agentSubline(a, defaultLabel);
+              const highlighted = i === highlightedIndex;
               return (
-                <li key={a.id} role="option" aria-selected={a.id === value}>
+                <li
+                  key={a.id}
+                  id={optionId(i)}
+                  role="option"
+                  aria-selected={a.id === value}
+                  data-menu-index={i}
+                >
                   <button
                     type="button"
-                    className={`agent-picker-option ${a.id === value ? "is-active" : ""}`}
+                    tabIndex={-1}
+                    className={`agent-picker-option ${a.id === value ? "is-active" : ""}${highlighted ? " is-highlighted" : ""}`}
+                    onMouseEnter={() => setHighlightedIndex(i)}
                     onClick={() => {
-                      setOpen(false);
+                      closeMenu(true);
                       if (a.id !== value) onChange(a.id);
                     }}
                   >
@@ -198,15 +281,21 @@ export default function AgentPicker({
             })}
             {onCreateNew ? (
               <li
+                id={optionId(createIndex)}
                 role="option"
                 className="agent-picker-create"
                 aria-selected={false}
+                data-menu-index={createIndex}
               >
                 <button
                   type="button"
-                  className="agent-picker-option agent-picker-option--create"
+                  tabIndex={-1}
+                  className={`agent-picker-option agent-picker-option--create${
+                    highlightedIndex === createIndex ? " is-highlighted" : ""
+                  }`}
+                  onMouseEnter={() => setHighlightedIndex(createIndex)}
                   onClick={() => {
-                    setOpen(false);
+                    closeMenu(true);
                     onCreateNew();
                   }}
                 >
@@ -236,8 +325,16 @@ export default function AgentPicker({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        aria-activedescendant={
+          open && highlightedIndex >= 0 ? optionId(highlightedIndex) : undefined
+        }
         aria-label={t(labelKey)}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (disabled) return;
+          if (open) closeMenu();
+          else openMenu();
+        }}
+        onKeyDown={handleKeyDown}
       >
         {active ? (
           <>
