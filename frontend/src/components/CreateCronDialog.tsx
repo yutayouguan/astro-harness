@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import {
   Bot,
   CalendarPlus,
+  Check,
   ChevronDown,
   Cpu,
   MessageSquareText,
@@ -419,13 +420,19 @@ export function CreateCronDialog({
                   }
                 />
               </label>
-              <label className="cron-dialog-check">
+              <label
+                className={`cron-dialog-check${showInChat ? " is-checked" : ""}`}
+              >
                 <input
                   type="checkbox"
+                  className="cron-dialog-check-input"
                   checked={showInChat}
                   onChange={(e) => setShowInChat(e.target.checked)}
                 />
-                <span>
+                <span className="cron-dialog-check-box" aria-hidden>
+                  {showInChat ? <Check size={12} strokeWidth={2.8} /> : null}
+                </span>
+                <span className="cron-dialog-check-copy">
                   <strong>
                     <MessagesSquare size={13} strokeWidth={2.2} aria-hidden />
                     {t("cron.field.showInChat")}
