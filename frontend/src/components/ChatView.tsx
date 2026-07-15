@@ -168,6 +168,10 @@ type Props = {
   streaming: boolean;
   /** 流是否已暂停 */
   streamPaused?: boolean;
+  /** 禁止发送（压实中 / 只读会话等） */
+  sendBlocked?: boolean;
+  /** 禁止发送时的输入框占位/原因文案 */
+  sendBlockedReason?: string;
   /** 聊天展示偏好（详细度等） */
   displayPrefs: ChatDisplayPrefs;
   /** 空状态模式：欢迎 / 创建 Agent / 正常 */
@@ -482,6 +486,8 @@ export default function ChatView({
   attachments,
   streaming,
   streamPaused = false,
+  sendBlocked = false,
+  sendBlockedReason,
   displayPrefs,
   emptyMode,
   focusMessageId,
@@ -1013,17 +1019,20 @@ export default function ChatView({
   const canSend =
     !streaming &&
     !interruptBlocked &&
+    !sendBlocked &&
     (input.trim().length > 0 || attachments.length > 0);
 
   const composerPlaceholder = streaming
     ? t("chat.placeholderStreaming")
-    : interruptBlocked
-      ? t("chat.interrupt.pending")
-      : emptyMode === "chat"
-        ? ""
-        : attachments.length
-          ? t("chat.placeholderWithAttach")
-          : t("chat.placeholder");
+    : sendBlocked && sendBlockedReason
+      ? sendBlockedReason
+      : interruptBlocked
+        ? t("chat.interrupt.pending")
+        : emptyMode === "chat"
+          ? ""
+          : attachments.length
+            ? t("chat.placeholderWithAttach")
+            : t("chat.placeholder");
 
   return (
     <section

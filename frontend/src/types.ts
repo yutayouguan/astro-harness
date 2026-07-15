@@ -156,6 +156,10 @@ export type ChatHistoryMessageDto = {
 export type ChatHistoryDto = {
   sessionId: string | null;
   messages: ChatHistoryMessageDto[];
+  /** 会话结束原因，如 `compacted`；未结束为 null */
+  endReason?: string | null;
+  /** 结束时间（epoch 秒）；未结束为 null */
+  endedAt?: number | null;
 };
 
 /** 聊天后备链条目（写入 providers.json） */

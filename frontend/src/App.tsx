@@ -396,7 +396,15 @@ export default function App() {
   const lastCompactAtRef = useRef(0);
   /** 上次自动压实尝试时间（失败也计入，避免死循环） */
   const lastAutoCompactAttemptRef = useRef(0);
+  /** 压实进行中（防重入；与 isCompacting state 同步） */
+  const compactingRef = useRef(false);
   const prevStreamingRef = useRef(false);
+  /** 压实进行中：禁用发送，避免写入即将/已经 ended 的会话 */
+  const [isCompacting, setIsCompacting] = useState(false);
+  /** 当前打开的是已结束（如 compacted）会话：只读回放 */
+  const [sessionReadOnly, setSessionReadOnly] = useState(false);
+  /** 只读原因（end_reason），用于文案区分 compacted / 其它 */
+  const [sessionEndReason, setSessionEndReason] = useState<string | null>(null);
   /** 编辑/再生后下次 start_chat 应截断 DB 到的气泡数；普通发送为 null */
   const pendingKeepChatBubblesRef = useRef<number | null>(null);
   /** 流式 token / reasoning 按帧合并，避免同 tick 批量 setState 导致整段弹出 */
@@ -674,6 +682,7 @@ export default function App() {
       sid: string | null,
       restored: ChatMessage[],
       pendingInterrupts: PendingInterrupt[] = [],
+      endReason?: string | null,
     ) => {
       if (restored.length === 0) return false;
       restoringRef.current = true;
@@ -682,6 +691,8 @@ export default function App() {
       setSessionId(sid);
       setMessages(restored);
       setSessionPendingInterrupts(pendingInterrupts);
+      setSessionReadOnly(!!endReason);
+      setSessionEndReason(endReason ?? null);
       setEmptyMode(null);
       saveChatSession(sid, restored, pendingInterrupts);
       queueMicrotask(() => {
@@ -705,6 +716,20 @@ export default function App() {
         stored.messages,
         stored.pendingInterrupts ?? [],
       );
+      // localStorage 无 endReason：后台补查，避免复开已压实会话仍可写
+      if (stored.sessionId) {
+        void invoke<ChatHistoryDto>("get_chat_history", {
+          sessionId: stored.sessionId,
+          limit: 1,
+        })
+          .then((h) => {
+            if (h.endReason) {
+              setSessionReadOnly(true);
+              setSessionEndReason(h.endReason);
+            }
+          })
+          .catch(() => {});
+      }
       return;
     }
 
@@ -716,7 +741,12 @@ export default function App() {
       if (!history.messages?.length) return;
       const restored = mapHistoryMessages(history.messages);
       if (restored.length === 0) return;
-      applyRestoredHistory(history.sessionId, restored);
+      applyRestoredHistory(
+        history.sessionId,
+        restored,
+        [],
+        history.endReason,
+      );
     } catch {
       // 后端/本地库不可用时保持欢迎页
     }
@@ -1049,6 +1079,19 @@ export default function App() {
       !resumeJson
     ) {
       showTransientToast(t("chat.interrupt.pending"));
+      return;
+    }
+    if (isCompacting || compactingRef.current) {
+      showTransientToast(t("chat.compactInProgress"), { tone: "warning" });
+      return;
+    }
+    if (sessionReadOnly) {
+      showTransientToast(
+        sessionEndReason === "compacted" || !sessionEndReason
+          ? t("chat.sessionCompactedReadOnly")
+          : t("chat.sessionEndedReadOnly"),
+        { tone: "warning" },
+      );
       return;
     }
     if (
@@ -1677,6 +1720,9 @@ export default function App() {
     input,
     attachments,
     streaming,
+    isCompacting,
+    sessionReadOnly,
+    sessionEndReason,
     activeProvider,
     providers,
     sessionId,
@@ -2047,6 +2093,8 @@ export default function App() {
       setCurrentTurnId(null);
       setSessionId(newId);
       setMessages(keep);
+      setSessionReadOnly(false);
+      setSessionEndReason(null);
       setEmptyMode(null);
       saveChatSession(newId, keep, []);
       showTransientToast(t("chat.branchDone"), { tone: "success" });
@@ -2063,6 +2111,12 @@ export default function App() {
 
   /** 压实：摘要旧会话并切换到含摘要+尾部的新会话 */
   const runCompactSession = useCallback(async () => {
+    if (compactingRef.current || isCompacting) {
+      showTransientToast(t("chat.compactAlreadyRunning"), {
+        tone: "warning",
+      });
+      return;
+    }
     if (streaming) {
       showTransientToast(t("chat.compactBlockedStreaming"), {
         tone: "warning",
@@ -2081,6 +2135,10 @@ export default function App() {
       });
       return;
     }
+
+    compactingRef.current = true;
+    setIsCompacting(true);
+    let splitNewId: string | null = null;
     try {
       const res = await invoke<{
         newSessionId: string;
@@ -2091,12 +2149,9 @@ export default function App() {
         keepTailBubbles: 3,
         focus: null,
       });
-      const history = await invoke<ChatHistoryDto>("get_chat_history", {
-        sessionId: res.newSessionId,
-        limit: 200,
-      });
-      const restored = mapHistoryMessages(history.messages ?? []);
+      splitNewId = res.newSessionId;
 
+      // 拆分已落库：先切到新会话，避免历史加载失败时仍钉在已 ended 的旧 id
       unlistenRef.current?.();
       unlistenRef.current = null;
       clearStreamBuffers();
@@ -2105,30 +2160,64 @@ export default function App() {
       setFocusMessageId(null);
       currentRunIdRef.current = null;
       setCurrentTurnId(null);
+      setSessionPendingInterrupts([]);
+      setSessionReadOnly(false);
+      setSessionEndReason(null);
+      setSessionId(res.newSessionId);
+      setEmptyMode(null);
+      saveChatSession(res.newSessionId, [], []);
 
-      if (!applyRestoredHistory(res.newSessionId, restored)) {
-        setSessionPendingInterrupts([]);
-        setSessionId(res.newSessionId);
-        setMessages(restored);
-        setEmptyMode(null);
-        saveChatSession(res.newSessionId, restored, []);
+      try {
+        const history = await invoke<ChatHistoryDto>("get_chat_history", {
+          sessionId: res.newSessionId,
+          limit: 200,
+        });
+        const restored = mapHistoryMessages(history.messages ?? []);
+        if (!applyRestoredHistory(res.newSessionId, restored, [], null)) {
+          setMessages(restored);
+          saveChatSession(res.newSessionId, restored, []);
+        }
+        lastCompactAtRef.current = Date.now();
+        showTransientToast(
+          res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
+          { tone: res.degraded ? "warning" : "success" },
+        );
+      } catch (histErr) {
+        lastCompactAtRef.current = Date.now();
+        showTransientToast(
+          t("chat.compactHistoryFailed", {
+            error:
+              histErr instanceof Error
+                ? histErr.message
+                : String(histErr ?? "error"),
+          }),
+          { tone: "warning" },
+        );
       }
-
-      lastCompactAtRef.current = Date.now();
-      showTransientToast(
-        res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
-        { tone: res.degraded ? "warning" : "success" },
-      );
     } catch (e) {
-      showTransientToast(
-        t("chat.compactFailed", {
-          error: e instanceof Error ? e.message : String(e ?? "error"),
-        }),
-        { tone: "error" },
-      );
+      // 若拆分已成功但未进入上面的分支，保留新 id（已切走）；否则仍在旧会话
+      if (!splitNewId) {
+        showTransientToast(
+          t("chat.compactFailed", {
+            error: e instanceof Error ? e.message : String(e ?? "error"),
+          }),
+          { tone: "error" },
+        );
+      } else {
+        showTransientToast(
+          t("chat.compactHistoryFailed", {
+            error: e instanceof Error ? e.message : String(e ?? "error"),
+          }),
+          { tone: "warning" },
+        );
+      }
+    } finally {
+      compactingRef.current = false;
+      setIsCompacting(false);
     }
   }, [
     streaming,
+    isCompacting,
     sessionPendingInterrupts,
     sessionId,
     clearStreamBuffers,
@@ -2140,6 +2229,7 @@ export default function App() {
   /** 上下文占用超阈值时自动压实（轮次结束时检查） */
   const maybeAutoCompact = useCallback(() => {
     if (streaming) return;
+    if (compactingRef.current || isCompacting) return;
     if (sessionPendingInterrupts.length > 0) return;
     if (!sessionId) return;
 
@@ -2168,6 +2258,7 @@ export default function App() {
     void runCompactSession();
   }, [
     streaming,
+    isCompacting,
     sessionPendingInterrupts,
     sessionId,
     messages,
@@ -2382,6 +2473,8 @@ export default function App() {
     setFocusMessageId(null);
     setMessages([]);
     setSessionPendingInterrupts([]);
+    setSessionReadOnly(false);
+    setSessionEndReason(null);
     currentRunIdRef.current = null;
     setCurrentTurnId(null);
     setNav("chat");
@@ -2768,12 +2861,20 @@ export default function App() {
         limit: 200,
       });
       const restored = mapHistoryMessages(hist.messages ?? []);
+      const endReason = hist.endReason ?? null;
       if (restored.length > 0) {
-        applyRestoredHistory(hist.sessionId ?? targetSessionId, restored);
+        applyRestoredHistory(
+          hist.sessionId ?? targetSessionId,
+          restored,
+          [],
+          endReason,
+        );
       } else {
         currentRunIdRef.current = null;
         setCurrentTurnId(null);
         setSessionId(hist.sessionId ?? targetSessionId);
+        setSessionReadOnly(!!endReason);
+        setSessionEndReason(endReason);
       }
       const canFocus =
         !!messageId && restored.some((m) => m.id === messageId);
@@ -2988,6 +3089,17 @@ export default function App() {
                       attachments={attachments}
                       streaming={streaming}
                       streamPaused={streamPaused}
+                      sendBlocked={isCompacting || sessionReadOnly}
+                      sendBlockedReason={
+                        isCompacting
+                          ? t("chat.compactInProgress")
+                          : sessionReadOnly
+                            ? sessionEndReason === "compacted" ||
+                              !sessionEndReason
+                              ? t("chat.sessionCompactedReadOnly")
+                              : t("chat.sessionEndedReadOnly")
+                            : undefined
+                      }
                       displayPrefs={chatDisplayPrefs}
                       emptyMode={emptyMode}
                       focusMessageId={focusMessageId}

@@ -124,6 +124,10 @@ pub struct ChatHistoryMessageDto {
 pub struct ChatHistoryDto {
     pub session_id: Option<String>,
     pub messages: Vec<ChatHistoryMessageDto>,
+    /// 会话结束原因（如 `compacted`）；未结束为 `None`
+    pub end_reason: Option<String>,
+    /// 结束时间（epoch 秒）；未结束为 `None`
+    pub ended_at: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -529,6 +533,26 @@ pub async fn start_chat(
         "max" | "xhigh" => "max".to_string(),
         _ => "high".to_string(),
     };
+
+    // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
+    {
+        bootstrap_workspace()?;
+        let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+            .map_err(|e| e.to_string())?;
+        if let Ok(Some(meta)) = mgr.session_store.get_session(&sid) {
+            if meta.ended_at.is_some() {
+                let reason = meta
+                    .end_reason
+                    .as_deref()
+                    .unwrap_or("ended");
+                return Err(if reason == "compacted" {
+                    "会话已压实，无法继续写入；请打开续聊会话".into()
+                } else {
+                    format!("会话已结束（{reason}），无法继续写入")
+                });
+            }
+        }
+    }
 
     if let Some(keep) = keep_chat_bubbles {
         bootstrap_workspace()?;
@@ -1084,10 +1108,19 @@ pub async fn get_chat_history(
                 return Ok(ChatHistoryDto {
                     session_id: None,
                     messages: vec![],
+                    end_reason: None,
+                    ended_at: None,
                 });
             }
         },
     };
+
+    let meta = mgr
+        .session_store
+        .get_session(&sid)
+        .map_err(|e| e.to_string())?;
+    let end_reason = meta.as_ref().and_then(|s| s.end_reason.clone());
+    let ended_at = meta.as_ref().and_then(|s| s.ended_at);
 
     let messages = mgr
         .session_store
@@ -1119,6 +1152,8 @@ pub async fn get_chat_history(
     Ok(ChatHistoryDto {
         session_id: Some(sid),
         messages,
+        end_reason,
+        ended_at,
     })
 }
 
