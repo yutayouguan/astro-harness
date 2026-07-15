@@ -8,7 +8,6 @@ import {
   MessageCircle,
   MoreHorizontal,
   Navigation,
-  X,
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { useTransientToast } from "../hooks/useTransientToast";
@@ -20,6 +19,7 @@ import type {
   ListArtifactsResult,
 } from "../types";
 import {
+  IconWsBackChat,
   IconWsFile,
   IconWsFileCode,
   IconWsFileImage,
@@ -815,10 +815,10 @@ export default function FileSpacePanel({
                 type="button"
                 className="fs-close-btn"
                 onClick={onClose}
-                title={t("filespace.close")}
-                aria-label={t("filespace.close")}
+                title={t("filespace.back")}
+                aria-label={t("filespace.back")}
               >
-                <X size={16} strokeWidth={2.4} absoluteStrokeWidth aria-hidden />
+                <IconWsBackChat width={16} height={16} />
               </button>
             )}
           </div>
