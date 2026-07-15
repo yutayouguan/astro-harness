@@ -164,13 +164,13 @@ impl AgentLoop {
 
         let orchestration_spawner: orchestration::OrchestrationSpawner = Arc::new(|req| {
             tokio::spawn(async move {
-                if let Err(e) = crate::orchestration::run_orchestration(req).await {
+                if let Err(e) = crate::exec::orchestration::run_orchestration(req).await {
                     tracing::warn!(error = %e, "orchestration failed");
                 }
             });
         });
         let delegate_runner: delegate::DelegateRunner = Arc::new(|req| {
-            crate::delegate_exec::run_delegate_blocking(req)
+            crate::exec::delegate::run_delegate_blocking(req)
         });
         let async_spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, req| {
             tokio::spawn(async move {
@@ -178,7 +178,7 @@ impl AgentLoop {
                 if reg.is_cancel_requested(&task_id) {
                     return;
                 }
-                match crate::delegate_exec::run_delegate(req).await {
+                match crate::exec::delegate::run_delegate(req).await {
                     Ok(json) => {
                         if !reg.is_cancel_requested(&task_id) {
                             reg.finish_ok(&task_id, json);
@@ -200,7 +200,7 @@ impl AgentLoop {
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 handle.spawn(async move {
                     if let Err(e) =
-                        crate::orchestration::resume_incomplete_orchestrations(&orch_spawner_resume)
+                        crate::exec::orchestration::resume_incomplete_orchestrations(&orch_spawner_resume)
                             .await
                     {
                         tracing::warn!(error = %e, "orchestration resume failed");
