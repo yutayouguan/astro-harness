@@ -15,7 +15,8 @@ import PreferencesPanel from "./components/PreferencesPanel";
 import ProvidersPanel from "./components/ProvidersPanel";
 import SkillsPanel from "./components/SkillsPanel";
 import ToolsPanel from "./components/ToolsPanel";
-import { Toast, TOAST_ERROR_DURATION_MS } from "./components/Toast";
+import { TOAST_ERROR_DURATION_MS } from "./components/Toast";
+import { useTransientToast } from "./hooks/useTransientToast";
 import WorkspacePanel from "./components/WorkspacePanel";
 import { MSG_DISSOLVE_MS } from "./components/MsgDissolveOverlay";
 import {
@@ -361,12 +362,10 @@ export default function App() {
   const [statusPhase, setStatusPhase] = useState<StatusPhase>("ready");
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
-  const [toastMsg, setToastMsg] = useState("");
-  const [toastVisible, setToastVisible] = useState(false);
-  /** 每次弹出递增，用于重置进度条动画 */
-  const [toastEpoch, setToastEpoch] = useState(0);
-  const [toastSticky, setToastSticky] = useState(false);
-  const [toastDurationMs, setToastDurationMs] = useState(4000);
+  const {
+    showToast: showTransientToast,
+    toastHost,
+  } = useTransientToast();
   /** 编辑截断时正在粒子消散的消息 */
   const [dissolvingIds, setDissolvingIds] = useState<string[]>([]);
   /** 记忆 pending 角标 */
@@ -421,30 +420,6 @@ export default function App() {
   >(new Map());
   const toolDeltaRafRef = useRef<number | null>(null);
   const toolDeltaIdsRef = useRef<Map<string, string>>(new Map());
-
-  const dismissToast = useCallback(() => {
-    setToastVisible(false);
-    setToastSticky(false);
-  }, []);
-
-  const showTransientToast = useCallback(
-    (
-      msg: string,
-      opts?: { sticky?: boolean; durationMs?: number },
-    ) => {
-      const text = msg.trim();
-      if (!text) return;
-      setToastMsg(text);
-      setToastSticky(Boolean(opts?.sticky));
-      setToastDurationMs(
-        opts?.durationMs ??
-          (opts?.sticky ? TOAST_ERROR_DURATION_MS : 4000),
-      );
-      setToastEpoch((n) => n + 1);
-      setToastVisible(true);
-    },
-    [],
-  );
 
   const flushStreamTokens = useCallback(() => {
     streamRafRef.current = null;
@@ -3129,14 +3104,7 @@ export default function App() {
           </div>
         </section>
       </div>
-      <Toast
-        key={toastEpoch}
-        message={toastMsg}
-        visible={toastVisible}
-        sticky={toastSticky}
-        durationMs={toastSticky ? undefined : toastDurationMs}
-        onDismiss={dismissToast}
-      />
+      {toastHost}
     </div>
   );
 }

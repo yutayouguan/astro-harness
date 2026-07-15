@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
+import { useTransientToast } from "../hooks/useTransientToast";
 import type { MessageKey } from "../i18n/messages";
 import type {
   ArtifactCategory,
@@ -240,7 +241,7 @@ export default function FileSpacePanel({
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [menuFiles, setMenuFiles] = useState<ArtifactDto[]>([]);
   const [trashConfirm, setTrashConfirm] = useState<ArtifactDto[] | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const { showToast, toastHost } = useTransientToast();
   const debounceRef = useRef<number | null>(null);
   const loadGen = useRef(0);
 
@@ -438,11 +439,6 @@ export default function FileSpacePanel({
       .filter((f): f is ArtifactDto => !!f);
   }, [flatFiles, visibleIds, selection.selectedIds]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const tid = window.setTimeout(() => setToast(null), 2500);
-    return () => window.clearTimeout(tid);
-  }, [toast]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -479,7 +475,7 @@ export default function FileSpacePanel({
   const runOpen = async (files: ArtifactDto[]) => {
     const existing = files.filter((f) => !f.missing);
     if (existing.length > 5) {
-      setToast(t("filespace.toast.openLimit", { n: "5" }));
+      showToast(t("filespace.toast.openLimit", { n: "5" }), { error: true });
     }
     for (const f of existing.slice(0, 5)) {
       try {
@@ -492,7 +488,7 @@ export default function FileSpacePanel({
 
   const runReveal = async (files: ArtifactDto[]) => {
     if (files.length !== 1 || files[0].missing) {
-      setToast(t("filespace.toast.revealSingleOnly"));
+      showToast(t("filespace.toast.revealSingleOnly"), { error: true });
       return;
     }
     try {
@@ -506,7 +502,7 @@ export default function FileSpacePanel({
     const text = files.map((f) => f.path).join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      setToast(t("filespace.toast.copiedPath"));
+      showToast(t("filespace.toast.copiedPath"));
     } catch {
       // clipboard unavailable
     }
@@ -517,9 +513,9 @@ export default function FileSpacePanel({
     if (!paths.length) return;
     try {
       await invoke("copy_paths_to_clipboard", { paths });
-      setToast(t("filespace.toast.copiedFile"));
+      showToast(t("filespace.toast.copiedFile"));
     } catch (e) {
-      setToast(String(e));
+      showToast(String(e), { error: true });
     }
   };
 
@@ -529,14 +525,14 @@ export default function FileSpacePanel({
       await invoke("remove_artifacts_by_paths", {
         paths: files.map((f) => f.path),
       });
-      setToast(t("filespace.toast.removedIndex"));
+      showToast(t("filespace.toast.removedIndex"));
       selection.clear();
       setSelected(null);
       setMenuFiles([]);
       setMenu(null);
       await load();
     } catch (e) {
-      setToast(String(e));
+      showToast(String(e), { error: true });
     }
   };
 
@@ -560,26 +556,27 @@ export default function FileSpacePanel({
           await invoke("remove_artifacts_by_paths", { paths: trashed });
         }
         if (fails.length && trashed.length) {
-          setToast(
+          showToast(
             t("filespace.toast.partialFail", {
               ok: String(trashed.length),
               fail: String(fails.length),
               detail: fails.slice(0, 2).join("; "),
             }),
+            { error: true },
           );
         } else if (fails.length && !trashed.length) {
-          setToast(fails[0] ?? "trash failed");
+          showToast(fails[0] ?? "trash failed", { error: true });
           setTrashConfirm(null);
           return;
         } else {
-          setToast(t("filespace.toast.trashed"));
+          showToast(t("filespace.toast.trashed"));
         }
       }
       if (missingOnly.length) {
         await invoke("remove_artifacts_by_paths", {
           paths: missingOnly.map((f) => f.path),
         });
-        if (!existing.length) setToast(t("filespace.toast.removedIndex"));
+        if (!existing.length) showToast(t("filespace.toast.removedIndex"));
       }
       selection.clear();
       setSelected(null);
@@ -588,7 +585,7 @@ export default function FileSpacePanel({
       setMenu(null);
       await load();
     } catch (e) {
-      setToast(String(e));
+      showToast(String(e), { error: true });
       setTrashConfirm(null);
     }
   };
@@ -840,11 +837,6 @@ export default function FileSpacePanel({
             className="anim-switch--fill"
           >
           <div className="fs-list-pane" data-selected-count={selectedFiles.length}>
-            {toast && (
-              <div className="fs-status fs-toast" role="status">
-                {toast}
-              </div>
-            )}
             {loading && <div className="fs-status">{t("filespace.search")}…</div>}
             {error && <div className="fs-error">{error}</div>}
             {!loading && !error && groups.length === 0 && (
@@ -1118,6 +1110,7 @@ export default function FileSpacePanel({
           </aside>
         </div>
       </div>
+      {toastHost}
     </div>
   );
 }

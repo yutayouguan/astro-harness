@@ -10,6 +10,7 @@ import {
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useTheme } from "../hooks/useTheme";
+import { useTransientToast } from "../hooks/useTransientToast";
 import { useFileSelection } from "../hooks/useFileSelection";
 import { useI18n } from "../i18n/LocaleContext";
 import type { FileEntryDto } from "../types";
@@ -207,7 +208,7 @@ export default function WorkspacePanel({ onClose }: Props) {
   const [trashConfirm, setTrashConfirm] = useState<FileEntryDto[] | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
+  const { showToast, toastHost } = useTransientToast();
   const panelRef = useRef<HTMLElement | null>(null);
   const renameIgnoreBlurRef = useRef(false);
   const renameBusyRef = useRef(false);
@@ -253,11 +254,6 @@ export default function WorkspacePanel({ onClose }: Props) {
     }
   }, [listLayout]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const tid = window.setTimeout(() => setToast(null), 2500);
-    return () => window.clearTimeout(tid);
-  }, [toast]);
 
   const load = useCallback(async (path?: string) => {
     setLoadingList(true);
@@ -546,11 +542,11 @@ export default function WorkspacePanel({ onClose }: Props) {
         setEditorName(dto.name);
       }
       cancelRename();
-      setToast(t("workspace.toast.renamed"));
+      showToast(t("workspace.toast.renamed"));
       await load(root);
       selection.setOnly(dto.path);
     } catch (e) {
-      setToast(String(e));
+      showToast(String(e), { error: true });
     } finally {
       renameBusyRef.current = false;
     }
@@ -572,7 +568,7 @@ export default function WorkspacePanel({ onClose }: Props) {
     const files = targets.filter((e) => !e.is_dir);
     if (files.length) {
       if (files.length > MAX_OPEN_EXTERNALLY) {
-        setToast(t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }));
+        showToast(t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }), { error: true });
       }
       for (const entry of files.slice(0, MAX_OPEN_EXTERNALLY)) {
         openEntry(entry);
@@ -585,9 +581,9 @@ export default function WorkspacePanel({ onClose }: Props) {
 
   const clipboardFailToast = useCallback(
     (err: unknown) => {
-      setToast(`${String(err)} · ${t("workspace.toast.clipboardHint")}`);
+      showToast(`${String(err)} · ${t("workspace.toast.clipboardHint")}`, { error: true });
     },
-    [t],
+    [t, showToast],
   );
 
   const runCut = useCallback(
@@ -597,7 +593,7 @@ export default function WorkspacePanel({ onClose }: Props) {
       try {
         await invoke("copy_paths_to_clipboard", { paths });
         setPendingCut(paths);
-        setToast(t("workspace.toast.cut"));
+        showToast(t("workspace.toast.cut"));
       } catch (e) {
         clipboardFailToast(e);
       }
@@ -612,7 +608,7 @@ export default function WorkspacePanel({ onClose }: Props) {
       try {
         await invoke("copy_paths_to_clipboard", { paths });
         setPendingCut(null);
-        setToast(t("workspace.toast.copied"));
+        showToast(t("workspace.toast.copied"));
       } catch (e) {
         clipboardFailToast(e);
       }
@@ -638,7 +634,7 @@ export default function WorkspacePanel({ onClose }: Props) {
         });
         count = pasted.length;
       }
-      setToast(t("workspace.toast.pasted", { n: String(count) }));
+      showToast(t("workspace.toast.pasted", { n: String(count) }));
       await load(root);
     } catch (e) {
       clipboardFailToast(e);
@@ -650,7 +646,7 @@ export default function WorkspacePanel({ onClose }: Props) {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      setToast(t("workspace.toast.copiedPath"));
+      showToast(t("workspace.toast.copiedPath"));
     } catch {
       // clipboard unavailable
     }
@@ -661,14 +657,14 @@ export default function WorkspacePanel({ onClose }: Props) {
     try {
       await invoke("reveal_in_folder", { path: targets[0].path });
     } catch (e) {
-      setToast(String(e));
+      showToast(String(e), { error: true });
     }
   };
 
   const runOpenExternally = async (targets: FileEntryDto[]) => {
     if (!targets.length) return;
     if (targets.length > MAX_OPEN_EXTERNALLY) {
-      setToast(t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }));
+      showToast(t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }), { error: true });
     }
     for (const entry of targets.slice(0, MAX_OPEN_EXTERNALLY)) {
       try {
@@ -694,19 +690,20 @@ export default function WorkspacePanel({ onClose }: Props) {
         }
       }
       if (fails.length && trashed.length) {
-        setToast(
+        showToast(
           t("workspace.toast.partialFail", {
             ok: String(trashed.length),
             fail: String(fails.length),
             detail: fails.slice(0, 2).join("; "),
           }),
+          { error: true },
         );
       } else if (fails.length && !trashed.length) {
-        setToast(fails[0] ?? "trash failed");
+        showToast(fails[0] ?? "trash failed", { error: true });
         setTrashConfirm(null);
         return;
       } else {
-        setToast(t("workspace.toast.trashed"));
+        showToast(t("workspace.toast.trashed"));
       }
       if (editorPath && trashed.includes(editorPath)) {
         clearViewer();
@@ -723,7 +720,7 @@ export default function WorkspacePanel({ onClose }: Props) {
       closeMenu();
       await load(root);
     } catch (e) {
-      setToast(String(e));
+      showToast(String(e), { error: true });
       setTrashConfirm(null);
     } finally {
       setDeleting(false);
@@ -1118,11 +1115,6 @@ export default function WorkspacePanel({ onClose }: Props) {
           />
 
           {error && <div className="side-error">{error}</div>}
-          {toast && (
-            <div className="ws-toast" role="status">
-              {toast}
-            </div>
-          )}
 
           <div
             className={`ws-file-tree is-${listLayout}`}
@@ -1324,11 +1316,6 @@ export default function WorkspacePanel({ onClose }: Props) {
           </div>
 
           {error && <div className="side-error">{error}</div>}
-          {toast && (
-            <div className="ws-toast" role="status">
-              {toast}
-            </div>
-          )}
 
           <div className="ws-media-stage" data-kind={mediaKind ?? "image"}>
             <div className="ws-media-frame">
@@ -1446,11 +1433,6 @@ export default function WorkspacePanel({ onClose }: Props) {
           </div>
 
           {error && <div className="side-error">{error}</div>}
-          {toast && (
-            <div className="ws-toast" role="status">
-              {toast}
-            </div>
-          )}
 
           <div className="ws-editor-wrap">
             <WorkspaceEditor
@@ -1478,6 +1460,7 @@ export default function WorkspacePanel({ onClose }: Props) {
         </>
       )}
       </AnimatedSwitch>
+      {toastHost}
     </aside>
   );
 }
