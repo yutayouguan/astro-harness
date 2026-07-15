@@ -2484,7 +2484,7 @@ html[data-theme="dark"] .skills-preview::before {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 16px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--tone) 14%, var(--chip-border));
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
   flex-shrink: 0;
   background:
     linear-gradient(
@@ -2495,7 +2495,7 @@ html[data-theme="dark"] .skills-preview::before {
 }
 
 html[data-theme="dark"] .skills-preview-head {
-  border-bottom-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.08));
+  border-bottom-color: color-mix(in srgb, var(--tone) 12%, transparent);
   background:
     linear-gradient(
       165deg,
