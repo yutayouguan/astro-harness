@@ -1,5 +1,5 @@
-/** 轻量 Toast：6s 后自动消失，可手动点 ×；按 tone 显示图标与配色。 */
-import { useEffect, useRef } from "react";
+/** 轻量 Toast：倒计时环绕进度条后自动消失，可手动点 ×；按 tone 显示图标与配色。 */
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 
@@ -31,6 +31,52 @@ function ToneIcon({ tone }: { tone: ToastTone }) {
   }
 }
 
+/** 贴边环绕倒计时：仅进度描边、无轨道；pathLength=100，dashoffset 0→100。 */
+function ToastCountdownRing({ durationMs }: { durationMs: number }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    const host = svgRef.current?.parentElement;
+    if (!host) return;
+    const update = () => {
+      const { width, height } = host.getBoundingClientRect();
+      setBox({ w: Math.round(width), h: Math.round(height) });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, []);
+
+  const inset = 2.5;
+  const ready = box.w > 4 && box.h > 4;
+
+  return (
+    <svg
+      ref={svgRef}
+      className="astro-toast-ring"
+      width={ready ? box.w : undefined}
+      height={ready ? box.h : undefined}
+      aria-hidden
+    >
+      {ready && (
+        <rect
+          className="astro-toast-ring-progress"
+          x={inset}
+          y={inset}
+          width={box.w - inset * 2}
+          height={box.h - inset * 2}
+          rx={12}
+          ry={12}
+          pathLength={100}
+          style={{ animationDuration: `${durationMs}ms` }}
+        />
+      )}
+    </svg>
+  );
+}
+
 export function Toast({
   message,
   visible,
@@ -58,6 +104,7 @@ export function Toast({
       aria-live={tone === "error" ? "assertive" : "polite"}
       data-tone={tone}
     >
+      {!sticky && <ToastCountdownRing durationMs={durationMs} />}
       {sticky && <div className="astro-toast-sticky-mark" aria-hidden />}
       <div className="astro-toast-row">
         <span className={`astro-toast-icon tone-${tone}`} aria-hidden>
