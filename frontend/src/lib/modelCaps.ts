@@ -1,6 +1,44 @@
 /** 模型能力展示辅助。 */
 import type { ModelCapabilities } from "../types";
 
+/** 能力位展示顺序（与 ModelPicker 图标一致）。 */
+export type ModelCapKey =
+  | "tools"
+  | "reasoning"
+  | "vision"
+  | "web"
+  | "image_gen"
+  | "video_gen"
+  | "audio_gen";
+
+export const MODEL_CAP_ORDER: ModelCapKey[] = [
+  "tools",
+  "reasoning",
+  "vision",
+  "web",
+  "image_gen",
+  "video_gen",
+  "audio_gen",
+];
+
+export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
+  vision: false,
+  web: false,
+  reasoning: false,
+  tools: false,
+  image_gen: false,
+  video_gen: false,
+  audio_gen: false,
+};
+
+/** 返回为 true 的能力键（固定顺序）。 */
+export function listActiveModelCaps(
+  caps: ModelCapabilities | null | undefined,
+): ModelCapKey[] {
+  if (!caps) return [];
+  return MODEL_CAP_ORDER.filter((k) => Boolean(caps[k]));
+}
+
 /** 将上下文窗口 token 数格式化为短标签（如 128K、1M）。 */
 export function formatContextWindow(
   tokens?: number | null,
@@ -47,5 +85,13 @@ export function inferModelCapabilities(
 
   const tools = !isNonChat;
 
-  return { vision, web, reasoning, tools };
+  return {
+    vision,
+    web,
+    reasoning,
+    tools,
+    image_gen: false,
+    video_gen: false,
+    audio_gen: false,
+  };
 }

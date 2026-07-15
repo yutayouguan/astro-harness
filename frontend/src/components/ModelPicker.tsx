@@ -24,7 +24,14 @@ import {
   type ModelPickerGlobals,
   type ModelRuntimePrefs,
 } from "../lib/modelPrefs";
-import type { ModelInfo, ProviderDto, ProviderModelsResult } from "../types";
+import { EMPTY_MODEL_CAPABILITIES } from "../lib/modelCaps";
+import type {
+  ModelCapabilities,
+  ModelInfo,
+  ProviderDto,
+  ProviderModelsResult,
+} from "../types";
+import ModelCapabilityIcons from "./ModelCapabilityIcons";
 import { ModelBrandIcon } from "./ProviderIcons";
 
 /** 模型选择器入参 */
@@ -44,6 +51,7 @@ type ModelOption = {
   providerId: string;
   providerName: string;
   modelId: string;
+  capabilities: ModelCapabilities;
 };
 
 /** 选中勾选图标 */
@@ -64,12 +72,7 @@ function ensureDefaultModel(models: ModelInfo[], defaultId: string): ModelInfo[]
   return [
     {
       id,
-      capabilities: {
-        vision: false,
-        web: false,
-        reasoning: false,
-        tools: true,
-      },
+      capabilities: { ...EMPTY_MODEL_CAPABILITIES, tools: true },
       meta_source: "default",
     },
     ...models,
@@ -190,6 +193,10 @@ export default function ModelPicker({
             providerId: p.id,
             providerName: p.display_name,
             modelId: m.id,
+            capabilities: m.capabilities ?? {
+              ...EMPTY_MODEL_CAPABILITIES,
+              tools: true,
+            },
           }));
         }),
       );
@@ -411,8 +418,13 @@ export default function ModelPicker({
                                   </span>
                                 ) : null}
                               </span>
-                              <span className="model-picker-option-provider">
-                                {opt.providerName}
+                              <span className="model-picker-option-meta">
+                                <span className="model-picker-option-provider">
+                                  {opt.providerName}
+                                </span>
+                                <ModelCapabilityIcons
+                                  capabilities={opt.capabilities}
+                                />
                               </span>
                             </span>
                             <span

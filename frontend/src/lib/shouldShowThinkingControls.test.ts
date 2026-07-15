@@ -5,14 +5,30 @@ import { shouldShowThinkingControls } from "./shouldShowThinkingControls.ts";
 test("uses explicit capabilities.reasoning when present", () => {
   assert.equal(
     shouldShowThinkingControls({
-      capabilities: { vision: false, web: false, reasoning: true, tools: true },
+      capabilities: {
+        vision: false,
+        web: false,
+        reasoning: true,
+        tools: true,
+        image_gen: false,
+        video_gen: false,
+        audio_gen: false,
+      },
       backendId: "openai",
     }),
     true,
   );
   assert.equal(
     shouldShowThinkingControls({
-      capabilities: { vision: false, web: false, reasoning: false, tools: true },
+      capabilities: {
+        vision: false,
+        web: false,
+        reasoning: false,
+        tools: true,
+        image_gen: false,
+        video_gen: false,
+        audio_gen: false,
+      },
       backendId: "deepseek",
     }),
     false,

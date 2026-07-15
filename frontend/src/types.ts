@@ -229,6 +229,9 @@ export type ModelCapabilities = {
   web: boolean;
   reasoning: boolean;
   tools: boolean;
+  image_gen: boolean;
+  video_gen: boolean;
+  audio_gen: boolean;
 };
 
 /** 模型元信息（列表 / 选择器） */

@@ -627,6 +627,13 @@ html[data-theme="dark"] .model-picker.is-empty {
   text-overflow: ellipsis;
 }
 
+.model-picker-option-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .model-picker-option-provider {
   font-size: 10px;
   font-weight: 500;
@@ -634,10 +641,37 @@ html[data-theme="dark"] .model-picker.is-empty {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .model-picker-option.is-selected .model-picker-option-provider {
   opacity: 0.82;
+}
+
+.model-picker-cap-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.model-picker-cap-icon {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: inherit;
+  opacity: 0.5;
+}
+
+.model-picker-cap-icon svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.model-picker-option.is-selected .model-picker-cap-icon {
+  opacity: 0.72;
 }
 
 .model-picker-option-check {

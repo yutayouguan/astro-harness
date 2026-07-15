@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 模型能力位（视觉 / 联网 / 推理 / 工具）。
+/// 模型能力位（视觉 / 联网 / 推理 / 工具 / 生图 / 生视频 / 生音频）。
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct ModelCapabilities {
     #[serde(default)]
@@ -13,6 +13,12 @@ pub struct ModelCapabilities {
     pub reasoning: bool,
     #[serde(default)]
     pub tools: bool,
+    #[serde(default)]
+    pub image_gen: bool,
+    #[serde(default)]
+    pub video_gen: bool,
+    #[serde(default)]
+    pub audio_gen: bool,
 }
 
 /// 前端展示用的模型元信息。
@@ -163,28 +169,36 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             }
         }
 
-        let non_chat = entry
+        let mode = entry
             .mode
             .as_deref()
-            .map(|m| {
-                let m = m.to_lowercase();
-                m.contains("embed")
-                    || m.contains("image")
-                    || m.contains("audio")
-                    || m.contains("moderation")
-            })
-            .unwrap_or(false);
+            .unwrap_or("")
+            .to_lowercase();
+        let mode_image = mode.contains("image");
+        let mode_video = mode.contains("video");
+        let mode_audio = mode.contains("audio");
+        let non_chat = mode.contains("embed")
+            || mode_image
+            || mode_audio
+            || mode_video
+            || mode.contains("moderation");
 
         if non_chat {
             info.capabilities.vision = false;
             info.capabilities.web = false;
             info.capabilities.reasoning = false;
             info.capabilities.tools = false;
+            info.capabilities.image_gen |= mode_image || entry.supports_image_generation;
+            info.capabilities.video_gen |= mode_video || entry.supports_video_generation;
+            info.capabilities.audio_gen |= mode_audio || entry.supports_audio_output;
         } else {
             info.capabilities.vision |= entry.supports_vision;
             info.capabilities.web |= entry.supports_web_search;
             info.capabilities.reasoning |= entry.supports_reasoning;
             info.capabilities.tools |= entry.supports_function_calling;
+            info.capabilities.image_gen |= entry.supports_image_generation;
+            info.capabilities.video_gen |= entry.supports_video_generation;
+            info.capabilities.audio_gen |= entry.supports_audio_output;
         }
         sources.push("litellm");
     }
@@ -302,5 +316,81 @@ mod tests {
             assert!(!info.capabilities.tools);
             assert!(!info.capabilities.vision);
         });
+    }
+
+    #[test]
+    fn litellm_image_mode_sets_image_gen() {
+        crate::litellm_meta::with_fixture(
+            r#"{
+              "dall-e-3": {
+                "mode": "image_generation",
+                "litellm_provider": "openai"
+              }
+            }"#,
+            || {
+                let info = enrich_from_id("dall-e-3", "openai", None);
+                assert!(info.capabilities.image_gen);
+                assert!(!info.capabilities.tools);
+                assert!(!info.capabilities.vision);
+                assert_eq!(info.meta_source, "litellm");
+            },
+        );
+    }
+
+    #[test]
+    fn litellm_audio_output_sets_audio_gen() {
+        crate::litellm_meta::with_fixture(
+            r#"{
+              "gpt-4o-mini-tts": {
+                "mode": "audio_speech",
+                "supports_audio_output": true,
+                "litellm_provider": "openai"
+              }
+            }"#,
+            || {
+                let info = enrich_from_id("gpt-4o-mini-tts", "openai", None);
+                assert!(info.capabilities.audio_gen);
+                assert!(!info.capabilities.tools);
+            },
+        );
+    }
+
+    #[test]
+    fn litellm_chat_explicit_media_flags() {
+        crate::litellm_meta::with_fixture(
+            r#"{
+              "gemini-2.0-flash": {
+                "mode": "chat",
+                "supports_function_calling": true,
+                "supports_vision": true,
+                "supports_image_generation": true,
+                "litellm_provider": "gemini"
+              }
+            }"#,
+            || {
+                let info = enrich_from_id("gemini-2.0-flash", "google", None);
+                assert!(info.capabilities.tools);
+                assert!(info.capabilities.vision);
+                assert!(info.capabilities.image_gen);
+                assert!(!info.capabilities.video_gen);
+            },
+        );
+    }
+
+    #[test]
+    fn litellm_video_mode_sets_video_gen() {
+        crate::litellm_meta::with_fixture(
+            r#"{
+              "sora-2": {
+                "mode": "video_generation",
+                "litellm_provider": "openai"
+              }
+            }"#,
+            || {
+                let info = enrich_from_id("sora-2", "openai", None);
+                assert!(info.capabilities.video_gen);
+                assert!(!info.capabilities.tools);
+            },
+        );
     }
 }

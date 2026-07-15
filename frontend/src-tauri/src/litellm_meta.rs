@@ -23,6 +23,9 @@ pub struct LiteLlmEntry {
     pub supports_function_calling: bool,
     pub supports_reasoning: bool,
     pub supports_web_search: bool,
+    pub supports_image_generation: bool,
+    pub supports_video_generation: bool,
+    pub supports_audio_output: bool,
     pub mode: Option<String>,
     pub litellm_provider: Option<String>,
     pub input_cost_per_token: Option<f64>,
@@ -49,6 +52,12 @@ struct RawEntry {
     #[serde(default)]
     supports_web_search: Option<bool>,
     #[serde(default)]
+    supports_image_generation: Option<bool>,
+    #[serde(default)]
+    supports_video_generation: Option<bool>,
+    #[serde(default)]
+    supports_audio_output: Option<bool>,
+    #[serde(default)]
     mode: Option<String>,
     #[serde(default)]
     litellm_provider: Option<String>,
@@ -68,6 +77,9 @@ impl RawEntry {
             supports_function_calling: self.supports_function_calling.unwrap_or(false),
             supports_reasoning: self.supports_reasoning.unwrap_or(false),
             supports_web_search: self.supports_web_search.unwrap_or(false),
+            supports_image_generation: self.supports_image_generation.unwrap_or(false),
+            supports_video_generation: self.supports_video_generation.unwrap_or(false),
+            supports_audio_output: self.supports_audio_output.unwrap_or(false),
             mode: self.mode,
             litellm_provider: self.litellm_provider,
             input_cost_per_token: self.input_cost_per_token,
@@ -119,12 +131,20 @@ fn parse_map(value: serde_json::Value) -> HashMap<String, LiteLlmEntry> {
         }
         if let Ok(entry) = serde_json::from_value::<RawEntry>(raw.clone()) {
             let e = entry.into_entry(key);
-            // 保留有上下文、能力标记或单价的条目（跳过无信息占位）
+            // 保留有上下文、能力标记、mode 或单价的条目（跳过无信息占位）
+            let has_mode = e
+                .mode
+                .as_ref()
+                .is_some_and(|m| !m.trim().is_empty());
             if e.max_input_tokens.is_some()
                 || e.supports_vision
                 || e.supports_function_calling
                 || e.supports_reasoning
                 || e.supports_web_search
+                || e.supports_image_generation
+                || e.supports_video_generation
+                || e.supports_audio_output
+                || has_mode
                 || e.input_cost_per_token.is_some()
                 || e.output_cost_per_token.is_some()
             {
