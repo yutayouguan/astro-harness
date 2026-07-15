@@ -1103,6 +1103,15 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         <button
           type="button"
           className="skills-action-btn is-icon"
+          onClick={() => void openSkillFolder(skill)}
+          title={t("skills.openFolder")}
+          aria-label={t("skills.openFolder")}
+        >
+          <FolderOpen size={15} strokeWidth={2.25} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className="skills-action-btn is-icon"
           onClick={() => void copyInstalledPrompt(skill)}
           title={
             copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
@@ -1175,6 +1184,15 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           ) : (
             <Eye size={15} strokeWidth={2.25} aria-hidden />
           )}
+        </button>
+        <button
+          type="button"
+          className="skills-action-btn is-icon"
+          onClick={() => void openSkillFolder(skill)}
+          title={t("skills.openFolder")}
+          aria-label={t("skills.openFolder")}
+        >
+          <FolderOpen size={15} strokeWidth={2.25} aria-hidden />
         </button>
         <button
           type="button"
@@ -1432,6 +1450,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 <button
                   type="button"
                   className="skills-action-btn"
+                  onClick={() => void openSkillFolder(selectedInstalled)}
+                >
+                  <FolderOpen size={14} strokeWidth={2.25} aria-hidden />
+                  {t("skills.openFolder")}
+                </button>
+                <button
+                  type="button"
+                  className="skills-action-btn"
                   onClick={() => void copyInstalledPrompt(selectedInstalled)}
                 >
                   {copiedId === selectedInstalled.id ? (
@@ -1556,6 +1582,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   loadingPreview === selectedMachine.name
                     ? t("skills.viewing")
                     : t("skills.view")}
+                </button>
+                <button
+                  type="button"
+                  className="skills-action-btn"
+                  onClick={() => void openSkillFolder(selectedMachine)}
+                >
+                  <FolderOpen size={14} strokeWidth={2.25} aria-hidden />
+                  {t("skills.openFolder")}
                 </button>
                 <button
                   type="button"

@@ -2,7 +2,9 @@
 
 use skills::{
     fetch_detail, install_from_ref, link_skill_to_agent, list_installed_for_agent,
-    list_skill_files_ex, load_skill_by_name, read_skill_file_ex, search, set_enabled_for_agent,
+    list_skill_files_ex, load_skill_by_name,
+    open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
+    read_skill_file_ex, reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
     InstalledSkill, SkillBundle, SkillStoreFilter, StoreSkill, StoreSkillDetail,
 };
 use serde::Serialize;
@@ -134,4 +136,30 @@ pub async fn get_skill_file(
     id: Option<String>,
 ) -> Result<String, String> {
     read_skill_file_ex(&name, &relative_path, id.as_deref()).map_err(|e| e.to_string())
+}
+
+/// 打开技能根目录。
+#[tauri::command]
+pub async fn open_skill_folder(name: String, id: Option<String>) -> Result<(), String> {
+    open_skill_folder_fs(&name, id.as_deref()).map_err(|e| e.to_string())
+}
+
+/// 在文件管理器中显示技能内某个文件。
+#[tauri::command]
+pub async fn reveal_skill_file(
+    name: String,
+    relative_path: String,
+    id: Option<String>,
+) -> Result<(), String> {
+    reveal_skill_file_fs(&name, &relative_path, id.as_deref()).map_err(|e| e.to_string())
+}
+
+/// 用系统默认应用打开技能内文件。
+#[tauri::command]
+pub async fn open_skill_file(
+    name: String,
+    relative_path: String,
+    id: Option<String>,
+) -> Result<(), String> {
+    open_skill_file_fs(&name, &relative_path, id.as_deref()).map_err(|e| e.to_string())
 }

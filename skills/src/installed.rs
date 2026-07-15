@@ -693,6 +693,121 @@ pub fn read_skill_file_ex(
     fs::read_to_string(&canon).with_context(|| format!("读取失败: {rel}"))
 }
 
+/// 解析技能内绝对路径（防穿越），供打开/定位使用。
+fn resolve_skill_abs_path(
+    name: &str,
+    relative_path: Option<&str>,
+    id: Option<&str>,
+) -> Result<PathBuf> {
+    let installed = find_installed_for_preview(name, id)?;
+    let root = skill_root_of(&installed)?.canonicalize()?;
+    let Some(rel_raw) = relative_path.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(root);
+    };
+    let rel = rel_raw.trim_start_matches('/');
+    if rel.contains("..") {
+        anyhow::bail!("非法路径");
+    }
+    let joined = root.join(rel);
+    let canon = joined
+        .canonicalize()
+        .with_context(|| format!("路径不存在: {rel}"))?;
+    if !canon.starts_with(&root) {
+        anyhow::bail!("路径越界");
+    }
+    Ok(canon)
+}
+
+fn open_path_with_system(path: &Path) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(path)
+            .spawn()
+            .with_context(|| format!("无法打开 {}", path.display()))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(path)
+            .spawn()
+            .with_context(|| format!("无法打开 {}", path.display()))?;
+        return Ok(());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .with_context(|| format!("无法打开 {}", path.display()))?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        let _ = path;
+        anyhow::bail!("当前平台不支持用系统应用打开")
+    }
+}
+
+fn reveal_path_in_folder(path: &Path) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R"])
+            .arg(path)
+            .spawn()
+            .with_context(|| format!("无法定位 {}", path.display()))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path.to_string_lossy()))
+            .spawn()
+            .with_context(|| format!("无法定位 {}", path.display()))?;
+        return Ok(());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let parent = path.parent().unwrap_or(path);
+        open_path_with_system(parent)?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        let _ = path;
+        anyhow::bail!("当前平台不支持在文件管理器中显示")
+    }
+}
+
+/// 在系统文件管理器中打开技能根目录。
+pub fn open_skill_folder(name: &str, id: Option<&str>) -> Result<()> {
+    let root = resolve_skill_abs_path(name, None, id)?;
+    open_path_with_system(&root)
+}
+
+/// 在文件管理器中选中/显示技能内某个文件（或根目录）。
+pub fn reveal_skill_file(
+    name: &str,
+    relative_path: &str,
+    id: Option<&str>,
+) -> Result<()> {
+    let path = resolve_skill_abs_path(name, Some(relative_path), id)?;
+    reveal_path_in_folder(&path)
+}
+
+/// 用系统默认应用打开技能内某个文件。
+pub fn open_skill_file_externally(
+    name: &str,
+    relative_path: &str,
+    id: Option<&str>,
+) -> Result<()> {
+    let path = resolve_skill_abs_path(name, Some(relative_path), id)?;
+    open_path_with_system(&path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
