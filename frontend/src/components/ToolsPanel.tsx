@@ -1,5 +1,6 @@
 /** 工具面板：内置工具开关、调用统计与 MCP。 */
 import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import { createPortal } from "react-dom";
 import {
   Braces,
   Columns2,
@@ -136,7 +137,7 @@ function parseEnvOrHeaders(text: string): Record<string, string> {
   return out;
 }
 
-/** 新增 MCP Server 对话框 */
+/** 新增 MCP Server 右侧抽屉 */
 function McpAddDialog({
   onAdd,
   onClose,
@@ -165,20 +166,28 @@ function McpAddDialog({
   const isStdio = formType === "stdio";
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (typeMenuOpen) {
+        setTypeMenuOpen(false);
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose, typeMenuOpen]);
+
+  useEffect(() => {
     if (!typeMenuOpen) return;
     const onPointerDown = (e: MouseEvent) => {
       if (!typeMenuRef.current?.contains(e.target as Node)) {
         setTypeMenuOpen(false);
       }
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setTypeMenuOpen(false);
-    };
     document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
     };
   }, [typeMenuOpen]);
 
@@ -237,32 +246,45 @@ function McpAddDialog({
     onClose();
   }
 
-  return (
+  return createPortal(
     <div
-      className="mcp-dialog-backdrop"
+      className="mcp-add-drawer-backdrop"
       ref={backdropRef}
       onClick={handleBackdrop}
     >
-      <div className="mcp-dialog" role="dialog" aria-modal>
-        <div className="mcp-dialog-head">
-          <span className="mcp-dialog-title">{t("mcpTools.addTitle")}</span>
+      <aside
+        className="mcp-add-drawer"
+        role="dialog"
+        aria-modal
+        aria-labelledby="mcp-add-drawer-title"
+      >
+        <header className="mcp-add-drawer-head">
+          <h2 id="mcp-add-drawer-title" className="mcp-add-drawer-title">
+            <span className="mcp-add-drawer-title-icon" aria-hidden>
+              <McpIcon size={18} />
+            </span>
+            {t("mcpTools.addTitle")}
+          </h2>
           <button
             type="button"
-            className="mcp-dialog-close"
+            className="mcp-add-drawer-close"
             onClick={onClose}
             aria-label={t("mcpTools.cancel")}
           >
             <X size={16} strokeWidth={2.5} aria-hidden />
           </button>
-        </div>
+        </header>
 
-        <div className="mcp-dialog-tabs" role="tablist">
+        <div className="mcp-add-drawer-tabs" role="tablist">
           <button
             type="button"
             role="tab"
             aria-selected={addTab === "json"}
-            className={`mcp-dialog-tab ${addTab === "json" ? "active" : ""}`}
-            onClick={() => { setAddTab("json"); setJsonError(""); }}
+            className={`mcp-add-drawer-tab ${addTab === "json" ? "active" : ""}`}
+            onClick={() => {
+              setAddTab("json");
+              setJsonError("");
+            }}
           >
             <Braces size={14} strokeWidth={2.25} aria-hidden />
             {t("mcpTools.tabJson")}
@@ -271,187 +293,196 @@ function McpAddDialog({
             type="button"
             role="tab"
             aria-selected={addTab === "form"}
-            className={`mcp-dialog-tab ${addTab === "form" ? "active" : ""}`}
-            onClick={() => { setAddTab("form"); setFormError(""); }}
+            className={`mcp-add-drawer-tab ${addTab === "form" ? "active" : ""}`}
+            onClick={() => {
+              setAddTab("form");
+              setFormError("");
+            }}
           >
             <FormInput size={14} strokeWidth={2.25} aria-hidden />
             {t("mcpTools.tabForm")}
           </button>
         </div>
 
-        <AnimatedSwitch switchKey={addTab} variant="fade">
-        {addTab === "json" && (
-          <div className="mcp-dialog-body">
-            <textarea
-              className="mcp-dialog-textarea"
-              value={jsonText}
-              onChange={(e) => setJsonText(e.target.value)}
-              placeholder={t("mcpTools.jsonPlaceholder")}
-              spellCheck={false}
-              rows={8}
-            />
-            {jsonError && (
-              <p className="mcp-dialog-error">{jsonError}</p>
-            )}
-            <div className="mcp-dialog-actions">
-              <button type="button" className="mcp-btn-ghost" onClick={onClose}>
-                {t("mcpTools.cancel")}
-              </button>
-              <button
-                type="button"
-                className="mcp-btn-primary"
-                onClick={handleJsonImport}
-                disabled={!jsonText.trim()}
-              >
-                {t("mcpTools.jsonImport")}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {addTab === "form" && (
-          <div className="mcp-dialog-body">
-            <div className="mcp-form-grid">
-              <label className="mcp-field mcp-field--full">
-                <span>{t("mcpTools.formName")}</span>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder={t("mcpTools.formNamePlaceholder")}
+        <div className="mcp-add-drawer-scroll">
+          <AnimatedSwitch switchKey={addTab} variant="fade">
+            {addTab === "json" && (
+              <div className="mcp-add-drawer-body">
+                <textarea
+                  className="mcp-add-drawer-textarea"
+                  value={jsonText}
+                  onChange={(e) => setJsonText(e.target.value)}
+                  placeholder={t("mcpTools.jsonPlaceholder")}
+                  spellCheck={false}
+                  rows={10}
                 />
-              </label>
-              <label className="mcp-field mcp-field--full">
-                <span>{t("mcpTools.formDesc")}</span>
-                <input
-                  type="text"
-                  value={formDesc}
-                  onChange={(e) => setFormDesc(e.target.value)}
-                  placeholder={t("mcpTools.formDescPlaceholder")}
-                />
-              </label>
-              <div className="mcp-field mcp-field--full">
-                <span>{t("mcpTools.formType")}</span>
-                <div className="mcp-type-picker" ref={typeMenuRef}>
-                  <button
-                    type="button"
-                    className={`mcp-type-trigger ${typeMenuOpen ? "is-open" : ""}`}
-                    aria-haspopup="listbox"
-                    aria-expanded={typeMenuOpen}
-                    aria-label={t("mcpTools.formType")}
-                    onClick={() => setTypeMenuOpen((v) => !v)}
-                  >
-                    <span className="mcp-type-trigger-text">
-                      {t(MCP_TYPE_LABEL[formType])}
-                    </span>
-                    <span className="mcp-type-chevron" aria-hidden>
-                      ▾
-                    </span>
-                  </button>
-                  {typeMenuOpen ? (
-                    <ul
-                      className="mcp-type-menu"
-                      role="listbox"
-                      aria-label={t("mcpTools.formType")}
-                    >
-                      {MCP_TYPES.map((type) => (
-                        <li key={type} role="option" aria-selected={type === formType}>
-                          <button
-                            type="button"
-                            className={`mcp-type-option ${type === formType ? "is-active" : ""}`}
-                            onClick={() => {
-                              setFormType(type);
-                              setTypeMenuOpen(false);
-                            }}
-                          >
-                            <span className="mcp-type-option-name">
-                              {t(MCP_TYPE_LABEL[type])}
-                            </span>
-                            <span className="mcp-type-option-id">{type}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
+                {jsonError ? (
+                  <p className="mcp-add-drawer-error">{jsonError}</p>
+                ) : null}
               </div>
+            )}
 
-              {isStdio ? (
-                <>
+            {addTab === "form" && (
+              <div className="mcp-add-drawer-body">
+                <div className="mcp-form-grid">
                   <label className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formCommand")}</span>
+                    <span>{t("mcpTools.formName")}</span>
                     <input
                       type="text"
-                      value={formCommand}
-                      onChange={(e) => setFormCommand(e.target.value)}
-                      placeholder={t("mcpTools.formCommandPlaceholder")}
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      placeholder={t("mcpTools.formNamePlaceholder")}
                     />
                   </label>
                   <label className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formArgs")}</span>
-                    <textarea
-                      className="mcp-field-textarea"
-                      value={formArgs}
-                      onChange={(e) => setFormArgs(e.target.value)}
-                      placeholder={t("mcpTools.formArgsPlaceholder")}
-                      rows={3}
-                    />
-                  </label>
-                  <label className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formEnv")}</span>
-                    <textarea
-                      className="mcp-field-textarea"
-                      value={formEnv}
-                      onChange={(e) => setFormEnv(e.target.value)}
-                      placeholder={t("mcpTools.formEnvPlaceholder")}
-                      rows={3}
-                    />
-                  </label>
-                </>
-              ) : (
-                <>
-                  <label className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formUrl")}</span>
+                    <span>{t("mcpTools.formDesc")}</span>
                     <input
-                      type="url"
-                      value={formUrl}
-                      onChange={(e) => setFormUrl(e.target.value)}
-                      placeholder={t("mcpTools.formUrlPlaceholder")}
+                      type="text"
+                      value={formDesc}
+                      onChange={(e) => setFormDesc(e.target.value)}
+                      placeholder={t("mcpTools.formDescPlaceholder")}
                     />
                   </label>
-                  <label className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formHeaders")}</span>
-                    <textarea
-                      className="mcp-field-textarea"
-                      value={formHeaders}
-                      onChange={(e) => setFormHeaders(e.target.value)}
-                      placeholder={t("mcpTools.formHeadersPlaceholder")}
-                      rows={3}
-                    />
-                  </label>
-                </>
-              )}
-            </div>
-            {formError && (
-              <p className="mcp-dialog-error">{formError}</p>
+                  <div className="mcp-field mcp-field--full">
+                    <span>{t("mcpTools.formType")}</span>
+                    <div className="mcp-type-picker" ref={typeMenuRef}>
+                      <button
+                        type="button"
+                        className={`mcp-type-trigger ${typeMenuOpen ? "is-open" : ""}`}
+                        aria-haspopup="listbox"
+                        aria-expanded={typeMenuOpen}
+                        aria-label={t("mcpTools.formType")}
+                        onClick={() => setTypeMenuOpen((v) => !v)}
+                      >
+                        <span className="mcp-type-trigger-text">
+                          {t(MCP_TYPE_LABEL[formType])}
+                        </span>
+                        <span className="mcp-type-chevron" aria-hidden>
+                          ▾
+                        </span>
+                      </button>
+                      {typeMenuOpen ? (
+                        <ul
+                          className="mcp-type-menu"
+                          role="listbox"
+                          aria-label={t("mcpTools.formType")}
+                        >
+                          {MCP_TYPES.map((type) => (
+                            <li
+                              key={type}
+                              role="option"
+                              aria-selected={type === formType}
+                            >
+                              <button
+                                type="button"
+                                className={`mcp-type-option ${type === formType ? "is-active" : ""}`}
+                                onClick={() => {
+                                  setFormType(type);
+                                  setTypeMenuOpen(false);
+                                }}
+                              >
+                                <span className="mcp-type-option-name">
+                                  {t(MCP_TYPE_LABEL[type])}
+                                </span>
+                                <span className="mcp-type-option-id">{type}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {isStdio ? (
+                    <>
+                      <label className="mcp-field mcp-field--full">
+                        <span>{t("mcpTools.formCommand")}</span>
+                        <input
+                          type="text"
+                          value={formCommand}
+                          onChange={(e) => setFormCommand(e.target.value)}
+                          placeholder={t("mcpTools.formCommandPlaceholder")}
+                        />
+                      </label>
+                      <label className="mcp-field mcp-field--full">
+                        <span>{t("mcpTools.formArgs")}</span>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formArgs}
+                          onChange={(e) => setFormArgs(e.target.value)}
+                          placeholder={t("mcpTools.formArgsPlaceholder")}
+                          rows={3}
+                        />
+                      </label>
+                      <label className="mcp-field mcp-field--full">
+                        <span>{t("mcpTools.formEnv")}</span>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formEnv}
+                          onChange={(e) => setFormEnv(e.target.value)}
+                          placeholder={t("mcpTools.formEnvPlaceholder")}
+                          rows={3}
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label className="mcp-field mcp-field--full">
+                        <span>{t("mcpTools.formUrl")}</span>
+                        <input
+                          type="url"
+                          value={formUrl}
+                          onChange={(e) => setFormUrl(e.target.value)}
+                          placeholder={t("mcpTools.formUrlPlaceholder")}
+                        />
+                      </label>
+                      <label className="mcp-field mcp-field--full">
+                        <span>{t("mcpTools.formHeaders")}</span>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formHeaders}
+                          onChange={(e) => setFormHeaders(e.target.value)}
+                          placeholder={t("mcpTools.formHeadersPlaceholder")}
+                          rows={3}
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+                {formError ? (
+                  <p className="mcp-add-drawer-error">{formError}</p>
+                ) : null}
+              </div>
             )}
-            <div className="mcp-dialog-actions">
-              <button type="button" className="mcp-btn-ghost" onClick={onClose}>
-                {t("mcpTools.cancel")}
-              </button>
-              <button
-                type="button"
-                className="mcp-btn-primary"
-                onClick={handleFormAdd}
-              >
-                {t("mcpTools.formAdd")}
-              </button>
-            </div>
-          </div>
-        )}
-        </AnimatedSwitch>
-      </div>
-    </div>
+          </AnimatedSwitch>
+        </div>
+
+        <footer className="mcp-add-drawer-foot">
+          <button type="button" className="mcp-btn-ghost" onClick={onClose}>
+            {t("mcpTools.cancel")}
+          </button>
+          {addTab === "json" ? (
+            <button
+              type="button"
+              className="mcp-btn-primary"
+              onClick={handleJsonImport}
+              disabled={!jsonText.trim()}
+            >
+              {t("mcpTools.jsonImport")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="mcp-btn-primary"
+              onClick={handleFormAdd}
+            >
+              {t("mcpTools.formAdd")}
+            </button>
+          )}
+        </footer>
+      </aside>
+    </div>,
+    document.body,
   );
 }
 
