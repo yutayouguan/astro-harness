@@ -1,7 +1,7 @@
 # 工作空间 Markdown 预览切换
 
 日期：2026-07-15  
-状态：设计已确认，待实现
+状态：已实现（见 [实现计划](../plans/2026-07-15-workspace-markdown-preview.md)）
 
 ## 背景
 
