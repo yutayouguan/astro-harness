@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -29,6 +30,8 @@ type Props = {
   size?: "md" | "sm";
   "aria-label"?: string;
   placeholder?: string;
+  /** 展开方向：auto（默认）/ up（强制向上）/ down（强制向下） */
+  openDirection?: "auto" | "up" | "down";
 };
 
 /** 下拉菜单 fixed 定位信息 */
@@ -89,13 +92,19 @@ function CheckIcon() {
 function computePos(
   trigger: HTMLElement,
   menuEl?: HTMLElement | null,
+  forceDirection?: "up" | "down",
 ): MenuPos {
   const rect = trigger.getBoundingClientRect();
   const gap = 6;
   const maxH = Math.min(260, window.innerHeight * 0.42);
   const spaceBelow = window.innerHeight - rect.bottom - gap;
   const spaceAbove = rect.top - gap;
-  const openUp = spaceBelow < Math.min(maxH, 160) && spaceAbove > spaceBelow;
+  const openUp =
+    forceDirection === "up"
+      ? true
+      : forceDirection === "down"
+        ? false
+        : spaceBelow < Math.min(maxH, 160) && spaceAbove > spaceBelow;
 
   const minW = Math.max(rect.width, 140);
   const maxW = Math.min(280, window.innerWidth - VIEWPORT_PAD * 2);
@@ -133,9 +142,11 @@ export function SelectMenu({
   size = "md",
   "aria-label": ariaLabel,
   placeholder = "—",
+  openDirection = "auto",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -143,14 +154,103 @@ export function SelectMenu({
   const selected = options.find((o) => o.value === value);
   const label = selected?.label ?? placeholder;
 
+  const optionId = (i: number) => `${listId}-opt-${i}`;
+
+  const openMenu = (initialIndex?: number) => {
+    const idx = initialIndex ?? options.findIndex((o) => o.value === value);
+    setHighlightedIndex(idx >= 0 ? idx : 0);
+    setOpen(true);
+  };
+
+  const closeMenu = () => {
+    setOpen(false);
+    setHighlightedIndex(-1);
+  };
+
+  const selectHighlighted = () => {
+    if (highlightedIndex >= 0 && highlightedIndex < options.length) {
+      const opt = options[highlightedIndex]!;
+      closeMenu();
+      if (opt.value !== value) onChange(opt.value);
+    }
+  };
+
+  // 键盘导航：触发器上的 onKeyDown
+  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        if (!open) {
+          openMenu();
+        } else {
+          setHighlightedIndex((i) => Math.min(i + 1, options.length - 1));
+        }
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        if (!open) {
+          openMenu(options.length - 1);
+        } else {
+          setHighlightedIndex((i) => Math.max(i - 1, 0));
+        }
+        break;
+      case "Home":
+        e.preventDefault();
+        if (open) setHighlightedIndex(0);
+        break;
+      case "End":
+        e.preventDefault();
+        if (open) setHighlightedIndex(options.length - 1);
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (!open) {
+          openMenu();
+        } else {
+          selectHighlighted();
+        }
+        break;
+      case "Escape":
+        if (open) {
+          e.preventDefault();
+          closeMenu();
+          triggerRef.current?.focus();
+        }
+        break;
+      default:
+        // 输入字符跳转（type-ahead）
+        if (open && e.key.length === 1) {
+          const ch = e.key.toLowerCase();
+          const start = highlightedIndex >= 0 ? highlightedIndex + 1 : 0;
+          const rotated = [...options.slice(start), ...options.slice(0, start)];
+          const idx = rotated.findIndex((o) =>
+            o.label.toLowerCase().startsWith(ch),
+          );
+          if (idx >= 0) {
+            setHighlightedIndex((start + idx) % options.length);
+          }
+        }
+    }
+  };
+
+  // 高亮项变化时滚动入视
+  useEffect(() => {
+    if (!open || highlightedIndex < 0 || !listRef.current) return;
+    const items = listRef.current.querySelectorAll<HTMLElement>('[role="option"]');
+    items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
+  }, [open, highlightedIndex]);
+
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) {
       setPos(null);
       return;
     }
+    const dir = openDirection === "auto" ? undefined : openDirection;
     const update = () => {
       if (triggerRef.current) {
-        setPos(computePos(triggerRef.current, listRef.current));
+        setPos(computePos(triggerRef.current, listRef.current, dir));
       }
     };
     update();
@@ -163,24 +263,19 @@ export function SelectMenu({
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
-  }, [open, options, value]);
+  }, [open, options, value, openDirection]);
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (e: MouseEvent) => {
+    const onMouseDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (rootRef.current?.contains(target)) return;
       if (listRef.current?.contains(target)) return;
-      setOpen(false);
+      closeMenu();
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onMouseDown);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onMouseDown);
     };
   }, [open]);
 
@@ -220,17 +315,26 @@ export function SelectMenu({
               ...menuToneStyle,
             }}
           >
-            {options.map((opt) => {
+            {options.map((opt, i) => {
               const active = opt.value === value;
+              const highlighted = i === highlightedIndex;
               return (
-                <li key={opt.value} role="option" aria-selected={active}>
+                <li
+                  key={opt.value}
+                  id={optionId(i)}
+                  role="option"
+                  aria-selected={active}
+                >
                   <button
                     type="button"
-                    className={`select-menu-option${active ? " is-active" : ""}`}
+                    className={`select-menu-option${active ? " is-active" : ""}${highlighted ? " is-highlighted" : ""}`}
+                    tabIndex={-1}
                     onClick={() => {
-                      setOpen(false);
+                      closeMenu();
                       if (opt.value !== value) onChange(opt.value);
+                      triggerRef.current?.focus();
                     }}
+                    onMouseEnter={() => setHighlightedIndex(i)}
                   >
                     {opt.icon ? (
                       <span className="select-menu-option-icon" aria-hidden>
@@ -260,11 +364,18 @@ export function SelectMenu({
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={listId}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={
+          open && highlightedIndex >= 0 ? optionId(highlightedIndex) : undefined
+        }
         aria-label={ariaLabel}
         onClick={() => {
-          if (!disabled) setOpen((v) => !v);
+          if (!disabled) {
+            if (open) closeMenu();
+            else openMenu();
+          }
         }}
+        onKeyDown={handleKeyDown}
       >
         {selected?.icon ? (
           <span className="select-menu-value-icon" aria-hidden>

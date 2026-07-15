@@ -205,10 +205,18 @@
   background: color-mix(in srgb, var(--select-tone) 10%, transparent);
 }
 
+.select-menu-option.is-highlighted {
+  background: color-mix(in srgb, var(--select-tone) 10%, transparent);
+}
+
 .select-menu-option.is-active {
   color: var(--select-tone);
   background: var(--select-tone-soft);
   font-weight: 650;
+}
+
+.select-menu-option.is-active.is-highlighted {
+  background: color-mix(in srgb, var(--select-tone) 18%, transparent);
 }
 
 .select-menu-option-label {
