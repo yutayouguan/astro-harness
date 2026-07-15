@@ -2635,8 +2635,12 @@ html[data-theme="dark"] .skills-preview-mark {
   display: flex;
   flex-wrap: nowrap;
   gap: 2px;
-  /* 底部留白：overflow-x 会裁切纵向阴影，避免选中胶囊底边成硬切 */
-  padding: 6px 14px 4px;
+  margin: 0 12px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tone) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
+  /* 底部留白：overflow-x 会裁切纵向溢出 */
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -2649,13 +2653,14 @@ html[data-theme="dark"] .skills-preview-mark {
   flex-shrink: 0;
   padding: 6px 10px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 11px;
   font-size: 12px;
   font-weight: 650;
   color: var(--ink-mute);
   background: transparent;
+  box-shadow: none;
   cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
 .skills-preview-tab svg {
@@ -2670,23 +2675,15 @@ html[data-theme="dark"] .skills-preview-mark {
 
 .skills-preview-tab.is-active {
   color: var(--tone);
-  border-color: color-mix(in srgb, var(--tone) 14%, transparent);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55)),
-    var(--tone-soft);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--tone) 8%, transparent),
-    0 4px 12px color-mix(in srgb, var(--tone) 10%, transparent);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tone-soft) 70%, rgba(255, 255, 255, 0.55));
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .skills-preview-tab.is-active {
-  border-color: color-mix(in srgb, var(--tone) 22%, transparent);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--tone) 14%, transparent);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.25),
-    0 4px 14px color-mix(in srgb, var(--tone) 18%, transparent);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.04));
+  box-shadow: none;
   color: color-mix(in srgb, #fff 18%, var(--tone));
 }
 
@@ -2695,7 +2692,12 @@ html[data-theme="dark"] .skills-preview-tab.is-active {
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  color: color-mix(in srgb, var(--tone) 75%, var(--ink-mute));
+}
+
+.skills-preview-tab.is-active .skills-preview-tab-count {
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
   color: var(--tone);
 }
 
