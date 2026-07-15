@@ -1,7 +1,7 @@
 //! 多 Agent 编排工具：异步串行调度子 Agent，并可查询进度。
 //!
 //! `orchestration_run` 落库后经 spawn hook 后台执行；立即返回 `orchestration_id`。
-//! 真正执行在 `agent::orchestration`，本模块不依赖 `agent` crate。
+//! 真正执行在 `agent::exec::orchestration`，本模块不依赖 `agent` crate。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

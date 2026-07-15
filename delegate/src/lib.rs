@@ -1,6 +1,6 @@
 //! 委派运行时契约：同步请求、异步任务登记、git worktree 隔离。
 //!
-//! 实际执行在 `agent::delegate_exec`；tools 只持有 [`DelegateRunner`] / spawner 回调。
+//! 实际执行在 `agent::exec::delegate`；tools 只持有 [`DelegateRunner`] / spawner 回调。
 
 pub mod async_reg;
 pub mod git_worktree;
