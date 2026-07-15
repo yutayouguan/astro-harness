@@ -97,31 +97,11 @@ fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 模型常把宽高比/分辨率写进 prompt 却漏传字段；缺参时从 prompt 补全，并规范化 `image_size` 大小写。
-fn enrich_geometry_from_prompt(args: &mut ImageGenArgs) {
+/// 仅规范化显式传入的 `image_size` 大小写（如 `2k` → `2K`）；缺省字段保持不填。
+fn normalize_image_gen_args(args: &mut ImageGenArgs) {
     if let Some(sz) = args.image_size.as_deref() {
         if let Some(norm) = normalize_image_size_token(sz) {
             args.image_size = Some(norm);
-        }
-    }
-    if args
-        .aspect_ratio
-        .as_deref()
-        .map(str::trim)
-        .is_none_or(|s| s.is_empty())
-    {
-        if let Some(ar) = infer_aspect_ratio_from_prompt(&args.prompt) {
-            args.aspect_ratio = Some(ar);
-        }
-    }
-    if args
-        .image_size
-        .as_deref()
-        .map(str::trim)
-        .is_none_or(|s| s.is_empty())
-    {
-        if let Some(sz) = infer_image_size_from_prompt(&args.prompt) {
-            args.image_size = Some(sz);
         }
     }
 }
@@ -134,30 +114,6 @@ fn normalize_image_size_token(s: &str) -> Option<String> {
         "4k" => Some("4K".into()),
         _ => None,
     }
-}
-
-fn infer_aspect_ratio_from_prompt(prompt: &str) -> Option<String> {
-    // 长边比优先匹配，避免误命中短片段。
-    const RATIOS: &[&str] = &[
-        "21:9", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "1:1",
-    ];
-    for ratio in RATIOS {
-        if prompt.contains(ratio) {
-            return Some((*ratio).to_string());
-        }
-    }
-    None
-}
-
-fn infer_image_size_from_prompt(prompt: &str) -> Option<String> {
-    let upper = prompt.to_ascii_uppercase();
-    // 先匹配更长的 token，避免 "0.5K" 被拆。
-    for token in ["0.5K", "4K", "2K", "1K"] {
-        if upper.contains(token) {
-            return Some(token.to_string());
-        }
-    }
-    None
 }
 
 fn has_advanced_interactions_args(args: &ImageGenArgs) -> bool {
@@ -213,7 +169,7 @@ pub fn register(registry: &mut ToolRegistry) {
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let mut parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
-    enrich_geometry_from_prompt(&mut parsed);
+    normalize_image_gen_args(&mut parsed);
     validate_image_gen_args(&parsed)?;
 
     if ctx.image_gen_targets.is_empty() {
@@ -565,45 +521,7 @@ mod arg_tests {
     }
 
     #[test]
-    fn enrich_lifts_geometry_stuffed_in_prompt() {
-        let mut a = ImageGenArgs {
-            prompt: "16:9宽屏，2K超高清分辨率，中国风写实摄影".into(),
-            aspect_ratio: None,
-            image_size: None,
-            reference_images: None,
-            previous_interaction_id: None,
-            google_search: false,
-            image_search: false,
-            thinking_level: None,
-            video_uri: None,
-            video: None,
-        };
-        enrich_geometry_from_prompt(&mut a);
-        assert_eq!(a.aspect_ratio.as_deref(), Some("16:9"));
-        assert_eq!(a.image_size.as_deref(), Some("2K"));
-    }
-
-    #[test]
-    fn enrich_does_not_override_explicit_fields() {
-        let mut a = ImageGenArgs {
-            prompt: "16:9 and 4K but caller already chose 1:1 / 1K".into(),
-            aspect_ratio: Some("1:1".into()),
-            image_size: Some("1K".into()),
-            reference_images: None,
-            previous_interaction_id: None,
-            google_search: false,
-            image_search: false,
-            thinking_level: None,
-            video_uri: None,
-            video: None,
-        };
-        enrich_geometry_from_prompt(&mut a);
-        assert_eq!(a.aspect_ratio.as_deref(), Some("1:1"));
-        assert_eq!(a.image_size.as_deref(), Some("1K"));
-    }
-
-    #[test]
-    fn enrich_normalizes_lowercase_image_size() {
+    fn normalize_lowercase_image_size() {
         let mut a = ImageGenArgs {
             prompt: "cat".into(),
             aspect_ratio: None,
@@ -616,7 +534,7 @@ mod arg_tests {
             video_uri: None,
             video: None,
         };
-        enrich_geometry_from_prompt(&mut a);
+        normalize_image_gen_args(&mut a);
         assert_eq!(a.image_size.as_deref(), Some("2K"));
         assert!(validate_image_gen_args(&a).is_ok());
     }
