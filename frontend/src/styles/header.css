@@ -569,8 +569,8 @@ html[data-theme="dark"] .model-picker.is-empty {
 }
 
 .model-picker-option.is-selected {
-  background: var(--accent);
-  color: #fff;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--ink);
 }
 
 .model-picker-option-icon {
@@ -588,8 +588,8 @@ html[data-theme="dark"] .model-picker.is-empty {
 }
 
 .model-picker-option.is-selected .model-picker-option-icon {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(255, 255, 255, 1);
+  background: color-mix(in srgb, #fff 88%, var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 18%, rgba(255, 255, 255, 0.9));
 }
 
 .model-picker-option-icon svg,
