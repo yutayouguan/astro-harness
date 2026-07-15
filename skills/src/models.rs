@@ -112,7 +112,7 @@ pub struct StoreSkillDetail {
     pub verified: Option<bool>,
 }
 
-/// 商店筛选：`skillhub` | `skillsdotsh` | `all`。
+/// 商店筛选：`skillhub` | `skillsdotsh` | `clawhub` | `all`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkillStoreFilter {
     /// 全部来源。
@@ -121,6 +121,8 @@ pub enum SkillStoreFilter {
     SkillHub,
     /// 仅 skills.sh。
     SkillsDotSh,
+    /// 仅 ClawHub。
+    ClawHub,
 }
 
 impl SkillStoreFilter {
@@ -130,6 +132,7 @@ impl SkillStoreFilter {
             "all" => Some(Self::All),
             "skillhub" => Some(Self::SkillHub),
             "skillsdotsh" => Some(Self::SkillsDotSh),
+            "clawhub" => Some(Self::ClawHub),
             _ => None,
         }
     }

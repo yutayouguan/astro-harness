@@ -174,7 +174,9 @@ function skillTone(id: string): (typeof SKILL_TONES)[number] {
 
 /** 商店来源短徽章文案 */
 function storeBadge(store: string): string {
-  return store === "skillhub" ? "SH" : "S·";
+  if (store === "skillhub") return "SH";
+  if (store === "clawhub") return "CH";
+  return "S·";
 }
 
 /** 安装量缩写（K / M） */
@@ -1721,7 +1723,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 ? t("skills.store.skillhub")
                 : selectedStore.store === "skillsdotsh"
                   ? t("skills.store.skillsdotsh")
-                  : selectedStore.store;
+                  : selectedStore.store === "clawhub"
+                    ? t("skills.store.clawhub")
+                    : selectedStore.store;
 
             return (
               <>
@@ -2157,7 +2161,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 role="tablist"
                 aria-label={t("skills.stores")}
               >
-                {(["all", "skillhub", "skillsdotsh"] as const).map((id) => (
+                {(
+                  ["all", "skillhub", "skillsdotsh", "clawhub"] as const
+                ).map((id) => (
                   <button
                     key={id}
                     type="button"
@@ -2170,6 +2176,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                       <LayoutGrid size={14} strokeWidth={2.25} aria-hidden />
                     ) : id === "skillhub" ? (
                       <Sparkles size={14} strokeWidth={2.25} aria-hidden />
+                    ) : id === "clawhub" ? (
+                      <Bot size={14} strokeWidth={2.25} aria-hidden />
                     ) : (
                       <Terminal size={14} strokeWidth={2.25} aria-hidden />
                     )}
@@ -2177,7 +2185,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                       ? t("skills.storeAll")
                       : id === "skillhub"
                         ? t("skills.store.skillhub")
-                        : t("skills.store.skillsdotsh")}
+                        : id === "clawhub"
+                          ? t("skills.store.clawhub")
+                          : t("skills.store.skillsdotsh")}
                   </button>
                 ))}
               </div>

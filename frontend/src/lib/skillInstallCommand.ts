@@ -57,6 +57,19 @@ export function storeInstallCommand(skill: StoreSkill): string {
     );
   }
 
+  if (skill.store === "clawhub") {
+    const installHint = skill.install_ref || `clawhub:${skill.name}`;
+    const detailUrl =
+      skill.homepage ||
+      `https://clawhub.ai/s/skills/${skill.id.replace(/^clawhub:/, "")}`;
+    return (
+      `请帮我安装 ClawHub 技能「${skill.name}」\n` +
+      `- 安装命令：npx --yes clawhub@latest install ${installHint.replace(/^clawhub:/, "")}\n` +
+      `- 安装引用：${installHint}\n` +
+      `- 详情：${detailUrl}\n`
+    );
+  }
+
   return (
     `请帮我安装这个 Skill：\n` +
     `- 名称：${skill.name}\n` +
@@ -83,6 +96,12 @@ export function storeSkillDetailUrl(skill: StoreSkill): string | null {
   if (skill.store === "skillhub") {
     // 勿用 homepage（api.skillhub.cn/...）或 owner/slug：官网详情路由仅为 /skills/:slug
     return `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;
+  }
+
+  if (skill.store === "clawhub") {
+    if (skill.homepage) return skill.homepage;
+    const slug = skill.id.replace(/^clawhub:/, "").split("--").pop() || skill.name;
+    return `https://clawhub.ai/s/skills/${slug}`;
   }
 
   return skill.homepage;

@@ -253,7 +253,7 @@ export type FileEntryDto = {
 };
 
 /** Skill 商店来源 id */
-export type SkillStoreId = "skillhub" | "skillsdotsh";
+export type SkillStoreId = "skillhub" | "skillsdotsh" | "clawhub";
 
 /** 本机已安装 Skill */
 export type InstalledSkill = {
