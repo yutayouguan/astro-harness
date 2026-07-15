@@ -654,7 +654,27 @@ html[data-theme="dark"] .bubble.user {
     color-mix(in srgb, var(--tl-tone) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--tl-tone) 32%, var(--glass-edge));
   box-shadow: var(--glass-rim, 0 0 0 1px transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
   z-index: 1;
+}
+
+html[data-theme="dark"] .msg-timeline-dot {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%),
+    color-mix(in srgb, var(--tl-tone) 22%, rgba(8, 6, 18, 0.55));
+  border-color: color-mix(in srgb, var(--tl-tone) 42%, rgba(255, 255, 255, 0.1));
+  box-shadow:
+    var(--glass-rim),
+    0 4px 12px color-mix(in srgb, var(--tl-tone) 18%, rgba(0, 0, 0, 0.35));
+}
+
+html[data-theme="dark"] .msg-timeline-line {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tl-tone) 48%, transparent) 0%,
+    color-mix(in srgb, var(--ink-mute) 18%, transparent) 100%
+  );
 }
 
 .msg-timeline-step.is-active .msg-timeline-dot {
@@ -971,12 +991,61 @@ html[data-theme="light"] .a2ui-surface {
   align-items: flex-start;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 12%, var(--glass-edge));
+  border: 1px solid color-mix(in srgb, var(--tl-tone, var(--tone, var(--accent))) 14%, var(--glass-edge));
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.08) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 30%, transparent);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow: var(--glass-rim);
+  backdrop-filter: blur(12px) saturate(1.25);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+}
+
+html[data-theme="dark"] .msg-activity {
+  border-color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, #a78bfa)) 28%,
+    rgba(255, 255, 255, 0.1)
+  );
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
+    color-mix(
+      in srgb,
+      var(--tl-tone, var(--tone, #a78bfa)) 12%,
+      rgba(8, 6, 18, 0.52)
+    );
+  box-shadow:
+    var(--glass-rim),
+    0 8px 22px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+html[data-theme="dark"] .msg-activity-title {
+  color: color-mix(in srgb, #fff 18%, var(--ink));
+}
+
+html[data-theme="dark"] .msg-activity-duration,
+html[data-theme="dark"] .msg-activity-time,
+html[data-theme="dark"] .msg-activity-kind,
+html[data-theme="dark"] .msg-activity-io-label,
+html[data-theme="dark"] .msg-activity-chevron {
+  color: color-mix(in srgb, var(--ink-mute) 72%, #fff);
+}
+
+html[data-theme="dark"] .msg-activity-kind-icon {
+  color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, #a78bfa)) 70%,
+    var(--ink-mute)
+  );
+}
+
+html[data-theme="dark"] .msg-activity-detail {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(0, 0, 0, 0.28);
+  color: var(--ink-soft);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .msg-activity-kind {
@@ -1218,6 +1287,34 @@ html[data-theme="light"] .a2ui-surface {
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   overflow: hidden;
+}
+
+html[data-theme="dark"] .msg-reasoning {
+  border-color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, #f59e0b)) 26%,
+    rgba(255, 255, 255, 0.1)
+  );
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.02) 100%),
+    color-mix(
+      in srgb,
+      var(--tl-tone, var(--tone, #f59e0b)) 10%,
+      rgba(8, 6, 18, 0.52)
+    );
+  box-shadow:
+    var(--glass-rim),
+    0 8px 22px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+html[data-theme="dark"] .msg-reasoning-toggle {
+  color: color-mix(in srgb, var(--ink-mute) 70%, #fff);
+}
+
+html[data-theme="dark"] .msg-reasoning-toggle:hover {
+  color: var(--ink);
 }
 
 .msg-reasoning-toggle {
