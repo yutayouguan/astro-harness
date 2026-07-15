@@ -435,6 +435,152 @@ fn multipart_image(field: &str, img: VideoImagePart) -> Result<(String, reqwest:
     Ok((field.to_string(), part))
 }
 
+async fn google_api_get_bytes(client: &Client, url: &str, api_key: &str) -> Result<Vec<u8>> {
+    let response = client
+        .get(url)
+        .header("x-goog-api-key", api_key)
+        .send()
+        .await
+        .with_context(|| format!("GET 失败: {url}"))?;
+    let status = response.status();
+    if status.is_success() {
+        return response
+            .bytes()
+            .await
+            .context("读取响应字节失败")
+            .map(|b| b.to_vec());
+    }
+    let v: Value = response.json().await.unwrap_or(json!({}));
+    let msg = v
+        .pointer("/error/message")
+        .and_then(|m| m.as_str())
+        .unwrap_or("GET 请求失败");
+    anyhow::bail!("GET {status}: {msg}");
+}
+
+/// Google 原生 Veo：`predictLongRunning` 创建、轮询 operation、下载视频字节。
+///
+/// 若 `extend_video` 为空且 `extend_video_uri` 有值，会先 GET 该 URI（带 API key）
+/// 再写入请求体 `video.inlineData`。
+pub async fn google_native_generate_video(
+    client: &Client,
+    prompt: &str,
+    config: &ProviderConfig,
+    extras: &VideoGenExtras,
+    mut on_progress: Option<&mut dyn FnMut(&str)>,
+) -> Result<GeneratedVideo> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("Google API Key 为空");
+    }
+    let api_key = config.api_key.trim();
+    let model = if config.model.trim().is_empty() {
+        default_video_model()
+    } else {
+        config.model.trim()
+    };
+
+    let mut body_extras = extras.clone();
+    if body_extras.extend_video.is_none() {
+        if let Some(uri) = extras
+            .extend_video_uri
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            let bytes = google_api_get_bytes(client, uri, api_key)
+                .await
+                .with_context(|| format!("下载 extend_video_uri 失败: {uri}"))?;
+            body_extras.extend_video = Some(VideoImagePart {
+                mime: "video/mp4".into(),
+                filename: "extend.mp4".into(),
+                bytes,
+            });
+        }
+    }
+
+    let predict_url = google_veo_predict_url(config, model);
+    let body = build_veo_predict_body(prompt, &body_extras);
+
+    let emit = |cb: &mut Option<&mut dyn FnMut(&str)>, msg: &str| {
+        if let Some(f) = cb.as_mut() {
+            f(msg);
+        }
+    };
+
+    let create_resp = client
+        .post(&predict_url)
+        .header("x-goog-api-key", api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("Veo predictLongRunning 失败: {predict_url}"))?;
+    let create_status = create_resp.status();
+    let create_body: Value = create_resp
+        .json()
+        .await
+        .context("解析 Veo 创建响应失败")?;
+    if !create_status.is_success() {
+        let msg = create_body
+            .pointer("/error/message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Veo predictLongRunning 失败");
+        anyhow::bail!("Veo predict HTTP {create_status}: {msg}");
+    }
+
+    let op_name = extract_veo_operation_name(&create_body)?;
+    emit(
+        &mut on_progress,
+        &format!("status=queued operation_name={op_name}"),
+    );
+
+    let poll_url = google_operation_url(config, &op_name);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10 * 60);
+    let video_uri = loop {
+        if tokio::time::Instant::now() > deadline {
+            anyhow::bail!("Veo 生成超时（operation name={op_name}）");
+        }
+        let poll = client
+            .get(&poll_url)
+            .header("x-goog-api-key", api_key)
+            .send()
+            .await
+            .with_context(|| format!("轮询 Veo operation 失败: {poll_url}"))?;
+        let status = poll.status();
+        let poll_body: Value = poll.json().await.context("解析 Veo 轮询响应失败")?;
+        if !status.is_success() {
+            let msg = poll_body
+                .pointer("/error/message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("轮询 Veo operation 失败");
+            anyhow::bail!("Veo operation poll HTTP {status}: {msg}");
+        }
+        let done = poll_body.get("done") == Some(&json!(true))
+            || poll_body.pointer("/done").and_then(|d| d.as_bool()) == Some(true);
+        if done {
+            break extract_veo_video_uri(&poll_body)?;
+        }
+        emit(
+            &mut on_progress,
+            &format!("status=processing operation_name={op_name}"),
+        );
+        sleep(Duration::from_secs(10)).await;
+    };
+
+    emit(&mut on_progress, "status=downloading");
+    let bytes = google_api_get_bytes(client, &video_uri, api_key)
+        .await
+        .with_context(|| format!("下载 Veo 视频失败: {video_uri}"))?;
+    emit(&mut on_progress, "status=completed");
+
+    Ok(GeneratedVideo {
+        data: bytes,
+        mime_type: "video/mp4".into(),
+        operation_id: op_name,
+        video_uri: Some(video_uri),
+    })
+}
+
 /// 创建并轮询 Google OpenAI 兼容视频，完成后下载字节。
 ///
 /// `on_progress` 在创建成功与每次轮询时回调（如 `status=processing`）。
@@ -615,7 +761,7 @@ pub async fn google_openai_generate_video(
                     data: bytes.to_vec(),
                     mime_type: "video/mp4".to_string(),
                     operation_id: op_id,
-                    video_uri: None,
+                    video_uri: Some(url.to_string()),
                 });
             }
             "failed" => {
