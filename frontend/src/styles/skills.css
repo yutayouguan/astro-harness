@@ -186,8 +186,163 @@ html[data-theme="dark"] .skills-main-tab.active {
   min-height: 36px;
 }
 
+/* 紧凑 Tab 轨道：与 .skills-main-tabs 同语汇（pill-on-track） */
+.skills-tab-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.skills-tab-shell .skills-action-btn {
+  border: none;
+  border-radius: 10px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 7px 12px;
+  color: var(--ink-soft);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.5)),
+    color-mix(in srgb, var(--chip-bg, #fff) 80%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--glass-edge) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 2px 6px color-mix(in srgb, var(--tone) 8%, rgba(15, 23, 42, 0.04));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.skills-tab-shell .skills-action-btn:hover {
+  color: var(--tone);
+  border-color: transparent;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.55)),
+    color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.skills-tab-shell .skills-action-btn.primary {
+  color: var(--tone);
+  border-color: transparent;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+.skills-tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink-mute);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--glass-edge) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+.skills-tab-pill.is-on {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+html[data-theme="dark"] .skills-tab-shell {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    rgba(8, 6, 18, 0.58);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .skills-tab-shell .skills-action-btn {
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .skills-tab-shell .skills-action-btn.primary,
+html[data-theme="dark"] .skills-tab-pill.is-on {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
+html[data-theme="dark"] .skills-tab-pill {
+  color: var(--ink-mute);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.skills-tab-shell .agent-picker {
+  max-width: min(220px, 42vw);
+}
+
+.skills-tab-shell .agent-picker-chip {
+  min-height: 28px;
+  min-width: 0;
+  border: none;
+  border-radius: 10px;
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.skills-tab-shell .agent-picker-chip:hover:not(:disabled),
+.skills-tab-shell .agent-picker-chip.is-open {
+  border-color: transparent;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.52)),
+    color-mix(in srgb, var(--tone) 16%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 32%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 3px 10px color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+html[data-theme="dark"] .skills-tab-shell .agent-picker-chip {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
 /* 展开搜索时隐藏左侧筛选，腾出空间给输入框 */
 .skills-pane-actions:has(.expandable-search.is-open) .agent-picker,
+.skills-pane-actions:has(.expandable-search.is-open) .skills-tab-shell:has(.agent-picker),
 .skills-pane-actions:has(.expandable-search.is-open) .select-menu {
   display: none;
 }
@@ -210,22 +365,78 @@ html[data-theme="dark"] .skills-main-tab.active {
 
 .skills-pane-actions .select-menu,
 .skills-store-toolbar .select-menu {
-  /* 继承页面 --tone（indigo/lavender），与 Agent 芯片同套液态玻璃 */
+  /* 继承页面 --tone；容器本身即 Tab 轨道 */
   --select-tone: var(--tone);
   --select-tone-soft: var(--tone-soft);
   flex: 0 0 auto;
-  width: 5.75rem;
+  width: auto;
   min-width: 5.75rem;
-  max-width: 5.75rem;
+  max-width: 8rem;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .skills-pane-actions .select-menu--sm .select-menu-trigger,
 .skills-store-toolbar .select-menu--sm .select-menu-trigger {
-  height: 36px;
-  min-height: 36px;
-  border-radius: 12px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 10px;
+  border: none;
   font-size: 13px;
-  padding: 8px 8px 8px 10px;
+  font-weight: 650;
+  padding: 6px 8px 6px 10px;
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.skills-pane-actions .select-menu--sm .select-menu-trigger:hover:not(:disabled),
+.skills-pane-actions .select-menu.is-open .select-menu-trigger,
+.skills-store-toolbar .select-menu--sm .select-menu-trigger:hover:not(:disabled),
+.skills-store-toolbar .select-menu.is-open .select-menu-trigger {
+  color: var(--tone);
+  border-color: transparent;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.52)),
+    color-mix(in srgb, var(--tone) 16%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 32%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 3px 10px color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+html[data-theme="dark"] .skills-pane-actions .select-menu,
+html[data-theme="dark"] .skills-store-toolbar .select-menu {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    rgba(8, 6, 18, 0.58);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .skills-pane-actions .select-menu--sm .select-menu-trigger,
+html[data-theme="dark"] .skills-store-toolbar .select-menu--sm .select-menu-trigger {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
 }
 
 .skills-store-toolbar-row {
@@ -1047,7 +1258,8 @@ html[data-theme="dark"] .skill-card-tag {
   opacity: 0.88;
 }
 
-.skill-card-toggle .skill-card-toggle-mark {
+.skill-card-toggle .skill-card-toggle-mark,
+.skills-tab-pill .skill-card-toggle-mark {
   display: inline-grid;
   place-items: center;
   width: 16px;
@@ -1059,7 +1271,8 @@ html[data-theme="dark"] .skill-card-tag {
   box-shadow: 0 1px 3px color-mix(in srgb, var(--tone, var(--tone-cyan)) 35%, transparent);
 }
 
-.skill-card-toggle:has(input:not(:checked)) .skill-card-toggle-mark {
+.skill-card-toggle:has(input:not(:checked)) .skill-card-toggle-mark,
+.skills-tab-pill:not(.is-on) .skill-card-toggle-mark {
   background: color-mix(in srgb, var(--ink) 18%, transparent);
   box-shadow: none;
   color: transparent;
@@ -1865,11 +2078,25 @@ html[data-theme="dark"] .skills-detail-body {
 .skills-detail-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
 .skills-detail-actions .skills-action-btn {
   min-width: 120px;
+}
+
+.skills-detail-actions .skills-tab-shell .skills-action-btn {
+  min-width: 0;
+}
+
+.skills-detail-panel .skills-toggle.skills-tab-shell {
+  gap: 0;
+  padding: 3px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  font-size: inherit;
 }
 
 .skills-toggle {
@@ -2260,11 +2487,16 @@ html[data-theme="dark"] .skills-end-hint {
 
 .skills-update-filters {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   padding: 4px;
   border-radius: 14px;
-  background: var(--chip-bg);
-  border: 1px solid var(--chip-border);
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .skills-update-filter {
@@ -2276,25 +2508,41 @@ html[data-theme="dark"] .skills-end-hint {
   border-radius: 10px;
   padding: 8px 14px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.skills-update-filter:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
 }
 
 .skills-update-filter.active {
-  color: var(--tone-indigo);
-  background: var(--tone-indigo-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-indigo) 22%, transparent);
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 .skills-store-tabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   padding: 4px;
   border-radius: 14px;
-  background: var(--chip-bg);
-  border: 1px solid var(--chip-border);
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .skills-store-tab {
@@ -2306,10 +2554,11 @@ html[data-theme="dark"] .skills-end-hint {
   border-radius: 10px;
   padding: 8px 14px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .skills-store-tab > svg {
@@ -2317,14 +2566,24 @@ html[data-theme="dark"] .skills-end-hint {
   opacity: 0.85;
 }
 
+.skills-store-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+}
+
 .skills-store-tab.active > svg {
   opacity: 1;
 }
 
 .skills-store-tab.active {
-  color: var(--tone-cyan);
-  background: var(--tone-cyan-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-cyan) 22%, transparent);
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 .skills-action-btn {

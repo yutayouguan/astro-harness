@@ -2201,27 +2201,31 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                     })}
                   </span>
                 </div>
-                <label className="skills-toggle skill-card-toggle">
+                <label className="skills-toggle skills-tab-shell">
                   <input
                     type="checkbox"
                     checked={selectedInstalled.enabled}
                     onChange={() => void toggleEnabled(selectedInstalled)}
                   />
-                  <span className="skill-card-toggle-mark" aria-hidden>
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path
-                        d="M2 5.2 4.1 7.3 8 2.8"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <span>
-                    {selectedInstalled.enabled
-                      ? t("skills.enabled")
-                      : t("skills.disabled")}
+                  <span
+                    className={`skills-tab-pill ${selectedInstalled.enabled ? "is-on" : ""}`}
+                  >
+                    <span className="skill-card-toggle-mark" aria-hidden>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                        <path
+                          d="M2 5.2 4.1 7.3 8 2.8"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                    <span>
+                      {selectedInstalled.enabled
+                        ? t("skills.enabled")
+                        : t("skills.disabled")}
+                    </span>
                   </span>
                 </label>
               </div>
@@ -2246,28 +2250,30 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                     ? t("skills.viewing")
                     : t("skills.view")}
                 </button>
-                <button
-                  type="button"
-                  className="skills-action-btn"
-                  onClick={() => void openSkillFolder(selectedInstalled)}
-                >
-                  <FolderOpen size={14} strokeWidth={2.25} aria-hidden />
-                  {t("skills.openFolder")}
-                </button>
-                <button
-                  type="button"
-                  className="skills-action-btn"
-                  onClick={() => void copyInstalledPrompt(selectedInstalled)}
-                >
-                  {copiedId === selectedInstalled.id ? (
-                    <Check size={14} strokeWidth={2.25} aria-hidden />
-                  ) : (
-                    <Copy size={14} strokeWidth={2.25} aria-hidden />
-                  )}
-                  {copiedId === selectedInstalled.id
-                    ? t("skills.copied")
-                    : t("skills.copyPrompt")}
-                </button>
+                <div className="skills-tab-shell">
+                  <button
+                    type="button"
+                    className="skills-action-btn"
+                    onClick={() => void openSkillFolder(selectedInstalled)}
+                  >
+                    <FolderOpen size={14} strokeWidth={2.25} aria-hidden />
+                    {t("skills.openFolder")}
+                  </button>
+                  <button
+                    type="button"
+                    className="skills-action-btn"
+                    onClick={() => void copyInstalledPrompt(selectedInstalled)}
+                  >
+                    {copiedId === selectedInstalled.id ? (
+                      <Check size={14} strokeWidth={2.25} aria-hidden />
+                    ) : (
+                      <Copy size={14} strokeWidth={2.25} aria-hidden />
+                    )}
+                    {copiedId === selectedInstalled.id
+                      ? t("skills.copied")
+                      : t("skills.copyPrompt")}
+                  </button>
+                </div>
               </div>
             </header>
             <section className="skills-detail-section">
@@ -2382,47 +2388,49 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                     ? t("skills.viewing")
                     : t("skills.view")}
                 </button>
-                <button
-                  type="button"
-                  className="skills-action-btn"
-                  onClick={() => void openSkillFolder(selectedMachine)}
-                >
-                  <FolderOpen size={14} strokeWidth={2.25} aria-hidden />
-                  {t("skills.openFolder")}
-                </button>
-                <button
-                  type="button"
-                  className={`skills-action-btn ${selectedMachine.linked ? "" : "primary"}`}
-                  disabled={linkingId === selectedMachine.id}
-                  onClick={() => void toggleMachineLink(selectedMachine)}
-                >
-                  {linkingId === selectedMachine.id ? (
-                    <LoaderCircle size={14} strokeWidth={2.25} className="is-spin" aria-hidden />
-                  ) : selectedMachine.linked ? (
-                    <Unlink2 size={14} strokeWidth={2.25} aria-hidden />
-                  ) : (
-                    <Link2 size={14} strokeWidth={2.25} aria-hidden />
-                  )}
-                  {linkingId === selectedMachine.id
-                    ? "…"
-                    : selectedMachine.linked
-                      ? t("skills.machineUnlink")
-                      : t("skills.machineLink")}
-                </button>
-                <button
-                  type="button"
-                  className="skills-action-btn"
-                  onClick={() => void copyInstalledPrompt(selectedMachine)}
-                >
-                  {copiedId === selectedMachine.id ? (
-                    <Check size={14} strokeWidth={2.25} aria-hidden />
-                  ) : (
-                    <Copy size={14} strokeWidth={2.25} aria-hidden />
-                  )}
-                  {copiedId === selectedMachine.id
-                    ? t("skills.copied")
-                    : t("skills.copyPrompt")}
-                </button>
+                <div className="skills-tab-shell">
+                  <button
+                    type="button"
+                    className="skills-action-btn"
+                    onClick={() => void openSkillFolder(selectedMachine)}
+                  >
+                    <FolderOpen size={14} strokeWidth={2.25} aria-hidden />
+                    {t("skills.openFolder")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`skills-action-btn ${selectedMachine.linked ? "" : "primary"}`}
+                    disabled={linkingId === selectedMachine.id}
+                    onClick={() => void toggleMachineLink(selectedMachine)}
+                  >
+                    {linkingId === selectedMachine.id ? (
+                      <LoaderCircle size={14} strokeWidth={2.25} className="is-spin" aria-hidden />
+                    ) : selectedMachine.linked ? (
+                      <Unlink2 size={14} strokeWidth={2.25} aria-hidden />
+                    ) : (
+                      <Link2 size={14} strokeWidth={2.25} aria-hidden />
+                    )}
+                    {linkingId === selectedMachine.id
+                      ? "…"
+                      : selectedMachine.linked
+                        ? t("skills.machineUnlink")
+                        : t("skills.machineLink")}
+                  </button>
+                  <button
+                    type="button"
+                    className="skills-action-btn"
+                    onClick={() => void copyInstalledPrompt(selectedMachine)}
+                  >
+                    {copiedId === selectedMachine.id ? (
+                      <Check size={14} strokeWidth={2.25} aria-hidden />
+                    ) : (
+                      <Copy size={14} strokeWidth={2.25} aria-hidden />
+                    )}
+                    {copiedId === selectedMachine.id
+                      ? t("skills.copied")
+                      : t("skills.copyPrompt")}
+                  </button>
+                </div>
               </div>
             </header>
             <section className="skills-detail-section">
@@ -2758,12 +2766,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               </p>
             </div>
             <div className="skills-pane-actions">
-              <AgentPicker
-                agents={agents}
-                value={agentId}
-                onChange={(id) => void switchAgent(id)}
-                labelKey="filespace.agentFilter"
-              />
+              <div className="skills-tab-shell">
+                <AgentPicker
+                  agents={agents}
+                  value={agentId}
+                  onChange={(id) => void switchAgent(id)}
+                  labelKey="filespace.agentFilter"
+                />
+              </div>
               <SelectMenu
                 size="sm"
                 value={installedSort}
@@ -2841,12 +2851,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               <p>{t("skills.machineSub")}</p>
             </div>
             <div className="skills-pane-actions">
-              <AgentPicker
-                agents={agents}
-                value={agentId}
-                onChange={(id) => void switchAgent(id)}
-                labelKey="filespace.agentFilter"
-              />
+              <div className="skills-tab-shell">
+                <AgentPicker
+                  agents={agents}
+                  value={agentId}
+                  onChange={(id) => void switchAgent(id)}
+                  labelKey="filespace.agentFilter"
+                />
+              </div>
               <SelectMenu
                 size="sm"
                 value={machineLinkFilter}
@@ -2934,51 +2946,55 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               </p>
             </div>
             <div className="skills-pane-actions">
-              <AgentPicker
-                agents={agents}
-                value={agentId}
-                onChange={(id) => void switchAgent(id)}
-                labelKey="filespace.agentFilter"
-              />
-              <button
-                type="button"
-                className="skills-action-btn"
-                disabled={
-                  checkingUpdates || updatingAll || updatingFolder !== null
-                }
-                onClick={() => void checkSkillUpdates({ force: true })}
-                title={t("skills.checkUpdates")}
-              >
-                {checkingUpdates ? (
-                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
-                ) : (
-                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
-                )}
-                <span>
-                  {checkingUpdates
-                    ? t("skills.checkingUpdates")
-                    : t("skills.checkUpdates")}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="skills-action-btn primary"
-                disabled={
-                  outdatedCount === 0 ||
-                  updatingAll ||
-                  updatingFolder !== null ||
-                  checkingUpdates
-                }
-                onClick={() => void updateAllSkills()}
-                title={t("skills.updateAll")}
-              >
-                {updatingAll ? (
-                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
-                ) : (
-                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
-                )}
-                <span>{updatingAll ? t("skills.updating") : t("skills.updateAll")}</span>
-              </button>
+              <div className="skills-tab-shell">
+                <AgentPicker
+                  agents={agents}
+                  value={agentId}
+                  onChange={(id) => void switchAgent(id)}
+                  labelKey="filespace.agentFilter"
+                />
+              </div>
+              <div className="skills-tab-shell">
+                <button
+                  type="button"
+                  className="skills-action-btn"
+                  disabled={
+                    checkingUpdates || updatingAll || updatingFolder !== null
+                  }
+                  onClick={() => void checkSkillUpdates({ force: true })}
+                  title={t("skills.checkUpdates")}
+                >
+                  {checkingUpdates ? (
+                    <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+                  )}
+                  <span>
+                    {checkingUpdates
+                      ? t("skills.checkingUpdates")
+                      : t("skills.checkUpdates")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="skills-action-btn primary"
+                  disabled={
+                    outdatedCount === 0 ||
+                    updatingAll ||
+                    updatingFolder !== null ||
+                    checkingUpdates
+                  }
+                  onClick={() => void updateAllSkills()}
+                  title={t("skills.updateAll")}
+                >
+                  {updatingAll ? (
+                    <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+                  )}
+                  <span>{updatingAll ? t("skills.updating") : t("skills.updateAll")}</span>
+                </button>
+              </div>
               <button
                 type="button"
                 className="skills-icon-btn"
