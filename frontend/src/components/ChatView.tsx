@@ -8,6 +8,7 @@ import {
   type ChangeEvent,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -79,6 +80,7 @@ import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
+import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
 import { useMcpTools } from "../hooks/useMcpTools";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
 import A2UISurfaceCard from "./A2UISurfaceCard";
@@ -469,32 +471,6 @@ function MessageActions({
       >
         <GitBranch size={14} strokeWidth={2} aria-hidden />
       </button>
-    </div>
-  );
-}
-
-/** 工具/技能等活动卡片列表（直接展示，无外层折叠包裹） */
-function ActivityCards({
-  items,
-  prefs,
-  showTimestamps,
-}: {
-  items: ChatActivity[];
-  prefs: ChatDisplayPrefs;
-  showTimestamps: boolean;
-}) {
-  const visible = items.filter((a) => isActivityVisible(a.kind, prefs));
-  if (!visible.length) return null;
-  return (
-    <div className="msg-activities">
-      {visible.map((a) => (
-        <MsgActivity
-          key={a.id}
-          activity={a}
-          defaultOpen={false}
-          showTimestamp={showTimestamps}
-        />
-      ))}
     </div>
   );
 }
@@ -1088,142 +1064,196 @@ export default function ChatView({
                       {m.attachments && m.attachments.length > 0 && (
                         <MessageAttachments items={m.attachments} />
                       )}
-                      {m.segments && m.segments.length > 0 ? (
-                        <>
-                          {(coalesceReasoningSegments(m.segments) ?? m.segments).map(
-                            (seg, segIdx, displaySegs) => {
-                            if (seg.type === "reasoning") {
-                              const openReasoning =
-                                seg.durationSec == null || seg.durationSec <= 0;
-                              const isLastReasoning =
-                                !displaySegs
-                                  .slice(segIdx + 1)
-                                  .some((s) => s.type === "reasoning");
-                              const active = Boolean(
-                                isStreamingBubble &&
-                                  openReasoning &&
-                                  isLastReasoning,
-                              );
-                              return (
-                                <MsgReasoning
-                                  key={seg.id}
-                                  reasoning={seg.text}
-                                  active={active}
-                                  durationSec={seg.durationSec}
-                                  startedAtMs={active ? seg.at : undefined}
-                                />
-                              );
-                            }
-                            if (seg.type === "activity") {
-                              const act = m.activities?.find(
-                                (a) => a.id === seg.id,
-                              );
-                              if (!act) return null;
-                              return (
-                                <ActivityCards
-                                  key={seg.id}
-                                  items={[act]}
-                                  prefs={displayPrefs}
-                                  showTimestamps={displayPrefs.showTimestamps}
-                                />
-                              );
-                            }
-                            const surface = m.uiSurfaces?.find(
-                              (s) => s.messageId === seg.id,
-                            );
-                            if (!surface) return null;
-                            if (surface.interrupts && surface.interrupts.length > 0) {
-                              return (
+                      {(() => {
+                        type Step = {
+                          key: string;
+                          kind: MsgTimelineKind;
+                          active?: boolean;
+                          node: ReactNode;
+                        };
+                        const steps: Step[] = [];
+                        const pushActivity = (act: ChatActivity) => {
+                          if (!isActivityVisible(act.kind, displayPrefs)) return;
+                          steps.push({
+                            key: `act-${act.id}`,
+                            kind: act.kind,
+                            active: act.status === "running",
+                            node: (
+                              <MsgActivity
+                                activity={act}
+                                defaultOpen={false}
+                                showTimestamp={displayPrefs.showTimestamps}
+                              />
+                            ),
+                          });
+                        };
+                        const pushSurface = (
+                          surface: NonNullable<ChatMessage["uiSurfaces"]>[number],
+                        ) => {
+                          steps.push({
+                            key: `surf-${surface.messageId}`,
+                            kind: "surface",
+                            active: surface.status === "active",
+                            node:
+                              surface.interrupts && surface.interrupts.length > 0 ? (
                                 <A2UIRenderer
-                                  key={seg.id}
                                   operations={surface.operations}
                                   disabled={surface.status !== "active"}
                                   onAction={(name, context) =>
                                     onUiAction?.(m.id, name, context)
                                   }
                                 />
+                              ) : (
+                                <A2UISurfaceCard
+                                  surface={surface}
+                                  onAction={(name, context) =>
+                                    onUiAction?.(m.id, name, context)
+                                  }
+                                />
+                              ),
+                          });
+                        };
+
+                        if (m.segments && m.segments.length > 0) {
+                          const displaySegs =
+                            coalesceReasoningSegments(m.segments) ?? m.segments;
+                          for (const seg of displaySegs) {
+                            if (seg.type === "reasoning") {
+                              const openReasoning =
+                                seg.durationSec == null || seg.durationSec <= 0;
+                              const active = Boolean(
+                                isStreamingBubble && openReasoning,
                               );
-                            }
-                            return (
-                              <A2UISurfaceCard
-                                key={seg.id}
-                                surface={surface}
-                                onAction={(name, context) =>
-                                  onUiAction?.(m.id, name, context)
-                                }
-                              />
-                            );
-                          })}
-                        </>
-                      ) : (
-                        <>
-                          {m.reasoning ? (
-                            <MsgReasoning
-                              reasoning={m.reasoning}
-                              active={reasoningActive}
-                              durationSec={m.reasoningDurationSec}
-                            />
-                          ) : null}
-                          {m.activities && m.activities.length > 0 && (
-                            <ActivityCards
-                              items={m.activities}
-                              prefs={displayPrefs}
-                              showTimestamps={displayPrefs.showTimestamps}
-                            />
-                          )}
-                          {m.uiSurfaces && m.uiSurfaces.length > 0
-                            ? m.uiSurfaces.map((surface) =>
-                                surface.interrupts && surface.interrupts.length > 0 ? (
-                                  <A2UIRenderer
-                                    key={surface.messageId}
-                                    operations={surface.operations}
-                                    disabled={surface.status !== "active"}
-                                    onAction={(name, context) =>
-                                      onUiAction?.(m.id, name, context)
-                                    }
-                                  />
-                                ) : (
-                                  <A2UISurfaceCard
-                                    key={surface.messageId}
-                                    surface={surface}
-                                    onAction={(name, context) =>
-                                      onUiAction?.(m.id, name, context)
-                                    }
+                              steps.push({
+                                key: seg.id,
+                                kind: "reasoning",
+                                active,
+                                node: (
+                                  <MsgReasoning
+                                    reasoning={seg.text}
+                                    active={active}
+                                    durationSec={seg.durationSec}
+                                    startedAtMs={active ? seg.at : undefined}
                                   />
                                 ),
-                              )
-                            : null}
-                        </>
-                      )}
+                              });
+                              continue;
+                            }
+                            if (seg.type === "activity") {
+                              const act = m.activities?.find(
+                                (a) => a.id === seg.id,
+                              );
+                              if (act) pushActivity(act);
+                              continue;
+                            }
+                            const surface = m.uiSurfaces?.find(
+                              (s) => s.messageId === seg.id,
+                            );
+                            if (surface) pushSurface(surface);
+                          }
+                        } else {
+                          if (m.reasoning) {
+                            steps.push({
+                              key: `r-${m.id}`,
+                              kind: "reasoning",
+                              active: reasoningActive,
+                              node: (
+                                <MsgReasoning
+                                  reasoning={m.reasoning}
+                                  active={reasoningActive}
+                                  durationSec={m.reasoningDurationSec}
+                                />
+                              ),
+                            });
+                          }
+                          for (const act of m.activities ?? []) {
+                            pushActivity(act);
+                          }
+                          for (const surface of m.uiSurfaces ?? []) {
+                            pushSurface(surface);
+                          }
+                        }
+
+                        const showLoaderAlone =
+                          isStreamingBubble &&
+                          !m.content &&
+                          !m.reasoning &&
+                          !m.attachments?.length &&
+                          !m.uiSurfaces?.length &&
+                          !(
+                            m.activities?.length &&
+                            displayPrefs.verbosity !== "compact"
+                          );
+                        const hasProcess = steps.length > 0;
+
+                        if (m.content) {
+                          steps.push({
+                            key: `reply-${m.id}`,
+                            kind: "reply",
+                            node: (
+                              <>
+                                <ChatMarkdown
+                                  content={m.content}
+                                  streaming={isStreamingBubble}
+                                  compact={displayPrefs.verbosity === "compact"}
+                                  plain={m.role === "user" || Boolean(m.error)}
+                                  caret={isStreamingBubble}
+                                />
+                                {isStreamingBubble ? <MsgStreamLoader /> : null}
+                              </>
+                            ),
+                          });
+                        } else if (isStreamingBubble && hasProcess) {
+                          steps.push({
+                            key: `gen-${m.id}`,
+                            kind: "generating",
+                            active: true,
+                            node: <MsgStreamLoader />,
+                          });
+                        } else if (showLoaderAlone) {
+                          steps.push({
+                            key: `gen-${m.id}`,
+                            kind: "generating",
+                            active: true,
+                            node: <MsgStreamLoader alone />,
+                          });
+                        } else if (isStreamingBubble && !hasProcess) {
+                          steps.push({
+                            key: `gen-${m.id}`,
+                            kind: "generating",
+                            active: true,
+                            node: <MsgStreamLoader />,
+                          });
+                        }
+
+                        if (steps.length === 0) return null;
+
+                        if (!hasProcess) {
+                          return <>{steps.map((step) => (
+                            <div key={step.key}>{step.node}</div>
+                          ))}</>;
+                        }
+
+                        return (
+                          <MsgTimeline>
+                            {steps.map((step, i) => (
+                              <MsgTimelineStep
+                                key={step.key}
+                                kind={step.kind}
+                                active={step.active}
+                                isLast={i === steps.length - 1}
+                              >
+                                {step.node}
+                              </MsgTimelineStep>
+                            ))}
+                          </MsgTimeline>
+                        );
+                      })()}
                       {displayPrefs.showTimestamps && m.createdAt ? (
                         <div className="msg-timestamp">
                           {new Date(m.createdAt).toLocaleTimeString()}
                         </div>
                       ) : null}
-                      {isStreamingBubble &&
-                      !m.content &&
-                      !m.reasoning &&
-                      !m.attachments?.length &&
-                      !m.uiSurfaces?.length &&
-                      !(
-                        m.activities?.length &&
-                        displayPrefs.verbosity !== "compact"
-                      ) ? (
-                        <MsgStreamLoader alone />
-                      ) : (
-                        <>
-                          {m.content ? (
-                            <ChatMarkdown
-                              content={m.content}
-                              streaming={isStreamingBubble}
-                              compact={displayPrefs.verbosity === "compact"}
-                              plain={m.role === "user" || Boolean(m.error)}
-                              caret={isStreamingBubble}
-                            />
-                          ) : null}
-                          {isStreamingBubble ? <MsgStreamLoader /> : null}
-                        </>
-                      )}
                       {m.role === "assistant" &&
                       !isStreamingBubble &&
                       (m.usage || m.generationDurationSec) ? (
