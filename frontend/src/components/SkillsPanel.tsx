@@ -2358,6 +2358,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                         ? formatBytes(previewFileMeta.size)
                         : undefined
                     }
+                    skillName={preview.name}
+                    skillDescription={preview.description}
                     onReveal={
                       previewFile
                         ? () => {

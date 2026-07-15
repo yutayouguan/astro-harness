@@ -43,14 +43,35 @@ function isMarkdownPath(filename: string): boolean {
   return lower.endsWith(".md") || lower.endsWith(".markdown");
 }
 
-function SkillFrontmatterCard({ meta }: { meta: SkillFrontmatter }) {
+function normText(s: string | undefined | null): string {
+  return (s ?? "").trim().replace(/\s+/g, " ");
+}
+
+function SkillFrontmatterCard({
+  meta,
+  knownName,
+  knownDescription,
+}: {
+  meta: SkillFrontmatter;
+  /** 抽屉顶栏已展示的名称；相同则不再重复 */
+  knownName?: string;
+  /** 抽屉顶栏已展示的描述；相同则不再重复 */
+  knownDescription?: string;
+}) {
   const { t } = useI18n();
   const [descOpen, setDescOpen] = useState(false);
   const [extrasOpen, setExtrasOpen] = useState(false);
-  const desc = meta.description?.trim() ?? "";
-  const descLong = desc.length > 160 || desc.includes("\n");
 
-  if (!meta.name && !desc && meta.extras.length === 0) return null;
+  const showName =
+    Boolean(meta.name?.trim()) &&
+    normText(meta.name) !== normText(knownName);
+  const desc = meta.description?.trim() ?? "";
+  const showDesc =
+    Boolean(desc) && normText(desc) !== normText(knownDescription);
+  const descLong = desc.length > 160 || desc.includes("\n");
+  const showExtras = meta.extras.length > 0;
+
+  if (!showName && !showDesc && !showExtras) return null;
 
   return (
     <section className="skills-frontmatter" aria-label={t("skills.frontmatterTitle")}>
@@ -58,45 +79,47 @@ function SkillFrontmatterCard({ meta }: { meta: SkillFrontmatter }) {
         <Tags size={13} strokeWidth={2.3} aria-hidden />
         <span>{t("skills.frontmatterTitle")}</span>
       </header>
-      <dl className="skills-frontmatter-fields">
-        {meta.name ? (
-          <div className="skills-frontmatter-row">
-            <dt>{t("skills.frontmatterName")}</dt>
-            <dd>
-              <code className="skills-frontmatter-name">{meta.name}</code>
-            </dd>
-          </div>
-        ) : null}
-        {desc ? (
-          <div className="skills-frontmatter-row">
-            <dt>{t("skills.frontmatterDescription")}</dt>
-            <dd>
-              <p
-                className={`skills-frontmatter-desc ${descOpen || !descLong ? "is-open" : ""}`}
-              >
-                {desc}
-              </p>
-              {descLong ? (
-                <button
-                  type="button"
-                  className="skills-frontmatter-toggle"
-                  onClick={() => setDescOpen((v) => !v)}
+      {showName || showDesc ? (
+        <dl className="skills-frontmatter-fields">
+          {showName ? (
+            <div className="skills-frontmatter-row">
+              <dt>{t("skills.frontmatterName")}</dt>
+              <dd>
+                <code className="skills-frontmatter-name">{meta.name}</code>
+              </dd>
+            </div>
+          ) : null}
+          {showDesc ? (
+            <div className="skills-frontmatter-row">
+              <dt>{t("skills.frontmatterDescription")}</dt>
+              <dd>
+                <p
+                  className={`skills-frontmatter-desc ${descOpen || !descLong ? "is-open" : ""}`}
                 >
-                  {descOpen ? (
-                    <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
-                  ) : (
-                    <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
-                  )}
-                  {descOpen
-                    ? t("skills.frontmatterCollapse")
-                    : t("skills.frontmatterExpand")}
-                </button>
-              ) : null}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-      {meta.extras.length > 0 ? (
+                  {desc}
+                </p>
+                {descLong ? (
+                  <button
+                    type="button"
+                    className="skills-frontmatter-toggle"
+                    onClick={() => setDescOpen((v) => !v)}
+                  >
+                    {descOpen ? (
+                      <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
+                    ) : (
+                      <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
+                    )}
+                    {descOpen
+                      ? t("skills.frontmatterCollapse")
+                      : t("skills.frontmatterExpand")}
+                  </button>
+                ) : null}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+      {showExtras ? (
         <div className="skills-frontmatter-extras">
           <button
             type="button"
@@ -143,6 +166,10 @@ type Props = {
   onOpenExternal?: () => void;
   /** 在访达中显示当前文件 */
   onReveal?: () => void;
+  /** 抽屉顶栏已有的技能名，用于去重视觉重复 */
+  skillName?: string;
+  /** 抽屉顶栏已有的技能描述，用于去重视觉重复 */
+  skillDescription?: string;
 };
 
 export function SkillFileViewer({
@@ -154,6 +181,8 @@ export function SkillFileViewer({
   loading = false,
   onOpenExternal,
   onReveal,
+  skillName,
+  skillDescription,
 }: Props) {
   const { t } = useI18n();
   const { resolved } = useTheme();
