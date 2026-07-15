@@ -1401,7 +1401,7 @@ html[data-theme="light"] .a2ui-surface {
   --label-opacity: 1;
   --label-scale: 1;
   position: fixed;
-  z-index: 10001;
+  z-index: var(--z-tip);
   display: inline-flex;
   align-items: center;
   max-width: min(16rem, 46vw);
@@ -2145,7 +2145,7 @@ html[data-theme="dark"] .msg-md-codeblock {
 
 .composer-mode-menu {
   position: fixed;
-  z-index: 1400;
+  z-index: var(--z-menu);
   min-width: 168px;
   padding: 0.35rem;
   border-radius: 14px;
@@ -2217,7 +2217,7 @@ html[data-theme="light"] .composer-mode-menu {
 
 .ctx-usage-popover {
   position: fixed;
-  z-index: 1400;
+  z-index: var(--z-menu);
   width: min(320px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
@@ -2587,7 +2587,7 @@ html[data-theme="dark"] .composer-palette {
 
 .composer-mcp-menu {
   position: fixed;
-  z-index: 1400;
+  z-index: var(--z-menu);
   width: min(320px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
@@ -4356,7 +4356,7 @@ html[data-theme="dark"] .chat-agent-icon-slot {
 .agent-icon-drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1300;
+  z-index: var(--z-drawer);
   display: flex;
   justify-content: flex-end;
   background:

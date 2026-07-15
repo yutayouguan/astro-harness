@@ -89,6 +89,19 @@
 - [x] ChatMessageNav 预览标签改 left/top + 可 flip 右侧
 - [x] Commit
 
+### Task 8: 随访收口
+
+**Files:**
+- Create: `frontend/src/hooks/useAnchoredMenu.ts`
+- Modify: `AgentPicker.tsx`, `SelectMenu.tsx`, `CronPanel.tsx`, `ModelPicker.tsx`, `ChatMessageNav.tsx`
+- Modify: `base.css`（`--z-drawer` / `--z-menu` / `--z-tip`）及菜单/抽屉/tip 样式
+
+- [x] `useAnchoredMenu`：portal 菜单测量 + rAF + clamp；迁 AgentPicker / SelectMenu / Cron
+- [x] ModelPicker 改用 `useClampPopover`（relative，仅水平）
+- [x] ChatMessageNav：估宽首帧 + 量完精调
+- [x] CSS 叠放 token；Skills/MCP 全屏抽屉与 Providers 拖拽 ghost 不迁 clamp
+- [x] 测试 + Commit
+
 ---
 
 ## 验证

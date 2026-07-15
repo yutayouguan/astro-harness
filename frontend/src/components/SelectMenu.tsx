@@ -2,7 +2,6 @@
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -10,11 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  clampPopover,
-  measurePopoverSize,
-  resolveClipBounds,
-} from "../lib/clampPopover";
+import { useAnchoredMenu } from "../hooks/useAnchoredMenu";
 
 /** 下拉选项 */
 export type SelectOption = {
@@ -37,15 +32,6 @@ type Props = {
   placeholder?: string;
   /** 展开方向：auto（默认）/ up（强制向上）/ down（强制向下） */
   openDirection?: "auto" | "up" | "down";
-};
-
-/** 下拉菜单 fixed 定位信息 */
-type MenuPos = {
-  top: number;
-  left: number;
-  width: number;
-  openUp: boolean;
-  maxHeight: number;
 };
 
 const VIEWPORT_PAD = 8;
@@ -90,50 +76,6 @@ function CheckIcon() {
   );
 }
 
-/**
- * 按触发器位置计算菜单坐标。
- * 上下：空间不足时向上展开；左右：夹紧在裁切盒内，避免溢出。
- */
-function computePos(
-  trigger: HTMLElement,
-  menuEl?: HTMLElement | null,
-  forceDirection?: "up" | "down",
-): MenuPos {
-  const rect = trigger.getBoundingClientRect();
-  const bounds = resolveClipBounds(trigger);
-  const minW = Math.max(rect.width, 140);
-  const maxW = Math.min(280, bounds.right - bounds.left - VIEWPORT_PAD * 2);
-  const size = menuEl
-    ? measurePopoverSize(menuEl)
-    : { width: minW, height: 160 };
-  const measuredW = Math.min(Math.max(size.width, minW), maxW);
-  const maxHeightCap = Math.min(260, (bounds.bottom - bounds.top) * 0.42);
-  const placement =
-    forceDirection === "up"
-      ? "above"
-      : forceDirection === "down"
-        ? "below"
-        : "auto";
-
-  const clamped = clampPopover({
-    anchorRect: rect,
-    popoverSize: { width: measuredW, height: size.height },
-    bounds,
-    preferAlign: "start",
-    placement,
-    maxHeightCap,
-    minMaxHeight: 96,
-  });
-
-  return {
-    top: clamped.top,
-    left: clamped.left,
-    width: measuredW,
-    openUp: clamped.placement === "above",
-    maxHeight: clamped.maxHeight,
-  };
-}
-
 /** 通用下拉选择菜单（Portal 列表） */
 export function SelectMenu({
   value,
@@ -147,7 +89,6 @@ export function SelectMenu({
   openDirection = "auto",
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<MenuPos | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -155,6 +96,26 @@ export function SelectMenu({
   const listId = useId();
   const selected = options.find((o) => o.value === value);
   const label = selected?.label ?? placeholder;
+
+  const placement =
+    openDirection === "up"
+      ? "above"
+      : openDirection === "down"
+        ? "below"
+        : "auto";
+
+  const pos = useAnchoredMenu({
+    open,
+    anchorRef: triggerRef,
+    menuRef: listRef,
+    sizeKey: `${options.length}:${value}:${openDirection}`,
+    minWidth: 140,
+    maxWidth: 280,
+    maxHeightCap: 260,
+    maxHeightRatio: 0.42,
+    preferAlign: "start",
+    placement,
+  });
 
   const optionId = (i: number) => `${listId}-opt-${i}`;
 
@@ -177,7 +138,6 @@ export function SelectMenu({
     }
   };
 
-  // 键盘导航：触发器上的 onKeyDown
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
     switch (e.key) {
@@ -222,7 +182,6 @@ export function SelectMenu({
         }
         break;
       default:
-        // 输入字符跳转（type-ahead）
         if (open && e.key.length === 1) {
           const ch = e.key.toLowerCase();
           const start = highlightedIndex >= 0 ? highlightedIndex + 1 : 0;
@@ -237,35 +196,11 @@ export function SelectMenu({
     }
   };
 
-  // 高亮项变化时滚动入视
   useEffect(() => {
     if (!open || highlightedIndex < 0 || !listRef.current) return;
     const items = listRef.current.querySelectorAll<HTMLElement>('[role="option"]');
     items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
   }, [open, highlightedIndex]);
-
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) {
-      setPos(null);
-      return;
-    }
-    const dir = openDirection === "auto" ? undefined : openDirection;
-    const update = () => {
-      if (triggerRef.current) {
-        setPos(computePos(triggerRef.current, listRef.current, dir));
-      }
-    };
-    update();
-    // 首帧后按真实菜单宽度再夹紧一次（max-content 展开后）
-    const raf = requestAnimationFrame(update);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open, options, value, openDirection]);
 
   useEffect(() => {
     if (!open) return;
@@ -281,7 +216,6 @@ export function SelectMenu({
     };
   }, [open]);
 
-  // Portal 到 body 会丢掉父级 CSS 变量，需从触发器根节点带过去
   const menuToneStyle =
     open && rootRef.current
       ? (() => {
@@ -328,12 +262,12 @@ export function SelectMenu({
                     type="button"
                     className={`select-menu-option${active ? " is-active" : ""}${highlighted ? " is-highlighted" : ""}`}
                     tabIndex={-1}
+                    onMouseEnter={() => setHighlightedIndex(i)}
                     onClick={() => {
                       closeMenu();
                       if (opt.value !== value) onChange(opt.value);
                       triggerRef.current?.focus();
                     }}
-                    onMouseEnter={() => setHighlightedIndex(i)}
                   >
                     {opt.icon ? (
                       <span className="select-menu-option-icon" aria-hidden>
@@ -353,8 +287,8 @@ export function SelectMenu({
 
   return (
     <div
-      className={`select-menu select-menu--${size} ${open ? "is-open" : ""} ${className}`.trim()}
       ref={rootRef}
+      className={`select-menu select-menu--${size} ${open ? "is-open" : ""} ${className}`.trim()}
     >
       <button
         ref={triggerRef}

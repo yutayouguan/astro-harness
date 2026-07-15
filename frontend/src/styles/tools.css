@@ -577,7 +577,7 @@ html[data-theme="dark"] .tool-main-tab.active {
 .mcp-add-drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1300;
+  z-index: var(--z-drawer);
   display: flex;
   justify-content: flex-end;
   background:

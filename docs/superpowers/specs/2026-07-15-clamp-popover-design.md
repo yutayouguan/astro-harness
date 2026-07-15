@@ -1,7 +1,7 @@
 # 共享启发式浮层定位（clampPopover）
 
 日期：2026-07-15  
-状态：阶段 A/B/C + 四向 tip 扩展已实现（见 [实现计划](../plans/2026-07-15-clamp-popover.md)）
+状态：阶段 A/B/C + tip 扩展 + 随访收口已实现（见 [实现计划](../plans/2026-07-15-clamp-popover.md)）
 
 ## 背景
 
@@ -31,7 +31,8 @@
 - 本轮不强制全部浮层改 `createPortal`。
 - 不重做浮层视觉样式（毛玻璃、圆角等）。
 - 不抽通用 Dropdown/Popover React 组件（只统一几何与定位生命周期）。
-- 不解决 z-index / 主题 token 全局重构。
+- 不做全站 z-index 体系重写；仅约定 `--z-drawer` / `--z-menu` / `--z-tip` 三档供浮层叠放。
+- Skills/MCP 全屏抽屉、Providers 拖拽 ghost 等非贴边菜单场景不接入 `clampPopover`。
 
 ## API 设计
 
@@ -114,7 +115,7 @@ type ClampPopoverResult = {
 
 - 本设计**不改变**菜单外观；仅改变坐标与可能的 `max-height`。
 - ModelPicker 编辑态继续可用 CSS `row-reverse`（编辑在列表内侧），钳制按**整块 flyout**宽高计算。
-- z-index 沿用各组件现有值；若 portal 后被挡，个案调高，不在本规格统一 z-index 表。
+- 菜单 / tip / 抽屉使用 `--z-menu` / `--z-tip` / `--z-drawer`；其它浮层仍可个案调整。
 
 ## 测试
 

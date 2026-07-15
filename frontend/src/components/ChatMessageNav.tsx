@@ -15,6 +15,7 @@ import { ChevronDown, User } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import {
   clampFloatingTip,
+  measurePopoverSize,
   resolveClipBounds,
   type TipSide,
 } from "../lib/clampPopover";
@@ -93,6 +94,7 @@ export default function ChatMessageNav({
   const ratiosRef = useRef<Map<string, number>>(new Map());
   const trackRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const labelRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const previews = useMemo(() => {
     const map = new Map<string, string>();
@@ -206,7 +208,7 @@ export default function ChatMessageNav({
     return [];
   }, [hoverY, hoveredId, messages]);
 
-  // Portal 标签：每个邻近锚点旁显示各自预览，距离越远越淡越小。
+  // Portal 标签：先估宽定位，量完真实尺寸再精调一次。
   useLayoutEffect(() => {
     if (nearbyRanks.length === 0) {
       setLabelPlacements([]);
@@ -214,7 +216,7 @@ export default function ChatMessageNav({
     }
 
     const maxDist = Math.max(nearbyRanks[nearbyRanks.length - 1]?.dist ?? 0, 1);
-    const next: LabelPlacement[] = [];
+    const estimated: LabelPlacement[] = [];
 
     for (let rank = 0; rank < nearbyRanks.length; rank++) {
       const item = nearbyRanks[rank]!;
@@ -243,7 +245,7 @@ export default function ChatMessageNav({
         pad: 8,
       });
 
-      next.push({
+      estimated.push({
         id: item.id,
         text,
         top: placed.top,
@@ -251,12 +253,53 @@ export default function ChatMessageNav({
         side: placed.side,
         opacity,
         scale,
-        z: 10001 + (nearbyRanks.length - rank),
+        z: nearbyRanks.length - rank,
         primary: rank === 0,
       });
     }
 
-    setLabelPlacements(next);
+    setLabelPlacements(estimated);
+
+    const raf = requestAnimationFrame(() => {
+      const refined: LabelPlacement[] = [];
+      let dirty = false;
+      for (const p of estimated) {
+        const tipEl = labelRefs.current.get(p.id);
+        const anchor = itemRefs.current.get(p.id);
+        if (!tipEl || !anchor) {
+          refined.push(p);
+          continue;
+        }
+        const size = measurePopoverSize(tipEl);
+        if (size.width < 2 || size.height < 2) {
+          refined.push(p);
+          continue;
+        }
+        const placed = clampFloatingTip({
+          anchorRect: anchor.getBoundingClientRect(),
+          tipSize: size,
+          bounds: resolveClipBounds(anchor),
+          prefer: "left",
+          gap: 12,
+          pad: 8,
+        });
+        if (
+          Math.abs(placed.left - p.left) > 0.5 ||
+          Math.abs(placed.top - p.top) > 0.5 ||
+          placed.side !== p.side
+        ) {
+          dirty = true;
+        }
+        refined.push({
+          ...p,
+          left: placed.left,
+          top: placed.top,
+          side: placed.side,
+        });
+      }
+      if (dirty) setLabelPlacements(refined);
+    });
+    return () => cancelAnimationFrame(raf);
   }, [nearbyRanks, scales, previews]);
 
   if (messages.length === 0) return null;
@@ -344,6 +387,10 @@ export default function ChatMessageNav({
               {labelPlacements.map((p) => (
                 <div
                   key={p.id}
+                  ref={(el) => {
+                    if (el) labelRefs.current.set(p.id, el);
+                    else labelRefs.current.delete(p.id);
+                  }}
                   className={`chat-msg-nav-label ${p.primary ? "is-primary" : "is-near"}${
                     p.side === "right" ? " is-side-right" : ""
                   }`}
@@ -351,7 +398,7 @@ export default function ChatMessageNav({
                     {
                       top: p.top,
                       left: p.left,
-                      zIndex: p.z,
+                      zIndex: `calc(var(--z-tip) + ${p.z})`,
                       "--label-opacity": String(p.opacity),
                       "--label-scale": String(p.scale),
                     } as CSSProperties

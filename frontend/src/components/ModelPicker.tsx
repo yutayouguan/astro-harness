@@ -2,7 +2,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,12 +10,8 @@ import {
 } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useClampPopover } from "../hooks/useClampPopover";
 import { useI18n } from "../i18n/LocaleContext";
-import {
-  clampPopover,
-  measurePopoverSize,
-  resolveClipBounds,
-} from "../lib/clampPopover";
 import {
   DEFAULT_MODEL_PREFS,
   loadAllModelPrefs,
@@ -135,7 +130,6 @@ export default function ModelPicker({
   });
   const [globals] = useState<ModelPickerGlobals>(() => loadPickerGlobals());
   const [, setPrefsTick] = useState(0);
-  const [flyoutStyle, setFlyoutStyle] = useState<CSSProperties | undefined>();
   const ref = useRef<HTMLDivElement | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
   const activeProvider =
@@ -229,41 +223,20 @@ export default function ModelPicker({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  useLayoutEffect(() => {
-    if (!open || !ref.current || !flyoutRef.current) {
-      setFlyoutStyle(undefined);
-      return;
-    }
-    const clamp = () => {
-      const root = ref.current;
-      const flyout = flyoutRef.current;
-      if (!root || !flyout) return;
-      const rootRect = root.getBoundingClientRect();
-      const size = measurePopoverSize(flyout);
-      const bounds = resolveClipBounds(root);
-      const pos = clampPopover({
-        anchorRect: rootRect,
-        popoverSize: size,
-        bounds,
-        preferAlign: "end",
-        placement: "below",
-        gap: 8,
-      });
-      setFlyoutStyle({
-        left: pos.offsetLeft,
-        right: "auto",
-      });
-    };
-    clamp();
-    const raf = requestAnimationFrame(clamp);
-    window.addEventListener("resize", clamp);
-    window.addEventListener("scroll", clamp, true);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", clamp);
-      window.removeEventListener("scroll", clamp, true);
-    };
-  }, [open, editing, options.length]);
+  const clampedStyle = useClampPopover({
+    open,
+    anchorRef: ref,
+    popoverRef: flyoutRef,
+    sizeKey: `${editing ? `${editing.providerId}:${editing.modelId}` : ""}:${options.length}`,
+    mode: "relative",
+    preferAlign: "end",
+    placement: "below",
+    gap: 8,
+  });
+  // 仅水平钳制；竖直仍用 CSS top: calc(100% + 8px)
+  const flyoutStyle: CSSProperties | undefined = clampedStyle
+    ? { left: clampedStyle.left, right: "auto" }
+    : undefined;
 
   const grouped = useMemo(() => {
     const map = new Map<

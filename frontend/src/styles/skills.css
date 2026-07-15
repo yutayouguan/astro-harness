@@ -2534,7 +2534,7 @@ html[data-theme="dark"] .skills-action-btn.primary {
   --tone-glow: var(--tone-indigo-glow);
   position: fixed;
   inset: 0;
-  z-index: 1300;
+  z-index: var(--z-drawer);
   display: flex;
   justify-content: flex-end;
   background:
@@ -3429,7 +3429,7 @@ html[data-theme="dark"] .skills-frontmatter {
   --tone: var(--tone-indigo);
   position: fixed;
   inset: 0;
-  z-index: 1400;
+  z-index: var(--z-menu);
   display: grid;
   place-items: center;
   padding: 24px 16px;

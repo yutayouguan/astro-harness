@@ -19,7 +19,7 @@
   width: 0;
   height: 0;
   overflow: visible;
-  z-index: 10000;
+  z-index: calc(var(--z-tip) - 1);
   pointer-events: none;
 }
 
@@ -33,7 +33,7 @@
   position: fixed;
   left: 0;
   top: 0;
-  z-index: 10001;
+  z-index: var(--z-tip);
   max-width: min(280px, calc(100vw - 16px));
   width: max-content;
   padding: 6px 11px;

@@ -1,5 +1,5 @@
 /** 定时任务面板：任务列表、运行记录与创建抽屉。 */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -24,12 +24,8 @@ import {
   TerminalSquare,
   X,
 } from "lucide-react";
+import { useAnchoredMenu } from "../hooks/useAnchoredMenu";
 import { useI18n } from "../i18n/LocaleContext";
-import {
-  clampPopover,
-  measurePopoverSize,
-  resolveClipBounds,
-} from "../lib/clampPopover";
 import { formatScheduleLabel } from "../lib/cronSchedule";
 import { useAgentsChanged } from "../lib/agentsChanged";
 import type { AgentInfo } from "../types/agent";
@@ -380,7 +376,6 @@ export default function CronPanel({
   const [showCreate, setShowCreate] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJobDto | null>(null);
   const [menuJobId, setMenuJobId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabId>("jobs");
@@ -400,9 +395,20 @@ export default function CronPanel({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const moreBtnRef = useRef<HTMLButtonElement | null>(null);
 
+  const menuPos = useAnchoredMenu({
+    open: !!menuJobId,
+    anchorRef: moreBtnRef,
+    menuRef,
+    sizeKey: menuJobId,
+    fixedWidth: 176,
+    preferAlign: "end",
+    placement: "auto",
+    gap: 6,
+    maxHeightCap: 280,
+  });
+
   const closeMenu = useCallback(() => {
     setMenuJobId(null);
-    setMenuPos(null);
     moreBtnRef.current = null;
   }, []);
 
@@ -412,19 +418,6 @@ export default function CronPanel({
       return;
     }
     moreBtnRef.current = btn;
-    const rect = btn.getBoundingClientRect();
-    const menuW = 176;
-    const pos = clampPopover({
-      anchorRect: rect,
-      popoverSize: { width: menuW, height: 180 },
-      bounds: resolveClipBounds(btn),
-      preferAlign: "end",
-      placement: "auto",
-      gap: 6,
-      maxHeightCap: 280,
-      minMaxHeight: 96,
-    });
-    setMenuPos({ top: pos.top, left: pos.left });
     setMenuJobId(jobId);
   };
 
@@ -520,37 +513,6 @@ export default function CronPanel({
     const id = window.setInterval(() => void loadHistoryRuns(), 15000);
     return () => window.clearInterval(id);
   }, [active, activeTab, loadHistoryRuns]);
-
-  useLayoutEffect(() => {
-    if (!menuJobId || !moreBtnRef.current) return;
-    const sync = () => {
-      const btn = moreBtnRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      const menuW = 176;
-      const measuredH = menuRef.current
-        ? measurePopoverSize(menuRef.current).height
-        : 180;
-      const pos = clampPopover({
-        anchorRect: rect,
-        popoverSize: { width: menuW, height: measuredH },
-        bounds: resolveClipBounds(btn),
-        preferAlign: "end",
-        placement: "auto",
-        gap: 6,
-        maxHeightCap: 280,
-        minMaxHeight: 96,
-      });
-      setMenuPos({ top: pos.top, left: pos.left });
-    };
-    sync();
-    window.addEventListener("resize", sync);
-    window.addEventListener("scroll", sync, true);
-    return () => {
-      window.removeEventListener("resize", sync);
-      window.removeEventListener("scroll", sync, true);
-    };
-  }, [menuJobId]);
 
   useEffect(() => {
     if (!menuJobId) return;
@@ -1263,7 +1225,11 @@ export default function CronPanel({
             ref={menuRef}
             className="cron-more-menu"
             role="menu"
-            style={{ top: menuPos.top, left: menuPos.left }}
+            style={{
+              top: menuPos.top,
+              left: menuPos.left,
+              maxHeight: menuPos.maxHeight,
+            }}
           >
             {(() => {
               const job = jobs.find((j) => j.id === menuJobId);

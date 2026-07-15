@@ -2,20 +2,15 @@
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type SVGProps,
 } from "react";
 import { createPortal } from "react-dom";
+import { useAnchoredMenu } from "../hooks/useAnchoredMenu";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
-import {
-  clampPopover,
-  measurePopoverSize,
-  resolveClipBounds,
-} from "../lib/clampPopover";
 import type { AgentInfo } from "../types/agent";
 import AgentAvatar from "./AgentAvatar";
 
@@ -33,15 +28,6 @@ type Props = {
   onCreateNew?: () => void;
   /** 新建项文案；默认 chat.newAgent */
   createLabelKey?: MessageKey;
-};
-
-/** 下拉菜单 fixed 定位 */
-type MenuPos = {
-  top: number;
-  left: number;
-  width: number;
-  openUp: boolean;
-  maxHeight: number;
 };
 
 function agentSubline(
@@ -72,42 +58,6 @@ function ChevronDown(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/**
- * 按触发器位置计算 fixed 菜单坐标（Portal 到 body，毛玻璃才能透出背后内容）。
- */
-function computePos(
-  trigger: HTMLElement,
-  menuEl?: HTMLElement | null,
-): MenuPos {
-  const rect = trigger.getBoundingClientRect();
-  const bounds = resolveClipBounds(trigger);
-  const minW = Math.max(rect.width, 220);
-  const maxW = Math.min(340, bounds.right - bounds.left - 16);
-  const size = menuEl
-    ? measurePopoverSize(menuEl)
-    : { width: minW, height: 160 };
-  const measuredW = Math.min(Math.max(size.width, minW), maxW);
-  const maxHeightCap = Math.min(300, (bounds.bottom - bounds.top) * 0.42);
-
-  const clamped = clampPopover({
-    anchorRect: rect,
-    popoverSize: { width: measuredW, height: size.height },
-    bounds,
-    preferAlign: "start",
-    placement: "auto",
-    maxHeightCap,
-    minMaxHeight: 96,
-  });
-
-  return {
-    top: clamped.top,
-    left: clamped.left,
-    width: measuredW,
-    openUp: clamped.placement === "above",
-    maxHeight: clamped.maxHeight,
-  };
-}
-
 export default function AgentPicker({
   agents,
   value,
@@ -120,7 +70,6 @@ export default function AgentPicker({
 }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<MenuPos | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
@@ -128,26 +77,18 @@ export default function AgentPicker({
   const active = agents.find((a) => a.id === value) ?? agents[0];
   const defaultLabel = t("workspace.defaultAgent");
 
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) {
-      setPos(null);
-      return;
-    }
-    const update = () => {
-      if (triggerRef.current) {
-        setPos(computePos(triggerRef.current, menuRef.current));
-      }
-    };
-    update();
-    const raf = requestAnimationFrame(update);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open, agents, value, onCreateNew]);
+  const pos = useAnchoredMenu({
+    open,
+    anchorRef: triggerRef,
+    menuRef,
+    sizeKey: `${agents.length}:${value}:${onCreateNew ? 1 : 0}`,
+    minWidth: 220,
+    maxWidth: 340,
+    maxHeightCap: 300,
+    maxHeightRatio: 0.42,
+    preferAlign: "start",
+    placement: "auto",
+  });
 
   useEffect(() => {
     if (!open) return;

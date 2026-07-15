@@ -135,8 +135,8 @@
 
 .agent-picker-menu {
   position: fixed;
-  /* 高于右侧抽屉 / 侧栏（≈ 1300），毛玻璃才能透出背后内容 */
-  z-index: 1400;
+  /* 高于右侧抽屉 / 侧栏，毛玻璃才能透出背后内容 */
+  z-index: var(--z-menu);
   margin: 0;
   padding: 6px;
   list-style: none;
