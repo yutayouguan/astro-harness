@@ -529,8 +529,6 @@ html[data-theme="dark"] .skills-view-btn.is-active {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  grid-template-columns: none;
-  grid-template-rows: none;
   gap: 6px;
   margin-top: 0;
   flex: 0 0 auto;
@@ -538,30 +536,20 @@ html[data-theme="dark"] .skills-view-btn.is-active {
   min-width: 0;
 }
 
-.skills-gallery.is-list .skill-card-action-row {
-  display: contents;
+.skills-gallery.is-list .skill-card-primary {
+  flex: 0 1 auto;
+  padding: 7px 10px;
 }
 
-.skills-gallery.is-list .skill-card-actions .skills-action-btn {
-  width: auto;
-  flex: 0 0 auto;
-  padding: 7px 10px;
-  white-space: nowrap;
+.skills-gallery.is-list .skill-card-action-icons {
+  display: inline-flex;
+  gap: 6px;
 }
 
 .skills-gallery.is-list .skill-card-actions .skills-action-btn.is-icon {
   width: 32px;
   height: 32px;
   min-width: 32px;
-  padding: 0;
-}
-
-.skills-gallery.is-list .skill-card-action-row.is-primary .skill-card-install:not(.is-installed),
-.skills-gallery.is-list .skill-card-action-row.is-primary .skill-card-install.is-installed {
-  flex: 0 0 auto;
-}
-
-.skills-gallery.is-list .skill-card-action-row.is-secondary .skills-action-btn {
   padding: 0;
 }
 
@@ -922,9 +910,9 @@ html[data-theme="dark"] .skills-detail-item-icon {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
-/* 简介区：嵌套白玻璃子卡片，对齐欢迎页 */
+/* 简介区：嵌套白玻璃子卡片，对齐欢迎页；撑满卡片中部避免底栏悬空 */
 .skill-card-desc {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1065,25 +1053,43 @@ html[data-theme="dark"] .skill-card-toggle {
   color: var(--tone);
 }
 
-/* 底栏：主操作短文案 + 次要纯 icon */
+/* 底栏：主操作 icon+文案 撑开，次要纯 icon 靠右同一行 */
 .skill-card-actions {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
   align-items: center;
   gap: 6px;
   margin-top: auto;
   flex-shrink: 0;
 }
 
-.skill-card-actions .skills-action-btn {
+.skill-card-primary {
+  flex: 1 1 auto;
+  min-width: 0;
   width: auto;
-  padding: 9px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 650;
-  text-align: center;
+  white-space: nowrap;
+}
+
+.skill-card-primary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-card-action-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .skill-card-actions .skills-action-btn.is-icon {
@@ -1092,56 +1098,6 @@ html[data-theme="dark"] .skill-card-toggle {
   min-width: 34px;
   padding: 0;
   flex: 0 0 auto;
-}
-
-/* 在线商店：主操作一行（安装优先）+ 次操作纯 icon */
-.skill-card-actions.is-store {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-
-.skill-card-action-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.skill-card-action-row .skills-action-btn {
-  flex: 1;
-  min-width: 0;
-  width: auto;
-}
-
-.skill-card-action-row .skills-action-btn.is-icon {
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  padding: 0;
-}
-
-.skill-card-action-row.is-primary .skill-card-install:not(.is-installed) {
-  flex: 1;
-  min-width: 0;
-}
-
-.skill-card-action-row.is-primary .skill-card-install.is-installed {
-  flex: 1;
-}
-
-.skill-card-action-row.is-secondary {
-  justify-content: flex-end;
-}
-
-.skill-card-action-row.is-secondary .skills-action-btn {
-  flex: 0 0 auto;
-  padding: 0;
-  font-size: inherit;
-  font-weight: inherit;
-  color: var(--ink-mute);
 }
 
 .skills-action-btn.is-installed,

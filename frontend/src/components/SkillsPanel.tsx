@@ -879,7 +879,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         prev.map((s) => (s.id === skill.id ? { ...s, linked: next } : s)),
       );
       // 链接会在 Agent workspace 建/删 symlink，同步已安装列表供在线「已安装」判定
-      void refreshInstalled();
+      void refreshInstalled({ mode: "hard" });
     } catch (err) {
       setError(String(err));
     } finally {
@@ -898,7 +898,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         agentId,
       });
       setInstallMsg(msg);
-      await refreshInstalled();
+      await refreshInstalled({ mode: "hard" });
       setTab("installed");
     } catch (err) {
       setError(String(err));
@@ -1346,15 +1346,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       <div className="skill-card-actions">
         <button
           type="button"
-          className="skills-action-btn is-icon primary"
+          className="skills-action-btn primary skill-card-primary"
           disabled={loadingPreview === skill.id || loadingPreview === skill.name}
           onClick={() => void viewSkill(skill)}
           title={
-            loadingPreview === skill.id || loadingPreview === skill.name
-              ? t("skills.viewing")
-              : t("skills.view")
-          }
-          aria-label={
             loadingPreview === skill.id || loadingPreview === skill.name
               ? t("skills.viewing")
               : t("skills.view")
@@ -1365,33 +1360,40 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           ) : (
             <Eye size={15} strokeWidth={2.25} aria-hidden />
           )}
+          <span>
+            {loadingPreview === skill.id || loadingPreview === skill.name
+              ? t("skills.viewing")
+              : t("skills.view")}
+          </span>
         </button>
-        <button
-          type="button"
-          className="skills-action-btn is-icon"
-          onClick={() => void openSkillFolder(skill)}
-          title={t("skills.openFolder")}
-          aria-label={t("skills.openFolder")}
-        >
-          <FolderOpen size={15} strokeWidth={2.25} aria-hidden />
-        </button>
-        <button
-          type="button"
-          className="skills-action-btn is-icon"
-          onClick={() => void copyInstalledPrompt(skill)}
-          title={
-            copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
-          }
-          aria-label={
-            copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
-          }
-        >
-          {copiedId === skill.id ? (
-            <Check size={15} strokeWidth={2.25} aria-hidden />
-          ) : (
-            <Copy size={15} strokeWidth={2.25} aria-hidden />
-          )}
-        </button>
+        <div className="skill-card-action-icons">
+          <button
+            type="button"
+            className="skills-action-btn is-icon"
+            onClick={() => void openSkillFolder(skill)}
+            title={t("skills.openFolder")}
+            aria-label={t("skills.openFolder")}
+          >
+            <FolderOpen size={15} strokeWidth={2.25} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="skills-action-btn is-icon"
+            onClick={() => void copyInstalledPrompt(skill)}
+            title={
+              copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
+            }
+            aria-label={
+              copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
+            }
+          >
+            {copiedId === skill.id ? (
+              <Check size={15} strokeWidth={2.25} aria-hidden />
+            ) : (
+              <Copy size={15} strokeWidth={2.25} aria-hidden />
+            )}
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -1431,46 +1433,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       <div className="skill-card-actions">
         <button
           type="button"
-          className="skills-action-btn is-icon"
-          disabled={loadingPreview === skill.id || loadingPreview === skill.name}
-          onClick={() => void viewSkill(skill)}
-          title={
-            loadingPreview === skill.id || loadingPreview === skill.name
-              ? t("skills.viewing")
-              : t("skills.view")
-          }
-          aria-label={
-            loadingPreview === skill.id || loadingPreview === skill.name
-              ? t("skills.viewing")
-              : t("skills.view")
-          }
-        >
-          {loadingPreview === skill.id || loadingPreview === skill.name ? (
-            <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
-          ) : (
-            <Eye size={15} strokeWidth={2.25} aria-hidden />
-          )}
-        </button>
-        <button
-          type="button"
-          className="skills-action-btn is-icon"
-          onClick={() => void openSkillFolder(skill)}
-          title={t("skills.openFolder")}
-          aria-label={t("skills.openFolder")}
-        >
-          <FolderOpen size={15} strokeWidth={2.25} aria-hidden />
-        </button>
-        <button
-          type="button"
-          className={`skills-action-btn is-icon ${skill.linked ? "" : "primary"}`}
+          className={`skills-action-btn skill-card-primary ${skill.linked ? "" : "primary"}`}
           disabled={linkingId === skill.id}
           onClick={() => void toggleMachineLink(skill)}
           title={
-            skill.linked
-              ? t("skills.machineUnlink")
-              : t("skills.machineLink")
-          }
-          aria-label={
             skill.linked
               ? t("skills.machineUnlink")
               : t("skills.machineLink")
@@ -1483,24 +1449,60 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           ) : (
             <Link2 size={15} strokeWidth={2.25} aria-hidden />
           )}
+          <span>
+            {skill.linked ? t("skills.unlink") : t("skills.link")}
+          </span>
         </button>
-        <button
-          type="button"
-          className="skills-action-btn is-icon"
-          onClick={() => void copyInstalledPrompt(skill)}
-          title={
-            copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
-          }
-          aria-label={
-            copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
-          }
-        >
-          {copiedId === skill.id ? (
-            <Check size={15} strokeWidth={2.25} aria-hidden />
-          ) : (
-            <Copy size={15} strokeWidth={2.25} aria-hidden />
-          )}
-        </button>
+        <div className="skill-card-action-icons">
+          <button
+            type="button"
+            className="skills-action-btn is-icon"
+            disabled={loadingPreview === skill.id || loadingPreview === skill.name}
+            onClick={() => void viewSkill(skill)}
+            title={
+              loadingPreview === skill.id || loadingPreview === skill.name
+                ? t("skills.viewing")
+                : t("skills.view")
+            }
+            aria-label={
+              loadingPreview === skill.id || loadingPreview === skill.name
+                ? t("skills.viewing")
+                : t("skills.view")
+            }
+          >
+            {loadingPreview === skill.id || loadingPreview === skill.name ? (
+              <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+            ) : (
+              <Eye size={15} strokeWidth={2.25} aria-hidden />
+            )}
+          </button>
+          <button
+            type="button"
+            className="skills-action-btn is-icon"
+            onClick={() => void openSkillFolder(skill)}
+            title={t("skills.openFolder")}
+            aria-label={t("skills.openFolder")}
+          >
+            <FolderOpen size={15} strokeWidth={2.25} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="skills-action-btn is-icon"
+            onClick={() => void copyInstalledPrompt(skill)}
+            title={
+              copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
+            }
+            aria-label={
+              copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
+            }
+          >
+            {copiedId === skill.id ? (
+              <Check size={15} strokeWidth={2.25} aria-hidden />
+            ) : (
+              <Copy size={15} strokeWidth={2.25} aria-hidden />
+            )}
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -2325,8 +2327,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 type="button"
                 className="skills-icon-btn"
                 onClick={() => {
-                  void refreshMachine();
-                  void refreshSkillCalls();
+                  void refreshMachine({ mode: "hard" });
+                  void refreshSkillCalls({ force: true });
                 }}
                 disabled={loadingMachine}
                 title={
