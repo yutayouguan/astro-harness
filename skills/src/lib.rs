@@ -17,8 +17,10 @@ pub mod registry;
 pub mod seed;
 pub mod skill;
 pub mod store;
+pub mod update;
 
 pub use install::{install_from_ref, InstallOriginHint};
+pub use update::{update_all_with_origin, update_installed_skill};
 pub use seed::{
     is_public_skill_installed, seed_default_public_skills, SeedReport, DEFAULT_PUBLIC_SKILLS,
 };
@@ -28,7 +30,10 @@ pub use installed::{
     open_skill_folder, read_skill_file, read_skill_file_ex, reveal_skill_file, set_enabled,
     set_enabled_for_agent,
 };
-pub use models::{InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, StoreSkill, StoreSkillDetail};
+pub use models::{
+    InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateItemResult,
+    StoreSkill, StoreSkillDetail,
+};
 pub use registry::SkillRegistry;
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use store::{fetch_detail, search};

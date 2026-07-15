@@ -166,3 +166,11 @@ pub struct SkillOriginsFile {
     pub version: u32,
     pub records: Vec<SkillOriginRecord>,
 }
+
+/// 批量更新单条结果（「更新」Tab）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillUpdateItemResult {
+    pub folder: String,
+    pub ok: bool,
+    pub message: String,
+}
