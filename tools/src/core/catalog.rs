@@ -179,7 +179,7 @@ fn entries_to_item(id: String, mut entries: Vec<&crate::registry::ToolEntry>) ->
 
 /// 按已知 toolset 顺序输出目录；顶层 `params` 取代表性工具的 schema。
 ///
-/// 先输出 `memory::KNOWN_TOOLSET_IDS` 中定义的顺序，其余未知 toolset 追加在后。
+/// 先输出 `home::KNOWN_TOOLSET_IDS` 中定义的顺序，其余未知 toolset 追加在后。
 pub fn catalog_for_ui(registry: &ToolRegistry) -> Vec<ToolCatalogItem> {
     use std::collections::BTreeMap;
 
@@ -192,7 +192,7 @@ pub fn catalog_for_ui(registry: &ToolRegistry) -> Vec<ToolCatalogItem> {
     }
 
     let mut out = Vec::new();
-    for &id in memory::KNOWN_TOOLSET_IDS {
+    for &id in home::KNOWN_TOOLSET_IDS {
         let Some(entries) = by_set.remove(id) else {
             continue;
         };
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn builtin_catalog_covers_known_toolsets() {
         let cat = builtin_catalog();
-        assert!(cat.len() >= memory::KNOWN_TOOLSET_IDS.len());
+        assert!(cat.len() >= home::KNOWN_TOOLSET_IDS.len());
         let file_ops = cat.iter().find(|c| c.id == "file_ops").expect("file_ops");
         assert_eq!(file_ops.icon, "folder-kanban");
         assert!(file_ops.params.iter().any(|p| p.name == "path"));

@@ -91,7 +91,7 @@ impl RawEntry {
 
 /// LiteLLM 元数据缓存文件路径。
 fn cache_path() -> PathBuf {
-    memory::default_memory_dir().join("litellm-model-meta.json")
+    home::default_memory_dir().join("litellm-model-meta.json")
 }
 
 /// 获取进程内缓存 Map 锁。
@@ -241,7 +241,7 @@ async fn fetch_and_store() -> Result<usize, String> {
     if map.is_empty() {
         return Err("LiteLLM 模型表为空".into());
     }
-    let dir = memory::default_memory_dir();
+    let dir = home::default_memory_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = cache_path();
     let tmp = path.with_extension("json.tmp");

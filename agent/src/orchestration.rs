@@ -14,10 +14,11 @@ use std::time::Duration;
 use chrono::Utc;
 use common::ChatTarget;
 use futures::StreamExt;
-use memory::{
-    default_memory_dir, AgentRuntimeConfig, NewUsageEvent, OrchestrationDb, OrchestrationRow,
-    OrchestrationSpawnRequest, OrchestrationStatus, StepRow, UsageDb,
+use home::{default_memory_dir, AgentRuntimeConfig};
+use orchestration::{
+    OrchestrationDb, OrchestrationRow, OrchestrationSpawnRequest, OrchestrationStatus, StepRow,
 };
+use usage::{NewUsageEvent, UsageDb};
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
@@ -137,7 +138,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
 
 /// 进程启动后：对 DB 中未完成编排重新 spawn（允许 reclaim）。
 pub async fn resume_incomplete_orchestrations(
-    spawner: &memory::OrchestrationSpawner,
+    spawner: &orchestration::OrchestrationSpawner,
 ) -> anyhow::Result<()> {
     let db = OrchestrationDb::open_default()?;
     let ids = db.list_incomplete_ids()?;
@@ -158,7 +159,7 @@ pub async fn resume_incomplete_orchestrations(
             base_url: row.base_url,
             chat_targets: vec![],
             caller_depth: 0,
-            max_spawn_depth: memory::DEFAULT_MAX_SPAWN_DEPTH,
+            max_spawn_depth: home::DEFAULT_MAX_SPAWN_DEPTH,
             allow_reclaim: true,
         });
     }
@@ -176,11 +177,11 @@ async fn run_step(
     }
 
     let del_cfg = hooks::config::load_config_or_default().delegation;
-    let mut worktree: Option<memory::WorktreeHandle> = None;
+    let mut worktree: Option<delegate::WorktreeHandle> = None;
     let mut project_root: Option<std::path::PathBuf> = None;
     if del_cfg.worktree {
-        if let Some(repo) = memory::resolve_project_root(None).and_then(|p| memory::find_git_root(&p)) {
-            match memory::create_task_worktree(&repo, &step.id) {
+        if let Some(repo) = delegate::resolve_project_root(None).and_then(|p| delegate::find_git_root(&p)) {
+            match delegate::create_task_worktree(&repo, &step.id) {
                 Ok(handle) => {
                     project_root = Some(handle.path().to_path_buf());
                     worktree = Some(handle);
@@ -212,7 +213,7 @@ async fn run_step(
 
     let mut config = AgentConfig::with_defaults(memory_dir.clone());
     // 覆盖 soul 为该 agent 的 SOUL.md（with_defaults 读的是活跃 agent）
-    let ws = memory::agent_workspace_dir(&memory_dir, &target_agent_id);
+    let ws = home::agent_workspace_dir(&memory_dir, &target_agent_id);
     if let Ok(soul) = std::fs::read_to_string(ws.join("SOUL.md")) {
         config.soul = soul;
     }
@@ -221,7 +222,7 @@ async fn run_step(
     let mut agent = AgentLoop::with_session_id_for_agent(config, sid, &target_agent_id)?;
     agent.set_project_root(project_root);
     let depth_ctx =
-        memory::SpawnDepthCtx::from_caller(req.caller_depth, req.max_spawn_depth);
+        home::SpawnDepthCtx::from_caller(req.caller_depth, req.max_spawn_depth);
     crate::delegate_exec::apply_nested_agent_tool_strips_depth_only(
         agent.tool_registry_mut(),
         depth_ctx,
@@ -231,7 +232,7 @@ async fn run_step(
     let targets = effective_chat_targets(req, &provider, &model, &api_key, &base_url, &registry);
     agent.set_chat_targets(targets);
 
-    let result = memory::scope_spawn_depth(depth_ctx, async {
+    let result = home::scope_spawn_depth(depth_ctx, async {
         let turn_result = agent.run_turn(&user_message, "orchestration").await?;
         match turn_result {
             TurnResult::Finished(message) => Ok(message),
@@ -317,7 +318,7 @@ fn effective_chat_targets(
 async fn run_provider_loop(
     agent: &mut AgentLoop,
     initial_system_prompt: &str,
-    depth_ctx: memory::SpawnDepthCtx,
+    depth_ctx: home::SpawnDepthCtx,
 ) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
     let targets = agent.chat_targets().to_vec();

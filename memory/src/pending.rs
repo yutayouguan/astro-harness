@@ -12,7 +12,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::agent::scan::scan_memory_content;
+use home::scan_memory_content;
 use crate::config::load_memory_config;
 use crate::parse_memory_entries;
 use crate::MemoryManager;

@@ -259,7 +259,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
         item.unwrap();
     }
 
-    let store = memory::SessionStore::open(&dir.path().join("sessions/state.db")).unwrap();
+    let store = session::SessionStore::open(&dir.path().join("sessions/state.db")).unwrap();
     let hist = store.build_chat_history("persist-session", 50).unwrap();
     assert!(
         hist.iter()

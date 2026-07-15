@@ -1,5 +1,5 @@
-use memory::session_store::NewMessage;
 use memory::MemoryManager;
+use session::NewMessage;
 use tempfile::TempDir;
 
 #[test]

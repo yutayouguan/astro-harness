@@ -3,7 +3,7 @@
 use memory::pending::{
     approve, enqueue, list_pending, pending_dir, reject, PendingMemoryWrite,
 };
-use memory::scan_memory_content;
+use home::scan_memory_content;
 use memory::{MemoryManager, MemoryTarget};
 use std::fs;
 use tempfile::TempDir;

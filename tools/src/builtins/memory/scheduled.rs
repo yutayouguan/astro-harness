@@ -1,6 +1,6 @@
 //! 定时任务工具集：注册 `cron_*` / `scheduled` 别名，并转发到 memory crate。
 //!
-//! 实际持久化与调度逻辑在 [`memory::dispatch_cron_tool`]；本模块只负责 schema 与注册。
+//! 实际持久化与调度逻辑在 [`cron::dispatch_cron_tool`]；本模块只负责 schema 与注册。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -92,11 +92,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-/// 将工具名与参数转交给 [`memory::dispatch_cron_tool`]。
+/// 将工具名与参数转交给 [`cron::dispatch_cron_tool`]。
 ///
 /// # 参数
 /// - `name`：工具名（含 `scheduled` 别名）
 /// - `args`：JSON 参数对象
 pub fn dispatch(name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
-    memory::dispatch_cron_tool(name, args)
+    cron::dispatch_cron_tool(name, args)
 }

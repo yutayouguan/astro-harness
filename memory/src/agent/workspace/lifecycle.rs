@@ -4,10 +4,7 @@ use std::path::Path;
 
 use session::SessionStore;
 
-pub use home::{
-    create_agent, create_agent_with_profile, ensure_agent_space, ensure_daily_memory,
-    list_agents, write_agent_config, AgentInfo, AgentProfile, EnsureWorkspaceReport,
-};
+pub use home::EnsureWorkspaceReport;
 
 /// 完整首次引导：home 目录脚手架 + 会话库 + 内置技能播种。
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {

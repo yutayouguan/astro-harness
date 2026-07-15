@@ -1,9 +1,8 @@
 //! Tauri IPC 薄封装 → artifacts 索引（文件空间）
 
-use memory::{
-    active_agent_id, default_memory_dir, open_default, ArtifactRow, ArtifactSource, MemoryManager,
-    ReconcileReport,
-};
+use artifacts::{open_default, ArtifactRow, ArtifactSource, ReconcileReport};
+use home::{active_agent_id, default_memory_dir};
+use memory::MemoryManager;
 use serde::Serialize;
 use std::collections::HashMap;
 

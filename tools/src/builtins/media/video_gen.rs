@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use memory::{generated_dir, GeneratedKind};
+use home::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::media_http::{

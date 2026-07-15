@@ -16,6 +16,9 @@
 | **4 ✅** | `cron` | jobs.json + cron.db + tick/dispatch | 执行仍 backend/agent |
 | **5 ✅** | `artifacts` + `delegate` | artifacts.db；委派类型/异步登记/worktree | store/pending/review/dreaming/config + MemoryManager |
 | **6 ✅** | lifecycle → `home` | templates + Agent 脚手架（无 SQLite） | `ensure_workspace` 仍编排 SessionStore + skills |
+| **7 ✅** | stub 清理 + 调用方 | 删 memory→home 空壳；backend/tauri 改用 home/cron | facade 仍保留根级 `memory::*` |
+| **8 ✅** | tools/agent 直连 | orchestration/delegate/cron/usage/session/home 直依赖 | MemoryManager、ensure_workspace、review/dreaming 仍经 memory |
+| **9 ✅** | 收窄 facade | 删根级域 re-export；去 usage/cron/… 依赖；迁 backend 残留 | memory 仅真域 API |
 
 ---
 

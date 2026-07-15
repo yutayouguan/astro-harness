@@ -16,7 +16,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use common::message::Message;
-use memory::session_store::NewMessage;
+use session::NewMessage;
 use memory::{format_recalled_context, MemoryManager};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use providers::registry::ProviderRegistry;
@@ -60,8 +60,8 @@ impl AgentConfig {
     /// 不变量：`memory_dir` 必须可写；`ensure_workspace` 失败时仍继续，使用内置默认 soul。
     pub fn with_defaults(memory_dir: PathBuf) -> Self {
         let _ = memory::ensure_workspace(&memory_dir);
-        let agent_id = memory::active_agent_id(&memory_dir);
-        let ws = memory::agent_workspace_dir(&memory_dir, &agent_id);
+        let agent_id = home::active_agent_id(&memory_dir);
+        let ws = home::agent_workspace_dir(&memory_dir, &agent_id);
         let soul = std::fs::read_to_string(ws.join("SOUL.md"))
             .unwrap_or_else(|_| "你是 Astro，一个自我进化的 AI 助手".to_string());
         Self {
@@ -115,11 +115,11 @@ pub struct AgentLoop {
     /// 当前多轮流式 run 的 turn_id（与 streaming `run_id` 相同）；未在 run 内为 None。
     current_turn_id: Option<String>,
     /// 同步委派执行器（由 from_memory 构造）。
-    delegate_runner: memory::DelegateRunner,
+    delegate_runner: delegate::DelegateRunner,
     /// 异步委派 spawner（由 from_memory 构造）。
-    async_spawner: memory::DelegateAsyncSpawner,
+    async_spawner: delegate::DelegateAsyncSpawner,
     /// 编排 spawner（由 from_memory 构造）。
-    orchestration_spawner: memory::OrchestrationSpawner,
+    orchestration_spawner: orchestration::OrchestrationSpawner,
 }
 
 impl AgentLoop {
@@ -162,19 +162,19 @@ impl AgentLoop {
         let mut mcp_hub = McpHub::new();
         mcp_hub.set_agent_id(Some(agent_id));
 
-        let orchestration_spawner: memory::OrchestrationSpawner = Arc::new(|req| {
+        let orchestration_spawner: orchestration::OrchestrationSpawner = Arc::new(|req| {
             tokio::spawn(async move {
                 if let Err(e) = crate::orchestration::run_orchestration(req).await {
                     tracing::warn!(error = %e, "orchestration failed");
                 }
             });
         });
-        let delegate_runner: memory::DelegateRunner = Arc::new(|req| {
+        let delegate_runner: delegate::DelegateRunner = Arc::new(|req| {
             crate::delegate_exec::run_delegate_blocking(req)
         });
-        let async_spawner: memory::DelegateAsyncSpawner = Arc::new(|task_id, req| {
+        let async_spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, req| {
             tokio::spawn(async move {
-                let reg = memory::AsyncDelegateRegistry::global();
+                let reg = delegate::AsyncDelegateRegistry::global();
                 if reg.is_cancel_requested(&task_id) {
                     return;
                 }
@@ -196,7 +196,7 @@ impl AgentLoop {
         let async_spawner_resume = async_spawner.clone();
         let orch_spawner_resume = orchestration_spawner.clone();
         RESUME_ONCE.call_once(move || {
-            memory::resume_incomplete_async_delegates(&async_spawner_resume);
+            delegate::resume_incomplete_async_delegates(&async_spawner_resume);
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 handle.spawn(async move {
                     if let Err(e) =
@@ -253,17 +253,17 @@ impl AgentLoop {
     }
 
     /// 克隆同步委派执行器，供 streaming 快照使用。
-    pub fn delegate_runner(&self) -> memory::DelegateRunner {
+    pub fn delegate_runner(&self) -> delegate::DelegateRunner {
         Arc::clone(&self.delegate_runner)
     }
 
     /// 克隆异步委派 spawner，供 streaming 快照使用。
-    pub fn async_spawner(&self) -> memory::DelegateAsyncSpawner {
+    pub fn async_spawner(&self) -> delegate::DelegateAsyncSpawner {
         Arc::clone(&self.async_spawner)
     }
 
     /// 克隆编排 spawner，供 streaming 快照使用。
-    pub fn orchestration_spawner(&self) -> memory::OrchestrationSpawner {
+    pub fn orchestration_spawner(&self) -> orchestration::OrchestrationSpawner {
         Arc::clone(&self.orchestration_spawner)
     }
 
@@ -609,15 +609,15 @@ impl AgentLoop {
             }
             let agent_id = self.memory.agent_id.clone();
             let turn_id = self.current_turn_id.clone();
-            let _ = memory::record_tool_call(&agent_id, name, args);
-            let _ = memory::record_usage_tool_call(
+            let _ = home::record_tool_call(&agent_id, name, args);
+            let _ = usage::record_tool_call(
                 &agent_id,
                 name,
                 args,
                 Some(self.session_id.as_str()),
                 turn_id.as_deref(),
             );
-            memory::UsageDb::try_record(memory::NewUsageEvent {
+            usage::UsageDb::try_record(usage::NewUsageEvent {
                 ts: chrono::Utc::now().to_rfc3339(),
                 kind: "mcp".into(),
                 name: name.to_string(),
@@ -1021,7 +1021,7 @@ fn hydrate_session_messages(
 }
 
 fn stored_message_to_runtime(
-    m: memory::session_store::StoredMessage,
+    m: session::StoredMessage,
 ) -> anyhow::Result<Option<Message>> {
     let content = m.content.unwrap_or_default();
     let msg = match m.role.as_str() {
@@ -1055,6 +1055,6 @@ fn resolve_session_project_root() -> Option<PathBuf> {
     if flag != "1" && !flag.eq_ignore_ascii_case("true") {
         return None;
     }
-    memory::resolve_project_root(None).filter(|p| memory::find_git_root(p).is_some() || p.is_dir())
+    delegate::resolve_project_root(None).filter(|p| delegate::find_git_root(p).is_some() || p.is_dir())
 }
 

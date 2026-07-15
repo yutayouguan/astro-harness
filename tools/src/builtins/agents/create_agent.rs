@@ -1,6 +1,6 @@
 //! 创建 Agent 工具：在 `~/.astro` 下新建独立记忆空间与配置。
 //!
-//! 调用 [`memory::create_agent_with_profile`]；若 `activate`，会就地更新
+//! 调用 [`home::create_agent_with_profile`]；若 `activate`，会就地更新
 //! [`ToolContext`] 的工作区与 MemoryManager，便于后续 file_ops 写到新空间。
 
 use schemars::JsonSchema;
@@ -90,7 +90,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     let activate = parsed.activate.unwrap_or(false);
     let inherit_config = parsed.inherit_config.unwrap_or(true);
 
-    let profile = parsed.profile.as_ref().map(|p| memory::AgentProfile {
+    let profile = parsed.profile.as_ref().map(|p| home::AgentProfile {
         background: opt_str(&p.background),
         style: opt_str(&p.style),
         focus: opt_str(&p.focus),
@@ -100,7 +100,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     });
 
     let base = ctx.memory_dir.clone();
-    let info = memory::create_agent_with_profile(
+    let info = home::create_agent_with_profile(
         &base,
         name,
         id_override,
@@ -123,7 +123,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         name = info.name,
         id = info.id,
         path = info.path,
-        cfg = memory::agent_config_dir(&base, &info.id)
+        cfg = home::agent_config_dir(&base, &info.id)
             .join("config.json")
             .display(),
         active = activate,

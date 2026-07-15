@@ -10,7 +10,7 @@ fn normalize_agent_id(agent_id: Option<String>) -> Option<String> {
         .filter(|s| !s.is_empty())
         .map(|s| {
             if s == "default" {
-                memory::DEFAULT_AGENT_ID.to_string()
+                home::DEFAULT_AGENT_ID.to_string()
             } else {
                 s
             }
@@ -23,7 +23,7 @@ pub async fn get_tools_enabled(
     agent_id: Option<String>,
 ) -> Result<HashMap<String, bool>, String> {
     let id = normalize_agent_id(agent_id);
-    memory::sync_tools_enabled_defaults_for_agent(id.as_deref()).map_err(|e| e.to_string())
+    home::sync_tools_enabled_defaults_for_agent(id.as_deref()).map_err(|e| e.to_string())
 }
 
 /// 保存工具集启用表（与磁盘现有项合并，避免 UI 未列的工具集被冲掉）。
@@ -33,14 +33,14 @@ pub async fn set_tools_enabled(
     agent_id: Option<String>,
 ) -> Result<(), String> {
     let id = normalize_agent_id(agent_id);
-    let mut merged = memory::load_tools_enabled_for_agent(id.as_deref());
+    let mut merged = home::load_tools_enabled_for_agent(id.as_deref());
     for (k, v) in enabled {
         merged.insert(k, v);
     }
-    for known in memory::KNOWN_TOOLSET_IDS {
+    for known in home::KNOWN_TOOLSET_IDS {
         merged.entry((*known).to_string()).or_insert(true);
     }
-    memory::save_tools_enabled_for_agent(id.as_deref(), &merged).map_err(|e| e.to_string())
+    home::save_tools_enabled_for_agent(id.as_deref(), &merged).map_err(|e| e.to_string())
 }
 
 /// 内置工具目录（schemars 派生参数），供前端 Tools 面板展示
@@ -185,9 +185,9 @@ pub async fn refresh_mcp_tools(
 #[tauri::command]
 pub async fn get_agent_usage_stats(
     agent_id: Option<String>,
-) -> Result<memory::AgentUsageSummary, String> {
+) -> Result<usage::AgentUsageSummary, String> {
     let id = normalize_agent_id(agent_id);
-    Ok(memory::get_usage_summary(id.as_deref()))
+    Ok(usage::get_usage_summary(id.as_deref()))
 }
 
 /// `get_usage_insights` 请求参数。
@@ -205,16 +205,16 @@ pub struct UsageInsightsArgs {
 #[tauri::command]
 pub async fn get_usage_insights(
     args: UsageInsightsArgs,
-) -> Result<memory::UsageInsights, String> {
+) -> Result<usage::UsageInsights, String> {
     let period = match args.period.to_lowercase().as_str() {
-        "month" => memory::UsagePeriod::Month,
-        "quarter" => memory::UsagePeriod::Quarter,
-        "year" => memory::UsagePeriod::Year,
+        "month" => usage::UsagePeriod::Month,
+        "quarter" => usage::UsagePeriod::Quarter,
+        "year" => usage::UsagePeriod::Year,
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
-    let db = memory::UsageDb::open_default().map_err(|e| e.to_string())?;
-    db.query_insights(memory::UsageInsightsQuery {
+    let db = usage::UsageDb::open_default().map_err(|e| e.to_string())?;
+    db.query_insights(usage::UsageInsightsQuery {
         period,
         as_of: args.as_of,
         agent_id,
@@ -237,15 +237,15 @@ pub struct CollaborationInsightsArgs {
 #[tauri::command]
 pub async fn get_collaboration_insights(
     args: CollaborationInsightsArgs,
-) -> Result<memory::CollaborationInsights, String> {
+) -> Result<orchestration::CollaborationInsights, String> {
     let period = match args.period.to_lowercase().as_str() {
-        "month" => memory::UsagePeriod::Month,
-        "quarter" => memory::UsagePeriod::Quarter,
-        "year" => memory::UsagePeriod::Year,
+        "month" => usage::UsagePeriod::Month,
+        "quarter" => usage::UsagePeriod::Quarter,
+        "year" => usage::UsagePeriod::Year,
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
-    memory::query_collaboration_insights(memory::CollaborationInsightsQuery {
+    orchestration::query_collaboration_insights(orchestration::CollaborationInsightsQuery {
         period,
         as_of: args.as_of,
         agent_id,
@@ -268,15 +268,15 @@ pub struct TraceInsightsArgs {
 #[tauri::command]
 pub async fn get_trace_insights(
     args: TraceInsightsArgs,
-) -> Result<memory::TraceInsights, String> {
+) -> Result<usage::TraceInsights, String> {
     let period = match args.period.to_lowercase().as_str() {
-        "month" => memory::UsagePeriod::Month,
-        "quarter" => memory::UsagePeriod::Quarter,
-        "year" => memory::UsagePeriod::Year,
+        "month" => usage::UsagePeriod::Month,
+        "quarter" => usage::UsagePeriod::Quarter,
+        "year" => usage::UsagePeriod::Year,
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
-    memory::query_trace_insights(memory::TraceInsightsQuery {
+    usage::query_trace_insights(usage::TraceInsightsQuery {
         period,
         as_of: args.as_of,
         agent_id,
@@ -298,19 +298,19 @@ pub struct QueryAgentLogsArgs {
 
 /// Tauri 命令：按 session/turn/level 查询 agent/errors 日志尾部。
 #[tauri::command]
-pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<memory::AgentLogLine>, String> {
+pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<home::AgentLogLine>, String> {
     let source = match args.source.as_deref() {
-        Some("agent") => memory::LogSource::Agent,
-        Some("errors") => memory::LogSource::Errors,
-        _ => memory::LogSource::Both,
+        Some("agent") => home::LogSource::Agent,
+        Some("errors") => home::LogSource::Errors,
+        _ => home::LogSource::Both,
     };
-    let q = memory::AgentLogQuery {
-        logs_dir: memory::logs_dir(),
+    let q = home::AgentLogQuery {
+        logs_dir: home::logs_dir(),
         session_id: args.session_id,
         turn_id: args.turn_id,
         min_level: args.min_level,
         lines: args.lines.unwrap_or(50),
         source,
     };
-    memory::query_agent_logs(q).map_err(|e| e.to_string())
+    home::query_agent_logs(q).map_err(|e| e.to_string())
 }

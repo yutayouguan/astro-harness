@@ -36,11 +36,11 @@ pub fn register(registry: &mut ToolRegistry) {
 
 /// 将角色列表落库为编排并触发后台执行。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    if !memory::can_spawn_nested() {
+    if !home::can_spawn_nested() {
         anyhow::bail!(
             "spawn depth limit reached (depth {} >= max {})",
-            memory::current_spawn_depth(),
-            memory::effective_max_spawn_depth()
+            home::current_spawn_depth(),
+            home::effective_max_spawn_depth()
         );
     }
 
@@ -60,15 +60,15 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         if role.is_empty() {
             anyhow::bail!("multi_agent agents[{i}] 不能为空");
         }
-        steps.push(memory::NewOrchestrationStep {
+        steps.push(orchestration::NewOrchestrationStep {
             role: role.to_string(),
             agent_id: None,
             prompt: format!("As {role}, help achieve the overall goal.\n\n## Goal\n{goal}"),
         });
     }
 
-    let db = memory::OrchestrationDb::open_default()?;
-    let orchestration_id = db.create(memory::NewOrchestration {
+    let db = orchestration::OrchestrationDb::open_default()?;
+    let orchestration_id = db.create(orchestration::NewOrchestration {
         parent_agent_id: ctx.memory.agent_id.clone(),
         session_id: Some(ctx.session_id.clone()),
         goal: goal.to_string(),
@@ -79,7 +79,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         base_url: ctx.chat_base_url.clone(),
     })?;
 
-    let spawn_req = memory::OrchestrationSpawnRequest {
+    let spawn_req = orchestration::OrchestrationSpawnRequest {
         orchestration_id: orchestration_id.clone(),
         parent_agent_id: ctx.memory.agent_id.clone(),
         provider: ctx.chat_provider.clone(),
@@ -87,8 +87,8 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         api_key: ctx.chat_api_key.clone(),
         base_url: ctx.chat_base_url.clone(),
         chat_targets: ctx.chat_targets.clone(),
-        caller_depth: memory::current_spawn_depth(),
-        max_spawn_depth: memory::effective_max_spawn_depth(),
+        caller_depth: home::current_spawn_depth(),
+        max_spawn_depth: home::effective_max_spawn_depth(),
         allow_reclaim: false,
     };
     if let Some(spawner) = ctx.orchestration_spawner.as_ref() {

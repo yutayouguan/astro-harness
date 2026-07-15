@@ -1,28 +1,20 @@
-//! Astro 记忆子系统 facade：精炼记忆（MEMORY/USER）与工作区生命周期。
+//! Astro 记忆真域：精炼记忆、审批队列、回顾、入梦与 `MemoryManager`。
 //!
-//! 会话 / 用量 / 编排 / 定时 / 产物 / 委派已独立 crate；本包继续 `pub use` 保持 `memory::*`。
-//! 数据根目录默认为 `~/.astro`（可通过 `ASTRO_MEMORY_DIR` 覆盖）。
+//! 路径 / 定时 / 会话库 / 用量等已独立为 `home`、`cron`、`session`、`usage` 等 crate。
+//! 完整工作区引导仍由 [`ensure_workspace`] 编排（`home` 脚手架 + 会话库 + 技能播种）。
 
 pub mod agent;
 pub mod config;
 pub mod dreaming;
-pub mod infra;
 pub mod pending;
 pub mod review;
 pub mod session;
-pub mod spawn_depth;
 
 #[cfg(test)]
 pub(crate) mod test_env;
 
-// ── 真域 ──────────────────────────────────────────────────────
-pub use agent::agent_icons;
-pub use agent::auto_icon;
-pub use agent::scan::scan_memory_content;
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
-pub use agent::tools_enabled;
 pub use agent::workspace;
-
 pub use config::{
     load_auxiliary_config, load_memory_config, resolve_auxiliary, set_background_review_enabled,
     set_auto_refresh_on_update, set_write_approval, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute,
@@ -40,108 +32,7 @@ pub use dreaming::{
     load_dreaming_state, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
     DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
-
-pub use session::manager;
-pub use session::message_db;
-pub use session::store as session_store;
-
-// ── 已拆出域的 facade ──────────────────────────────────────────
-pub use ::cron::run_db as cron_run_db;
-pub use ::usage::db as usage_db;
-pub use ::usage::pricing as usage_pricing;
-pub use ::usage::stats as usage_stats;
-pub use ::usage::trace_insights;
-pub use ::orchestration::collab_insights;
-pub use ::orchestration::db as orchestration_db;
-pub use ::orchestration::spawn as orchestration_spawn;
-pub use ::artifacts::db as artifact_db;
-pub use ::delegate::async_reg as delegate_async;
-pub use ::delegate::git_worktree;
-pub use ::delegate::spawn as delegate_spawn;
-
-pub use infra::log_query;
-pub use infra::logging;
-pub use infra::tool_calls;
-
-// ── 根级符号 re-export（保持既有 `memory::Foo` 调用方）──────────
-pub use artifact_db::{
-    artifacts_db_path, category_from_name, is_junk_artifact_name, open_default, ArtifactDb,
-    ArtifactRow, ArtifactSource, ReconcileReport,
-};
-pub use manager::{
+pub use session::manager::{
     dispatch_memory_tool, format_recalled_context, MemoryManager, MemoryTarget,
 };
-pub use message_db::{build_conversation_context, ScrolledMessage};
-pub use session_store::{
-    BillingDelta, ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit,
-    SessionBillingRow, SessionStore, StoredMessage, StoredSession,
-};
-pub use workspace::{
-    active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
-    create_agent, create_agent_with_profile, daily_memory_path, default_agent_workspace_dir,
-    default_memory_dir, ensure_agent_space, ensure_daily_memory, ensure_default_workspace,
-    ensure_workspace, generated_dir, list_agents, list_daily_memory_dates, normalize_agent_id,
-    seed_create_agent_skill, set_active_agent, today_date_string, write_agent_config, AgentInfo,
-    AgentProfile, AgentRuntimeConfig, EnsureWorkspaceReport, GeneratedKind, GENERATED_SUBDIRS,
-    DEFAULT_AGENT_ID,
-};
-pub use agent_icons::{
-    apply_pending_agent_icons, clear_pending_agent_icon, resolve_icon_field, set_pending_agent_icon,
-    update_agent_icons, write_agent_icon, AgentIconKind,
-};
-pub use logging::{init_logging, logs_dir};
-pub use log_query::{
-    default_agent_log_query, query_agent_logs, AgentLogLine, AgentLogQuery, LogSource,
-};
-pub use ::cron::{
-    cron_dir, cron_extract_preamble, dispatch_cron_tool, normalize_cron_extract, tick_default,
-    CronJob, CronJobExtract, CronStore, NewCronJob,
-};
-pub use cron_run_db::{
-    cron_db_path, CronRunDb, CronRunFilters, CronRunRow, NewCronRun,
-};
-pub use tools_enabled::{
-    is_tool_call_allowed, is_toolset_enabled, load_tools_enabled, load_tools_enabled_for_agent,
-    save_tools_enabled, save_tools_enabled_for_agent, sync_tools_enabled_defaults,
-    sync_tools_enabled_defaults_for_agent, tool_name_to_toolset, tools_enabled_path,
-    KNOWN_TOOLSET_IDS,
-};
-pub use tool_calls::record_tool_call;
-pub use usage_stats::{
-    get_usage_summary, load_usage_stats, record_tool_call as record_usage_tool_call,
-    save_usage_stats, AgentUsageStats, AgentUsageSummary,
-};
-pub use usage_db::{
-    period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
-    UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint, USAGE_SCHEMA_VERSION,
-};
-pub use usage_pricing::{
-    estimate_usage_cost, resolve_billing_route, BillingRoute, CostResult, CostStatus, UsageTokens,
-};
-pub use orchestration_db::{
-    orchestration_db_path, NewOrchestration, NewOrchestrationStep, OrchestrationDb,
-    OrchestrationRow, OrchestrationStatus, StepRow, StepStatus,
-};
-pub use orchestration_spawn::{OrchestrationSpawnRequest, OrchestrationSpawner};
-pub use delegate_spawn::{DelegateRole, DelegateRunRequest, DelegateRunner, DelegateTaskSpec};
-pub use git_worktree::{
-    create_task_worktree, find_git_root, resolve_project_root, WorktreeHandle,
-};
-pub use delegate_async::{
-    async_delegate_cancel, async_delegate_collect, async_delegate_status,
-    start_delegate_async, resume_incomplete_async_delegates, AsyncDelegateRecord,
-    AsyncDelegateRegistry, AsyncDelegateStatus, DelegateAsyncSpawner,
-};
-pub use spawn_depth::{
-    can_spawn_nested, current_spawn_depth, effective_max_spawn_depth, scoped_max_spawn_depth,
-    scope_spawn_depth, SpawnDepthCtx, DEFAULT_MAX_SPAWN_DEPTH,
-};
-pub use collab_insights::{
-    query_collaboration_insights, CollaborationEdge, CollaborationGraph,
-    CollaborationInsights, CollaborationInsightsQuery, CollaborationNode,
-    CollaborationOrchestration, CollaborationStep, COLLAB_LIST_LIMIT, COLLAB_OUTPUT_MAX_BYTES,
-};
-pub use trace_insights::{
-    query_trace_insights, TraceEvent, TraceInsights, TraceInsightsQuery, TraceKpis, TraceSummary,
-    TRACE_EVENTS_LIMIT, TRACE_LIST_LIMIT,
-};
+pub use workspace::{ensure_default_workspace, ensure_workspace};

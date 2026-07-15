@@ -9,9 +9,9 @@ use memory::dreaming::{
     mark_agent_dream_error, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
+use home::{default_memory_dir, list_agents};
 use memory::{
-    default_memory_dir, list_agents, list_pending, load_auxiliary_config, load_memory_config,
-    resolve_auxiliary, AuxiliaryKind,
+    list_pending, load_auxiliary_config, load_memory_config, resolve_auxiliary, AuxiliaryKind,
 };
 use providers::client::ProviderClient;
 use providers::registry::ProviderRegistry;

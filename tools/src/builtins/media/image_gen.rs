@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use memory::{generated_dir, GeneratedKind};
+use home::{generated_dir, GeneratedKind};
 use providers::interactions_http::{
     google_interactions_image, InteractionImagePart, InteractionImageRequest,
     InteractionVideoInput,
@@ -592,7 +592,8 @@ mod arg_tests {
 mod path_tests {
     use super::*;
     use crate::context::{ImageGenTargets, ToolContext};
-    use memory::{generated_dir, GeneratedKind, MemoryManager};
+    use home::{generated_dir, GeneratedKind};
+    use memory::MemoryManager;
     use providers::registry::ProviderRegistry;
     use std::path::Path;
     use tempfile::TempDir;

@@ -7,7 +7,7 @@ use agent::context::{DynamicContext, StaticContext};
 use agent::loop_::{AgentConfig, AgentLoop, MaxDepthError};
 use agent::prompt_builder::PromptBuilder;
 use common::message::Message;
-use memory::AgentRuntimeConfig;
+use home::AgentRuntimeConfig;
 use tempfile::TempDir;
 
 fn test_config(dir: &TempDir) -> AgentConfig {

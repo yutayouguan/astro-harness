@@ -64,11 +64,11 @@ pub fn register(registry: &mut ToolRegistry) {
 
 /// 创建编排并触发后台执行；立即返回 queued JSON。
 pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    if !memory::can_spawn_nested() {
+    if !home::can_spawn_nested() {
         anyhow::bail!(
             "spawn depth limit reached (depth {} >= max {})",
-            memory::current_spawn_depth(),
-            memory::effective_max_spawn_depth()
+            home::current_spawn_depth(),
+            home::effective_max_spawn_depth()
         );
     }
     let parsed: OrchestrationRunArgs = serde_json::from_value(args.clone())
@@ -78,7 +78,7 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     let steps: Vec<_> = parsed
         .steps
         .into_iter()
-        .map(|s| memory::NewOrchestrationStep {
+        .map(|s| orchestration::NewOrchestrationStep {
             role: s.role.trim().to_string(),
             agent_id: s
                 .agent_id
@@ -89,8 +89,8 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         })
         .collect();
 
-    let db = memory::OrchestrationDb::open_default()?;
-    let orchestration_id = db.create(memory::NewOrchestration {
+    let db = orchestration::OrchestrationDb::open_default()?;
+    let orchestration_id = db.create(orchestration::NewOrchestration {
         parent_agent_id: ctx.memory.agent_id.clone(),
         session_id: Some(ctx.session_id.clone()),
         goal: parsed.goal.trim().to_string(),
@@ -101,7 +101,7 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         base_url: ctx.chat_base_url.clone(),
     })?;
 
-    let spawn_req = memory::OrchestrationSpawnRequest {
+    let spawn_req = orchestration::OrchestrationSpawnRequest {
         orchestration_id: orchestration_id.clone(),
         parent_agent_id: ctx.memory.agent_id.clone(),
         provider: ctx.chat_provider.clone(),
@@ -109,8 +109,8 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         api_key: ctx.chat_api_key.clone(),
         base_url: ctx.chat_base_url.clone(),
         chat_targets: ctx.chat_targets.clone(),
-        caller_depth: memory::current_spawn_depth(),
-        max_spawn_depth: memory::effective_max_spawn_depth(),
+        caller_depth: home::current_spawn_depth(),
+        max_spawn_depth: home::effective_max_spawn_depth(),
         allow_reclaim: false,
     };
     if let Some(spawner) = ctx.orchestration_spawner.as_ref() {
@@ -149,7 +149,7 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
         anyhow::bail!("orchestration_status 需要 orchestration_id");
     }
 
-    let db = memory::OrchestrationDb::open_default()?;
+    let db = orchestration::OrchestrationDb::open_default()?;
     let orch = db
         .get(id)?
         .ok_or_else(|| anyhow::anyhow!("orchestration 不存在: {id}"))?;

@@ -12,7 +12,8 @@ use agent::streaming::{
 };
 use agent::{HitlGate, HitlRegistry};
 use futures::StreamExt;
-use memory::{AgentRuntimeConfig, MemoryManager};
+use home::AgentRuntimeConfig;
+use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
@@ -195,7 +196,7 @@ impl AstroServiceImpl {
             return Ok(handle.clone());
         }
 
-        let agent_id = memory::active_agent_id(&self.memory_dir);
+        let agent_id = home::active_agent_id(&self.memory_dir);
         let mut builder = AgentBuilder::new(self.memory_dir.clone()).agent_id(agent_id.clone());
         if let Ok(rt) = AgentRuntimeConfig::load(&self.memory_dir, &agent_id) {
             builder = builder.from_runtime_config(&rt);
@@ -1086,7 +1087,7 @@ impl AstroService for AstroServiceImpl {
         let (tx, rx) = tokio::sync::mpsc::channel(8);
 
         tokio::spawn(async move {
-            if !memory::is_toolset_enabled("skills") {
+            if !home::is_toolset_enabled("skills") {
                 let _ = tx
                     .send(Ok(SkillEvent {
                         payload: Some(proto::skill_event::Payload::Error(
@@ -1153,7 +1154,7 @@ impl AstroService for AstroServiceImpl {
         _request: Request<Empty>,
     ) -> Result<Response<McpServerList>, Status> {
         // 优先：active agent 的 hub（实时连接状态）；勿用任意会话以免串 agent
-        let active = memory::active_agent_id(&self.memory_dir);
+        let active = home::active_agent_id(&self.memory_dir);
         let sessions = self.sessions.read().await;
         for handle in sessions.values() {
             let agent = handle.lock().await;

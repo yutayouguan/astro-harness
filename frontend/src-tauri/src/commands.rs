@@ -303,18 +303,18 @@ pub struct AgentInfoDto {
 
 /// 返回本机 Astro 记忆根目录。
 fn memory_dir() -> String {
-    memory::default_memory_dir().to_string_lossy().into_owned()
+    home::default_memory_dir().to_string_lossy().into_owned()
 }
 
 /// 返回当前（或指定）Agent 工作区路径。
 fn workspace_dir() -> String {
-    memory::default_agent_workspace_dir()
+    home::default_agent_workspace_dir()
         .to_string_lossy()
         .into_owned()
 }
 
 /// 将内部 AgentInfo 转为前端 DTO。
-fn agent_info_dto(a: memory::AgentInfo) -> AgentInfoDto {
+fn agent_info_dto(a: home::AgentInfo) -> AgentInfoDto {
     AgentInfoDto {
         id: a.id,
         name: a.name,
@@ -329,7 +329,7 @@ fn agent_info_dto(a: memory::AgentInfo) -> AgentInfoDto {
 
 /// 确保并返回记忆根路径。
 fn memory_root() -> std::path::PathBuf {
-    memory::default_memory_dir()
+    home::default_memory_dir()
 }
 
 /// 引导默认工作区文件结构。
@@ -405,7 +405,7 @@ fn file_entry_dto(path: &std::path::Path, name: &str, is_dir: bool) -> FileEntry
 pub async fn get_config() -> Result<AppConfigDto, String> {
     bootstrap_workspace()?;
     let root = memory_root();
-    let agents = memory::list_agents(&root)
+    let agents = home::list_agents(&root)
         .into_iter()
         .map(agent_info_dto)
         .collect();
@@ -413,7 +413,7 @@ pub async fn get_config() -> Result<AppConfigDto, String> {
         grpc_address: default_grpc_address(),
         memory_dir: memory_dir(),
         workspace_dir: workspace_dir(),
-        active_agent_id: memory::active_agent_id(&root),
+        active_agent_id: home::active_agent_id(&root),
         agents,
     })
 }
@@ -422,7 +422,7 @@ pub async fn get_config() -> Result<AppConfigDto, String> {
 #[tauri::command]
 pub async fn list_agents() -> Result<Vec<AgentInfoDto>, String> {
     bootstrap_workspace()?;
-    Ok(memory::list_agents(&memory_root())
+    Ok(home::list_agents(&memory_root())
         .into_iter()
         .map(agent_info_dto)
         .collect())
@@ -432,7 +432,7 @@ pub async fn list_agents() -> Result<Vec<AgentInfoDto>, String> {
 #[tauri::command]
 pub async fn create_agent(name: String) -> Result<AgentInfoDto, String> {
     bootstrap_workspace()?;
-    let info = memory::create_agent(&memory_root(), &name).map_err(|e| e.to_string())?;
+    let info = home::create_agent(&memory_root(), &name).map_err(|e| e.to_string())?;
     Ok(agent_info_dto(info))
 }
 
@@ -440,7 +440,7 @@ pub async fn create_agent(name: String) -> Result<AgentInfoDto, String> {
 #[tauri::command]
 pub async fn set_active_agent(agent_id: String) -> Result<AppConfigDto, String> {
     bootstrap_workspace()?;
-    memory::set_active_agent(&memory_root(), &agent_id).map_err(|e| e.to_string())?;
+    home::set_active_agent(&memory_root(), &agent_id).map_err(|e| e.to_string())?;
     get_config().await
 }
 
@@ -451,7 +451,7 @@ pub async fn set_pending_agent_icon(
     data_base64: String,
     file_name: String,
 ) -> Result<(), String> {
-    let kind = memory::agent_icons::AgentIconKind::from_str(&kind)
+    let kind = home::config::agent_icons::AgentIconKind::from_str(&kind)
         .ok_or_else(|| format!("未知图标类型: {kind}"))?;
     let bytes = {
         use base64::Engine as _;
@@ -459,7 +459,7 @@ pub async fn set_pending_agent_icon(
             .decode(data_base64.trim())
             .map_err(|e| format!("图标 base64 无效: {e}"))?
     };
-    memory::agent_icons::set_pending_agent_icon(&memory_root(), kind, &bytes, &file_name)
+    home::config::agent_icons::set_pending_agent_icon(&memory_root(), kind, &bytes, &file_name)
         .map_err(|e| e.to_string())
 }
 
@@ -469,11 +469,11 @@ pub async fn clear_pending_agent_icon(kind: Option<String>) -> Result<(), String
     let kind = match kind.as_deref() {
         None => None,
         Some(s) => Some(
-            memory::agent_icons::AgentIconKind::from_str(s)
+            home::config::agent_icons::AgentIconKind::from_str(s)
                 .ok_or_else(|| format!("未知图标类型: {s}"))?,
         ),
     };
-    memory::agent_icons::clear_pending_agent_icon(&memory_root(), kind).map_err(|e| e.to_string())
+    home::config::agent_icons::clear_pending_agent_icon(&memory_root(), kind).map_err(|e| e.to_string())
 }
 
 /// 列出每日记忆日期。
@@ -481,9 +481,9 @@ pub async fn clear_pending_agent_icon(kind: Option<String>) -> Result<(), String
 pub async fn list_daily_memory(agent_id: Option<String>) -> Result<Vec<String>, String> {
     bootstrap_workspace()?;
     let root = memory_root();
-    let id = agent_id.unwrap_or_else(|| memory::active_agent_id(&root));
-    let ws = memory::agent_workspace_dir(&root, &id);
-    Ok(memory::list_daily_memory_dates(&ws))
+    let id = agent_id.unwrap_or_else(|| home::active_agent_id(&root));
+    let ws = home::agent_workspace_dir(&root, &id);
+    Ok(home::list_daily_memory_dates(&ws))
 }
 
 /// 读取指定日期的每日记忆 Markdown。
@@ -494,10 +494,10 @@ pub async fn read_daily_memory(
 ) -> Result<String, String> {
     bootstrap_workspace()?;
     let root = memory_root();
-    let id = agent_id.unwrap_or_else(|| memory::active_agent_id(&root));
-    let ws = memory::agent_workspace_dir(&root, &id);
-    let date = date.unwrap_or_else(memory::today_date_string);
-    let path = memory::ensure_daily_memory(&ws, &date).map_err(|e| e.to_string())?;
+    let id = agent_id.unwrap_or_else(|| home::active_agent_id(&root));
+    let ws = home::agent_workspace_dir(&root, &id);
+    let date = date.unwrap_or_else(home::today_date_string);
+    let path = home::ensure_daily_memory(&ws, &date).map_err(|e| e.to_string())?;
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
@@ -510,10 +510,10 @@ pub async fn write_daily_memory(
 ) -> Result<(), String> {
     bootstrap_workspace()?;
     let root = memory_root();
-    let id = agent_id.unwrap_or_else(|| memory::active_agent_id(&root));
-    let ws = memory::agent_workspace_dir(&root, &id);
-    let date = date.unwrap_or_else(memory::today_date_string);
-    let path = memory::ensure_daily_memory(&ws, &date).map_err(|e| e.to_string())?;
+    let id = agent_id.unwrap_or_else(|| home::active_agent_id(&root));
+    let ws = home::agent_workspace_dir(&root, &id);
+    let date = date.unwrap_or_else(home::today_date_string);
+    let path = home::ensure_daily_memory(&ws, &date).map_err(|e| e.to_string())?;
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
@@ -559,7 +559,7 @@ pub async fn start_chat(
     // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
     {
         bootstrap_workspace()?;
-        let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+        let mgr = memory::MemoryManager::new(home::default_memory_dir())
             .map_err(|e| e.to_string())?;
         if let Ok(Some(meta)) = mgr.session_store.get_session(&sid) {
             if meta.ended_at.is_some() {
@@ -578,7 +578,7 @@ pub async fn start_chat(
 
     if let Some(keep) = keep_chat_bubbles {
         bootstrap_workspace()?;
-        let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+        let mgr = memory::MemoryManager::new(home::default_memory_dir())
             .map_err(|e| e.to_string())?;
         mgr.ensure_session(&sid, "tauri")
             .map_err(|e| e.to_string())?;
@@ -1044,9 +1044,9 @@ pub async fn generate_image(
     for target in &targets {
         match generate_image_via_grpc(target, &prompt, width, height).await {
             Ok((data, mime)) => {
-                let dir = memory::generated_dir(
-                    &memory::default_agent_workspace_dir(),
-                    memory::GeneratedKind::Images,
+                let dir = home::generated_dir(
+                    &home::default_agent_workspace_dir(),
+                    home::GeneratedKind::Images,
                 );
                 std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
                 let filename = format!(
@@ -1133,7 +1133,7 @@ pub async fn get_chat_history(
     session_id: Option<String>,
     limit: Option<i32>,
 ) -> Result<ChatHistoryDto, String> {
-    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+    let mgr = memory::MemoryManager::new(home::default_memory_dir())
         .map_err(|e| e.to_string())?;
     let limit = limit.unwrap_or(200).clamp(1, 500) as usize;
 
@@ -1217,7 +1217,7 @@ pub async fn fork_chat_session(
         return Err("新会话 id 不能与源会话相同".into());
     }
 
-    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+    let mgr = memory::MemoryManager::new(home::default_memory_dir())
         .map_err(|e| e.to_string())?;
     mgr.session_store
         .fork_session(source, &new_id, keep)
@@ -1241,7 +1241,7 @@ pub async fn remove_chat_bubbles(
     if start >= end {
         return Ok(());
     }
-    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+    let mgr = memory::MemoryManager::new(home::default_memory_dir())
         .map_err(|e| e.to_string())?;
     mgr.session_store
         .remove_chat_bubbles(sid, start, end)
@@ -1251,7 +1251,7 @@ pub async fn remove_chat_bubbles(
 /// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    let mgr = memory::MemoryManager::new(memory::default_memory_dir())
+    let mgr = memory::MemoryManager::new(home::default_memory_dir())
         .map_err(|e| e.to_string())?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
     Ok(mgr
@@ -1412,7 +1412,7 @@ pub async fn trash_paths(paths: Vec<String>) -> Result<u32, String> {
         if paths_equal(&p, &memory) {
             return Err("不能删除数据根目录".into());
         }
-        for agent in memory::list_agents(&memory) {
+        for agent in home::list_agents(&memory) {
             if paths_equal(&p, std::path::Path::new(&agent.path)) {
                 return Err("不能删除 Agent 工作区根目录".into());
             }
@@ -1582,11 +1582,11 @@ pub async fn write_file(
     std::fs::write(&p, content).map_err(|e| e.to_string())?;
 
     if as_artifact.unwrap_or(false) {
-        let mem = memory::default_memory_dir();
-        if let Ok(db) = memory::open_default(&mem) {
+        let mem = home::default_memory_dir();
+        if let Ok(db) = artifacts::open_default(&mem) {
             let _ = db.register(
                 &path,
-                memory::ArtifactSource::AgentWrite,
+                artifacts::ArtifactSource::AgentWrite,
                 session_id.as_deref(),
                 None,
                 None,
@@ -1637,7 +1637,7 @@ pub async fn rename_path(path: String, new_name: String) -> Result<FileEntryDto,
     if paths_equal(&p, &memory) {
         return Err("不能重命名数据根目录".into());
     }
-    for agent in memory::list_agents(&memory) {
+    for agent in home::list_agents(&memory) {
         if paths_equal(&p, std::path::Path::new(&agent.path)) {
             return Err("不能重命名 Agent 工作区根目录".into());
         }
@@ -1710,7 +1710,7 @@ pub async fn move_paths(sources: Vec<String>, dest_dir: String) -> Result<Vec<Fi
         if paths_equal(&src, &memory) {
             return Err("不能移动数据根目录".into());
         }
-        for agent in memory::list_agents(&memory) {
+        for agent in home::list_agents(&memory) {
             if paths_equal(&src, std::path::Path::new(&agent.path)) {
                 return Err("不能移动 Agent 工作区根目录".into());
             }
@@ -1753,7 +1753,7 @@ pub async fn delete_path(path: String) -> Result<(), String> {
         return Err("不能删除数据根目录".into());
     }
     // 不能删除任一 Agent 工作区根目录
-    for agent in memory::list_agents(&memory) {
+    for agent in home::list_agents(&memory) {
         if paths_equal(&p, std::path::Path::new(&agent.path)) {
             return Err("不能删除 Agent 工作区根目录".into());
         }
@@ -1863,11 +1863,11 @@ fn default_run_limit() -> u32 {
 
 /// 解析默认 / 活跃 Agent id。
 fn default_agent() -> String {
-    memory::DEFAULT_AGENT_ID.into()
+    home::DEFAULT_AGENT_ID.into()
 }
 
 /// CronJob → 前端任务 DTO。
-fn job_to_dto(j: memory::CronJob) -> CronJobDto {
+fn job_to_dto(j: cron::CronJob) -> CronJobDto {
     CronJobDto {
         id: j.id,
         schedule: j.schedule,
@@ -1885,7 +1885,7 @@ fn job_to_dto(j: memory::CronJob) -> CronJobDto {
 }
 
 /// CronRun → 前端运行记录 DTO。
-fn run_to_dto(r: memory::cron_run_db::CronRunRow) -> CronRunDto {
+fn run_to_dto(r: cron::run_db::CronRunRow) -> CronRunDto {
     CronRunDto {
         id: r.id,
         job_id: r.job_id,
@@ -1905,7 +1905,7 @@ fn run_to_dto(r: memory::cron_run_db::CronRunRow) -> CronRunDto {
 }
 
 /// 为定时任务解析 Provider/模型/密钥。
-fn resolve_creds_for_job(job: &memory::CronJob) -> Result<agent::cron_exec::CronExecCredentials, String> {
+fn resolve_creds_for_job(job: &cron::CronJob) -> Result<agent::cron_exec::CronExecCredentials, String> {
     use crate::providers_commands::{find_provider, find_provider_by_backend, resolve_chat_targets};
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
@@ -1947,7 +1947,7 @@ fn resolve_creds_for_job(job: &memory::CronJob) -> Result<agent::cron_exec::Cron
 #[tauri::command]
 pub async fn list_cron_jobs() -> Result<Vec<CronJobDto>, String> {
     bootstrap_workspace()?;
-    let store = memory::CronStore::open_default().map_err(|e| e.to_string())?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
     let jobs = store.list().map_err(|e| e.to_string())?;
     Ok(jobs.into_iter().map(job_to_dto).collect())
 }
@@ -2006,15 +2006,15 @@ pub async fn extract_cron_job(args: ExtractCronJobArgs) -> Result<ExtractCronJob
     );
 
     let extractor = client
-        .extractor::<memory::CronJobExtract>(&model)
-        .preamble(memory::cron_extract_preamble())
+        .extractor::<cron::CronJobExtract>(&model)
+        .preamble(cron::cron_extract_preamble())
         .build();
 
     let raw = extractor
         .extract(text)
         .await
         .map_err(|e| format!("抽取失败: {e}"))?;
-    let normalized = memory::normalize_cron_extract(raw).map_err(|e| e.to_string())?;
+    let normalized = cron::normalize_cron_extract(raw).map_err(|e| e.to_string())?;
 
     Ok(ExtractCronJobDto {
         schedule: normalized.schedule,
@@ -2027,9 +2027,9 @@ pub async fn extract_cron_job(args: ExtractCronJobArgs) -> Result<ExtractCronJob
 #[tauri::command]
 pub async fn add_cron_job(args: AddCronJobArgs) -> Result<CronJobDto, String> {
     bootstrap_workspace()?;
-    let store = memory::CronStore::open_default().map_err(|e| e.to_string())?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
     let j = store
-        .add_job(memory::NewCronJob {
+        .add_job(cron::NewCronJob {
             schedule: args.schedule,
             task: args.task,
             title: args.title,
@@ -2046,11 +2046,11 @@ pub async fn add_cron_job(args: AddCronJobArgs) -> Result<CronJobDto, String> {
 #[tauri::command]
 pub async fn update_cron_job(args: UpdateCronJobArgs) -> Result<CronJobDto, String> {
     bootstrap_workspace()?;
-    let store = memory::CronStore::open_default().map_err(|e| e.to_string())?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
     let j = store
         .update_job(
             &args.id,
-            memory::NewCronJob {
+            cron::NewCronJob {
                 schedule: args.schedule,
                 task: args.task,
                 title: args.title,
@@ -2069,7 +2069,7 @@ pub async fn update_cron_job(args: UpdateCronJobArgs) -> Result<CronJobDto, Stri
 #[tauri::command]
 pub async fn remove_cron_job(id: String) -> Result<bool, String> {
     bootstrap_workspace()?;
-    let store = memory::CronStore::open_default().map_err(|e| e.to_string())?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
     store.remove(&id).map_err(|e| e.to_string())
 }
 
@@ -2077,7 +2077,7 @@ pub async fn remove_cron_job(id: String) -> Result<bool, String> {
 #[tauri::command]
 pub async fn set_cron_job_enabled(id: String, enabled: bool) -> Result<bool, String> {
     bootstrap_workspace()?;
-    let store = memory::CronStore::open_default().map_err(|e| e.to_string())?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
     store.set_enabled(&id, enabled).map_err(|e| e.to_string())
 }
 
@@ -2085,7 +2085,7 @@ pub async fn set_cron_job_enabled(id: String, enabled: bool) -> Result<bool, Str
 #[tauri::command]
 pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
     bootstrap_workspace()?;
-    let store = memory::CronStore::open_default().map_err(|e| e.to_string())?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
     let job = store
         .list()
         .map_err(|e| e.to_string())?
@@ -2104,9 +2104,9 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
 #[tauri::command]
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {
     bootstrap_workspace()?;
-    let db = memory::CronRunDb::open_default().map_err(|e| e.to_string())?;
+    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
     let rows = db
-        .list_filtered(memory::cron_run_db::CronRunFilters {
+        .list_filtered(cron::run_db::CronRunFilters {
             job_id: args.job_id,
             agent_id: args.agent_id,
             date_from: args.date_from,
