@@ -213,7 +213,7 @@ html[data-theme="light"] .app-shell[data-tone="teal"] {
 }
 
 .body-row {
-  --sidebar-w: 72px;
+  --sidebar-w: 74px;
   --sidebar-w-wide: 228px;
   flex: 1;
   min-height: 0;
