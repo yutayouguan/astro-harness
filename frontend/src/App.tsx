@@ -2919,6 +2919,26 @@ export default function App() {
         aria-hidden
       />
 
+      <div className="titlebar-sidebar-toggle">
+        <button
+          type="button"
+          className="sidebar-pin-btn"
+          data-tone={activeTone}
+          onClick={toggleSidebar}
+          title={sidebarPinned ? t("sidebar.unpin") : t("sidebar.pin")}
+          aria-label={
+            sidebarPinned ? t("sidebar.unpinAria") : t("sidebar.pinAria")
+          }
+          aria-pressed={sidebarPinned}
+        >
+          {sidebarPinned ? (
+            <IconPanelClose width={15} height={15} />
+          ) : (
+            <IconPanelOpen width={15} height={15} />
+          )}
+        </button>
+      </div>
+
       {!sidebarPinned && (
         <div
           className="sidebar-hotzone"
@@ -2954,23 +2974,6 @@ export default function App() {
                   <IconSidebarIcons width={15} height={15} />
                 ) : (
                   <IconSidebarLabels width={15} height={15} />
-                )}
-              </button>
-              <button
-                type="button"
-                className="sidebar-pin-btn"
-                data-tone={activeTone}
-                onClick={toggleSidebar}
-                title={sidebarPinned ? t("sidebar.unpin") : t("sidebar.pin")}
-                aria-label={
-                  sidebarPinned ? t("sidebar.unpinAria") : t("sidebar.pinAria")
-                }
-                aria-pressed={sidebarPinned}
-              >
-                {sidebarPinned ? (
-                  <IconPanelClose width={15} height={15} />
-                ) : (
-                  <IconPanelOpen width={15} height={15} />
                 )}
               </button>
             </div>
