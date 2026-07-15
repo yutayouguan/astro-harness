@@ -62,6 +62,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &Value) -> anyhow::Result<Str
         anyhow::bail!("robotics 需要 image_urls 或 image_url");
     }
 
+    let Some(creds) = ctx.image_gen_targets.google() else {
+        anyhow::bail!("robotics 需要配置 Google API Key（Providers 面板）");
+    };
+
     let queries = parsed.queries.filter(|q| !q.is_empty());
     let robot_api = parsed
         .robot_api
@@ -88,9 +92,6 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &Value) -> anyhow::Result<Str
         .unwrap_or_else(|| default_robotics_model())
         .to_string();
 
-    let Some(creds) = ctx.image_gen_targets.google() else {
-        anyhow::bail!("robotics 需要配置 Google API Key（Providers 面板）");
-    };
     let images = resolve_images(ctx, &urls).await?;
     let text = call_google(creds, &model, &prompt, &images, thinking_budget).await?;
     let looks_json = looks_like_json_payload(&text);
