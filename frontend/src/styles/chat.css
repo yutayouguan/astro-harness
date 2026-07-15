@@ -1415,7 +1415,7 @@ html[data-theme="light"] .a2ui-surface {
   line-height: 1.35;
   letter-spacing: 0.01em;
   opacity: var(--label-opacity);
-  transform: translateY(-50%) scale(var(--label-scale));
+  transform: scale(var(--label-scale));
   transform-origin: right center;
   /* 描边/阴影跟随主体+尖角的合成外形，避免双边框三角接缝与异色 */
   filter:
@@ -1443,6 +1443,18 @@ html[data-theme="light"] .a2ui-surface {
   border-width: var(--arrow-size) 0 var(--arrow-size) var(--arrow-size);
   border-left-color: var(--nav-label-bg);
   pointer-events: none;
+}
+
+.chat-msg-nav-label.is-side-right {
+  transform-origin: left center;
+}
+
+.chat-msg-nav-label.is-side-right.is-primary::after {
+  left: calc(-1 * var(--arrow-size) + 1px);
+  right: auto;
+  border-width: var(--arrow-size) var(--arrow-size) var(--arrow-size) 0;
+  border-left-color: transparent;
+  border-right-color: var(--nav-label-bg);
 }
 
 .chat-msg-nav-label.is-near {

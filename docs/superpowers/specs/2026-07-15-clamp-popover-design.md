@@ -1,7 +1,7 @@
 # 共享启发式浮层定位（clampPopover）
 
 日期：2026-07-15  
-状态：阶段 A/B/C 已实现（见 [实现计划](../plans/2026-07-15-clamp-popover.md)）
+状态：阶段 A/B/C + 四向 tip 扩展已实现（见 [实现计划](../plans/2026-07-15-clamp-popover.md)）
 
 ## 背景
 

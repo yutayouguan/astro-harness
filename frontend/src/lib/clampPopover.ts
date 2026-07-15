@@ -176,3 +176,93 @@ export function clampPopover(input: ClampPopoverInput): ClampPopoverResult {
     offsetTop: top - anchorRect.top,
   };
 }
+
+export type TipSide = "top" | "bottom" | "left" | "right";
+
+export type ClampFloatingTipInput = {
+  anchorRect: RectLike;
+  tipSize: { width: number; height: number };
+  bounds: Bounds;
+  prefer: TipSide;
+  gap?: number;
+  pad?: number;
+  /** 箭头距 tip 边缘内边距，默认 14 */
+  arrowInset?: number;
+};
+
+export type ClampFloatingTipResult = {
+  left: number;
+  top: number;
+  side: TipSide;
+  /** 相对 tip 左上角的箭头落点 */
+  arrowX: number;
+  arrowY: number;
+};
+
+const OPPOSITE: Record<TipSide, TipSide> = {
+  top: "bottom",
+  bottom: "top",
+  left: "right",
+  right: "left",
+};
+
+/**
+ * 四向 tip 定位：优先 prefer 侧，空间不足则翻到对侧，再钳入 bounds；
+ * 交叉轴相对触发器居中。返回 tip 盒左上角与箭头偏移。
+ */
+export function clampFloatingTip(
+  input: ClampFloatingTipInput,
+): ClampFloatingTipResult {
+  const pad = input.pad ?? DEFAULT_PAD;
+  const gap = input.gap ?? 10;
+  const arrowInset = input.arrowInset ?? 14;
+  const { bounds, anchorRect } = input;
+  const tipW = Math.max(0, input.tipSize.width);
+  const tipH = Math.max(0, input.tipSize.height);
+
+  const innerLeft = bounds.left + pad;
+  const innerRight = bounds.right - pad;
+  const innerTop = bounds.top + pad;
+  const innerBottom = bounds.bottom - pad;
+
+  const space: Record<TipSide, number> = {
+    top: anchorRect.top - gap - innerTop,
+    bottom: innerBottom - (anchorRect.bottom + gap),
+    left: anchorRect.left - gap - innerLeft,
+    right: innerRight - (anchorRect.right + gap),
+  };
+
+  let side = input.prefer;
+  const needMain = side === "top" || side === "bottom" ? tipH : tipW;
+  if (space[side] < needMain && space[OPPOSITE[side]] > space[side]) {
+    side = OPPOSITE[side];
+  }
+
+  let left: number;
+  let top: number;
+  if (side === "bottom") {
+    left = anchorRect.left + anchorRect.width / 2 - tipW / 2;
+    top = anchorRect.bottom + gap;
+  } else if (side === "top") {
+    left = anchorRect.left + anchorRect.width / 2 - tipW / 2;
+    top = anchorRect.top - tipH - gap;
+  } else if (side === "left") {
+    left = anchorRect.left - tipW - gap;
+    top = anchorRect.top + anchorRect.height / 2 - tipH / 2;
+  } else {
+    left = anchorRect.right + gap;
+    top = anchorRect.top + anchorRect.height / 2 - tipH / 2;
+  }
+
+  left = Math.max(innerLeft, Math.min(left, innerRight - tipW));
+  top = Math.max(innerTop, Math.min(top, innerBottom - tipH));
+
+  const triggerCx = anchorRect.left + anchorRect.width / 2;
+  const triggerCy = anchorRect.top + anchorRect.height / 2;
+  const arrowMaxX = Math.max(arrowInset, tipW - arrowInset);
+  const arrowMaxY = Math.max(arrowInset, tipH - arrowInset);
+  const arrowX = Math.max(arrowInset, Math.min(triggerCx - left, arrowMaxX));
+  const arrowY = Math.max(arrowInset, Math.min(triggerCy - top, arrowMaxY));
+
+  return { left, top, side, arrowX, arrowY };
+}

@@ -13,6 +13,11 @@ import {
 import { createPortal } from "react-dom";
 import { ChevronDown, User } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
+import {
+  clampFloatingTip,
+  resolveClipBounds,
+  type TipSide,
+} from "../lib/clampPopover";
 import type { ChatMessage } from "../types";
 
 /** 消息码头导航入参 */
@@ -43,7 +48,8 @@ type LabelPlacement = {
   id: string;
   text: string;
   top: number;
-  right: number;
+  left: number;
+  side: TipSide;
   opacity: number;
   scale: number;
   z: number;
@@ -222,12 +228,27 @@ export default function ChatMessageNav({
         nearbyRanks.length === 1 ? 0 : Math.min(1, item.dist / maxDist);
       const opacity = 1 - t * 0.58;
       const scale = 1 - t * 0.14;
+      const approxW = Math.min(
+        16 * 16,
+        window.innerWidth * 0.46,
+        Math.max(48, text.length * 7.5 + 22),
+      );
+      const approxH = rank === 0 ? 30 : 26;
+      const placed = clampFloatingTip({
+        anchorRect: rect,
+        tipSize: { width: approxW, height: approxH },
+        bounds: resolveClipBounds(el),
+        prefer: "left",
+        gap: 12,
+        pad: 8,
+      });
 
       next.push({
         id: item.id,
         text,
-        top: rect.top + rect.height / 2,
-        right: window.innerWidth - rect.left + 12,
+        top: placed.top,
+        left: placed.left,
+        side: placed.side,
         opacity,
         scale,
         z: 10001 + (nearbyRanks.length - rank),
@@ -323,11 +344,13 @@ export default function ChatMessageNav({
               {labelPlacements.map((p) => (
                 <div
                   key={p.id}
-                  className={`chat-msg-nav-label ${p.primary ? "is-primary" : "is-near"}`}
+                  className={`chat-msg-nav-label ${p.primary ? "is-primary" : "is-near"}${
+                    p.side === "right" ? " is-side-right" : ""
+                  }`}
                   style={
                     {
                       top: p.top,
-                      right: p.right,
+                      left: p.left,
                       zIndex: p.z,
                       "--label-opacity": String(p.opacity),
                       "--label-scale": String(p.scale),

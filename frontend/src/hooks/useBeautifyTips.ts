@@ -1,5 +1,10 @@
 /** 将 title 升级为可定位的美化 tip（body 门户）。 */
 import { useEffect } from "react";
+import {
+  clampFloatingTip,
+  resolveClipBounds,
+  type TipSide,
+} from "../lib/clampPopover";
 
 const GAP = 10;
 const HOST_ID = "astro-ui-tip-host";
@@ -20,9 +25,14 @@ function getTipHost(): HTMLElement {
   return host;
 }
 
-function resolvePos(el: HTMLElement): "top" | "bottom" | "left" | "right" {
+function resolvePos(el: HTMLElement): TipSide {
   const explicit = el.getAttribute("data-tip-pos");
-  if (explicit === "bottom" || explicit === "left" || explicit === "right" || explicit === "top") {
+  if (
+    explicit === "bottom" ||
+    explicit === "left" ||
+    explicit === "right" ||
+    explicit === "top"
+  ) {
     return explicit;
   }
   // 行尾操作按钮：优先左侧，避免贴右缘时 tip 盖住按钮导致 hover 粘滞
@@ -74,53 +84,28 @@ function placeTip(el: HTMLElement, text: string) {
   const tipW = Math.max(tipEl.offsetWidth, tipEl.getBoundingClientRect().width);
   const tipH = Math.max(tipEl.offsetHeight, tipEl.getBoundingClientRect().height);
   const rect = el.getBoundingClientRect();
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  const placed = clampFloatingTip({
+    anchorRect: rect,
+    tipSize: { width: tipW, height: tipH },
+    bounds: resolveClipBounds(el, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }),
+    prefer: resolvePos(el),
+    gap: GAP,
+    pad: EDGE,
+    arrowInset: ARROW_INSET,
+  });
 
-  let pos = resolvePos(el);
-
-  // 贴边自动翻转，避免 tip 盖住触发元素（否则 WKWebView 易出现 :hover 粘滞）
-  if (pos === "top" && rect.top < tipH + GAP + EDGE) pos = "bottom";
-  else if (pos === "bottom" && vh - rect.bottom < tipH + GAP + EDGE) pos = "top";
-  else if (pos === "left" && rect.left < tipW + GAP + EDGE) pos = "right";
-  else if (pos === "right" && vw - rect.right < tipW + GAP + EDGE) pos = "left";
-
-  let x = 0;
-  let y = 0;
-  if (pos === "bottom") {
-    x = rect.left + rect.width / 2 - tipW / 2;
-    y = rect.bottom + GAP;
-  } else if (pos === "left") {
-    x = rect.left - tipW - GAP;
-    y = rect.top + rect.height / 2 - tipH / 2;
-  } else if (pos === "right") {
-    x = rect.right + GAP;
-    y = rect.top + rect.height / 2 - tipH / 2;
-  } else {
-    x = rect.left + rect.width / 2 - tipW / 2;
-    y = rect.top - tipH - GAP;
-  }
-
-  x = Math.max(8, Math.min(x, vw - tipW - 8));
-  y = Math.max(8, Math.min(y, vh - tipH - 8));
-
-  // 贴边钳位后，箭头仍对准触发控件中心（限制在 tip 圆角内侧）
-  const triggerCx = rect.left + rect.width / 2;
-  const triggerCy = rect.top + rect.height / 2;
-  const arrowMaxX = Math.max(ARROW_INSET, tipW - ARROW_INSET);
-  const arrowMaxY = Math.max(ARROW_INSET, tipH - ARROW_INSET);
-  const arrowX = Math.max(ARROW_INSET, Math.min(triggerCx - x, arrowMaxX));
-  const arrowY = Math.max(ARROW_INSET, Math.min(triggerCy - y, arrowMaxY));
-
-  tipEl.style.left = `${Math.round(x)}px`;
-  tipEl.style.top = `${Math.round(y)}px`;
-  tipEl.style.setProperty("--tip-arrow-x", `${Math.round(arrowX)}px`);
-  tipEl.style.setProperty("--tip-arrow-y", `${Math.round(arrowY)}px`);
+  tipEl.style.left = `${Math.round(placed.left)}px`;
+  tipEl.style.top = `${Math.round(placed.top)}px`;
+  tipEl.style.setProperty("--tip-arrow-x", `${Math.round(placed.arrowX)}px`);
+  tipEl.style.setProperty("--tip-arrow-y", `${Math.round(placed.arrowY)}px`);
   tipEl.style.visibility = "";
   tipEl.style.opacity = "";
   tipEl.style.transform = "";
   tipEl.style.transition = "";
-  tipEl.dataset.pos = pos;
+  tipEl.dataset.pos = placed.side;
   // 下一帧再显示，让最终坐标生效后再播入场动画
   showRaf = requestAnimationFrame(() => {
     showRaf = 0;

@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampPopover, pointAnchor } from "./clampPopover.ts";
+import {
+  clampFloatingTip,
+  clampPopover,
+  pointAnchor,
+} from "./clampPopover.ts";
 
 function rect(
   left: number,
@@ -108,4 +112,45 @@ test("cursor point anchor flips above near bottom edge", () => {
   });
   assert.equal(r.placement, "above");
   assert.ok(r.top + Math.min(200, r.maxHeight) <= 750);
+});
+
+test("floating tip flips from top to bottom near viewport top", () => {
+  const r = clampFloatingTip({
+    anchorRect: rect(200, 20, 40, 24),
+    tipSize: { width: 120, height: 32 },
+    bounds: { left: 0, top: 0, right: 1000, bottom: 800 },
+    prefer: "top",
+    gap: 10,
+    pad: 12,
+  });
+  assert.equal(r.side, "bottom");
+  assert.ok(r.top >= 20 + 24 + 10 - 1);
+});
+
+test("floating tip flips from left to right near left edge", () => {
+  const r = clampFloatingTip({
+    anchorRect: rect(20, 200, 32, 32),
+    tipSize: { width: 140, height: 28 },
+    bounds: { left: 0, top: 0, right: 1000, bottom: 800 },
+    prefer: "left",
+    gap: 10,
+    pad: 12,
+  });
+  assert.equal(r.side, "right");
+  assert.ok(r.left >= 20 + 32 + 10 - 1);
+});
+
+test("floating tip clamps horizontally and keeps arrow on tip", () => {
+  const anchor = rect(980, 200, 20, 20);
+  const r = clampFloatingTip({
+    anchorRect: anchor,
+    tipSize: { width: 200, height: 30 },
+    bounds: { left: 0, top: 0, right: 1000, bottom: 800 },
+    prefer: "top",
+    gap: 10,
+    pad: 8,
+    arrowInset: 14,
+  });
+  assert.ok(r.left + 200 <= 1000 - 8);
+  assert.ok(r.arrowX >= 14 && r.arrowX <= 200 - 14);
 });
