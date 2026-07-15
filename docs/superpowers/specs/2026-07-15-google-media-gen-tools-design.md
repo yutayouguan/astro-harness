@@ -48,7 +48,7 @@ Google 官方 OpenAI 兼容层已提供：
 - 参数：保持现有 `prompt`（及已有可选字段）
 - Google：`POST {openai_compat_base}/images/generations`，Bearer，`response_format=b64_json`，默认模型 `gemini-3.1-flash-image`
 - 失败时可回退现有原生 `generateContent` IMAGE，再试 OpenAI
-- 输出：`generated/img-*.{png|jpg|webp}`
+- 输出：`generated/images/img-*.{png|jpg|webp}`
 
 ### `video_gen`（新）
 
@@ -57,7 +57,7 @@ Google 官方 OpenAI 兼容层已提供：
 - Google：`POST {openai_compat_base}/videos`（form / JSON 以官方 REST 为准）→ 轮询 `GET …/videos/{id}`（约 10s 间隔，总超时 5–10 分钟）→ 下载 `url`
 - 默认模型：`veo-3.1-generate-preview`
 - 无 Google 凭证 → 明确错误；无 OpenAI 备用
-- 输出：`generated/vid-*.mp4`（或响应 mime 对应后缀）
+- 输出：`generated/videos/vid-*.mp4`（或响应 mime 对应后缀）
 
 ### `tts`（扩）
 
@@ -65,6 +65,7 @@ Google 官方 OpenAI 兼容层已提供：
 - Google：原生 `…/v1beta/models/{tts_model}:generateContent`，`responseModalities: ["AUDIO"]` + `speechConfig.voiceConfig`；默认 `gemini-3.1-flash-tts-preview`
 - PCM → wav 落盘（与官方示例一致，24kHz / 16-bit / mono）
 - 回落：现有 OpenAI `/audio/speech` + `gpt-4o-mini-tts`
+- 输出：`generated/audio/tts-*.wav`
 - 工具描述改为表明 Google 或 OpenAI
 
 ## 架构

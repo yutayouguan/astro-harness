@@ -169,6 +169,19 @@ Skills 定义工具「怎么用」。本文件记录「你这台机器上的具�
 - 设备昵称、TTS 音色
 - 任何环境相关、不宜写进共享 Skill 的信息
 
+## 生成物目录
+
+优先写入工作区 `generated/` 分类目录（勿堆在根下）：
+
+- 图 → `generated/images/`
+- 视频 → `generated/videos/`
+- 音频 → `generated/audio/`
+- 单文件代码 → `generated/code/`
+- 多文件小工程 → `generated/project/`
+- 办公文档（pdf/word/pptx/excel）→ `generated/docs/`
+- HTML → `generated/html/`
+- 其它 → `generated/other/`
+
 ## 示例
 
 ```markdown

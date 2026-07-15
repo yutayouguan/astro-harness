@@ -53,6 +53,13 @@ test("absolutizeMediaPath joins relative under workspace baseDir", () => {
     "/Users/a/.astro/workspace/generated/img-20260715-195717-4d0d50c2.png",
   );
   assert.equal(
+    absolutizeMediaPath(
+      "generated/images/img-1.png",
+      "/Users/a/.astro/workspace",
+    ),
+    "/Users/a/.astro/workspace/generated/images/img-1.png",
+  );
+  assert.equal(
     absolutizeMediaPath("./plans/x.html", "/Users/a/.astro/workspace/"),
     "/Users/a/.astro/workspace/plans/x.html",
   );
