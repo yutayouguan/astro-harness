@@ -421,6 +421,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const originsMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
     null,
   );
+  const updateCheckMetaRef = useRef<{ agentId: string; checkedAt: number } | null>(
+    null,
+  );
+  const updateCheckInFlightRef = useRef(false);
   const skillCallsMetaRef = useRef<{
     agentId: string;
     fetchedAt: number;
@@ -460,6 +464,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   useEffect(() => {
     setLastCheckResults([]);
+    updateCheckMetaRef.current = null;
   }, [agentId]);
 
   const refreshInstalled = useCallback(
@@ -588,6 +593,48 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       }
     },
     [agentId],
+  );
+
+  const checkSkillUpdates = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!isTauri()) return;
+      const force = opts?.force ?? false;
+      const meta = updateCheckMetaRef.current;
+      if (!force && meta?.agentId === agentId) return;
+      if (updateCheckInFlightRef.current) return;
+      updateCheckInFlightRef.current = true;
+      setCheckingUpdates(true);
+      setError(null);
+      try {
+        const checks = await invoke<SkillUpdateCheckResult[]>("check_skill_updates", {
+          agentId,
+        });
+        setLastCheckResults(checks);
+        updateCheckMetaRef.current = { agentId, checkedAt: Date.now() };
+        const count = checks.filter((c) => c.status === "outdated").length;
+        if (force) {
+          showToast(
+            count > 0
+              ? t("skills.checkUpdatesDone").replace("{count}", String(count))
+              : t("skills.upToDate"),
+            { tone: count > 0 ? "info" : "success" },
+          );
+        } else if (count > 0) {
+          showToast(
+            t("skills.checkUpdatesDone").replace("{count}", String(count)),
+            { tone: "info" },
+          );
+        }
+      } catch (err) {
+        const msg = String(err);
+        setError(msg);
+        showToast(msg, { error: true });
+      } finally {
+        updateCheckInFlightRef.current = false;
+        setCheckingUpdates(false);
+      }
+    },
+    [agentId, showToast, t],
   );
 
   /** 切 Tab：新鲜则跳过；过期则静默刷新；Agent 变更/无数据则硬刷 */
@@ -841,6 +888,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const switchAgent = async (id: string) => {
     setAgentId(id);
     setLastCheckResults([]);
+    updateCheckMetaRef.current = null;
     if (!isTauri()) return;
     try {
       await invoke("set_active_agent", { agentId: id });
@@ -867,6 +915,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     ensureMachine();
     void refreshOrigins();
     void refreshSkillCalls();
+    void checkSkillUpdates();
   }, [
     active,
     tab,
@@ -875,6 +924,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     ensureMachine,
     refreshOrigins,
     refreshSkillCalls,
+    checkSkillUpdates,
   ]);
 
   useEffect(() => {
@@ -1156,31 +1206,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     setUpdateConfirm(null);
     if (!confirmed) return;
     void runBatchUpdate(targets);
-  };
-
-  const checkSkillUpdates = async () => {
-    if (!isTauri()) return;
-    setCheckingUpdates(true);
-    setError(null);
-    try {
-      const checks = await invoke<SkillUpdateCheckResult[]>("check_skill_updates", {
-        agentId,
-      });
-      setLastCheckResults(checks);
-      const count = checks.filter((c) => c.status === "outdated").length;
-      showToast(
-        count > 0
-          ? t("skills.checkUpdatesDone").replace("{count}", String(count))
-          : t("skills.upToDate"),
-        { tone: count > 0 ? "info" : "success" },
-      );
-    } catch (err) {
-      const msg = String(err);
-      setError(msg);
-      showToast(msg, { error: true });
-    } finally {
-      setCheckingUpdates(false);
-    }
   };
 
   const updateAllSkills = async () => {
@@ -2856,7 +2881,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 disabled={
                   checkingUpdates || updatingAll || updatingFolder !== null
                 }
-                onClick={() => void checkSkillUpdates()}
+                onClick={() => void checkSkillUpdates({ force: true })}
                 title={t("skills.checkUpdates")}
               >
                 {checkingUpdates ? (
