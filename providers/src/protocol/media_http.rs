@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use tokio::time::sleep;
 
 use crate::http_stream::openai_compatible_base;
+use crate::interactions_http::VisionMode;
 use crate::trait_::{GeneratedImage, ProviderConfig};
 
 /// 去掉 endpoint 末尾斜杠。
@@ -75,57 +76,63 @@ pub fn default_vision_model(provider: &str) -> &'static str {
     }
 }
 
+/// 拼装 OpenAI 兼容视觉 `chat/completions` 请求体。
+pub(crate) fn build_openai_vision_body(
+    model: &str,
+    prompt: &str,
+    image_urls: &[String],
+    mode: VisionMode,
+) -> Value {
+    let mut content = vec![json!({"type": "text", "text": prompt})];
+    for u in image_urls {
+        content.push(json!({
+            "type": "image_url",
+            "image_url": { "url": u }
+        }));
+    }
+    let mut body = json!({
+        "model": model,
+        "messages": [{ "role": "user", "content": content }]
+    });
+    if matches!(mode, VisionMode::Detect | VisionMode::Segment) {
+        body["response_format"] = json!({ "type": "json_object" });
+    }
+    body
+}
+
 /// OpenAI 兼容视觉：`POST …/chat/completions`，content 含 text + image_url。
 ///
-/// `image_url` 可为 `data:image/...;base64,...` 或 `http(s)://`。
-/// `provider` 为 `"google"` 时走 [`google_openai_base`]，否则走 OpenAI 兼容 base。
+/// 仅 OpenAI 兼容 base（默认 `https://api.openai.com/v1`）；Google 请用
+/// [`crate::interactions_http::google_interactions_vision`]。
+/// `image_urls` 可为 `data:image/...;base64,...` 或 `http(s)://`。
 pub async fn openai_vision_completions(
     client: &Client,
-    provider: &str,
     prompt: &str,
-    image_url: &str,
+    image_urls: &[String],
+    mode: VisionMode,
     config: &ProviderConfig,
 ) -> Result<String> {
     if config.api_key.trim().is_empty() {
         anyhow::bail!("API Key 为空");
     }
+    if image_urls.is_empty() {
+        anyhow::bail!("vision 至少需要一张图片");
+    }
     let model = if config.model.trim().is_empty() {
-        default_vision_model(provider)
+        default_vision_model("openai")
     } else {
         config.model.trim()
     };
 
-    let base = if provider == "google"
-        || config
-            .base_url
-            .as_deref()
-            .map(|u| u.contains("generativelanguage.googleapis.com"))
-            .unwrap_or(false)
-    {
-        google_openai_base(config)
-    } else {
-        let raw = config
-            .base_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .unwrap_or("https://api.openai.com/v1");
-        openai_compatible_base(raw)
-    };
+    let raw = config
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("https://api.openai.com/v1");
+    let base = openai_compatible_base(raw);
     let url = format!("{base}/chat/completions");
-    let body = json!({
-        "model": model,
-        "messages": [{
-            "role": "user",
-            "content": [
-                { "type": "text", "text": prompt },
-                {
-                    "type": "image_url",
-                    "image_url": { "url": image_url }
-                }
-            ]
-        }]
-    });
+    let body = build_openai_vision_body(model, prompt, image_urls, mode);
 
     let response = client
         .post(&url)
@@ -658,5 +665,32 @@ mod tests {
     fn default_vision_models() {
         assert_eq!(default_vision_model("google"), "gemini-3.5-flash");
         assert_eq!(default_vision_model("openai"), "gpt-4o");
+    }
+
+    #[test]
+    fn openai_vision_body_multi_image_and_json_mode() {
+        use crate::interactions_http::VisionMode;
+        let urls = vec![
+            "https://a/1.jpg".to_string(),
+            "data:image/png;base64,AAAA".to_string(),
+        ];
+        let body = build_openai_vision_body("gpt-4o", "detect please", &urls, VisionMode::Detect);
+        assert_eq!(body["model"], "gpt-4o");
+        assert_eq!(body["response_format"]["type"], "json_object");
+        let content = body["messages"][0]["content"].as_array().unwrap();
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content.len(), 3); // text + 2 images
+    }
+
+    #[test]
+    fn openai_vision_body_describe_omits_response_format() {
+        use crate::interactions_http::VisionMode;
+        let body = build_openai_vision_body(
+            "gpt-4o",
+            "hi",
+            &["https://a/1.jpg".into()],
+            VisionMode::Describe,
+        );
+        assert!(body.get("response_format").is_none());
     }
 }
