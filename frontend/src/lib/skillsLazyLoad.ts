@@ -61,3 +61,18 @@ export function pageHasMore(
   if (newlyAddedCount <= 0) return false;
   return fetchedCount >= pageSize;
 }
+
+/** 商店列表会话缓存 TTL（过期后切回 Tab 会静默刷新） */
+export const STORE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export function storeCacheKey(storeId: string, query: string): string {
+  return `${storeId}\0${query.trim().toLowerCase()}`;
+}
+
+export function isStoreCacheFresh(
+  fetchedAt: number,
+  now = Date.now(),
+  ttlMs = STORE_CACHE_TTL_MS,
+): boolean {
+  return now - fetchedAt < ttlMs;
+}

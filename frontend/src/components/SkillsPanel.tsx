@@ -51,7 +51,9 @@ import { resolveFileType } from "../lib/fileTypeIcon";
 import {
   createLazyLoadGate,
   decideLazyLoad,
+  isStoreCacheFresh,
   pageHasMore,
+  storeCacheKey,
   type LazyLoadGate,
 } from "../lib/skillsLazyLoad";
 import type { AgentInfo } from "../types/agent";
@@ -136,6 +138,15 @@ type AgentUsageSummary = {
 
 const STORE_PAGE_SIZE = 24;
 const SKILLS_VIEW_KEY = "astro.skills.viewMode";
+
+/** 单个商店 Tab 的会话缓存快照（SWR） */
+type StoreListCacheEntry = {
+  results: StoreSkill[];
+  page: number;
+  hasMore: boolean;
+  selectedDetailId: string | null;
+  fetchedAt: number;
+};
 
 const SKILL_TONES = [
   "cyan",
@@ -341,6 +352,11 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const loadMoreLock = useRef(false);
   /** 递增以丢弃切换 Tab / 重新搜索后的过期响应 */
   const storeFetchGen = useRef(0);
+  const storeCacheRef = useRef<Map<string, StoreListCacheEntry>>(new Map());
+  /** 当前列表对应的缓存键（storeId + 已提交搜索词） */
+  const activeStoreCacheKeyRef = useRef<string | null>(null);
+  const storePageRef = useRef(1);
+  const selectedDetailIdRef = useRef<string | null>(null);
   const lazyGateRef = useRef<LazyLoadGate>(createLazyLoadGate());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const onlinePaneRef = useRef<HTMLElement | null>(null);
@@ -357,6 +373,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   storeResultsRef.current = storeResults;
   loadingMoreRef.current = loadingMore;
   hasMoreRef.current = hasMore;
+  storePageRef.current = storePage;
+  selectedDetailIdRef.current = selectedDetailId;
 
   useEffect(() => {
     try {
@@ -421,78 +439,165 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     }
   }, [agentId]);
 
-  const fetchStorePage = useCallback(async (page: number, append: boolean) => {
-    if (!isTauri()) return;
-    const gen = append ? storeFetchGen.current : ++storeFetchGen.current;
-    if (append) {
-      if (loadMoreLock.current) return;
-      loadMoreLock.current = true;
-      setLoadingMore(true);
-    } else {
-      // 切换商店 / 重新搜索：立刻清空旧列表，展示加载过渡，避免短暂显示上一 Tab 数据
-      loadMoreLock.current = false;
-      setLoadingMore(false);
-      storeResultsRef.current = [];
-      setStoreResults([]);
-      setStorePage(1);
-      setSelectedDetailId(null);
-      setStoreDetail(null);
-      lazyGateRef.current = createLazyLoadGate();
-      setLoadingStore(true);
-      setHasMore(true);
-    }
-    setError(null);
-    try {
-      const list = await invoke<StoreSkill[]>("search_store_skills", {
-        query: queryRef.current,
-        store: storeIdRef.current,
-        limit: STORE_PAGE_SIZE,
-        page,
-      });
-      if (gen !== storeFetchGen.current) return;
-      if (!append) {
-        storeResultsRef.current = list;
-        setStoreResults(list);
-        setHasMore(list.length >= STORE_PAGE_SIZE);
-      } else {
-        const prev = storeResultsRef.current;
-        const seen = new Set(prev.map((s) => s.id));
-        const merged = [...prev];
-        let newlyAdded = 0;
-        for (const item of list) {
-          if (!seen.has(item.id)) {
-            seen.add(item.id);
-            merged.push(item);
-            newlyAdded += 1;
-          }
-        }
-        storeResultsRef.current = merged;
-        setStoreResults(merged);
-        setHasMore(pageHasMore(list.length, STORE_PAGE_SIZE, newlyAdded));
-      }
-      setStorePage(page);
-    } catch (err) {
-      if (gen !== storeFetchGen.current) return;
-      setError(String(err));
-      if (!append) setStoreResults([]);
-      setHasMore(false);
-    } finally {
-      if (gen !== storeFetchGen.current) {
-        if (append) loadMoreLock.current = false;
-        return;
-      }
-      if (append) {
-        setLoadingMore(false);
-        loadMoreLock.current = false;
-      } else {
-        setLoadingStore(false);
-      }
-    }
+  const persistActiveStoreCache = useCallback(() => {
+    const key = activeStoreCacheKeyRef.current;
+    if (!key) return;
+    storeCacheRef.current.set(key, {
+      results: storeResultsRef.current,
+      page: storePageRef.current,
+      hasMore: hasMoreRef.current,
+      selectedDetailId: selectedDetailIdRef.current,
+      fetchedAt: storeCacheRef.current.get(key)?.fetchedAt ?? Date.now(),
+    });
   }, []);
 
+  const applyStoreCache = useCallback((entry: StoreListCacheEntry) => {
+    storeResultsRef.current = entry.results;
+    setStoreResults(entry.results);
+    setStorePage(entry.page);
+    storePageRef.current = entry.page;
+    setHasMore(entry.hasMore);
+    hasMoreRef.current = entry.hasMore;
+    setSelectedDetailId(entry.selectedDetailId);
+    selectedDetailIdRef.current = entry.selectedDetailId;
+    setStoreDetail(null);
+    setLoadingStore(false);
+    setLoadingMore(false);
+    loadMoreLock.current = false;
+    lazyGateRef.current = createLazyLoadGate();
+  }, []);
+
+  const fetchStorePage = useCallback(
+    async (
+      page: number,
+      append: boolean,
+      opts?: { mode?: "hard" | "silent" },
+    ) => {
+      if (!isTauri()) return;
+      const mode = opts?.mode ?? (append ? "hard" : "hard");
+      const silent = !append && mode === "silent";
+      const gen = append ? storeFetchGen.current : ++storeFetchGen.current;
+      const store = storeIdRef.current;
+      const q = queryRef.current.trim();
+      const cacheKey = storeCacheKey(store, q);
+
+      if (append) {
+        if (loadMoreLock.current) return;
+        loadMoreLock.current = true;
+        setLoadingMore(true);
+      } else if (silent) {
+        loadMoreLock.current = false;
+        setLoadingMore(false);
+      } else {
+        // hard：清空并展示点阵，用于首次加载 / 搜索变更 / 强制刷新
+        loadMoreLock.current = false;
+        setLoadingMore(false);
+        storeResultsRef.current = [];
+        setStoreResults([]);
+        setStorePage(1);
+        storePageRef.current = 1;
+        setSelectedDetailId(null);
+        selectedDetailIdRef.current = null;
+        setStoreDetail(null);
+        lazyGateRef.current = createLazyLoadGate();
+        setLoadingStore(true);
+        setHasMore(true);
+        hasMoreRef.current = true;
+      }
+      activeStoreCacheKeyRef.current = cacheKey;
+      setError(null);
+      try {
+        const list = await invoke<StoreSkill[]>("search_store_skills", {
+          query: q,
+          store,
+          limit: STORE_PAGE_SIZE,
+          page,
+        });
+        if (gen !== storeFetchGen.current) return;
+        if (!append) {
+          storeResultsRef.current = list;
+          setStoreResults(list);
+          const more = list.length >= STORE_PAGE_SIZE;
+          setHasMore(more);
+          hasMoreRef.current = more;
+          setStorePage(page);
+          storePageRef.current = page;
+          if (
+            selectedDetailIdRef.current &&
+            !list.some((s) => s.id === selectedDetailIdRef.current)
+          ) {
+            setSelectedDetailId(null);
+            selectedDetailIdRef.current = null;
+            setStoreDetail(null);
+          }
+          storeCacheRef.current.set(cacheKey, {
+            results: list,
+            page,
+            hasMore: more,
+            selectedDetailId: selectedDetailIdRef.current,
+            fetchedAt: Date.now(),
+          });
+        } else {
+          const prev = storeResultsRef.current;
+          const seen = new Set(prev.map((s) => s.id));
+          const merged = [...prev];
+          let newlyAdded = 0;
+          for (const item of list) {
+            if (!seen.has(item.id)) {
+              seen.add(item.id);
+              merged.push(item);
+              newlyAdded += 1;
+            }
+          }
+          storeResultsRef.current = merged;
+          setStoreResults(merged);
+          const more = pageHasMore(list.length, STORE_PAGE_SIZE, newlyAdded);
+          setHasMore(more);
+          hasMoreRef.current = more;
+          setStorePage(page);
+          storePageRef.current = page;
+          storeCacheRef.current.set(cacheKey, {
+            results: merged,
+            page,
+            hasMore: more,
+            selectedDetailId: selectedDetailIdRef.current,
+            fetchedAt:
+              storeCacheRef.current.get(cacheKey)?.fetchedAt ?? Date.now(),
+          });
+        }
+      } catch (err) {
+        if (gen !== storeFetchGen.current) return;
+        setError(String(err));
+        if (!append && !silent) {
+          setStoreResults([]);
+          storeResultsRef.current = [];
+        }
+        if (!append && !silent) {
+          setHasMore(false);
+          hasMoreRef.current = false;
+        }
+      } finally {
+        if (gen !== storeFetchGen.current) {
+          if (append) loadMoreLock.current = false;
+          return;
+        }
+        if (append) {
+          setLoadingMore(false);
+          loadMoreLock.current = false;
+        } else if (!silent) {
+          setLoadingStore(false);
+        }
+      }
+    },
+    [],
+  );
+
   const searchStore = useCallback(async () => {
-    await fetchStorePage(1, false);
-  }, [fetchStorePage]);
+    // 搜索词变更：作废当前键并硬刷新
+    persistActiveStoreCache();
+    activeStoreCacheKeyRef.current = null;
+    await fetchStorePage(1, false, { mode: "hard" });
+  }, [fetchStorePage, persistActiveStoreCache]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingStore || loadingMore || loadMoreLock.current) return;
@@ -562,8 +667,34 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     // 在线「已安装」依赖本机/Astro 列表：切到 online 时一并刷新
     void refreshInstalled();
     void refreshMachine();
-    void fetchStorePage(1, false);
-  }, [active, tab, storeId, refreshInstalled, refreshMachine, fetchStorePage]);
+  }, [active, tab, refreshInstalled, refreshMachine]);
+
+  useEffect(() => {
+    if (!active || tab !== "online") return;
+
+    // SWR：先写入上一 Tab 快照，再恢复缓存；过期则后台静默刷新
+    persistActiveStoreCache();
+    const key = storeCacheKey(storeId, queryRef.current);
+    const cached = storeCacheRef.current.get(key);
+    activeStoreCacheKeyRef.current = key;
+
+    if (cached) {
+      applyStoreCache(cached);
+      if (!isStoreCacheFresh(cached.fetchedAt)) {
+        void fetchStorePage(1, false, { mode: "silent" });
+      }
+      return;
+    }
+
+    void fetchStorePage(1, false, { mode: "hard" });
+  }, [
+    active,
+    tab,
+    storeId,
+    fetchStorePage,
+    persistActiveStoreCache,
+    applyStoreCache,
+  ]);
 
   useEffect(() => {
     if (!active || tab !== "online" || !hasMore || loadingStore) return;
@@ -2162,7 +2293,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   const prev = query;
                   setQuery(value);
                   if (prev.trim() && !value.trim()) {
-                    void fetchStorePage(1, false);
+                    persistActiveStoreCache();
+                    activeStoreCacheKeyRef.current = null;
+                    void fetchStorePage(1, false, { mode: "hard" });
                   }
                 }}
                 onSubmit={() => void searchStore()}
@@ -2223,9 +2356,13 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           {installMsg && <p className="skills-success">{installMsg}</p>}
 
           {loadingStore ? (
-            <div className="skills-loading-block" aria-busy="true">
-              <IconLoader className="is-spin skills-loader-lg" />
-              <span>{t("skills.searching")}</span>
+            <div
+              className="skills-loading-block"
+              aria-busy="true"
+              aria-label={t("skills.loadingMore")}
+              role="status"
+            >
+              <MsgStreamLoader alone />
             </div>
           ) : viewMode === "detail" ? (
             storeResults.length === 0 ? (
