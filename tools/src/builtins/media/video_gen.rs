@@ -134,6 +134,8 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         negative_prompt: opt_owned(parsed.negative_prompt.as_deref()),
         style: opt_owned(parsed.style.as_deref()),
         extend_video_id: extend_id.map(|s| s.to_string()),
+        extend_video_uri: None,
+        extend_video: None,
         person_generation: opt_owned(parsed.person_generation.as_deref()),
         seed: parsed.seed,
         image: image_path
@@ -142,9 +144,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         last_frame: last_frame_path
             .map(|p| load_image_part(ctx, p))
             .transpose()?,
-        reference_image: reference_path
+        reference_images: reference_path
             .map(|p| load_image_part(ctx, p))
-            .transpose()?,
+            .transpose()?
+            .into_iter()
+            .collect(),
     };
 
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Videos);
