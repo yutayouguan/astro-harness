@@ -1,5 +1,5 @@
 /** 记忆面板：MEMORY/USER/日记编辑与召回。 */
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Book,
@@ -24,7 +24,6 @@ import { useI18n } from "../i18n/LocaleContext";
 import { useAgentsChanged } from "../lib/agentsChanged";
 import AnimatedSwitch from "./AnimatedSwitch";
 import AgentAvatar from "./AgentAvatar";
-import { IconWsBackChat } from "./WorkspaceIcons";
 import { EmptyIllustration } from "../illustrations";
 import type { AgentInfo } from "../types/agent";
 
@@ -188,6 +187,9 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState("workspace");
   const [filterAgentId, setFilterAgentId] = useState(ALL_AGENTS);
+  /** 右侧正文当前展示对应的专家（与侧栏选中可短暂不同，避免切换时内容区闪跳） */
+  const [diaryPaneAgentId, setDiaryPaneAgentId] = useState(ALL_AGENTS);
+  const filterSwitchGen = useRef(0);
 
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth() + 1);
@@ -234,13 +236,16 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
   const diaryCount = useMemo(() => {
     if (filterAgentId === ALL_AGENTS) return allDiaryDates.size;
-    return dailyDates.length;
-  }, [filterAgentId, allDiaryDates, dailyDates]);
+    const cached = diaryDatesByAgent[filterAgentId];
+    return cached ? cached.length : dailyDates.length;
+  }, [filterAgentId, allDiaryDates, diaryDatesByAgent, dailyDates]);
 
   const markedDates = useMemo(() => {
     if (filterAgentId === ALL_AGENTS) return allDiaryDates;
+    const cached = diaryDatesByAgent[filterAgentId];
+    if (cached) return new Set(cached);
     return new Set(dailyDates);
-  }, [filterAgentId, allDiaryDates, dailyDates]);
+  }, [filterAgentId, allDiaryDates, diaryDatesByAgent, dailyDates]);
 
   const dreamMarkedDates = useMemo(() => {
     const agentsStatus = dreamStatus?.agents ?? [];
@@ -506,14 +511,16 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
       if (filterAgentId !== ALL_AGENTS && !cfg.agents.some((a) => a.id === filterAgentId)) {
         nextFilter = ALL_AGENTS;
         setFilterAgentId(ALL_AGENTS);
+        setDiaryPaneAgentId(ALL_AGENTS);
       }
       const date = dailyDate || todayLocal();
       if (nextFilter === ALL_AGENTS) {
         setDailyDraft("");
         setDailySaved("");
-        setDailyDates([]);
+        setDiaryPaneAgentId(ALL_AGENTS);
       } else {
         await loadDaily(nextFilter, date);
+        setDiaryPaneAgentId(nextFilter);
       }
       await loadMemoryMd(cfg.workspace_dir);
       await loadArchive(cfg.workspace_dir, archiveId);
@@ -627,38 +634,44 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     if (agentId === filterAgentId && forDate == null) return;
     if (!confirmIfDirty()) return;
     const date = forDate ?? dailyDate;
+    const gen = ++filterSwitchGen.current;
     setFilterAgentId(agentId);
     if (forDate) setDailyDate(forDate);
     setSaveMsg(null);
     setError(null);
-    setLoading(true);
     try {
       if (agentId === ALL_AGENTS) {
-        // 汇总浏览：不加载正文，避免残留某专家草稿造成空态错乱
+        // 汇总浏览：立即清空正文，避免残留某专家草稿造成空态错乱
+        setDiaryPaneAgentId(ALL_AGENTS);
         setDailyDraft("");
         setDailySaved("");
-        setDailyDates([]);
         await refreshAllDiaryMarks(agents);
       } else {
+        // 侧栏先切高亮；正文等加载完成再切，避免空态/编辑器来回闪
+        const cached = diaryDatesByAgent[agentId];
+        if (cached) setDailyDates(cached);
         const cfg = await invoke<{
           memory_dir: string;
           workspace_dir: string;
           active_agent_id: string;
           agents: AgentInfo[];
         }>("set_active_agent", { agentId });
+        if (gen !== filterSwitchGen.current) return;
         setMemoryDir(cfg.memory_dir);
         setWorkspaceDir(cfg.workspace_dir);
         setActiveAgentId(cfg.active_agent_id);
         setAgents(cfg.agents);
         await loadDaily(agentId, date);
-        await loadMemoryMd(cfg.workspace_dir);
-        await loadArchive(cfg.workspace_dir, archiveId);
+        if (gen !== filterSwitchGen.current) return;
+        setDiaryPaneAgentId(agentId);
+        if (view !== "diary") {
+          await loadMemoryMd(cfg.workspace_dir);
+          await loadArchive(cfg.workspace_dir, archiveId);
+        }
         await refreshAllDiaryMarks(cfg.agents);
       }
     } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
+      if (gen === filterSwitchGen.current) setError(String(e));
     }
   };
 
@@ -939,7 +952,11 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
       {error && <div className="side-error">{error}</div>}
       {saveMsg && <div className="memory-save-msg">{saveMsg}</div>}
-      {loading && <div className="mem-loading muted">{t("memory.loading")}</div>}
+      {loading && (
+        <div className="mem-loading muted" aria-live="polite">
+          {t("memory.loading")}
+        </div>
+      )}
 
       <AnimatedSwitch switchKey={view} className="anim-switch--fill">
       {view === "diary" && (
@@ -1032,7 +1049,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
               )}
             </div>
 
-            {filterAgentId === ALL_AGENTS ? (
+            {diaryPaneAgentId === ALL_AGENTS ? (
               <div className="mem-empty mem-empty-pick">
                 <EmptyIllustration
                   scene="memory"

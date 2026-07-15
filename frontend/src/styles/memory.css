@@ -1,6 +1,7 @@
 .memory-panel {
   --tone: var(--tone-green);
   --tone-soft: var(--tone-green-soft);
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -38,7 +39,7 @@
   justify-content: flex-start;
   gap: 40px;
   margin: 0;
-  padding: 3px 6px;
+  padding: 4px 7px;
   border-radius: 14px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
@@ -430,8 +431,16 @@ html[data-theme="dark"] .mem-view-tab--dream {
 }
 
 .mem-loading {
-  padding: 0 16px 8px;
+  /* 不占文档流高度，避免切换时把内容顶下去再弹回 */
+  position: absolute;
+  top: 44px;
+  left: 14px;
+  z-index: 2;
+  padding: 4px 10px;
   font-size: 12px;
+  pointer-events: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--glass-fill, #fff) 88%, transparent);
 }
 
 .mem-split {
