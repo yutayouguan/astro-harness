@@ -2748,8 +2748,8 @@ html[data-theme="dark"] .skills-preview-tab.is-active {
   z-index: 1;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px 14px 0;
+  gap: 4px;
+  padding: 4px 14px 0;
 }
 
 .skills-preview-filechip {
