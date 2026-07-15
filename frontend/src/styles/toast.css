@@ -4,8 +4,10 @@
   bottom: 24px;
   z-index: 9999;
   max-width: min(360px, calc(100vw - 40px));
-  padding: 10px 14px;
+  min-width: min(220px, calc(100vw - 40px));
+  padding: 0;
   border-radius: 12px;
+  overflow: hidden;
   font-size: 13px;
   line-height: 1.4;
   color: var(--ink);
@@ -28,6 +30,66 @@ html[data-theme="dark"] .astro-toast {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
+.astro-toast-progress {
+  height: 3px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.astro-toast-progress-bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(1);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tone, var(--accent)) 85%, #fff),
+    color-mix(in srgb, var(--accent-2, #60a5fa) 70%, var(--tone, var(--accent)))
+  );
+  animation-name: astro-toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.astro-toast-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+}
+
+.astro-toast-msg {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.astro-toast-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: -2px -2px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.astro-toast-close:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.astro-toast-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 45%, transparent);
+  outline-offset: 1px;
+}
+
 @keyframes astro-toast-in {
   from {
     opacity: 0;
@@ -36,5 +98,25 @@ html[data-theme="dark"] .astro-toast {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes astro-toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .astro-toast {
+    animation: none;
+  }
+
+  .astro-toast-progress-bar {
+    animation: none;
+    transform: scaleX(0);
   }
 }

@@ -363,6 +363,8 @@ export default function App() {
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  /** 每次弹出递增，用于重置进度条动画 */
+  const [toastEpoch, setToastEpoch] = useState(0);
   /** 编辑截断时正在粒子消散的消息 */
   const [dissolvingIds, setDissolvingIds] = useState<string[]>([]);
   /** 记忆 pending 角标 */
@@ -417,6 +419,18 @@ export default function App() {
   >(new Map());
   const toolDeltaRafRef = useRef<number | null>(null);
   const toolDeltaIdsRef = useRef<Map<string, string>>(new Map());
+
+  const dismissToast = useCallback(() => {
+    setToastVisible(false);
+  }, []);
+
+  const showTransientToast = useCallback((msg: string) => {
+    const text = msg.trim();
+    if (!text) return;
+    setToastMsg(text);
+    setToastEpoch((n) => n + 1);
+    setToastVisible(true);
+  }, []);
 
   const flushStreamTokens = useCallback(() => {
     streamRafRef.current = null;
@@ -774,16 +788,14 @@ export default function App() {
       return;
     }
     let unlisten: UnlistenFn | undefined;
-    let hideTimer: number | undefined;
     void listen<{ installed: string[]; failed: string[] }>(
       "default-skills-seeded",
       (ev) => {
         const n = ev.payload?.installed?.length ?? 0;
         if (n <= 0) return;
-        setToastMsg(t("skills.defaultSeeded").replace("{n}", String(n)));
-        setToastVisible(true);
-        if (hideTimer) window.clearTimeout(hideTimer);
-        hideTimer = window.setTimeout(() => setToastVisible(false), 4000);
+        showTransientToast(
+          t("skills.defaultSeeded").replace("{n}", String(n)),
+        );
       },
     )
       .then((fn) => {
@@ -792,16 +804,14 @@ export default function App() {
       .catch(() => {});
     return () => {
       unlisten?.();
-      if (hideTimer) window.clearTimeout(hideTimer);
     };
-  }, [t]);
+  }, [t, showTransientToast]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
       return;
     }
     let unlisten: UnlistenFn | undefined;
-    let hideTimer: number | undefined;
     void listen<{ op?: string; content?: string; new_memories?: number }>(
       "memory-updated",
       (ev) => {
@@ -810,10 +820,7 @@ export default function App() {
         const msg =
           ev.payload?.content?.trim() ||
           t("chat.toast.memoryUpdated").replace("{n}", String(n || 1));
-        setToastMsg(msg);
-        setToastVisible(true);
-        if (hideTimer) window.clearTimeout(hideTimer);
-        hideTimer = window.setTimeout(() => setToastVisible(false), 4000);
+        showTransientToast(msg);
       },
     )
       .then((fn) => {
@@ -822,9 +829,8 @@ export default function App() {
       .catch(() => {});
     return () => {
       unlisten?.();
-      if (hideTimer) window.clearTimeout(hideTimer);
     };
-  }, [t]);
+  }, [t, showTransientToast]);
 
   const onTitleMouseDown = (e: ReactMouseEvent) => {
     if (e.button !== 0) return;
@@ -1052,10 +1058,7 @@ export default function App() {
       sessionPendingInterrupts.length > 0 &&
       !resumeJson
     ) {
-      setToastMsg(t("chat.interrupt.pending"));
-      setToastVisible(true);
-      if (hideTimerRef.current != null) window.clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
+      showTransientToast(t("chat.interrupt.pending"));
       return;
     }
     if (
@@ -1123,21 +1126,13 @@ export default function App() {
             const hasHistory = messages.some(
               (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
             );
-            setToastMsg(
+            showTransientToast(
               t(
                 hasHistory
                   ? "chat.mentionAgentSwitchedLater"
                   : "chat.mentionAgentSwitched",
                 { name: resolved.switchAgentName ?? resolved.switchAgentId },
               ),
-            );
-            setToastVisible(true);
-            if (hideTimerRef.current != null) {
-              window.clearTimeout(hideTimerRef.current);
-            }
-            hideTimerRef.current = window.setTimeout(
-              () => setToastVisible(false),
-              4000,
             );
           } catch (e) {
             console.warn("set_active_agent failed", e);
@@ -1726,13 +1721,6 @@ export default function App() {
     flushToolDeltas,
     settleMessageUsage,
   ]);
-
-  const showTransientToast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    setToastVisible(true);
-    if (hideTimerRef.current != null) window.clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
-  }, []);
 
   const onUiAction = useCallback(
     async (
