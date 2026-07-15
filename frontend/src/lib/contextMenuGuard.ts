@@ -16,6 +16,7 @@ const ALLOW_SELECTOR = [
   ".fs-preview-text",
   ".chat-agent-preview",
   ".skills-preview",
+  ".skills-preview-backdrop",
   "[data-allow-context-menu]",
 ].join(", ");
 

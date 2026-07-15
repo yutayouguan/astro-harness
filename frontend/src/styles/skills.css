@@ -1888,39 +1888,6 @@ html[data-theme="dark"] .skills-detail-body {
   min-width: 120px;
 }
 
-.skills-preview {
-  margin-top: 12px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  max-height: 40vh;
-  overflow: auto;
-}
-
-.skills-preview-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.skills-preview-head h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.skills-preview pre {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: var(--ink-mute);
-}
-
 .skills-toggle {
   display: inline-flex;
   align-items: center;
@@ -2427,29 +2394,48 @@ html[data-theme="dark"] .skills-action-btn.primary {
   flex-direction: column;
 }
 
-.skills-preview {
+/* 技能内容：右侧抽屉（对齐 cron-run-drawer） */
+.skills-preview-backdrop {
   position: fixed;
-  inset: 10% 12%;
-  z-index: 80;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--bg-base, #000) 38%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.skills-preview {
+  width: min(520px, 92vw);
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
-  border-radius: 22px;
+  border-left: 1px solid var(--glass-edge);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.55)),
-    color-mix(in srgb, var(--glass-panel, #fff) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  box-shadow: var(--shadow-card), 0 24px 64px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78)),
+    var(--glass-panel, #fff);
+  box-shadow: -12px 0 40px rgba(15, 23, 42, 0.12);
+  animation: skills-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
   overflow: hidden;
 }
 
 html[data-theme="dark"] .skills-preview {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(18, 12, 32, 0.92);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04)),
+    var(--glass-panel, rgba(30, 30, 40, 0.96));
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes skills-drawer-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .skills-preview-head {
@@ -2457,23 +2443,67 @@ html[data-theme="dark"] .skills-preview {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--chip-border);
+  flex-shrink: 0;
 }
 
 .skills-preview-head h3 {
-  margin: 0 0 4px;
-  font-size: 18px;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--ink);
 }
 
+.skills-preview-head h3 svg {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--tone, #8b5cf6) 75%, var(--ink-mute));
+}
+
 .skills-preview-desc {
-  margin: 0;
-  font-size: 13px;
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--ink-mute);
+}
+
+.skills-preview-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--chip-border);
+  background: color-mix(in srgb, var(--chip-bg) 80%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.skills-preview-close:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--tone) 28%, var(--chip-border));
+  background: color-mix(in srgb, var(--tone-soft) 70%, var(--chip-bg));
+}
+
+.skills-preview-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .skills-preview-meta {
   flex: 1;
   min-height: 0;
+  display: block;
   margin: 0;
   padding: 14px 16px;
   overflow: auto;
@@ -2485,4 +2515,10 @@ html[data-theme="dark"] .skills-preview {
   color: var(--ink-soft);
   background: color-mix(in srgb, var(--chip-bg) 80%, transparent);
   border: 1px solid var(--chip-border);
+}
+
+@media (max-width: 640px) {
+  .skills-preview {
+    width: min(100vw, 100%);
+  }
 }

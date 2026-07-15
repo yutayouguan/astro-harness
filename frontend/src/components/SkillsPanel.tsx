@@ -28,7 +28,9 @@ import {
   Sparkles,
   Terminal,
   Unlink2,
+  X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import { useI18n } from "../i18n/LocaleContext";
@@ -625,6 +627,15 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       setLoadingPreview(null);
     }
   };
+
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
 
   const viewStoreDetail = async (skill: StoreSkill) => {
     const url = storeSkillDetailUrl(skill);
@@ -1772,31 +1783,48 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       )}
       </AnimatedSwitch>
 
-      {preview && (
-        <div
-          className="skills-preview"
-          role="dialog"
-          aria-modal="true"
-          aria-label={preview.metadata?.name ?? "skill"}
-        >
-          <div className="skills-preview-head">
-            <div>
-              <h3>{preview.metadata?.name}</h3>
-              <p className="skills-preview-desc">
-                {preview.metadata?.description}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="skills-action-btn"
-              onClick={() => setPreview(null)}
+      {preview &&
+        createPortal(
+          <div
+            className="skills-preview-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setPreview(null);
+            }}
+          >
+            <aside
+              className="skills-preview"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="skills-preview-title"
             >
-              {t("skills.previewClose")}
-            </button>
-          </div>
-          <pre className="skills-preview-meta">{preview.content}</pre>
-        </div>
-      )}
+              <header className="skills-preview-head">
+                <div>
+                  <h3 id="skills-preview-title">
+                    <FileText size={16} strokeWidth={2.3} aria-hidden />
+                    {preview.metadata?.name ?? "skill"}
+                  </h3>
+                  {preview.metadata?.description ? (
+                    <p className="skills-preview-desc">
+                      {preview.metadata.description}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  className="skills-preview-close"
+                  onClick={() => setPreview(null)}
+                  aria-label={t("skills.previewClose")}
+                >
+                  <X size={16} strokeWidth={2.5} aria-hidden />
+                </button>
+              </header>
+              <div className="skills-preview-body">
+                <pre className="skills-preview-meta">{preview.content}</pre>
+              </div>
+            </aside>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
