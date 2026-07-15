@@ -933,18 +933,29 @@ html[data-theme="dark"] .fs-preview-img {
   }
 }
 
-/* ── Context menu: liquid glass (shared base; workspace overrides via .ws-ctx-menu) ── */
+/* ── Context menu: 半透明毛玻璃（靠 blur 保证可读，避免实底色块） ── */
 .fs-ctx-menu {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--z-menu, 1400);
   min-width: 196px;
   padding: 6px;
   border-radius: 16px;
-  border: 1px solid var(--menu-glass-border);
-  background: var(--menu-glass-bg);
-  box-shadow: var(--menu-glass-shadow);
-  backdrop-filter: var(--menu-glass-blur);
-  -webkit-backdrop-filter: var(--menu-glass-blur);
+  border: 1px solid color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone-soft, transparent) 22%, rgba(255, 255, 255, 0.55)) 0%,
+      rgba(255, 255, 255, 0.28) 55%,
+      rgba(255, 255, 255, 0.16) 100%
+    ),
+    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.42)) 48%, transparent);
+  box-shadow:
+    0 18px 48px color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
+    0 2px 8px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
+  backdrop-filter: blur(28px) saturate(1.45);
+  -webkit-backdrop-filter: blur(28px) saturate(1.45);
   color: var(--ink);
   isolation: isolate;
 }
@@ -1009,11 +1020,21 @@ html[data-theme="dark"] .fs-preview-img {
 }
 
 html[data-theme="dark"] .fs-ctx-menu {
-  border-color: var(--menu-glass-border);
-  background: var(--menu-glass-bg);
-  box-shadow: var(--menu-glass-shadow);
-  backdrop-filter: var(--menu-glass-blur);
-  -webkit-backdrop-filter: var(--menu-glass-blur);
+  border-color: color-mix(in srgb, var(--tone, transparent) 22%, var(--menu-glass-border));
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone-soft, transparent) 32%, rgba(255, 255, 255, 0.08)) 0%,
+      rgba(255, 255, 255, 0.03) 55%,
+      rgba(8, 6, 18, 0.28) 100%
+    ),
+    color-mix(in srgb, var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 42%, transparent);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
 }
 
 html[data-theme="dark"] .fs-ctx-item:hover:not(:disabled) {
