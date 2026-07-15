@@ -76,21 +76,18 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   --toast-tone: #fbbf24;
 }
 
-.astro-toast-progress {
-  height: 3px;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+/* 边框倒计时 SVG 叠层 */
+.astro-toast-border {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-.astro-toast-progress-bar {
-  height: 100%;
-  width: 100%;
-  transform-origin: left center;
-  transform: scaleX(1);
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--toast-tone) 90%, #fff),
-    color-mix(in srgb, var(--toast-tone) 55%, #fff)
-  );
+.astro-toast-border-rect {
+  fill: none;
+  stroke: var(--toast-tone);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .astro-toast-sticky-mark {
@@ -171,5 +168,8 @@ html[data-theme="dark"] .astro-toast.tone-warning {
 @media (prefers-reduced-motion: reduce) {
   .astro-toast {
     animation: none;
+  }
+  .astro-toast-border {
+    display: none;
   }
 }

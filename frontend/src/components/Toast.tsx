@@ -1,4 +1,4 @@
-/** 轻量 Toast：单一倒计时驱动进度条与关闭，可手动点 ×；按 tone 显示图标与配色。 */
+/** 轻量 Toast：边框倒计时动画驱动关闭，可手动点 ×；按 tone 显示图标与配色。 */
 import { useEffect, useRef } from "react";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
@@ -45,25 +45,33 @@ export function Toast({
   const { t } = useI18n();
   const onDismissRef = useRef(onDismiss);
   onDismissRef.current = onDismiss;
-  const barRef = useRef<HTMLDivElement>(null);
+  const borderRef = useRef<SVGRectElement>(null);
 
   useEffect(() => {
-    if (!visible || !message || sticky) {
-      if (barRef.current) barRef.current.style.transform = "scaleX(1)";
-      return;
-    }
+    const el = borderRef.current;
+    if (!visible || !message || sticky || !el) return;
 
-    const bar = barRef.current;
-    if (bar) bar.style.transform = "scaleX(1)";
+    // 用 SVG 实际渲染尺寸设定 rect 大小，确保 getTotalLength() 精确
+    const svgEl = el.ownerSVGElement!;
+    const { width: svgW, height: svgH } = svgEl.getBoundingClientRect();
+    el.setAttribute("width", String(Math.max(0, svgW - 2)));
+    el.setAttribute("height", String(Math.max(0, svgH - 2)));
+
+    const perimeter = el.getTotalLength();
+    el.style.strokeDasharray = String(perimeter);
+    el.style.strokeDashoffset = "0";
 
     const started = performance.now();
     let raf = 0;
     const tick = (now: number) => {
-      const left = Math.max(0, 1 - (now - started) / durationMs);
-      if (barRef.current) {
-        barRef.current.style.transform = `scaleX(${left})`;
+      const remaining = Math.max(0, 1 - (now - started) / durationMs);
+      if (borderRef.current) {
+        // 负 offset：缺口从路径起点（左上角）顺时针扩大，边框顺时针消退
+        borderRef.current.style.strokeDashoffset = String(
+          -perimeter * (1 - remaining),
+        );
       }
-      if (left <= 0) {
+      if (remaining <= 0) {
         onDismissRef.current();
         return;
       }
@@ -82,13 +90,7 @@ export function Toast({
       aria-live={tone === "error" ? "assertive" : "polite"}
       data-tone={tone}
     >
-      {!sticky ? (
-        <div className="astro-toast-progress" aria-hidden>
-          <div ref={barRef} className="astro-toast-progress-bar" />
-        </div>
-      ) : (
-        <div className="astro-toast-sticky-mark" aria-hidden />
-      )}
+      {sticky && <div className="astro-toast-sticky-mark" aria-hidden />}
       <div className="astro-toast-row">
         <span className={`astro-toast-icon tone-${tone}`} aria-hidden>
           <ToneIcon tone={tone} />
@@ -103,6 +105,23 @@ export function Toast({
           <X size={14} strokeWidth={2.25} aria-hidden />
         </button>
       </div>
+      {!sticky && (
+        <svg
+          className="astro-toast-border"
+          width="100%"
+          height="100%"
+          aria-hidden
+        >
+          <rect
+            ref={borderRef}
+            className="astro-toast-border-rect"
+            x={1}
+            y={1}
+            rx={13}
+            ry={13}
+          />
+        </svg>
+      )}
     </div>
   );
 }
