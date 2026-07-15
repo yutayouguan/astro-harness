@@ -45,6 +45,9 @@ pub struct DreamAgentStatusDto {
     pub pending_diaries: usize,
     pub last_run_at: Option<String>,
     pub last_error: Option<String>,
+    /// 已入梦日期（`YYYY-MM-DD`），日历圆点用
+    #[serde(default)]
+    pub dreamed_dates: Vec<String>,
 }
 
 /// 取 UI 当前激活（或列表首个）供应商配置。
@@ -178,6 +181,7 @@ fn status_from_state(base: &std::path::Path, state: &DreamingState) -> DreamingS
                 pending_diaries: *pending_by_agent.get(&a.id).unwrap_or(&0),
                 last_run_at: st.and_then(|s| s.last_run_at.clone()),
                 last_error: st.and_then(|s| s.last_error.clone()),
+                dreamed_dates: st.map(|s| s.dreamed_dates.clone()).unwrap_or_default(),
             }
         })
         .collect();

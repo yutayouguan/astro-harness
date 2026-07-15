@@ -51,6 +51,7 @@ type DreamAgentStatus = {
   pending_diaries: number;
   last_run_at?: string | null;
   last_error?: string | null;
+  dreamed_dates?: string[];
 };
 
 /** 做梦子系统整体状态 */
@@ -193,6 +194,10 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const [dailyDate, setDailyDate] = useState(todayLocal());
   const [dailyDates, setDailyDates] = useState<string[]>([]);
   const [allDiaryDates, setAllDiaryDates] = useState<Set<string>>(() => new Set());
+  /** agentId → 有日记的日期，用于「全部」模式下点日历跳转 */
+  const [diaryDatesByAgent, setDiaryDatesByAgent] = useState<Record<string, string[]>>(
+    {},
+  );
   const [dailyDraft, setDailyDraft] = useState("");
   const [dailySaved, setDailySaved] = useState("");
 
@@ -236,6 +241,19 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     if (filterAgentId === ALL_AGENTS) return allDiaryDates;
     return new Set(dailyDates);
   }, [filterAgentId, allDiaryDates, dailyDates]);
+
+  const dreamMarkedDates = useMemo(() => {
+    const agentsStatus = dreamStatus?.agents ?? [];
+    if (filterAgentId === ALL_AGENTS) {
+      const union = new Set<string>();
+      for (const a of agentsStatus) {
+        for (const d of a.dreamed_dates ?? []) union.add(d);
+      }
+      return union;
+    }
+    const mine = agentsStatus.find((a) => a.agent_id === filterAgentId);
+    return new Set(mine?.dreamed_dates ?? []);
+  }, [dreamStatus, filterAgentId]);
 
   const readText = async (path: string) => {
     try {
@@ -432,17 +450,23 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   };
 
   const refreshAllDiaryMarks = useCallback(async (list: AgentInfo[]) => {
-    const sets = await Promise.all(
+    const pairs = await Promise.all(
       list.map(async (a) => {
         try {
-          return await invoke<string[]>("list_daily_memory", { agentId: a.id });
+          const dates = await invoke<string[]>("list_daily_memory", { agentId: a.id });
+          return [a.id, dates] as const;
         } catch {
-          return [] as string[];
+          return [a.id, [] as string[]] as const;
         }
       }),
     );
+    const byAgent: Record<string, string[]> = {};
     const union = new Set<string>();
-    for (const dates of sets) for (const d of dates) union.add(d);
+    for (const [id, dates] of pairs) {
+      byAgent[id] = dates;
+      for (const d of dates) union.add(d);
+    }
+    setDiaryDatesByAgent(byAgent);
     setAllDiaryDates(union);
   }, []);
 
@@ -478,15 +502,19 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
       setWorkspaceDir(cfg.workspace_dir);
       setActiveAgentId(cfg.active_agent_id);
       setAgents(cfg.agents);
+      let nextFilter = filterAgentId;
       if (filterAgentId !== ALL_AGENTS && !cfg.agents.some((a) => a.id === filterAgentId)) {
+        nextFilter = ALL_AGENTS;
         setFilterAgentId(ALL_AGENTS);
       }
       const date = dailyDate || todayLocal();
-      const agentForDaily =
-        filterAgentId !== ALL_AGENTS && cfg.agents.some((a) => a.id === filterAgentId)
-          ? filterAgentId
-          : cfg.active_agent_id;
-      await loadDaily(agentForDaily, date);
+      if (nextFilter === ALL_AGENTS) {
+        setDailyDraft("");
+        setDailySaved("");
+        setDailyDates([]);
+      } else {
+        await loadDaily(nextFilter, date);
+      }
       await loadMemoryMd(cfg.workspace_dir);
       await loadArchive(cfg.workspace_dir, archiveId);
       await refreshAllDiaryMarks(cfg.agents);
@@ -595,18 +623,22 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     }
   };
 
-  const switchFilterAgent = async (agentId: string) => {
-    if (agentId === filterAgentId) return;
+  const switchFilterAgent = async (agentId: string, forDate?: string) => {
+    if (agentId === filterAgentId && forDate == null) return;
     if (!confirmIfDirty()) return;
+    const date = forDate ?? dailyDate;
     setFilterAgentId(agentId);
+    if (forDate) setDailyDate(forDate);
     setSaveMsg(null);
     setError(null);
     setLoading(true);
     try {
       if (agentId === ALL_AGENTS) {
-        await loadDaily(activeAgentId, dailyDate);
-        await loadMemoryMd(workspaceDir);
-        await loadArchive(workspaceDir, archiveId);
+        // 汇总浏览：不加载正文，避免残留某专家草稿造成空态错乱
+        setDailyDraft("");
+        setDailySaved("");
+        setDailyDates([]);
+        await refreshAllDiaryMarks(agents);
       } else {
         const cfg = await invoke<{
           memory_dir: string;
@@ -618,7 +650,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
         setWorkspaceDir(cfg.workspace_dir);
         setActiveAgentId(cfg.active_agent_id);
         setAgents(cfg.agents);
-        await loadDaily(agentId, dailyDate);
+        await loadDaily(agentId, date);
         await loadMemoryMd(cfg.workspace_dir);
         await loadArchive(cfg.workspace_dir, archiveId);
         await refreshAllDiaryMarks(cfg.agents);
@@ -630,14 +662,43 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     }
   };
 
+  const preferAgentForDate = useCallback(
+    (ymd: string): string | null => {
+      const idsWithDiary = agents
+        .map((a) => a.id)
+        .filter((id) => (diaryDatesByAgent[id] ?? []).includes(ymd));
+      if (!idsWithDiary.length) return null;
+      if (idsWithDiary.includes(activeAgentId)) return activeAgentId;
+      const def = agents.find((a) => a.is_default)?.id;
+      if (def && idsWithDiary.includes(def)) return def;
+      return idsWithDiary[0] ?? null;
+    },
+    [agents, diaryDatesByAgent, activeAgentId],
+  );
+
   const switchDailyDate = async (date: string) => {
-    if (date === dailyDate) return;
+    if (date === dailyDate && filterAgentId !== ALL_AGENTS) return;
     if (diaryDirty && !window.confirm(t("memory.unsavedConfirm"))) return;
-    setDailyDate(date);
     setSaveMsg(null);
-    const agentId = filterAgentId === ALL_AGENTS ? activeAgentId : filterAgentId;
+    setError(null);
+
+    if (filterAgentId === ALL_AGENTS) {
+      const target = preferAgentForDate(date);
+      if (target) {
+        await switchFilterAgent(target, date);
+        return;
+      }
+      setDailyDate(date);
+      setDailyDraft("");
+      setDailySaved("");
+      setSaveMsg(t("memory.diaryNoAgentOnDate"));
+      return;
+    }
+
+    if (date === dailyDate) return;
+    setDailyDate(date);
     try {
-      await loadDaily(agentId, date);
+      await loadDaily(filterAgentId, date);
     } catch (e) {
       setError(String(e));
     }
@@ -736,8 +797,8 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
             className={`mem-agent-row ${filterAgentId === ALL_AGENTS ? "active" : ""}`}
             onClick={() => void switchFilterAgent(ALL_AGENTS)}
           >
-            <span className="mem-agent-avatar" aria-hidden>
-              ✦
+            <span className="mem-agent-avatar mem-agent-avatar--all" aria-hidden>
+              <Users size={16} strokeWidth={2.1} />
             </span>
             <span className="mem-agent-row-name">{t("memory.allExperts")}</span>
           </button>
@@ -931,6 +992,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                         "mem-cal-day",
                         cell.ymd === dailyDate ? "selected" : "",
                         markedDates.has(cell.ymd) ? "has-diary" : "",
+                        dreamMarkedDates.has(cell.ymd) ? "has-dream" : "",
                         cell.ymd === todayLocal() ? "today" : "",
                       ]
                         .filter(Boolean)
@@ -975,7 +1037,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
               )}
             </div>
 
-            {filterAgentId === ALL_AGENTS && !diaryEmpty ? (
+            {filterAgentId === ALL_AGENTS ? (
               <div className="mem-empty mem-empty-pick">
                 {onClose && (
                   <button
@@ -990,9 +1052,10 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                 )}
                 <EmptyIllustration
                   scene="memory"
-                  size="sm"
-                  title={t("memory.pickExpertForDiary")}
-                  hint={t("memory.pickExpertHint")}
+                  size="lg"
+                  className="mem-empty-illust"
+                  title={t("memory.pickExpertForDiaryAll")}
+                  hint={t("memory.pickExpertHintDiaryAll")}
                 />
               </div>
             ) : diaryEmpty ? (
@@ -1010,6 +1073,8 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                 ) : null}
                 <EmptyIllustration
                   scene="memory"
+                  size="lg"
+                  className="mem-empty-illust"
                   title={t("memory.diaryEmptyTitle")}
                   hint={t("memory.diaryEmptySub")}
                 />
