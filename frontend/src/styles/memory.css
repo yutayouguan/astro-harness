@@ -10,43 +10,24 @@
 .mem-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 14px 12px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 4px 14px 8px;
   flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.mem-top-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-height: 0;
 }
 
 .mem-top-title {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 750;
   color: var(--ink);
   letter-spacing: -0.02em;
   flex-shrink: 0;
-}
-
-.mem-beta {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: 999px;
-  color: var(--tone-green);
-  background: var(--tone-green-soft);
-  border: 1px solid color-mix(in srgb, var(--tone-green) 22%, transparent);
+  line-height: 1.2;
 }
 
 .mem-view-nav {
@@ -55,22 +36,24 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
-  gap: 52px;
+  gap: 40px;
   margin: 0;
-  padding: 5px 8px;
-  border-radius: 16px;
+  padding: 3px 6px;
+  border-radius: 14px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
     color-mix(in srgb, var(--glass-fill, transparent) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 12%, var(--glass-edge, var(--chip-border)));
   box-shadow:
-    0 8px 22px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
+    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   width: fit-content;
-  max-width: 100%;
+  max-width: min(100%, 520px);
   isolation: isolate;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* 日记 → 做梦底下 → 长期记忆：细线束传送 */
@@ -266,10 +249,10 @@
   z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   border: none;
-  border-radius: 12px;
-  padding: 8px 14px;
+  border-radius: 10px;
+  padding: 5px 11px;
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
