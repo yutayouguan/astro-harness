@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  IconAudioUnderstand,
   IconBrowser,
   IconClarify,
   IconCodeExec,
@@ -38,6 +39,7 @@ export type AgentToolId =
   | "file_ops"
   | "code_exec"
   | "vision"
+  | "audio_understand"
   | "image_gen"
   | "video_gen"
   | "tts"
@@ -174,6 +176,20 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "image_url", type: "string" },
       { name: "prompt", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "audio_understand",
+    titleKey: "agentTools.audioUnderstand.title",
+    descKey: "agentTools.audioUnderstand.desc",
+    Icon: IconAudioUnderstand,
+    tone: "cyan",
+    params: [
+      { name: "audio_url", type: "string" },
+      { name: "prompt", type: "string", optional: true },
+      { name: "mode", type: "string", optional: true },
+      { name: "start", type: "string", optional: true },
+      { name: "end", type: "string", optional: true },
     ],
   },
   {

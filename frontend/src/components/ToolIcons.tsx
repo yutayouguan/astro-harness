@@ -80,6 +80,18 @@ export function IconEye(props: IconProps) {
   );
 }
 
+export function IconAudioUnderstand(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 10v4" />
+      <path d="M8 7v10" />
+      <path d="M12 4v16" />
+      <path d="M16 7v10" />
+      <path d="M20 10v4" />
+    </IconBase>
+  );
+}
+
 export function IconImageGen(props: IconProps) {
   return (
     <IconBase {...props}>
