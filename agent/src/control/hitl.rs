@@ -8,8 +8,8 @@ use serde_json::Value;
 use tokio::sync::{oneshot, Mutex, RwLock};
 use uuid::Uuid;
 
-use crate::interrupt::{Interrupt, ResumeItem};
-use crate::schema_validate::validate_against_schema;
+use crate::control::interrupt::{Interrupt, ResumeItem};
+use crate::control::schema_validate::validate_against_schema;
 
 /// 默认等待用户响应超时（秒），对齐 Hermes clarify。
 pub const HITL_DEFAULT_TIMEOUT_SECS: u64 = 600;

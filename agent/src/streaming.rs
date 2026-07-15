@@ -203,8 +203,8 @@ fn chunk_to_contents(chunk: ChatChunk) -> Vec<StreamedAssistantContent> {
 
 /// 将会话消息转为 Provider 消息序列。
 ///
-/// 实现见 [`crate::messages::to_provider_messages`]（缺 `tool_call_id` 的 tool 消息会跳过）。
-pub use crate::messages::to_provider_messages;
+/// 实现见 [`crate::prompt::messages::to_provider_messages`]（缺 `tool_call_id` 的 tool 消息会跳过）。
+pub use crate::prompt::messages::to_provider_messages;
 
 /// 将 Provider 原始 [`ChatStream`] 映射为 [`AssistantContentStream`]。
 ///

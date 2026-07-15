@@ -43,7 +43,7 @@ async fn test_message_alternation_validation() {
 
 #[tokio::test]
 async fn test_prompt_builder_layers() {
-    use agent::prompt_builder::PromptBuilder;
+    use agent::prompt::prompt_builder::PromptBuilder;
     let builder = PromptBuilder::new();
     let prompt = builder
         .with_soul("你是 Astro，一个自我进化的 AI 助手")

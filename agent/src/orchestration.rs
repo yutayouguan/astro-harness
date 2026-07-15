@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 use crate::chat_fallback::try_stream_completion_with_fallback;
 use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
-use crate::messages::to_provider_messages;
+use crate::prompt::messages::to_provider_messages;
 
 /// 单步执行超时（秒）
 const STEP_TIMEOUT_SECS: u64 = 120;

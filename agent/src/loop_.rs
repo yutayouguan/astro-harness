@@ -23,9 +23,9 @@ use providers::registry::ProviderRegistry;
 use serde_json::Value;
 use tools::{dispatch_tool, register_all, ToolContext, ToolEntry, ToolRegistry};
 
-use crate::context::{DynamicContext, StaticContext};
-use crate::hooks::CancelSignal;
-use crate::prompt_builder::PromptBuilder;
+use crate::prompt::context::{DynamicContext, StaticContext};
+use crate::prompt::hooks::CancelSignal;
+use crate::prompt::prompt_builder::PromptBuilder;
 
 /// 图像生成凭据与输出目标，供 `image_gen` 等工具使用。
 pub use tools::{ImageGenCreds, ImageGenTargets};

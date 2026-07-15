@@ -5,7 +5,7 @@
 
 use chrono::Local;
 
-use crate::context::{DynamicContext, StaticContext};
+use crate::prompt::context::{DynamicContext, StaticContext};
 
 /// 可链式追加的 prompt 层容器。
 pub struct PromptBuilder {

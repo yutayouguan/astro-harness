@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
-use agent::context::{DynamicContext, StaticContext};
+use agent::prompt::context::{DynamicContext, StaticContext};
 use agent::loop_::{AgentConfig, AgentLoop, MaxDepthError};
-use agent::prompt_builder::PromptBuilder;
+use agent::prompt::prompt_builder::PromptBuilder;
 use common::message::Message;
 use home::AgentRuntimeConfig;
 use tempfile::TempDir;

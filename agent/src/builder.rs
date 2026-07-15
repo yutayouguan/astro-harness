@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use home::AgentRuntimeConfig;
 use serde_json::Value;
 
-use crate::context::{DynamicContext, StaticContext};
+use crate::prompt::context::{DynamicContext, StaticContext};
 use crate::loop_::{AgentConfig, AgentLoop};
 
 /// 构建完成的 Agent 运行时规格，可在不立即创建循环时持有或序列化传递。
