@@ -1,6 +1,13 @@
-//! 技能更新状态比对（纯函数，无网络请求）。
+//! 技能更新状态比对与批量检查。
 
-use crate::models::{SkillOriginRecord, SkillUpdateStatus};
+use anyhow::Result;
+
+use crate::install::agent_skills_dir;
+use crate::models::{
+    SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
+};
+use crate::origins::load_origins;
+use crate::store::fetch_detail;
 
 /// 用本地 origin 快照与远端快照判定更新状态。
 pub fn classify_update_status(
@@ -42,10 +49,145 @@ pub fn classify_update_status(
     SkillUpdateStatus::Current
 }
 
+/// 从 origin 记录构造商店查询用的 `StoreSkill`（供 `fetch_detail`）。
+pub fn origin_to_store_skill(origin: &SkillOriginRecord) -> StoreSkill {
+    let id = origin
+        .skill_id
+        .clone()
+        .unwrap_or_else(|| derive_store_skill_id(origin));
+    StoreSkill {
+        id,
+        name: origin.name.clone(),
+        description: String::new(),
+        source: derive_source(&origin.install_ref, &origin.store),
+        store: origin.store.clone(),
+        installs: None,
+        install_ref: origin.install_ref.clone(),
+        homepage: None,
+    }
+}
+
+fn derive_store_skill_id(origin: &SkillOriginRecord) -> String {
+    let r = origin.install_ref.trim();
+    if let Some(rest) = r.strip_prefix("skillhub:") {
+        return format!("skillhub:{rest}");
+    }
+    if let Some(rest) = r.strip_prefix("clawhub:") {
+        if let Some((handle, slug)) = rest.rsplit_once("--") {
+            return format!("clawhub:{handle}/{slug}");
+        }
+        return format!("clawhub:{rest}");
+    }
+    if r.contains(':') {
+        return r.to_string();
+    }
+    format!("{}:{}", origin.store, origin.folder)
+}
+
+fn derive_source(install_ref: &str, store: &str) -> String {
+    let r = install_ref.trim();
+    if let Some(rest) = r.strip_prefix("skillhub:") {
+        if let Some((owner, _)) = rest.split_once('/') {
+            return owner.to_string();
+        }
+    }
+    if let Some(rest) = r.strip_prefix("clawhub:") {
+        if let Some((handle, _)) = rest.rsplit_once("--") {
+            return handle.to_string();
+        }
+    }
+    if let Some((_, path)) = r.split_once(':') {
+        if let Some((source, _)) = path.split_once('/') {
+            return source.to_string();
+        }
+    }
+    store.to_string()
+}
+
+/// 用 origin baseline 与已拉取的远端详情判定单条检查结果（无网络，便于单测）。
+pub fn check_origin_against_detail(
+    origin: &SkillOriginRecord,
+    detail: &StoreSkillDetail,
+) -> SkillUpdateCheckResult {
+    let status = classify_update_status(
+        origin,
+        detail.version.as_deref(),
+        detail.updated_at,
+    );
+    SkillUpdateCheckResult {
+        folder: origin.folder.clone(),
+        status,
+        remote_version: detail.version.clone(),
+        remote_updated_at: detail.updated_at,
+        message: String::new(),
+    }
+}
+
+fn normalize_agent_id(agent_id: Option<&str>) -> String {
+    match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some("default") | None => "workspace".to_string(),
+        Some(id) => id.to_string(),
+    }
+}
+
+fn installed_skill_folder_exists(agent_id: Option<&str>, folder: &str) -> Result<bool> {
+    let skills_dir = agent_skills_dir(agent_id)?;
+    Ok(skills_dir.join(folder).is_dir())
+}
+
+/// 检查当前 Agent 下所有有来源记录的技能更新状态；不写回 origin baseline `remote_*`。
+pub async fn check_updates_for_agent(
+    agent_id: Option<&str>,
+) -> Result<Vec<SkillUpdateCheckResult>> {
+    let target = normalize_agent_id(agent_id);
+    let file = load_origins()?;
+    let origins: Vec<SkillOriginRecord> = file
+        .records
+        .into_iter()
+        .filter(|r| normalize_agent_id(r.agent_id.as_deref()) == target)
+        .collect();
+
+    let mut results = Vec::with_capacity(origins.len());
+    for origin in origins {
+        match installed_skill_folder_exists(agent_id, &origin.folder) {
+            Ok(false) => continue,
+            Ok(true) => {
+                let store_skill = origin_to_store_skill(&origin);
+                let item = match fetch_detail(&store_skill).await {
+                    Ok(detail) => check_origin_against_detail(&origin, &detail),
+                    Err(e) => SkillUpdateCheckResult {
+                        folder: origin.folder.clone(),
+                        status: SkillUpdateStatus::Error,
+                        remote_version: None,
+                        remote_updated_at: None,
+                        message: e.to_string(),
+                    },
+                };
+                results.push(item);
+            }
+            Err(e) => {
+                results.push(SkillUpdateCheckResult {
+                    folder: origin.folder.clone(),
+                    status: SkillUpdateStatus::Error,
+                    remote_version: None,
+                    remote_updated_at: None,
+                    message: e.to_string(),
+                });
+            }
+        }
+    }
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::SkillUpdateStatus;
+    use crate::origins::{load_origins, upsert_origin};
+    use std::sync::Mutex;
+    use tempfile::tempdir;
+
+    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn sample_origin(
         remote_version: Option<&str>,
@@ -65,6 +207,30 @@ mod tests {
             last_updated_at,
             remote_version: remote_version.map(str::to_string),
             remote_updated_at,
+        }
+    }
+
+    fn sample_detail(version: Option<&str>, updated_at: Option<i64>) -> StoreSkillDetail {
+        StoreSkillDetail {
+            name: "Demo".into(),
+            slug: "demo-skill".into(),
+            description: String::new(),
+            overview: String::new(),
+            source: "owner".into(),
+            store: "skillhub".into(),
+            installs: None,
+            downloads: None,
+            stars: None,
+            install_ref: "skillhub:owner/demo-skill".into(),
+            homepage: None,
+            detail_url: "https://skillhub.cn/skills/demo-skill".into(),
+            icon_url: None,
+            category: None,
+            sub_categories: vec![],
+            version: version.map(str::to_string),
+            updated_at,
+            owner_name: None,
+            verified: None,
         }
     }
 
@@ -133,5 +299,75 @@ mod tests {
             classify_update_status(&origin, Some("1.0"), Some(200)),
             SkillUpdateStatus::Outdated
         );
+    }
+
+    #[test]
+    fn origin_to_store_skill_maps_fields() {
+        let origin = sample_origin(None, None, None, 1);
+        let skill = origin_to_store_skill(&origin);
+        assert_eq!(skill.id, "skillhub:owner/demo-skill");
+        assert_eq!(skill.name, "Demo");
+        assert_eq!(skill.store, "skillhub");
+        assert_eq!(skill.install_ref, "skillhub:owner/demo-skill");
+        assert_eq!(skill.source, "owner");
+    }
+
+    #[test]
+    fn origin_to_store_skill_clawhub_id() {
+        let mut origin = sample_origin(None, None, None, 1);
+        origin.store = "clawhub".into();
+        origin.install_ref = "clawhub:steipete--weather".into();
+        origin.folder = "weather".into();
+        let skill = origin_to_store_skill(&origin);
+        assert_eq!(skill.id, "clawhub:steipete/weather");
+        assert_eq!(skill.source, "steipete");
+    }
+
+    #[test]
+    fn check_origin_against_detail_outdated() {
+        let origin = sample_origin(Some("1.0.0"), None, None, 100);
+        let detail = sample_detail(Some("2.0.0"), None);
+        let result = check_origin_against_detail(&origin, &detail);
+        assert_eq!(result.status, SkillUpdateStatus::Outdated);
+        assert_eq!(result.folder, "demo-skill");
+        assert_eq!(result.remote_version.as_deref(), Some("2.0.0"));
+    }
+
+    #[test]
+    fn check_origin_against_detail_unknown_when_no_remote_meta() {
+        let origin = sample_origin(Some("1.0.0"), Some(100), None, 50);
+        let detail = sample_detail(None, None);
+        let result = check_origin_against_detail(&origin, &detail);
+        assert_eq!(result.status, SkillUpdateStatus::Unknown);
+    }
+
+    #[tokio::test]
+    async fn check_updates_skips_orphan_without_origin_mutation() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        upsert_origin(SkillOriginRecord {
+            folder: "ghost-skill".into(),
+            skill_id: None,
+            name: "ghost".into(),
+            store: "clawhub".into(),
+            install_ref: "clawhub:ghost".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 1,
+            last_updated_at: None,
+            remote_version: Some("1.0.0".into()),
+            remote_updated_at: Some(100),
+        })
+        .unwrap();
+
+        let results = check_updates_for_agent(Some("workspace")).await.unwrap();
+        assert!(results.is_empty());
+
+        let file = load_origins().unwrap();
+        assert_eq!(file.records.len(), 1);
+        assert_eq!(file.records[0].remote_version.as_deref(), Some("1.0.0"));
+        assert_eq!(file.records[0].remote_updated_at, Some(100));
     }
 }

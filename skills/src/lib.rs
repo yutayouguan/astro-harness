@@ -35,7 +35,10 @@ pub use models::{
     InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,
     SkillUpdateItemResult, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
 };
-pub use check::classify_update_status;
+pub use check::{
+    check_origin_against_detail, check_updates_for_agent, classify_update_status,
+    origin_to_store_skill,
+};
 pub use registry::SkillRegistry;
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use store::{fetch_detail, search};
