@@ -6,13 +6,15 @@
 
 use std::path::PathBuf;
 
+use home::{
+    active_agent_id, daily_memory_path, ensure_agent_space, ensure_daily_memory, normalize_agent_id,
+    today_date_string, DEFAULT_AGENT_ID,
+};
 use session::build_conversation_context;
 use session::{NewMessage, RecentSession, ScrolledMessage, SearchHit, SessionStore};
 use crate::config::{load_memory_config, MemoryConfig};
 use crate::MemoryStore;
-use crate::workspace::{
-    active_agent_id, daily_memory_path, ensure_daily_memory, today_date_string, DEFAULT_AGENT_ID,
-};
+use crate::workspace::ensure_workspace;
 
 /// 记忆写入/替换/删除的目标存储位置（工具面仅 MEMORY / USER）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +51,7 @@ impl MemoryManager {
     ///
     /// 活跃 Agent 由 `active_agent_id` 决定；空或缺失时回退默认 Agent。
     pub fn new(base_dir: PathBuf) -> anyhow::Result<Self> {
-        crate::workspace::ensure_workspace(&base_dir)?;
+        ensure_workspace(&base_dir)?;
         let agent_id = active_agent_id(&base_dir);
         Self::for_agent(base_dir, &agent_id)
     }
@@ -58,13 +60,13 @@ impl MemoryManager {
     ///
     /// 会创建 Agent 工作区（若不存在）并打开/迁移会话库。
     pub fn for_agent(base_dir: PathBuf, agent_id: &str) -> anyhow::Result<Self> {
-        crate::workspace::ensure_workspace(&base_dir)?;
+        ensure_workspace(&base_dir)?;
         let id = if agent_id.trim().is_empty() {
             DEFAULT_AGENT_ID.to_string()
         } else {
-            crate::workspace::normalize_agent_id(agent_id)
+            normalize_agent_id(agent_id)
         };
-        let workspace = crate::workspace::ensure_agent_space(&base_dir, &id, None)?;
+        let workspace = ensure_agent_space(&base_dir, &id, None)?;
         let sessions_dir = base_dir.join("sessions");
         let config = load_memory_config(&base_dir);
         let memory = MemoryStore::open(workspace.join("MEMORY.md"), config.memory_char_limit)?;
