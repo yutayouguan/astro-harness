@@ -34,7 +34,14 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$HOME/**", "$APPDATA/**", "$RESOURCE/**"]
+        "scope": {
+          "allow": [
+            "$HOME/**",
+            "$HOME/.astro/**",
+            "$APPDATA/**",
+            "$RESOURCE/**"
+          ]
+        }
       }
     }
   },
