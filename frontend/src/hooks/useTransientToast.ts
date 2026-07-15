@@ -1,5 +1,11 @@
 /** 统一短暂 Toast：进度条倒计时 + 可点关闭；支持 tone / 图标。 */
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import {
+  createElement,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
 import {
   Toast,
   TOAST_DURATION_MS,
@@ -59,17 +65,16 @@ export function useTransientToast(): {
   }, []);
 
   const toastHost = useMemo(
-    () => (
-      <Toast
-        key={epoch}
-        message={message}
-        visible={visible}
-        sticky={sticky}
-        tone={tone}
-        durationMs={sticky ? undefined : durationMs}
-        onDismiss={dismissToast}
-      />
-    ),
+    () =>
+      createElement(Toast, {
+        key: epoch,
+        message,
+        visible,
+        sticky,
+        tone,
+        durationMs: sticky ? undefined : durationMs,
+        onDismiss: dismissToast,
+      }),
     [epoch, message, visible, sticky, tone, durationMs, dismissToast],
   );
 
