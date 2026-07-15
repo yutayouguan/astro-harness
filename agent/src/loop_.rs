@@ -18,7 +18,7 @@ use uuid::Uuid;
 use common::message::Message;
 use session::NewMessage;
 use memory::MemoryManager;
-use session::{build_conversation_context, SessionStore};
+use session::{build_conversation_context, format_recalled_context, SessionStore};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use providers::registry::ProviderRegistry;
 use serde_json::Value;
@@ -1021,22 +1021,6 @@ fn hydrate_session_messages(
         }
     }
     Ok(out)
-}
-
-/// 将召回消息格式化为 LLM 可读的多行文本。
-fn format_recalled_context(messages: &[session::ScrolledMessage]) -> String {
-    if messages.is_empty() {
-        return String::new();
-    }
-
-    messages
-        .iter()
-        .map(|m| {
-            let marker = if m.is_anchor { " [anchor]" } else { "" };
-            format!("[{}] {}: {}{}", m.id, m.role, m.content, marker)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 fn stored_message_to_runtime(
