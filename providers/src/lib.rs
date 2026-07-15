@@ -17,8 +17,8 @@ pub mod vendors;
 // 保持原有顶层路径，避免破坏下游 crate 的 `providers::trait_` 等引用。
 pub use api::{client, registry, streaming, trait_};
 pub use protocol::{
-    extractor, http_stream, image_gen, image_http, interactions_http, media_http, responses,
-    tool_format, verify,
+    extractor, files_http, http_stream, image_gen, image_http, interactions_http, media_http,
+    responses, tool_format, verify,
 };
 pub use vendors::{
     azure, bailian, claude, deepseek, google, mimo, minimax, moonshot, nvidia, ollama, openai,
