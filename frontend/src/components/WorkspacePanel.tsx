@@ -27,6 +27,7 @@ import type { AgentInfo } from "../types/agent";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import { ChatMarkdown } from "./ChatMarkdown";
+import MediaPreview from "./media/MediaPreview";
 import ExpandableSearch from "./ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceConfirm from "./FileSpaceConfirm";
@@ -66,7 +67,7 @@ type CreateMode = "file" | "folder";
 /** 工作区条目语义种类（决定图标与打开方式） */
 type FileKind = FileGlyphKind;
 /** 可内嵌预览的媒体类型 */
-type MediaKind = "image" | "video";
+type MediaKind = "image" | "video" | "audio" | "html";
 /** 右键菜单上下文：空白区 / 选中条目 */
 type MenuKind = "blank" | "entries";
 
@@ -194,8 +195,6 @@ export default function WorkspacePanel({ onClose }: Props) {
   const [savedContent, setSavedContent] = useState("");
   const [draftContent, setDraftContent] = useState("");
   const [mediaKind, setMediaKind] = useState<MediaKind | null>(null);
-  const [mediaSrc, setMediaSrc] = useState<string | null>(null);
-  const [mediaBroken, setMediaBroken] = useState(false);
   const [mediaMeta, setMediaMeta] = useState<string>("");
   const [loadingList, setLoadingList] = useState(false);
   const [loadingFile, setLoadingFile] = useState(false);
@@ -362,32 +361,30 @@ export default function WorkspacePanel({ onClose }: Props) {
     setSavedContent(content);
     setDraftContent(content);
     setMediaKind(null);
-    setMediaSrc(null);
-    setMediaBroken(false);
     setMediaMeta("");
     setView("editor");
     setError(null);
   };
 
-  const openMedia = (entry: FileEntryDto, kind: MediaKind) => {
-    const src = localMediaSrc(entry.path);
+  const openMedia = (
+    entry: FileEntryDto,
+    kind: MediaKind,
+    htmlSource?: string,
+  ) => {
     setEditorPath(entry.path);
     setEditorName(entry.name);
-    setSavedContent("");
-    setDraftContent("");
+    setSavedContent(htmlSource ?? "");
+    setDraftContent(htmlSource ?? "");
     setMediaKind(kind);
-    setMediaSrc(src);
-    setMediaBroken(!src);
     setMediaMeta(formatSize(entry.size));
     setView("media");
-    setError(src ? null : t("workspace.mediaLoadError"));
+    setError(null);
   };
 
   const openFolder = async (entry: FileEntryDto) => {
     setView("browse");
     setEditorPath(null);
     setMediaKind(null);
-    setMediaSrc(null);
     selection.clear();
     setRenamingPath(null);
     await load(entry.path);
@@ -404,6 +401,19 @@ export default function WorkspacePanel({ onClose }: Props) {
 
   const openFile = async (entry: FileEntryDto) => {
     const media = mediaKindOf(entry.name);
+    if (media === "html") {
+      setLoadingFile(true);
+      setError(null);
+      try {
+        const content = await invoke<string>("read_file", { path: entry.path });
+        openMedia(entry, "html", content);
+      } catch {
+        await openWithSystemApp(entry.path);
+      } finally {
+        setLoadingFile(false);
+      }
+      return;
+    }
     if (media) {
       openMedia(entry, media);
       return;
@@ -439,7 +449,6 @@ export default function WorkspacePanel({ onClose }: Props) {
     setView("browse");
     setEditorPath(null);
     setMediaKind(null);
-    setMediaSrc(null);
     selection.clear();
     setRenamingPath(null);
     await load(parent);
@@ -452,8 +461,6 @@ export default function WorkspacePanel({ onClose }: Props) {
     setView("browse");
     setEditorPath(null);
     setMediaKind(null);
-    setMediaSrc(null);
-    setMediaBroken(false);
     setError(null);
   };
 
@@ -484,8 +491,6 @@ export default function WorkspacePanel({ onClose }: Props) {
     setView("browse");
     setEditorPath(null);
     setMediaKind(null);
-    setMediaSrc(null);
-    setMediaBroken(false);
     setMediaMeta("");
     setError(null);
   };
@@ -1300,6 +1305,17 @@ export default function WorkspacePanel({ onClose }: Props) {
               <IconWsArrowLeft width={18} height={18} />
             </button>
             <div className="ws-editor-actions">
+              {mediaKind === "html" && editorPath ? (
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() =>
+                    openEditor(editorPath, editorName, draftContent)
+                  }
+                >
+                  {t("media.htmlSource")}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="ghost-btn"
@@ -1327,7 +1343,13 @@ export default function WorkspacePanel({ onClose }: Props) {
             <div className="ws-editor-meta-block">
               <h3 className="ws-editor-filename">{editorName}</h3>
               <p className="ws-editor-path">
-                {mediaKind === "video" ? t("workspace.mediaVideo") : t("workspace.mediaImage")}
+                {mediaKind === "video"
+                  ? t("workspace.mediaVideo")
+                  : mediaKind === "audio"
+                    ? t("workspace.mediaAudio")
+                    : mediaKind === "html"
+                      ? t("workspace.mediaHtml")
+                      : t("workspace.mediaImage")}
                 {mediaMeta ? ` · ${mediaMeta}` : ""}
               </p>
             </div>
@@ -1337,7 +1359,14 @@ export default function WorkspacePanel({ onClose }: Props) {
 
           <div className="ws-media-stage" data-kind={mediaKind ?? "image"}>
             <div className="ws-media-frame">
-              {mediaBroken || !mediaSrc ? (
+              {editorPath && mediaKind ? (
+                <MediaPreview
+                  kind={mediaKind}
+                  path={editorPath}
+                  htmlSource={mediaKind === "html" ? draftContent : null}
+                  alt={editorName}
+                />
+              ) : (
                 <div className="ws-media-fallback">
                   <FileGlyph name={editorName} isDir={false} />
                   <p>{t("workspace.mediaLoadError")}</p>
@@ -1349,31 +1378,6 @@ export default function WorkspacePanel({ onClose }: Props) {
                     {t("workspace.openExternally")}
                   </button>
                 </div>
-              ) : mediaKind === "video" ? (
-                <video
-                  className="ws-media-video"
-                  src={mediaSrc}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  onError={() => setMediaBroken(true)}
-                />
-              ) : (
-                <img
-                  className="ws-media-image"
-                  src={mediaSrc}
-                  alt={editorName}
-                  onLoad={(e) => {
-                    const img = e.currentTarget;
-                    if (img.naturalWidth && img.naturalHeight) {
-                      const dim = `${img.naturalWidth}×${img.naturalHeight}`;
-                      setMediaMeta((prev) =>
-                        prev.includes("×") ? prev : prev ? `${dim} · ${prev}` : dim,
-                      );
-                    }
-                  }}
-                  onError={() => setMediaBroken(true)}
-                />
               )}
             </div>
           </div>

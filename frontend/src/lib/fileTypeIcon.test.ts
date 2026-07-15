@@ -38,6 +38,10 @@ test("language extensions map to distinct glyph kinds", () => {
 test("media and folders", () => {
   assert.equal(mediaKindOf("a.png"), "image");
   assert.equal(mediaKindOf("a.mp4"), "video");
+  assert.equal(mediaKindOf("a.wav"), "audio");
+  assert.equal(mediaKindOf("index.html"), "html");
+  assert.equal(resolveFileType("a.mp3").open, "media-audio");
+  assert.equal(resolveFileType("index.html").open, "html-preview");
   assert.equal(resolveFileType("docs", true).kind, "folder");
   assert.equal(resolveFileType("notes.csv").kind, "sheet");
   assert.equal(resolveFileType("notes.csv").open, "text");

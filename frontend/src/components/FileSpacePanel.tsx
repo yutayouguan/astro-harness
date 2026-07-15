@@ -8,6 +8,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   Navigation,
+  Palette,
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { useTransientToast } from "../hooks/useTransientToast";
@@ -31,13 +32,14 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "./WorkspaceIcons";
-import { resolveFileType } from "../lib/fileTypeIcon";
+import { mediaKindOf, resolveFileType } from "../lib/fileTypeIcon";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceBatchBar from "./FileSpaceBatchBar";
 import FileSpaceConfirm from "./FileSpaceConfirm";
+import MediaPreview from "./media/MediaPreview";
 import { EmptyIllustration } from "../illustrations";
 import { useFileSelection } from "../hooks/useFileSelection";
 import { useAgentsChanged } from "../lib/agentsChanged";
@@ -62,6 +64,9 @@ type LayoutMode = "list" | "grid";
 type PreviewState =
   | { kind: "text"; content: string }
   | { kind: "image"; src: string }
+  | { kind: "video"; src: string; path: string }
+  | { kind: "audio"; src: string; path: string }
+  | { kind: "html"; path: string; content: string }
   | { kind: "missing" }
   | { kind: "unsupported" }
   | { kind: "loading" }
@@ -120,7 +125,6 @@ const TEXT_EXTS = new Set([
   "js",
   "jsx",
   "py",
-  "html",
   "css",
   "scss",
   "less",
@@ -362,7 +366,9 @@ export default function FileSpacePanel({
     const run = async () => {
       setPreview({ kind: "loading" });
       const ext = fileExt(selected.name);
+      const media = mediaKindOf(selected.name);
       const isImage =
+        media === "image" ||
         selected.category === "image" ||
         IMAGE_EXTS.has(ext) ||
         (selected.mime?.startsWith("image/") ?? false);
@@ -373,6 +379,38 @@ export default function FileSpacePanel({
         selected.category === "sheet" ||
         (selected.mime?.startsWith("text/") ?? false) ||
         selected.mime === "application/json";
+
+      if (media === "html" && isTauri()) {
+        try {
+          const content = await invoke<string>("read_file", {
+            path: selected.path,
+          });
+          if (!cancelled) {
+            setPreview({ kind: "html", path: selected.path, content });
+          }
+          return;
+        } catch {
+          if (!cancelled) setPreview({ kind: "unsupported" });
+          return;
+        }
+      }
+
+      if ((media === "video" || media === "audio") && isTauri()) {
+        try {
+          const src = convertFileSrc(selected.path);
+          if (!cancelled) {
+            setPreview(
+              media === "video"
+                ? { kind: "video", src, path: selected.path }
+                : { kind: "audio", src, path: selected.path },
+            );
+          }
+          return;
+        } catch {
+          if (!cancelled) setPreview({ kind: "unsupported" });
+          return;
+        }
+      }
 
       if (isImage && isTauri()) {
         try {
@@ -824,6 +862,11 @@ export default function FileSpacePanel({
           </div>
         </div>
 
+        <div className="fs-board-stub" role="note">
+          <Palette size={14} strokeWidth={2} aria-hidden />
+          <span>{t("filespace.boardComingSoon")}</span>
+        </div>
+
         <FileSpaceBatchBar
           count={selection.selectedIds.size}
           onAction={(a) => void handleBatchAction(a)}
@@ -1107,11 +1150,23 @@ export default function FileSpacePanel({
                     <pre className="fs-preview-text">{preview.content}</pre>
                   )}
                   {preview?.kind === "image" && (
-                    <img
-                      className="fs-preview-image"
-                      src={preview.src}
+                    <MediaPreview
+                      kind="image"
+                      path={selected.path}
                       alt={selected.name}
-                      onError={() => setPreview({ kind: "missing" })}
+                    />
+                  )}
+                  {preview?.kind === "video" && (
+                    <MediaPreview kind="video" path={preview.path} />
+                  )}
+                  {preview?.kind === "audio" && (
+                    <MediaPreview kind="audio" path={preview.path} />
+                  )}
+                  {preview?.kind === "html" && (
+                    <MediaPreview
+                      kind="html"
+                      path={preview.path}
+                      htmlSource={preview.content}
                     />
                   )}
                 </div>

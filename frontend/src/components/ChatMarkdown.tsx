@@ -1,4 +1,4 @@
-/** 聊天消息 Markdown 渲染（用户 / 助手共用）。 */
+/** 聊天消息 Markdown 渲染（用户 / 助手共用）；本地媒体路径与 HTML 代码块可预览。 */
 import {
   useCallback,
   useMemo,
@@ -10,6 +10,9 @@ import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "../i18n/LocaleContext";
+import { resolveMediaSrc, stripFileUrl } from "../lib/resolveMediaSrc";
+import BrokenMedia from "./media/BrokenMedia";
+import HtmlPreview from "./media/HtmlPreview";
 
 /** Markdown 渲染入参 */
 type Props = {
@@ -36,6 +39,97 @@ function childrenToText(children: ReactNode): string {
     return childrenToText((children as ReactElement).props?.children);
   }
   return "";
+}
+
+function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+  const resolved = useMemo(() => resolveMediaSrc(src), [src]);
+  const [broken, setBroken] = useState(!resolved);
+
+  if (broken || !resolved) {
+    return <BrokenMedia path={src} />;
+  }
+
+  return (
+    <span className="msg-md-img-wrap">
+      <img src={resolved} alt={alt ?? ""} onError={() => setBroken(true)} />
+    </span>
+  );
+}
+
+function HtmlCodeBlock({
+  className,
+  children,
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
+  const { t } = useI18n();
+  const [mode, setMode] = useState<"source" | "preview">("source");
+  const [copied, setCopied] = useState(false);
+  const lang = /language-([\w+-]+)/.exec(className ?? "")?.[1] ?? "";
+  const codeText = useMemo(
+    () => childrenToText(children).replace(/\n$/, ""),
+    [children],
+  );
+
+  const onCopy = useCallback(async () => {
+    if (!codeText) return;
+    try {
+      await navigator.clipboard.writeText(codeText);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // ignore
+    }
+  }, [codeText]);
+
+  return (
+    <div className="msg-md-html-block" data-lang={lang || undefined}>
+      <div className="msg-md-html-toggle" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          className={mode === "source" ? "is-active" : ""}
+          aria-selected={mode === "source"}
+          onClick={() => setMode("source")}
+        >
+          {t("media.htmlSource")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={mode === "preview" ? "is-active" : ""}
+          aria-selected={mode === "preview"}
+          onClick={() => setMode("preview")}
+        >
+          {t("media.htmlShowPreview")}
+        </button>
+        <button
+          type="button"
+          className={`msg-md-code-copy ${copied ? "is-copied" : ""}`}
+          onClick={() => void onCopy()}
+          aria-label={copied ? t("chat.codeCopied") : t("chat.copyCode")}
+          title={copied ? t("chat.codeCopied") : t("chat.copyCode")}
+          style={{ marginLeft: "auto" }}
+        >
+          {copied ? (
+            <Check size={14} strokeWidth={2.4} aria-hidden />
+          ) : (
+            <Copy size={14} strokeWidth={2} aria-hidden />
+          )}
+        </button>
+      </div>
+      {mode === "preview" ? (
+        <HtmlPreview source={codeText} compact />
+      ) : (
+        <div className="msg-md-codeblock" data-lang={lang || undefined}>
+          <pre className="msg-md-pre">
+            <code className={className}>{children}</code>
+          </pre>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CodeBlock({
@@ -89,6 +183,47 @@ function CodeBlock({
   );
 }
 
+function LocalHtmlLink({
+  href,
+  children,
+}: {
+  href?: string;
+  children?: ReactNode;
+}) {
+  const { t } = useI18n();
+  const [showPreview, setShowPreview] = useState(false);
+  const path = href?.trim() ?? "";
+  const isLocalHtml =
+    /\.(html?)$/i.test(path) &&
+    (path.startsWith("/") ||
+      /^[A-Za-z]:[\\/]/.test(path) ||
+      /^file:/i.test(path));
+
+  if (!isLocalHtml) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer noopener">
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <span className="msg-md-html-link">
+      <a href={href} target="_blank" rel="noreferrer noopener">
+        {children}
+      </a>{" "}
+      <button
+        type="button"
+        className="msg-md-inline-preview-btn"
+        onClick={() => setShowPreview((v) => !v)}
+      >
+        {showPreview ? t("media.htmlSource") : t("media.htmlShowPreview")}
+      </button>
+      {showPreview ? <HtmlPreview path={stripFileUrl(path)} compact /> : null}
+    </span>
+  );
+}
+
 export function ChatMarkdown({
   content,
   streaming = false,
@@ -121,18 +256,23 @@ export function ChatMarkdown({
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer noopener">
-              {children}
-            </a>
+            <LocalHtmlLink href={href}>{children}</LocalHtmlLink>
           ),
+          img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
           code: ({ className, children, ...props }) => {
             const text = String(children ?? "");
             const isBlock =
               Boolean(className?.includes("language-")) || text.includes("\n");
             if (isBlock) {
-              return (
-                <CodeBlock className={className}>{children}</CodeBlock>
-              );
+              const lang =
+                /language-([\w+-]+)/.exec(className ?? "")?.[1]?.toLowerCase() ??
+                "";
+              if (lang === "html" || lang === "htm") {
+                return (
+                  <HtmlCodeBlock className={className}>{children}</HtmlCodeBlock>
+                );
+              }
+              return <CodeBlock className={className}>{children}</CodeBlock>;
             }
             return (
               <code className="msg-md-inline-code" {...props}>

@@ -1,0 +1,208 @@
+/* 共享媒体 / HTML 预览 */
+
+.media-preview {
+  margin: 8px 0;
+  max-width: min(100%, 520px);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--glass, rgba(255, 255, 255, 0.4)) 70%, transparent);
+  border: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.08));
+}
+
+.media-preview.is-compact {
+  max-width: min(100%, 360px);
+  margin: 6px 0;
+}
+
+.media-preview-image,
+.media-preview-video {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  background: color-mix(in srgb, var(--ink, #0f172a) 4%, transparent);
+}
+
+.media-preview-audio {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+}
+
+.media-broken {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 20px 16px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--ink-soft, #64748b) 35%, transparent);
+  color: var(--ink-soft, #64748b);
+  text-align: center;
+  font-size: 13px;
+}
+
+.media-broken-path {
+  max-width: 100%;
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.75;
+  word-break: break-all;
+}
+
+.media-broken-open {
+  margin-top: 4px;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--tone-soft, var(--chip-bg, rgba(0, 0, 0, 0.06)));
+  color: var(--tone, var(--ink));
+}
+
+.html-preview {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0;
+  max-width: min(100%, 640px);
+  min-height: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.08));
+  background: #fff;
+}
+
+.html-preview.is-compact {
+  max-width: min(100%, 420px);
+  min-height: 160px;
+}
+
+.html-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink-soft, #64748b);
+  background: color-mix(in srgb, var(--glass, #f8fafc) 80%, transparent);
+  border-bottom: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.06));
+}
+
+.html-preview-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--tone, var(--ink-soft));
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.html-preview-open:hover {
+  background: var(--glass, rgba(0, 0, 0, 0.04));
+}
+
+.html-preview-frame {
+  width: 100%;
+  height: 320px;
+  border: none;
+  background: #fff;
+}
+
+.html-preview.is-compact .html-preview-frame {
+  height: 220px;
+}
+
+.fs-preview-body .media-preview,
+.fs-preview-body .html-preview,
+.fs-preview-body .media-broken {
+  max-width: 100%;
+  margin: 0;
+}
+
+.fs-preview-body .html-preview-frame {
+  height: min(52vh, 420px);
+}
+
+.msg-activity-media {
+  padding: 0 0 8px;
+}
+
+.msg-md-html-block {
+  margin: 8px 0;
+}
+
+.msg-md-html-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.msg-md-html-toggle button {
+  border: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.1));
+  background: transparent;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+
+.msg-md-html-toggle button.is-active {
+  background: var(--tone-soft, var(--chip-bg));
+  color: var(--tone, var(--ink));
+  border-color: color-mix(in srgb, var(--tone, var(--ink)) 28%, transparent);
+}
+
+.msg-md-img-wrap {
+  margin: 8px 0;
+  max-width: min(100%, 520px);
+}
+
+.msg-md-img-wrap img {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.08));
+}
+
+.a2ui-image-wrap {
+  max-width: 100%;
+}
+
+.a2ui-image-wrap .media-broken {
+  margin: 0;
+}
+
+.msg-md-inline-preview-btn {
+  border: none;
+  background: var(--tone-soft, var(--chip-bg, rgba(0, 0, 0, 0.06)));
+  color: var(--tone, var(--ink-soft));
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 4px;
+  vertical-align: baseline;
+}
+
+.fs-board-stub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--ink-soft, #64748b);
+  background: color-mix(in srgb, var(--tone-soft, transparent) 40%, var(--glass, transparent));
+  border: 1px dashed color-mix(in srgb, var(--ink-soft) 22%, transparent);
+}

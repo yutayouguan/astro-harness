@@ -1,5 +1,5 @@
-/** 单条聊天活动卡：kind 图标 + 可折叠 Input/Output。 */
-import { useEffect, useState, type ReactNode } from "react";
+/** 单条聊天活动卡：kind 图标 + 可折叠 Input/Output；生成媒体内嵌预览。 */
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, ChevronDown, Webhook } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
@@ -8,8 +8,10 @@ import {
   resolveActivityIO,
 } from "../lib/resolveActivityIO";
 import { formatElapsedSec } from "../lib/elapsedSec";
+import { parseGeneratedMedia } from "../lib/parseGeneratedMedia";
 import type { ChatActivity, ChatActivityKind } from "../types";
 import McpIcon from "./McpIcon";
+import MediaPreview from "./media/MediaPreview";
 import { IconMemory, IconSkills, IconTools } from "./NavIcons";
 
 type Props = {
@@ -43,6 +45,11 @@ export default function MsgActivity({
   const { t } = useI18n();
   const hasBody = activityHasBody(activity);
   const { input, output } = resolveActivityIO(activity);
+  const mediaItems = useMemo(
+    () =>
+      activity.status === "running" ? [] : parseGeneratedMedia(output),
+    [activity.status, output],
+  );
   const [open, setOpen] = useState(defaultOpen && hasBody);
   const running = activity.status === "running";
   const liveSec = useLiveElapsedSec(running, activity.at ?? null);
@@ -101,6 +108,18 @@ export default function MsgActivity({
         ) : (
           <div className="msg-activity-summary">{summary}</div>
         )}
+        {mediaItems.length > 0 ? (
+          <div className="msg-activity-media">
+            {mediaItems.map((m) => (
+              <MediaPreview
+                key={`${m.kind}:${m.path}`}
+                kind={m.kind}
+                path={m.path}
+                compact
+              />
+            ))}
+          </div>
+        ) : null}
         {open && (input || output) ? (
           <div className="msg-activity-io">
             {input ? (

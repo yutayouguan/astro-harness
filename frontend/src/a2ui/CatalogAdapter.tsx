@@ -10,6 +10,7 @@ import {
   Shield,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import MediaPreview from "../components/media/MediaPreview";
 import { mergeActionContext, missingRequiredFields } from "./formState";
 import type { A2uiComponent } from "./types";
 import { isKnownComponent } from "./validate";
@@ -113,7 +114,11 @@ function CatalogNode({
         (typeof node.url === "string" && node.url) ||
         "";
       if (!src) return null;
-      return <img className="a2ui-image" src={src} alt="" />;
+      return (
+        <div className="a2ui-image-wrap a2ui-image">
+          <MediaPreview kind="image" path={src} compact />
+        </div>
+      );
     }
     case "Button": {
       const eventName = node.action?.event?.name ?? "click";

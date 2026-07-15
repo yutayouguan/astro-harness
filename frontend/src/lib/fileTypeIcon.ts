@@ -72,6 +72,9 @@ export type FileOpenMode =
   | "text"
   | "media-image"
   | "media-video"
+  | "media-audio"
+  | "media-pdf"
+  | "html-preview"
   | "external";
 
 export type ResolvedFileType = {
@@ -183,15 +186,15 @@ const EXT_MAP: Record<string, ResolvedFileType> = {
   wmv: entry("video", FileVideo, "external"),
 
   // 音频
-  mp3: entry("audio", FileAudio, "external"),
-  wav: entry("audio", FileAudio, "external"),
-  flac: entry("audio", FileAudio, "external"),
-  aac: entry("audio", FileAudio, "external"),
-  ogg: entry("audio", FileAudio, "external"),
-  m4a: entry("audio", FileAudio, "external"),
-  wma: entry("audio", FileAudio, "external"),
-  aiff: entry("audio", FileAudio, "external"),
-  opus: entry("audio", FileAudio, "external"),
+  mp3: entry("audio", FileAudio, "media-audio"),
+  wav: entry("audio", FileAudio, "media-audio"),
+  flac: entry("audio", FileAudio, "media-audio"),
+  aac: entry("audio", FileAudio, "media-audio"),
+  ogg: entry("audio", FileAudio, "media-audio"),
+  m4a: entry("audio", FileAudio, "media-audio"),
+  wma: entry("audio", FileAudio, "media-audio"),
+  aiff: entry("audio", FileAudio, "media-audio"),
+  opus: entry("audio", FileAudio, "media-audio"),
 
   // 压缩 / 磁盘镜像
   zip: entry("archive", FileArchive, "external"),
@@ -306,8 +309,8 @@ const EXT_MAP: Record<string, ResolvedFileType> = {
   command: entry("code-shell", Terminal),
 
   // Web
-  html: entry("code-web", Globe),
-  htm: entry("code-web", Globe),
+  html: entry("code-web", Globe, "html-preview"),
+  htm: entry("code-web", Globe, "html-preview"),
   xhtml: entry("code-web", Globe),
   css: entry("code-web", Palette),
   scss: entry("code-web", Palette),
@@ -413,12 +416,14 @@ export function isExternalOnlyFile(name: string): boolean {
   return resolveFileType(name, false).open === "external";
 }
 
-/** 若可内嵌预览则返回 image / video */
+/** 若可内嵌预览则返回 image / video / audio / html */
 export function mediaKindOf(
   name: string,
-): "image" | "video" | null {
+): "image" | "video" | "audio" | "html" | null {
   const open = resolveFileType(name, false).open;
   if (open === "media-image") return "image";
   if (open === "media-video") return "video";
+  if (open === "media-audio") return "audio";
+  if (open === "html-preview") return "html";
   return null;
 }
