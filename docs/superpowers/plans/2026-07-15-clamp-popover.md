@@ -68,6 +68,16 @@
 - [x] Composer 模式 / MCP / 上下文用量：portal + `useClampPopover`（`placement: above`）
 - [x] Palette 仍为输入区上方文档流布局（自带 max-height），本轮不改
 
+### Task 6: 阶段 C — 触碰迁移
+
+**Files:**
+- Modify: `FileContextMenu.tsx`, `CronPanel.tsx`, `ScheduleEditor.tsx`
+- Modify: `clampPopover.ts`（`pointAnchor` / `resolveClipBoundsAt`）
+
+- [x] FileContextMenu 改用共享 API（光标点锚）
+- [x] Cron 更多菜单 / Schedule 日期弹层改用共享 API
+- [x] 测试 + Commit
+
 ---
 
 ## 验证

@@ -25,6 +25,10 @@ import type { ScheduleDraft, ScheduleMode, Weekday } from "../lib/cronSchedule";
 import { UI_WEEKDAYS } from "../lib/cronSchedule";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
+import {
+  clampPopover,
+  resolveClipBounds,
+} from "../lib/clampPopover";
 import { SelectMenu } from "./SelectMenu";
 
 /** 调度表达式编辑器入参 */
@@ -272,21 +276,28 @@ function OnceDateTimePicker({
       return;
     }
     const update = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.min(248, window.innerWidth - 16);
-      const left = Math.min(
-        Math.max(8, rect.left),
-        window.innerWidth - width - 8,
-      );
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const bounds = resolveClipBounds(trigger);
+      const width = Math.min(248, bounds.right - bounds.left - 16);
       const popH = 292;
-      const spaceBelow = window.innerHeight - rect.bottom - 8;
-      const openUp = spaceBelow < popH && rect.top > spaceBelow;
-      setPopStyle(
-        openUp
-          ? { bottom: window.innerHeight - rect.top + 8, left, width }
-          : { top: rect.bottom + 8, left, width },
-      );
+      const pos = clampPopover({
+        anchorRect: rect,
+        popoverSize: { width, height: popH },
+        bounds,
+        preferAlign: "start",
+        placement: "auto",
+        gap: 8,
+        maxHeightCap: popH,
+        minMaxHeight: 120,
+      });
+      setPopStyle({
+        top: pos.top,
+        left: pos.left,
+        width,
+        maxHeight: pos.maxHeight,
+      });
     };
     update();
     window.addEventListener("resize", update);

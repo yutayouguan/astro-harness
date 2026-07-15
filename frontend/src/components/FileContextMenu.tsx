@@ -20,6 +20,12 @@ import {
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
+import {
+  clampPopover,
+  measurePopoverSize,
+  pointAnchor,
+  resolveClipBoundsAt,
+} from "../lib/clampPopover";
 
 export type FileMenuAction =
   | "open"
@@ -62,8 +68,6 @@ type Props = {
   className?: string;
 };
 
-const EDGE = 8;
-
 const ICO = { size: 14, strokeWidth: 2.1 } as const;
 
 const ACTION_ICONS: Record<FileMenuAction, ComponentType<LucideProps>> = {
@@ -82,38 +86,6 @@ const ACTION_ICONS: Record<FileMenuAction, ComponentType<LucideProps>> = {
   newFolder: FolderPlus,
   openExternally: ExternalLink,
 };
-
-/** Clamp menu to viewport; flip to the other side of the cursor when near right/bottom. */
-function clampMenuPosition(
-  cursorX: number,
-  cursorY: number,
-  width: number,
-  height: number,
-  vw: number,
-  vh: number,
-) {
-  let left = cursorX;
-  let top = cursorY;
-
-  if (left + width > vw - EDGE) {
-    left = cursorX - width;
-  }
-  if (left < EDGE) {
-    left = Math.max(EDGE, Math.min(cursorX, vw - width - EDGE));
-  }
-
-  if (top + height > vh - EDGE) {
-    top = cursorY - height;
-  }
-  if (top < EDGE) {
-    top = Math.max(EDGE, Math.min(cursorY, vh - height - EDGE));
-  }
-
-  return {
-    left: Math.max(EDGE, Math.min(left, vw - width - EDGE)),
-    top: Math.max(EDGE, Math.min(top, vh - height - EDGE)),
-  };
-}
 
 export default function FileContextMenu({ x, y, items, onAction, onClose, className }: Props) {
   const { t } = useI18n();
@@ -137,17 +109,22 @@ export default function FileContextMenu({ x, y, items, onAction, onClose, classN
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const { left, top } = clampMenuPosition(
-      x,
-      y,
-      rect.width,
-      rect.height,
-      window.innerWidth,
-      window.innerHeight,
-    );
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
+    const size = measurePopoverSize(el);
+    const pos = clampPopover({
+      anchorRect: pointAnchor(x, y),
+      popoverSize: size,
+      bounds: resolveClipBoundsAt(x, y),
+      preferAlign: "start",
+      placement: "auto",
+      gap: 0,
+      pad: 8,
+    });
+    el.style.left = `${pos.left}px`;
+    el.style.top = `${pos.top}px`;
+    if (pos.maxHeight > 0) {
+      el.style.maxHeight = `${pos.maxHeight}px`;
+      el.style.overflow = "auto";
+    }
   }, [x, y, items]);
 
   const menu = (

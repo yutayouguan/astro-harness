@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampPopover } from "./clampPopover.ts";
+import { clampPopover, pointAnchor } from "./clampPopover.ts";
 
 function rect(
   left: number,
@@ -93,4 +93,19 @@ test("start-align flips to end when overflowing right", () => {
   assert.ok(r.left + 280 <= 1000 - 8);
   // 翻转到 end 对齐附近
   assert.ok(Math.abs(r.left - (anchor.right - 280)) < 1 || r.left === 8);
+});
+
+test("cursor point anchor flips above near bottom edge", () => {
+  const anchor = pointAnchor(100, 750);
+  const r = clampPopover({
+    anchorRect: anchor,
+    popoverSize: { width: 180, height: 200 },
+    bounds: { left: 0, top: 0, right: 1000, bottom: 800 },
+    preferAlign: "start",
+    placement: "auto",
+    gap: 0,
+    pad: 8,
+  });
+  assert.equal(r.placement, "above");
+  assert.ok(r.top + Math.min(200, r.maxHeight) <= 750);
 });

@@ -69,6 +69,30 @@ export function resolveClipBounds(
   return { left: 0, top: 0, right: w, bottom: h };
 }
 
+/** 视口点（如右键 clientX/Y）对应的零尺寸锚点。 */
+export function pointAnchor(x: number, y: number): RectLike {
+  return { left: x, top: y, right: x, bottom: y, width: 0, height: 0 };
+}
+
+/** 从视口点解析裁切盒（elementFromPoint → content-pane / 视口）。 */
+export function resolveClipBoundsAt(
+  x: number,
+  y: number,
+  viewport?: { width: number; height: number },
+): Bounds {
+  if (typeof document !== "undefined") {
+    const el = document.elementFromPoint(x, y);
+    if (el) return resolveClipBounds(el, viewport);
+  }
+  const w =
+    viewport?.width ??
+    (typeof window !== "undefined" ? window.innerWidth : 0);
+  const h =
+    viewport?.height ??
+    (typeof window !== "undefined" ? window.innerHeight : 0);
+  return { left: 0, top: 0, right: w, bottom: h };
+}
+
 /** 不受父级 overflow:hidden 裁切低估影响。 */
 export function measurePopoverSize(el: HTMLElement): {
   width: number;

@@ -25,6 +25,11 @@ import {
   X,
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
+import {
+  clampPopover,
+  measurePopoverSize,
+  resolveClipBounds,
+} from "../lib/clampPopover";
 import { formatScheduleLabel } from "../lib/cronSchedule";
 import { useAgentsChanged } from "../lib/agentsChanged";
 import type { AgentInfo } from "../types/agent";
@@ -409,11 +414,17 @@ export default function CronPanel({
     moreBtnRef.current = btn;
     const rect = btn.getBoundingClientRect();
     const menuW = 176;
-    const left = Math.min(
-      Math.max(8, rect.right - menuW),
-      window.innerWidth - menuW - 8,
-    );
-    setMenuPos({ top: rect.bottom + 6, left });
+    const pos = clampPopover({
+      anchorRect: rect,
+      popoverSize: { width: menuW, height: 180 },
+      bounds: resolveClipBounds(btn),
+      preferAlign: "end",
+      placement: "auto",
+      gap: 6,
+      maxHeightCap: 280,
+      minMaxHeight: 96,
+    });
+    setMenuPos({ top: pos.top, left: pos.left });
     setMenuJobId(jobId);
   };
 
@@ -517,16 +528,20 @@ export default function CronPanel({
       if (!btn) return;
       const rect = btn.getBoundingClientRect();
       const menuW = 176;
-      const menuH = menuRef.current?.offsetHeight ?? 180;
-      const gap = 6;
-      const spaceBelow = window.innerHeight - rect.bottom - gap;
-      const openUp = spaceBelow < menuH && rect.top > spaceBelow;
-      const top = openUp ? rect.top - gap - menuH : rect.bottom + gap;
-      const left = Math.min(
-        Math.max(8, rect.right - menuW),
-        window.innerWidth - menuW - 8,
-      );
-      setMenuPos({ top, left });
+      const measuredH = menuRef.current
+        ? measurePopoverSize(menuRef.current).height
+        : 180;
+      const pos = clampPopover({
+        anchorRect: rect,
+        popoverSize: { width: menuW, height: measuredH },
+        bounds: resolveClipBounds(btn),
+        preferAlign: "end",
+        placement: "auto",
+        gap: 6,
+        maxHeightCap: 280,
+        minMaxHeight: 96,
+      });
+      setMenuPos({ top: pos.top, left: pos.left });
     };
     sync();
     window.addEventListener("resize", sync);
