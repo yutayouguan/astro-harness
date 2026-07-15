@@ -588,19 +588,6 @@ pub async fn google_interactions_image(
     parse_interaction_image_response(&v)
 }
 
-fn trim_slash(s: &str) -> String {
-    s.trim_end_matches('/').to_string()
-}
-
-fn interactions_url(config: &ProviderConfig) -> String {
-    let base = trim_slash(&google_native_base(config));
-    if base.contains("/v1beta") {
-        format!("{base}/interactions")
-    } else {
-        format!("{base}/v1beta/interactions")
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisionMode {
     Describe,
