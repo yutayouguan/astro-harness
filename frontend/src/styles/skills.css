@@ -2582,6 +2582,11 @@ html[data-theme="dark"] .skills-preview-head {
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
+.skills-preview-tab svg {
+  flex-shrink: 0;
+  opacity: 0.88;
+}
+
 .skills-preview-tab:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--tone) 8%, transparent);
@@ -2871,9 +2876,35 @@ html[data-theme="dark"] .skills-preview-filechip[data-kind^="code"] svg { color:
 .skills-file-viewer-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.skills-file-viewer-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(42%, 220px);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.skills-file-viewer-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-file-viewer-size {
+  flex-shrink: 0;
+  font-weight: 550;
+  opacity: 0.8;
 }
 
 .skills-file-viewer-actions {
@@ -2887,6 +2918,7 @@ html[data-theme="dark"] .skills-preview-filechip[data-kind^="code"] svg { color:
 .skills-file-viewer-modes {
   display: inline-flex;
   gap: 4px;
+  flex-shrink: 0;
   padding: 3px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
@@ -2929,6 +2961,33 @@ html[data-theme="dark"] .skills-file-viewer-mode.is-active {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.skills-file-viewer-reveal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--tone-soft) 35%, transparent);
+  color: var(--tone);
+  cursor: pointer;
+}
+
+.skills-file-viewer-reveal:hover {
+  background: var(--tone-soft);
+  border-color: color-mix(in srgb, var(--tone) 32%, transparent);
+}
+
+html[data-theme="dark"] .skills-file-viewer-reveal {
+  background: color-mix(in srgb, var(--tone-soft) 50%, rgba(8, 6, 18, 0.4));
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
+  color: color-mix(in srgb, #fff 18%, var(--tone));
 }
 
 .skills-file-viewer-copy {

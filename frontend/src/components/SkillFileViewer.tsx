@@ -33,6 +33,10 @@ function isMarkdownPath(filename: string): boolean {
 type Props = {
   content: string | null;
   filename: string;
+  /** 工具栏展示的路径（与预览/源码同一行） */
+  pathLabel?: string;
+  /** 工具栏展示的体积文案 */
+  sizeLabel?: string;
   /** 文件字节大小；超限时不展示编辑器 */
   size?: number;
   loading?: boolean;
@@ -44,6 +48,8 @@ type Props = {
 export function SkillFileViewer({
   content,
   filename,
+  pathLabel,
+  sizeLabel,
   size = 0,
   loading = false,
   onOpenExternal,
@@ -114,6 +120,16 @@ export function SkillFileViewer({
   return (
     <div className="skills-file-viewer">
       <div className="skills-file-viewer-toolbar">
+        {(pathLabel || sizeLabel) && (
+          <div className="skills-file-viewer-meta" title={pathLabel}>
+            {pathLabel ? (
+              <span className="skills-file-viewer-path">{pathLabel}</span>
+            ) : null}
+            {sizeLabel ? (
+              <span className="skills-file-viewer-size">{sizeLabel}</span>
+            ) : null}
+          </div>
+        )}
         {isMd ? (
           <div className="skills-file-viewer-modes" role="tablist">
             <button
@@ -137,9 +153,9 @@ export function SkillFileViewer({
               {t("skills.previewSource")}
             </button>
           </div>
-        ) : (
+        ) : !pathLabel ? (
           <span className="skills-file-viewer-label">{filename}</span>
-        )}
+        ) : null}
         <div className="skills-file-viewer-actions">
           {onReveal ? (
             <button

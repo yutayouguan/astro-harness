@@ -8,9 +8,11 @@ import {
   type SVGProps,
 } from "react";
 import {
+  BookOpen,
   Bot,
   Check,
   CloudDownload,
+  Code2,
   Columns2,
   Copy,
   Download,
@@ -19,11 +21,13 @@ import {
   FileText,
   FolderOpen,
   HardDrive,
+  Image as ImageIcon,
   LayoutGrid,
   Library,
   Link2,
   List,
   LoaderCircle,
+  MoreHorizontal,
   Package,
   Sparkles,
   Star,
@@ -31,6 +35,7 @@ import {
   Unlink2,
   User,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -80,12 +85,13 @@ type SkillPreviewCategory =
 const PREVIEW_TABS: {
   id: SkillPreviewCategory;
   labelKey: MessageKey;
+  Icon: LucideIcon;
 }[] = [
-  { id: "overview", labelKey: "skills.previewTab.overview" },
-  { id: "scripts", labelKey: "skills.previewTab.scripts" },
-  { id: "references", labelKey: "skills.previewTab.references" },
-  { id: "assets", labelKey: "skills.previewTab.assets" },
-  { id: "other", labelKey: "skills.previewTab.other" },
+  { id: "overview", labelKey: "skills.previewTab.overview", Icon: BookOpen },
+  { id: "scripts", labelKey: "skills.previewTab.scripts", Icon: Code2 },
+  { id: "references", labelKey: "skills.previewTab.references", Icon: Library },
+  { id: "assets", labelKey: "skills.previewTab.assets", Icon: ImageIcon },
+  { id: "other", labelKey: "skills.previewTab.other", Icon: MoreHorizontal },
 ];
 
 function fileLabel(path: string): string {
@@ -2279,6 +2285,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   const count = preview.files.filter(
                     (f) => f.category === tab.id,
                   ).length;
+                  const TabIcon = tab.Icon;
                   return (
                     <button
                       key={tab.id}
@@ -2288,6 +2295,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                       className={`skills-preview-tab ${previewTab === tab.id ? "is-active" : ""}`}
                       onClick={() => selectPreviewTab(tab.id)}
                     >
+                      <TabIcon size={13} strokeWidth={2.3} aria-hidden />
                       {t(tab.labelKey)}
                       <span className="skills-preview-tab-count">{count}</span>
                     </button>
@@ -2317,13 +2325,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                     );
                   })}
                 </div>
-              ) : previewFilesInTab[0] ? (
-                <div className="skills-preview-filepath">
-                  <span className="skills-preview-filepath-name">
-                    {previewFilesInTab[0].relative_path}
-                  </span>
-                  <span>{formatBytes(previewFilesInTab[0].size)}</span>
-                </div>
               ) : null}
 
               <div className="skills-preview-body">
@@ -2342,6 +2343,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 ) : (
                   <SkillFileViewer
                     content={previewContent}
+                    pathLabel={
+                      previewFileMeta?.relative_path ?? previewFile ?? undefined
+                    }
+                    sizeLabel={
+                      previewFileMeta
+                        ? formatBytes(previewFileMeta.size)
+                        : undefined
+                    }
                     onReveal={
                       previewFile
                         ? () => {
