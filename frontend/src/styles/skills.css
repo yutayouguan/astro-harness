@@ -2680,7 +2680,7 @@ html[data-theme="dark"] .skills-preview-mark {
   flex-wrap: nowrap;
   gap: 2px;
   /* 底部留白：overflow-x 会裁切纵向阴影，避免选中胶囊底边成硬切 */
-  padding: 6px 14px 8px;
+  padding: 6px 14px 4px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
