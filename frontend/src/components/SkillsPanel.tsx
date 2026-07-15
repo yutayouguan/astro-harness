@@ -2240,9 +2240,25 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   {preview.description ? (
                     <p className="skills-preview-desc">{preview.description}</p>
                   ) : null}
-                  <p className="skills-preview-root" title={preview.root}>
-                    {preview.root}
-                  </p>
+                  <div className="skills-preview-root-row">
+                    <p className="skills-preview-root" title={preview.root}>
+                      {preview.root}
+                    </p>
+                    <button
+                      type="button"
+                      className="skills-preview-root-btn"
+                      onClick={() =>
+                        void invoke("open_skill_folder", {
+                          name: preview.name,
+                          id: previewSkillId,
+                        }).catch((err) => setError(String(err)))
+                      }
+                      title={t("skills.openFolder")}
+                      aria-label={t("skills.openFolder")}
+                    >
+                      <FolderOpen size={14} strokeWidth={2.3} aria-hidden />
+                    </button>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -2281,52 +2297,81 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
               {previewFilesInTab.length > 1 ? (
                 <div className="skills-preview-filelist" role="list">
-                  {previewFilesInTab.map((file) => (
-                    <button
-                      key={file.relative_path}
-                      type="button"
-                      role="listitem"
-                      className={`skills-preview-filechip ${previewFile === file.relative_path ? "is-active" : ""}`}
-                      onClick={() => setPreviewFile(file.relative_path)}
-                      title={file.relative_path}
-                    >
-                      <span>{fileLabel(file.relative_path)}</span>
-                      <small>{formatBytes(file.size)}</small>
-                    </button>
-                  ))}
+                  {previewFilesInTab.map((file) => {
+                    const ft = resolveFileType(fileLabel(file.relative_path));
+                    const Icon = ft.Icon;
+                    return (
+                      <button
+                        key={file.relative_path}
+                        type="button"
+                        role="listitem"
+                        data-kind={ft.kind}
+                        className={`skills-preview-filechip ${previewFile === file.relative_path ? "is-active" : ""}`}
+                        onClick={() => setPreviewFile(file.relative_path)}
+                        title={file.relative_path}
+                      >
+                        <Icon size={13} strokeWidth={2.2} aria-hidden />
+                        <span>{fileLabel(file.relative_path)}</span>
+                        <small>{formatBytes(file.size)}</small>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : previewFilesInTab[0] ? (
                 <div className="skills-preview-filepath">
-                  {previewFilesInTab[0].relative_path}
+                  <span className="skills-preview-filepath-name">
+                    {previewFilesInTab[0].relative_path}
+                  </span>
                   <span>{formatBytes(previewFilesInTab[0].size)}</span>
+                  {previewFile ? (
+                    <button
+                      type="button"
+                      className="skills-preview-root-btn"
+                      onClick={() => void revealPreviewFile()}
+                      title={t("skills.revealFile")}
+                      aria-label={t("skills.revealFile")}
+                    >
+                      <FolderOpen size={14} strokeWidth={2.3} aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {previewFilesInTab.length > 1 && previewFile ? (
+                <div className="skills-preview-filebar">
+                  <button
+                    type="button"
+                    className="skills-action-btn is-icon"
+                    onClick={() => void revealPreviewFile()}
+                    title={t("skills.revealFile")}
+                    aria-label={t("skills.revealFile")}
+                  >
+                    <FolderOpen size={14} strokeWidth={2.3} aria-hidden />
+                  </button>
                 </div>
               ) : null}
 
               <div className="skills-preview-body">
-                {loadingFile ? (
-                  <p className="skills-preview-empty">{t("skills.previewLoading")}</p>
-                ) : previewBinaryHint ? (
+                {previewBinaryHint ? (
                   <div className="skills-preview-binary">
                     <p>{t("skills.previewBinary")}</p>
                     <button
                       type="button"
                       className="skills-action-btn"
-                      onClick={() => {
-                        if (!previewFile) return;
-                        const full = `${preview.root}/${previewFile}`;
-                        void invoke("open_path_externally", { path: full }).catch(
-                          (err) => setPreviewContent(String(err)),
-                        );
-                      }}
+                      onClick={() => void openPreviewFileExternal()}
                     >
                       <ExternalLink size={14} strokeWidth={2.2} aria-hidden />
                       {t("skills.previewOpenExternal")}
                     </button>
                   </div>
                 ) : (
-                  <pre className="skills-preview-meta">
-                    {previewContent ?? ""}
-                  </pre>
+                  <SkillFileViewer
+                    content={previewContent}
+                    filename={previewFile ?? "file"}
+                    size={previewFileMeta?.size ?? 0}
+                    loading={loadingFile}
+                    onOpenExternal={() => void openPreviewFileExternal()}
+                  />
                 )}
               </div>
             </aside>
