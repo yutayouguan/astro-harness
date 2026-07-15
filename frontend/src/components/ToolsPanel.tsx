@@ -766,9 +766,6 @@ export default function ToolsPanel({
             onChange={(id) => void switchAgent(id)}
             labelKey="filespace.agentFilter"
           />
-          <span className="tools-usage-chip" aria-live="polite">
-            {t("tools.callTotal", { n: String(usage?.tool_total ?? 0) })}
-          </span>
         </div>
         <div className="panel-agent-toolbar-end">
           <ExpandableSearch
