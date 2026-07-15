@@ -1966,7 +1966,9 @@ html[data-theme="dark"] .msg-md-codeblock {
   position: absolute;
   inset: 0;
   display: block;
-  padding: 2px 4px 4px;
+  /* 与 textarea 原生光标对齐：macOS 下 caret 比同行文字略偏上 */
+  padding: 0 4px 4px;
+  transform: translateY(-2px);
   pointer-events: none;
   color: var(--ink-mute);
   font: inherit;
