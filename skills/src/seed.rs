@@ -166,9 +166,11 @@ fn run_npx_seed(base: &Path, source: &str, name: &str) -> Result<()> {
 const BUNDLED_STORYBOARD_VIDEO_MD: &str =
     include_str!("../bundled/storyboard-video/SKILL.md");
 const BUNDLED_CREATE_AGENT_MD: &str = include_str!("../bundled/create-agent/SKILL.md");
+const BUNDLED_AIHOT_MD: &str = include_str!("../bundled/aihot/SKILL.md");
 
 /// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
 pub const BUNDLED_SKILLS: &[(&str, &str)] = &[
+    ("aihot", BUNDLED_AIHOT_MD),
     ("create-agent", BUNDLED_CREATE_AGENT_MD),
     ("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD),
 ];
@@ -271,16 +273,21 @@ mod tests {
     fn seed_bundled_installs_create_agent_and_storyboard() {
         let dir = tempdir().unwrap();
         let r1 = seed_bundled_into(dir.path());
+        assert!(r1.installed.contains(&"aihot".to_string()));
         assert!(r1.installed.contains(&"create-agent".to_string()));
         assert!(r1.installed.contains(&"storyboard-video".to_string()));
+        assert!(is_public_skill_installed(dir.path(), "aihot"));
         assert!(is_public_skill_installed(dir.path(), "create-agent"));
         assert!(is_public_skill_installed(dir.path(), "storyboard-video"));
         let body = fs::read_to_string(dir.path().join("skills/create-agent/SKILL.md")).unwrap();
         assert!(body.contains("create-agent"));
         assert!(body.contains("astro_bundled_rev:"));
         assert!(body.contains("delegate"));
+        let aihot = fs::read_to_string(dir.path().join("skills/aihot/SKILL.md")).unwrap();
+        assert!(aihot.contains("aihot.virxact.com"));
         let r2 = seed_bundled_into(dir.path());
         assert!(r2.installed.is_empty());
+        assert!(r2.skipped.contains(&"aihot".to_string()));
         assert!(r2.skipped.contains(&"create-agent".to_string()));
         assert!(r2.skipped.contains(&"storyboard-video".to_string()));
     }
