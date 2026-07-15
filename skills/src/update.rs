@@ -101,7 +101,7 @@ pub async fn update_installed_skill_ex(
     loop {
         match install_from_ref(&install_ref, agent_id, Some(hint.clone())).await {
             Ok(message) => return Ok(message),
-            Err(e) if retries_left > 0 => {
+            Err(_) if retries_left > 0 => {
                 retries_left -= 1;
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
