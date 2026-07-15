@@ -3950,6 +3950,20 @@ html[data-theme="dark"] .chat-agent-icons {
   color: var(--ink-mute);
 }
 
+.chat-agent-avatar-block,
+.chat-agent-emoji-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.chat-agent-emoji-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+}
+
 .chat-agent-icons-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3975,6 +3989,35 @@ html[data-theme="dark"] .chat-agent-icons {
   overflow: hidden;
   animation: rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.chat-agent-icon-slot.is-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+}
+
+.chat-agent-icon-slot.is-row .chat-agent-icon-preview {
+  width: 64px;
+  max-height: none;
+  flex: 0 0 64px;
+}
+
+.chat-agent-icon-slot.is-row .chat-agent-icon-plus {
+  width: 20px;
+  height: 20px;
+  right: 5px;
+  bottom: 5px;
+  font-size: 0.85rem;
+}
+
+.chat-agent-icon-slot.is-row .chat-agent-icon-fallback {
+  font-size: 1.15rem;
+}
+
+.chat-agent-icon-slot.is-row:hover {
+  transform: translateY(-1px);
 }
 
 .chat-agent-icon-slot::before {
@@ -4239,6 +4282,10 @@ html[data-theme="dark"] .chat-agent-icon-slot {
 
   .chat-agent-icons-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chat-agent-icon-slot.is-row {
+    flex-direction: row;
   }
 
   .chat-agent-icon-preview {

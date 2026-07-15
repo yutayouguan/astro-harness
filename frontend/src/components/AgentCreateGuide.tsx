@@ -210,9 +210,10 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     hint: string,
     tone: "emoji" | "avatar",
     delay: string,
+    layout: "stack" | "row" = "stack",
   ) => (
     <div
-      className={`chat-agent-icon-slot tone-${tone}`}
+      className={`chat-agent-icon-slot tone-${tone}${layout === "row" ? " is-row" : ""}`}
       data-tone={tone === "emoji" ? "blue" : "purple"}
       style={{ animationDelay: delay }}
     >
@@ -358,9 +359,11 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
             <p className="chat-agent-icons-sub">{t("chat.agentIconsSub")}</p>
           </div>
 
-          <div className="chat-agent-covers">
+          <section className="chat-agent-avatar-block" aria-labelledby="chat-agent-avatar-heading">
             <div className="chat-agent-covers-head">
-              <p className="chat-agent-covers-title">{t("chat.agentCoversTitle")}</p>
+              <p id="chat-agent-avatar-heading" className="chat-agent-covers-title">
+                {t("chat.agentCoversTitle")}
+              </p>
               <p className="chat-agent-covers-sub">{t("chat.agentCoversSub")}</p>
             </div>
             <CoverPicker
@@ -368,9 +371,19 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
               busy={coverBusy}
               onChange={(id) => void pickCover(id)}
             />
-          </div>
+            {renderSlot(
+              "avatar",
+              avatar,
+              avatarInputRef,
+              t("chat.agentAvatarCustom"),
+              t("chat.agentAvatarCustomHint"),
+              "avatar",
+              "0.14s",
+              "row",
+            )}
+          </section>
 
-          <div className="chat-agent-icons-grid">
+          <section className="chat-agent-emoji-block" aria-label={t("chat.agentIconEmoji")}>
             {renderSlot(
               "emoji",
               emoji,
@@ -378,18 +391,10 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
               t("chat.agentIconEmoji"),
               t("chat.agentIconEmojiHint"),
               "emoji",
-              "0.14s",
-            )}
-            {renderSlot(
-              "avatar",
-              avatar,
-              avatarInputRef,
-              t("chat.agentIconAvatar"),
-              t("chat.agentIconAvatarHint"),
-              "avatar",
               "0.2s",
+              "row",
             )}
-          </div>
+          </section>
           {error ? <p className="chat-agent-icons-error">{error}</p> : null}
         </div>
 

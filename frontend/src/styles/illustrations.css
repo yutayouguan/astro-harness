@@ -139,7 +139,7 @@ html[data-theme="dark"] .astro-cover-swatch {
   padding: 0;
 }
 
-/* 聊天空欢迎页内嵌插画（布局由 chat.css .chat-welcome-mark 控制） */
+/* 创建 Agent：遗留 covers 容器（头像区块样式见 chat.css .chat-agent-avatar-block） */
 .chat-agent-covers {
   margin-top: 4px;
   display: flex;
