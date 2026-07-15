@@ -24,7 +24,7 @@ use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
 use uuid::Uuid;
 
-use crate::chat_fallback::try_stream_completion_with_fallback;
+use crate::streaming::fallback::try_stream_completion_with_fallback;
 use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 use crate::prompt::messages::to_provider_messages;
 
