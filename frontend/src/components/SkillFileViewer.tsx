@@ -59,10 +59,6 @@ export function SkillFileViewer({
     [filename, resolved],
   );
 
-  useEffect(() => {
-    // 换文件时仍沿用偏好；无需重置
-  }, [filename]);
-
   const setMode = (mode: MdMode) => {
     setMdMode(mode);
     try {
