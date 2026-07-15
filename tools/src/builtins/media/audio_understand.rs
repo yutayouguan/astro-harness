@@ -129,9 +129,43 @@ fn validate_mmss(v: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 判断是否为 YouTube URL：须为 http(s)，且 host 等于/以 `.youtube.com` 结尾，或等于 `youtu.be`。
+/// 非 URL（本地路径）或包含 `youtube.com` 字样的文件名/主机（如 `notyoutube.com`）均不算 YouTube。
 fn is_youtube_url(url: &str) -> bool {
-    let lower = url.to_ascii_lowercase();
-    lower.contains("youtube.com") || lower.contains("youtu.be")
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+    let host = host.to_ascii_lowercase();
+    host == "youtube.com" || host.ends_with(".youtube.com") || host == "youtu.be"
+}
+
+/// 从 http(s) URL 中剥离 query/fragment 后取路径部分；解析失败则原样返回。
+fn url_path_without_query(url: &str) -> String {
+    match reqwest::Url::parse(url) {
+        Ok(parsed) => parsed.path().to_string(),
+        Err(_) => url.to_string(),
+    }
+}
+
+/// 依据 URL 路径（已剥离 query/fragment）推断 mime；非路径部分不参与扩展名判断。
+fn mime_from_url(url: &str) -> &'static str {
+    mime_from_path(std::path::Path::new(&url_path_without_query(url)))
+}
+
+/// 依据 URL 路径的 basename（已剥离 query/fragment）生成 Whisper 下载文件名；缺省 `audio.mp3`。
+fn filename_from_url(url: &str) -> String {
+    url_path_without_query(url)
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("audio.mp3")
+        .to_string()
 }
 
 fn mime_from_path(path: &std::path::Path) -> &'static str {
@@ -200,11 +234,11 @@ fn resolve_google_media(
     if audio_url.starts_with("http://") || audio_url.starts_with("https://") {
         return Ok(AudioMediaPart::Uri {
             media_type: AudioMediaKind::Audio,
-            mime_type: mime_from_path(std::path::Path::new(audio_url)).to_string(),
+            mime_type: mime_from_url(audio_url).to_string(),
             uri: audio_url.to_string(),
         });
     }
-    let path = ctx.workspace_dir.join(audio_url);
+    let path = crate::path_safe::resolve_safe(&ctx.workspace_dir, audio_url)?;
     if !path.exists() {
         anyhow::bail!("本地文件不存在: {}", path.display());
     }
@@ -269,14 +303,10 @@ async fn load_audio_bytes(
             .unwrap_or("audio/mp3")
             .to_string();
         let bytes = resp.bytes().await?.to_vec();
-        let filename = audio_url
-            .rsplit('/')
-            .next()
-            .unwrap_or("audio.mp3")
-            .to_string();
+        let filename = filename_from_url(audio_url);
         return Ok((bytes, mime, filename));
     }
-    let path = ctx.workspace_dir.join(audio_url);
+    let path = crate::path_safe::resolve_safe(&ctx.workspace_dir, audio_url)?;
     if !path.exists() {
         anyhow::bail!("本地文件不存在: {}", path.display());
     }
@@ -430,7 +460,21 @@ mod tests {
     fn youtube_detect() {
         assert!(is_youtube_url("https://youtu.be/abc"));
         assert!(is_youtube_url("https://www.youtube.com/watch?v=abc"));
+        assert!(is_youtube_url("HTTPS://M.YOUTUBE.COM/watch?v=abc"));
+        assert!(is_youtube_url("http://youtube.com/watch?v=abc"));
         assert!(!is_youtube_url("https://example.com/a.mp3"));
+    }
+
+    /// Finding 2：伪装/相似域名与本地文件名不应被误判为 YouTube。
+    #[test]
+    fn youtube_detect_rejects_lookalike_and_local() {
+        assert!(!is_youtube_url("https://notyoutube.com/watch?v=abc"));
+        assert!(!is_youtube_url("https://youtube.com.evil.com/watch?v=abc"));
+        assert!(!is_youtube_url("https://evilyoutube.com/watch?v=abc"));
+        // 本地文件名中含 "youtube.com" 字样，但不是 URL，绝不能判定为 YouTube。
+        assert!(!is_youtube_url("clips/youtube.com/local.mp3"));
+        assert!(!is_youtube_url("youtube.com.mp3"));
+        assert!(!is_youtube_url("ftp://youtube.com/x"));
     }
 
     #[test]
@@ -440,6 +484,35 @@ mod tests {
         assert_eq!(mime_from_path(std::path::Path::new("a.unknown")), "audio/mp3");
     }
 
+    /// Finding 3：mime 须依据 URL 路径部分，剥离 `?query`/`#fragment` 后再取扩展名。
+    #[test]
+    fn mime_from_url_strips_query_and_fragment() {
+        assert_eq!(
+            mime_from_url("https://example.com/a/b.wav?x=1&y=2"),
+            "audio/wav"
+        );
+        assert_eq!(
+            mime_from_url("https://example.com/clip.m4a#t=10"),
+            "audio/mp4"
+        );
+        assert_eq!(mime_from_url("https://example.com/noext"), "audio/mp3");
+    }
+
+    /// Finding 3：Whisper 下载文件名须取路径 basename（剥离 query），缺省 `audio.mp3`。
+    #[test]
+    fn filename_from_url_strips_query_and_defaults() {
+        assert_eq!(
+            filename_from_url("https://example.com/dir/song.mp3?x=1&y=2"),
+            "song.mp3"
+        );
+        assert_eq!(
+            filename_from_url("https://example.com/dir/song.wav#frag"),
+            "song.wav"
+        );
+        assert_eq!(filename_from_url("https://example.com/"), "audio.mp3");
+        assert_eq!(filename_from_url("https://example.com"), "audio.mp3");
+    }
+
     #[test]
     fn parses_mode_default_and_invalid() {
         assert_eq!(
@@ -447,5 +520,106 @@ mod tests {
             AudioUnderstandMode::Describe
         );
         assert!(AudioUnderstandMode::parse("bogus").is_err());
+    }
+}
+
+#[cfg(test)]
+mod path_escape_tests {
+    use super::*;
+    use crate::context::{ImageGenTargets, ToolContext};
+    use memory::MemoryManager;
+    use providers::registry::ProviderRegistry;
+    use tempfile::TempDir;
+
+    fn build_ctx<'a>(
+        memory: &'a mut MemoryManager,
+        memory_dir: std::path::PathBuf,
+        workspace_dir: std::path::PathBuf,
+        targets: &'a ImageGenTargets,
+        providers: &'a ProviderRegistry,
+    ) -> ToolContext<'a> {
+        ToolContext {
+            memory,
+            memory_dir,
+            workspace_dir,
+            project_root: None,
+            image_gen_targets: targets,
+            providers,
+            session_id: "test".into(),
+            turn_id: None,
+            chat_api_key: String::new(),
+            chat_base_url: String::new(),
+            chat_provider: String::new(),
+            chat_model: String::new(),
+            chat_targets: vec![],
+            delegate_runner: None,
+            async_spawner: None,
+            orchestration_spawner: None,
+        }
+    }
+
+    /// Finding 1：本地路径须经 `resolve_safe` 校验，`..` 越界须被拒绝（而非读取 workspace 外文件）。
+    #[tokio::test]
+    async fn load_audio_bytes_rejects_path_escape() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.mp3"), b"top-secret-bytes").unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+
+        let err = load_audio_bytes(&ctx, "../outside/secret.mp3")
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("越界") || err.to_string().contains(".."),
+            "unexpected error: {err}"
+        );
+    }
+
+    /// Finding 1：workspace 内的相对路径应正常解析并读取到文件内容。
+    #[tokio::test]
+    async fn load_audio_bytes_accepts_in_workspace_path() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::write(ws.join("ok.wav"), b"ok-bytes").unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+
+        let (bytes, mime, filename) = load_audio_bytes(&ctx, "ok.wav").await.unwrap();
+        assert_eq!(bytes, b"ok-bytes");
+        assert_eq!(mime, "audio/wav");
+        assert_eq!(filename, "ok.wav");
+    }
+
+    /// Finding 1：`resolve_google_media` 同样须拒绝越界本地路径。
+    #[test]
+    fn resolve_google_media_rejects_path_escape() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.mp3"), b"top-secret-bytes").unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+
+        let err = resolve_google_media(&ctx, "../outside/secret.mp3", false).unwrap_err();
+        assert!(
+            err.to_string().contains("越界") || err.to_string().contains(".."),
+            "unexpected error: {err}"
+        );
     }
 }
