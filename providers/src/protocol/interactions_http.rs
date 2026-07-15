@@ -588,6 +588,209 @@ pub async fn google_interactions_image(
     parse_interaction_image_response(&v)
 }
 
+// ── Audio understand ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioUnderstandMode {
+    Describe,
+    Transcribe,
+}
+
+impl AudioUnderstandMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Describe => "describe",
+            Self::Transcribe => "transcribe",
+        }
+    }
+
+    pub fn parse(s: &str) -> anyhow::Result<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "" | "describe" => Ok(Self::Describe),
+            "transcribe" => Ok(Self::Transcribe),
+            other => anyhow::bail!("audio_understand mode 无效: {other}（支持 describe|transcribe）"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioMediaKind {
+    Audio,
+    Video,
+}
+
+impl AudioMediaKind {
+    fn as_type_str(self) -> &'static str {
+        match self {
+            Self::Audio => "audio",
+            Self::Video => "video",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AudioMediaPart {
+    Inline {
+        media_type: AudioMediaKind,
+        mime_type: String,
+        data_b64: String,
+    },
+    Uri {
+        media_type: AudioMediaKind,
+        mime_type: String,
+        uri: String,
+    },
+}
+
+pub fn default_audio_understand_prompt(mode: AudioUnderstandMode) -> &'static str {
+    match mode {
+        AudioUnderstandMode::Describe => "请描述这段音频",
+        AudioUnderstandMode::Transcribe => {
+            "Process the audio and generate a detailed transcription. \
+Identify distinct speakers (Speaker 1, Speaker 2, …). \
+Provide timestamps MM:SS. Detect language; if not English provide English translation in translation. \
+emotion must be one of happy, sad, angry, neutral. Include a brief summary."
+        }
+    }
+}
+
+pub fn audio_transcribe_json_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "summary": { "type": "string" },
+            "segments": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "speaker": { "type": "string" },
+                        "timestamp": { "type": "string" },
+                        "content": { "type": "string" },
+                        "language": { "type": "string" },
+                        "translation": { "type": "string" },
+                        "emotion": {
+                            "type": "string",
+                            "enum": ["happy", "sad", "angry", "neutral"]
+                        }
+                    },
+                    "required": ["speaker", "timestamp", "content", "emotion"]
+                }
+            }
+        },
+        "required": ["summary", "segments"]
+    })
+}
+
+pub fn build_interaction_audio_body(
+    model: &str,
+    prompt: &str,
+    media: &AudioMediaPart,
+    mode: AudioUnderstandMode,
+) -> Value {
+    let media_json = match media {
+        AudioMediaPart::Inline {
+            media_type,
+            mime_type,
+            data_b64,
+        } => json!({
+            "type": media_type.as_type_str(),
+            "data": data_b64,
+            "mime_type": mime_type,
+        }),
+        AudioMediaPart::Uri {
+            media_type,
+            mime_type,
+            uri,
+        } => json!({
+            "type": media_type.as_type_str(),
+            "uri": uri,
+            "mime_type": mime_type,
+        }),
+    };
+    let mut body = json!({
+        "model": model,
+        "input": [
+            { "type": "text", "text": prompt },
+            media_json
+        ]
+    });
+    if mode == AudioUnderstandMode::Transcribe {
+        body["response_format"] = json!({
+            "mime_type": "application/json",
+            "schema": audio_transcribe_json_schema()
+        });
+    }
+    body
+}
+
+pub fn parse_interaction_audio_text(v: &Value) -> Result<String> {
+    if let Some(t) = v.get("output_text").and_then(|x| x.as_str()) {
+        let t = t.trim();
+        if !t.is_empty() {
+            return Ok(t.to_string());
+        }
+    }
+    let mut out = String::new();
+    if let Some(steps) = v.get("steps").and_then(|s| s.as_array()) {
+        for step in steps {
+            if let Some(content) = step.get("content").and_then(|c| c.as_array()) {
+                for part in content {
+                    if part.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        if let Some(t) = part.get("text").and_then(|x| x.as_str()) {
+                            out.push_str(t);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let out = out.trim().to_string();
+    if out.is_empty() {
+        anyhow::bail!("Google interactions 音频响应无文本");
+    }
+    Ok(out)
+}
+
+pub async fn google_interactions_audio(
+    client: &Client,
+    prompt: &str,
+    media: &AudioMediaPart,
+    mode: AudioUnderstandMode,
+    config: &ProviderConfig,
+) -> Result<String> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("Google API Key 为空");
+    }
+    let model = if config.model.trim().is_empty() {
+        "gemini-3.5-flash".to_string()
+    } else {
+        config.model.trim().to_string()
+    };
+    let url = interactions_url(config);
+    let body = build_interaction_audio_body(&model, prompt, media, mode);
+    let response = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .header("x-goog-api-key", config.api_key.trim())
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("连接 Google interactions 音频理解失败: {url}"))?;
+    let status = response.status();
+    let v: Value = response
+        .json()
+        .await
+        .context("解析 Google interactions 音频理解响应失败")?;
+    if !status.is_success() {
+        anyhow::bail!(
+            "Google interactions HTTP {status}: {}",
+            error_message(&v)
+        );
+    }
+    parse_interaction_audio_text(&v)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -794,5 +997,91 @@ mod tests {
     fn parse_errors_when_no_image() {
         let v = json!({ "id": "ix", "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "x" }] }] });
         assert!(parse_interaction_image_response(&v).is_err());
+    }
+}
+
+#[cfg(test)]
+mod audio_understand_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn build_describe_inline_audio() {
+        let media = AudioMediaPart::Inline {
+            media_type: AudioMediaKind::Audio,
+            mime_type: "audio/mp3".into(),
+            data_b64: "YWJj".into(),
+        };
+        let body = build_interaction_audio_body(
+            "gemini-3.5-flash",
+            "describe please",
+            &media,
+            AudioUnderstandMode::Describe,
+        );
+        assert_eq!(body["model"], "gemini-3.5-flash");
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(input[0]["type"], "text");
+        assert_eq!(input[0]["text"], "describe please");
+        assert_eq!(input[1]["type"], "audio");
+        assert_eq!(input[1]["data"], "YWJj");
+        assert_eq!(input[1]["mime_type"], "audio/mp3");
+        assert!(body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn build_youtube_as_video_uri() {
+        let media = AudioMediaPart::Uri {
+            media_type: AudioMediaKind::Video,
+            mime_type: "video/mp4".into(),
+            uri: "https://www.youtube.com/watch?v=ku-N-eS1lgM".into(),
+        };
+        let body = build_interaction_audio_body(
+            "gemini-3.5-flash",
+            "transcribe",
+            &media,
+            AudioUnderstandMode::Transcribe,
+        );
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(input[1]["type"], "video");
+        assert_eq!(input[1]["uri"], "https://www.youtube.com/watch?v=ku-N-eS1lgM");
+        assert_eq!(input[1]["mime_type"], "video/mp4");
+        assert_eq!(body["response_format"]["mime_type"], "application/json");
+        let props = &body["response_format"]["schema"]["properties"];
+        assert!(props.get("summary").is_some());
+        assert!(props["segments"]["items"]["properties"].get("emotion").is_some());
+        assert!(props["segments"]["items"]["properties"].get("speaker").is_some());
+    }
+
+    #[test]
+    fn parse_prefers_output_text() {
+        let v = json!({ "output_text": "ok audio", "steps": [] });
+        assert_eq!(parse_interaction_audio_text(&v).unwrap(), "ok audio");
+    }
+
+    #[test]
+    fn parse_falls_back_to_steps() {
+        let v = json!({
+            "steps": [{
+                "type": "model_output",
+                "content": [
+                    { "type": "text", "text": "hello " },
+                    { "type": "text", "text": "audio" }
+                ]
+            }]
+        });
+        assert_eq!(parse_interaction_audio_text(&v).unwrap(), "hello audio");
+    }
+
+    #[test]
+    fn mode_parse() {
+        assert_eq!(
+            AudioUnderstandMode::parse("").unwrap(),
+            AudioUnderstandMode::Describe
+        );
+        assert_eq!(
+            AudioUnderstandMode::parse("transcribe").unwrap(),
+            AudioUnderstandMode::Transcribe
+        );
+        assert!(AudioUnderstandMode::parse("detect").is_err());
     }
 }
