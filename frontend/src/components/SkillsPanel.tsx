@@ -26,8 +26,10 @@ import {
   LoaderCircle,
   Package,
   Sparkles,
+  Star,
   Terminal,
   Unlink2,
+  User,
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -40,6 +42,7 @@ import {
   storeInstallCommand,
   storeSkillDetailUrl,
 } from "../lib/skillInstallCommand";
+import { resolveFileType } from "../lib/fileTypeIcon";
 import {
   createLazyLoadGate,
   decideLazyLoad,
@@ -54,11 +57,16 @@ import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
 import { IconRefresh } from "./NavIcons";
 import { SelectMenu } from "./SelectMenu";
+import {
+  SkillFileViewer,
+  SKILL_PREVIEW_MAX_BYTES,
+} from "./SkillFileViewer";
 import type {
   InstalledSkill,
   SkillBundle,
   SkillFileEntry,
   StoreSkill,
+  StoreSkillDetail,
   SkillStoreId,
 } from "../types";
 
@@ -169,6 +177,26 @@ function formatInstalls(n?: number | null): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
+}
+
+/** SkillHub `updated_at`（毫秒）→ 相对时间文案 */
+function formatStoreUpdatedAt(
+  ts: number | null | undefined,
+  t: (key: MessageKey) => string,
+): string | null {
+  if (ts == null || !Number.isFinite(ts)) return null;
+  const ms = ts > 1e12 ? ts : ts * 1000;
+  const days = Math.max(0, Math.floor((Date.now() - ms) / 86_400_000));
+  if (days <= 0) return t("skills.detailUpdatedToday");
+  if (days < 30) {
+    return t("skills.detailUpdatedDays").replace("{days}", String(days));
+  }
+  const months = Math.floor(days / 30);
+  if (months < 12) {
+    return t("skills.detailUpdatedMonths").replace("{months}", String(months));
+  }
+  const years = Math.floor(months / 12);
+  return t("skills.detailUpdatedYears").replace("{years}", String(years));
 }
 
 /** usage-stats.json 的 skills 键为 skill_id（技能名） */
@@ -298,6 +326,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [machineLinkFilter, setMachineLinkFilter] =
     useState<MachineLinkFilter>("all");
   const [storeSort, setStoreSort] = useState<StoreSort>("default");
+  const [storeDetail, setStoreDetail] = useState<StoreSkillDetail | null>(null);
+  const [loadingStoreDetail, setLoadingStoreDetail] = useState(false);
 
   const loadMoreLock = useRef(false);
   const lazyGateRef = useRef<LazyLoadGate>(createLazyLoadGate());
@@ -690,6 +720,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         setPreviewBinaryHint(true);
         return;
       }
+      if (file.size > SKILL_PREVIEW_MAX_BYTES) {
+        // SkillFileViewer 根据 size 展示大文件提示，不再请求全文
+        return;
+      }
       setLoadingFile(true);
       try {
         const content = await invoke<string>("get_skill_file", {
@@ -748,6 +782,48 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     setPreviewContent(null);
     setPreviewBinaryHint(false);
   };
+
+  const openSkillFolder = async (skill: InstalledSkill) => {
+    try {
+      await invoke("open_skill_folder", {
+        name: skill.name,
+        id: skill.id,
+      });
+    } catch (err) {
+      setError(String(err) || t("skills.openFolderFailed"));
+    }
+  };
+
+  const revealPreviewFile = async () => {
+    if (!preview || !previewFile) return;
+    try {
+      await invoke("reveal_skill_file", {
+        name: preview.name,
+        relativePath: previewFile,
+        id: previewSkillId,
+      });
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const openPreviewFileExternal = async () => {
+    if (!preview || !previewFile) return;
+    try {
+      await invoke("open_skill_file", {
+        name: preview.name,
+        relativePath: previewFile,
+        id: previewSkillId,
+      });
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const previewFileMeta = useMemo(() => {
+    if (!preview || !previewFile) return null;
+    return preview.files.find((f) => f.relative_path === previewFile) ?? null;
+  }, [preview, previewFile]);
 
   const viewStoreDetail = async (skill: StoreSkill) => {
     const url = storeSkillDetailUrl(skill);
@@ -872,6 +948,39 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   );
   const selectedMachine = filteredMachine.find((s) => s.id === selectedDetailId);
   const selectedStore = sortedStoreResults.find((s) => s.id === selectedDetailId);
+
+  useEffect(() => {
+    if (tab !== "online" || !selectedDetailId || !isTauri()) {
+      setStoreDetail(null);
+      setLoadingStoreDetail(false);
+      return;
+    }
+    const skill = storeResultsRef.current.find((s) => s.id === selectedDetailId);
+    if (!skill) {
+      setStoreDetail(null);
+      setLoadingStoreDetail(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingStoreDetail(true);
+    setStoreDetail(null);
+    void invoke<StoreSkillDetail>("get_store_skill_detail", { skill })
+      .then((detail) => {
+        if (!cancelled) setStoreDetail(detail);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setStoreDetail(null);
+          setError(String(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingStoreDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, selectedDetailId]);
 
   const callSortOptions = useMemo(
     () => [
@@ -1523,6 +1632,11 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   : skill.source}
               </span>
             </span>
+            {skill.installs != null && (
+              <span className="skills-detail-item-calls">
+                {formatInstalls(skill.installs)}
+              </span>
+            )}
           </button>
         ))}
         <div
@@ -1535,13 +1649,59 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         {selectedStore ? (
           (() => {
             const already = isStoreSkillInstalled(selectedStore);
+            const detail =
+              storeDetail &&
+              (storeDetail.install_ref === selectedStore.install_ref ||
+                storeDetail.name === selectedStore.name)
+                ? storeDetail
+                : null;
+            const downloads = detail?.downloads ?? selectedStore.installs;
+            const installs = detail?.installs ?? selectedStore.installs;
+            const stars = detail?.stars ?? null;
+            const author = detail?.owner_name ?? null;
+            const version = detail?.version ?? null;
+            const category = detail?.category ?? null;
+            const updated = formatStoreUpdatedAt(detail?.updated_at, t);
+            const description =
+              detail?.overview?.trim() ||
+              detail?.description?.trim() ||
+              storeCardDescription(
+                selectedStore,
+                t("skills.detailInstalls"),
+              );
+            const storeLabel =
+              selectedStore.store === "skillhub"
+                ? t("skills.store.skillhub")
+                : selectedStore.store === "skillsdotsh"
+                  ? t("skills.store.skillsdotsh")
+                  : selectedStore.store;
+
             return (
               <>
                 <header className="skills-detail-head">
                   <div>
-                    <h3 className="skills-detail-title">
-                      {selectedStore.name}
-                    </h3>
+                    <div className="skills-detail-title-row">
+                      <h3 className="skills-detail-title">
+                        {detail?.name || selectedStore.name}
+                      </h3>
+                      {downloads != null && (
+                        <span className="skills-detail-item-calls is-inline">
+                          {formatInstalls(downloads)}{" "}
+                          {t("skills.detailDownloads")}
+                        </span>
+                      )}
+                    </div>
+                    {loadingStoreDetail && (
+                      <p className="skills-detail-loading">
+                        <LoaderCircle
+                          size={14}
+                          strokeWidth={2.25}
+                          className="is-spin"
+                          aria-hidden
+                        />
+                        {t("skills.detailLoading")}
+                      </p>
+                    )}
                   </div>
                   <div className="skills-detail-actions">
                     {already ? (
@@ -1595,12 +1755,88 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                     <FileText size={15} strokeWidth={2.25} aria-hidden />
                     {t("skills.detailDescription")}
                   </h4>
-                  <p className="skills-detail-body">
-                    {storeCardDescription(
-                      selectedStore,
-                      t("skills.detailInstalls"),
-                    )}
-                  </p>
+                  <p className="skills-detail-body">{description || "—"}</p>
+                </section>
+                <section className="skills-detail-meta-grid">
+                  {downloads != null && (
+                    <div className="skills-detail-meta-item">
+                      <span className="skills-detail-label">
+                        <Download size={15} strokeWidth={2.25} aria-hidden />
+                        {t("skills.detailDownloads")}
+                      </span>
+                      <span>{formatInstalls(downloads)}</span>
+                    </div>
+                  )}
+                  {installs != null && (
+                    <div className="skills-detail-meta-item">
+                      <span className="skills-detail-label">
+                        <Package size={15} strokeWidth={2.25} aria-hidden />
+                        {t("skills.detailInstalls")}
+                      </span>
+                      <span>{formatInstalls(installs)}</span>
+                    </div>
+                  )}
+                  {stars != null && (
+                    <div className="skills-detail-meta-item">
+                      <span className="skills-detail-label">
+                        <Star size={15} strokeWidth={2.25} aria-hidden />
+                        {t("skills.detailStars")}
+                      </span>
+                      <span>{formatInstalls(stars)}</span>
+                    </div>
+                  )}
+                  {author && (
+                    <div className="skills-detail-meta-item">
+                      <span className="skills-detail-label">
+                        <User size={15} strokeWidth={2.25} aria-hidden />
+                        {t("skills.detailAuthor")}
+                      </span>
+                      <span title={author}>{author}</span>
+                    </div>
+                  )}
+                  {version && (
+                    <div className="skills-detail-meta-item">
+                      <span className="skills-detail-label">
+                        <Terminal size={15} strokeWidth={2.25} aria-hidden />
+                        {t("skills.detailVersion")}
+                      </span>
+                      <span>{version}</span>
+                    </div>
+                  )}
+                  {category && (
+                    <div className="skills-detail-meta-item">
+                      <span className="skills-detail-label">
+                        <Library size={15} strokeWidth={2.25} aria-hidden />
+                        {t("skills.detailCategory")}
+                      </span>
+                      <span title={category}>{category}</span>
+                    </div>
+                  )}
+                  <div className="skills-detail-meta-item">
+                    <span className="skills-detail-label">
+                      <CloudDownload size={15} strokeWidth={2.25} aria-hidden />
+                      {t("skills.detailStore")}
+                    </span>
+                    <span>{storeLabel}</span>
+                  </div>
+                  <div className="skills-detail-meta-item">
+                    <span className="skills-detail-label">
+                      <FolderOpen size={15} strokeWidth={2.25} aria-hidden />
+                      {t("skills.detailSource")}
+                    </span>
+                    <span title={detail?.source || selectedStore.source}>
+                      {detail?.source || selectedStore.source}
+                    </span>
+                  </div>
+                  {updated && (
+                    <div className="skills-detail-meta-item">
+                      <span className="skills-detail-label">
+                        <Sparkles size={15} strokeWidth={2.25} aria-hidden />
+                        {t("skills.detailUpdated")}
+                      </span>
+                      <span>{updated}</span>
+                    </div>
+                  )}
                 </section>
               </>
             );

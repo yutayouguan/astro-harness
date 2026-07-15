@@ -206,8 +206,61 @@ pub async fn search(
     }
 }
 
-/// 详情：优先返回列表已有字段；SkillHub 可再拉一次首页匹配
-pub async fn fetch_detail(skill: &StoreSkill) -> Result<StoreSkillDetail> {
+/// SkillHub `/api/v1/skills/{slug}` 详情响应。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillHubV1Detail {
+    latest_version: Option<SkillHubV1LatestVersion>,
+    owner: Option<SkillHubV1Owner>,
+    skill: Option<SkillHubV1Skill>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillHubV1LatestVersion {
+    version: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillHubV1Owner {
+    display_name: Option<String>,
+    handle: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillHubV1Skill {
+    display_name: Option<String>,
+    slug: Option<String>,
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(rename = "summary_zh")]
+    summary_zh: Option<String>,
+    source: Option<String>,
+    category: Option<String>,
+    #[serde(default)]
+    sub_categories: Vec<SkillHubSubCategory>,
+    icon_url: Option<String>,
+    verified: Option<bool>,
+    updated_at: Option<i64>,
+    stats: Option<SkillHubV1Stats>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SkillHubSubCategory {
+    name: Option<String>,
+    key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SkillHubV1Stats {
+    downloads: Option<u64>,
+    installs: Option<u64>,
+    stars: Option<u64>,
+}
+
+fn detail_from_list(skill: &StoreSkill) -> StoreSkillDetail {
     let slug = skill
         .id
         .rsplit('/')
@@ -219,10 +272,10 @@ pub async fn fetch_detail(skill: &StoreSkill) -> Result<StoreSkillDetail> {
         .clone()
         .unwrap_or_else(|| match skill.store.as_str() {
             "skillhub" => format!("https://skillhub.cn/skills/{slug}"),
-            _ => format!("https://skills.sh/{}", skill.source),
+            _ => format!("https://skills.sh/{}/{}", skill.source, slug),
         });
 
-    Ok(StoreSkillDetail {
+    StoreSkillDetail {
         name: skill.name.clone(),
         slug,
         description: skill.description.clone(),
@@ -242,7 +295,86 @@ pub async fn fetch_detail(skill: &StoreSkill) -> Result<StoreSkillDetail> {
         updated_at: None,
         owner_name: None,
         verified: None,
-    })
+    }
+}
+
+async fn fetch_skillhub_v1_detail(slug: &str) -> Result<SkillHubV1Detail> {
+    let client = http_client()?;
+    let url = format!("{SKILLHUB_API}/api/v1/skills/{}", urlencoding::encode(slug));
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .with_context(|| format!("GET {url}"))?;
+    if !resp.status().is_success() {
+        return Err(anyhow!("SkillHub detail HTTP {}", resp.status()));
+    }
+    resp.json().await.context("parse SkillHub v1 detail JSON")
+}
+
+/// 详情：SkillHub 拉 v1 详情补全下载量等；其它商店回退列表字段。
+pub async fn fetch_detail(skill: &StoreSkill) -> Result<StoreSkillDetail> {
+    let mut detail = detail_from_list(skill);
+
+    if skill.store != "skillhub" {
+        return Ok(detail);
+    }
+
+    match fetch_skillhub_v1_detail(&detail.slug).await {
+        Ok(body) => {
+            let Some(api_skill) = body.skill else {
+                return Ok(detail);
+            };
+            if let Some(name) = api_skill.display_name.filter(|s| !s.is_empty()) {
+                detail.name = name;
+            }
+            if let Some(slug) = api_skill.slug.filter(|s| !s.is_empty()) {
+                detail.slug = slug;
+                detail.detail_url = format!("https://skillhub.cn/skills/{}", detail.slug);
+            }
+            let overview = api_skill
+                .summary_zh
+                .filter(|s| !s.is_empty())
+                .or(api_skill.summary.filter(|s| !s.is_empty()))
+                .unwrap_or_default();
+            if !overview.is_empty() {
+                detail.description = overview.clone();
+                detail.overview = overview;
+            }
+            if let Some(source) = api_skill.source.filter(|s| !s.is_empty()) {
+                detail.source = source;
+            }
+            detail.category = api_skill.category.filter(|s| !s.is_empty());
+            detail.sub_categories = api_skill
+                .sub_categories
+                .into_iter()
+                .filter_map(|c| c.name.or(c.key).filter(|s| !s.is_empty()))
+                .collect();
+            detail.icon_url = api_skill.icon_url.filter(|s| !s.is_empty());
+            detail.verified = api_skill.verified;
+            detail.updated_at = api_skill.updated_at;
+            if let Some(stats) = api_skill.stats {
+                detail.downloads = stats.downloads.or(detail.downloads);
+                detail.installs = stats.installs.or(detail.installs);
+                detail.stars = stats.stars;
+            }
+            detail.version = body
+                .latest_version
+                .and_then(|v| v.version)
+                .filter(|s| !s.is_empty());
+            detail.owner_name = body.owner.and_then(|o| {
+                o.display_name
+                    .filter(|s| !s.is_empty())
+                    .or(o.handle.filter(|s| !s.is_empty()))
+            });
+            Ok(detail)
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, slug = %detail.slug, "SkillHub detail fetch failed; using list fields");
+            Ok(detail)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -285,5 +417,33 @@ mod tests {
             list[0].install_ref,
             "skillsdotsh:vercel-labs/skills/find-skills"
         );
+    }
+
+    #[test]
+    fn skillhub_v1_detail_parses_stats() {
+        let raw = r#"{
+            "latestVersion": {"version": "1.0.2"},
+            "owner": {"displayName": "user_x", "handle": "user_x"},
+            "skill": {
+                "displayName": "web-tools-guide",
+                "slug": "web-tools-guide",
+                "summary_zh": "desc",
+                "source": "community",
+                "category": "knowledge-management",
+                "subCategories": [{"key": "knowledge-retrieval", "name": "信息检索"}],
+                "iconUrl": "https://example.com/icon.png",
+                "verified": false,
+                "updatedAt": 1784078500822,
+                "stats": {"downloads": 182494, "installs": 3459, "stars": 129}
+            }
+        }"#;
+        let body: SkillHubV1Detail = serde_json::from_str(raw).unwrap();
+        let skill = body.skill.unwrap();
+        let stats = skill.stats.unwrap();
+        assert_eq!(stats.downloads, Some(182494));
+        assert_eq!(stats.installs, Some(3459));
+        assert_eq!(stats.stars, Some(129));
+        assert_eq!(body.latest_version.unwrap().version.as_deref(), Some("1.0.2"));
+        assert_eq!(body.owner.unwrap().handle.as_deref(), Some("user_x"));
     }
 }

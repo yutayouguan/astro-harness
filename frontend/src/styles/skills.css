@@ -719,6 +719,15 @@ html[data-theme="dark"] .skills-detail-item-icon {
   font-weight: 700;
   color: var(--ink);
 }
+
+.skills-detail-loading {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
   
   .skills-detail-actions {
     display: flex;
