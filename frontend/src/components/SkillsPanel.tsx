@@ -59,6 +59,7 @@ import {
 } from "../lib/skillsLazyLoad";
 import {
   collectInstalledSkillKeys,
+  inferFolderFromInstallRef,
   isStoreSkillInstalled as matchStoreSkillInstalled,
 } from "../lib/skillInstalledMatch";
 import type { AgentInfo } from "../types/agent";
@@ -900,6 +901,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       await invoke<string>("install_store_skill", {
         installRef: skill.install_ref,
         agentId,
+        name: skill.name,
+        store: skill.store,
+        folder: inferFolderFromInstallRef(skill.install_ref),
       });
       // 留在商店：刷新已安装态后卡片按钮变为「已安装」
       await refreshInstalled({ mode: "hard" });

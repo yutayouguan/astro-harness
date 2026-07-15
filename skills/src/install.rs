@@ -8,6 +8,9 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
+use crate::models::SkillOriginRecord;
+use crate::origins::{find_origin, infer_folder, infer_store, upsert_origin};
+
 /// SkillHub 公开文件 API（无需 CLI / login）。
 const SKILLHUB_API: &str = "https://api.skillhub.cn";
 
@@ -315,23 +318,102 @@ fn run_npx(args: &[String], cwd: &Path) -> Result<String> {
     }
 }
 
+/// 安装时附带的来源提示（商店名 / 展示名 / 本地文件夹名）。
+#[derive(Debug, Clone, Default)]
+pub struct InstallOriginHint {
+    pub name: Option<String>,
+    pub store: Option<String>,
+    pub folder: Option<String>,
+}
+
+/// 安装成功后写入 `skill-origins.json`；无法推断 folder 时仅告警，不使安装失败。
+pub fn record_after_install(
+    install_ref: &str,
+    agent_id: Option<&str>,
+    hint: &InstallOriginHint,
+) -> Result<()> {
+    let folder = hint
+        .folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| infer_folder(install_ref));
+
+    let Some(folder) = folder else {
+        tracing::warn!(
+            install_ref = %install_ref,
+            "无法推断 skill folder，跳过 origin 记录"
+        );
+        return Ok(());
+    };
+
+    let store = hint
+        .store
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| infer_store(install_ref));
+
+    let name = hint
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| folder.clone());
+
+    let normalized_agent = normalize_agent_id(agent_id);
+    let existing = find_origin(Some(&normalized_agent), &folder)?;
+    let now = chrono::Utc::now().timestamp();
+    let installed_at = existing
+        .as_ref()
+        .map(|r| r.installed_at)
+        .unwrap_or(now);
+    let is_update = existing.is_some();
+
+    upsert_origin(SkillOriginRecord {
+        folder,
+        skill_id: None,
+        name,
+        store,
+        install_ref: install_ref.to_string(),
+        agent_id: Some(normalized_agent),
+        scope: None,
+        installed_at,
+        last_updated_at: if is_update { Some(now) } else { None },
+        remote_version: None,
+        remote_updated_at: None,
+    })
+}
+
 /// 安装技能到指定 Agent 工作区的 `skills/`（SkillHub 无需 Node；其余需本机 Node.js）
-pub async fn install_from_ref(install_ref: &str, agent_id: Option<&str>) -> Result<String> {
+pub async fn install_from_ref(
+    install_ref: &str,
+    agent_id: Option<&str>,
+    hint: Option<InstallOriginHint>,
+) -> Result<String> {
     let skills_dir = agent_skills_dir(agent_id)?;
     let workspace = skills_dir
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| skills_dir.clone());
 
-    if is_skillhub_http_ref(install_ref) {
+    let result = if is_skillhub_http_ref(install_ref) {
         let slug = skillhub_slug(install_ref)?;
-        return install_skillhub_http(&slug, &skills_dir).await;
-    }
+        install_skillhub_http(&slug, &skills_dir).await?
+    } else {
+        let args = build_install_args(install_ref, &skills_dir)?;
+        tokio::task::spawn_blocking(move || run_npx(&args, &workspace))
+            .await
+            .context("npx 任务 join 失败")??
+    };
 
-    let args = build_install_args(install_ref, &skills_dir)?;
-    tokio::task::spawn_blocking(move || run_npx(&args, &workspace))
-        .await
-        .context("npx 任务 join 失败")?
+    let hint = hint.unwrap_or_default();
+    record_after_install(install_ref, agent_id, &hint)?;
+
+    Ok(result)
 }
 
 #[cfg(test)]

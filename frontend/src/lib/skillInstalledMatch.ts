@@ -12,6 +12,21 @@ function folderFromId(id: string): string | undefined {
   return parts[parts.length - 1];
 }
 
+/** 从 install_ref 推断本地技能文件夹名（与 Rust `infer_folder` 对齐）。 */
+export function inferFolderFromInstallRef(installRef: string): string | undefined {
+  const trimmed = installRef.trim();
+  if (!trimmed) return undefined;
+  const withoutScheme = trimmed.includes(":")
+    ? trimmed.slice(trimmed.indexOf(":") + 1)
+    : trimmed;
+  if (withoutScheme.includes("--")) {
+    const after = withoutScheme.split("--").pop();
+    if (after?.trim()) return after.trim();
+  }
+  const pathTail = withoutScheme.split("/").filter(Boolean).pop();
+  return pathTail?.trim() || undefined;
+}
+
 /** 从 `scheme:rest` / `owner/slug` / `owner--slug` 提取可比对的短名 */
 function slugCandidates(raw: string): string[] {
   const trimmed = raw.trim();

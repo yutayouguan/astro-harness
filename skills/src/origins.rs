@@ -263,4 +263,30 @@ mod tests {
         assert_eq!(infer_store("skillhub:owner/slug"), "skillhub");
         assert_eq!(infer_store("clawhub:owner--slug"), "clawhub");
     }
+
+    #[test]
+    fn record_after_install_upserts() {
+        use crate::install::{record_after_install, InstallOriginHint};
+
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        record_after_install(
+            "skillhub:owner/demo-skill",
+            Some("workspace"),
+            &InstallOriginHint {
+                name: Some("Demo".into()),
+                store: Some("skillhub".into()),
+                folder: Some("demo-skill".into()),
+            },
+        )
+        .unwrap();
+        let o = find_origin(Some("workspace"), "demo-skill")
+            .unwrap()
+            .unwrap();
+        assert_eq!(o.install_ref, "skillhub:owner/demo-skill");
+        assert_eq!(o.store, "skillhub");
+        assert_eq!(o.name, "Demo");
+    }
 }

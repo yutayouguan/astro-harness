@@ -2,7 +2,7 @@
 
 use skills::{
     fetch_detail, install_from_ref, link_skill_to_agent, list_installed_for_agent,
-    list_skill_files_ex, load_skill_by_name,
+    list_skill_files_ex, load_skill_by_name, InstallOriginHint,
     open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
     read_skill_file_ex, reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
     InstalledSkill, SkillBundle, SkillStoreFilter, StoreSkill, StoreSkillDetail,
@@ -98,9 +98,17 @@ pub async fn link_machine_skill(
 pub async fn install_store_skill(
     install_ref: String,
     agent_id: Option<String>,
+    name: Option<String>,
+    store: Option<String>,
+    folder: Option<String>,
 ) -> Result<String, String> {
     let agent = normalize_agent_id(agent_id);
-    install_from_ref(&install_ref, agent.as_deref())
+    let hint = InstallOriginHint {
+        name,
+        store,
+        folder,
+    };
+    install_from_ref(&install_ref, agent.as_deref(), Some(hint))
         .await
         .map_err(|e| e.to_string())
 }

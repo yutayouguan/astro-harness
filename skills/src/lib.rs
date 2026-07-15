@@ -18,7 +18,7 @@ pub mod seed;
 pub mod skill;
 pub mod store;
 
-pub use install::install_from_ref;
+pub use install::{install_from_ref, InstallOriginHint};
 pub use seed::{
     is_public_skill_installed, seed_default_public_skills, SeedReport, DEFAULT_PUBLIC_SKILLS,
 };
