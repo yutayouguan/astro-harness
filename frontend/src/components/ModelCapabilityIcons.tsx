@@ -51,11 +51,11 @@ export default function ModelCapabilityIcons({
         return (
           <span
             key={key}
-            className="model-picker-cap-icon"
+            className={`model-picker-cap-icon is-${key.replace("_", "-")}`}
             title={label}
             aria-label={label}
           >
-            <Icon size={12} strokeWidth={2} aria-hidden />
+            <Icon size={12} strokeWidth={2.25} aria-hidden />
           </span>
         );
       })}

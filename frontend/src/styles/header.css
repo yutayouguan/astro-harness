@@ -660,8 +660,7 @@ html[data-theme="dark"] .model-picker.is-empty {
   place-items: center;
   width: 14px;
   height: 14px;
-  color: inherit;
-  opacity: 0.5;
+  opacity: 1;
 }
 
 .model-picker-cap-icon svg {
@@ -670,8 +669,32 @@ html[data-theme="dark"] .model-picker.is-empty {
   height: 12px;
 }
 
-.model-picker-option.is-selected .model-picker-cap-icon {
-  opacity: 0.72;
+.model-picker-cap-icon.is-tools {
+  color: #4f6bed;
+}
+
+.model-picker-cap-icon.is-reasoning {
+  color: #9b59d0;
+}
+
+.model-picker-cap-icon.is-vision {
+  color: #1a9e8f;
+}
+
+.model-picker-cap-icon.is-web {
+  color: #2f80ed;
+}
+
+.model-picker-cap-icon.is-image-gen {
+  color: #e67e22;
+}
+
+.model-picker-cap-icon.is-video-gen {
+  color: #e74c6b;
+}
+
+.model-picker-cap-icon.is-audio-gen {
+  color: #16a085;
 }
 
 .model-picker-option-check {
