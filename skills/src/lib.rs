@@ -12,6 +12,7 @@
 pub mod install;
 pub mod installed;
 pub mod models;
+pub mod origins;
 pub mod registry;
 pub mod seed;
 pub mod skill;

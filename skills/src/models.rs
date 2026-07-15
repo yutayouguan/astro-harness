@@ -137,3 +137,32 @@ impl SkillStoreFilter {
         }
     }
 }
+
+/// 技能安装来源记录（`skill-origins.json` 单条）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillOriginRecord {
+    pub folder: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_id: Option<String>,
+    pub name: String,
+    pub store: String,
+    pub install_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    pub installed_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_updated_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_updated_at: Option<i64>,
+}
+
+/// 技能安装来源清单文件。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillOriginsFile {
+    pub version: u32,
+    pub records: Vec<SkillOriginRecord>,
+}
