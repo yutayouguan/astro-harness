@@ -1,4 +1,4 @@
-/** 定时任务面板：任务列表、运行记录与创建对话框。 */
+/** 定时任务面板：任务列表、运行记录与创建抽屉。 */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";

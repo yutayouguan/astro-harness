@@ -957,7 +957,7 @@ html[data-theme="dark"] .cron-sched-input {
 }
 
 /* Create cron dialog — 与计划任务页共用 teal，避免弹层掉到默认橙/琥珀色 */
-.cron-dialog-backdrop {
+.cron-create-drawer-backdrop {
   --tone: var(--tone-teal);
   --tone-soft: var(--tone-teal-soft);
   --tone-glow: var(--tone-teal-glow);
@@ -965,22 +965,20 @@ html[data-theme="dark"] .cron-sched-input {
   --select-tone-soft: var(--tone-teal-soft);
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 1300;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--bg-base, #000) 42%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--bg-base, #000) 38%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
-.cron-dialog {
-  width: min(560px, 92vw);
-  max-width: 100%;
-  max-height: 85vh;
+.cron-create-drawer {
+  width: min(520px, 94vw);
+  height: 100%;
   display: flex;
   flex-direction: column;
-  border-radius: 24px;
+  border-left: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge, transparent));
   background:
     linear-gradient(
       165deg,
@@ -988,18 +986,14 @@ html[data-theme="dark"] .cron-sched-input {
       color-mix(in srgb, var(--tone) 5%, rgba(255, 255, 255, 0.72)) 100%
     ),
     var(--glass-panel);
-  border: 1px solid color-mix(in srgb, #fff 70%, var(--glass-border));
-  box-shadow:
-    0 28px 72px color-mix(in srgb, #000 28%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--tone) 10%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  overflow: hidden;
-  box-sizing: border-box;
+  box-shadow: -12px 0 40px rgba(15, 23, 42, 0.14);
   backdrop-filter: blur(24px) saturate(1.35);
   -webkit-backdrop-filter: blur(24px) saturate(1.35);
+  box-sizing: border-box;
+  animation: cron-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-html[data-theme="dark"] .cron-dialog {
+html[data-theme="dark"] .cron-create-drawer {
   background:
     linear-gradient(
       165deg,
@@ -1007,25 +1001,55 @@ html[data-theme="dark"] .cron-dialog {
       color-mix(in srgb, var(--tone) 8%, rgba(255, 255, 255, 0.03)) 100%
     ),
     var(--glass-panel);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow:
-    0 28px 72px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-left-color: rgba(255, 255, 255, 0.14);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.45);
 }
 
-.cron-dialog-head {
+.cron-create-drawer-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 20px 0;
+  gap: 12px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
   flex-shrink: 0;
 }
 
-.cron-dialog-title {
-  font-size: 16px;
+html[data-theme="dark"] .cron-create-drawer-head {
+  border-bottom-color: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.cron-create-drawer-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--ink);
+}
+
+.cron-create-drawer-title-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  color: var(--tone);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--tone-soft) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 2px 8px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+html[data-theme="dark"] .cron-create-drawer-title-icon {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    color-mix(in srgb, var(--tone) 18%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .cron-dialog-close {
@@ -1047,16 +1071,41 @@ html[data-theme="dark"] .cron-dialog {
   color: var(--tone, var(--ink));
 }
 
-.cron-dialog-body {
+.cron-create-drawer-scroll {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 20px 20px;
+  padding: 16px 18px 12px;
   box-sizing: border-box;
+}
+
+.cron-create-drawer-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 12px 18px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
+  background:
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--tone-soft) 35%, rgba(255, 255, 255, 0.55)),
+      color-mix(in srgb, var(--tone-soft) 6%, transparent)
+    );
+}
+
+html[data-theme="dark"] .cron-create-drawer-foot {
+  border-top-color: color-mix(in srgb, var(--tone) 12%, transparent);
+  background:
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--tone) 12%, rgba(8, 6, 18, 0.5)),
+      transparent
+    );
 }
 
 .cron-dialog-row {
@@ -1066,7 +1115,7 @@ html[data-theme="dark"] .cron-dialog {
   min-width: 0;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 520px) {
   .cron-dialog-row {
     grid-template-columns: 1fr;
   }
@@ -1195,14 +1244,6 @@ html[data-theme="dark"] .cron-dialog-textarea {
   margin: 0;
   font-size: 12px;
   color: #ef4444;
-}
-
-.cron-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 4px;
 }
 
 .cron-btn-primary {

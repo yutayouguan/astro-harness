@@ -1,5 +1,7 @@
-/** 新建定时任务对话框。 */
+/** 新建/编辑定时任务：右侧抽屉。 */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { CalendarPlus, Pencil, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { SelectMenu } from "./SelectMenu";
@@ -16,7 +18,7 @@ import type { CronJobDto } from "./CronPanel";
 /** 创建任务对话框可选的供应商简项 */
 export type ProviderOpt = { id: string; name: string; model: string };
 
-/** 新建/编辑定时任务对话框入参 */
+/** 新建/编辑定时任务抽屉入参 */
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -48,7 +50,7 @@ function defaultProviderId(
   return providers[0]?.id ?? "";
 }
 
-/** 新建或编辑定时任务对话框 */
+/** 新建或编辑定时任务（右侧抽屉） */
 export function CreateCronDialog({
   open,
   onClose,
@@ -168,6 +170,15 @@ export function CreateCronDialog({
     };
   }, [open, modelsProp, selectedProviderId, providers, activeProviderId, editingJob]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   function handleBackdrop(e: React.MouseEvent) {
@@ -226,31 +237,38 @@ export function CreateCronDialog({
           } satisfies AgentInfo,
         ];
 
-  return (
+  const TitleIcon = isEdit ? Pencil : CalendarPlus;
+
+  return createPortal(
     <div
-      className="cron-dialog-backdrop"
+      className="cron-create-drawer-backdrop"
       ref={backdropRef}
       onClick={handleBackdrop}
     >
-      <div className="cron-dialog" role="dialog" aria-modal aria-labelledby="cron-dialog-title">
-        <div className="cron-dialog-head">
-          <span className="cron-dialog-title" id="cron-dialog-title">
+      <aside
+        className="cron-create-drawer"
+        role="dialog"
+        aria-modal
+        aria-labelledby="cron-create-drawer-title"
+      >
+        <header className="cron-create-drawer-head">
+          <h2 id="cron-create-drawer-title" className="cron-create-drawer-title">
+            <span className="cron-create-drawer-title-icon" aria-hidden>
+              <TitleIcon size={16} strokeWidth={2.3} />
+            </span>
             {isEdit ? t("cron.dialog.editTitle") : t("cron.dialog.title")}
-          </span>
+          </h2>
           <button
             type="button"
             className="cron-dialog-close"
             onClick={onClose}
             aria-label={t("cron.cancel")}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X size={16} strokeWidth={2.5} aria-hidden />
           </button>
-        </div>
+        </header>
 
-        <div className="cron-dialog-body">
+        <div className="cron-create-drawer-scroll">
           <div className="cron-dialog-row">
             <label className="cron-dialog-field">
               <span>
@@ -366,22 +384,23 @@ export function CreateCronDialog({
           </details>
 
           {error && <p className="cron-dialog-error">{error}</p>}
-
-          <div className="cron-dialog-actions">
-            <button type="button" className="cron-btn-ghost" onClick={onClose}>
-              {t("cron.cancel")}
-            </button>
-            <button
-              type="button"
-              className="cron-btn-primary"
-              onClick={() => void handleSave()}
-              disabled={saving}
-            >
-              {t("cron.save")}
-            </button>
-          </div>
         </div>
-      </div>
-    </div>
+
+        <footer className="cron-create-drawer-foot">
+          <button type="button" className="cron-btn-ghost" onClick={onClose}>
+            {t("cron.cancel")}
+          </button>
+          <button
+            type="button"
+            className="cron-btn-primary"
+            onClick={() => void handleSave()}
+            disabled={saving}
+          >
+            {t("cron.save")}
+          </button>
+        </footer>
+      </aside>
+    </div>,
+    document.body,
   );
 }
