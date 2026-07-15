@@ -162,13 +162,50 @@ fn run_npx_seed(base: &Path, source: &str, name: &str) -> Result<()> {
     }
 }
 
+/// 仓库内置 Skill（编译期嵌入 `skills/bundled/`）。
+const BUNDLED_STORYBOARD_VIDEO_MD: &str =
+    include_str!("../bundled/storyboard-video/SKILL.md");
+
+/// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
+pub const BUNDLED_SKILLS: &[(&str, &str)] = &[("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD)];
+
+/// 将内置 Skill 复制到 `base/skills/<name>/`（已存在则跳过）。
+pub fn seed_bundled_into(base: &Path) -> SeedReport {
+    let _ = fs::create_dir_all(base.join("skills"));
+    let mut report = SeedReport::default();
+    for &(name, body) in BUNDLED_SKILLS {
+        if is_public_skill_installed(base, name) {
+            report.skipped.push(name.to_string());
+            continue;
+        }
+        let dest = base.join("skills").join(name);
+        match fs::create_dir_all(&dest).and_then(|_| fs::write(dest.join("SKILL.md"), body)) {
+            Ok(()) => report.installed.push(name.to_string()),
+            Err(_) => report.failed.push(name.to_string()),
+        }
+    }
+    report
+}
+
+/// 合并两次播种结果。
+fn merge_seed_reports(mut a: SeedReport, b: SeedReport) -> SeedReport {
+    a.installed.extend(b.installed);
+    a.failed.extend(b.failed);
+    a.skipped.extend(b.skipped);
+    a
+}
+
 /// 补装缺失的默认公共 skills → `ASTRO_MEMORY_DIR` 或 `~/.astro/skills`
+///
+/// 含：远程 `DEFAULT_PUBLIC_SKILLS`（npx）+ 仓库内置 `BUNDLED_SKILLS`。
 pub fn seed_default_public_skills() -> SeedReport {
     let base = memory_dir();
     let _ = fs::create_dir_all(&base);
-    seed_with_installer(&base, DEFAULT_PUBLIC_SKILLS, &|source, name| {
+    let remote = seed_with_installer(&base, DEFAULT_PUBLIC_SKILLS, &|source, name| {
         run_npx_seed(&base, source, name)
-    })
+    });
+    let bundled = seed_bundled_into(&base);
+    merge_seed_reports(remote, bundled)
 }
 
 /// 解析本机 Astro 数据根目录。
@@ -200,6 +237,23 @@ mod tests {
         assert!(names.contains(&"skill-creator"));
         assert!(names.contains(&"brainstorming"));
         assert!(names.contains(&"agent-browser"));
+    }
+
+    #[test]
+    fn seed_bundled_storyboard_video_once() {
+        let dir = tempdir().unwrap();
+        let r1 = seed_bundled_into(dir.path());
+        assert_eq!(r1.installed, vec!["storyboard-video".to_string()]);
+        assert!(is_public_skill_installed(dir.path(), "storyboard-video"));
+        let body = fs::read_to_string(
+            dir.path()
+                .join("skills/storyboard-video/SKILL.md"),
+        )
+        .unwrap();
+        assert!(body.contains("storyboard-video"));
+        let r2 = seed_bundled_into(dir.path());
+        assert!(r2.installed.is_empty());
+        assert_eq!(r2.skipped, vec!["storyboard-video".to_string()]);
     }
 
     #[test]

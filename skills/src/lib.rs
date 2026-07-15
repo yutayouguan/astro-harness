@@ -30,7 +30,8 @@ pub use update::{
     update_outdated_skills,
 };
 pub use seed::{
-    is_public_skill_installed, seed_default_public_skills, SeedReport, DEFAULT_PUBLIC_SKILLS,
+    is_public_skill_installed, seed_bundled_into, seed_default_public_skills, SeedReport,
+    BUNDLED_SKILLS, DEFAULT_PUBLIC_SKILLS,
 };
 pub use installed::{
     link_skill_to_agent, list_enabled_for_prompt, list_installed, list_installed_for_agent,

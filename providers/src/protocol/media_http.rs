@@ -258,15 +258,42 @@ pub struct GeneratedVideo {
     pub operation_id: String,
 }
 
+/// multipart 图片字段（首帧 / 尾帧 / 参考图）。
+#[derive(Debug, Clone)]
+pub struct VideoImagePart {
+    pub bytes: Vec<u8>,
+    pub filename: String,
+    pub mime: String,
+}
+
+/// Google 视频创建的可选参数（文本 + 图片）。
+#[derive(Debug, Clone, Default)]
+pub struct VideoGenExtras {
+    pub aspect_ratio: Option<String>,
+    pub duration_seconds: Option<u32>,
+    pub resolution: Option<String>,
+    pub negative_prompt: Option<String>,
+    pub style: Option<String>,
+    pub extend_video_id: Option<String>,
+    pub image: Option<VideoImagePart>,
+    pub last_frame: Option<VideoImagePart>,
+    pub reference_image: Option<VideoImagePart>,
+}
+
+fn multipart_image(field: &str, img: VideoImagePart) -> Result<(String, reqwest::multipart::Part)> {
+    let part = reqwest::multipart::Part::bytes(img.bytes)
+        .file_name(img.filename)
+        .mime_str(&img.mime)
+        .map_err(|e| anyhow!("视频图片字段 {field} mime 无效: {e}"))?;
+    Ok((field.to_string(), part))
+}
+
 /// 创建并轮询 Google OpenAI 兼容视频，完成后下载字节。
 pub async fn google_openai_generate_video(
     client: &Client,
     prompt: &str,
     config: &ProviderConfig,
-    aspect_ratio: Option<&str>,
-    duration_seconds: Option<u32>,
-    resolution: Option<&str>,
-    negative_prompt: Option<&str>,
+    extras: &VideoGenExtras,
 ) -> Result<GeneratedVideo> {
     if config.api_key.trim().is_empty() {
         anyhow::bail!("Google API Key 为空");
@@ -282,17 +309,60 @@ pub async fn google_openai_generate_video(
     let mut form = reqwest::multipart::Form::new()
         .text("model", model.to_string())
         .text("prompt", prompt.to_string());
-    if let Some(ar) = aspect_ratio.map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(ar) = extras
+        .aspect_ratio
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         form = form.text("aspect_ratio", ar.to_string());
     }
-    if let Some(sec) = duration_seconds.filter(|s| *s > 0) {
+    if let Some(sec) = extras.duration_seconds.filter(|s| *s > 0) {
         form = form.text("duration_seconds", sec.to_string());
     }
-    if let Some(res) = resolution.map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(res) = extras
+        .resolution
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         form = form.text("resolution", res.to_string());
     }
-    if let Some(neg) = negative_prompt.map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(neg) = extras
+        .negative_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         form = form.text("negative_prompt", neg.to_string());
+    }
+    if let Some(style) = extras
+        .style
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        form = form.text("style", style.to_string());
+    }
+    if let Some(id) = extras
+        .extend_video_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        form = form.text("extend_video_id", id.to_string());
+    }
+    if let Some(img) = extras.image.clone() {
+        let (name, part) = multipart_image("image", img)?;
+        form = form.part(name, part);
+    }
+    if let Some(img) = extras.last_frame.clone() {
+        let (name, part) = multipart_image("last_frame", img)?;
+        form = form.part(name, part);
+    }
+    if let Some(img) = extras.reference_image.clone() {
+        let (name, part) = multipart_image("reference_images", img)?;
+        form = form.part(name, part);
     }
 
     let create_resp = client

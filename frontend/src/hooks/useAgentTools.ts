@@ -199,6 +199,11 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "duration_seconds", type: "number", optional: true },
       { name: "resolution", type: "string", optional: true },
       { name: "negative_prompt", type: "string", optional: true },
+      { name: "style", type: "string", optional: true },
+      { name: "extend_video_id", type: "string", optional: true },
+      { name: "reference_image", type: "string", optional: true },
+      { name: "image", type: "string", optional: true },
+      { name: "last_frame", type: "string", optional: true },
     ],
   },
   {
