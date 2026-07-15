@@ -92,6 +92,7 @@ import type {
   SkillUpdateCheckResult,
   SkillUpdateFilter,
   SkillUpdateItemResult,
+  SkillUpdatePreview,
   SkillUpdateRow,
   StoreSkill,
   StoreSkillDetail,
@@ -336,6 +337,18 @@ const VIEW_OPTIONS = [
   },
 ];
 
+type SkillUpdateConfirmState =
+  | {
+      mode: "single";
+      row: SkillUpdateRow;
+      folder: string;
+    }
+  | {
+      mode: "batch";
+      targets: SkillUpdateRow[];
+      dirtyCount: number;
+    };
+
 export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const { t } = useI18n();
   const { showToast, toastHost } = useTransientToast();
@@ -387,6 +400,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingFolder, setUpdatingFolder] = useState<string | null>(null);
   const [updatingAll, setUpdatingAll] = useState(false);
+  const [updateConfirm, setUpdateConfirm] = useState<SkillUpdateConfirmState | null>(
+    null,
+  );
 
   const loadMoreLock = useRef(false);
   /** 递增以丢弃切换 Tab / 重新搜索后的过期响应 */
@@ -1030,10 +1046,44 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const updateSkillRow = async (row: SkillUpdateRow) => {
     if (!isTauri() || !row.origin) return;
     const folder = updateFolderForRow(row);
+    setError(null);
+    try {
+      const preview = await invoke<SkillUpdatePreview>("preview_skill_update", {
+        folder,
+        agentId,
+      });
+      if (preview.has_local_changes) {
+        setUpdateConfirm({ mode: "single", row, folder });
+        return;
+      }
+      await runSingleUpdate(row, folder, { force: true, backupIfDirty: true });
+    } catch (err) {
+      const msg = String(err);
+      setError(msg);
+      showToast(msg, { error: true });
+    }
+  };
+
+  const invokeUpdateInstalled = (
+    folder: string,
+    opts: { force: boolean; backupIfDirty: boolean },
+  ) =>
+    invoke<string>("update_installed_skill", {
+      folder,
+      agentId,
+      force: opts.force,
+      backupIfDirty: opts.backupIfDirty,
+    });
+
+  const runSingleUpdate = async (
+    row: SkillUpdateRow,
+    folder: string,
+    opts: { force: boolean; backupIfDirty: boolean },
+  ) => {
     setUpdatingFolder(folder);
     setError(null);
     try {
-      await invoke<string>("update_installed_skill", { folder, agentId });
+      await invokeUpdateInstalled(folder, opts);
       await refreshUpdatesData();
       setLastCheckResults([]);
       showToast(t("skills.updateDone").replace("{name}", row.skill.name), {
@@ -1046,6 +1096,66 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     } finally {
       setUpdatingFolder(null);
     }
+  };
+
+  const handleSingleUpdateConfirm = (
+    action: "backup" | "overwrite" | "cancel",
+  ) => {
+    if (!updateConfirm || updateConfirm.mode !== "single") return;
+    const { row, folder } = updateConfirm;
+    setUpdateConfirm(null);
+    if (action === "cancel") return;
+    void runSingleUpdate(row, folder, {
+      force: true,
+      backupIfDirty: action === "backup",
+    });
+  };
+
+  const runBatchUpdate = async (targets: SkillUpdateRow[]) => {
+    if (targets.length === 0) return;
+    setUpdatingAll(true);
+    setError(null);
+    const results: SkillUpdateItemResult[] = [];
+    try {
+      for (const row of targets) {
+        const folder = updateFolderForRow(row);
+        setUpdatingFolder(folder);
+        try {
+          const message = await invokeUpdateInstalled(folder, {
+            force: true,
+            backupIfDirty: true,
+          });
+          results.push({ folder, ok: true, message });
+        } catch (err) {
+          results.push({ folder, ok: false, message: String(err) });
+        }
+      }
+      await refreshUpdatesData();
+      setLastCheckResults([]);
+      const ok = results.filter((r) => r.ok).length;
+      const fail = results.length - ok;
+      showToast(
+        t("skills.updateAllDone")
+          .replace("{ok}", String(ok))
+          .replace("{fail}", String(fail)),
+        { tone: fail > 0 ? "warning" : "success" },
+      );
+    } catch (err) {
+      const msg = String(err);
+      setError(msg);
+      showToast(msg, { error: true });
+    } finally {
+      setUpdatingFolder(null);
+      setUpdatingAll(false);
+    }
+  };
+
+  const handleBatchUpdateConfirm = (confirmed: boolean) => {
+    if (!updateConfirm || updateConfirm.mode !== "batch") return;
+    const { targets } = updateConfirm;
+    setUpdateConfirm(null);
+    if (!confirmed) return;
+    void runBatchUpdate(targets);
   };
 
   const checkSkillUpdates = async () => {
@@ -1075,29 +1185,34 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   const updateAllSkills = async () => {
     if (!isTauri()) return;
-    setUpdatingAll(true);
     setError(null);
+    const targets = updateRows.filter(
+      (row) =>
+        row.status === "outdated" &&
+        canUpdateSkillFromOrigin(row.skill, row.origin),
+    );
+    if (targets.length === 0) return;
     try {
-      const results = await invoke<SkillUpdateItemResult[]>("update_all_skills", {
-        agentId,
-        onlyOutdated: true,
-      });
-      await refreshUpdatesData();
-      setLastCheckResults([]);
-      const ok = results.filter((r) => r.ok).length;
-      const fail = results.length - ok;
-      showToast(
-        t("skills.updateAllDone")
-          .replace("{ok}", String(ok))
-          .replace("{fail}", String(fail)),
-        { tone: fail > 0 ? "warning" : "success" },
+      const previews = await Promise.all(
+        targets.map(async (row) => {
+          const folder = updateFolderForRow(row);
+          const preview = await invoke<SkillUpdatePreview>("preview_skill_update", {
+            folder,
+            agentId,
+          });
+          return { row, preview };
+        }),
       );
+      const dirtyCount = previews.filter((p) => p.preview.has_local_changes).length;
+      if (dirtyCount > 0) {
+        setUpdateConfirm({ mode: "batch", targets, dirtyCount });
+        return;
+      }
+      await runBatchUpdate(targets);
     } catch (err) {
       const msg = String(err);
       setError(msg);
       showToast(msg, { error: true });
-    } finally {
-      setUpdatingAll(false);
     }
   };
 
@@ -1205,6 +1320,20 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [preview]);
+
+  useEffect(() => {
+    if (!updateConfirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (updateConfirm.mode === "single") {
+        handleSingleUpdateConfirm("cancel");
+      } else {
+        handleBatchUpdateConfirm(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [updateConfirm]);
 
   const previewFilesInTab = useMemo(() => {
     if (!preview) return [];
@@ -2963,6 +3092,76 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       </AnimatedSwitch>
 
       {toastHost}
+
+      {updateConfirm &&
+        createPortal(
+          <div
+            className="skills-update-confirm-backdrop"
+            role="presentation"
+            onClick={(e) => {
+              if (e.target !== e.currentTarget) return;
+              if (updateConfirm.mode === "single") {
+                handleSingleUpdateConfirm("cancel");
+              } else {
+                handleBatchUpdateConfirm(false);
+              }
+            }}
+          >
+            <div
+              className="skills-update-confirm"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="skills-update-confirm-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 id="skills-update-confirm-title">
+                {t("skills.updateLocalChangesTitle")}
+              </h3>
+              <p>
+                {updateConfirm.mode === "single"
+                  ? t("skills.updateLocalChangesBody")
+                  : t("skills.updateBatchLocalChanges").replace(
+                      "{count}",
+                      String(updateConfirm.dirtyCount),
+                    )}
+              </p>
+              <div className="skills-update-confirm-actions">
+                <button
+                  type="button"
+                  className="skills-action-btn"
+                  onClick={() =>
+                    updateConfirm.mode === "single"
+                      ? handleSingleUpdateConfirm("cancel")
+                      : handleBatchUpdateConfirm(false)
+                  }
+                >
+                  {t("skills.updateCancel")}
+                </button>
+                {updateConfirm.mode === "single" ? (
+                  <button
+                    type="button"
+                    className="skills-action-btn"
+                    onClick={() => handleSingleUpdateConfirm("overwrite")}
+                  >
+                    {t("skills.updateOverwriteOnly")}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="skills-action-btn primary"
+                  onClick={() =>
+                    updateConfirm.mode === "single"
+                      ? handleSingleUpdateConfirm("backup")
+                      : handleBatchUpdateConfirm(true)
+                  }
+                >
+                  {t("skills.updateBackupAndContinue")}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {preview &&
         createPortal(

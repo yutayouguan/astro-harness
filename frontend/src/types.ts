@@ -343,6 +343,15 @@ export type SkillOriginRecord = {
   remote_updated_at?: number | null;
 };
 
+/** 更新前本地改动预览（与 Rust `SkillUpdatePreview` 对齐） */
+export type SkillUpdatePreview = {
+  folder: string;
+  has_local_changes: boolean;
+  has_baseline_digest: boolean;
+  current_digest: string | null;
+  baseline_digest: string | null;
+};
+
 /** 批量更新单条结果（「更新」Tab，与 Rust `SkillUpdateItemResult` 对齐） */
 export type SkillUpdateItemResult = {
   folder: string;
