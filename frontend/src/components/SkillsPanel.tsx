@@ -57,6 +57,10 @@ import {
   storeCacheKey,
   type LazyLoadGate,
 } from "../lib/skillsLazyLoad";
+import {
+  collectInstalledSkillKeys,
+  isStoreSkillInstalled as matchStoreSkillInstalled,
+} from "../lib/skillInstalledMatch";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agentsChanged";
@@ -899,7 +903,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       });
       // 留在商店：刷新已安装态后卡片按钮变为「已安装」
       await refreshInstalled({ mode: "hard" });
-      showToast(t("skills.installDone").replace("{name}", skill.name));
+      showToast(t("skills.installDone").replace("{name}", skill.name), {
+        tone: "success",
+      });
     } catch (err) {
       setError(String(err));
       showToast(String(err), { error: true });
@@ -1112,20 +1118,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const enabledCount = installed.filter((s) => s.enabled).length;
   const linkedCount = machineSkills.filter((s) => s.linked).length;
 
-  /** 当前 Agent 可用：Astro 已安装，或本机技能已链接 */
-  const availableSkillNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const skill of installed) {
-      names.add(skill.name.toLowerCase());
-    }
-    for (const skill of machineSkills) {
-      if (skill.linked) names.add(skill.name.toLowerCase());
-    }
-    return names;
-  }, [installed, machineSkills]);
+  /** 当前 Agent 可用：Astro 已安装，或本机技能已链接（含目录名，因 frontmatter name 常与商店名不同） */
+  const availableSkillKeys = useMemo(
+    () => collectInstalledSkillKeys(installed, machineSkills),
+    [installed, machineSkills],
+  );
 
   const isStoreSkillInstalled = (skill: StoreSkill) =>
-    availableSkillNames.has(skill.name.toLowerCase());
+    matchStoreSkillInstalled(skill, availableSkillKeys);
 
   const filteredInstalled = useMemo(() => {
     const q = installedQuery.trim().toLowerCase();
