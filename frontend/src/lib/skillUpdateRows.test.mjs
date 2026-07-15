@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterUpdateRows, mergeUpdateRows } from "./skillUpdateRows.ts";
+import {
+  applyCheckResults,
+  filterUpdateRows,
+  mergeUpdateRows,
+} from "./skillUpdateRows.ts";
 
 const pptInstalled = {
   id: "/Users/iswm/.astro/workspace/skills/ppt-generator-skill",
@@ -199,6 +203,103 @@ test("linked machine skill duplicates installed row is collapsed", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].skill.id, pptInstalled.id);
   assert.equal(rows[0].status, "with_origin");
+});
+
+test("applyCheckResults maps outdated status by origin folder", () => {
+  const rows = mergeUpdateRows([pptInstalled], [], [pptOrigin], "workspace");
+  const applied = applyCheckResults(rows, [
+    {
+      folder: "ppt-generator-skill",
+      status: "outdated",
+      remote_version: "2.0.0",
+      remote_updated_at: 99,
+      message: "",
+    },
+  ]);
+  assert.equal(applied[0].status, "outdated");
+});
+
+test("applyCheckResults maps current status by origin folder", () => {
+  const rows = mergeUpdateRows([pptInstalled], [], [pptOrigin], "workspace");
+  const applied = applyCheckResults(rows, [
+    {
+      folder: "ppt-generator-skill",
+      status: "current",
+      remote_version: "1.0.0",
+      remote_updated_at: 1,
+      message: "",
+    },
+  ]);
+  assert.equal(applied[0].status, "current");
+});
+
+test("applyCheckResults leaves no_origin rows unchanged", () => {
+  const rows = mergeUpdateRows(
+    [{ ...pptInstalled, id: "/tmp/orphan", name: "orphan" }],
+    [],
+    [pptOrigin],
+    "workspace",
+  );
+  const applied = applyCheckResults(rows, [
+    {
+      folder: "ppt-generator-skill",
+      status: "outdated",
+      remote_version: null,
+      remote_updated_at: null,
+      message: "",
+    },
+  ]);
+  assert.equal(applied[0].status, "no_origin");
+});
+
+test("applyCheckResults keeps with_origin when folder has no check", () => {
+  const rows = mergeUpdateRows([pptInstalled], [], [pptOrigin], "workspace");
+  const applied = applyCheckResults(rows, []);
+  assert.equal(applied[0].status, "with_origin");
+});
+
+test("filter updatable includes only outdated rows", () => {
+  const rows = mergeUpdateRows([pptInstalled], [], [pptOrigin], "workspace");
+  const applied = applyCheckResults(rows, [
+    {
+      folder: "ppt-generator-skill",
+      status: "outdated",
+      remote_version: "2.0.0",
+      remote_updated_at: 99,
+      message: "",
+    },
+  ]);
+  const filtered = filterUpdateRows(applied, "updatable");
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].status, "outdated");
+});
+
+test("filter updatable excludes current rows", () => {
+  const rows = mergeUpdateRows([pptInstalled], [], [pptOrigin], "workspace");
+  const applied = applyCheckResults(rows, [
+    {
+      folder: "ppt-generator-skill",
+      status: "current",
+      remote_version: "1.0.0",
+      remote_updated_at: 1,
+      message: "",
+    },
+  ]);
+  assert.equal(filterUpdateRows(applied, "updatable").length, 0);
+});
+
+test("filter updatable excludes unknown rows", () => {
+  const rows = mergeUpdateRows([pptInstalled], [], [pptOrigin], "workspace");
+  const applied = applyCheckResults(rows, [
+    {
+      folder: "ppt-generator-skill",
+      status: "unknown",
+      remote_version: null,
+      remote_updated_at: null,
+      message: "",
+    },
+  ]);
+  assert.equal(filterUpdateRows(applied, "updatable").length, 0);
 });
 
 test("filter updatable excludes machine-scoped rows with origin", () => {

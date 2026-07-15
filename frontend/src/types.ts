@@ -350,14 +350,32 @@ export type SkillUpdateItemResult = {
   message: string;
 };
 
-/** 「更新」Tab 筛选：v1 中 `updatable` 与 `with_origin` 等价 */
+/** 技能更新检查状态（与 Rust `SkillUpdateStatus` 对齐，serde snake_case） */
+export type SkillUpdateStatus = "outdated" | "current" | "unknown" | "error";
+
+/** 单条技能更新检查结果（与 Rust `SkillUpdateCheckResult` 对齐） */
+export type SkillUpdateCheckResult = {
+  folder: string;
+  status: SkillUpdateStatus;
+  remote_version: string | null;
+  remote_updated_at: number | null;
+  message: string;
+};
+
+/** 「更新」Tab 筛选：v2 中 `updatable` 仅含 `outdated` */
 export type SkillUpdateFilter = "with_origin" | "no_origin" | "updatable";
 
-/** 「更新」Tab 合并行：已安装技能 + 可选来源记录 */
+/** 「更新」Tab 合并行：已安装技能 + 可选来源记录 + 远端检查状态 */
 export type SkillUpdateRow = {
   skill: InstalledSkill;
   origin: SkillOriginRecord | null;
-  status: "with_origin" | "no_origin";
+  status:
+    | "no_origin"
+    | "with_origin"
+    | "outdated"
+    | "current"
+    | "unknown"
+    | "error";
 };
 
 /** 侧栏近期会话 */
