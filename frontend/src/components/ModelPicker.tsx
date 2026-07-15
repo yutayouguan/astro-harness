@@ -2,14 +2,20 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
+import {
+  clampModelPickerFlyout,
+  resolveFlyoutBounds,
+} from "../lib/modelPickerFlyout";
 import {
   DEFAULT_MODEL_PREFS,
   loadAllModelPrefs,
@@ -24,6 +30,8 @@ import {
 } from "../lib/modelPrefs";
 import type { ModelInfo, ProviderDto, ProviderModelsResult } from "../types";
 import { ModelBrandIcon } from "./ProviderIcons";
+
+const FLYOUT_VIEWPORT_PAD = 8;
 
 /** 模型选择器入参 */
 type Props = {
@@ -128,7 +136,9 @@ export default function ModelPicker({
   });
   const [globals] = useState<ModelPickerGlobals>(() => loadPickerGlobals());
   const [, setPrefsTick] = useState(0);
+  const [flyoutStyle, setFlyoutStyle] = useState<CSSProperties | undefined>();
   const ref = useRef<HTMLDivElement | null>(null);
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
   const activeProvider =
     providers.find((p) => p.id === value) ?? providers[0] ?? null;
 
@@ -219,6 +229,41 @@ export default function ModelPicker({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !ref.current || !flyoutRef.current) {
+      setFlyoutStyle(undefined);
+      return;
+    }
+    const clamp = () => {
+      const root = ref.current;
+      const flyout = flyoutRef.current;
+      if (!root || !flyout) return;
+      const rootRect = root.getBoundingClientRect();
+      // scrollWidth：不受父级 overflow:hidden 裁切影响，避免低估「列表+编辑」总宽
+      const flyoutWidth = Math.max(flyout.scrollWidth, flyout.offsetWidth);
+      const bounds = resolveFlyoutBounds(root, window.innerWidth);
+      const pos = clampModelPickerFlyout(
+        rootRect,
+        flyoutWidth,
+        bounds,
+        FLYOUT_VIEWPORT_PAD,
+      );
+      setFlyoutStyle({
+        left: pos.left,
+        right: pos.right,
+      });
+    };
+    clamp();
+    const raf = requestAnimationFrame(clamp);
+    window.addEventListener("resize", clamp);
+    window.addEventListener("scroll", clamp, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", clamp);
+      window.removeEventListener("scroll", clamp, true);
+    };
+  }, [open, editing, options.length]);
 
   const grouped = useMemo(() => {
     const map = new Map<
@@ -316,7 +361,9 @@ export default function ModelPicker({
 
       {open && (
         <div
+          ref={flyoutRef}
           className={`model-picker-flyout ${editing ? "has-edit" : ""}`}
+          style={flyoutStyle}
         >
           <div className="model-picker-panel model-picker-panel--list">
               <ul

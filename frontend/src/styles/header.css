@@ -235,11 +235,21 @@ html[data-theme="dark"] .model-picker.is-empty {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  width: max-content;
+  max-width: min(100vw - 16px, 640px);
   isolation: isolate;
 }
 
+/* 编辑面板在列表左侧展开，避免贴窗右缘时被 content-pane overflow 裁切 */
+.model-picker-flyout.has-edit {
+  flex-direction: row-reverse;
+}
+
 .model-picker-panel {
-  min-width: max(100%, 280px);
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  min-width: 280px;
+  width: min(320px, 78vw);
   max-width: min(360px, 78vw);
   border-radius: 16px;
   border: 1px solid var(--menu-glass-border);
@@ -259,7 +269,8 @@ html[data-theme="dark"] .model-picker.is-empty {
 
 .model-picker-panel--edit {
   width: 220px;
-  min-width: 200px;
+  min-width: 220px;
+  max-width: 220px;
   max-height: min(460px, 70vh);
   overflow: auto;
   padding: 8px;
