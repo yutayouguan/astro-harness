@@ -30,8 +30,8 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinSet;
 
 use crate::chat_fallback::{try_stream_completion_with_fallback, ActiveTargetMeta};
-use crate::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
-use crate::interrupt::Interrupt;
+use crate::control::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
+use crate::control::interrupt::Interrupt;
 use crate::loop_::AgentLoop;
 use crate::usage_record::apply_llm_usage_dual_write;
 
@@ -142,7 +142,7 @@ pub enum MultiTurnStreamItem {
         content: String,
     },
     /// 本轮 API 请求前的上下文占用估算（分层 token 快照）。
-    ContextUsage(crate::context_usage::ContextUsageSnapshot),
+    ContextUsage(crate::prompt::context_usage::ContextUsageSnapshot),
     /// AG-UI `RUN_STARTED`：一次用户发送对应一个 run。
     RunStarted {
         thread_id: String,
@@ -698,7 +698,7 @@ async fn run_multi_turn_stream_inner(
             let agent = session.lock().await;
             let (system_chars, memory_chars, skills_chars, recall_chars) =
                 agent.system_prompt_layer_chars();
-            let snap = crate::context_usage::build_snapshot(crate::context_usage::ContextUsageInput {
+            let snap = crate::prompt::context_usage::build_snapshot(crate::prompt::context_usage::ContextUsageInput {
                 system_chars,
                 memory_chars,
                 skills_chars,
@@ -1470,7 +1470,7 @@ async fn execute_tools_serial_inner(
                                     },
                                     ..ProviderConfig::default()
                                 };
-                                crate::smart_approval::maybe_smart_downgrade_ask(
+                        crate::control::smart_approval::maybe_smart_downgrade_ask(
                                     cmd,
                                     decision.description,
                                     provider,
@@ -1914,7 +1914,7 @@ fn parse_astro_ui(result: &str) -> Option<AstroUiPayload> {
 #[cfg(test)]
 mod child_hitl_tests {
     use super::*;
-    use crate::interrupt::ResumeItem;
+    use crate::control::interrupt::ResumeItem;
     use serde_json::json;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
