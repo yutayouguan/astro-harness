@@ -484,12 +484,38 @@ html[data-theme="dark"] .fs-layout-btn:hover {
 }
 
 .fs-status,
-.fs-empty,
-.fs-preview-empty {
+.fs-empty {
   padding: 28px 16px;
   text-align: center;
   color: var(--ink-mute);
   font-size: 13px;
+}
+
+.fs-preview-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 18px;
+  text-align: center;
+  color: var(--ink-mute);
+}
+
+.fs-preview-empty-illust {
+  --tone: var(--tone-cyan, #06b6d4);
+  width: min(220px, 78%);
+  max-width: 240px;
+}
+
+.fs-preview-empty-illust.astro-empty {
+  padding: 0;
+}
+
+.fs-preview-empty-illust .astro-empty-art {
+  width: 100%;
+  max-width: none;
 }
 
 .fs-error {

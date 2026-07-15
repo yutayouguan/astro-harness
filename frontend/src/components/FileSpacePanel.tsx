@@ -1030,7 +1030,15 @@ export default function FileSpacePanel({
 
           <aside className="fs-preview" aria-label={t("filespace.preview")}>
             {!selected ? (
-              <div className="fs-preview-empty">{t("filespace.preview")}</div>
+              <div className="fs-preview-empty">
+                <EmptyIllustration
+                  scene="files"
+                  size="lg"
+                  className="fs-preview-empty-illust"
+                  title={t("filespace.previewEmpty")}
+                  hint={t("filespace.previewEmptyHint")}
+                />
+              </div>
             ) : (
               <>
                 <div className="fs-preview-head">
