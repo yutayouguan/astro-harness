@@ -588,6 +588,207 @@ pub async fn google_interactions_image(
     parse_interaction_image_response(&v)
 }
 
+// ── Video understanding ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoUnderstandMode {
+    Qa,
+    Summarize,
+    Timeline,
+}
+
+impl VideoUnderstandMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Qa => "qa",
+            Self::Summarize => "summarize",
+            Self::Timeline => "timeline",
+        }
+    }
+}
+
+impl std::str::FromStr for VideoUnderstandMode {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "qa" | "" => Ok(Self::Qa),
+            "summarize" => Ok(Self::Summarize),
+            "timeline" => Ok(Self::Timeline),
+            other => anyhow::bail!("未知 video_understand mode: {other}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum VideoInputPart {
+    Inline {
+        mime_type: String,
+        data_b64: String,
+    },
+    Uri {
+        mime_type: Option<String>,
+        uri: String,
+    },
+}
+
+pub fn default_video_understand_prompt(mode: VideoUnderstandMode) -> &'static str {
+    match mode {
+        VideoUnderstandMode::Qa => {
+            "请概括该视频，并用要点回答关于其内容的问题。引用时刻请用 MM:SS。"
+        }
+        VideoUnderstandMode::Summarize => {
+            "请用 3–5 句话总结该视频，并分别说明关键的视觉与音频要点。引用时刻请用 MM:SS。"
+        }
+        VideoUnderstandMode::Timeline => {
+            "提取该视频的关键事件时间线。每个事件包含 timestamp(MM:SS)、description、modality(visual|audio|both)。"
+        }
+    }
+}
+
+pub fn video_timeline_json_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "events": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "timestamp": { "type": "string" },
+                        "description": { "type": "string" },
+                        "modality": { "type": "string", "enum": ["visual", "audio", "both"] }
+                    },
+                    "required": ["timestamp", "description", "modality"]
+                }
+            }
+        },
+        "required": ["events"]
+    })
+}
+
+pub fn build_interaction_video_body(
+    model: &str,
+    prompt: &str,
+    video: &VideoInputPart,
+    mode: VideoUnderstandMode,
+) -> Value {
+    let video_part = match video {
+        VideoInputPart::Inline { mime_type, data_b64 } => json!({
+            "type": "video",
+            "data": data_b64,
+            "mime_type": mime_type,
+        }),
+        VideoInputPart::Uri { mime_type, uri } => {
+            let mut p = json!({ "type": "video", "uri": uri });
+            if let Some(m) = mime_type.as_ref().filter(|s| !s.is_empty()) {
+                p["mime_type"] = json!(m);
+            }
+            p
+        }
+    };
+    let mut body = json!({
+        "model": model,
+        "input": [video_part, { "type": "text", "text": prompt }],
+    });
+    if mode == VideoUnderstandMode::Timeline {
+        body["response_format"] = json!({
+            "type": "json_schema",
+            "json_schema": {
+                "name": "video_timeline",
+                "schema": video_timeline_json_schema()
+            }
+        });
+    }
+    body
+}
+
+pub fn parse_interaction_video_text(v: &Value) -> Result<String> {
+    if let Some(t) = v.get("output_text").and_then(|x| x.as_str()) {
+        let t = t.trim();
+        if !t.is_empty() {
+            return Ok(t.to_string());
+        }
+    }
+    let mut parts = Vec::new();
+    if let Some(steps) = v.get("steps").and_then(|s| s.as_array()) {
+        for step in steps {
+            let content = step
+                .get("content")
+                .or_else(|| step.pointer("/model_output/content"));
+            if let Some(arr) = content.and_then(|c| c.as_array()) {
+                for item in arr {
+                    if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
+                        parts.push(t.to_string());
+                    }
+                }
+            } else if let Some(t) = step
+                .pointer("/content/0/text")
+                .and_then(|t| t.as_str())
+            {
+                parts.push(t.to_string());
+            }
+        }
+    }
+    let joined = parts.join("\n").trim().to_string();
+    if joined.is_empty() {
+        anyhow::bail!("Interactions 视频理解响应无文本");
+    }
+    Ok(joined)
+}
+
+pub fn try_parse_timeline_events(text: &str) -> Result<Value> {
+    let trimmed = text.trim();
+    // 允许 markdown fence
+    let json_str = if let Some(rest) = trimmed.strip_prefix("```") {
+        let rest = rest
+            .trim_start_matches("json")
+            .trim_start_matches('\n');
+        rest.strip_suffix("```").unwrap_or(rest).trim()
+    } else {
+        trimmed
+    };
+    let v: Value = serde_json::from_str(json_str).context("timeline JSON 解析失败")?;
+    if !v.get("events").map(|e| e.is_array()).unwrap_or(false) {
+        anyhow::bail!("timeline JSON 缺少 events 数组");
+    }
+    Ok(v)
+}
+
+pub async fn google_interactions_video(
+    client: &Client,
+    config: &ProviderConfig,
+    model: &str,
+    prompt: &str,
+    video: &VideoInputPart,
+    mode: VideoUnderstandMode,
+) -> Result<String> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("Google API Key 为空");
+    }
+    let url = interactions_url(config);
+    let body = build_interaction_video_body(model, prompt, video, mode);
+    let response = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .header("x-goog-api-key", config.api_key.trim())
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("连接 Google interactions video 失败: {url}"))?;
+    let status = response.status();
+    let v: Value = response
+        .json()
+        .await
+        .context("解析 Google interactions video 响应失败")?;
+    if !status.is_success() {
+        anyhow::bail!(
+            "Google interactions HTTP {status}: {}",
+            error_message(&v)
+        );
+    }
+    parse_interaction_video_text(&v)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -794,5 +995,91 @@ mod tests {
     fn parse_errors_when_no_image() {
         let v = json!({ "id": "ix", "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "x" }] }] });
         assert!(parse_interaction_image_response(&v).is_err());
+    }
+}
+
+#[cfg(test)]
+mod video_understand_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn build_qa_body_video_before_text() {
+        let body = build_interaction_video_body(
+            "gemini-3.5-flash",
+            "summarize please",
+            &VideoInputPart::Uri {
+                mime_type: Some("video/mp4".into()),
+                uri: "https://www.youtube.com/watch?v=abc".into(),
+            },
+            VideoUnderstandMode::Qa,
+        );
+        assert_eq!(body["model"], "gemini-3.5-flash");
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[0]["type"], "video");
+        assert_eq!(input[0]["uri"], "https://www.youtube.com/watch?v=abc");
+        assert_eq!(input[1]["type"], "text");
+        assert_eq!(input[1]["text"], "summarize please");
+        assert!(body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn build_inline_and_timeline_schema() {
+        let body = build_interaction_video_body(
+            "gemini-3.5-flash",
+            "timeline",
+            &VideoInputPart::Inline {
+                mime_type: "video/mp4".into(),
+                data_b64: "YWJj".into(),
+            },
+            VideoUnderstandMode::Timeline,
+        );
+        assert_eq!(body["input"][0]["data"], "YWJj");
+        assert_eq!(body["input"][0]["mime_type"], "video/mp4");
+        assert_eq!(body["response_format"]["type"], "json_schema");
+        let schema = body
+            .pointer("/response_format/schema")
+            .or_else(|| body.pointer("/response_format/json_schema/schema"))
+            .expect("schema");
+        assert!(schema.pointer("/properties/events").is_some());
+    }
+
+    #[test]
+    fn parse_prefers_output_text() {
+        let v = json!({ "output_text": "ok", "steps": [] });
+        assert_eq!(parse_interaction_video_text(&v).unwrap(), "ok");
+    }
+
+    #[test]
+    fn parse_falls_back_to_steps() {
+        let v = json!({
+            "steps": [{
+                "type": "model_output",
+                "content": [{ "type": "text", "text": "from-steps" }]
+            }]
+        });
+        assert_eq!(parse_interaction_video_text(&v).unwrap(), "from-steps");
+    }
+
+    #[test]
+    fn try_parse_timeline_events_ok() {
+        let text = r#"{"events":[{"timestamp":"00:05","description":"intro","modality":"both"}]}"#;
+        let v = try_parse_timeline_events(text).unwrap();
+        assert_eq!(v["events"][0]["timestamp"], "00:05");
+    }
+
+    #[test]
+    fn try_parse_timeline_events_rejects_missing() {
+        assert!(try_parse_timeline_events(r#"{"foo":1}"#).is_err());
+    }
+
+    #[test]
+    fn mode_parse() {
+        assert_eq!(
+            "timeline".parse::<VideoUnderstandMode>().unwrap(),
+            VideoUnderstandMode::Timeline
+        );
+        assert!("nope".parse::<VideoUnderstandMode>().is_err());
     }
 }
