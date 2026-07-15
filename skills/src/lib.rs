@@ -23,7 +23,10 @@ pub mod store;
 pub mod update;
 
 pub use install::{install_from_ref, InstallOriginHint};
-pub use update::{update_all_with_origin, update_installed_skill, update_outdated_skills};
+pub use update::{
+    backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,
+    update_outdated_skills,
+};
 pub use seed::{
     is_public_skill_installed, seed_default_public_skills, SeedReport, DEFAULT_PUBLIC_SKILLS,
 };
@@ -36,6 +39,7 @@ pub use installed::{
 pub use models::{
     InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,
     SkillUpdateItemResult, SkillUpdatePreview, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
+    UpdateSkillOpts,
 };
 pub use preview::preview_skill_update;
 pub use check::{
