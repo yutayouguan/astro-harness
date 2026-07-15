@@ -1,11 +1,21 @@
 /** 通用下拉选择菜单。 */
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 /** 下拉选项 */
 export type SelectOption = {
   value: string;
   label: string;
+  /** 可选前缀图标（如模型/供应商品牌） */
+  icon?: ReactNode;
 };
 
 /** 通用下拉选择菜单入参 */
@@ -222,6 +232,11 @@ export function SelectMenu({
                       if (opt.value !== value) onChange(opt.value);
                     }}
                   >
+                    {opt.icon ? (
+                      <span className="select-menu-option-icon" aria-hidden>
+                        {opt.icon}
+                      </span>
+                    ) : null}
                     <span className="select-menu-option-label">{opt.label}</span>
                     {active ? <CheckIcon /> : null}
                   </button>
@@ -251,6 +266,11 @@ export function SelectMenu({
           if (!disabled) setOpen((v) => !v);
         }}
       >
+        {selected?.icon ? (
+          <span className="select-menu-value-icon" aria-hidden>
+            {selected.icon}
+          </span>
+        ) : null}
         <span className="select-menu-value">{label}</span>
         <ChevronDown open={open} />
       </button>

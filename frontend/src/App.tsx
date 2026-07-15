@@ -3104,6 +3104,7 @@ export default function App() {
                     id: p.id,
                     name: p.display_name,
                     model: p.model,
+                    kind: p.kind,
                   }))}
                   activeProviderId={activeProviderId}
                 />

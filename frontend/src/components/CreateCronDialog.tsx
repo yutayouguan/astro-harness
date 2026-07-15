@@ -18,6 +18,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { SelectMenu } from "./SelectMenu";
+import { ModelBrandIcon, ProviderBrandIcon } from "./ProviderIcons";
 import {
   decodeSchedule,
   encodeSchedule,
@@ -29,7 +30,13 @@ import { normalizeAgentId } from "../types/agent";
 import type { CronJobDto } from "./CronPanel";
 
 /** 创建任务对话框可选的供应商简项 */
-export type ProviderOpt = { id: string; name: string; model: string };
+export type ProviderOpt = {
+  id: string;
+  name: string;
+  model: string;
+  /** 供应商品牌 kind，用于 lobehub 图标 */
+  kind?: string;
+};
 
 /** 新建/编辑定时任务抽屉入参 */
 type Props = {
@@ -373,19 +380,21 @@ export function CreateCronDialog({
                     <Server size={13} strokeWidth={2.2} aria-hidden />
                     {t("cron.field.provider")}
                   </span>
-                  <div className="cron-dialog-control">
-                    <Server size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
-                    <SelectMenu
-                      className="cron-dialog-select has-leading-icon"
-                      value={selectedProviderId}
-                      onChange={setSelectedProviderId}
-                      aria-label={t("cron.field.provider")}
+                  <SelectMenu
+                    className="cron-dialog-select cron-dialog-select--brand"
+                    value={selectedProviderId}
+                    onChange={setSelectedProviderId}
+                    aria-label={t("cron.field.provider")}
                       options={providers.map((p) => ({
                         value: p.id,
                         label: p.name,
+                        icon: (
+                          <span className="select-menu-brand-icon" aria-hidden>
+                            <ProviderBrandIcon kind={p.kind ?? p.id} size={13} />
+                          </span>
+                        ),
                       }))}
-                    />
-                  </div>
+                  />
                 </label>
               )}
               <label className="cron-dialog-field">
@@ -393,21 +402,22 @@ export function CreateCronDialog({
                   <Cpu size={13} strokeWidth={2.2} aria-hidden />
                   {t("cron.field.model")}
                 </span>
-                <div className="cron-dialog-control">
-                  <Cpu size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
-                  <SelectMenu
-                    className="cron-dialog-select has-leading-icon"
-                    value={selectedModel}
-                    onChange={setSelectedModel}
-                    aria-label={t("cron.field.model")}
-                    disabled={modelOptions.length === 0}
-                    options={
-                      modelOptions.length === 0
-                        ? [{ value: "", label: "—" }]
-                        : modelOptions.map((m) => ({ value: m, label: m }))
-                    }
-                  />
-                </div>
+                <SelectMenu
+                  className="cron-dialog-select cron-dialog-select--brand"
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  aria-label={t("cron.field.model")}
+                  disabled={modelOptions.length === 0}
+                  options={
+                    modelOptions.length === 0
+                      ? [{ value: "", label: "—" }]
+                      : modelOptions.map((m) => ({
+                          value: m,
+                          label: m,
+                          icon: <ModelBrandIcon modelId={m} size={13} />,
+                        }))
+                  }
+                />
               </label>
               <label className="cron-dialog-check">
                 <input
