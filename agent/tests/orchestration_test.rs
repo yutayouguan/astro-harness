@@ -1,6 +1,6 @@
 //! 编排执行器单测（无真实 LLM）。
 
-use memory::{
+use orchestration::{
     NewOrchestration, NewOrchestrationStep, OrchestrationDb, OrchestrationSpawnRequest,
     OrchestrationStatus,
 };
@@ -44,7 +44,7 @@ async fn second_claim_is_noop_without_llm() {
         base_url: String::new(),
         chat_targets: vec![],
         caller_depth: 0,
-        max_spawn_depth: memory::DEFAULT_MAX_SPAWN_DEPTH,
+        max_spawn_depth: home::DEFAULT_MAX_SPAWN_DEPTH,
         allow_reclaim: false,
     };
     agent::orchestration::run_orchestration(req).await.unwrap();
@@ -94,7 +94,7 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
         base_url: String::new(),
         chat_targets: vec![],
         caller_depth: 0,
-        max_spawn_depth: memory::DEFAULT_MAX_SPAWN_DEPTH,
+        max_spawn_depth: home::DEFAULT_MAX_SPAWN_DEPTH,
         allow_reclaim: false,
     };
     agent::orchestration::run_orchestration(req).await.unwrap();
@@ -113,10 +113,10 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
         "remaining pending steps should be skipped on failure"
     );
 
-    let usage = memory::UsageDb::open_default().unwrap();
+    let usage = usage::UsageDb::open_default().unwrap();
     let insights = usage
-        .query_insights(memory::UsageInsightsQuery {
-            period: memory::UsagePeriod::Year,
+        .query_insights(usage::UsageInsightsQuery {
+            period: usage::UsagePeriod::Year,
             as_of: None,
             agent_id: None,
         })
@@ -125,7 +125,7 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
         insights.kpis.calls, 0,
         "orchestration kind must not inflate calls KPI"
     );
-    let conn = rusqlite::Connection::open(memory::usage_db_path()).unwrap();
+    let conn = rusqlite::Connection::open(usage::usage_db_path()).unwrap();
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM usage_events WHERE kind = 'orchestration'",

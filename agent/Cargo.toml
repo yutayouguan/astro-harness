@@ -7,6 +7,11 @@ edition = "2021"
 common = { path = "../common" }
 memory = { path = "../memory" }
 home = { path = "../home" }
+session = { path = "../session" }
+usage = { path = "../usage" }
+orchestration = { path = "../orchestration" }
+delegate = { path = "../delegate" }
+cron = { path = "../cron" }
 skills = { path = "../skills" }
 providers = { path = "../providers" }
 tools = { path = "../tools" }
@@ -25,6 +30,5 @@ chrono = { version = "0.4", features = ["clock"] }
 futures = "0.3"
 
 [dev-dependencies]
-session = { path = "../session" }
 tempfile = "3"
 rusqlite = { version = "0.31", features = ["bundled"] }

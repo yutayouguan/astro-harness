@@ -3,7 +3,7 @@
 #[tokio::test]
 async fn execute_job_fails_without_api_key() {
     let dir = tempfile::TempDir::new().unwrap();
-    let job = memory::CronJob {
+    let job = cron::CronJob {
         id: "job-test-1".into(),
         schedule: "every:1d".into(),
         task: "hi".into(),

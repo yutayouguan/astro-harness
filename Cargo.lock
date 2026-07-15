@@ -26,11 +26,14 @@ dependencies = [
  "async-trait",
  "chrono",
  "common",
+ "cron",
+ "delegate",
  "futures",
  "home",
  "hooks",
  "mcp",
  "memory",
+ "orchestration",
  "providers",
  "rusqlite",
  "serde",
@@ -42,6 +45,7 @@ dependencies = [
  "tokio",
  "tools",
  "tracing",
+ "usage",
  "uuid",
 ]
 
@@ -5022,8 +5026,12 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "common",
+ "cron",
+ "delegate",
+ "home",
  "hooks",
  "memory",
+ "orchestration",
  "providers",
  "regex",
  "reqwest 0.12.28",
@@ -5034,6 +5042,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "urlencoding",
+ "usage",
  "uuid",
 ]
 

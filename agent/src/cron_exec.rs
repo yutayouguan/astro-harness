@@ -10,9 +10,9 @@ use std::time::Duration;
 use chrono::Utc;
 use common::ChatTarget;
 use futures::StreamExt;
-use memory::{
-    cron_db_path, cron_dir, default_memory_dir, CronJob, CronRunDb, MemoryManager, NewCronRun,
-};
+use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
+use home::default_memory_dir;
+use memory::MemoryManager;
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
@@ -81,7 +81,7 @@ impl CronExecCredentials {
 ///
 /// # 返回
 ///
-/// 执行结束后的 [`memory::CronRunRow`]（含最终状态、摘要与输出）。
+/// 执行结束后的 [`cron::CronRunRow`]（含最终状态、摘要与输出）。
 ///
 /// # 错误
 ///
@@ -92,7 +92,7 @@ pub async fn execute_job(
     job: &CronJob,
     creds: CronExecCredentials,
     trigger: &str,
-) -> anyhow::Result<memory::CronRunRow> {
+) -> anyhow::Result<cron::CronRunRow> {
     execute_job_with_roots(cron_dir(), job, creds, trigger).await
 }
 
@@ -108,7 +108,7 @@ pub async fn execute_job(
 ///
 /// # 返回
 ///
-/// 终态 [`memory::CronRunRow`]；成功时 `summary` 由输出首行截取，完整输出存入对应字段。
+/// 终态 [`cron::CronRunRow`]；成功时 `summary` 由输出首行截取，完整输出存入对应字段。
 ///
 /// # 错误
 ///
@@ -121,7 +121,7 @@ pub async fn execute_job_with_roots(
     job: &CronJob,
     creds: CronExecCredentials,
     trigger: &str,
-) -> anyhow::Result<memory::CronRunRow> {
+) -> anyhow::Result<cron::CronRunRow> {
     let cron_root = cron_root.as_ref();
     let db = CronRunDb::new(cron_db_path(cron_root))?;
 
@@ -214,7 +214,7 @@ pub async fn execute_job_with_roots(
         .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))?;
 
     if row.status == "success" {
-        memory::UsageDb::try_record(memory::NewUsageEvent {
+        usage::UsageDb::try_record(usage::NewUsageEvent {
             ts: Utc::now().to_rfc3339(),
             kind: "cron".into(),
             name: job.id.clone(),

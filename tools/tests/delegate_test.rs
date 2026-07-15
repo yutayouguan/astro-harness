@@ -72,11 +72,11 @@ async fn delegate_goal_hits_runner_or_key() {
 #[tokio::test]
 async fn delegate_async_status_collect_cancel_flow() {
     let _guard = ASYNC_TEST_LOCK.lock().unwrap();
-    let spawner: memory::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
+    let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
-            memory::AsyncDelegateRegistry::global().finish_ok(
+            delegate::AsyncDelegateRegistry::global().finish_ok(
                 &tid,
                 serde_json::json!({"ok": true, "summary": "done"}).to_string(),
             );
@@ -132,11 +132,11 @@ async fn delegate_async_status_collect_cancel_flow() {
 #[tokio::test]
 async fn delegate_async_cancel_marks_cancelled() {
     let _guard = ASYNC_TEST_LOCK.lock().unwrap();
-    let spawner: memory::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
+    let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(500)).await;
-            memory::AsyncDelegateRegistry::global()
+            delegate::AsyncDelegateRegistry::global()
                 .finish_ok(&tid, r#"{"late":true}"#.into());
         });
     });
@@ -182,11 +182,11 @@ async fn delegate_blocked_at_max_spawn_depth() {
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
 
-    let ctx_depth = memory::SpawnDepthCtx {
+    let ctx_depth = home::SpawnDepthCtx {
         depth: 1,
         max_depth: 1,
     };
-    let err = memory::scope_spawn_depth(ctx_depth, async {
+    let err = home::scope_spawn_depth(ctx_depth, async {
         tools::dispatch_tool(
             |_| true,
             &mut ctx,

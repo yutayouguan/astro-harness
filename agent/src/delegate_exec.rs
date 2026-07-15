@@ -6,9 +6,10 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use futures::StreamExt;
-use memory::{
-    default_memory_dir, create_task_worktree, find_git_root, resolve_project_root, DelegateRole,
-    DelegateRunRequest, DelegateTaskSpec, WorktreeHandle,
+use home::default_memory_dir;
+use delegate::{
+    create_task_worktree, find_git_root, resolve_project_root, DelegateRole, DelegateRunRequest,
+    DelegateTaskSpec, WorktreeHandle,
 };
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
@@ -136,7 +137,7 @@ fn child_max_rounds(task: &DelegateTaskSpec, cfg: &hooks::config::DelegationConf
 /// 生效角色：orchestrator 仅在配置允许且仍可再嵌套时保留。
 fn effective_role(
     requested: DelegateRole,
-    depth_ctx: memory::SpawnDepthCtx,
+    depth_ctx: home::SpawnDepthCtx,
     cfg: &hooks::config::DelegationConfig,
 ) -> DelegateRole {
     if !cfg.orchestrator_enabled {
@@ -183,14 +184,14 @@ async fn run_one_child(
     creds: DelegateRunRequest,
     task: DelegateTaskSpec,
 ) -> anyhow::Result<serde_json::Value> {
-    let depth_ctx = memory::SpawnDepthCtx::from_caller(creds.caller_depth, creds.max_spawn_depth);
-    memory::scope_spawn_depth(depth_ctx, run_one_child_inner(creds, task, depth_ctx)).await
+    let depth_ctx = home::SpawnDepthCtx::from_caller(creds.caller_depth, creds.max_spawn_depth);
+    home::scope_spawn_depth(depth_ctx, run_one_child_inner(creds, task, depth_ctx)).await
 }
 
 async fn run_one_child_inner(
     creds: DelegateRunRequest,
     task: DelegateTaskSpec,
-    depth_ctx: memory::SpawnDepthCtx,
+    depth_ctx: home::SpawnDepthCtx,
 ) -> anyhow::Result<serde_json::Value> {
     let cfg = delegation_cfg();
     let role = effective_role(task.role, depth_ctx, &cfg);
@@ -317,7 +318,7 @@ fn resolve_git_repo_for_delegate(explicit: Option<&std::path::Path>) -> Option<P
 /// 嵌套子 Agent 工具剥离：记忆/建 Agent/clarify/confirm 始终禁用；叶子再禁委派与编排。
 pub fn apply_nested_agent_tool_strips(
     registry: &mut tools::ToolRegistry,
-    depth_ctx: memory::SpawnDepthCtx,
+    depth_ctx: home::SpawnDepthCtx,
     role: DelegateRole,
 ) {
     apply_nested_agent_tool_strips_with_role(registry, depth_ctx, role);
@@ -326,7 +327,7 @@ pub fn apply_nested_agent_tool_strips(
 /// 兼容仅依赖深度的调用方（编排步默认按叶子深度剥离委派）。
 pub fn apply_nested_agent_tool_strips_depth_only(
     registry: &mut tools::ToolRegistry,
-    depth_ctx: memory::SpawnDepthCtx,
+    depth_ctx: home::SpawnDepthCtx,
 ) {
     let role = if depth_ctx.is_leaf() {
         DelegateRole::Leaf
@@ -338,7 +339,7 @@ pub fn apply_nested_agent_tool_strips_depth_only(
 
 fn apply_nested_agent_tool_strips_with_role(
     registry: &mut tools::ToolRegistry,
-    depth_ctx: memory::SpawnDepthCtx,
+    depth_ctx: home::SpawnDepthCtx,
     role: DelegateRole,
 ) {
     for name in [
@@ -394,7 +395,7 @@ pub fn apply_toolsets_filter(registry: &mut tools::ToolRegistry, toolsets: Optio
         .map(|t| t.name.clone())
         .collect();
     for name in names {
-        let ts = memory::tool_name_to_toolset(&name);
+        let ts = home::tool_name_to_toolset(&name);
         if !allowed.contains(ts) {
             registry.unregister(&name);
         }
@@ -405,7 +406,7 @@ async fn run_provider_loop(
     agent: &mut AgentLoop,
     creds: &DelegateRunRequest,
     initial_system_prompt: &str,
-    depth_ctx: memory::SpawnDepthCtx,
+    depth_ctx: home::SpawnDepthCtx,
     role: DelegateRole,
     toolsets: Option<&[String]>,
     max_rounds: usize,
@@ -592,7 +593,7 @@ pub async fn run_subtasks_parallel(
 #[cfg(test)]
 mod strip_tests {
     use super::*;
-    use memory::SpawnDepthCtx;
+    use home::SpawnDepthCtx;
     use tools::{register_all, ToolRegistry};
 
     #[test]

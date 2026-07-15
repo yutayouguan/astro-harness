@@ -1639,9 +1639,9 @@ struct ToolExecSnapshot {
     chat_targets: Vec<common::ChatTarget>,
     image_gen_targets: tools::ImageGenTargets,
     providers: Arc<providers::registry::ProviderRegistry>,
-    delegate_runner: memory::DelegateRunner,
-    async_spawner: memory::DelegateAsyncSpawner,
-    orchestration_spawner: memory::OrchestrationSpawner,
+    delegate_runner: delegate::DelegateRunner,
+    async_spawner: delegate::DelegateAsyncSpawner,
+    orchestration_spawner: orchestration::OrchestrationSpawner,
 }
 
 fn run_tool_on_snapshot(

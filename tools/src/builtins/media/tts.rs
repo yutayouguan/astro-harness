@@ -4,7 +4,7 @@
 //! OpenAI 依次尝试 targets、当前聊天 OpenAI、`OPENAI_API_KEY`。
 //! 音频写入工作区 `generated/audio/`。
 
-use memory::{generated_dir, GeneratedKind};
+use home::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::http_stream::openai_compatible_base;

@@ -124,12 +124,12 @@ fn reload_uses_agent_specific_tools_enabled() {
 
     let mut global = HashMap::new();
     global.insert("memory".into(), true);
-    memory::save_tools_enabled(&global).unwrap();
+    home::save_tools_enabled(&global).unwrap();
 
     let mut custom = HashMap::new();
     custom.insert("memory".into(), false);
     custom.insert("scheduled".into(), true);
-    memory::save_tools_enabled_for_agent(Some("custom-bot"), &custom).unwrap();
+    home::save_tools_enabled_for_agent(Some("custom-bot"), &custom).unwrap();
 
     let mut reg = ToolRegistry::new();
     reg.register(ToolEntry {

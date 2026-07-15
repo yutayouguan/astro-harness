@@ -2,7 +2,7 @@
 //!
 //! 工具层 `multi_agent` 已改为串行 orchestration；本模块 API 供程序化并行派发。
 
-use memory::DelegateRunRequest;
+use delegate::DelegateRunRequest;
 use tokio::task::JoinSet;
 
 use crate::delegate_exec;

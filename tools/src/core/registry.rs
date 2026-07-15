@@ -58,7 +58,7 @@ impl ToolRegistry {
     /// `save_tools_enabled_for_agent` 对齐。
     pub fn reload_enabled_from_disk(&mut self, agent_id: Option<&str>) {
         self.enabled =
-            memory::sync_tools_enabled_defaults_for_agent(agent_id).unwrap_or_default();
+            home::sync_tools_enabled_defaults_for_agent(agent_id).unwrap_or_default();
     }
 
     /// 判断指定 toolset 是否启用；未在映射中出现时默认返回 `true`。
@@ -74,7 +74,7 @@ impl ToolRegistry {
         if name.starts_with("mcp__") {
             return self.tools.contains_key(name);
         }
-        let toolset = memory::tool_name_to_toolset(name);
+        let toolset = home::tool_name_to_toolset(name);
         self.is_toolset_enabled(toolset)
     }
 
@@ -225,12 +225,12 @@ mod tests {
         let mut global = HashMap::new();
         global.insert("memory".into(), true);
         global.insert("scheduled".into(), true);
-        memory::save_tools_enabled(&global).unwrap();
+        home::save_tools_enabled(&global).unwrap();
 
         let mut alice = HashMap::new();
         alice.insert("memory".into(), false);
         alice.insert("scheduled".into(), true);
-        memory::save_tools_enabled_for_agent(Some("alice"), &alice).unwrap();
+        home::save_tools_enabled_for_agent(Some("alice"), &alice).unwrap();
 
         let mut reg = ToolRegistry::new();
         reg.register(ToolEntry {

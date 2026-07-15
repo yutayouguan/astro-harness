@@ -46,7 +46,7 @@ async fn multi_agent_queues_orchestration() {
     let id = v["orchestration_id"].as_str().unwrap();
     assert!(!id.is_empty());
 
-    let db = memory::OrchestrationDb::open_default().unwrap();
+    let db = orchestration::OrchestrationDb::open_default().unwrap();
     let orch = db.get(id).unwrap().unwrap();
     assert_eq!(orch.goal, "ship feature");
     let steps = db.list_steps(id).unwrap();

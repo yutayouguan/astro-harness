@@ -3,7 +3,7 @@
 //! 凭据来自 [`ToolContext::image_gen_targets`]：先试 primary，失败再试 fallback。
 //! 成功图片写入工作区 `generated/images/`。
 
-use memory::{generated_dir, GeneratedKind};
+use home::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::trait_::ProviderConfig;
@@ -147,7 +147,7 @@ async fn generate_one(
 
 #[cfg(test)]
 mod path_tests {
-    use memory::{generated_dir, GeneratedKind};
+    use home::{generated_dir, GeneratedKind};
     use std::path::Path;
 
     #[test]

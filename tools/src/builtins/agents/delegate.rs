@@ -133,7 +133,7 @@ pub fn dispatch_async(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .async_spawner
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no async_spawner configured"))?;
-    let task_id = memory::start_delegate_async(req, spawner)?;
+    let task_id = delegate::start_delegate_async(req, spawner)?;
     Ok(serde_json::json!({
         "task_id": task_id,
         "status": "running",
@@ -149,7 +149,7 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
     if id.is_empty() {
         anyhow::bail!("delegate_status 需要非空 task_id");
     }
-    let rec = memory::async_delegate_status(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let rec = delegate::async_delegate_status(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(record_to_json(&rec, true))
 }
 
@@ -162,7 +162,7 @@ pub async fn dispatch_collect(args: &serde_json::Value) -> anyhow::Result<String
         anyhow::bail!("delegate_collect 需要非空 task_id");
     }
     let timeout = parsed.timeout_secs.unwrap_or(600).clamp(1, 3600);
-    let rec = memory::async_delegate_collect(id, timeout)
+    let rec = delegate::async_delegate_collect(id, timeout)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(record_to_json(&rec, false))
@@ -176,19 +176,19 @@ pub fn dispatch_cancel(args: &serde_json::Value) -> anyhow::Result<String> {
     if id.is_empty() {
         anyhow::bail!("delegate_cancel 需要非空 task_id");
     }
-    let rec = memory::async_delegate_cancel(id).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let rec = delegate::async_delegate_cancel(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(record_to_json(&rec, true))
 }
 
 fn build_run_request(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
-) -> anyhow::Result<memory::DelegateRunRequest> {
-    if !memory::can_spawn_nested() {
+) -> anyhow::Result<delegate::DelegateRunRequest> {
+    if !home::can_spawn_nested() {
         anyhow::bail!(
             "spawn depth limit reached (depth {} >= max {})",
-            memory::current_spawn_depth(),
-            memory::effective_max_spawn_depth()
+            home::current_spawn_depth(),
+            home::effective_max_spawn_depth()
         );
     }
     let parsed: DelegateArgs = serde_json::from_value(args.clone())
@@ -199,9 +199,9 @@ fn build_run_request(
         .max_concurrent
         .unwrap_or(cfg.delegation.max_concurrent_children)
         .clamp(1, 8);
-    let max_spawn_depth = memory::scoped_max_spawn_depth()
+    let max_spawn_depth = home::scoped_max_spawn_depth()
         .unwrap_or(cfg.delegation.max_spawn_depth.max(1));
-    Ok(memory::DelegateRunRequest {
+    Ok(delegate::DelegateRunRequest {
         parent_agent_id: ctx.memory.agent_id.clone(),
         parent_session_id: ctx.session_id.clone(),
         provider: ctx.chat_provider.clone(),
@@ -211,13 +211,13 @@ fn build_run_request(
         chat_targets: ctx.chat_targets.clone(),
         tasks: task_specs,
         max_concurrent,
-        caller_depth: memory::current_spawn_depth(),
+        caller_depth: home::current_spawn_depth(),
         max_spawn_depth,
         project_root: ctx.project_root.clone(),
     })
 }
 
-fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<memory::DelegateTaskSpec>> {
+fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<delegate::DelegateTaskSpec>> {
     if let Some(tasks) = &parsed.tasks {
         if tasks.is_empty() {
             anyhow::bail!("tasks 不能为空");
@@ -231,10 +231,10 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<memory::DelegateTa
             if goal.is_empty() {
                 anyhow::bail!("tasks[].goal 不能为空");
             }
-            out.push(memory::DelegateTaskSpec {
+            out.push(delegate::DelegateTaskSpec {
                 goal: goal.to_string(),
                 context: t.context.as_deref().unwrap_or("").trim().to_string(),
-                role: memory::DelegateRole::parse(t.role.as_deref().unwrap_or("leaf")),
+                role: delegate::DelegateRole::parse(t.role.as_deref().unwrap_or("leaf")),
                 toolsets: t.toolsets.clone(),
                 max_iterations: t.max_iterations,
             });
@@ -246,16 +246,16 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<memory::DelegateTa
     if goal.is_empty() {
         anyhow::bail!("delegate 需要 goal 或 tasks");
     }
-    Ok(vec![memory::DelegateTaskSpec {
+    Ok(vec![delegate::DelegateTaskSpec {
         goal: goal.to_string(),
         context: parsed.context.as_deref().unwrap_or("").trim().to_string(),
-        role: memory::DelegateRole::parse(parsed.role.as_deref().unwrap_or("leaf")),
+        role: delegate::DelegateRole::parse(parsed.role.as_deref().unwrap_or("leaf")),
         toolsets: parsed.toolsets.clone(),
         max_iterations: parsed.max_iterations,
     }])
 }
 
-fn record_to_json(rec: &memory::AsyncDelegateRecord, truncate_result: bool) -> String {
+fn record_to_json(rec: &delegate::AsyncDelegateRecord, truncate_result: bool) -> String {
     let mut result = rec.result_json.clone();
     if truncate_result && result.len() > 2_000 {
         result.truncate(2_000);
@@ -299,7 +299,7 @@ mod resolve_tests {
         };
         let specs = resolve_tasks(&parsed).unwrap();
         assert_eq!(specs.len(), 1);
-        assert_eq!(specs[0].role, memory::DelegateRole::Orchestrator);
+        assert_eq!(specs[0].role, delegate::DelegateRole::Orchestrator);
         assert_eq!(
             specs[0].toolsets.as_ref().unwrap(),
             &vec!["terminal".to_string(), "file".to_string()]

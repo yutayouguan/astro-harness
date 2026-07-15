@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use memory::AgentRuntimeConfig;
+use home::AgentRuntimeConfig;
 use serde_json::Value;
 
 use crate::context::{DynamicContext, StaticContext};
