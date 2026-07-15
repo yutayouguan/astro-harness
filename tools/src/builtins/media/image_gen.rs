@@ -1,7 +1,8 @@
-//! 图片生成工具：按文本提示调用 Google / OpenAI 等图片 Provider。
+//! 图片生成工具：按文本提示调用 Google Gemini Interactions / OpenAI 等图片 Provider。
 //!
-//! 凭据来自 [`ToolContext::image_gen_targets`]：先试 primary，失败再试 fallback。
-//! 成功图片写入工作区 `generated/images/`。
+//! Google 路径走 Gemini Interactions API（参考图、多轮、search、video 等）；
+//! OpenAI 路径仅 prompt-only 生图。凭据来自 [`ToolContext::image_gen_targets`]：
+//! 先试 primary，失败再试 fallback。成功图片写入工作区 `generated/images/`。
 
 use std::path::{Path, PathBuf};
 
@@ -376,16 +377,21 @@ fn load_reference_image(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result
     })
 }
 
-fn load_video_input(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<InteractionVideoInput> {
-    let path = resolve_workspace_file(ctx, relative)?;
-    let meta = std::fs::metadata(&path)?;
-    if meta.len() as usize > MAX_VIDEO_BYTES {
+fn check_video_byte_len(len: usize) -> anyhow::Result<()> {
+    if len > MAX_VIDEO_BYTES {
         anyhow::bail!(
-            "视频文件过大: {}（最大 {} MiB）",
-            path.display(),
+            "视频文件过大（{} 字节，最大 {} MiB）",
+            len,
             MAX_VIDEO_BYTES / (1024 * 1024)
         );
     }
+    Ok(())
+}
+
+fn load_video_input(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<InteractionVideoInput> {
+    let path = resolve_workspace_file(ctx, relative)?;
+    let meta = std::fs::metadata(&path)?;
+    check_video_byte_len(meta.len() as usize)?;
     let data = std::fs::read(&path)
         .map_err(|e| anyhow::anyhow!("读取视频失败 {}: {e}", path.display()))?;
     let filename = path
@@ -494,9 +500,8 @@ mod arg_tests {
         assert!(validate_image_gen_args(&a).is_ok());
     }
 
-    #[test]
-    fn detects_advanced_interactions_args() {
-        let base = ImageGenArgs {
+    fn base_args() -> ImageGenArgs {
+        ImageGenArgs {
             prompt: "x".into(),
             aspect_ratio: None,
             image_size: None,
@@ -507,24 +512,176 @@ mod arg_tests {
             thinking_level: None,
             video_uri: None,
             video: None,
-        };
+        }
+    }
+
+    #[test]
+    fn detects_advanced_interactions_args() {
+        let base = base_args();
         assert!(!has_advanced_interactions_args(&base));
-        let with_size = ImageGenArgs {
-            image_size: Some("1K".into()),
-            ..base.clone()
-        };
-        assert!(has_advanced_interactions_args(&with_size));
+
+        let cases: Vec<(&str, ImageGenArgs)> = vec![
+            (
+                "image_size",
+                ImageGenArgs {
+                    image_size: Some("1K".into()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "reference_images",
+                ImageGenArgs {
+                    reference_images: Some(vec!["generated/images/ref.png".into()]),
+                    ..base.clone()
+                },
+            ),
+            (
+                "previous_interaction_id",
+                ImageGenArgs {
+                    previous_interaction_id: Some("int-abc".into()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "google_search",
+                ImageGenArgs {
+                    google_search: true,
+                    ..base.clone()
+                },
+            ),
+            (
+                "image_search",
+                ImageGenArgs {
+                    google_search: true,
+                    image_search: true,
+                    ..base.clone()
+                },
+            ),
+            (
+                "thinking_level",
+                ImageGenArgs {
+                    thinking_level: Some("high".into()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "video_uri",
+                ImageGenArgs {
+                    video_uri: Some("https://www.youtube.com/watch?v=x".into()),
+                    ..base.clone()
+                },
+            ),
+            (
+                "video",
+                ImageGenArgs {
+                    video: Some("generated/videos/a.mp4".into()),
+                    ..base.clone()
+                },
+            ),
+        ];
+        for (name, args) in cases {
+            assert!(
+                has_advanced_interactions_args(&args),
+                "expected advanced for {name}"
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod path_tests {
-    use memory::{generated_dir, GeneratedKind};
+    use super::*;
+    use crate::context::{ImageGenTargets, ToolContext};
+    use memory::{generated_dir, GeneratedKind, MemoryManager};
+    use providers::registry::ProviderRegistry;
     use std::path::Path;
+    use tempfile::TempDir;
 
     #[test]
     fn image_gen_target_dir_is_images() {
         let d = generated_dir(Path::new("/ws"), GeneratedKind::Images);
         assert!(d.ends_with("generated/images"));
+    }
+
+    #[test]
+    fn resolve_workspace_file_rejects_escape() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"x").unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = ToolContext {
+            memory: &mut memory,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: ws,
+            project_root: None,
+            image_gen_targets: &targets,
+            providers: &providers,
+            session_id: "test".into(),
+            turn_id: None,
+            chat_api_key: String::new(),
+            chat_base_url: String::new(),
+            chat_provider: String::new(),
+            chat_model: String::new(),
+            chat_targets: vec![],
+            delegate_runner: None,
+            async_spawner: None,
+            orchestration_spawner: None,
+        };
+
+        let err = resolve_workspace_file(&ctx, "../outside/secret.txt").unwrap_err();
+        assert!(
+            err.to_string().contains("工作区内"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_workspace_file_accepts_in_workspace() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::write(ws.join("ok.txt"), b"ok").unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = ToolContext {
+            memory: &mut memory,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: ws.clone(),
+            project_root: None,
+            image_gen_targets: &targets,
+            providers: &providers,
+            session_id: "test".into(),
+            turn_id: None,
+            chat_api_key: String::new(),
+            chat_base_url: String::new(),
+            chat_provider: String::new(),
+            chat_model: String::new(),
+            chat_targets: vec![],
+            delegate_runner: None,
+            async_spawner: None,
+            orchestration_spawner: None,
+        };
+
+        let path = resolve_workspace_file(&ctx, "ok.txt").unwrap();
+        assert!(path.ends_with("ok.txt"));
+    }
+
+    #[test]
+    fn check_video_byte_len_rejects_over_limit() {
+        let err = check_video_byte_len(MAX_VIDEO_BYTES + 1).unwrap_err();
+        assert!(err.to_string().contains("视频文件过大"));
+    }
+
+    #[test]
+    fn check_video_byte_len_accepts_at_limit() {
+        assert!(check_video_byte_len(MAX_VIDEO_BYTES).is_ok());
     }
 }
