@@ -20,6 +20,11 @@ use crate::context::{ImageGenCreds, ToolContext};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
+/// 远程音频下载的超时时长。
+const DOWNLOAD_TIMEOUT_SECS: u64 = 60;
+/// 远程音频下载的字节数上限（25 MiB），适用于 `Content-Length` 预检与累计字节数双重校验。
+const MAX_AUDIO_DOWNLOAD_BYTES: u64 = 25 * 1024 * 1024;
+
 /// `audio_understand` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AudioUnderstandArgs {
@@ -210,7 +215,7 @@ async fn call_google(
         model: model.clone(),
         ..ProviderConfig::default()
     };
-    let media = resolve_google_media(ctx, audio_url, is_yt)?;
+    let media = resolve_google_media(ctx, audio_url, is_yt).await?;
     let client = reqwest::Client::new();
     let text = google_interactions_audio(&client, prompt, &media, mode, &config).await?;
     Ok(format!(
@@ -219,7 +224,13 @@ async fn call_google(
     ))
 }
 
-fn resolve_google_media(
+/// 解析 Google Interactions 所需的音频媒体部分。
+///
+/// - YouTube URL：以 `Uri` + `Video` 直传，Google 侧原生解析 YouTube 链接。
+/// - 其余情况（本地路径 / 任意 http(s) 音频 URL）：均通过 [`load_audio_bytes`]
+///   下载/读取字节后，以 `Inline`（base64）方式发送，绝不将任意 http(s) URL
+///   作为 `uri` 字段传给 Google（避免 SSRF/无鉴权外链拉取风险）。
+async fn resolve_google_media(
     ctx: &ToolContext<'_>,
     audio_url: &str,
     is_yt: bool,
@@ -231,26 +242,19 @@ fn resolve_google_media(
             uri: audio_url.to_string(),
         });
     }
-    if audio_url.starts_with("http://") || audio_url.starts_with("https://") {
-        return Ok(AudioMediaPart::Uri {
-            media_type: AudioMediaKind::Audio,
-            mime_type: mime_from_url(audio_url).to_string(),
-            uri: audio_url.to_string(),
-        });
-    }
-    let path = crate::path_safe::resolve_safe(&ctx.workspace_dir, audio_url)?;
-    if !path.exists() {
-        anyhow::bail!("本地文件不存在: {}", path.display());
-    }
-    let bytes = std::fs::read(&path)
-        .map_err(|e| anyhow::anyhow!("读取音频失败 {}: {e}", path.display()))?;
-    let mime = mime_from_path(&path);
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Ok(AudioMediaPart::Inline {
+    let (bytes, mime, _filename) = load_audio_bytes(ctx, audio_url).await?;
+    Ok(build_inline_audio_part(&bytes, &mime))
+}
+
+/// 纯函数：由已读取的字节与 mime 构造 Google Inline 音频媒体部分。
+/// 抽出以便单测直接覆盖「http(s) 字节 → Inline」映射，无需网络。
+fn build_inline_audio_part(bytes: &[u8], mime: &str) -> AudioMediaPart {
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    AudioMediaPart::Inline {
         media_type: AudioMediaKind::Audio,
         mime_type: mime.to_string(),
         data_b64: b64,
-    })
+    }
 }
 
 async fn call_openai(
@@ -287,22 +291,7 @@ async fn load_audio_bytes(
     audio_url: &str,
 ) -> anyhow::Result<(Vec<u8>, String, String)> {
     if audio_url.starts_with("http://") || audio_url.starts_with("https://") {
-        let client = reqwest::Client::new();
-        let resp = client
-            .get(audio_url)
-            .send()
-            .await
-            .map_err(|e| anyhow::anyhow!("下载音频失败: {e}"))?;
-        if !resp.status().is_success() {
-            anyhow::bail!("下载音频 HTTP {}", resp.status());
-        }
-        let mime = resp
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("audio/mp3")
-            .to_string();
-        let bytes = resp.bytes().await?.to_vec();
+        let (bytes, mime) = download_audio_bytes(audio_url).await?;
         let filename = filename_from_url(audio_url);
         return Ok((bytes, mime, filename));
     }
@@ -318,6 +307,55 @@ async fn load_audio_bytes(
         .unwrap_or("audio.mp3")
         .to_string();
     Ok((bytes, mime, filename))
+}
+
+/// 下载远程音频字节，带超时与大小上限保护：
+/// - 连接/读取超时 `DOWNLOAD_TIMEOUT_SECS` 秒；
+/// - `Content-Length` 声明超过 `MAX_AUDIO_DOWNLOAD_BYTES` 直接拒绝（无需下载）；
+/// - 服务器未声明或谎报长度时，按累计已读字节数二次校验，超限立即中止（防止无限占用内存）。
+async fn download_audio_bytes(audio_url: &str) -> anyhow::Result<(Vec<u8>, String)> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| anyhow::anyhow!("创建下载客户端失败: {e}"))?;
+    let mut resp = client
+        .get(audio_url)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("下载音频失败: {e}"))?;
+    if !resp.status().is_success() {
+        anyhow::bail!("下载音频 HTTP {}", resp.status());
+    }
+    if let Some(len) = resp.content_length() {
+        if len > MAX_AUDIO_DOWNLOAD_BYTES {
+            anyhow::bail!(
+                "音频文件过大（声明大小 {len} 字节），超过 {} MiB 限制",
+                MAX_AUDIO_DOWNLOAD_BYTES / (1024 * 1024)
+            );
+        }
+    }
+    let mime = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .filter(|m| m.starts_with("audio/") || m.starts_with("video/"))
+        .map(str::to_string)
+        .unwrap_or_else(|| mime_from_url(audio_url).to_string());
+    let mut bytes: Vec<u8> = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| anyhow::anyhow!("下载音频失败: {e}"))?
+    {
+        bytes.extend_from_slice(&chunk);
+        if bytes.len() as u64 > MAX_AUDIO_DOWNLOAD_BYTES {
+            anyhow::bail!(
+                "音频文件过大（已下载超过 {} MiB），已中止下载",
+                MAX_AUDIO_DOWNLOAD_BYTES / (1024 * 1024)
+            );
+        }
+    }
+    Ok((bytes, mime))
 }
 
 fn resolve_openai_describe_config(
@@ -521,6 +559,28 @@ mod tests {
         );
         assert!(AudioUnderstandMode::parse("bogus").is_err());
     }
+
+    /// Final-review Finding 1：纯函数覆盖「已知字节+mime → Google Inline 媒体部分」映射，
+    /// 无需网络即可验证 http(s) 音频最终以 base64 Inline（而非 Uri）形式发出。
+    #[test]
+    fn build_inline_audio_part_encodes_bytes_as_base64() {
+        let part = build_inline_audio_part(b"hello-audio-bytes", "audio/mp3");
+        match part {
+            AudioMediaPart::Inline {
+                media_type,
+                mime_type,
+                data_b64,
+            } => {
+                assert_eq!(media_type, AudioMediaKind::Audio);
+                assert_eq!(mime_type, "audio/mp3");
+                assert_eq!(
+                    data_b64,
+                    base64::engine::general_purpose::STANDARD.encode(b"hello-audio-bytes")
+                );
+            }
+            AudioMediaPart::Uri { .. } => panic!("应始终构造 Inline"),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -602,8 +662,8 @@ mod path_escape_tests {
     }
 
     /// Finding 1：`resolve_google_media` 同样须拒绝越界本地路径。
-    #[test]
-    fn resolve_google_media_rejects_path_escape() {
+    #[tokio::test]
+    async fn resolve_google_media_rejects_path_escape() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("ws");
         let outside = dir.path().join("outside");
@@ -616,10 +676,160 @@ mod path_escape_tests {
         let providers = ProviderRegistry::new();
         let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
 
-        let err = resolve_google_media(&ctx, "../outside/secret.mp3", false).unwrap_err();
+        let err = resolve_google_media(&ctx, "../outside/secret.mp3", false)
+            .await
+            .unwrap_err();
         assert!(
             err.to_string().contains("越界") || err.to_string().contains(".."),
             "unexpected error: {err}"
         );
+    }
+
+    /// Final-review Finding 1：非 YouTube 的本地路径须解析为 `Inline`（而非 `Uri`）。
+    /// 通过本地文件路径覆盖 `resolve_google_media` 的非 YouTube 分支，
+    /// 避免真实网络请求；http(s) → Inline 的字节映射由 `build_inline_audio_part` 覆盖。
+    #[tokio::test]
+    async fn resolve_google_media_non_youtube_resolves_to_inline() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::write(ws.join("clip.wav"), b"pcm-bytes").unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+
+        let media = resolve_google_media(&ctx, "clip.wav", false).await.unwrap();
+        match media {
+            AudioMediaPart::Inline {
+                media_type,
+                mime_type,
+                data_b64,
+            } => {
+                assert_eq!(media_type, AudioMediaKind::Audio);
+                assert_eq!(mime_type, "audio/wav");
+                assert_eq!(
+                    data_b64,
+                    base64::engine::general_purpose::STANDARD.encode(b"pcm-bytes")
+                );
+            }
+            AudioMediaPart::Uri { .. } => {
+                panic!("非 YouTube 音频不应以 Uri 形式传给 Google，须下载为 Inline");
+            }
+        }
+    }
+
+    /// Final-review Finding 1：YouTube 分支仍须保持 `Uri` + `Video`。
+    #[tokio::test]
+    async fn resolve_google_media_youtube_resolves_to_uri_video() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+
+        let media = resolve_google_media(&ctx, "https://youtu.be/abc", true)
+            .await
+            .unwrap();
+        match media {
+            AudioMediaPart::Uri {
+                media_type, uri, ..
+            } => {
+                assert_eq!(media_type, AudioMediaKind::Video);
+                assert_eq!(uri, "https://youtu.be/abc");
+            }
+            AudioMediaPart::Inline { .. } => panic!("YouTube 应保持 Uri+Video"),
+        }
+    }
+}
+
+/// Final-review Finding 2：远程音频下载的大小上限校验。
+/// 用最小化的原始 TCP/HTTP 服务器模拟远端响应，避免引入额外 mock 依赖。
+#[cfg(test)]
+mod download_limit_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// 启动一个仅处理一次连接的极简 HTTP 服务器：丢弃请求，写回状态行/指定 headers/指定长度的正文后关闭连接。
+    /// 返回可直接请求的 URL 与后台线程 handle（测试内 join 以确保写完成）。
+    fn spawn_raw_http_server(
+        extra_headers: &str,
+        body_len: usize,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
+        let addr = listener.local_addr().expect("local_addr");
+        let extra_headers = extra_headers.to_string();
+        let handle = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let mut head = String::new();
+                head.push_str("HTTP/1.1 200 OK\r\n");
+                head.push_str("Content-Type: audio/mpeg\r\n");
+                head.push_str("Connection: close\r\n");
+                head.push_str(&extra_headers);
+                head.push_str("\r\n");
+                let _ = stream.write_all(head.as_bytes());
+                let chunk = vec![b'a'; 64 * 1024];
+                let mut written = 0usize;
+                while written < body_len {
+                    let n = std::cmp::min(chunk.len(), body_len - written);
+                    if stream.write_all(&chunk[..n]).is_err() {
+                        break;
+                    }
+                    written += n;
+                }
+                let _ = stream.flush();
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+            }
+        });
+        (format!("http://{addr}/audio.mp3"), handle)
+    }
+
+    /// 声明的 `Content-Length` 超限时须立即拒绝，无需读取正文。
+    #[tokio::test]
+    async fn rejects_declared_content_length_over_limit() {
+        let over_limit = MAX_AUDIO_DOWNLOAD_BYTES + 1;
+        let (url, handle) = spawn_raw_http_server(
+            &format!("Content-Length: {over_limit}\r\n"),
+            0,
+        );
+
+        let err = download_audio_bytes(&url).await.unwrap_err();
+        assert!(
+            err.to_string().contains("过大") || err.to_string().contains("MiB"),
+            "unexpected error: {err}"
+        );
+        handle.join().ok();
+    }
+
+    /// 未声明（或谎报较小）`Content-Length` 时，仍须在累计读取超限的瞬间中止，防止无限占用内存。
+    #[tokio::test]
+    async fn aborts_when_streamed_bytes_exceed_limit_without_content_length() {
+        let over_limit_len = (MAX_AUDIO_DOWNLOAD_BYTES + 64 * 1024) as usize;
+        let (url, handle) = spawn_raw_http_server("", over_limit_len);
+
+        let err = download_audio_bytes(&url).await.unwrap_err();
+        assert!(
+            err.to_string().contains("过大") || err.to_string().contains("MiB"),
+            "unexpected error: {err}"
+        );
+        handle.join().ok();
+    }
+
+    /// 正常大小的下载应成功返回字节与 mime。
+    #[tokio::test]
+    async fn downloads_small_body_successfully() {
+        let (url, handle) = spawn_raw_http_server("", 128);
+
+        let (bytes, mime) = download_audio_bytes(&url).await.unwrap();
+        assert_eq!(bytes.len(), 128);
+        assert_eq!(mime, "audio/mpeg");
+        handle.join().ok();
     }
 }
