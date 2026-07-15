@@ -12,6 +12,8 @@ session         = { path = "../session" }
 usage           = { path = "../usage" }
 orchestration   = { path = "../orchestration" }
 cron            = { path = "../cron" }
+artifacts       = { path = "../artifacts" }
+delegate        = { path = "../delegate" }
 tokio = { workspace = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }

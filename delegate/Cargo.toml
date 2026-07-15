@@ -1,0 +1,19 @@
+[package]
+name = "delegate"
+version = "0.1.0"
+edition = "2021"
+description = "子 Agent 委派请求类型、异步登记与 git worktree"
+
+[dependencies]
+anyhow = { workspace = true }
+common = { path = "../common" }
+home = { path = "../home" }
+chrono = { version = "0.4", features = ["clock", "serde"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

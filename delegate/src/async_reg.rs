@@ -9,8 +9,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::delegate_spawn::DelegateRunRequest;
-use crate::workspace::default_memory_dir;
+use crate::spawn::DelegateRunRequest;
 
 /// 异步委派任务状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,7 +170,7 @@ impl AsyncDelegateRegistry {
 }
 
 fn side_dir() -> PathBuf {
-    default_memory_dir().join("delegate_async")
+    home::default_memory_dir().join("delegate_async")
 }
 
 fn save_side_file(rec: &AsyncDelegateRecord) -> std::io::Result<()> {
@@ -289,7 +288,7 @@ pub fn async_delegate_cancel(task_id: &str) -> Result<AsyncDelegateRecord, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delegate_spawn::DelegateTaskSpec;
+    use crate::spawn::DelegateTaskSpec;
     use std::sync::Arc;
 
     #[test]
@@ -328,7 +327,7 @@ mod tests {
     #[test]
     fn persist_request_and_list_running() {
         let dir = tempfile::tempdir().unwrap();
-        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         let spawner: DelegateAsyncSpawner = Arc::new(|_id, _req| {});
         let req = DelegateRunRequest {
             parent_agent_id: "a".into(),

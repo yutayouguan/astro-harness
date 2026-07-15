@@ -1,6 +1,6 @@
 //! 产物数据库（`ArtifactDb`）分类、写入与对账测试。
 
-use memory::artifact_db::{category_from_name, ArtifactDb, ArtifactSource};
+use artifacts::db::{category_from_name, ArtifactDb, ArtifactSource};
 use tempfile::tempdir;
 
 #[test]
@@ -16,7 +16,7 @@ fn category_from_extension() {
 
 #[test]
 fn junk_artifact_names() {
-    use memory::artifact_db::is_junk_artifact_name;
+    use artifacts::db::is_junk_artifact_name;
     assert!(is_junk_artifact_name(".DS_Store"));
     assert!(is_junk_artifact_name(".ds_store"));
     assert!(is_junk_artifact_name("Thumbs.db"));
@@ -158,7 +158,7 @@ fn reconcile_registers_uploaded_memory_template() {
 #[test]
 fn list_filters_by_agent_id() {
     let dir = tempfile::tempdir().unwrap();
-    let db = memory::artifact_db::ArtifactDb::new(dir.path().join("artifacts.db")).unwrap();
+    let db = artifacts::db::ArtifactDb::new(dir.path().join("artifacts.db")).unwrap();
     let p1 = dir.path().join("a.md");
     let p2 = dir.path().join("b.md");
     std::fs::write(&p1, b"1").unwrap();
@@ -166,7 +166,7 @@ fn list_filters_by_agent_id() {
 
     db.register(
         p1.to_str().unwrap(),
-        memory::artifact_db::ArtifactSource::AgentWrite,
+        artifacts::db::ArtifactSource::AgentWrite,
         Some("s1"),
         None,
         Some("workspace"),
@@ -174,7 +174,7 @@ fn list_filters_by_agent_id() {
     .unwrap();
     db.register(
         p2.to_str().unwrap(),
-        memory::artifact_db::ArtifactSource::AgentWrite,
+        artifacts::db::ArtifactSource::AgentWrite,
         Some("s2"),
         None,
         Some("coder"),
@@ -191,14 +191,14 @@ fn list_filters_by_agent_id() {
 #[test]
 fn re_register_without_agent_preserves_coder_ownership() {
     let dir = tempfile::tempdir().unwrap();
-    let db = memory::artifact_db::ArtifactDb::new(dir.path().join("artifacts.db")).unwrap();
+    let db = artifacts::db::ArtifactDb::new(dir.path().join("artifacts.db")).unwrap();
     let path = dir.path().join("tool.rs");
     std::fs::write(&path, b"fn main() {}").unwrap();
     let path_str = path.to_str().unwrap();
 
     db.register(
         path_str,
-        memory::artifact_db::ArtifactSource::AgentWrite,
+        artifacts::db::ArtifactSource::AgentWrite,
         None,
         None,
         Some("coder"),
@@ -206,7 +206,7 @@ fn re_register_without_agent_preserves_coder_ownership() {
     .unwrap();
     db.register(
         path_str,
-        memory::artifact_db::ArtifactSource::AgentWrite,
+        artifacts::db::ArtifactSource::AgentWrite,
         None,
         None,
         None,

@@ -225,8 +225,8 @@ impl ArtifactDb {
         let category = category_from_name(&name).to_string();
         let size = std::fs::metadata(&p).map(|m| m.len() as i64).unwrap_or(0);
         let id = Uuid::new_v4().to_string();
-        let default_agent_id = crate::workspace::DEFAULT_AGENT_ID;
-        let mut agent_id = crate::workspace::normalize_agent_id(
+        let default_agent_id = home::DEFAULT_AGENT_ID;
+        let mut agent_id = home::normalize_agent_id(
             agent_id.unwrap_or(default_agent_id),
         );
         if agent_id.is_empty() {
@@ -426,7 +426,7 @@ impl ArtifactDb {
         if let Ok(entries) = std::fs::read_dir(memory_root) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if let Some(agent_id) = crate::workspace::agent_id_from_workspace_dir_name(&name) {
+                if let Some(agent_id) = home::agent_id_from_workspace_dir_name(&name) {
                     if entry.path().is_dir() {
                         roots.push((entry.path(), Some(agent_id)));
                     }

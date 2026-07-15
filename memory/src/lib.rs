@@ -1,26 +1,21 @@
-//! Astro 记忆子系统 facade：精炼记忆与其它本机域入口。
+//! Astro 记忆子系统 facade：精炼记忆（MEMORY/USER）与工作区生命周期。
 //!
-//! 精炼记忆为 Markdown（`MEMORY.md` / `USER.md`）；会话、用量、编排、定时任务在独立 crate，
-//! 本包继续 `pub use` 以保持既有 `memory::*` 调用方不变。
+//! 会话 / 用量 / 编排 / 定时 / 产物 / 委派已独立 crate；本包继续 `pub use` 保持 `memory::*`。
 //! 数据根目录默认为 `~/.astro`（可通过 `ASTRO_MEMORY_DIR` 覆盖）。
 
 pub mod agent;
-pub mod artifacts;
 pub mod config;
 pub mod dreaming;
 pub mod infra;
 pub mod pending;
 pub mod review;
 pub mod session;
-pub mod delegate_async;
-pub mod delegate_spawn;
-pub mod git_worktree;
 pub mod spawn_depth;
 
 #[cfg(test)]
 pub(crate) mod test_env;
 
-// ── 域内路径（新）──────────────────────────────────────────────
+// ── 真域 ──────────────────────────────────────────────────────
 pub use agent::agent_icons;
 pub use agent::auto_icon;
 pub use agent::scan::scan_memory_content;
@@ -41,23 +36,28 @@ pub use review::{
     apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,
     ReviewSuggestion, REVIEW_SYSTEM_PROMPT,
 };
+pub use dreaming::{
+    load_dreaming_state, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
+    DreamMemoryUpdate, DreamRunReport, DreamingState,
+};
 
 pub use session::manager;
 pub use session::message_db;
 pub use session::store as session_store;
 
+// ── 已拆出域的 facade ──────────────────────────────────────────
 pub use ::cron::run_db as cron_run_db;
-
 pub use ::usage::db as usage_db;
 pub use ::usage::pricing as usage_pricing;
 pub use ::usage::stats as usage_stats;
 pub use ::usage::trace_insights;
-
 pub use ::orchestration::collab_insights;
 pub use ::orchestration::db as orchestration_db;
 pub use ::orchestration::spawn as orchestration_spawn;
-
-pub use artifacts::db as artifact_db;
+pub use ::artifacts::db as artifact_db;
+pub use ::delegate::async_reg as delegate_async;
+pub use ::delegate::git_worktree;
+pub use ::delegate::spawn as delegate_spawn;
 
 pub use infra::log_query;
 pub use infra::logging;
@@ -107,10 +107,6 @@ pub use tools_enabled::{
     KNOWN_TOOLSET_IDS,
 };
 pub use tool_calls::record_tool_call;
-pub use dreaming::{
-    load_dreaming_state, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
-    DreamMemoryUpdate, DreamRunReport, DreamingState,
-};
 pub use usage_stats::{
     get_usage_summary, load_usage_stats, record_tool_call as record_usage_tool_call,
     save_usage_stats, AgentUsageStats, AgentUsageSummary,
