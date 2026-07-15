@@ -323,6 +323,8 @@ pub fn run() {
             skills_commands::link_machine_skill,
             skills_commands::install_store_skill,
             skills_commands::get_skill_content,
+            skills_commands::list_skill_bundle,
+            skills_commands::get_skill_file,
             artifacts_commands::list_artifacts,
             artifacts_commands::reconcile_artifacts,
             artifacts_commands::register_artifact,

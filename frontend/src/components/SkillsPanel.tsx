@@ -56,10 +56,40 @@ import { IconRefresh } from "./NavIcons";
 import { SelectMenu } from "./SelectMenu";
 import type {
   InstalledSkill,
-  SkillContent,
+  SkillBundle,
+  SkillFileEntry,
   StoreSkill,
   SkillStoreId,
 } from "../types";
+
+type SkillPreviewCategory =
+  | "overview"
+  | "scripts"
+  | "references"
+  | "assets"
+  | "other";
+
+const PREVIEW_TABS: {
+  id: SkillPreviewCategory;
+  labelKey: MessageKey;
+}[] = [
+  { id: "overview", labelKey: "skills.previewTab.overview" },
+  { id: "scripts", labelKey: "skills.previewTab.scripts" },
+  { id: "references", labelKey: "skills.previewTab.references" },
+  { id: "assets", labelKey: "skills.previewTab.assets" },
+  { id: "other", labelKey: "skills.previewTab.other" },
+];
+
+function fileLabel(path: string): string {
+  const parts = path.split("/");
+  return parts[parts.length - 1] || path;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** Skills 面板入参 */
 type Props = {
@@ -255,7 +285,12 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
-  const [preview, setPreview] = useState<SkillContent | null>(null);
+  const [preview, setPreview] = useState<SkillBundle | null>(null);
+  const [previewTab, setPreviewTab] = useState<SkillPreviewCategory>("overview");
+  const [previewFile, setPreviewFile] = useState<string | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewBinaryHint, setPreviewBinaryHint] = useState(false);
+  const [loadingFile, setLoadingFile] = useState(false);
   const [skillCalls, setSkillCalls] = useState<Record<string, number>>({});
   const [installedSort, setInstalledSort] = useState<CallSort>("name");
   const [machineSort, setMachineSort] = useState<CallSort>("name");
@@ -619,8 +654,20 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     setLoadingPreview(name);
     setError(null);
     try {
-      const content = await invoke<SkillContent>("get_skill_content", { name });
-      setPreview(content);
+      const bundle = await invoke<SkillBundle>("list_skill_bundle", { name });
+      const tabs = PREVIEW_TABS.filter((tab) =>
+        bundle.files.some((f) => f.category === tab.id),
+      );
+      const firstTab = tabs[0]?.id ?? "overview";
+      const firstFile =
+        bundle.files.find((f) => f.category === firstTab)?.relative_path ??
+        bundle.files[0]?.relative_path ??
+        null;
+      setPreview(bundle);
+      setPreviewTab(firstTab);
+      setPreviewFile(firstFile);
+      setPreviewContent(null);
+      setPreviewBinaryHint(false);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -628,14 +675,70 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     }
   };
 
+  const loadPreviewFile = useCallback(
+    async (name: string, file: SkillFileEntry) => {
+      setPreviewBinaryHint(false);
+      setPreviewContent(null);
+      if (!file.is_text) {
+        setPreviewBinaryHint(true);
+        return;
+      }
+      setLoadingFile(true);
+      try {
+        const content = await invoke<string>("get_skill_file", {
+          name,
+          relativePath: file.relative_path,
+        });
+        setPreviewContent(content);
+      } catch (err) {
+        setPreviewContent(String(err));
+      } finally {
+        setLoadingFile(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!preview || !previewFile) return;
+    const file = preview.files.find((f) => f.relative_path === previewFile);
+    if (!file) return;
+    void loadPreviewFile(preview.name, file);
+  }, [preview, previewFile, loadPreviewFile]);
+
   useEffect(() => {
     if (!preview) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPreview(null);
+      if (e.key === "Escape") closePreview();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [preview]);
+
+  const previewFilesInTab = useMemo(() => {
+    if (!preview) return [];
+    return preview.files.filter((f) => f.category === previewTab);
+  }, [preview, previewTab]);
+
+  const availablePreviewTabs = useMemo(() => {
+    if (!preview) return [];
+    return PREVIEW_TABS.filter((tab) =>
+      preview.files.some((f) => f.category === tab.id),
+    );
+  }, [preview]);
+
+  const selectPreviewTab = (tab: SkillPreviewCategory) => {
+    setPreviewTab(tab);
+    const first = preview?.files.find((f) => f.category === tab);
+    if (first) setPreviewFile(first.relative_path);
+  };
+
+  const closePreview = () => {
+    setPreview(null);
+    setPreviewFile(null);
+    setPreviewContent(null);
+    setPreviewBinaryHint(false);
+  };
 
   const viewStoreDetail = async (skill: StoreSkill) => {
     const url = storeSkillDetailUrl(skill);
@@ -1789,7 +1892,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
             className="skills-preview-backdrop"
             data-tone="indigo"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setPreview(null);
+              if (e.target === e.currentTarget) closePreview();
             }}
           >
             <aside
@@ -1802,25 +1905,99 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 <div>
                   <h3 id="skills-preview-title">
                     <FileText size={16} strokeWidth={2.3} aria-hidden />
-                    {preview.metadata?.name ?? "skill"}
+                    {preview.name}
                   </h3>
-                  {preview.metadata?.description ? (
-                    <p className="skills-preview-desc">
-                      {preview.metadata.description}
-                    </p>
+                  {preview.description ? (
+                    <p className="skills-preview-desc">{preview.description}</p>
                   ) : null}
+                  <p className="skills-preview-root" title={preview.root}>
+                    {preview.root}
+                  </p>
                 </div>
                 <button
                   type="button"
                   className="skills-preview-close"
-                  onClick={() => setPreview(null)}
+                  onClick={closePreview}
                   aria-label={t("skills.previewClose")}
                 >
                   <X size={16} strokeWidth={2.5} aria-hidden />
                 </button>
               </header>
+
+              <div
+                className="skills-preview-tabs"
+                role="tablist"
+                aria-label={t("skills.previewTabs")}
+              >
+                {availablePreviewTabs.map((tab) => {
+                  const count = preview.files.filter(
+                    (f) => f.category === tab.id,
+                  ).length;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={previewTab === tab.id}
+                      className={`skills-preview-tab ${previewTab === tab.id ? "is-active" : ""}`}
+                      onClick={() => selectPreviewTab(tab.id)}
+                    >
+                      {t(tab.labelKey)}
+                      <span className="skills-preview-tab-count">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {previewFilesInTab.length > 1 ? (
+                <div className="skills-preview-filelist" role="list">
+                  {previewFilesInTab.map((file) => (
+                    <button
+                      key={file.relative_path}
+                      type="button"
+                      role="listitem"
+                      className={`skills-preview-filechip ${previewFile === file.relative_path ? "is-active" : ""}`}
+                      onClick={() => setPreviewFile(file.relative_path)}
+                      title={file.relative_path}
+                    >
+                      <span>{fileLabel(file.relative_path)}</span>
+                      <small>{formatBytes(file.size)}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : previewFilesInTab[0] ? (
+                <div className="skills-preview-filepath">
+                  {previewFilesInTab[0].relative_path}
+                  <span>{formatBytes(previewFilesInTab[0].size)}</span>
+                </div>
+              ) : null}
+
               <div className="skills-preview-body">
-                <pre className="skills-preview-meta">{preview.content}</pre>
+                {loadingFile ? (
+                  <p className="skills-preview-empty">{t("skills.previewLoading")}</p>
+                ) : previewBinaryHint ? (
+                  <div className="skills-preview-binary">
+                    <p>{t("skills.previewBinary")}</p>
+                    <button
+                      type="button"
+                      className="skills-action-btn"
+                      onClick={() => {
+                        if (!previewFile) return;
+                        const full = `${preview.root}/${previewFile}`;
+                        void invoke("open_path_externally", { path: full }).catch(
+                          (err) => setPreviewContent(String(err)),
+                        );
+                      }}
+                    >
+                      <ExternalLink size={14} strokeWidth={2.2} aria-hidden />
+                      {t("skills.previewOpenExternal")}
+                    </button>
+                  </div>
+                ) : (
+                  <pre className="skills-preview-meta">
+                    {previewContent ?? ""}
+                  </pre>
+                )}
               </div>
             </aside>
           </div>,

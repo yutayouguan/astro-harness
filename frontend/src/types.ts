@@ -312,6 +312,22 @@ export type SkillContent = {
   content: string;
 };
 
+/** 技能包内单个文件 */
+export type SkillFileEntry = {
+  relative_path: string;
+  category: "overview" | "scripts" | "references" | "assets" | "other" | string;
+  is_text: boolean;
+  size: number;
+};
+
+/** 技能包文件清单（查看抽屉） */
+export type SkillBundle = {
+  name: string;
+  description: string;
+  root: string;
+  files: SkillFileEntry[];
+};
+
 /** 侧栏近期会话 */
 export type RecentSessionDto = {
   sessionId: string;

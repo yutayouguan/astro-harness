@@ -2,6 +2,29 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 技能包内单个文件条目。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillFileEntry {
+    /// 相对 skill 根目录的路径（`/` 分隔）。
+    pub relative_path: String,
+    /// 分类：overview / scripts / references / assets / other。
+    pub category: String,
+    /// 是否按文本预览。
+    pub is_text: bool,
+    /// 字节大小。
+    pub size: u64,
+}
+
+/// 技能包文件清单（用于查看抽屉）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillBundle {
+    pub name: String,
+    pub description: String,
+    /// 技能根目录绝对路径。
+    pub root: String,
+    pub files: Vec<SkillFileEntry>,
+}
+
 /// 本机已安装的 Skill（扫描 `SKILL.md` 得到）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstalledSkill {

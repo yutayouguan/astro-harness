@@ -491,6 +491,184 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
     })
 }
 
+const MAX_SKILL_FILE_PREVIEW_BYTES: u64 = 512 * 1024;
+
+fn find_installed_by_name(name: &str) -> Result<InstalledSkill> {
+    list_installed()
+        .into_iter()
+        .find(|s| s.name == name)
+        .with_context(|| format!("未找到技能: {name}"))
+}
+
+fn skill_root_of(installed: &InstalledSkill) -> Result<PathBuf> {
+    let skill_md = PathBuf::from(&installed.path);
+    skill_md
+        .parent()
+        .map(PathBuf::from)
+        .with_context(|| format!("无效技能路径: {}", installed.path))
+}
+
+fn skill_file_category(rel: &str) -> &'static str {
+    let lower = rel.to_ascii_lowercase();
+    if lower == "skill.md" {
+        return "overview";
+    }
+    if lower.starts_with("scripts/") || lower == "scripts" {
+        return "scripts";
+    }
+    if lower.starts_with("references/")
+        || lower.starts_with("reference/")
+        || lower == "references"
+        || lower == "reference"
+    {
+        return "references";
+    }
+    if lower.starts_with("assets/")
+        || lower.starts_with("asset/")
+        || lower == "assets"
+        || lower == "asset"
+    {
+        return "assets";
+    }
+    "other"
+}
+
+fn is_probably_text_file(path: &Path) -> bool {
+    const TEXT_EXT: &[&str] = &[
+        "md", "txt", "json", "yaml", "yml", "toml", "xml", "html", "htm", "css", "scss",
+        "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "rb", "go", "rs", "java", "kt", "swift",
+        "c", "cc", "cpp", "h", "hpp", "cs", "php", "sh", "bash", "zsh", "fish", "ps1", "bat",
+        "cmd", "sql", "graphql", "vue", "svelte", "astro", "ini", "cfg", "conf", "env",
+        "gitignore", "dockerignore", "editorconfig", "csv", "tsv", "log", "r", "lua", "pl",
+        "pm", "scala", "dart", "zig", "nim", "ex", "exs", "erl", "hs", "clj", "lisp", "el",
+        "makefile", "dockerfile", "cmake", "gradle", "properties", "plist",
+    ];
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if name == "skill.md"
+        || name == "makefile"
+        || name == "dockerfile"
+        || name == "license"
+        || name == "licence"
+        || name == "readme"
+        || name == "changelog"
+    {
+        return true;
+    }
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| {
+            let ext = e.to_ascii_lowercase();
+            TEXT_EXT.iter().any(|t| *t == ext)
+        })
+        .unwrap_or(false)
+}
+
+fn walk_skill_files(root: &Path, dir: &Path, out: &mut Vec<crate::models::SkillFileEntry>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            walk_skill_files(root, &path, out);
+            continue;
+        }
+        if !path.is_file() {
+            continue;
+        }
+        let Ok(rel) = path.strip_prefix(root) else {
+            continue;
+        };
+        let relative_path = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        if relative_path.is_empty() {
+            continue;
+        }
+        let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        out.push(crate::models::SkillFileEntry {
+            category: skill_file_category(&relative_path).to_string(),
+            is_text: is_probably_text_file(&path),
+            size,
+            relative_path,
+        });
+    }
+}
+
+fn category_rank(cat: &str) -> u8 {
+    match cat {
+        "overview" => 0,
+        "scripts" => 1,
+        "references" => 2,
+        "assets" => 3,
+        _ => 4,
+    }
+}
+
+/// 列出技能目录内全部文件（含禁用技能，供 UI 预览）。
+pub fn list_skill_files(name: &str) -> Result<crate::models::SkillBundle> {
+    let installed = find_installed_by_name(name)?;
+    let root = skill_root_of(&installed)?;
+    let mut files = Vec::new();
+    walk_skill_files(&root, &root, &mut files);
+    files.sort_by(|a, b| {
+        category_rank(&a.category)
+            .cmp(&category_rank(&b.category))
+            .then_with(|| a.relative_path.cmp(&b.relative_path))
+    });
+    Ok(crate::models::SkillBundle {
+        name: installed.name,
+        description: installed.description,
+        root: root.to_string_lossy().to_string(),
+        files,
+    })
+}
+
+/// 读取技能目录内某个相对路径的文本内容（防穿越）。
+pub fn read_skill_file(name: &str, relative_path: &str) -> Result<String> {
+    let installed = find_installed_by_name(name)?;
+    let root = skill_root_of(&installed)?.canonicalize()?;
+    let rel = relative_path.trim().trim_start_matches('/');
+    if rel.is_empty() || rel.contains("..") {
+        anyhow::bail!("非法路径");
+    }
+    let joined = root.join(rel);
+    let canon = joined
+        .canonicalize()
+        .with_context(|| format!("文件不存在: {rel}"))?;
+    if !canon.starts_with(&root) {
+        anyhow::bail!("路径越界");
+    }
+    if !canon.is_file() {
+        anyhow::bail!("不是文件: {rel}");
+    }
+    let meta = fs::metadata(&canon)?;
+    if meta.len() > MAX_SKILL_FILE_PREVIEW_BYTES {
+        anyhow::bail!(
+            "文件过大（{} > {} 字节），请在外部打开",
+            meta.len(),
+            MAX_SKILL_FILE_PREVIEW_BYTES
+        );
+    }
+    if !is_probably_text_file(&canon) {
+        anyhow::bail!("二进制或不支持预览的文件类型");
+    }
+    fs::read_to_string(&canon).with_context(|| format!("读取失败: {rel}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -555,6 +733,52 @@ mod tests {
 
         let err = load_skill_by_name("off-skill").unwrap_err();
         assert!(err.to_string().contains("禁用"));
+    }
+
+    #[test]
+    fn list_skill_files_groups_categories() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        let skill_dir = dir.path().join("skills/bundle-skill");
+        fs::create_dir_all(skill_dir.join("scripts")).unwrap();
+        fs::create_dir_all(skill_dir.join("references")).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: bundle-skill\ndescription: bundled\n---\n# Body\n",
+        )
+        .unwrap();
+        fs::write(skill_dir.join("scripts/run.py"), "print(1)\n").unwrap();
+        fs::write(skill_dir.join("references/notes.md"), "# notes\n").unwrap();
+        fs::write(skill_dir.join("logo.png"), [0u8, 1, 2, 3]).unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        std::env::remove_var("ASTRO_WORKSPACE");
+        fs::write(
+            dir.path().join("active-agent.json"),
+            r#"{"id":"workspace"}"#,
+        )
+        .unwrap();
+
+        let bundle = list_skill_files("bundle-skill").unwrap();
+        assert_eq!(bundle.name, "bundle-skill");
+        assert!(bundle.files.iter().any(|f| f.relative_path == "SKILL.md"
+            && f.category == "overview"
+            && f.is_text));
+        assert!(bundle.files.iter().any(|f| f.relative_path == "scripts/run.py"
+            && f.category == "scripts"));
+        assert!(bundle
+            .files
+            .iter()
+            .any(|f| f.relative_path == "references/notes.md" && f.category == "references"));
+        assert!(bundle.files.iter().any(|f| f.relative_path == "logo.png"
+            && f.category == "other"
+            && !f.is_text));
+
+        let md = read_skill_file("bundle-skill", "SKILL.md").unwrap();
+        assert!(md.contains("# Body"));
+        let py = read_skill_file("bundle-skill", "scripts/run.py").unwrap();
+        assert!(py.contains("print"));
+        assert!(read_skill_file("bundle-skill", "logo.png").is_err());
+        assert!(read_skill_file("bundle-skill", "../outside.md").is_err());
     }
 
     #[test]

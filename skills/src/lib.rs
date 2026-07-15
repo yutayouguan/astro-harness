@@ -23,9 +23,9 @@ pub use seed::{
 };
 pub use installed::{
     link_skill_to_agent, list_enabled_for_prompt, list_installed, list_installed_for_agent,
-    load_skill_by_name, set_enabled, set_enabled_for_agent,
+    list_skill_files, load_skill_by_name, read_skill_file, set_enabled, set_enabled_for_agent,
 };
-pub use models::{InstalledSkill, SkillStoreFilter, StoreSkill, StoreSkillDetail};
+pub use models::{InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, StoreSkill, StoreSkillDetail};
 pub use registry::SkillRegistry;
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use store::{fetch_detail, search};

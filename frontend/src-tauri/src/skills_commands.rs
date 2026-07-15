@@ -2,8 +2,8 @@
 
 use skills::{
     fetch_detail, install_from_ref, link_skill_to_agent, list_installed_for_agent,
-    load_skill_by_name, search, set_enabled_for_agent, InstalledSkill, SkillStoreFilter,
-    StoreSkill, StoreSkillDetail,
+    list_skill_files, load_skill_by_name, read_skill_file, search, set_enabled_for_agent,
+    InstalledSkill, SkillBundle, SkillStoreFilter, StoreSkill, StoreSkillDetail,
 };
 use serde::Serialize;
 
@@ -115,4 +115,16 @@ pub async fn get_skill_content(name: String) -> Result<SkillContentDto, String> 
         },
         content: skill.content,
     })
+}
+
+/// 列出技能目录下的全部相关文件。
+#[tauri::command]
+pub async fn list_skill_bundle(name: String) -> Result<SkillBundle, String> {
+    list_skill_files(&name).map_err(|e| e.to_string())
+}
+
+/// 读取技能目录内某个相对路径的文本文件。
+#[tauri::command]
+pub async fn get_skill_file(name: String, relative_path: String) -> Result<String, String> {
+    read_skill_file(&name, &relative_path).map_err(|e| e.to_string())
 }
