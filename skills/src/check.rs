@@ -162,6 +162,7 @@ mod tests {
             last_updated_at,
             remote_version: remote_version.map(str::to_string),
             remote_updated_at,
+            content_digest: None,
         }
     }
 
@@ -366,6 +367,7 @@ mod tests {
             last_updated_at: None,
             remote_version: Some("1.0.0".into()),
             remote_updated_at: Some(100),
+            content_digest: None,
         })
         .unwrap();
 

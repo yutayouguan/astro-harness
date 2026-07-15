@@ -151,6 +151,7 @@ mod tests {
             last_updated_at: None,
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         })
         .unwrap();
 

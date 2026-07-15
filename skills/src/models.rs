@@ -158,6 +158,8 @@ pub struct SkillOriginRecord {
     pub remote_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_updated_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_digest: Option<String>,
 }
 
 /// 技能安装来源清单文件。
