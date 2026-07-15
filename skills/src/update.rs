@@ -1,11 +1,16 @@
 //! 从已记录的安装来源重新安装 / 更新本机 Skill。
 
-use anyhow::{bail, Result};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use anyhow::{bail, Context, Result};
 
 use crate::check::{check_updates_for_agent, filter_outdated_folders};
 use crate::install::{agent_skills_dir, install_from_ref, InstallOriginHint};
-use crate::models::{SkillOriginRecord, SkillUpdateItemResult};
+use crate::models::{SkillOriginRecord, SkillUpdateItemResult, UpdateSkillOpts};
 use crate::origins::{find_origin, load_origins};
+use crate::preview::preview_skill_update;
 
 /// 规范化 Agent id：空/`default` → `workspace`（与 `install` / `origins` 一致）。
 fn normalize_agent_id(agent_id: Option<&str>) -> String {
@@ -13,6 +18,18 @@ fn normalize_agent_id(agent_id: Option<&str>) -> String {
         Some("default") | None => "workspace".to_string(),
         Some(id) => id.to_string(),
     }
+}
+
+/// 解析本机 Astro 数据根目录（`ASTRO_MEMORY_DIR` / `~/.astro`）。
+fn memory_dir() -> PathBuf {
+    std::env::var("ASTRO_MEMORY_DIR")
+        .map(PathBuf::from)
+        .or_else(|_| {
+            std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .map(|h| PathBuf::from(h).join(".astro"))
+        })
+        .unwrap_or_else(|_| PathBuf::from(".astro"))
 }
 
 fn origin_hint(record: &SkillOriginRecord) -> InstallOriginHint {
@@ -23,20 +40,91 @@ fn origin_hint(record: &SkillOriginRecord) -> InstallOriginHint {
     }
 }
 
-/// 按 folder 查找来源并重新安装；无 origin 时返回「无法追溯」错误。
-pub async fn update_installed_skill(
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    fs::create_dir_all(dst).with_context(|| format!("create {}", dst.display()))?;
+    for entry in fs::read_dir(src).with_context(|| format!("read_dir {}", src.display()))? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)
+                .with_context(|| format!("copy {} -> {}", src_path.display(), dst_path.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// 将技能目录拷贝到 `~/.astro/skill-backups/{agent}/{folder}/{timestamp}/`。
+pub fn backup_skill_dir(agent_id: Option<&str>, folder: &str) -> Result<PathBuf> {
+    let agent = normalize_agent_id(agent_id);
+    let skills_dir = agent_skills_dir(agent_id)?;
+    let src = skills_dir.join(folder);
+    if !src.is_dir() {
+        bail!("本地未找到技能目录: {folder}");
+    }
+
+    let timestamp = chrono::Utc::now().timestamp();
+    let backup_root = memory_dir()
+        .join("skill-backups")
+        .join(&agent)
+        .join(folder)
+        .join(timestamp.to_string());
+    copy_dir_recursive(&src, &backup_root)?;
+    Ok(backup_root)
+}
+
+/// 按 folder 查找来源并重新安装，支持备份、强制覆盖与失败重试。
+pub async fn update_installed_skill_ex(
     agent_id: Option<&str>,
     folder: &str,
+    opts: UpdateSkillOpts,
 ) -> Result<String> {
     let record = find_origin(agent_id, folder)?;
     let Some(record) = record else {
         bail!("无法追溯安装源: {folder}");
     };
 
-    install_from_ref(
-        &record.install_ref,
+    let preview = preview_skill_update(agent_id, folder)?;
+    if preview.has_local_changes && !opts.force {
+        bail!("本地有改动，请确认后 force 更新");
+    }
+
+    if preview.has_local_changes && opts.backup_if_dirty {
+        backup_skill_dir(agent_id, folder)?;
+    }
+
+    let hint = origin_hint(&record);
+    let install_ref = record.install_ref.clone();
+    let mut retries_left = opts.max_retries;
+    loop {
+        match install_from_ref(&install_ref, agent_id, Some(hint.clone())).await {
+            Ok(message) => return Ok(message),
+            Err(e) if retries_left > 0 => {
+                retries_left -= 1;
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// 按 folder 查找来源并重新安装；无 origin 时返回「无法追溯」错误。
+///
+/// 兼容旧入口：强制更新并在有本地改动时先备份。
+pub async fn update_installed_skill(
+    agent_id: Option<&str>,
+    folder: &str,
+) -> Result<String> {
+    update_installed_skill_ex(
         agent_id,
-        Some(origin_hint(&record)),
+        folder,
+        UpdateSkillOpts {
+            backup_if_dirty: true,
+            force: true,
+            max_retries: 1,
+        },
     )
     .await
 }
@@ -126,12 +214,90 @@ pub async fn update_outdated_skills(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::digest::skill_content_digest;
     use crate::models::SkillOriginRecord;
     use crate::origins::upsert_origin;
+    use std::io::Write;
     use std::sync::Mutex;
     use tempfile::tempdir;
 
     static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn write_skill_md(dir: &Path, body: &str) {
+        fs::create_dir_all(dir).unwrap();
+        let mut f = fs::File::create(dir.join("SKILL.md")).unwrap();
+        writeln!(f, "{body}").unwrap();
+    }
+
+    fn upsert_test_origin(folder: &str, content_digest: Option<String>) {
+        upsert_origin(SkillOriginRecord {
+            folder: folder.into(),
+            skill_id: None,
+            name: "demo".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:owner/demo".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 1,
+            last_updated_at: None,
+            remote_version: None,
+            remote_updated_at: None,
+            content_digest,
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn backup_skill_dir_creates_copy() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skill_dir = skills_dir.join("demo-skill");
+        write_skill_md(&skill_dir, "# Demo");
+        fs::write(skill_dir.join("extra.txt"), "payload").unwrap();
+
+        let backup_path = backup_skill_dir(Some("workspace"), "demo-skill").unwrap();
+        assert!(backup_path.is_dir());
+        assert!(backup_path.join("SKILL.md").is_file());
+        assert!(backup_path.join("extra.txt").is_file());
+        assert_eq!(
+            fs::read_to_string(backup_path.join("extra.txt")).unwrap(),
+            "payload"
+        );
+        assert!(backup_path
+            .components()
+            .any(|c| c.as_os_str() == "skill-backups"));
+    }
+
+    #[tokio::test]
+    async fn update_ex_dirty_without_force_errors() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skill_dir = skills_dir.join("demo-skill");
+        write_skill_md(&skill_dir, "# Changed locally");
+        let current = skill_content_digest(&skill_dir).unwrap();
+
+        upsert_test_origin("demo-skill", Some("stale-baseline-digest".into()));
+        assert_ne!(current, "stale-baseline-digest");
+
+        let err = update_installed_skill_ex(
+            Some("workspace"),
+            "demo-skill",
+            UpdateSkillOpts {
+                backup_if_dirty: true,
+                force: false,
+                max_retries: 0,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("本地有改动"));
+    }
 
     #[tokio::test]
     async fn update_all_skips_missing_local_folder() {
@@ -151,6 +317,7 @@ mod tests {
             last_updated_at: None,
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         })
         .unwrap();
 

@@ -1,10 +1,10 @@
 # Skills 更新 Tab 设计
 
 **日期:** 2026-07-15  
-**状态:** v2 已实现  
+**状态:** v3 已实现  
 **范围:** Skills 面板「更新」Tab、安装来源清单（origin）、从原源一键/批量更新  
 **相关:** `skills` crate 安装/扫描、`SkillsPanel` 已安装 / 本机 / 商店 Tab  
-**实现计划:** [`2026-07-15-skills-update-tab.md`](../plans/2026-07-15-skills-update-tab.md)（v1）· [`2026-07-15-skills-update-tab-v2.md`](../plans/2026-07-15-skills-update-tab-v2.md)（v2）
+**实现计划:** [`2026-07-15-skills-update-tab.md`](../plans/2026-07-15-skills-update-tab.md)（v1）· [`2026-07-15-skills-update-tab-v2.md`](../plans/2026-07-15-skills-update-tab-v2.md)（v2）· [`2026-07-15-skills-update-tab-v3.md`](../plans/2026-07-15-skills-update-tab-v3.md)（v3）
 
 ## 目标
 

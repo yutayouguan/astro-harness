@@ -8,6 +8,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
+use crate::digest::skill_content_digest;
 use crate::models::SkillOriginRecord;
 use crate::origins::{find_origin, infer_folder, infer_store, upsert_origin, fill_origin_remote_baseline};
 
@@ -373,6 +374,28 @@ pub async fn record_after_install(
         .unwrap_or(now);
     let is_update = existing.is_some();
 
+    let content_digest = match agent_skills_dir(agent_id) {
+        Ok(skills_dir) => match skill_content_digest(&skills_dir.join(&folder)) {
+            Ok(digest) => Some(digest),
+            Err(e) => {
+                tracing::debug!(
+                    folder = %folder,
+                    error = %e,
+                    "compute content_digest after install failed; continuing"
+                );
+                None
+            }
+        },
+        Err(e) => {
+            tracing::debug!(
+                folder = %folder,
+                error = %e,
+                "resolve skills dir for content_digest failed; continuing"
+            );
+            None
+        }
+    };
+
     upsert_origin(SkillOriginRecord {
         folder: folder.clone(),
         skill_id: None,
@@ -385,6 +408,7 @@ pub async fn record_after_install(
         last_updated_at: if is_update { Some(now) } else { None },
         remote_version: None,
         remote_updated_at: None,
+        content_digest,
     })?;
 
     fill_origin_remote_baseline(Some(&normalized_agent), &folder).await

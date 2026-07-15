@@ -272,6 +272,7 @@ mod tests {
             last_updated_at: None,
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         })
         .unwrap();
         upsert_origin(SkillOriginRecord {
@@ -286,6 +287,7 @@ mod tests {
             last_updated_at: Some(2),
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         })
         .unwrap();
         let file = load_origins().unwrap();
@@ -334,6 +336,7 @@ mod tests {
             last_updated_at: None,
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         })
         .unwrap();
         upsert_origin(SkillOriginRecord {
@@ -348,6 +351,7 @@ mod tests {
             last_updated_at: Some(9),
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         })
         .unwrap();
 
@@ -400,6 +404,7 @@ mod tests {
             last_updated_at: None,
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         };
         let detail = sample_detail(Some("1.2.3"), Some(999));
         let updated = origin_with_remote_baseline(&origin, &detail);
@@ -422,6 +427,7 @@ mod tests {
             last_updated_at: None,
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         };
         let detail = sample_detail(None, None);
         let updated = origin_with_remote_baseline(&origin, &detail);
@@ -447,6 +453,7 @@ mod tests {
             last_updated_at: None,
             remote_version: None,
             remote_updated_at: None,
+            content_digest: None,
         })
         .unwrap();
 
@@ -486,5 +493,41 @@ mod tests {
         assert_eq!(o.install_ref, "skillhub:owner/demo-skill");
         assert_eq!(o.store, "skillhub");
         assert_eq!(o.name, "Demo");
+    }
+
+    #[tokio::test]
+    async fn record_after_install_persists_content_digest() {
+        use crate::digest::skill_content_digest;
+        use crate::install::{agent_skills_dir, record_after_install, InstallOriginHint};
+        use std::io::Write;
+
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let skills_dir = agent_skills_dir(Some("workspace")).unwrap();
+        let skill_dir = skills_dir.join("demo-skill");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        let mut f = std::fs::File::create(skill_dir.join("SKILL.md")).unwrap();
+        writeln!(f, "# Demo").unwrap();
+
+        let expected = skill_content_digest(&skill_dir).unwrap();
+
+        record_after_install(
+            "skillhub:owner/demo-skill",
+            Some("workspace"),
+            &InstallOriginHint {
+                name: Some("Demo".into()),
+                store: Some("skillhub".into()),
+                folder: Some("demo-skill".into()),
+            },
+        )
+        .await
+        .unwrap();
+
+        let o = find_origin(Some("workspace"), "demo-skill")
+            .unwrap()
+            .unwrap();
+        assert_eq!(o.content_digest.as_deref(), Some(expected.as_str()));
     }
 }

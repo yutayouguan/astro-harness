@@ -158,6 +158,8 @@ pub struct SkillOriginRecord {
     pub remote_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_updated_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_digest: Option<String>,
 }
 
 /// 技能安装来源清单文件。
@@ -194,4 +196,35 @@ pub struct SkillUpdateCheckResult {
     pub remote_version: Option<String>,
     pub remote_updated_at: Option<i64>,
     pub message: String,
+}
+
+/// 单条技能更新选项（备份 / 强制覆盖 / 失败重试）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UpdateSkillOpts {
+    /// 有本地改动时是否先备份。
+    pub backup_if_dirty: bool,
+    /// 是否忽略本地改动强制更新。
+    pub force: bool,
+    /// 安装失败后的最大重试次数（默认 1 = 再试一次）。
+    pub max_retries: u8,
+}
+
+impl Default for UpdateSkillOpts {
+    fn default() -> Self {
+        Self {
+            backup_if_dirty: true,
+            force: false,
+            max_retries: 1,
+        }
+    }
+}
+
+/// 更新前本地改动预览（与安装时 `content_digest` baseline 比对）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillUpdatePreview {
+    pub folder: String,
+    pub has_local_changes: bool,
+    pub has_baseline_digest: bool,
+    pub current_digest: Option<String>,
+    pub baseline_digest: Option<String>,
 }

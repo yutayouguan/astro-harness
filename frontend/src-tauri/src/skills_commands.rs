@@ -2,13 +2,12 @@
 
 use skills::{
     check_updates_for_agent, fetch_detail, install_from_ref, link_skill_to_agent,
-    list_installed_for_agent, list_skill_files_ex, load_skill_by_name, update_all_with_origin,
-    update_installed_skill as skills_update_installed_skill, update_outdated_skills,
-    InstallOriginHint, open_skill_file_externally as open_skill_file_fs,
-    open_skill_folder as open_skill_folder_fs, read_skill_file_ex,
-    reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent, InstalledSkill,
-    SkillBundle, SkillStoreFilter, SkillUpdateCheckResult, SkillUpdateItemResult, StoreSkill,
-    StoreSkillDetail,
+    list_installed_for_agent, list_skill_files_ex, load_skill_by_name,
+    preview_skill_update as skills_preview_skill_update, update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
+    open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
+    read_skill_file_ex, reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
+    InstalledSkill, SkillBundle, SkillStoreFilter, SkillUpdateCheckResult, SkillUpdateItemResult,
+    SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
 };
 use skills::models::SkillOriginRecord;
 use skills::origins::load_origins;
@@ -70,16 +69,36 @@ pub async fn list_skill_origins(
     Ok(records)
 }
 
+/// Tauri 命令：preview_skill_update。
+#[tauri::command]
+pub fn preview_skill_update(
+    folder: String,
+    agent_id: Option<String>,
+) -> Result<SkillUpdatePreview, String> {
+    let agent = normalize_agent_id(agent_id);
+    skills_preview_skill_update(agent.as_deref(), &folder).map_err(|e| e.to_string())
+}
+
 /// Tauri 命令：update_installed_skill。
 #[tauri::command]
 pub async fn update_installed_skill(
     folder: String,
     agent_id: Option<String>,
+    force: Option<bool>,
+    backup_if_dirty: Option<bool>,
 ) -> Result<String, String> {
     let agent = normalize_agent_id(agent_id);
-    skills_update_installed_skill(agent.as_deref(), &folder)
-        .await
-        .map_err(|e| e.to_string())
+    update_installed_skill_ex(
+        agent.as_deref(),
+        &folder,
+        UpdateSkillOpts {
+            force: force.unwrap_or(true),
+            backup_if_dirty: backup_if_dirty.unwrap_or(true),
+            max_retries: 1,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：check_skill_updates。
