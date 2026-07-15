@@ -3039,11 +3039,11 @@ export default function App() {
                       onClose={() => setChatRightOpen(false)}
                       sessionId={sessionId}
                       turnId={currentTurnId}
-                      messages={messages}
                       tokenUsage={tokenUsage}
                       contextUsage={contextUsage}
                       contextWindow={contextWindow}
                       onOpenSession={(id) => void openSessionFromFilespace(id)}
+                      onNewSession={startNewChat}
                       onOpenMemory={() => setNav("memory")}
                       onOpenSkills={() => setNav("skills")}
                     />

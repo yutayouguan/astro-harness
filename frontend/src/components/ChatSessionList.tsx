@@ -1,6 +1,7 @@
 /** 近期会话列表。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Plus } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { RecentSessionDto } from "../types";
 
@@ -9,9 +10,15 @@ type Props = {
   /** 当前打开的会话（高亮） */
   activeSessionId: string | null;
   onOpenSession: (sessionId: string) => void;
+  /** 新建空白会话 */
+  onNewSession: () => void;
 };
 
-export default function ChatSessionList({ activeSessionId, onOpenSession }: Props) {
+export default function ChatSessionList({
+  activeSessionId,
+  onOpenSession,
+  onNewSession,
+}: Props) {
   const { t } = useI18n();
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [query, setQuery] = useState("");
@@ -44,6 +51,14 @@ export default function ChatSessionList({ activeSessionId, onOpenSession }: Prop
 
   return (
     <div className="chat-session-list">
+      <button
+        type="button"
+        className="chat-session-new"
+        onClick={onNewSession}
+      >
+        <Plus size={15} strokeWidth={2.2} aria-hidden />
+        {t("chat.newSession")}
+      </button>
       <input
         className="search-pill"
         type="search"

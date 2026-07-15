@@ -1,12 +1,17 @@
 /** 聊天右侧栏（会话 / 上下文等 Tab）。 */
 import { useEffect } from "react";
-import { X } from "lucide-react";
+import {
+  Bot,
+  Layers,
+  MessagesSquare,
+  PanelRight,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
-import type { ChatMessage } from "../types";
 import type { ContextUsageSnapshot } from "../lib/contextUsage";
 import ChatSessionList from "./ChatSessionList";
-import ChatContextTimeline from "./ChatContextTimeline";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
 import AnimatedSwitch from "./AnimatedSwitch";
@@ -21,7 +26,6 @@ type Props = {
   onClose: () => void;
   sessionId: string | null;
   turnId?: string | null;
-  messages: ChatMessage[];
   /** 当前会话累计 token（可选展示） */
   tokenUsage?: {
     promptTokens: number;
@@ -33,6 +37,8 @@ type Props = {
   /** 模型上下文窗口；未知时回落 128000 */
   contextWindow?: number;
   onOpenSession: (sessionId: string) => void;
+  /** 新建空白会话 */
+  onNewSession: () => void;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
 };
@@ -43,17 +49,23 @@ const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
   agent: "chat.rightPanel.agent",
 };
 
+const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
+  sessions: MessagesSquare,
+  context: Layers,
+  agent: Bot,
+};
+
 export default function ChatRightPanel({
   tab,
   onTabChange,
   onClose,
   sessionId,
   turnId = null,
-  messages,
   tokenUsage: _tokenUsage = null,
   contextUsage = null,
   contextWindow = 128_000,
   onOpenSession,
+  onNewSession,
   onOpenMemory,
   onOpenSkills,
 }: Props) {
@@ -78,7 +90,10 @@ export default function ChatRightPanel({
       />
       <aside className="chat-right-panel" aria-label={t("chat.rightPanel.title")}>
         <div className="chat-right-header">
-          <h2 className="chat-right-title">{t("chat.rightPanel.title")}</h2>
+          <h2 className="chat-right-title">
+            <PanelRight size={15} strokeWidth={2.2} aria-hidden />
+            {t("chat.rightPanel.title")}
+          </h2>
           <button
             type="button"
             className="chat-right-close"
@@ -90,18 +105,22 @@ export default function ChatRightPanel({
           </button>
         </div>
         <div className="chat-right-tabs" role="tablist">
-          {tabs.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              className={`chat-right-tab ${tab === id ? "is-active" : ""}`}
-              aria-selected={tab === id}
-              onClick={() => onTabChange(id)}
-            >
-              {t(TAB_KEYS[id])}
-            </button>
-          ))}
+          {tabs.map((id) => {
+            const Icon = TAB_ICONS[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                className={`chat-right-tab ${tab === id ? "is-active" : ""}`}
+                aria-selected={tab === id}
+                onClick={() => onTabChange(id)}
+              >
+                <Icon size={14} strokeWidth={2.2} aria-hidden />
+                {t(TAB_KEYS[id])}
+              </button>
+            );
+          })}
         </div>
         <div className="chat-right-body">
           <AnimatedSwitch switchKey={tab} className="anim-switch--fill" variant="fade">
@@ -109,17 +128,15 @@ export default function ChatRightPanel({
               <ChatSessionList
                 activeSessionId={sessionId}
                 onOpenSession={onOpenSession}
+                onNewSession={onNewSession}
               />
             )}
             {tab === "context" && (
-              <>
-                <ContextExplorer
-                  snapshot={contextUsage}
-                  windowTokens={contextWindow}
-                  sessionLabel={sessionId ?? "—"}
-                />
-                <ChatContextTimeline messages={messages} />
-              </>
+              <ContextExplorer
+                snapshot={contextUsage}
+                windowTokens={contextWindow}
+                sessionLabel={sessionId ?? "—"}
+              />
             )}
             {tab === "agent" && (
               <ChatAgentInfo
