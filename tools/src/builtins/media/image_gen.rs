@@ -3,14 +3,22 @@
 //! 凭据来自 [`ToolContext::image_gen_targets`]：先试 primary，失败再试 fallback。
 //! 成功图片写入工作区 `generated/images/`。
 
+use std::path::{Path, PathBuf};
+
 use memory::{generated_dir, GeneratedKind};
+use providers::interactions_http::{
+    google_interactions_image, InteractionImagePart, InteractionImageRequest,
+    InteractionVideoInput,
+};
+use providers::trait_::{GeneratedImage, ProviderConfig};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use providers::trait_::ProviderConfig;
 
 use crate::context::{ImageGenCreds, ToolContext};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
+
+const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 
 /// `image_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -88,12 +96,45 @@ fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn has_advanced_interactions_args(args: &ImageGenArgs) -> bool {
+    args.image_size
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|s| !s.is_empty())
+        || args
+            .reference_images
+            .as_ref()
+            .is_some_and(|refs| refs.iter().any(|p| !p.trim().is_empty()))
+        || args
+            .previous_interaction_id
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty())
+        || args.google_search
+        || args.image_search
+        || args
+            .thinking_level
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty())
+        || args
+            .video_uri
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty())
+        || args
+            .video
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty())
+}
+
 /// 向注册表登记 `image_gen` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate an image from a text prompt. Uses Gemini OpenAI-compatible images API when Google is enabled, otherwise OpenAI gpt-image-2. Optional aspect_ratio (e.g. 1:1, 16:9) for Google."
+        description: "Generate or edit images via Gemini Interactions (Nano Banana): text-to-image, up to 14 reference_images, previous_interaction_id for multi-turn, optional google_search/image_search, thinking_level, video_uri/video. Params: aspect_ratio, image_size (0.5K|1K|2K|4K). Falls back to OpenAI gpt-image-2 for prompt-only. Writes generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
@@ -109,12 +150,6 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
     validate_image_gen_args(&parsed)?;
-    let prompt = parsed.prompt.trim();
-    let aspect_ratio = parsed
-        .aspect_ratio
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
 
     if ctx.image_gen_targets.is_empty() {
         anyhow::bail!(
@@ -130,13 +165,8 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     .into_iter()
     .flatten()
     {
-        match generate_one(ctx, prompt, aspect_ratio, creds).await {
-            Ok(path) => {
-                return Ok(format!(
-                    "图片已生成：{path}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）",
-                    creds.provider, creds.model
-                ));
-            }
+        match generate_one(ctx, &parsed, creds).await {
+            Ok(msg) => return Ok(msg),
             Err(err) => {
                 errors.push(format!("{} ({}): {err}", creds.provider, creds.model));
             }
@@ -146,27 +176,24 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     anyhow::bail!("图片生成失败：{}", errors.join("；"))
 }
 
-/// 使用单一凭据调用 Provider，并将首张图片落盘。
-///
-/// # 返回
-/// 生成文件的绝对/显示路径字符串。
+/// 使用单一凭据生成图片并落盘。
 async fn generate_one(
     ctx: &ToolContext<'_>,
-    prompt: &str,
-    aspect_ratio: Option<&str>,
+    args: &ImageGenArgs,
     creds: &ImageGenCreds,
 ) -> anyhow::Result<String> {
-    let provider = ctx
-        .providers
-        .get(&creds.provider)
-        .ok_or_else(|| anyhow::anyhow!("未知 Provider: {}", creds.provider))?;
+    if creds.provider == "google" {
+        return generate_one_google(ctx, args, creds).await;
+    }
+    generate_one_openai_compat(ctx, args, creds).await
+}
 
-    let additional_params = if let Some(ar) = aspect_ratio.filter(|_| creds.provider == "google") {
-        serde_json::json!({ "aspect_ratio": ar })
-    } else {
-        serde_json::Value::Null
-    };
-
+async fn generate_one_google(
+    ctx: &ToolContext<'_>,
+    args: &ImageGenArgs,
+    creds: &ImageGenCreds,
+) -> anyhow::Result<String> {
+    let prompt = args.prompt.trim();
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
         base_url: if creds.base_url.trim().is_empty() {
@@ -175,7 +202,86 @@ async fn generate_one(
             Some(creds.base_url.clone())
         },
         model: creds.model.clone(),
-        additional_params,
+        ..ProviderConfig::default()
+    };
+
+    let reference_images = if let Some(refs) = &args.reference_images {
+        refs.iter()
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| load_reference_image(ctx, p))
+            .collect::<anyhow::Result<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
+    let video = if let Some(uri) = opt_path(args.video_uri.as_deref()) {
+        Some(InteractionVideoInput::Uri {
+            uri: uri.to_string(),
+            mime_type: "video/mp4".to_string(),
+        })
+    } else if let Some(path) = opt_path(args.video.as_deref()) {
+        Some(load_video_input(ctx, path)?)
+    } else {
+        None
+    };
+
+    let req = InteractionImageRequest {
+        prompt: prompt.to_string(),
+        aspect_ratio: opt_owned(args.aspect_ratio.as_deref()),
+        image_size: opt_owned(args.image_size.as_deref()),
+        mime_type: None,
+        reference_images,
+        previous_interaction_id: opt_owned(args.previous_interaction_id.as_deref()),
+        google_search: args.google_search,
+        image_search: args.image_search,
+        thinking_level: opt_owned(args.thinking_level.as_deref()),
+        video,
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(180))
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()?;
+
+    let result = google_interactions_image(&client, &config, &req).await?;
+    let rel = save_generated_image(ctx, &result.image)?;
+
+    let mut out = format!(
+        "图片已生成：{rel}\nprovider={}\nmodel={}\ninteraction_id={}",
+        creds.provider, creds.model, result.interaction_id
+    );
+    if let Some(text) = &result.output_text {
+        out.push_str(&format!("\noutput_text: {text}"));
+    }
+    if let Some(sug) = &result.search_suggestions {
+        out.push_str(&format!("\nsearch_suggestions: {sug}"));
+    }
+    out.push_str(&format!(
+        "\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）；多轮编辑可传 previous_interaction_id=\"{}\"",
+        result.interaction_id
+    ));
+    Ok(out)
+}
+
+async fn generate_one_openai_compat(
+    ctx: &ToolContext<'_>,
+    args: &ImageGenArgs,
+    creds: &ImageGenCreds,
+) -> anyhow::Result<String> {
+    let provider = ctx
+        .providers
+        .get(&creds.provider)
+        .ok_or_else(|| anyhow::anyhow!("未知 Provider: {}", creds.provider))?;
+
+    let prompt = args.prompt.trim();
+    let config = ProviderConfig {
+        api_key: creds.api_key.clone(),
+        base_url: if creds.base_url.trim().is_empty() {
+            None
+        } else {
+            Some(creds.base_url.clone())
+        },
+        model: creds.model.clone(),
         ..ProviderConfig::default()
     };
 
@@ -185,6 +291,20 @@ async fn generate_one(
         .next()
         .ok_or_else(|| anyhow::anyhow!("未返回图片数据"))?;
 
+    let rel = save_generated_image(ctx, &img)?;
+    let mut out = format!(
+        "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）",
+        creds.provider, creds.model
+    );
+    if has_advanced_interactions_args(args) {
+        out.push_str(
+            "\nnote: OpenAI 路径忽略 Interactions 高级参数（image_size/reference_images/…）",
+        );
+    }
+    Ok(out)
+}
+
+fn save_generated_image(ctx: &ToolContext<'_>, img: &GeneratedImage) -> anyhow::Result<String> {
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Images);
     std::fs::create_dir_all(&dir)?;
     let ext = if img.mime_type.contains("jpeg") || img.mime_type.contains("jpg") {
@@ -202,11 +322,104 @@ async fn generate_one(
     );
     let path = dir.join(filename);
     std::fs::write(&path, &img.data)?;
-    let rel = path
-        .strip_prefix(&ctx.workspace_dir)
+    Ok(rel_workspace(ctx, &path))
+}
+
+fn opt_path(s: Option<&str>) -> Option<&str> {
+    s.map(str::trim).filter(|s| !s.is_empty())
+}
+
+fn opt_owned(s: Option<&str>) -> Option<String> {
+    opt_path(s).map(|s| s.to_string())
+}
+
+fn rel_workspace(ctx: &ToolContext<'_>, path: &Path) -> String {
+    path.strip_prefix(&ctx.workspace_dir)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_else(|_| path.display().to_string());
-    Ok(rel)
+        .unwrap_or_else(|_| path.display().to_string())
+}
+
+fn resolve_workspace_file(ctx: &ToolContext<'_>, input: &str) -> anyhow::Result<PathBuf> {
+    let p = PathBuf::from(input);
+    let path = if p.is_absolute() {
+        p
+    } else {
+        ctx.workspace_dir.join(input)
+    };
+    let canon_ws = ctx
+        .workspace_dir
+        .canonicalize()
+        .unwrap_or_else(|_| ctx.workspace_dir.clone());
+    let canon = path
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("文件不存在: {}", path.display()))?;
+    if !canon.starts_with(&canon_ws) {
+        anyhow::bail!("文件必须位于工作区内: {}", path.display());
+    }
+    if !canon.is_file() {
+        anyhow::bail!("文件不存在: {}", path.display());
+    }
+    Ok(canon)
+}
+
+fn load_reference_image(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<InteractionImagePart> {
+    let path = resolve_workspace_file(ctx, relative)?;
+    let data = std::fs::read(&path)
+        .map_err(|e| anyhow::anyhow!("读取参考图失败 {}: {e}", path.display()))?;
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("image.jpg");
+    Ok(InteractionImagePart {
+        data,
+        mime_type: mime_from_name(filename).to_string(),
+    })
+}
+
+fn load_video_input(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<InteractionVideoInput> {
+    let path = resolve_workspace_file(ctx, relative)?;
+    let meta = std::fs::metadata(&path)?;
+    if meta.len() as usize > MAX_VIDEO_BYTES {
+        anyhow::bail!(
+            "视频文件过大: {}（最大 {} MiB）",
+            path.display(),
+            MAX_VIDEO_BYTES / (1024 * 1024)
+        );
+    }
+    let data = std::fs::read(&path)
+        .map_err(|e| anyhow::anyhow!("读取视频失败 {}: {e}", path.display()))?;
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("video.mp4");
+    Ok(InteractionVideoInput::Bytes {
+        data,
+        mime_type: video_mime_from_name(filename).to_string(),
+    })
+}
+
+fn mime_from_name(name: &str) -> &'static str {
+    let lower = name.to_ascii_lowercase();
+    if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".gif") {
+        "image/gif"
+    } else {
+        "image/jpeg"
+    }
+}
+
+fn video_mime_from_name(name: &str) -> &'static str {
+    let lower = name.to_ascii_lowercase();
+    if lower.ends_with(".webm") {
+        "video/webm"
+    } else if lower.ends_with(".mov") {
+        "video/quicktime"
+    } else {
+        "video/mp4"
+    }
 }
 
 #[cfg(test)]
@@ -279,6 +492,28 @@ mod arg_tests {
             video: None,
         };
         assert!(validate_image_gen_args(&a).is_ok());
+    }
+
+    #[test]
+    fn detects_advanced_interactions_args() {
+        let base = ImageGenArgs {
+            prompt: "x".into(),
+            aspect_ratio: None,
+            image_size: None,
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: false,
+            thinking_level: None,
+            video_uri: None,
+            video: None,
+        };
+        assert!(!has_advanced_interactions_args(&base));
+        let with_size = ImageGenArgs {
+            image_size: Some("1K".into()),
+            ..base.clone()
+        };
+        assert!(has_advanced_interactions_args(&with_size));
     }
 }
 
