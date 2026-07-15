@@ -9,16 +9,24 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { Eye, FileCode2 } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { useTransientToast } from "../hooks/useTransientToast";
 import { useFileSelection } from "../hooks/useFileSelection";
 import { useI18n } from "../i18n/LocaleContext";
 import type { FileEntryDto } from "../types";
 import { useAgentsChanged } from "../lib/agentsChanged";
+import {
+  isMarkdownFilename,
+  readWorkspaceMdMode,
+  writeWorkspaceMdMode,
+  type MdMode,
+} from "../lib/workspaceMdMode";
 import { buildWorkspaceMenuItems } from "../lib/workspaceMenuItems";
 import type { AgentInfo } from "../types/agent";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
+import { ChatMarkdown } from "./ChatMarkdown";
 import ExpandableSearch from "./ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceConfirm from "./FileSpaceConfirm";
@@ -208,12 +216,20 @@ export default function WorkspacePanel({ onClose }: Props) {
   const [trashConfirm, setTrashConfirm] = useState<FileEntryDto[] | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [mdMode, setMdMode] = useState<MdMode>(() => readWorkspaceMdMode());
   const { showToast, toastHost } = useTransientToast();
   const panelRef = useRef<HTMLElement | null>(null);
   const renameIgnoreBlurRef = useRef(false);
   const renameBusyRef = useRef(false);
 
   const dirty = view === "editor" && draftContent !== savedContent;
+  const editorIsMarkdown = isMarkdownFilename(editorName);
+  const showMdPreview = editorIsMarkdown && mdMode === "preview";
+
+  const setMdModePersist = (mode: MdMode) => {
+    setMdMode(mode);
+    writeWorkspaceMdMode(mode);
+  };
 
   const breadcrumbs = useMemo(
     () => buildBreadcrumbs(root, workspaceRoot),
@@ -1431,18 +1447,52 @@ export default function WorkspacePanel({ onClose }: Props) {
               <h3 className="ws-editor-filename">{editorName}</h3>
               <p className="ws-editor-path">{editorPath}</p>
             </div>
+            {editorIsMarkdown && (
+              <div
+                className="ws-md-modes"
+                role="tablist"
+                aria-label={t("workspace.previewMode")}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mdMode === "preview"}
+                  className={`ws-md-mode ${mdMode === "preview" ? "is-active" : ""}`}
+                  onClick={() => setMdModePersist("preview")}
+                >
+                  <Eye size={13} strokeWidth={2.3} aria-hidden />
+                  {t("workspace.previewMode")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mdMode === "source"}
+                  className={`ws-md-mode ${mdMode === "source" ? "is-active" : ""}`}
+                  onClick={() => setMdModePersist("source")}
+                >
+                  <FileCode2 size={13} strokeWidth={2.3} aria-hidden />
+                  {t("workspace.previewSource")}
+                </button>
+              </div>
+            )}
             {dirty && <span className="ws-dirty-badge">{t("workspace.unsaved")}</span>}
           </div>
 
           {error && <div className="side-error">{error}</div>}
 
           <div className="ws-editor-wrap">
-            <WorkspaceEditor
-              value={draftContent}
-              filename={editorName}
-              theme={theme}
-              onChange={setDraftContent}
-            />
+            {showMdPreview ? (
+              <div className="ws-md-preview">
+                <ChatMarkdown content={draftContent} />
+              </div>
+            ) : (
+              <WorkspaceEditor
+                value={draftContent}
+                filename={editorName}
+                theme={theme}
+                onChange={setDraftContent}
+              />
+            )}
           </div>
           {trashConfirm && (
             <FileSpaceConfirm
