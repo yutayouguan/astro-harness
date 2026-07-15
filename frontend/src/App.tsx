@@ -15,7 +15,7 @@ import PreferencesPanel from "./components/PreferencesPanel";
 import ProvidersPanel from "./components/ProvidersPanel";
 import SkillsPanel from "./components/SkillsPanel";
 import ToolsPanel from "./components/ToolsPanel";
-import { Toast } from "./components/Toast";
+import { Toast, TOAST_ERROR_DURATION_MS } from "./components/Toast";
 import WorkspacePanel from "./components/WorkspacePanel";
 import { MSG_DISSOLVE_MS } from "./components/MsgDissolveOverlay";
 import {
@@ -365,6 +365,8 @@ export default function App() {
   const [toastVisible, setToastVisible] = useState(false);
   /** 每次弹出递增，用于重置进度条动画 */
   const [toastEpoch, setToastEpoch] = useState(0);
+  const [toastSticky, setToastSticky] = useState(false);
+  const [toastDurationMs, setToastDurationMs] = useState(4000);
   /** 编辑截断时正在粒子消散的消息 */
   const [dissolvingIds, setDissolvingIds] = useState<string[]>([]);
   /** 记忆 pending 角标 */
@@ -422,15 +424,27 @@ export default function App() {
 
   const dismissToast = useCallback(() => {
     setToastVisible(false);
+    setToastSticky(false);
   }, []);
 
-  const showTransientToast = useCallback((msg: string) => {
-    const text = msg.trim();
-    if (!text) return;
-    setToastMsg(text);
-    setToastEpoch((n) => n + 1);
-    setToastVisible(true);
-  }, []);
+  const showTransientToast = useCallback(
+    (
+      msg: string,
+      opts?: { sticky?: boolean; durationMs?: number },
+    ) => {
+      const text = msg.trim();
+      if (!text) return;
+      setToastMsg(text);
+      setToastSticky(Boolean(opts?.sticky));
+      setToastDurationMs(
+        opts?.durationMs ??
+          (opts?.sticky ? TOAST_ERROR_DURATION_MS : 4000),
+      );
+      setToastEpoch((n) => n + 1);
+      setToastVisible(true);
+    },
+    [],
+  );
 
   const flushStreamTokens = useCallback(() => {
     streamRafRef.current = null;
@@ -1725,7 +1739,9 @@ export default function App() {
           typeof navigator === "undefined" ||
           !navigator.geolocation?.getCurrentPosition
         ) {
-          showTransientToast(t("chat.location.geoUnavailable"));
+          showTransientToast(t("chat.location.geoUnavailable"), {
+            durationMs: TOAST_ERROR_DURATION_MS,
+          });
           return;
         }
         try {
@@ -1742,14 +1758,18 @@ export default function App() {
             accuracy_m: pos.coords.accuracy,
           };
         } catch {
-          showTransientToast(t("chat.location.geoFailed"));
+          showTransientToast(t("chat.location.geoFailed"), {
+            durationMs: TOAST_ERROR_DURATION_MS,
+          });
           return;
         }
       } else if (name === "choose_city") {
         const cityRaw = context.city;
         const city = typeof cityRaw === "string" ? cityRaw.trim() : "";
         if (!city) {
-          showTransientToast(t("chat.location.cityRequired"));
+          showTransientToast(t("chat.location.cityRequired"), {
+            durationMs: TOAST_ERROR_DURATION_MS,
+          });
           return;
         }
         payload = { city };
@@ -3113,6 +3133,8 @@ export default function App() {
         key={toastEpoch}
         message={toastMsg}
         visible={toastVisible}
+        sticky={toastSticky}
+        durationMs={toastSticky ? undefined : toastDurationMs}
         onDismiss={dismissToast}
       />
     </div>

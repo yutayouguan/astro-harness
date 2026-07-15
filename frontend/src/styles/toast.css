@@ -45,9 +45,15 @@ html[data-theme="dark"] .astro-toast {
     color-mix(in srgb, var(--tone, var(--accent)) 85%, #fff),
     color-mix(in srgb, var(--accent-2, #60a5fa) 70%, var(--tone, var(--accent)))
   );
-  animation-name: astro-toast-progress;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
+}
+
+.astro-toast-sticky-mark {
+  height: 3px;
+  background: color-mix(in srgb, #f59e0b 75%, var(--tone, var(--accent)));
+}
+
+.astro-toast.is-sticky {
+  border-color: color-mix(in srgb, #f59e0b 35%, var(--glass-edge));
 }
 
 .astro-toast-row {
@@ -101,22 +107,8 @@ html[data-theme="dark"] .astro-toast {
   }
 }
 
-@keyframes astro-toast-progress {
-  from {
-    transform: scaleX(1);
-  }
-  to {
-    transform: scaleX(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .astro-toast {
     animation: none;
-  }
-
-  .astro-toast-progress-bar {
-    animation: none;
-    transform: scaleX(0);
   }
 }
