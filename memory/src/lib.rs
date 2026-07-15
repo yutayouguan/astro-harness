@@ -1,7 +1,7 @@
-//! Astro 记忆子系统 facade：精炼记忆、会话（via `session`）、用量（via `usage`）等入口。
+//! Astro 记忆子系统 facade：精炼记忆、会话 / 用量 / 编排等入口。
 //!
-//! 精炼记忆为 Markdown（`MEMORY.md` / `USER.md`）；会话/用量在独立 crate，
-//! 本包继续 `pub use` 以保持 `memory::SessionStore` / `memory::UsageDb` 等调用方不变。
+//! 精炼记忆为 Markdown（`MEMORY.md` / `USER.md`）；会话、用量、编排在独立 crate，
+//! 本包继续 `pub use` 以保持既有 `memory::*` 调用方不变。
 //! 数据根目录默认为 `~/.astro`（可通过 `ASTRO_MEMORY_DIR` 覆盖）。
 
 pub mod agent;
@@ -10,7 +10,6 @@ pub mod config;
 pub mod cron;
 pub mod dreaming;
 pub mod infra;
-pub mod orchestration;
 pub mod pending;
 pub mod review;
 pub mod session;
@@ -55,9 +54,9 @@ pub use ::usage::pricing as usage_pricing;
 pub use ::usage::stats as usage_stats;
 pub use ::usage::trace_insights;
 
-pub use orchestration::collab_insights;
-pub use orchestration::db as orchestration_db;
-pub use orchestration::spawn as orchestration_spawn;
+pub use ::orchestration::collab_insights;
+pub use ::orchestration::db as orchestration_db;
+pub use ::orchestration::spawn as orchestration_spawn;
 
 pub use artifacts::db as artifact_db;
 

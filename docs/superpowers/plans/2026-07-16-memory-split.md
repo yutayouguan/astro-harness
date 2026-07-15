@@ -10,10 +10,11 @@
 
 | 步 | Crate | 迁入内容 | 留在 memory |
 |----|-------|----------|-------------|
-| **1 ✅** | `session` | `SessionStore` + `message_db` | `MemoryManager`、记忆/用量/编排等 |
+| **1 ✅** | `session` | `SessionStore` + `message_db` | `MemoryManager`、记忆等 |
 | **2 ✅** | `usage` | usage db/pricing/stats/trace | — |
-| 3 | （可选）编排 DB / cron 持久化 | orchestration/cron DB | 执行仍 backend/agent |
-| 4 | 瘦身 | — | 仅 store/pending/review/dreaming/config |
+| **3 ✅** | `orchestration` | orchestration db/spawn/collab | 执行仍在 `agent` |
+| 4 | （可选）`cron` 持久化 | cron store/run_db | tick 仍 backend |
+| 5 | 瘦身 | — | 仅 store/pending/review/dreaming/config |
 
 ---
 

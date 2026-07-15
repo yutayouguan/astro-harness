@@ -164,7 +164,7 @@ pub struct OrchestrationDb {
 
 /// 默认数据库路径：`{ASTRO_MEMORY_DIR|~/.astro}/orchestration.db`
 pub fn orchestration_db_path() -> PathBuf {
-    crate::workspace::default_memory_dir().join("orchestration.db")
+    home::default_memory_dir().join("orchestration.db")
 }
 
 /// 当前 UTC 时间 RFC3339（秒精度，与 `usage_db::period_window` / `fmt_utc_bound` 一致）

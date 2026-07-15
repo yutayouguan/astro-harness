@@ -2,11 +2,9 @@
 
 use std::sync::Mutex;
 
-use memory::{
-    query_collaboration_insights, CollaborationInsightsQuery, NewUsageEvent, UsageDb,
-    UsageInsightsQuery, UsagePeriod,
-};
+use orchestration::{query_collaboration_insights, CollaborationInsightsQuery};
 use tempfile::TempDir;
+use usage::{NewUsageEvent, UsageDb, UsageInsightsQuery, UsagePeriod};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 

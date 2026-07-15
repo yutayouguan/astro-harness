@@ -10,6 +10,7 @@ skills          = { path = "../skills" }
 home            = { path = "../home" }
 session         = { path = "../session" }
 usage           = { path = "../usage" }
+orchestration   = { path = "../orchestration" }
 tokio = { workspace = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }

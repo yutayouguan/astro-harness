@@ -5,6 +5,7 @@ members = [
     "home",
     "session",
     "usage",
+    "orchestration",
     "backend",
     "agent",
     "providers",
