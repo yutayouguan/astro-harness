@@ -1,7 +1,7 @@
 # 文件空间多类型查看与文本编辑
 
 日期：2026-07-15  
-状态：实现中（见 [实现计划](../plans/2026-07-15-filespace-media-viewer.md)）
+状态：已实现（见 [实现计划](../plans/2026-07-15-filespace-media-viewer.md)）
 
 ## 背景
 
