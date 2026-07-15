@@ -1965,9 +1965,7 @@ html[data-theme="dark"] .msg-md-codeblock {
 .composer-typed-hint {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 1px;
+  display: block;
   padding: 2px 4px 4px;
   pointer-events: none;
   color: var(--ink-mute);
@@ -1975,6 +1973,8 @@ html[data-theme="dark"] .msg-md-codeblock {
   line-height: 1.5;
   opacity: 0.92;
   z-index: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .composer-typed-hint[hidden] {
@@ -1982,19 +1982,20 @@ html[data-theme="dark"] .msg-md-codeblock {
 }
 
 .composer-typed-text {
-  white-space: pre-wrap;
-  word-break: break-word;
+  display: inline;
+  white-space: inherit;
+  word-break: inherit;
 }
 
 .composer-typed-caret {
   display: inline-block;
   width: 1.5px;
-  height: 1.05em;
-  margin-top: 0.22em;
+  height: 1em;
+  margin: 0 0 -0.12em 1px;
+  vertical-align: baseline;
   border-radius: 1px;
   background: color-mix(in srgb, var(--tone-blue, var(--accent)) 75%, var(--ink-mute));
   animation: composer-caret-blink 1.05s steps(1, end) infinite;
-  flex-shrink: 0;
 }
 
 @keyframes composer-caret-blink {
@@ -3149,14 +3150,14 @@ html[data-theme="light"] .send-btn--round {
 
 .chat-welcome {
   position: relative;
-  gap: 20px;
+  gap: 16px;
   isolation: isolate;
 }
 
 .chat-welcome-hero {
   position: absolute;
-  inset: 0 6% auto;
-  height: 260px;
+  inset: 0 12% auto;
+  height: 180px;
   pointer-events: none;
   z-index: 0;
 }
@@ -3164,39 +3165,39 @@ html[data-theme="light"] .send-btn--round {
 .chat-welcome-orb {
   position: absolute;
   left: 50%;
-  top: 36%;
-  width: 240px;
-  height: 240px;
+  top: 42%;
+  width: 160px;
+  height: 160px;
   translate: -50% -50%;
   border-radius: 50%;
   background:
     radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.8), transparent 42%),
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 42%, transparent), transparent 68%);
   filter: blur(10px);
-  opacity: 0.9;
+  opacity: 0.85;
   animation: welcome-orb-breathe 6.5s ease-in-out infinite;
 }
 
 .chat-welcome-orb--soft {
-  width: 300px;
-  height: 170px;
-  top: 62%;
+  width: 200px;
+  height: 110px;
+  top: 68%;
   background:
     radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 30%, transparent), transparent 70%);
-  filter: blur(20px);
-  opacity: 0.5;
+  filter: blur(18px);
+  opacity: 0.45;
   animation-delay: -2.2s;
 }
 
 .chat-welcome-orb--spark {
-  width: 120px;
-  height: 120px;
-  top: 22%;
-  left: 58%;
+  width: 72px;
+  height: 72px;
+  top: 28%;
+  left: 56%;
   background:
     radial-gradient(circle, color-mix(in srgb, var(--tone-cyan) 35%, transparent), transparent 70%);
-  filter: blur(14px);
-  opacity: 0.55;
+  filter: blur(12px);
+  opacity: 0.5;
   animation-delay: -4s;
 }
 
@@ -3226,13 +3227,13 @@ html[data-theme="light"] .send-btn--round {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 2px;
+  gap: 8px;
+  margin-bottom: 0;
 }
 
 .chat-welcome-mark {
   position: relative;
-  width: min(132px, 34vw);
+  width: min(84px, 22vw);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -3241,28 +3242,28 @@ html[data-theme="light"] .send-btn--round {
 
 .chat-welcome-mark-glow {
   position: absolute;
-  inset: 8%;
+  inset: 10%;
   border-radius: 50%;
   background:
     radial-gradient(
       circle at 50% 45%,
-      color-mix(in srgb, var(--tone-blue) 28%, transparent),
+      color-mix(in srgb, var(--tone-blue) 26%, transparent),
       transparent 68%
     );
-  filter: blur(12px);
-  opacity: 0.9;
+  filter: blur(10px);
+  opacity: 0.85;
 }
 
 .chat-welcome-mark-ring {
   position: absolute;
-  inset: 4%;
-  border-radius: 28px;
+  inset: 6%;
+  border-radius: 20px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.22)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone-blue) 22%, rgba(255, 255, 255, 0.5));
   box-shadow:
-    0 14px 32px color-mix(in srgb, var(--tone-blue) 16%, transparent),
+    0 10px 22px color-mix(in srgb, var(--tone-blue) 14%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.75),
     var(--glass-rim, 0 0 0 0.5px rgba(255, 255, 255, 0.35));
   backdrop-filter: blur(14px) saturate(1.2);
@@ -3272,7 +3273,7 @@ html[data-theme="light"] .send-btn--round {
 .chat-welcome-illust {
   position: relative;
   z-index: 1;
-  width: 78%;
+  width: 72%;
   color: var(--tone-blue, #2563eb);
   line-height: 0;
   opacity: 0.95;
