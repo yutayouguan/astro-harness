@@ -791,6 +791,7 @@ export default function ToolsPanel({
         </button>
       </div>
 
+      <div className="agent-tools-body">
       <div className="panel-agent-toolbar">
         <div className="panel-agent-toolbar-start">
           <AgentPicker
@@ -839,7 +840,6 @@ export default function ToolsPanel({
         </div>
       </div>
 
-      <div className="agent-tools-body">
       <AnimatedSwitch switchKey={tab} className="anim-switch--fill">
       {tab === "builtin" && (
         <>

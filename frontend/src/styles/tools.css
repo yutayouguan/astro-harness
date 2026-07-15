@@ -47,6 +47,12 @@
   z-index: 1;
 }
 
+/* 工具栏进玻璃容器：与技能 pane-head 同款顶栏 */
+.agent-tools-body > .panel-agent-toolbar {
+  margin-bottom: 12px;
+  z-index: 40;
+}
+
 html[data-theme="dark"] .agent-tools-body {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
