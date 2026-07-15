@@ -691,12 +691,12 @@ pub fn build_interaction_video_body(
         "input": [video_part, { "type": "text", "text": prompt }],
     });
     if mode == VideoUnderstandMode::Timeline {
+        // 与 TTS(`type: audio`)/出图(`type: image`) 的扁平 response_format 风格保持一致，
+        // 并匹配 Gemini 官方结构化输出格式：{ type: "text", mime_type: "application/json", schema }
         body["response_format"] = json!({
-            "type": "json_schema",
-            "json_schema": {
-                "name": "video_timeline",
-                "schema": video_timeline_json_schema()
-            }
+            "type": "text",
+            "mime_type": "application/json",
+            "schema": video_timeline_json_schema()
         });
     }
     body
@@ -1040,10 +1040,11 @@ mod video_understand_tests {
         );
         assert_eq!(body["input"][0]["data"], "YWJj");
         assert_eq!(body["input"][0]["mime_type"], "video/mp4");
-        assert_eq!(body["response_format"]["type"], "json_schema");
+        // 与 TTS/出图一致的扁平 response_format 风格，匹配官方结构化输出格式
+        assert_eq!(body["response_format"]["type"], "text");
+        assert_eq!(body["response_format"]["mime_type"], "application/json");
         let schema = body
             .pointer("/response_format/schema")
-            .or_else(|| body.pointer("/response_format/json_schema/schema"))
             .expect("schema");
         assert!(schema.pointer("/properties/events").is_some());
     }

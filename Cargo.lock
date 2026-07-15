@@ -5018,6 +5018,7 @@ dependencies = [
  "common",
  "cron",
  "delegate",
+ "futures",
  "home",
  "hooks",
  "memory",

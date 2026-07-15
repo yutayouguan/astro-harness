@@ -11,7 +11,8 @@ use tokio::time::sleep;
 use crate::media_http::google_native_base;
 use crate::trait_::ProviderConfig;
 
-pub const INLINE_MAX_BYTES: u64 = 100 * 1024 * 1024;
+/// Gemini 官方建议：请求总大小超过约 20MB 时应改走 Files API，而非内嵌 base64。
+pub const INLINE_MAX_BYTES: u64 = 20 * 1024 * 1024;
 pub const FILES_POLL_INTERVAL: Duration = Duration::from_secs(5);
 pub const FILES_POLL_TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -258,8 +259,8 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn inline_max_is_100mb() {
-        assert_eq!(INLINE_MAX_BYTES, 100 * 1024 * 1024);
+    fn inline_max_is_20mb() {
+        assert_eq!(INLINE_MAX_BYTES, 20 * 1024 * 1024);
     }
 
     #[test]

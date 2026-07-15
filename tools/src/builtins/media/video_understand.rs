@@ -2,6 +2,7 @@
 //! 不走 OpenAI。
 
 use base64::Engine;
+use futures::StreamExt;
 use providers::files_http::{
     google_files_delete, google_files_upload_and_wait, INLINE_MAX_BYTES,
 };
@@ -15,10 +16,35 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
+
+/// 远程 http(s) 视频下载的硬上限：略高于 `INLINE_MAX_BYTES`，避免恶意/超大远程文件把整段响应体读进内存。
+/// 超限时直接报错，不做 Files API 兜底（保持本次修复范围可控）。
+const MAX_REMOTE_DOWNLOAD_BYTES: u64 = INLINE_MAX_BYTES + 5 * 1024 * 1024;
+
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+/// Files API（start/upload/delete）与轮询 GET 共用：单次请求超时上限，避免轮询在网络异常时无限期挂起。
+const FILES_REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
+/// Interactions 视频理解请求：视频体量大、可能耗时较久，但同样需要上限避免无限期挂起。
+const INTERACTIONS_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+
+fn build_files_client() -> anyhow::Result<reqwest::Client> {
+    Ok(reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(FILES_REQUEST_TIMEOUT)
+        .build()?)
+}
+
+fn build_interactions_client() -> anyhow::Result<reqwest::Client> {
+    Ok(reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(INTERACTIONS_REQUEST_TIMEOUT)
+        .build()?)
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VideoUnderstandArgs {
@@ -147,27 +173,28 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         model: model.clone(),
         ..ProviderConfig::default()
     };
-    let client = reqwest::Client::new();
+    let files_client = build_files_client()?;
+    let interactions_client = build_interactions_client()?;
 
     let (video_part, input_kind, uploaded_name) =
-        resolve_video_input(&client, &config, ctx, video_url).await?;
+        resolve_video_input(&files_client, &config, ctx, video_url).await?;
 
     let text = match google_interactions_video(
-        &client, &config, &model, &prompt, &video_part, mode,
+        &interactions_client, &config, &model, &prompt, &video_part, mode,
     )
     .await
     {
         Ok(t) => t,
         Err(e) => {
             if let Some(name) = uploaded_name.as_deref() {
-                let _ = google_files_delete(&client, &config, name).await;
+                let _ = google_files_delete(&files_client, &config, name).await;
             }
             return Err(e);
         }
     };
 
     if let Some(name) = uploaded_name.as_deref() {
-        let _ = google_files_delete(&client, &config, name).await;
+        let _ = google_files_delete(&files_client, &config, name).await;
     }
 
     let body = if mode == VideoUnderstandMode::Timeline {
@@ -253,20 +280,42 @@ async fn bytes_to_part(
     }
 }
 
+fn remote_too_large_err(len: u64) -> anyhow::Error {
+    anyhow::anyhow!(
+        "远程视频过大（约 {:.1}MB，上限 {:.0}MB）：video_understand 暂不支持下载超大远程 http(s) 视频；\
+请改用工作区本地路径（会按体量自动走 inline 或 Files API）、公开 YouTube 链接，或先压缩/裁剪后重试",
+        len as f64 / (1024.0 * 1024.0),
+        MAX_REMOTE_DOWNLOAD_BYTES as f64 / (1024.0 * 1024.0)
+    )
+}
+
 async fn download_bytes(client: &reqwest::Client, url: &str) -> anyhow::Result<Vec<u8>> {
+    use anyhow::Context;
     let resp = client
         .get(url)
         .send()
         .await
-        .map_err(|e| anyhow::anyhow!("下载视频失败: {e}"))?;
+        .with_context(|| format!("下载视频失败: {url}"))?;
     if !resp.status().is_success() {
         anyhow::bail!("下载视频 HTTP {}", resp.status());
     }
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| anyhow::anyhow!("读取视频字节失败: {e}"))?;
-    Ok(bytes.to_vec())
+    if let Some(len) = resp.content_length() {
+        if len > MAX_REMOTE_DOWNLOAD_BYTES {
+            return Err(remote_too_large_err(len));
+        }
+    }
+
+    // 即便 Content-Length 缺失或不可信，也按上限截断式读取，避免把整段响应体无限制读进内存。
+    let mut buf: Vec<u8> = Vec::new();
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| anyhow::anyhow!("读取视频字节失败: {e}"))?;
+        if buf.len() as u64 + chunk.len() as u64 > MAX_REMOTE_DOWNLOAD_BYTES {
+            return Err(remote_too_large_err(buf.len() as u64 + chunk.len() as u64));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(buf)
 }
 
 fn mime_from_url(url: &str) -> &'static str {
@@ -319,6 +368,83 @@ mod tests {
         assert!(!should_use_files_api(INLINE_MAX_BYTES - 1));
         assert!(should_use_files_api(INLINE_MAX_BYTES));
         assert!(should_use_files_api(INLINE_MAX_BYTES + 1));
+    }
+
+    #[test]
+    fn remote_download_cap_is_slightly_above_inline_max() {
+        assert!(MAX_REMOTE_DOWNLOAD_BYTES > INLINE_MAX_BYTES);
+    }
+
+    /// 读掉客户端请求行/头，避免关闭连接时因内核接收缓冲区里还有未读数据而触发 RST（而非正常 FIN），
+    /// 导致客户端把这当作连接错误而不是我们期望的「响应体过大被拒绝」。
+    fn drain_request(stream: &mut std::net::TcpStream) {
+        use std::io::Read;
+        let mut buf = [0u8; 4096];
+        let _ = stream.read(&mut buf);
+    }
+
+    #[tokio::test]
+    async fn download_bytes_rejects_oversized_content_length() {
+        use std::io::Write;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let big_len = MAX_REMOTE_DOWNLOAD_BYTES + 1;
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                drain_request(&mut stream);
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {big_len}\r\nContent-Type: video/mp4\r\nConnection: close\r\n\r\n"
+                );
+                // 只写响应头，故意不写 body：验证仅凭 Content-Length 就能提前拒绝，无需等待/读取超大 body。
+                let _ = stream.write_all(header.as_bytes());
+            }
+        });
+
+        let client = reqwest::Client::new();
+        let url = format!("http://{addr}/video.mp4");
+        let err = download_bytes(&client, &url).await.unwrap_err();
+        assert!(err.to_string().contains("远程视频过大"), "unexpected: {err}");
+    }
+
+    #[tokio::test]
+    async fn download_bytes_rejects_oversized_stream_without_content_length() {
+        use std::io::Write;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                drain_request(&mut stream);
+                // 无 Content-Length，用 chunked 传输持续发送超过上限的字节，验证流式读取会中途截断拒绝。
+                let header =
+                    "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nTransfer-Encoding: chunked\r\n\r\n";
+                if stream.write_all(header.as_bytes()).is_err() {
+                    return;
+                }
+                let chunk = vec![0u8; 1024 * 1024];
+                let chunk_header = format!("{:x}\r\n", chunk.len());
+                let mut sent = 0u64;
+                let target = MAX_REMOTE_DOWNLOAD_BYTES + 2 * 1024 * 1024;
+                while sent < target {
+                    if stream.write_all(chunk_header.as_bytes()).is_err()
+                        || stream.write_all(&chunk).is_err()
+                        || stream.write_all(b"\r\n").is_err()
+                    {
+                        return;
+                    }
+                    sent += chunk.len() as u64;
+                }
+                let _ = stream.write_all(b"0\r\n\r\n");
+            }
+        });
+
+        let client = reqwest::Client::new();
+        let url = format!("http://{addr}/video.mp4");
+        let err = download_bytes(&client, &url).await.unwrap_err();
+        assert!(err.to_string().contains("远程视频过大"), "unexpected: {err}");
     }
 }
 
