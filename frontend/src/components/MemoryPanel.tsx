@@ -1,5 +1,5 @@
 /** 记忆面板：MEMORY/USER/日记编辑与召回。 */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Book,
@@ -841,44 +841,54 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
         <h2 className="mem-top-title">{t("page.memory.title")}</h2>
 
         <nav className="mem-view-nav" aria-label={t("memory.views")}>
-          <span className="mem-view-flow" aria-hidden>
-            <span className="mem-view-flow-ember mem-view-flow-ember--src" />
-            <span className="mem-view-flow-ember mem-view-flow-ember--dst" />
-            {Array.from({ length: 10 }, (_, i) => (
-              <span
-                key={i}
-                className={`mem-view-flow-pulse mem-view-flow-pulse--${i % 5}`}
-                style={{ animationDelay: `${(i * 0.42).toFixed(2)}s` }}
-              />
+          <div className="mem-view-pipeline">
+            <span className="mem-view-flow" aria-hidden>
+              <span className="mem-view-flow-ember mem-view-flow-ember--src" />
+              <span className="mem-view-flow-ember mem-view-flow-ember--dst" />
+              {Array.from({ length: 10 }, (_, i) => (
+                <span
+                  key={i}
+                  className={`mem-view-flow-pulse mem-view-flow-pulse--${i % 5}`}
+                  style={{ animationDelay: `${(i * 0.42).toFixed(2)}s` }}
+                />
+              ))}
+            </span>
+            {(
+              [
+                { id: "diary" as const, label: t("memory.view.diary"), Icon: IconBook },
+                { id: "dream" as const, label: t("memory.view.dream"), Icon: IconMoon },
+                { id: "longterm" as const, label: t("memory.view.longterm"), Icon: IconList },
+              ] as const
+            ).map((item, index) => (
+              <Fragment key={item.id}>
+                {index > 0 && (
+                  <span className="mem-view-step" aria-hidden>
+                    ›
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className={`mem-view-tab mem-view-tab--${item.id} ${view === item.id ? "active" : ""}`}
+                  onClick={() => switchView(item.id)}
+                >
+                  <item.Icon />
+                  <span>{item.label}</span>
+                </button>
+              </Fragment>
             ))}
-          </span>
-          {(
-            [
-              { id: "diary" as const, label: t("memory.view.diary"), Icon: IconBook },
-              { id: "dream" as const, label: t("memory.view.dream"), Icon: IconMoon },
-              { id: "longterm" as const, label: t("memory.view.longterm"), Icon: IconList },
-              {
-                id: "pending" as const,
-                label: t("memory.view.pending"),
-                Icon: IconPending,
-              },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`mem-view-tab mem-view-tab--${item.id} ${view === item.id ? "active" : ""}`}
-              onClick={() => switchView(item.id)}
-            >
-              <item.Icon />
-              <span>
-                {item.label}
-                {item.id === "pending" && pendingWrites.length > 0
-                  ? ` (${pendingWrites.length})`
-                  : ""}
-              </span>
-            </button>
-          ))}
+          </div>
+          <span className="mem-view-rail" aria-hidden />
+          <button
+            type="button"
+            className={`mem-view-tab mem-view-tab--pending ${view === "pending" ? "active" : ""}`}
+            onClick={() => switchView("pending")}
+          >
+            <IconPending />
+            <span>
+              {t("memory.view.pending")}
+              {pendingWrites.length > 0 ? ` (${pendingWrites.length})` : ""}
+            </span>
+          </button>
         </nav>
 
         <div className="mem-top-stats">

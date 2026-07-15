@@ -38,7 +38,7 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
-  gap: 40px;
+  gap: 8px;
   margin: 0;
   padding: 4px 7px;
   height: var(--mem-top-ctrl-h);
@@ -54,17 +54,53 @@
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   width: fit-content;
-  max-width: min(100%, 520px);
+  max-width: min(100%, 560px);
   isolation: isolate;
   flex: 0 1 auto;
   min-width: 0;
 }
 
-/* 日记 → 做梦 → 长期记忆：小圆点走线（无传送线） */
+/* 主流程：日记 › 做梦 › 长期记忆 */
+.mem-view-pipeline {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.mem-view-step {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink-mute);
+  opacity: 0.85;
+  pointer-events: none;
+  user-select: none;
+}
+
+.mem-view-rail {
+  flex-shrink: 0;
+  width: 1px;
+  height: 18px;
+  margin: 0 2px 0 4px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink-mute) 55%, transparent);
+}
+
+/* 日记 → 做梦 → 长期记忆：小圆点仅走在主流程内 */
 .mem-view-flow {
   position: absolute;
-  left: 14%;
-  right: 8%;
+  left: 6%;
+  right: 6%;
   top: 48%;
   height: 34px;
   transform: translateY(-42%);
@@ -228,7 +264,7 @@
   color: inherit;
 }
 
-/* 做梦盖住细线，线从底下穿过 */
+/* 做梦盖在圆点走线之上 */
 .mem-view-tab--dream {
   z-index: 2;
   background:
@@ -237,6 +273,19 @@
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--tone-green) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 #fff;
+}
+
+.mem-view-tab--pending {
+  opacity: 0.92;
+}
+
+html[data-theme="dark"] .mem-view-step {
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+html[data-theme="dark"] .mem-view-rail {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 html[data-theme="dark"] .mem-view-nav {
@@ -301,29 +350,6 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 60%, transparent);
-}
-
-.mem-view-tab--diary::after,
-.mem-view-tab--longterm::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  transform: translateY(-50%);
-  background: color-mix(in srgb, var(--tone-green) 55%, transparent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--tone-green) 35%, transparent);
-  opacity: 0.55;
-  pointer-events: none;
-}
-
-.mem-view-tab--diary::after {
-  right: -2px;
-}
-
-.mem-view-tab--longterm::after {
-  left: -2px;
 }
 
 .mem-view-tab:hover:not(.active):not(.mem-view-tab--dream) {
