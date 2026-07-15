@@ -32,6 +32,11 @@ function ToneIcon({ tone }: { tone: ToastTone }) {
 }
 
 /** 贴边环绕倒计时：仅进度描边、无轨道；pathLength=100，dashoffset 0→100。 */
+const TOAST_RADIUS_PX = 14;
+const RING_STROKE_PX = 2.5;
+/** 外边到描边外沿的空隙；中心线再内收半线宽，避免 overflow 裁切不匀 */
+const RING_GAP_PX = 2;
+
 function ToastCountdownRing({ durationMs }: { durationMs: number }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -41,23 +46,35 @@ function ToastCountdownRing({ durationMs }: { durationMs: number }) {
     if (!host) return;
     const update = () => {
       const { width, height } = host.getBoundingClientRect();
-      setBox({ w: Math.round(width), h: Math.round(height) });
+      setBox({ w: width, h: height });
     };
     update();
-    const ro = new ResizeObserver(update);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const boxSize = entry.borderBoxSize?.[0];
+      if (boxSize) {
+        setBox({ w: boxSize.inlineSize, h: boxSize.blockSize });
+        return;
+      }
+      const { width, height } = host.getBoundingClientRect();
+      setBox({ w: width, h: height });
+    });
     ro.observe(host);
     return () => ro.disconnect();
   }, []);
 
-  const inset = 2.5;
+  const inset = RING_GAP_PX + RING_STROKE_PX / 2;
+  const rx = Math.max(0, TOAST_RADIUS_PX - inset);
   const ready = box.w > 4 && box.h > 4;
 
   return (
     <svg
       ref={svgRef}
       className="astro-toast-ring"
-      width={ready ? box.w : undefined}
-      height={ready ? box.h : undefined}
+      width={ready ? box.w : 0}
+      height={ready ? box.h : 0}
+      viewBox={ready ? `0 0 ${box.w} ${box.h}` : undefined}
       aria-hidden
     >
       {ready && (
@@ -65,10 +82,10 @@ function ToastCountdownRing({ durationMs }: { durationMs: number }) {
           className="astro-toast-ring-progress"
           x={inset}
           y={inset}
-          width={box.w - inset * 2}
-          height={box.h - inset * 2}
-          rx={12}
-          ry={12}
+          width={Math.max(0, box.w - inset * 2)}
+          height={Math.max(0, box.h - inset * 2)}
+          rx={rx}
+          ry={rx}
           pathLength={100}
           style={{ animationDuration: `${durationMs}ms` }}
         />
