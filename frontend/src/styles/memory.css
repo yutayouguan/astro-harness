@@ -249,10 +249,11 @@
   z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   border: none;
-  border-radius: 10px;
-  padding: 5px 11px;
+  border-radius: 11px;
+  padding: 7px 13px;
+  min-height: 34px;
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
@@ -351,7 +352,7 @@ html[data-theme="dark"] .mem-view-tab--dream {
 .mem-top-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0;
   flex-shrink: 0;
   margin-left: auto;
@@ -360,29 +361,30 @@ html[data-theme="dark"] .mem-view-tab--dream {
 .mem-enhance {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
 }
 
 .mem-enhance-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .mem-stat {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px 6px 6px;
-  border-radius: 14px;
+  gap: 8px;
+  padding: 3px 10px 3px 3px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 18%, rgba(255, 255, 255, 0.55));
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 65%, transparent);
   box-shadow:
-    0 8px 22px color-mix(in srgb, var(--tone, var(--tone-green)) 12%, transparent),
+    0 4px 12px color-mix(in srgb, var(--tone, var(--tone-green)) 10%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(14px) saturate(1.25);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
@@ -392,9 +394,9 @@ html[data-theme="dark"] .mem-view-tab--dream {
 .mem-stat-icon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 11px;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
   color: var(--tone, var(--tone-green));
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
@@ -407,23 +409,24 @@ html[data-theme="dark"] .mem-view-tab--dream {
 .mem-stat-body {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   min-width: 0;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .mem-stat strong {
   color: var(--ink);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 750;
   letter-spacing: -0.02em;
   margin: 0;
 }
 
 .mem-stat-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 550;
   color: var(--ink-mute);
+  white-space: nowrap;
 }
 
 .mem-loading {

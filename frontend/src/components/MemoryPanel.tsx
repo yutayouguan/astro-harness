@@ -1034,17 +1034,6 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
             {filterAgentId === ALL_AGENTS ? (
               <div className="mem-empty mem-empty-pick">
-                {onClose && (
-                  <button
-                    type="button"
-                    className="mem-empty-chat"
-                    onClick={onClose}
-                    title={t("memory.back")}
-                    aria-label={t("memory.back")}
-                  >
-                    <IconWsBackChat width={28} height={28} />
-                  </button>
-                )}
                 <EmptyIllustration
                   scene="memory"
                   size="lg"
@@ -1055,17 +1044,6 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
               </div>
             ) : diaryEmpty ? (
               <div className="mem-empty mem-empty-diary">
-                {onClose ? (
-                  <button
-                    type="button"
-                    className="mem-empty-chat"
-                    onClick={onClose}
-                    title={t("memory.goChat")}
-                    aria-label={t("memory.goChat")}
-                  >
-                    <IconWsBackChat width={28} height={28} />
-                  </button>
-                ) : null}
                 <EmptyIllustration
                   scene="memory"
                   size="lg"
