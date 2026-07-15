@@ -318,19 +318,12 @@ html[data-theme="dark"] .mem-view-tab:hover:not(.active) {
 
 html[data-theme="dark"] .mem-view-tab.active {
   color: color-mix(in srgb, #fff 22%, var(--tone, var(--tone-green)));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 55%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--tone-green)) 32%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.22);
+  background: color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 50%, transparent);
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .mem-view-tab--dream.active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
-    color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 60%, transparent);
+  background: color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 56%, transparent);
 }
 
 .mem-view-tab:hover:not(.active) {
@@ -340,19 +333,8 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
 
 .mem-view-tab.active {
   color: var(--tone, var(--tone-green));
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 72%, transparent),
-      color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 42%, transparent)
-    ),
-    color-mix(in srgb, var(--tone, var(--tone-green)) 8%, rgba(255, 255, 255, 0.4));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--tone-green)) 22%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 40%, transparent),
-    0 2px 8px color-mix(in srgb, var(--tone, var(--tone-green)) 10%, transparent);
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  background: color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 55%, transparent);
+  box-shadow: none;
 }
 
 .mem-view-tab.active svg {
@@ -361,13 +343,7 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
 
 /* 选中做梦时仍盖住圆点走线 */
 .mem-view-tab--dream.active {
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 78%, transparent),
-      color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 48%, transparent)
-    ),
-    color-mix(in srgb, var(--tone, var(--tone-green)) 10%, rgba(255, 255, 255, 0.38));
+  background: color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 62%, transparent);
 }
 
 .mem-top-stats {
@@ -403,38 +379,24 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
   gap: 7px;
   height: 100%;
   box-sizing: border-box;
-  padding: 0 10px 0 4px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 22%, rgba(15, 23, 42, 0.06));
-  background:
-    linear-gradient(
-      155deg,
-      color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 62%, transparent) 0%,
-      color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 36%, transparent) 100%
-    ),
-    color-mix(in srgb, var(--tone, var(--tone-green)) 7%, rgba(255, 255, 255, 0.32));
-  box-shadow:
-    0 4px 12px color-mix(in srgb, var(--tone, var(--tone-green)) 10%, rgba(15, 23, 42, 0.04)),
-    inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent);
-  backdrop-filter: blur(14px) saturate(1.25);
-  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  padding: 0 4px;
+  border-radius: 11px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
   color: var(--ink-soft);
 }
 
 .mem-stat-icon {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
-  border-radius: 9px;
+  border-radius: 0;
   color: var(--tone, var(--tone-green));
-  background:
-    color-mix(in srgb, var(--tone, var(--tone-green)) 14%, transparent),
-    color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 55%, rgba(255, 255, 255, 0.35));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 40%, transparent),
-    0 2px 6px color-mix(in srgb, var(--tone, var(--tone-green)) 12%, transparent);
+  background: transparent;
+  box-shadow: none;
 }
 
 .mem-stat-body {
@@ -464,23 +426,15 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
 }
 
 html[data-theme="dark"] .mem-stat {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-green)) 28%, rgba(255, 255, 255, 0.12));
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
-    color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 42%, rgba(8, 6, 18, 0.72));
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border: none;
+  background: transparent;
+  box-shadow: none;
   color: var(--ink-soft);
 }
 
 html[data-theme="dark"] .mem-stat-icon {
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    color-mix(in srgb, var(--tone, var(--tone-green)) 18%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 2px 6px rgba(0, 0, 0, 0.22);
+  background: transparent;
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .mem-stat-label {
@@ -563,20 +517,17 @@ html[data-theme="dark"] .mem-stat-label {
 }
 
 .memory-panel .mem-cal-header .ws-tool-btn {
-  background:
-    color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 48%, transparent),
-    color-mix(in srgb, var(--tone, var(--tone-green)) 6%, rgba(255, 255, 255, 0.28));
-  border-color: color-mix(in srgb, var(--tone, var(--tone-green)) 18%, transparent);
-  color: var(--tone, var(--tone-green));
-  box-shadow:
-    0 1px 3px color-mix(in srgb, var(--tone, var(--tone-green)) 8%, rgba(15, 23, 42, 0.03)),
-    inset 0 1px 0 color-mix(in srgb, #fff 40%, transparent);
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  box-shadow: none;
 }
 
 .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--tone, var(--tone-green)) 14%, transparent);
-  border-color: color-mix(in srgb, var(--tone, var(--tone-green)) 28%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--tone-green)) 8%, transparent);
+  border: none;
   color: var(--tone, var(--tone-green));
+  box-shadow: none;
 }
 
 .mem-cal-title {
