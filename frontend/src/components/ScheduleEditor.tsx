@@ -274,12 +274,12 @@ function OnceDateTimePicker({
     const update = () => {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const width = Math.min(Math.max(rect.width, 280), window.innerWidth - 16);
+      const width = Math.min(248, window.innerWidth - 16);
       const left = Math.min(
         Math.max(8, rect.left),
         window.innerWidth - width - 8,
       );
-      const popH = 340;
+      const popH = 292;
       const spaceBelow = window.innerHeight - rect.bottom - 8;
       const openUp = spaceBelow < popH && rect.top > spaceBelow;
       setPopStyle(
