@@ -63,7 +63,11 @@ import {
   inferFolderFromInstallRef,
   isStoreSkillInstalled as matchStoreSkillInstalled,
 } from "../lib/skillInstalledMatch";
-import { filterUpdateRows, mergeUpdateRows } from "../lib/skillUpdateRows";
+import {
+  filterUpdateRows,
+  mergeUpdateRows,
+  originMatchesSkill,
+} from "../lib/skillUpdateRows";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agentsChanged";
@@ -1345,6 +1349,49 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     [updateRows],
   );
 
+  const agentOrigins = useMemo(
+    () =>
+      origins.filter(
+        (origin) =>
+          normalizeAgentId(origin.agent_id ?? null) === normalizeAgentId(agentId),
+      ),
+    [origins, agentId],
+  );
+
+  const originForSkill = useCallback(
+    (skill: InstalledSkill): SkillOriginRecord | null => {
+      for (const origin of agentOrigins) {
+        if (originMatchesSkill(origin, skill)) return origin;
+      }
+      return null;
+    },
+    [agentOrigins],
+  );
+
+  const renderSkillUpdateButton = (skill: InstalledSkill) => {
+    const origin = originForSkill(skill);
+    if (!origin) return null;
+    const row: SkillUpdateRow = { skill, origin, status: "with_origin" };
+    const folder = updateFolderForRow(row);
+    const isUpdating = updatingFolder === folder || updatingAll;
+    return (
+      <button
+        type="button"
+        className="skills-action-btn"
+        disabled={isUpdating}
+        onClick={() => void updateSkillRow(row)}
+        title={t("skills.update")}
+      >
+        {isUpdating ? (
+          <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+        ) : (
+          <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+        )}
+        <span>{isUpdating ? t("skills.updating") : t("skills.update")}</span>
+      </button>
+    );
+  };
+
   const sortedStoreResults = useMemo(() => {
     if (storeSort !== "installs") return storeResults;
     return [...storeResults].sort((a, b) => {
@@ -1524,6 +1571,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               : t("skills.view")}
           </span>
         </button>
+        {renderSkillUpdateButton(skill)}
         <div className="skill-card-action-icons">
           <button
             type="button"
@@ -1611,6 +1659,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
             {skill.linked ? t("skills.unlink") : t("skills.link")}
           </span>
         </button>
+        {renderSkillUpdateButton(skill)}
         <div className="skill-card-action-icons">
           <button
             type="button"
