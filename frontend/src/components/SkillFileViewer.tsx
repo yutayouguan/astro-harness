@@ -1,5 +1,5 @@
 /** 技能包文件只读预览：CodeMirror 高亮、MD 预览/源码、复制。 */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { Check, Copy, Eye, FileCode2 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
