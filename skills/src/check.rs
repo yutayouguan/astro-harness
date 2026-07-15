@@ -4,9 +4,10 @@ use anyhow::Result;
 
 use crate::install::agent_skills_dir;
 use crate::models::{
-    SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
+    SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkillDetail,
 };
 use crate::origins::load_origins;
+pub use crate::origins::origin_to_store_skill;
 use crate::store::fetch_detail;
 
 /// 用本地 origin 快照与远端快照判定更新状态。
@@ -47,61 +48,6 @@ pub fn classify_update_status(
     }
 
     SkillUpdateStatus::Current
-}
-
-/// 从 origin 记录构造商店查询用的 `StoreSkill`（供 `fetch_detail`）。
-pub fn origin_to_store_skill(origin: &SkillOriginRecord) -> StoreSkill {
-    let id = origin
-        .skill_id
-        .clone()
-        .unwrap_or_else(|| derive_store_skill_id(origin));
-    StoreSkill {
-        id,
-        name: origin.name.clone(),
-        description: String::new(),
-        source: derive_source(&origin.install_ref, &origin.store),
-        store: origin.store.clone(),
-        installs: None,
-        install_ref: origin.install_ref.clone(),
-        homepage: None,
-    }
-}
-
-fn derive_store_skill_id(origin: &SkillOriginRecord) -> String {
-    let r = origin.install_ref.trim();
-    if let Some(rest) = r.strip_prefix("skillhub:") {
-        return format!("skillhub:{rest}");
-    }
-    if let Some(rest) = r.strip_prefix("clawhub:") {
-        if let Some((handle, slug)) = rest.rsplit_once("--") {
-            return format!("clawhub:{handle}/{slug}");
-        }
-        return format!("clawhub:{rest}");
-    }
-    if r.contains(':') {
-        return r.to_string();
-    }
-    format!("{}:{}", origin.store, origin.folder)
-}
-
-fn derive_source(install_ref: &str, store: &str) -> String {
-    let r = install_ref.trim();
-    if let Some(rest) = r.strip_prefix("skillhub:") {
-        if let Some((owner, _)) = rest.split_once('/') {
-            return owner.to_string();
-        }
-    }
-    if let Some(rest) = r.strip_prefix("clawhub:") {
-        if let Some((handle, _)) = rest.rsplit_once("--") {
-            return handle.to_string();
-        }
-    }
-    if let Some((_, path)) = r.split_once(':') {
-        if let Some((source, _)) = path.split_once('/') {
-            return source.to_string();
-        }
-    }
-    store.to_string()
 }
 
 /// 用 origin baseline 与已拉取的远端详情判定单条检查结果（无网络，便于单测）。

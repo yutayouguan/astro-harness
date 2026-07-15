@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
 use crate::models::SkillOriginRecord;
-use crate::origins::{find_origin, infer_folder, infer_store, upsert_origin};
+use crate::origins::{find_origin, infer_folder, infer_store, upsert_origin, fill_origin_remote_baseline};
 
 /// SkillHub 公开文件 API（无需 CLI / login）。
 const SKILLHUB_API: &str = "https://api.skillhub.cn";
@@ -327,7 +327,7 @@ pub struct InstallOriginHint {
 }
 
 /// 安装成功后写入 `skill-origins.json`；无法推断 folder 时仅告警，不使安装失败。
-pub fn record_after_install(
+pub async fn record_after_install(
     install_ref: &str,
     agent_id: Option<&str>,
     hint: &InstallOriginHint,
@@ -374,18 +374,20 @@ pub fn record_after_install(
     let is_update = existing.is_some();
 
     upsert_origin(SkillOriginRecord {
-        folder,
+        folder: folder.clone(),
         skill_id: None,
         name,
         store,
         install_ref: install_ref.to_string(),
-        agent_id: Some(normalized_agent),
+        agent_id: Some(normalized_agent.clone()),
         scope: None,
         installed_at,
         last_updated_at: if is_update { Some(now) } else { None },
         remote_version: None,
         remote_updated_at: None,
-    })
+    })?;
+
+    fill_origin_remote_baseline(Some(&normalized_agent), &folder).await
 }
 
 /// 安装技能到指定 Agent 工作区的 `skills/`（SkillHub 无需 Node；其余需本机 Node.js）
@@ -411,7 +413,7 @@ pub async fn install_from_ref(
     };
 
     let hint = hint.unwrap_or_default();
-    record_after_install(install_ref, agent_id, &hint)?;
+    record_after_install(install_ref, agent_id, &hint).await?;
 
     Ok(result)
 }
