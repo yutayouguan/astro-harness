@@ -24,12 +24,12 @@ const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 /// `image_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageGenArgs {
-    /// 图片的详细文字描述（不可为空）。
+    /// 画面内容描述（不可为空）。宽高比与分辨率请用 `aspect_ratio` / `image_size` 字段，勿只写进本 prompt。
     pub prompt: String,
-    /// 宽高比（可选，主要 Google）：如 `1:1` / `16:9` / `9:16`。
+    /// 宽高比（用户要 16:9 / 9:16 / 1:1 等时必须传此字段，勿只写进 prompt）。常用：`1:1` / `16:9` / `9:16` / `4:3` / `3:4`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// 输出分辨率（Google Interactions）：`0.5K` / `1K` / `2K` / `4K`（K 须大写）。
+    /// 输出分辨率档位（用户要 2K / 4K 等时必须传此字段，勿只写进 prompt）。仅：`0.5K` / `1K` / `2K` / `4K`（K 大写）。
     #[serde(default)]
     pub image_size: Option<String>,
     /// 参考图工作区相对路径（最多 14 张）。
@@ -97,6 +97,69 @@ fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 模型常把宽高比/分辨率写进 prompt 却漏传字段；缺参时从 prompt 补全，并规范化 `image_size` 大小写。
+fn enrich_geometry_from_prompt(args: &mut ImageGenArgs) {
+    if let Some(sz) = args.image_size.as_deref() {
+        if let Some(norm) = normalize_image_size_token(sz) {
+            args.image_size = Some(norm);
+        }
+    }
+    if args
+        .aspect_ratio
+        .as_deref()
+        .map(str::trim)
+        .is_none_or(|s| s.is_empty())
+    {
+        if let Some(ar) = infer_aspect_ratio_from_prompt(&args.prompt) {
+            args.aspect_ratio = Some(ar);
+        }
+    }
+    if args
+        .image_size
+        .as_deref()
+        .map(str::trim)
+        .is_none_or(|s| s.is_empty())
+    {
+        if let Some(sz) = infer_image_size_from_prompt(&args.prompt) {
+            args.image_size = Some(sz);
+        }
+    }
+}
+
+fn normalize_image_size_token(s: &str) -> Option<String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "0.5k" => Some("0.5K".into()),
+        "1k" => Some("1K".into()),
+        "2k" => Some("2K".into()),
+        "4k" => Some("4K".into()),
+        _ => None,
+    }
+}
+
+fn infer_aspect_ratio_from_prompt(prompt: &str) -> Option<String> {
+    // 长边比优先匹配，避免误命中短片段。
+    const RATIOS: &[&str] = &[
+        "21:9", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "1:1",
+    ];
+    for ratio in RATIOS {
+        if prompt.contains(ratio) {
+            return Some((*ratio).to_string());
+        }
+    }
+    None
+}
+
+fn infer_image_size_from_prompt(prompt: &str) -> Option<String> {
+    let upper = prompt.to_ascii_uppercase();
+    // 先匹配更长的 token，避免 "0.5K" 被拆。
+    for token in ["0.5K", "4K", "2K", "1K"] {
+        if upper.contains(token) {
+            return Some(token.to_string());
+        }
+    }
+    None
+}
+
 fn has_advanced_interactions_args(args: &ImageGenArgs) -> bool {
     args.image_size
         .as_deref()
@@ -135,7 +198,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate or edit images via Gemini Interactions (Nano Banana): text-to-image, up to 14 reference_images, previous_interaction_id for multi-turn, optional google_search/image_search, thinking_level, video_uri/video. Params: aspect_ratio, image_size (0.5K|1K|2K|4K). Falls back to OpenAI gpt-image-2 for prompt-only. Writes generated/images/."
+        description: "Generate or edit images via Gemini Interactions (Nano Banana). REQUIRED: if the user asks for aspect ratio (e.g. 16:9) or resolution (e.g. 2K), you MUST set aspect_ratio and/or image_size fields — do NOT only put them in prompt text. image_size values: 0.5K|1K|2K|4K. Also supports reference_images (≤14), previous_interaction_id, google_search/image_search, thinking_level, video_uri/video. OpenAI fallback is prompt-only. Writes generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
@@ -148,8 +211,9 @@ pub fn register(registry: &mut ToolRegistry) {
 /// # 错误
 /// 无可用 Provider、全部尝试失败，或缺少 `prompt`。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: ImageGenArgs = serde_json::from_value(args.clone())
+    let mut parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
+    enrich_geometry_from_prompt(&mut parsed);
     validate_image_gen_args(&parsed)?;
 
     if ctx.image_gen_targets.is_empty() {
@@ -500,6 +564,63 @@ mod arg_tests {
         assert!(validate_image_gen_args(&a).is_ok());
     }
 
+    #[test]
+    fn enrich_lifts_geometry_stuffed_in_prompt() {
+        let mut a = ImageGenArgs {
+            prompt: "16:9宽屏，2K超高清分辨率，中国风写实摄影".into(),
+            aspect_ratio: None,
+            image_size: None,
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: false,
+            thinking_level: None,
+            video_uri: None,
+            video: None,
+        };
+        enrich_geometry_from_prompt(&mut a);
+        assert_eq!(a.aspect_ratio.as_deref(), Some("16:9"));
+        assert_eq!(a.image_size.as_deref(), Some("2K"));
+    }
+
+    #[test]
+    fn enrich_does_not_override_explicit_fields() {
+        let mut a = ImageGenArgs {
+            prompt: "16:9 and 4K but caller already chose 1:1 / 1K".into(),
+            aspect_ratio: Some("1:1".into()),
+            image_size: Some("1K".into()),
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: false,
+            thinking_level: None,
+            video_uri: None,
+            video: None,
+        };
+        enrich_geometry_from_prompt(&mut a);
+        assert_eq!(a.aspect_ratio.as_deref(), Some("1:1"));
+        assert_eq!(a.image_size.as_deref(), Some("1K"));
+    }
+
+    #[test]
+    fn enrich_normalizes_lowercase_image_size() {
+        let mut a = ImageGenArgs {
+            prompt: "cat".into(),
+            aspect_ratio: None,
+            image_size: Some("2k".into()),
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: false,
+            thinking_level: None,
+            video_uri: None,
+            video: None,
+        };
+        enrich_geometry_from_prompt(&mut a);
+        assert_eq!(a.image_size.as_deref(), Some("2K"));
+        assert!(validate_image_gen_args(&a).is_ok());
+    }
+
     fn base_args() -> ImageGenArgs {
         ImageGenArgs {
             prompt: "x".into(),
@@ -614,10 +735,12 @@ mod path_tests {
         std::fs::write(outside.join("secret.txt"), b"x").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
+            sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
@@ -650,10 +773,12 @@ mod path_tests {
         std::fs::write(ws.join("ok.txt"), b"ok").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
+            sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws.clone(),
             project_root: None,
