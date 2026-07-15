@@ -24,10 +24,6 @@
   flex-shrink: 0;
   max-width: min(220px, 52vw);
   z-index: 1;
-  }
-  
-  .agent-picker:has(.agent-picker-menu) {
-    z-index: 80;
 }
 
 .agent-picker-chip {
@@ -138,32 +134,37 @@
 }
 
 .agent-picker-menu {
-  position: absolute;
-  z-index: 80;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: max(100%, 240px);
-  max-width: min(340px, calc(100vw - 16px));
+  position: fixed;
+  /* 高于右侧抽屉 / 侧栏（≈ 1300），毛玻璃才能透出背后内容 */
+  z-index: 1400;
   margin: 0;
   padding: 6px;
   list-style: none;
   border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--tone, transparent) 14%, var(--menu-glass-border));
+  border: 1px solid color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
+  /* 更透的磨砂：靠 blur 保证可读 */
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 35%, transparent) 0%,
-      transparent 55%
+      color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(255, 255, 255, 0.35)) 0%,
+      rgba(255, 255, 255, 0.18) 55%,
+      rgba(255, 255, 255, 0.12) 100%
     ),
-    var(--menu-glass-bg);
+    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.42)) 55%, transparent);
   box-shadow:
-    var(--menu-glass-shadow),
+    0 18px 48px color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
+    0 2px 8px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
     0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
-  backdrop-filter: var(--menu-glass-blur);
-  -webkit-backdrop-filter: var(--menu-glass-blur);
+  backdrop-filter: blur(28px) saturate(1.45);
+  -webkit-backdrop-filter: blur(28px) saturate(1.45);
   max-height: 300px;
   overflow: auto;
   isolation: isolate;
+}
+
+.agent-picker-menu.is-up {
+  transform-origin: bottom center;
 }
 
 .agent-picker-option {
@@ -182,7 +183,7 @@
 }
 
 .agent-picker-option:hover {
-  background: rgba(255, 255, 255, 0.55);
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.55) 70%, transparent);
 }
 
 .agent-picker-option.is-active {
@@ -294,11 +295,17 @@ html[data-theme="dark"] .agent-picker-menu {
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 40%, transparent) 0%,
-      transparent 55%
+      color-mix(in srgb, var(--tone-soft, transparent) 32%, rgba(255, 255, 255, 0.08)) 0%,
+      rgba(255, 255, 255, 0.03) 55%,
+      rgba(8, 6, 18, 0.28) 100%
     ),
-    var(--menu-glass-bg);
-  box-shadow: var(--menu-glass-shadow);
+    color-mix(in srgb, var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 50%, transparent);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
 }
 
 html[data-theme="dark"] .agent-picker-option:hover {

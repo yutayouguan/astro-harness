@@ -1,12 +1,14 @@
 /** Agent 切换器。 */
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type SVGProps,
 } from "react";
+import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
 import type { AgentInfo } from "../types/agent";
@@ -29,6 +31,15 @@ type Props = {
 };
 
 const VIEWPORT_PAD = 8;
+
+/** 下拉菜单 fixed 定位 */
+type MenuPos = {
+  top: number;
+  left: number;
+  width: number;
+  openUp: boolean;
+  maxHeight: number;
+};
 
 function agentSubline(
   agent: AgentInfo,
@@ -58,6 +69,45 @@ function ChevronDown(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/**
+ * 按触发器位置计算 fixed 菜单坐标（Portal 到 body，毛玻璃才能透出背后内容）。
+ */
+function computePos(
+  trigger: HTMLElement,
+  menuEl?: HTMLElement | null,
+): MenuPos {
+  const rect = trigger.getBoundingClientRect();
+  const gap = 6;
+  const maxH = Math.min(300, window.innerHeight * 0.42);
+  const spaceBelow = window.innerHeight - rect.bottom - gap;
+  const spaceAbove = rect.top - gap;
+  const openUp = spaceBelow < Math.min(maxH, 160) && spaceAbove > spaceBelow;
+
+  const minW = Math.max(rect.width, 220);
+  const maxW = Math.min(340, window.innerWidth - VIEWPORT_PAD * 2);
+  const measuredW = menuEl
+    ? Math.min(Math.max(menuEl.getBoundingClientRect().width, minW), maxW)
+    : Math.min(minW, maxW);
+
+  let left = rect.left;
+  if (left + measuredW > window.innerWidth - VIEWPORT_PAD) {
+    left = rect.right - measuredW;
+  }
+  left = Math.min(
+    Math.max(left, VIEWPORT_PAD),
+    window.innerWidth - VIEWPORT_PAD - measuredW,
+  );
+
+  const availH = openUp ? spaceAbove : spaceBelow;
+  return {
+    top: openUp ? rect.top - gap : rect.bottom + gap,
+    left,
+    width: measuredW,
+    openUp,
+    maxHeight: Math.min(maxH, Math.max(96, availH)),
+  };
+}
+
 export default function AgentPicker({
   agents,
   value,
@@ -70,58 +120,42 @@ export default function AgentPicker({
 }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<CSSProperties | undefined>();
-  const ref = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<MenuPos | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
+  const listId = useId();
   const active = agents.find((a) => a.id === value) ?? agents[0];
   const defaultLabel = t("workspace.defaultAgent");
 
   useLayoutEffect(() => {
-    if (!open || !ref.current || !menuRef.current) {
-      setMenuStyle(undefined);
+    if (!open || !triggerRef.current) {
+      setPos(null);
       return;
     }
-    const clamp = () => {
-      const root = ref.current;
-      const menu = menuRef.current;
-      if (!root || !menu) return;
-      const rootRect = root.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-      const maxW = Math.min(340, window.innerWidth - VIEWPORT_PAD * 2);
-      let left = 0;
-      // 相对 root：默认左对齐；右侧溢出视口则改为右对齐
-      if (rootRect.left + Math.min(menuRect.width, maxW) > window.innerWidth - VIEWPORT_PAD) {
-        left = rootRect.width - Math.min(menuRect.width, maxW);
+    const update = () => {
+      if (triggerRef.current) {
+        setPos(computePos(triggerRef.current, menuRef.current));
       }
-      const absLeft = rootRect.left + left;
-      if (absLeft < VIEWPORT_PAD) {
-        left += VIEWPORT_PAD - absLeft;
-      }
-      const absRight = rootRect.left + left + Math.min(menuRect.width, maxW);
-      if (absRight > window.innerWidth - VIEWPORT_PAD) {
-        left -= absRight - (window.innerWidth - VIEWPORT_PAD);
-      }
-      setMenuStyle({
-        left,
-        right: "auto",
-        maxWidth: maxW,
-      });
     };
-    clamp();
-    const raf = requestAnimationFrame(clamp);
-    window.addEventListener("resize", clamp);
-    window.addEventListener("scroll", clamp, true);
+    update();
+    const raf = requestAnimationFrame(update);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("resize", clamp);
-      window.removeEventListener("scroll", clamp, true);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
     };
-  }, [open, agents, value]);
+  }, [open, agents, value, onCreateNew]);
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -134,9 +168,32 @@ export default function AgentPicker({
     };
   }, [open]);
 
+  // Portal 丢 CSS 变量：从触发器节点带 tone / 毛玻璃令牌到浮层
+  const menuToneStyle =
+    open && rootRef.current
+      ? (() => {
+          const cs = getComputedStyle(rootRef.current!);
+          const pick = (name: string) => cs.getPropertyValue(name).trim();
+          const tone = pick("--tone");
+          const soft = pick("--tone-soft");
+          const bg = pick("--menu-glass-bg");
+          const border = pick("--menu-glass-border");
+          const shadow = pick("--menu-glass-shadow");
+          const blur = pick("--menu-glass-blur");
+          return {
+            ...(tone ? { ["--tone"]: tone } : {}),
+            ...(soft ? { ["--tone-soft"]: soft } : {}),
+            ...(bg ? { ["--menu-glass-bg"]: bg } : {}),
+            ...(border ? { ["--menu-glass-border"]: border } : {}),
+            ...(shadow ? { ["--menu-glass-shadow"]: shadow } : {}),
+            ...(blur ? { ["--menu-glass-blur"]: blur } : {}),
+          } as CSSProperties;
+        })()
+      : undefined;
+
   if (agents.length === 0) {
     return (
-      <div className={`agent-picker ${className}`.trim()}>
+      <div className={`agent-picker ${className}`.trim()} ref={rootRef}>
         <button
           type="button"
           className="agent-picker-chip"
@@ -154,14 +211,93 @@ export default function AgentPicker({
 
   const activeSub = active ? agentSubline(active, defaultLabel) : null;
 
+  const menu =
+    open && typeof document !== "undefined"
+      ? createPortal(
+          <ul
+            ref={menuRef}
+            id={listId}
+            className={`agent-picker-menu${pos?.openUp ? " is-up" : ""}`}
+            role="listbox"
+            aria-label={t(labelKey)}
+            style={{
+              ...menuToneStyle,
+              ...(pos
+                ? {
+                    top: pos.openUp ? undefined : pos.top,
+                    bottom: pos.openUp
+                      ? window.innerHeight - pos.top
+                      : undefined,
+                    left: pos.left,
+                    width: pos.width,
+                    maxHeight: pos.maxHeight,
+                  }
+                : { visibility: "hidden" as const }),
+            }}
+          >
+            {agents.map((a) => {
+              const sub = agentSubline(a, defaultLabel);
+              return (
+                <li key={a.id} role="option" aria-selected={a.id === value}>
+                  <button
+                    type="button"
+                    className={`agent-picker-option ${a.id === value ? "is-active" : ""}`}
+                    onClick={() => {
+                      setOpen(false);
+                      if (a.id !== value) onChange(a.id);
+                    }}
+                  >
+                    <AgentAvatar agent={a} size={22} />
+                    <span className="agent-picker-option-text">
+                      <span className="agent-picker-option-name">{a.name}</span>
+                      {sub ? (
+                        <span className="agent-picker-option-sub">{sub}</span>
+                      ) : null}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+            {onCreateNew ? (
+              <li
+                role="option"
+                className="agent-picker-create"
+                aria-selected={false}
+              >
+                <button
+                  type="button"
+                  className="agent-picker-option agent-picker-option--create"
+                  onClick={() => {
+                    setOpen(false);
+                    onCreateNew();
+                  }}
+                >
+                  <span className="agent-picker-create-icon" aria-hidden>
+                    +
+                  </span>
+                  <span className="agent-picker-option-text">
+                    <span className="agent-picker-option-name">
+                      {t(createLabelKey)}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ) : null}
+          </ul>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div className={`agent-picker ${className}`.trim()} ref={ref}>
+    <div className={`agent-picker ${className}`.trim()} ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`agent-picker-chip ${open ? "is-open" : ""}`}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
         aria-label={t(labelKey)}
         onClick={() => setOpen((v) => !v)}
       >
@@ -182,64 +318,7 @@ export default function AgentPicker({
         )}
         <ChevronDown className="agent-picker-chevron" />
       </button>
-      {open ? (
-        <ul
-          ref={menuRef}
-          className="agent-picker-menu"
-          role="listbox"
-          aria-label={t(labelKey)}
-          style={menuStyle}
-        >
-          {agents.map((a) => {
-            const sub = agentSubline(a, defaultLabel);
-            return (
-              <li key={a.id} role="option" aria-selected={a.id === value}>
-                <button
-                  type="button"
-                  className={`agent-picker-option ${a.id === value ? "is-active" : ""}`}
-                  onClick={() => {
-                    setOpen(false);
-                    if (a.id !== value) onChange(a.id);
-                  }}
-                >
-                  <AgentAvatar agent={a} size={22} />
-                  <span className="agent-picker-option-text">
-                    <span className="agent-picker-option-name">{a.name}</span>
-                    {sub ? (
-                      <span className="agent-picker-option-sub">{sub}</span>
-                    ) : null}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-          {onCreateNew ? (
-            <li
-              role="option"
-              className="agent-picker-create"
-              aria-selected={false}
-            >
-              <button
-                type="button"
-                className="agent-picker-option agent-picker-option--create"
-                onClick={() => {
-                  setOpen(false);
-                  onCreateNew();
-                }}
-              >
-                <span className="agent-picker-create-icon" aria-hidden>
-                  +
-                </span>
-                <span className="agent-picker-option-text">
-                  <span className="agent-picker-option-name">
-                    {t(createLabelKey)}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
+      {menu}
     </div>
   );
 }
