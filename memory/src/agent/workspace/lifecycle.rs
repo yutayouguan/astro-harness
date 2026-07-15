@@ -13,7 +13,7 @@ use super::paths::{
     AgentRuntimeConfig, DEFAULT_AGENT_ID,
 };
 use super::templates::{
-    render_template, AGENT_SUBDIRS, CORE_FILES, CREATE_AGENT_SKILL, ENSURED_DIRS,
+    render_template, AGENT_SUBDIRS, CORE_FILES, ENSURED_DIRS,
     STATE_JSON_FILES,
 };
 
@@ -552,9 +552,10 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
         }
     }
 
-    // 沉淀公共 create-agent 技能
-    if seed_create_agent_skill(base)? {
-        created_files.push("skills/create-agent/SKILL.md".to_string());
+    // 播种仓库内置公开技能（create-agent、storyboard-video 等）
+    let bundled = skills::seed_bundled_into(base);
+    for name in &bundled.installed {
+        created_files.push(format!("skills/{name}/SKILL.md"));
     }
 
     // 确保已有额外 agents 也具备子目录与缺失的核心文件
@@ -573,16 +574,13 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
 }
 
 
-/// 将 create-agent 技能写入 `~/.astro/skills/`（已存在则不覆盖，便于用户定制）
+/// 播种内置 `create-agent`（及同批 bundled skills）。
+///
+/// 正文在 `skills/bundled/`；已存在且 `astro_bundled_rev` 够新则跳过。
+/// 返回是否新写入/升级了 `create-agent`。
 pub fn seed_create_agent_skill(base: &Path) -> anyhow::Result<bool> {
-    let dir = base.join("skills").join("create-agent");
-    let path = dir.join("SKILL.md");
-    if path.is_file() {
-        return Ok(false);
-    }
-    fs::create_dir_all(&dir)?;
-    fs::write(&path, CREATE_AGENT_SKILL)?;
-    Ok(true)
+    let report = skills::seed_bundled_into(base);
+    Ok(report.installed.iter().any(|n| n == "create-agent"))
 }
 
 /// 对默认目录执行 [`ensure_workspace`]
@@ -653,12 +651,16 @@ mod tests {
         assert!(dir.path().join("active-agent.json").is_file());
         assert_eq!(
             report.created_files.len(),
-            CORE_FILES.len() + STATE_JSON_FILES.len() + 1 // + create-agent skill
+            CORE_FILES.len() + STATE_JSON_FILES.len() + skills::BUNDLED_SKILLS.len()
         );
         assert!(report
             .created_files
             .iter()
             .any(|f| f == "skills/create-agent/SKILL.md"));
+        assert!(report
+            .created_files
+            .iter()
+            .any(|f| f == "skills/storyboard-video/SKILL.md"));
         assert!(report.created_files.iter().any(|f| f == "cron/jobs.json"));
         assert!(report.created_files.iter().any(|f| f == "models.json"));
         assert!(report.created_files.iter().any(|f| f == "skills-enabled.json"));

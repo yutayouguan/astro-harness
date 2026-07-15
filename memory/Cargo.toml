@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow          = { workspace = true }
 common          = { path = "../common" }
+skills          = { path = "../skills" }
 memory-paths    = { path = "../memory-paths" }
 memory-agent    = { path = "../memory-agent" }
 tokio = { workspace = true }

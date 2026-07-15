@@ -165,9 +165,13 @@ fn run_npx_seed(base: &Path, source: &str, name: &str) -> Result<()> {
 /// 仓库内置 Skill（编译期嵌入 `skills/bundled/`）。
 const BUNDLED_STORYBOARD_VIDEO_MD: &str =
     include_str!("../bundled/storyboard-video/SKILL.md");
+const BUNDLED_CREATE_AGENT_MD: &str = include_str!("../bundled/create-agent/SKILL.md");
 
 /// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
-pub const BUNDLED_SKILLS: &[(&str, &str)] = &[("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD)];
+pub const BUNDLED_SKILLS: &[(&str, &str)] = &[
+    ("create-agent", BUNDLED_CREATE_AGENT_MD),
+    ("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD),
+];
 
 /// 从 SKILL.md frontmatter 解析 `astro_bundled_rev`（缺省 0）。
 fn bundled_rev_in(body: &str) -> u32 {
@@ -264,10 +268,45 @@ mod tests {
     }
 
     #[test]
+    fn seed_bundled_installs_create_agent_and_storyboard() {
+        let dir = tempdir().unwrap();
+        let r1 = seed_bundled_into(dir.path());
+        assert!(r1.installed.contains(&"create-agent".to_string()));
+        assert!(r1.installed.contains(&"storyboard-video".to_string()));
+        assert!(is_public_skill_installed(dir.path(), "create-agent"));
+        assert!(is_public_skill_installed(dir.path(), "storyboard-video"));
+        let body = fs::read_to_string(dir.path().join("skills/create-agent/SKILL.md")).unwrap();
+        assert!(body.contains("create-agent"));
+        assert!(body.contains("astro_bundled_rev:"));
+        assert!(body.contains("delegate"));
+        let r2 = seed_bundled_into(dir.path());
+        assert!(r2.installed.is_empty());
+        assert!(r2.skipped.contains(&"create-agent".to_string()));
+        assert!(r2.skipped.contains(&"storyboard-video".to_string()));
+    }
+
+    #[test]
+    fn seed_bundled_upgrades_stale_create_agent_without_rev() {
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("skills/create-agent");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(
+            dest.join("SKILL.md"),
+            "---\nname: create-agent\n---\nold create-agent body\n",
+        )
+        .unwrap();
+        let r = seed_bundled_into(dir.path());
+        assert!(r.installed.contains(&"create-agent".to_string()));
+        let body = fs::read_to_string(dest.join("SKILL.md")).unwrap();
+        assert!(bundled_rev_in(&body) >= 1);
+        assert!(body.contains("delegate"));
+    }
+
+    #[test]
     fn seed_bundled_storyboard_video_once() {
         let dir = tempdir().unwrap();
         let r1 = seed_bundled_into(dir.path());
-        assert_eq!(r1.installed, vec!["storyboard-video".to_string()]);
+        assert!(r1.installed.contains(&"storyboard-video".to_string()));
         assert!(is_public_skill_installed(dir.path(), "storyboard-video"));
         let body = fs::read_to_string(
             dir.path()
@@ -277,8 +316,8 @@ mod tests {
         assert!(body.contains("storyboard-video"));
         assert!(body.contains("astro_bundled_rev:"));
         let r2 = seed_bundled_into(dir.path());
-        assert!(r2.installed.is_empty());
-        assert_eq!(r2.skipped, vec!["storyboard-video".to_string()]);
+        assert!(!r2.installed.contains(&"storyboard-video".to_string()));
+        assert!(r2.skipped.contains(&"storyboard-video".to_string()));
     }
 
     #[test]
@@ -292,7 +331,8 @@ mod tests {
         )
         .unwrap();
         let r = seed_bundled_into(dir.path());
-        assert_eq!(r.installed, vec!["storyboard-video".to_string()]);
+        assert!(r.installed.contains(&"storyboard-video".to_string()));
+        assert!(r.installed.contains(&"create-agent".to_string()));
         let body = fs::read_to_string(dest.join("SKILL.md")).unwrap();
         assert!(bundled_rev_in(&body) >= 2);
         assert!(body.contains("先出图再出视频"));
