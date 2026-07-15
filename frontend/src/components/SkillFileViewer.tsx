@@ -1,7 +1,7 @@
 /** 技能包文件只读预览：CodeMirror 高亮、MD 预览/源码、复制。 */
 import { useCallback, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { Check, Copy, Eye, FileCode2 } from "lucide-react";
+import { Check, Copy, Eye, FileCode2, FolderOpen } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { useTheme } from "../hooks/useTheme";
 import {
@@ -37,6 +37,8 @@ type Props = {
   size?: number;
   loading?: boolean;
   onOpenExternal?: () => void;
+  /** 在访达中显示当前文件 */
+  onReveal?: () => void;
 };
 
 export function SkillFileViewer({
@@ -45,6 +47,7 @@ export function SkillFileViewer({
   size = 0,
   loading = false,
   onOpenExternal,
+  onReveal,
 }: Props) {
   const { t } = useI18n();
   const { resolved } = useTheme();
@@ -137,20 +140,33 @@ export function SkillFileViewer({
         ) : (
           <span className="skills-file-viewer-label">{filename}</span>
         )}
-        <button
-          type="button"
-          className={`skills-file-viewer-copy ${copied ? "is-copied" : ""}`}
-          onClick={() => void onCopy()}
-          title={copied ? t("skills.copied") : t("skills.copyContent")}
-          aria-label={copied ? t("skills.copied") : t("skills.copyContent")}
-        >
-          {copied ? (
-            <Check size={14} strokeWidth={2.4} aria-hidden />
-          ) : (
-            <Copy size={14} strokeWidth={2.2} aria-hidden />
-          )}
-          <span>{copied ? t("skills.copied") : t("skills.copyContent")}</span>
-        </button>
+        <div className="skills-file-viewer-actions">
+          {onReveal ? (
+            <button
+              type="button"
+              className="skills-file-viewer-reveal"
+              onClick={onReveal}
+              title={t("skills.revealFile")}
+              aria-label={t("skills.revealFile")}
+            >
+              <FolderOpen size={14} strokeWidth={2.3} aria-hidden />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`skills-file-viewer-copy ${copied ? "is-copied" : ""}`}
+            onClick={() => void onCopy()}
+            title={copied ? t("skills.copied") : t("skills.copyContent")}
+            aria-label={copied ? t("skills.copied") : t("skills.copyContent")}
+          >
+            {copied ? (
+              <Check size={14} strokeWidth={2.4} aria-hidden />
+            ) : (
+              <Copy size={14} strokeWidth={2.2} aria-hidden />
+            )}
+            <span>{copied ? t("skills.copied") : t("skills.copyContent")}</span>
+          </button>
+        </div>
       </div>
       <div className="skills-file-viewer-body">
         {showPreview ? (

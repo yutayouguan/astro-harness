@@ -2853,14 +2853,6 @@ html[data-theme="dark"] .skills-preview-filechip[data-kind^="code"] svg { color:
   white-space: nowrap;
 }
 
-.skills-preview-filebar {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: flex-end;
-  padding: 4px 14px 0;
-}
-
 .skills-preview-body {
   display: flex;
   flex-direction: column;
@@ -2882,6 +2874,14 @@ html[data-theme="dark"] .skills-preview-filechip[data-kind^="code"] svg { color:
   justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.skills-file-viewer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .skills-file-viewer-modes {

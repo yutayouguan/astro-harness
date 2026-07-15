@@ -2323,31 +2323,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                     {previewFilesInTab[0].relative_path}
                   </span>
                   <span>{formatBytes(previewFilesInTab[0].size)}</span>
-                  {previewFile ? (
-                    <button
-                      type="button"
-                      className="skills-preview-root-btn"
-                      onClick={() => void revealPreviewFile()}
-                      title={t("skills.revealFile")}
-                      aria-label={t("skills.revealFile")}
-                    >
-                      <FolderOpen size={14} strokeWidth={2.3} aria-hidden />
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {previewFilesInTab.length > 1 && previewFile ? (
-                <div className="skills-preview-filebar">
-                  <button
-                    type="button"
-                    className="skills-action-btn is-icon"
-                    onClick={() => void revealPreviewFile()}
-                    title={t("skills.revealFile")}
-                    aria-label={t("skills.revealFile")}
-                  >
-                    <FolderOpen size={14} strokeWidth={2.3} aria-hidden />
-                  </button>
                 </div>
               ) : null}
 
@@ -2367,6 +2342,13 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 ) : (
                   <SkillFileViewer
                     content={previewContent}
+                    onReveal={
+                      previewFile
+                        ? () => {
+                            void revealPreviewFile();
+                          }
+                        : undefined
+                    }
                     filename={previewFile ?? "file"}
                     size={previewFileMeta?.size ?? 0}
                     loading={loadingFile}
