@@ -1007,7 +1007,8 @@ html[data-theme="dark"] .fs-preview-img {
   height: 1px;
   margin: 5px 8px;
   border: 0;
-  background: color-mix(in srgb, var(--glass-edge) 70%, rgba(148, 163, 184, 0.35));
+  background: color-mix(in srgb, var(--ink, #1e293b) 14%, rgba(148, 163, 184, 0.42));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .fs-ctx-group {
@@ -1050,7 +1051,8 @@ html[data-theme="dark"] .fs-ctx-item.is-danger:hover:not(:disabled) {
 }
 
 html[data-theme="dark"] .fs-ctx-sep {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
 }
 
 html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
