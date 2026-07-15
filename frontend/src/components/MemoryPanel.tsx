@@ -3,14 +3,21 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Book,
+  Bot,
   Check,
   ClipboardList,
   Files,
+  Fingerprint,
   List,
   MoonStar,
   Pencil,
   Save,
+  Sparkles,
+  User,
+  Users,
+  Wrench,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
@@ -86,13 +93,13 @@ type PendingMemoryWrite = {
 /** 长期记忆归档文件 id */
 type ArchiveId = "agent" | "identity" | "user" | "soul" | "agents" | "tools";
 
-const ARCHIVE_FILES: { id: ArchiveId; filename: string }[] = [
-  { id: "agent", filename: "AGENT.md" },
-  { id: "identity", filename: "IDENTITY.md" },
-  { id: "user", filename: "USER.md" },
-  { id: "soul", filename: "SOUL.md" },
-  { id: "agents", filename: "AGENTS.md" },
-  { id: "tools", filename: "TOOLS.md" },
+const ARCHIVE_FILES: { id: ArchiveId; filename: string; Icon: LucideIcon }[] = [
+  { id: "agent", filename: "AGENT.md", Icon: Bot },
+  { id: "identity", filename: "IDENTITY.md", Icon: Fingerprint },
+  { id: "user", filename: "USER.md", Icon: User },
+  { id: "soul", filename: "SOUL.md", Icon: Sparkles },
+  { id: "agents", filename: "AGENTS.md", Icon: Users },
+  { id: "tools", filename: "TOOLS.md", Icon: Wrench },
 ];
 
 const ALL_AGENTS = "__all__";
@@ -1208,21 +1215,25 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
             ) : showArchives ? (
               <>
                 <div className="memory-file-tabs" role="tablist">
-                  {ARCHIVE_FILES.map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      role="tab"
-                      className={`memory-file-tab ${archiveId === f.id ? "active" : ""}`}
-                      onClick={() => {
-                        if (archiveDirty && !window.confirm(t("memory.unsavedConfirm"))) return;
-                        setArchiveId(f.id);
-                        void loadArchive(workspaceDir, f.id);
-                      }}
-                    >
-                      {f.filename}
-                    </button>
-                  ))}
+                  {ARCHIVE_FILES.map((f) => {
+                    const { Icon } = f;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        role="tab"
+                        className={`memory-file-tab ${archiveId === f.id ? "active" : ""}`}
+                        onClick={() => {
+                          if (archiveDirty && !window.confirm(t("memory.unsavedConfirm"))) return;
+                          setArchiveId(f.id);
+                          void loadArchive(workspaceDir, f.id);
+                        }}
+                      >
+                        <Icon size={13} strokeWidth={2.1} aria-hidden />
+                        <span>{f.filename}</span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <textarea
                   className="memory-editor mem-editor-fill"

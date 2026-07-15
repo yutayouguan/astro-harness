@@ -952,39 +952,81 @@ html[data-theme="dark"] .mem-cta {
 
 .memory-file-tabs {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
   margin: 0 0 10px;
-  padding: 4px;
+  padding: 4px 4px 6px;
   border-radius: 16px;
   background: var(--chip-bg);
   border: 1px solid var(--chip-border);
   flex-shrink: 0;
   overflow-x: auto;
+  overflow-y: hidden;
+  /* 始终占住滚动条高度，避免 hover 显示滚动条时布局跳动 */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tone-green) 35%, transparent) transparent;
+}
+
+.memory-file-tabs::-webkit-scrollbar {
+  height: 3px;
+}
+
+.memory-file-tabs::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0 6px;
+}
+
+.memory-file-tabs::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--tone-green) 38%, transparent);
+  border-radius: 999px;
+}
+
+.memory-file-tabs::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--tone-green) 55%, transparent);
 }
 
 .memory-file-tab {
+  box-sizing: border-box;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border: none;
-  border-radius: 12px;
-  padding: 9px 10px;
+  gap: 5px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0 10px;
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.02em;
+  line-height: 1;
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
+}
+
+.memory-file-tab svg {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.memory-file-tab:hover:not(.active) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone-green) 8%, transparent);
+}
+
+.memory-file-tab:hover:not(.active) svg,
+.memory-file-tab.active svg {
+  opacity: 1;
 }
 
 .memory-file-tab.active {
   color: var(--tone-green);
   background: var(--tone-green-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-green) 22%, transparent);
+  border-color: color-mix(in srgb, var(--tone-green) 22%, transparent);
+  box-shadow: none;
 }
 
 .memory-editor-toolbar {
