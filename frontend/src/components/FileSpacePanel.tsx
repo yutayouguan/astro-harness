@@ -502,7 +502,7 @@ export default function FileSpacePanel({
     const text = files.map((f) => f.path).join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      showToast(t("filespace.toast.copiedPath"));
+      showToast(t("filespace.toast.copiedPath"), { tone: "success" });
     } catch {
       // clipboard unavailable
     }
@@ -513,7 +513,7 @@ export default function FileSpacePanel({
     if (!paths.length) return;
     try {
       await invoke("copy_paths_to_clipboard", { paths });
-      showToast(t("filespace.toast.copiedFile"));
+      showToast(t("filespace.toast.copiedFile"), { tone: "success" });
     } catch (e) {
       showToast(String(e), { error: true });
     }
@@ -525,7 +525,7 @@ export default function FileSpacePanel({
       await invoke("remove_artifacts_by_paths", {
         paths: files.map((f) => f.path),
       });
-      showToast(t("filespace.toast.removedIndex"));
+      showToast(t("filespace.toast.removedIndex"), { tone: "success" });
       selection.clear();
       setSelected(null);
       setMenuFiles([]);
@@ -562,21 +562,23 @@ export default function FileSpacePanel({
               fail: String(fails.length),
               detail: fails.slice(0, 2).join("; "),
             }),
-            { error: true },
+            { tone: "warning" },
           );
         } else if (fails.length && !trashed.length) {
           showToast(fails[0] ?? "trash failed", { error: true });
           setTrashConfirm(null);
           return;
         } else {
-          showToast(t("filespace.toast.trashed"));
+          showToast(t("filespace.toast.trashed"), { tone: "success" });
         }
       }
       if (missingOnly.length) {
         await invoke("remove_artifacts_by_paths", {
           paths: missingOnly.map((f) => f.path),
         });
-        if (!existing.length) showToast(t("filespace.toast.removedIndex"));
+        if (!existing.length) {
+          showToast(t("filespace.toast.removedIndex"), { tone: "success" });
+        }
       }
       selection.clear();
       setSelected(null);

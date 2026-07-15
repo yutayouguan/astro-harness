@@ -1,33 +1,78 @@
 .astro-toast {
+  --toast-tone: #3b82f6;
   position: fixed;
   right: 20px;
   bottom: 24px;
   z-index: 9999;
-  max-width: min(360px, calc(100vw - 40px));
-  min-width: min(220px, calc(100vw - 40px));
+  max-width: min(380px, calc(100vw - 40px));
+  min-width: min(240px, calc(100vw - 40px));
   padding: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--ink);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
-    color-mix(in srgb, var(--glass-bg, var(--glass-panel)) 85%, transparent);
-  border: 1px solid color-mix(in srgb, var(--glass-border, var(--glass-edge)) 80%, transparent);
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--toast-tone) 8%, rgba(255, 255, 255, 0.55)),
+      rgba(255, 255, 255, 0.18)
+    ),
+    color-mix(in srgb, var(--glass-bg, var(--glass-panel)) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--toast-tone) 28%, var(--glass-edge, transparent));
+  box-shadow:
+    0 10px 32px rgba(15, 23, 42, 0.12),
+    0 0 0 1px color-mix(in srgb, var(--toast-tone) 6%, transparent);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   animation: astro-toast-in 180ms ease-out;
 }
 
+.astro-toast.tone-info {
+  --toast-tone: #3b82f6;
+}
+
+.astro-toast.tone-success {
+  --toast-tone: #16a34a;
+}
+
+.astro-toast.tone-error {
+  --toast-tone: #dc2626;
+}
+
+.astro-toast.tone-warning {
+  --toast-tone: #d97706;
+}
+
 html[data-theme="dark"] .astro-toast {
   color: var(--ink);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--glass-bg, rgba(28, 20, 48, 0.92)) 90%, transparent);
-  border-color: var(--glass-border, rgba(255, 255, 255, 0.12));
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--toast-tone) 16%, rgba(255, 255, 255, 0.08)),
+      rgba(255, 255, 255, 0.02)
+    ),
+    color-mix(in srgb, var(--glass-bg, rgba(28, 20, 48, 0.92)) 92%, transparent);
+  border-color: color-mix(in srgb, var(--toast-tone) 36%, var(--glass-border, rgba(255, 255, 255, 0.12)));
+  box-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.38),
+    0 0 0 1px color-mix(in srgb, var(--toast-tone) 10%, transparent);
+}
+
+html[data-theme="dark"] .astro-toast.tone-info {
+  --toast-tone: #60a5fa;
+}
+
+html[data-theme="dark"] .astro-toast.tone-success {
+  --toast-tone: #4ade80;
+}
+
+html[data-theme="dark"] .astro-toast.tone-error {
+  --toast-tone: #f87171;
+}
+
+html[data-theme="dark"] .astro-toast.tone-warning {
+  --toast-tone: #fbbf24;
 }
 
 .astro-toast-progress {
@@ -42,31 +87,46 @@ html[data-theme="dark"] .astro-toast {
   transform: scaleX(1);
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--tone, var(--accent)) 85%, #fff),
-    color-mix(in srgb, var(--accent-2, #60a5fa) 70%, var(--tone, var(--accent)))
+    color-mix(in srgb, var(--toast-tone) 90%, #fff),
+    color-mix(in srgb, var(--toast-tone) 55%, #fff)
   );
 }
 
 .astro-toast-sticky-mark {
   height: 3px;
-  background: color-mix(in srgb, #f59e0b 75%, var(--tone, var(--accent)));
+  background: color-mix(in srgb, var(--toast-tone) 85%, #f59e0b);
 }
 
 .astro-toast.is-sticky {
-  border-color: color-mix(in srgb, #f59e0b 35%, var(--glass-edge));
+  border-color: color-mix(in srgb, var(--toast-tone) 42%, var(--glass-edge));
 }
 
 .astro-toast-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 10px 10px 10px 14px;
+  gap: 10px;
+  padding: 12px 10px 12px 12px;
+}
+
+.astro-toast-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: -1px;
+  border-radius: 9px;
+  color: var(--toast-tone);
+  background: color-mix(in srgb, var(--toast-tone) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--toast-tone) 22%, transparent);
 }
 
 .astro-toast-msg {
   margin: 0;
   flex: 1;
   min-width: 0;
+  padding-top: 4px;
   word-break: break-word;
 }
 
@@ -92,18 +152,18 @@ html[data-theme="dark"] .astro-toast {
 }
 
 .astro-toast-close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 45%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--toast-tone) 45%, transparent);
   outline-offset: 1px;
 }
 
 @keyframes astro-toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(8px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 

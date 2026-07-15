@@ -542,7 +542,7 @@ export default function WorkspacePanel({ onClose }: Props) {
         setEditorName(dto.name);
       }
       cancelRename();
-      showToast(t("workspace.toast.renamed"));
+      showToast(t("workspace.toast.renamed"), { tone: "success" });
       await load(root);
       selection.setOnly(dto.path);
     } catch (e) {
@@ -593,12 +593,12 @@ export default function WorkspacePanel({ onClose }: Props) {
       try {
         await invoke("copy_paths_to_clipboard", { paths });
         setPendingCut(paths);
-        showToast(t("workspace.toast.cut"));
+        showToast(t("workspace.toast.cut"), { tone: "info" });
       } catch (e) {
         clipboardFailToast(e);
       }
     },
-    [t, clipboardFailToast],
+    [t, clipboardFailToast, showToast],
   );
 
   const runCopyFile = useCallback(
@@ -608,12 +608,12 @@ export default function WorkspacePanel({ onClose }: Props) {
       try {
         await invoke("copy_paths_to_clipboard", { paths });
         setPendingCut(null);
-        showToast(t("workspace.toast.copied"));
+        showToast(t("workspace.toast.copied"), { tone: "success" });
       } catch (e) {
         clipboardFailToast(e);
       }
     },
-    [t, clipboardFailToast],
+    [t, clipboardFailToast, showToast],
   );
 
   const runPaste = useCallback(async () => {
@@ -634,7 +634,9 @@ export default function WorkspacePanel({ onClose }: Props) {
         });
         count = pasted.length;
       }
-      showToast(t("workspace.toast.pasted", { n: String(count) }));
+      showToast(t("workspace.toast.pasted", { n: String(count) }), {
+        tone: "success",
+      });
       await load(root);
     } catch (e) {
       clipboardFailToast(e);
@@ -646,7 +648,7 @@ export default function WorkspacePanel({ onClose }: Props) {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      showToast(t("workspace.toast.copiedPath"));
+      showToast(t("workspace.toast.copiedPath"), { tone: "success" });
     } catch {
       // clipboard unavailable
     }
@@ -696,14 +698,14 @@ export default function WorkspacePanel({ onClose }: Props) {
             fail: String(fails.length),
             detail: fails.slice(0, 2).join("; "),
           }),
-          { error: true },
+          { tone: "warning" },
         );
       } else if (fails.length && !trashed.length) {
         showToast(fails[0] ?? "trash failed", { error: true });
         setTrashConfirm(null);
         return;
       } else {
-        showToast(t("workspace.toast.trashed"));
+        showToast(t("workspace.toast.trashed"), { tone: "success" });
       }
       if (editorPath && trashed.includes(editorPath)) {
         clearViewer();

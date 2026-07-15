@@ -784,6 +784,7 @@ export default function App() {
         if (n <= 0) return;
         showTransientToast(
           t("skills.defaultSeeded").replace("{n}", String(n)),
+          { tone: "success" },
         );
       },
     )
@@ -1715,6 +1716,7 @@ export default function App() {
           !navigator.geolocation?.getCurrentPosition
         ) {
           showTransientToast(t("chat.location.geoUnavailable"), {
+            tone: "error",
             durationMs: TOAST_ERROR_DURATION_MS,
           });
           return;
@@ -1734,6 +1736,7 @@ export default function App() {
           };
         } catch {
           showTransientToast(t("chat.location.geoFailed"), {
+            tone: "error",
             durationMs: TOAST_ERROR_DURATION_MS,
           });
           return;
@@ -1743,6 +1746,7 @@ export default function App() {
         const city = typeof cityRaw === "string" ? cityRaw.trim() : "";
         if (!city) {
           showTransientToast(t("chat.location.cityRequired"), {
+            tone: "warning",
             durationMs: TOAST_ERROR_DURATION_MS,
           });
           return;
@@ -2045,7 +2049,7 @@ export default function App() {
       setMessages(keep);
       setEmptyMode(null);
       saveChatSession(newId, keep, []);
-      showTransientToast(t("chat.branchDone"));
+      showTransientToast(t("chat.branchDone"), { tone: "success" });
     },
     [
       messages,
@@ -2060,15 +2064,21 @@ export default function App() {
   /** 压实：摘要旧会话并切换到含摘要+尾部的新会话 */
   const runCompactSession = useCallback(async () => {
     if (streaming) {
-      showTransientToast(t("chat.compactBlockedStreaming"));
+      showTransientToast(t("chat.compactBlockedStreaming"), {
+        tone: "warning",
+      });
       return;
     }
     if (sessionPendingInterrupts.length > 0) {
-      showTransientToast(t("chat.compactBlockedInterrupt"));
+      showTransientToast(t("chat.compactBlockedInterrupt"), {
+        tone: "warning",
+      });
       return;
     }
     if (!sessionId) {
-      showTransientToast(t("chat.compactFailed", { error: "no session" }));
+      showTransientToast(t("chat.compactFailed", { error: "no session" }), {
+        tone: "error",
+      });
       return;
     }
     try {
@@ -2107,12 +2117,14 @@ export default function App() {
       lastCompactAtRef.current = Date.now();
       showTransientToast(
         res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
+        { tone: res.degraded ? "warning" : "success" },
       );
     } catch (e) {
       showTransientToast(
         t("chat.compactFailed", {
           error: e instanceof Error ? e.message : String(e ?? "error"),
         }),
+        { tone: "error" },
       );
     }
   }, [
@@ -2573,9 +2585,11 @@ export default function App() {
                 agentId: null,
                 sessionId: sessionId ?? null,
               });
-              showTransientToast(t("memory.refresh.done"));
+              showTransientToast(t("memory.refresh.done"), {
+                tone: "success",
+              });
             } catch (e) {
-              showTransientToast(String(e));
+              showTransientToast(String(e), { tone: "error" });
             }
           })();
           break;
