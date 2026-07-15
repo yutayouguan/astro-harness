@@ -451,7 +451,7 @@ pub async fn set_pending_agent_icon(
     data_base64: String,
     file_name: String,
 ) -> Result<(), String> {
-    let kind = memory::agent_icons::AgentIconKind::from_str(&kind)
+    let kind = home::config::agent_icons::AgentIconKind::from_str(&kind)
         .ok_or_else(|| format!("未知图标类型: {kind}"))?;
     let bytes = {
         use base64::Engine as _;
@@ -459,7 +459,7 @@ pub async fn set_pending_agent_icon(
             .decode(data_base64.trim())
             .map_err(|e| format!("图标 base64 无效: {e}"))?
     };
-    memory::agent_icons::set_pending_agent_icon(&memory_root(), kind, &bytes, &file_name)
+    home::config::agent_icons::set_pending_agent_icon(&memory_root(), kind, &bytes, &file_name)
         .map_err(|e| e.to_string())
 }
 
@@ -469,11 +469,11 @@ pub async fn clear_pending_agent_icon(kind: Option<String>) -> Result<(), String
     let kind = match kind.as_deref() {
         None => None,
         Some(s) => Some(
-            memory::agent_icons::AgentIconKind::from_str(s)
+            home::config::agent_icons::AgentIconKind::from_str(s)
                 .ok_or_else(|| format!("未知图标类型: {s}"))?,
         ),
     };
-    memory::agent_icons::clear_pending_agent_icon(&memory_root(), kind).map_err(|e| e.to_string())
+    home::config::agent_icons::clear_pending_agent_icon(&memory_root(), kind).map_err(|e| e.to_string())
 }
 
 /// 列出每日记忆日期。

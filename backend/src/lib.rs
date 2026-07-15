@@ -14,7 +14,9 @@ pub use session_events::{
 use std::time::Duration;
 
 use crate::grpc::AstroServiceImpl;
-use memory::{cron_dir, default_memory_dir, ensure_workspace, init_logging};
+use cron::cron_dir;
+use home::{default_memory_dir, init_logging, logs_dir};
+use memory::ensure_workspace;
 use proto::astro_service_server::AstroServiceServer;
 use tonic::transport::Server;
 
@@ -52,7 +54,7 @@ pub async fn run() -> anyhow::Result<()> {
     tracing::info!("Astro Backend v0.1.0");
     tracing::info!("gRPC Server: {}", addr);
     tracing::info!("Memory dir: {}", memory_dir.display());
-    tracing::info!("Logs dir: {}", memory::logs_dir().display());
+    tracing::info!("Logs dir: {}", logs_dir().display());
     tracing::info!("Cron dir: {}", cron_dir().display());
     tracing::info!("Providers: google, openai, claude, deepseek, minmax, zhipu, mimo, ollama");
 

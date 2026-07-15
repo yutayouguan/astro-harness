@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use super::scan::scan_memory_content;
+use home::scan_memory_content;
 
 /// 条目之间的 canonical 分隔符。
 pub const ENTRY_DELIMITER: &str = "\n§\n";

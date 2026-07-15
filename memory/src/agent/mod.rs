@@ -1,8 +1,4 @@
-//! Agent 工作区、图标、记忆文件与工具开关。
+//! 精炼记忆存储与工作区编排。
 
-pub mod agent_icons;
-pub mod auto_icon;
-pub mod scan;
 pub mod store;
-pub mod tools_enabled;
 pub mod workspace;

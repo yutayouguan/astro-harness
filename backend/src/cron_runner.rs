@@ -6,7 +6,8 @@
 
 use agent::cron_exec::{self, CronExecCredentials};
 use common::{expand_chat_targets, ChatTarget, FallbackRef};
-use memory::{default_memory_dir, CronJob, CronStore};
+use cron::{CronJob, CronStore};
+use home::default_memory_dir;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
