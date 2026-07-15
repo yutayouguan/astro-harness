@@ -17,7 +17,8 @@ use uuid::Uuid;
 
 use common::message::Message;
 use session::NewMessage;
-use memory::{format_recalled_context, MemoryManager};
+use memory::MemoryManager;
+use session::{build_conversation_context, SessionStore};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use providers::registry::ProviderRegistry;
 use serde_json::Value;
@@ -93,6 +94,7 @@ pub struct AgentLoop {
     /// 内存中的会话消息镜像，与磁盘记忆同步追加。
     pub session_messages: Vec<Message>,
     memory: MemoryManager,
+    sessions: SessionStore,
     tool_registry: ToolRegistry,
     mcp_hub: McpHub,
     /// 最近一次 `run_turn` 召回并格式化后的记忆上下文。
@@ -155,7 +157,8 @@ impl AgentLoop {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
-        let session_messages = hydrate_session_messages(&memory, &session_id)?;
+        let sessions = SessionStore::open_sessions_dir(&config.memory_dir.join("sessions"))?;
+        let session_messages = hydrate_session_messages(&sessions, &session_id)?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -216,6 +219,7 @@ impl AgentLoop {
             tool_rounds: 0,
             session_messages,
             memory,
+            sessions,
             tool_registry,
             mcp_hub,
             last_recalled_context: String::new(),
@@ -654,11 +658,13 @@ impl AgentLoop {
         let chat_model = self.chat_model.clone();
         let chat_targets = self.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
+        let sessions = &self.sessions;
         let delegate_runner = Some(self.delegate_runner());
         let async_spawner = Some(self.async_spawner());
         let orchestration_spawner = Some(self.orchestration_spawner());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
+            sessions,
             memory_dir,
             workspace_dir,
             project_root: self.project_root.clone(),
@@ -793,7 +799,7 @@ impl AgentLoop {
 
     /// 确保会话行存在（不存在则按 `source` 创建）。
     pub fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
-        self.memory.ensure_session(&self.session_id, source)
+        self.sessions.ensure_session(&self.session_id, source)
     }
 
     /// 将 assistant 纯文本回复写入记忆与会话镜像。
@@ -817,17 +823,14 @@ impl AgentLoop {
             _ => None,
         };
         let reasoning = reasoning.filter(|r| !r.is_empty());
-        self.memory.ensure_session(&self.session_id, "tauri")?;
-        self.memory.record_message_ex(
-            &self.session_id,
-            NewMessage {
-                content: Some(content),
-                tool_calls: tool_calls_json,
-                reasoning,
-                reasoning_details,
-                ..NewMessage::empty(&self.session_id, "assistant")
-            },
-        )?;
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(content),
+            tool_calls: tool_calls_json,
+            reasoning,
+            reasoning_details,
+            ..NewMessage::empty(&self.session_id, "assistant")
+        })?;
         let msg = match tool_calls {
             Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
             _ => Message::assistant(content),
@@ -848,16 +851,13 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
-        self.memory.ensure_session(&self.session_id, "tauri")?;
-        self.memory.record_message_ex(
-            &self.session_id,
-            NewMessage {
-                content: Some(content),
-                tool_call_id,
-                tool_name,
-                ..NewMessage::empty(&self.session_id, "tool")
-            },
-        )?;
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(content),
+            tool_call_id,
+            tool_name,
+            ..NewMessage::empty(&self.session_id, "tool")
+        })?;
         let msg = match tool_call_id {
             Some(id) if !id.is_empty() => Message::tool_with_id(id, content),
             _ => Message::tool(content),
@@ -897,16 +897,19 @@ impl AgentLoop {
         self.begin_user_turn();
         self.reload_tools_and_mcp().await;
 
-        self.memory.ensure_session(&self.session_id, "tauri")?;
-        self.memory
-            .record_message(&self.session_id, "user", user_message)?;
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(user_message),
+            ..NewMessage::empty(&self.session_id, "user")
+        })?;
 
         let fts_keywords = if self.current_turn >= self.config.recent_turns {
             Some(user_message)
         } else {
             None
         };
-        let recalled = self.memory.build_session_context(
+        let recalled = build_conversation_context(
+            &self.sessions,
             &self.session_id,
             self.config.recent_turns,
             fts_keywords,
@@ -1007,10 +1010,10 @@ pub fn validate_message_order(messages: &[Message]) -> bool {
 
 /// 从 `SessionStore` 冷启动重建 `session_messages`（权威以 DB 为准）。
 fn hydrate_session_messages(
-    memory: &MemoryManager,
+    sessions: &SessionStore,
     session_id: &str,
 ) -> anyhow::Result<Vec<Message>> {
-    let stored = memory.session_store.get_messages(session_id)?;
+    let stored = sessions.get_messages(session_id)?;
     let mut out = Vec::with_capacity(stored.len());
     for m in stored {
         if let Some(msg) = stored_message_to_runtime(m)? {
@@ -1018,6 +1021,22 @@ fn hydrate_session_messages(
         }
     }
     Ok(out)
+}
+
+/// 将召回消息格式化为 LLM 可读的多行文本。
+fn format_recalled_context(messages: &[session::ScrolledMessage]) -> String {
+    if messages.is_empty() {
+        return String::new();
+    }
+
+    messages
+        .iter()
+        .map(|m| {
+            let marker = if m.is_anchor { " [anchor]" } else { "" };
+            format!("[{}] {}: {}{}", m.id, m.role, m.content, marker)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn stored_message_to_runtime(

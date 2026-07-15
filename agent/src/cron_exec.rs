@@ -16,6 +16,7 @@ use memory::MemoryManager;
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
+use session::SessionStore;
 use uuid::Uuid;
 
 use crate::chat_fallback::try_stream_completion_with_fallback;
@@ -137,9 +138,12 @@ pub async fn execute_job_with_roots(
 
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
-        if let Ok(mgr) = MemoryManager::new(default_memory_dir()) {
-            let _ = mgr.ensure_session(sid, "cron");
-            let _ = mgr.session_store.set_session_title(sid, &summary);
+        if MemoryManager::new(default_memory_dir()).is_ok() {
+            let sessions_dir = default_memory_dir().join("sessions");
+            if let Ok(sessions) = SessionStore::open_sessions_dir(&sessions_dir) {
+                let _ = sessions.ensure_session(sid, "cron");
+                let _ = sessions.set_session_title(sid, &summary);
+            }
         }
     }
 
