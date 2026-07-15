@@ -1,6 +1,7 @@
 /**
  * 将聊天 / A2UI / 文件入口中的媒体 src 转为 WebView 可加载 URL。
- * 本地绝对路径与 file:// 走 Tauri convertFileSrc；其余可加载协议原样返回。
+ * 本地绝对路径与 file:// 走 Tauri convertFileSrc；
+ * 工作区相对路径（如 generated/xxx.png）在提供 baseDir 时先拼成绝对路径再转换。
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
 
@@ -34,24 +35,72 @@ export function looksLikeLocalPath(src: string): boolean {
   return false;
 }
 
+/** 是否像工作区内相对本地路径（非协议、非绝对） */
+export function looksLikeRelativeLocalPath(src: string): boolean {
+  const s = src.trim();
+  if (!s) return false;
+  if (PASSTHROUGH.test(s)) return false;
+  if (looksLikeLocalPath(s)) return false;
+  // 排除纯网盘式短协议误判；允许 generated/foo.png、./a.webp
+  return true;
+}
+
+/**
+ * 将媒体 src 规范为本地绝对路径。
+ * http(s)/data 等返回 null；相对路径无 baseDir 或含 `..` 时返回 null。
+ */
+export function absolutizeMediaPath(
+  src: string | null | undefined,
+  baseDir?: string | null,
+): string | null {
+  if (src == null) return null;
+  const raw = src.trim();
+  if (!raw) return null;
+  if (PASSTHROUGH.test(raw)) return null;
+
+  if (looksLikeLocalPath(raw)) {
+    return stripFileUrl(raw);
+  }
+
+  if (!looksLikeRelativeLocalPath(raw)) return null;
+  const base = baseDir?.trim();
+  if (!base) return null;
+
+  const rel = raw.replace(/^\.\//, "").replace(/^[/\\]+/, "");
+  const segments = rel.split(/[/\\]/).filter((p) => p && p !== ".");
+  if (segments.some((p) => p === "..")) return null;
+  if (segments.length === 0) return null;
+
+  const baseClean = base.replace(/[/\\]+$/, "");
+  const sep = /\\/.test(baseClean) && !/\//.test(baseClean) ? "\\" : "/";
+  return `${baseClean}${sep}${segments.join(sep)}`;
+}
+
 /**
  * 解析为可加载 src；本地路径失败时返回 null（调用方显示 Broken）。
  * 非路径、非已知协议时原样返回（交给浏览器尝试）。
+ * @param baseDir Agent 工作区根目录，用于解析 Markdown 中的相对路径
  */
-export function resolveMediaSrc(src: string | null | undefined): string | null {
+export function resolveMediaSrc(
+  src: string | null | undefined,
+  baseDir?: string | null,
+): string | null {
   if (src == null) return null;
   const raw = src.trim();
   if (!raw) return null;
   if (PASSTHROUGH.test(raw)) return raw;
 
-  if (looksLikeLocalPath(raw)) {
-    const path = stripFileUrl(raw);
+  const abs = absolutizeMediaPath(raw, baseDir);
+  if (abs) {
     try {
-      return convertFileSrc(path);
+      return convertFileSrc(abs);
     } catch {
       return null;
     }
   }
+
+  // 相对路径缺 baseDir：不当作可加载 URL，避免 WebView 相对解析失败成 Broken 前白闪
+  if (looksLikeRelativeLocalPath(raw)) return null;
 
   return raw;
 }

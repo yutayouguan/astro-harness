@@ -544,17 +544,24 @@ export default function ChatView({
   const [triggerStart, setTriggerStart] = useState(0);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
+  const [mediaBaseDir, setMediaBaseDir] = useState<string | null>(null);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
 
   const loadMentionSources = useCallback(async () => {
     try {
       const cfg = await invoke<{
-        agents: { id: string; name: string }[];
+        workspace_dir: string;
+        active_agent_id: string;
+        agents: { id: string; name: string; path?: string }[];
       }>("get_config");
       setAgents(cfg.agents ?? []);
+      const scopedId = agentId ?? cfg.active_agent_id;
+      const scoped = cfg.agents?.find((a) => a.id === scopedId);
+      setMediaBaseDir(scoped?.path?.trim() || cfg.workspace_dir || null);
     } catch {
       setAgents([]);
+      setMediaBaseDir(null);
     }
     try {
       const list = await invoke<InstalledSkill[]>("list_installed_skills");
@@ -562,7 +569,7 @@ export default function ChatView({
     } catch {
       setSkills([]);
     }
-  }, []);
+  }, [agentId]);
 
   useEffect(() => {
     void loadMentionSources();
@@ -1255,6 +1262,7 @@ export default function ChatView({
                                   compact={displayPrefs.verbosity === "compact"}
                                   plain={Boolean(m.error)}
                                   caret={isStreamingBubble}
+                                  mediaBaseDir={mediaBaseDir}
                                 />
                                 {isStreamingBubble ? <MsgStreamLoader /> : null}
                               </>

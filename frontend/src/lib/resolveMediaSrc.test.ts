@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  absolutizeMediaPath,
   looksLikeLocalPath,
+  looksLikeRelativeLocalPath,
   resolveMediaSrc,
   stripFileUrl,
 } from "./resolveMediaSrc.ts";
@@ -29,4 +31,42 @@ test("resolveMediaSrc passthrough for http/data/blob", () => {
   assert.equal(resolveMediaSrc("blob:http://localhost/1"), "blob:http://localhost/1");
   assert.equal(resolveMediaSrc(""), null);
   assert.equal(resolveMediaSrc(null), null);
+});
+
+test("looksLikeRelativeLocalPath recognizes workspace-relative media", () => {
+  assert.equal(
+    looksLikeRelativeLocalPath("generated/img-20260715-195717-4d0d50c2.png"),
+    true,
+  );
+  assert.equal(looksLikeRelativeLocalPath("./generated/a.webp"), true);
+  assert.equal(looksLikeRelativeLocalPath("/Users/a/img.png"), false);
+  assert.equal(looksLikeRelativeLocalPath("https://ex.com/a.png"), false);
+  assert.equal(looksLikeRelativeLocalPath(""), false);
+});
+
+test("absolutizeMediaPath joins relative under workspace baseDir", () => {
+  assert.equal(
+    absolutizeMediaPath(
+      "generated/img-20260715-195717-4d0d50c2.png",
+      "/Users/a/.astro/workspace",
+    ),
+    "/Users/a/.astro/workspace/generated/img-20260715-195717-4d0d50c2.png",
+  );
+  assert.equal(
+    absolutizeMediaPath("./plans/x.html", "/Users/a/.astro/workspace/"),
+    "/Users/a/.astro/workspace/plans/x.html",
+  );
+  assert.equal(
+    absolutizeMediaPath("generated/a.png", null),
+    null,
+  );
+  assert.equal(
+    absolutizeMediaPath("/Users/a/.astro/workspace/generated/a.png", "/other"),
+    "/Users/a/.astro/workspace/generated/a.png",
+  );
+  assert.equal(absolutizeMediaPath("https://ex.com/a.png", "/ws"), null);
+  assert.equal(
+    absolutizeMediaPath("generated/../etc/passwd", "/Users/a/.astro/workspace"),
+    null,
+  );
 });

@@ -1,6 +1,7 @@
 /** 聊天消息 Markdown 渲染（用户 / 助手共用）；本地媒体路径与 HTML 代码块可预览。 */
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ReactElement,
@@ -25,6 +26,8 @@ type Props = {
   plain?: boolean;
   /** 是否显示末尾闪烁 caret */
   caret?: boolean;
+  /** Agent 工作区根；Markdown 相对路径（如 generated/x.png）据此解析 */
+  mediaBaseDir?: string | null;
 };
 
 function childrenToText(children: ReactNode): string {
@@ -41,9 +44,25 @@ function childrenToText(children: ReactNode): string {
   return "";
 }
 
-function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
-  const resolved = useMemo(() => resolveMediaSrc(src), [src]);
-  const [broken, setBroken] = useState(!resolved);
+function MarkdownImage({
+  src,
+  alt,
+  baseDir,
+}: {
+  src?: string;
+  alt?: string;
+  baseDir?: string | null;
+}) {
+  const resolved = useMemo(
+    () => resolveMediaSrc(src, baseDir),
+    [src, baseDir],
+  );
+  const [broken, setBroken] = useState(false);
+
+  // baseDir 异步到达后需重新尝试加载
+  useEffect(() => {
+    setBroken(false);
+  }, [resolved]);
 
   if (broken || !resolved) {
     return <BrokenMedia path={src} />;
@@ -230,6 +249,7 @@ export function ChatMarkdown({
   compact = false,
   plain = false,
   caret = false,
+  mediaBaseDir = null,
 }: Props) {
   const source = useMemo(() => content.replace(/\r\n/g, "\n"), [content]);
 
@@ -258,7 +278,9 @@ export function ChatMarkdown({
           a: ({ href, children }) => (
             <LocalHtmlLink href={href}>{children}</LocalHtmlLink>
           ),
-          img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
+          img: ({ src, alt }) => (
+            <MarkdownImage src={src} alt={alt} baseDir={mediaBaseDir} />
+          ),
           code: ({ className, children, ...props }) => {
             const text = String(children ?? "");
             const isBlock =
