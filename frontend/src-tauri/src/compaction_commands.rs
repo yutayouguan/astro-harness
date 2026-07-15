@@ -5,8 +5,6 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use session::StoredMessage;
-use home::default_memory_dir;
-use memory::MemoryManager;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 
@@ -15,6 +13,12 @@ use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvi
 const KEEP_TAIL_DEFAULT: usize = 3;
 const SUMMARY_PREFIX: &str = "[CONTEXT COMPACTION]";
 const FALLBACK_PREFIX: &str = "[CONTEXT COMPACTION — fallback summary]";
+
+fn open_sessions() -> Result<session::SessionStore, String> {
+    let root = home::default_memory_dir();
+    memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
+    session::SessionStore::open_sessions_dir(&root.join("sessions")).map_err(|e| e.to_string())
+}
 
 /// 压实结果：新会话 id、摘要预览、是否降级为启发式。
 #[derive(Debug, Clone, Serialize)]
@@ -139,8 +143,7 @@ pub async fn compact_chat_session(
 
     // SessionStore（rusqlite）非 Send：先读出元数据/消息并 drop，再 await LLM。
     let (messages, transcript) = {
-        let mgr = MemoryManager::new(default_memory_dir()).map_err(|e| e.to_string())?;
-        let store = &mgr.session_store;
+        let store = open_sessions()?;
         let meta = store
             .get_session(sid)
             .map_err(|e| e.to_string())?
@@ -189,8 +192,8 @@ pub async fn compact_chat_session(
 
     let new_id = Uuid::new_v4().to_string();
     {
-        let mgr = MemoryManager::new(default_memory_dir()).map_err(|e| e.to_string())?;
-        mgr.session_store
+        let store = open_sessions()?;
+        store
             .compact_and_split(sid, &new_id, &summary, keep)
             .map_err(|e| e.to_string())?;
     }

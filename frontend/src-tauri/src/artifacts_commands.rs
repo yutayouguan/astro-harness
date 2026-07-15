@@ -2,9 +2,14 @@
 
 use artifacts::{open_default, ArtifactRow, ArtifactSource, ReconcileReport};
 use home::{active_agent_id, default_memory_dir};
-use memory::MemoryManager;
 use serde::Serialize;
 use std::collections::HashMap;
+
+fn open_sessions() -> Result<session::SessionStore, String> {
+    let root = default_memory_dir();
+    memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
+    session::SessionStore::open_sessions_dir(&root.join("sessions")).map_err(|e| e.to_string())
+}
 
 #[derive(Debug, Serialize)]
 pub struct ArtifactDto {
@@ -91,8 +96,7 @@ pub async fn list_artifacts(
     let total: i64 = counts.values().sum();
     counts.insert("all".into(), total);
 
-    let mgr = MemoryManager::new(mem.clone()).map_err(|e| e.to_string())?;
-    let recent_sessions = mgr
+    let recent_sessions = open_sessions()?
         .list_recent_sessions(200)
         .map_err(|e| e.to_string())?;
     let title_map: HashMap<String, String> = recent_sessions

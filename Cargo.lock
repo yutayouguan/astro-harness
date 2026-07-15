@@ -304,6 +304,7 @@ dependencies = [
  "providers",
  "serde",
  "serde_json",
+ "session",
  "skills",
  "tempfile",
  "tokio",
