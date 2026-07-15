@@ -419,6 +419,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
   const disableDreaming = async () => {
     setError(null);
+    setSaveMsg(null);
     try {
       const st = await invoke<DreamingStatus>("set_dreaming_enabled_cmd", { enabled: false });
       setDreamStatus(st);
