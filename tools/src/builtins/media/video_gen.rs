@@ -259,6 +259,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
                     "Google 原生视频失败: {native_err}; 兼容回退失败: {compat_err}"
                 )
             })?;
+            on_progress("api_path=compat");
             (v, "compat")
         }
     };
