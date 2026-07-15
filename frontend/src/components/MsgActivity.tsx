@@ -1,5 +1,5 @@
-/** 单条聊天活动卡：kind 图标 + 可折叠 Input/Output；生成媒体内嵌预览。 */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+/** 单条聊天活动卡：kind 图标 + 可折叠正文（生成媒体预览与 Input/Output）。 */
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, ChevronDown, Webhook } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
@@ -50,13 +50,23 @@ export default function MsgActivity({
       activity.status === "running" ? [] : parseGeneratedMedia(output),
     [activity.status, output],
   );
-  const [open, setOpen] = useState(defaultOpen && hasBody);
+  const [open, setOpen] = useState(
+    () => (defaultOpen && hasBody) || mediaItems.length > 0,
+  );
   const running = activity.status === "running";
   const liveSec = useLiveElapsedSec(running, activity.at ?? null);
+  const prevMediaCountRef = useRef(mediaItems.length);
 
   useEffect(() => {
-    if (hasBody) setOpen(defaultOpen);
-  }, [defaultOpen, hasBody]);
+    if (hasBody && mediaItems.length === 0) setOpen(defaultOpen);
+  }, [defaultOpen, hasBody, mediaItems.length]);
+
+  // 生成刚完成（0 → N）时展开以便看到结果；之后尊重用户折叠，不再强行打开。
+  useEffect(() => {
+    const prev = prevMediaCountRef.current;
+    prevMediaCountRef.current = mediaItems.length;
+    if (prev === 0 && mediaItems.length > 0) setOpen(true);
+  }, [mediaItems.length]);
 
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
@@ -108,37 +118,41 @@ export default function MsgActivity({
         ) : (
           <div className="msg-activity-summary">{summary}</div>
         )}
-        {mediaItems.length > 0 ? (
-          <div className="msg-activity-media">
-            {mediaItems.map((m) => (
-              <MediaPreview
-                key={`${m.kind}:${m.path}`}
-                kind={m.kind}
-                path={m.path}
-                compact
-              />
-            ))}
-          </div>
-        ) : null}
-        {open && (input || output) ? (
-          <div className="msg-activity-io">
-            {input ? (
-              <div className="msg-activity-io-block">
-                <span className="msg-activity-io-label">
-                  {t("chat.activityInput")}
-                </span>
-                <pre className="msg-activity-detail">{input}</pre>
+        {open ? (
+          <>
+            {mediaItems.length > 0 ? (
+              <div className="msg-activity-media">
+                {mediaItems.map((m) => (
+                  <MediaPreview
+                    key={`${m.kind}:${m.path}`}
+                    kind={m.kind}
+                    path={m.path}
+                    compact
+                  />
+                ))}
               </div>
             ) : null}
-            {output ? (
-              <div className="msg-activity-io-block">
-                <span className="msg-activity-io-label">
-                  {t("chat.activityOutput")}
-                </span>
-                <pre className="msg-activity-detail">{output}</pre>
+            {input || output ? (
+              <div className="msg-activity-io">
+                {input ? (
+                  <div className="msg-activity-io-block">
+                    <span className="msg-activity-io-label">
+                      {t("chat.activityInput")}
+                    </span>
+                    <pre className="msg-activity-detail">{input}</pre>
+                  </div>
+                ) : null}
+                {output ? (
+                  <div className="msg-activity-io-block">
+                    <span className="msg-activity-io-label">
+                      {t("chat.activityOutput")}
+                    </span>
+                    <pre className="msg-activity-detail">{output}</pre>
+                  </div>
+                ) : null}
               </div>
             ) : null}
-          </div>
+          </>
         ) : null}
         {showTimestamp && activity.at ? (
           <span className="msg-activity-time">
