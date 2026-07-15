@@ -9,6 +9,7 @@
 //! ├── skill / registry   运行时 LoadedSkill
 //! ```
 
+pub mod check;
 pub mod install;
 pub mod installed;
 pub mod models;
@@ -31,9 +32,10 @@ pub use installed::{
     set_enabled_for_agent,
 };
 pub use models::{
-    InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateItemResult,
-    StoreSkill, StoreSkillDetail,
+    InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,
+    SkillUpdateItemResult, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
 };
+pub use check::classify_update_status;
 pub use registry::SkillRegistry;
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use store::{fetch_detail, search};
