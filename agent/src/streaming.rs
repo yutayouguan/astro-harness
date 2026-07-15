@@ -32,8 +32,8 @@ use tokio::task::JoinSet;
 use crate::chat_fallback::{try_stream_completion_with_fallback, ActiveTargetMeta};
 use crate::control::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
 use crate::control::interrupt::Interrupt;
-use crate::loop_::AgentLoop;
-use crate::usage_record::apply_llm_usage_dual_write;
+use crate::runtime::AgentLoop;
+use crate::runtime::usage::apply_llm_usage_dual_write;
 
 tokio::task_local! {
     /// 同步 `delegate` 子路径上浮 HITL 时读取；由串行工具执行注入。
@@ -636,12 +636,12 @@ async fn run_multi_turn_stream_inner(
         let agent = session.lock().await;
         let n = agent.multi_turn();
         if n == 0 {
-            crate::iteration_budget::DEFAULT_MAX_ITERATIONS
+            crate::runtime::budget::DEFAULT_MAX_ITERATIONS
         } else {
             n
         }
     };
-    let budget = crate::iteration_budget::IterationBudget::new(max_rounds);
+    let budget = crate::runtime::budget::IterationBudget::new(max_rounds);
     // 工具循环结束后是否需要无工具强制总结（预算耗尽且尚无自然语言终答）
     let need_summary;
     // 原始迭代计数（不受 refund 影响），防止 code_exec-only 反复 refund 导致净预算永不耗尽。
@@ -1118,7 +1118,7 @@ async fn run_multi_turn_stream_inner(
 
         // 对齐 Hermes：本轮工具仅 code_exec 时退还本次迭代
         let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-        if crate::iteration_budget::should_refund_tool_round(&names) {
+        if crate::runtime::budget::should_refund_tool_round(&names) {
             budget.refund();
         }
 

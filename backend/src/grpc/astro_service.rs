@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
-use agent::loop_::{AgentLoop, TurnResult};
+use agent::runtime::{AgentLoop, TurnResult};
 use agent::streaming::{
     stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
 };
@@ -610,7 +610,7 @@ impl AstroService for AstroServiceImpl {
         } else {
             req.reasoning_effort
         };
-        let image_targets = agent::loop_::ImageGenTargets::from_parts(
+        let image_targets = tools::ImageGenTargets::from_parts(
             &req.image_gen_provider,
             &req.image_gen_model,
             &req.image_gen_api_key,

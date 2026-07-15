@@ -13,16 +13,16 @@ pub mod control;
 pub mod exec;
 /// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。
 pub mod event_bus;
-/// Hermes 风格迭代预算（consume / refund）。
-pub mod iteration_budget;
-/// 多轮对话主循环：工具调用、深度限制与回合结果。
-pub mod loop_;
+/// Agent 运行时核心。
+pub mod runtime;
+/// 临时兼容旧路径，Task 5 删除。
+pub mod loop_ {
+    pub use crate::runtime::*;
+}
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
 pub mod prompt;
 /// 流式补全与多轮流式迭代抽象。
 pub mod streaming;
-/// LLM 用量双写（UsageDb + SessionStore 账单）。
-mod usage_record;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
 
@@ -47,14 +47,14 @@ pub use control::hitl::{
 /// Interrupt 状态机 re-export。
 pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
-pub use loop_::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
+pub use runtime::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
 /// 回合后记忆 review。
 pub use exec::memory_review::{
     job_from_agent, maybe_run_background_review, review_notify_from_applied,
     spawn_background_review_after_turn, BackgroundReviewJob, MemoryReviewNotify,
 };
 /// 迭代预算 re-export。
-pub use iteration_budget::{
+pub use runtime::budget::{
     should_refund_tool_round, IterationBudget, DEFAULT_CHILD_MAX_ITERATIONS,
     DEFAULT_MAX_ITERATIONS,
 };

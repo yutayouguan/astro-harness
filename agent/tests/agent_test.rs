@@ -1,6 +1,6 @@
 //! Agent 主循环（`AgentLoop`）回合与工具调用测试。
 
-use agent::loop_::*;
+use agent::runtime::*;
 use common::message::*;
 use tempfile::TempDir;
 
