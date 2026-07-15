@@ -712,6 +712,9 @@ pub fn parse_interaction_video_text(v: &Value) -> Result<String> {
     let mut parts = Vec::new();
     if let Some(steps) = v.get("steps").and_then(|s| s.as_array()) {
         for step in steps {
+            if step_type(step) != "model_output" {
+                continue; // 跳过 thought 等，与 image/vision 解析一致
+            }
             let content = step
                 .get("content")
                 .or_else(|| step.pointer("/model_output/content"));
@@ -1060,6 +1063,23 @@ mod video_understand_tests {
             }]
         });
         assert_eq!(parse_interaction_video_text(&v).unwrap(), "from-steps");
+    }
+
+    #[test]
+    fn parse_ignores_thought_steps() {
+        let v = json!({
+            "steps": [
+                {
+                    "type": "thought",
+                    "content": [{ "type": "text", "text": "secret-thought" }]
+                },
+                {
+                    "type": "model_output",
+                    "content": [{ "type": "text", "text": "visible" }]
+                }
+            ]
+        });
+        assert_eq!(parse_interaction_video_text(&v).unwrap(), "visible");
     }
 
     #[test]
