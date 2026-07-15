@@ -64,6 +64,7 @@ import {
   isStoreSkillInstalled as matchStoreSkillInstalled,
 } from "../lib/skillInstalledMatch";
 import {
+  applyCheckResults,
   canUpdateSkillFromOrigin,
   filterUpdateRows,
   mergeUpdateRows,
@@ -88,6 +89,7 @@ import type {
   SkillBundle,
   SkillFileEntry,
   SkillOriginRecord,
+  SkillUpdateCheckResult,
   SkillUpdateFilter,
   SkillUpdateItemResult,
   SkillUpdateRow,
@@ -378,7 +380,11 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [origins, setOrigins] = useState<SkillOriginRecord[]>([]);
   const [loadingOrigins, setLoadingOrigins] = useState(false);
   const [updateFilter, setUpdateFilter] =
-    useState<SkillUpdateFilter>("with_origin");
+    useState<SkillUpdateFilter>("updatable");
+  const [lastCheckResults, setLastCheckResults] = useState<
+    SkillUpdateCheckResult[]
+  >([]);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingFolder, setUpdatingFolder] = useState<string | null>(null);
   const [updatingAll, setUpdatingAll] = useState(false);
 
@@ -435,6 +441,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       // ignore
     }
   }, [viewMode]);
+
+  useEffect(() => {
+    setLastCheckResults([]);
+  }, [agentId]);
 
   const refreshInstalled = useCallback(
     async (opts?: { mode?: "hard" | "silent" }) => {
@@ -814,6 +824,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   const switchAgent = async (id: string) => {
     setAgentId(id);
+    setLastCheckResults([]);
     if (!isTauri()) return;
     try {
       await invoke("set_active_agent", { agentId: id });
@@ -1024,6 +1035,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     try {
       await invoke<string>("update_installed_skill", { folder, agentId });
       await refreshUpdatesData();
+      setLastCheckResults([]);
       showToast(t("skills.updateDone").replace("{name}", row.skill.name), {
         tone: "success",
       });
@@ -1036,6 +1048,29 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     }
   };
 
+  const checkSkillUpdates = async () => {
+    if (!isTauri()) return;
+    setCheckingUpdates(true);
+    setError(null);
+    try {
+      const checks = await invoke<SkillUpdateCheckResult[]>("check_skill_updates", {
+        agentId,
+      });
+      setLastCheckResults(checks);
+      const count = checks.filter((c) => c.status === "outdated").length;
+      showToast(
+        t("skills.checkUpdatesDone").replace("{count}", String(count)),
+        { tone: count > 0 ? "info" : "success" },
+      );
+    } catch (err) {
+      const msg = String(err);
+      setError(msg);
+      showToast(msg, { error: true });
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
   const updateAllSkills = async () => {
     if (!isTauri()) return;
     setUpdatingAll(true);
@@ -1043,8 +1078,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     try {
       const results = await invoke<SkillUpdateItemResult[]>("update_all_skills", {
         agentId,
+        onlyOutdated: true,
       });
       await refreshUpdatesData();
+      setLastCheckResults([]);
       const ok = results.filter((r) => r.ok).length;
       const fail = results.length - ok;
       showToast(
@@ -1332,10 +1369,10 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     skillCalls,
   ]);
 
-  const updateRows = useMemo(
-    () => mergeUpdateRows(installed, machineSkills, origins, agentId),
-    [installed, machineSkills, origins, agentId],
-  );
+  const updateRows = useMemo(() => {
+    const merged = mergeUpdateRows(installed, machineSkills, origins, agentId);
+    return applyCheckResults(merged, lastCheckResults);
+  }, [installed, machineSkills, origins, agentId, lastCheckResults]);
 
   const filteredUpdateRows = useMemo(
     () =>
@@ -1345,8 +1382,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     [updateRows, updateFilter],
   );
 
-  const withOriginCount = useMemo(
-    () => updateRows.filter((row) => row.status === "with_origin").length,
+  const outdatedCount = useMemo(
+    () => updateRows.filter((row) => row.status === "outdated").length,
     [updateRows],
   );
 
@@ -1737,9 +1774,19 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           </div>
           <h3 className="skill-card-title">{skill.name}</h3>
           {origin ? (
-            <span className="skill-card-tag" title={origin.install_ref}>
-              {storeBadge(origin.store)} {origin.store}
-            </span>
+            <>
+              {row.status === "outdated" && (
+                <span
+                  className="skill-card-link-badge is-outdated"
+                  title={t("skills.outdatedBadge")}
+                >
+                  {t("skills.outdatedBadge")}
+                </span>
+              )}
+              <span className="skill-card-tag" title={origin.install_ref}>
+                {storeBadge(origin.store)} {origin.store}
+              </span>
+            </>
           ) : (
             <span className="skill-card-link-badge">{t("skills.updatesFilter.noOrigin")}</span>
           )}
@@ -2461,6 +2508,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         >
           <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
           {t("skills.tab.updates")}
+          {outdatedCount > 0 && (
+            <span className="skills-main-tab-count">{outdatedCount}</span>
+          )}
         </button>
         <button
           type="button"
@@ -2671,9 +2721,32 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               />
               <button
                 type="button"
+                className="skills-action-btn"
+                disabled={
+                  checkingUpdates || updatingAll || updatingFolder !== null
+                }
+                onClick={() => void checkSkillUpdates()}
+                title={t("skills.checkUpdates")}
+              >
+                {checkingUpdates ? (
+                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+                ) : (
+                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+                )}
+                <span>
+                  {checkingUpdates
+                    ? t("skills.checkingUpdates")
+                    : t("skills.checkUpdates")}
+                </span>
+              </button>
+              <button
+                type="button"
                 className="skills-action-btn primary"
                 disabled={
-                  withOriginCount === 0 || updatingAll || updatingFolder !== null
+                  outdatedCount === 0 ||
+                  updatingAll ||
+                  updatingFolder !== null ||
+                  checkingUpdates
                 }
                 onClick={() => void updateAllSkills()}
                 title={t("skills.updateAll")}
