@@ -5,3 +5,4 @@ pub mod video_gen;
 pub mod tts;
 pub mod music;
 pub mod vision;
+pub mod robotics;
