@@ -299,38 +299,32 @@ export function CreateCronDialog({
                   *
                 </span>
               </span>
-              <div className="cron-dialog-control">
-                <Type size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
-                <input
-                  type="text"
-                  className="cron-dialog-input has-leading-icon"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={t("cron.field.namePlaceholder")}
-                  autoFocus
-                />
-              </div>
+              <input
+                type="text"
+                className="cron-dialog-input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("cron.field.namePlaceholder")}
+                autoFocus
+              />
             </label>
             <label className="cron-dialog-field">
               <span className="cron-dialog-label">
                 <Bot size={13} strokeWidth={2.2} aria-hidden />
                 {t("cron.field.agent")}
               </span>
-              <div className="cron-dialog-control">
-                <Bot size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
-                <SelectMenu
-                  className="cron-dialog-select has-leading-icon"
-                  value={selectedAgentId}
-                  onChange={setSelectedAgentId}
-                  aria-label={t("cron.field.agent")}
-                  options={agentOptions.map((a) => ({
-                    value: a.id,
-                    label: a.is_default
-                      ? `${a.name} (${t("workspace.defaultAgent")})`
-                      : a.name,
-                  }))}
-                />
-              </div>
+              <SelectMenu
+                className="cron-dialog-select"
+                value={selectedAgentId}
+                onChange={setSelectedAgentId}
+                aria-label={t("cron.field.agent")}
+                options={agentOptions.map((a) => ({
+                  value: a.id,
+                  label: a.is_default
+                    ? `${a.name} (${t("workspace.defaultAgent")})`
+                    : a.name,
+                }))}
+              />
             </label>
           </div>
 
@@ -342,21 +336,13 @@ export function CreateCronDialog({
                 *
               </span>
             </span>
-            <div className="cron-dialog-control cron-dialog-control--textarea">
-              <MessageSquareText
-                size={14}
-                strokeWidth={2.1}
-                className="cron-dialog-control-icon"
-                aria-hidden
-              />
-              <textarea
-                className="cron-dialog-textarea has-leading-icon"
-                value={task}
-                onChange={(e) => setTask(e.target.value)}
-                placeholder={t("cron.field.taskPlaceholder")}
-                rows={4}
-              />
-            </div>
+            <textarea
+              className="cron-dialog-textarea"
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+              placeholder={t("cron.field.taskPlaceholder")}
+              rows={4}
+            />
           </label>
 
           <ScheduleEditor value={draft} onChange={setDraft} />

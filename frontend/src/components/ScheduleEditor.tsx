@@ -136,7 +136,6 @@ export function ScheduleEditor({ value, onChange }: Props) {
         <div className="cron-sched-body">
           <div className="cron-sched-row">
             <label className="cron-sched-field-shell cron-sched-field-shell--time">
-              <Clock size={14} strokeWidth={2.1} aria-hidden />
               <input
                 type="time"
                 className="cron-sched-input cron-sched-input--bare"
@@ -482,7 +481,6 @@ function OnceDateTimePicker({
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
       >
-        <CalendarClock size={14} strokeWidth={2.1} aria-hidden />
         <span className="cron-sched-datetime-label">{label}</span>
       </button>
       {pop}

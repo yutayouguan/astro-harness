@@ -310,22 +310,14 @@ function McpAddDialog({
                     <Braces size={13} strokeWidth={2.2} aria-hidden />
                     {t("mcpTools.tabJson")}
                   </span>
-                  <div className="mcp-field-control mcp-field-control--textarea">
-                    <Braces
-                      size={14}
-                      strokeWidth={2.1}
-                      className="mcp-field-control-icon"
-                      aria-hidden
-                    />
-                    <textarea
-                      className="mcp-add-drawer-textarea has-leading-icon"
-                      value={jsonText}
-                      onChange={(e) => setJsonText(e.target.value)}
-                      placeholder={t("mcpTools.jsonPlaceholder")}
-                      spellCheck={false}
-                      rows={10}
-                    />
-                  </div>
+                  <textarea
+                    className="mcp-add-drawer-textarea"
+                    value={jsonText}
+                    onChange={(e) => setJsonText(e.target.value)}
+                    placeholder={t("mcpTools.jsonPlaceholder")}
+                    spellCheck={false}
+                    rows={10}
+                  />
                 </label>
                 {jsonError ? (
                   <p className="mcp-add-drawer-error">{jsonError}</p>
@@ -341,32 +333,24 @@ function McpAddDialog({
                       <Tag size={13} strokeWidth={2.2} aria-hidden />
                       {t("mcpTools.formName")}
                     </span>
-                    <div className="mcp-field-control">
-                      <Tag size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
-                      <input
-                        type="text"
-                        className="has-leading-icon"
-                        value={formName}
-                        onChange={(e) => setFormName(e.target.value)}
-                        placeholder={t("mcpTools.formNamePlaceholder")}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      placeholder={t("mcpTools.formNamePlaceholder")}
+                    />
                   </label>
                   <label className="mcp-field mcp-field--full">
                     <span className="mcp-field-label">
                       <AlignLeft size={13} strokeWidth={2.2} aria-hidden />
                       {t("mcpTools.formDesc")}
                     </span>
-                    <div className="mcp-field-control">
-                      <AlignLeft size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
-                      <input
-                        type="text"
-                        className="has-leading-icon"
-                        value={formDesc}
-                        onChange={(e) => setFormDesc(e.target.value)}
-                        placeholder={t("mcpTools.formDescPlaceholder")}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={formDesc}
+                      onChange={(e) => setFormDesc(e.target.value)}
+                      placeholder={t("mcpTools.formDescPlaceholder")}
+                    />
                   </label>
                   <div className="mcp-field mcp-field--full">
                     <span className="mcp-field-label">
@@ -396,48 +380,38 @@ function McpAddDialog({
                           <Terminal size={13} strokeWidth={2.2} aria-hidden />
                           {t("mcpTools.formCommand")}
                         </span>
-                        <div className="mcp-field-control">
-                          <Terminal size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
-                          <input
-                            type="text"
-                            className="has-leading-icon"
-                            value={formCommand}
-                            onChange={(e) => setFormCommand(e.target.value)}
-                            placeholder={t("mcpTools.formCommandPlaceholder")}
-                          />
-                        </div>
+                        <input
+                          type="text"
+                          value={formCommand}
+                          onChange={(e) => setFormCommand(e.target.value)}
+                          placeholder={t("mcpTools.formCommandPlaceholder")}
+                        />
                       </label>
                       <label className="mcp-field mcp-field--full">
                         <span className="mcp-field-label">
                           <List size={13} strokeWidth={2.2} aria-hidden />
                           {t("mcpTools.formArgs")}
                         </span>
-                        <div className="mcp-field-control mcp-field-control--textarea">
-                          <List size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
-                          <textarea
-                            className="mcp-field-textarea has-leading-icon"
-                            value={formArgs}
-                            onChange={(e) => setFormArgs(e.target.value)}
-                            placeholder={t("mcpTools.formArgsPlaceholder")}
-                            rows={3}
-                          />
-                        </div>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formArgs}
+                          onChange={(e) => setFormArgs(e.target.value)}
+                          placeholder={t("mcpTools.formArgsPlaceholder")}
+                          rows={3}
+                        />
                       </label>
                       <label className="mcp-field mcp-field--full">
                         <span className="mcp-field-label">
                           <KeyRound size={13} strokeWidth={2.2} aria-hidden />
                           {t("mcpTools.formEnv")}
                         </span>
-                        <div className="mcp-field-control mcp-field-control--textarea">
-                          <KeyRound size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
-                          <textarea
-                            className="mcp-field-textarea has-leading-icon"
-                            value={formEnv}
-                            onChange={(e) => setFormEnv(e.target.value)}
-                            placeholder={t("mcpTools.formEnvPlaceholder")}
-                            rows={3}
-                          />
-                        </div>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formEnv}
+                          onChange={(e) => setFormEnv(e.target.value)}
+                          placeholder={t("mcpTools.formEnvPlaceholder")}
+                          rows={3}
+                        />
                       </label>
                     </>
                   ) : (
@@ -447,32 +421,25 @@ function McpAddDialog({
                           <Link2 size={13} strokeWidth={2.2} aria-hidden />
                           {t("mcpTools.formUrl")}
                         </span>
-                        <div className="mcp-field-control">
-                          <Link2 size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
-                          <input
-                            type="url"
-                            className="has-leading-icon"
-                            value={formUrl}
-                            onChange={(e) => setFormUrl(e.target.value)}
-                            placeholder={t("mcpTools.formUrlPlaceholder")}
-                          />
-                        </div>
+                        <input
+                          type="url"
+                          value={formUrl}
+                          onChange={(e) => setFormUrl(e.target.value)}
+                          placeholder={t("mcpTools.formUrlPlaceholder")}
+                        />
                       </label>
                       <label className="mcp-field mcp-field--full">
                         <span className="mcp-field-label">
                           <Heading size={13} strokeWidth={2.2} aria-hidden />
                           {t("mcpTools.formHeaders")}
                         </span>
-                        <div className="mcp-field-control mcp-field-control--textarea">
-                          <Heading size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
-                          <textarea
-                            className="mcp-field-textarea has-leading-icon"
-                            value={formHeaders}
-                            onChange={(e) => setFormHeaders(e.target.value)}
-                            placeholder={t("mcpTools.formHeadersPlaceholder")}
-                            rows={3}
-                          />
-                        </div>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formHeaders}
+                          onChange={(e) => setFormHeaders(e.target.value)}
+                          placeholder={t("mcpTools.formHeadersPlaceholder")}
+                          rows={3}
+                        />
                       </label>
                     </>
                   )}
