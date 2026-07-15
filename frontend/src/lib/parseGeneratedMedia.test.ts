@@ -23,6 +23,11 @@ test("parses labeled image_gen / video_gen / tts output", () => {
     parseGeneratedMedia("语音已生成：/tmp/tts-1.wav\nprovider=google\nmodel=x"),
     [{ kind: "audio", path: "/tmp/tts-1.wav" }],
   );
+
+  assert.deepEqual(
+    parseGeneratedMedia("音乐已生成：generated/audio/music-1.mp3"),
+    [{ kind: "audio", path: "generated/audio/music-1.mp3" }],
+  );
 });
 
 test("dedupes and falls back to bare media paths", () => {

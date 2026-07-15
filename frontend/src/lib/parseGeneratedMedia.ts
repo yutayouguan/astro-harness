@@ -1,5 +1,5 @@
 /**
- * 从工具结果文本中解析生成媒体路径（image_gen / video_gen / tts 固定文案）。
+ * 从工具结果文本中解析生成媒体路径（image_gen / video_gen / tts / music_gen 固定文案）。
  */
 export type GeneratedMediaKind = "image" | "video" | "audio" | "html";
 
@@ -9,7 +9,7 @@ export type GeneratedMedia = {
 };
 
 const LABELED =
-  /(?:图片|视频|语音)已生成[：:]\s*(\S+)/g;
+  /(?:图片|视频|语音|音乐)已生成[：:]\s*(\S+)/g;
 
 const EXT_KIND: Record<string, GeneratedMediaKind> = {
   png: "image",
@@ -45,7 +45,7 @@ function extOf(path: string): string {
 function kindFromLabel(line: string): GeneratedMediaKind | null {
   if (line.includes("图片已生成")) return "image";
   if (line.includes("视频已生成")) return "video";
-  if (line.includes("语音已生成")) return "audio";
+  if (line.includes("语音已生成") || line.includes("音乐已生成")) return "audio";
   return null;
 }
 
