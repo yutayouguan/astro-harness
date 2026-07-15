@@ -4,6 +4,7 @@
 
 use base64::Engine;
 use providers::http_stream::openai_compatible_base;
+use providers::interactions_http::VisionMode;
 use providers::media_http::{default_vision_model, openai_vision_completions};
 use providers::trait_::ProviderConfig;
 use schemars::JsonSchema;
@@ -127,7 +128,14 @@ async fn call_vision(
         ..ProviderConfig::default()
     };
     let client = reqwest::Client::new();
-    let text = openai_vision_completions(&client, provider, prompt, image_url, &config).await?;
+    let text = openai_vision_completions(
+        &client,
+        prompt,
+        &[image_url.to_string()],
+        VisionMode::Describe,
+        &config,
+    )
+    .await?;
     Ok(format!(
         "{text}\nprovider={provider}\nmodel={model}"
     ))
@@ -159,8 +167,14 @@ async fn call_openai_vision(
             ..ProviderConfig::default()
         };
         let client = reqwest::Client::new();
-        let text =
-            openai_vision_completions(&client, "openai", prompt, image_url, &config).await?;
+        let text = openai_vision_completions(
+            &client,
+            prompt,
+            &[image_url.to_string()],
+            VisionMode::Describe,
+            &config,
+        )
+        .await?;
         return Ok(format!("{text}\nprovider=openai\nmodel={model}"));
     }
     let env_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
@@ -175,6 +189,13 @@ async fn call_openai_vision(
         ..ProviderConfig::default()
     };
     let client = reqwest::Client::new();
-    let text = openai_vision_completions(&client, "openai", prompt, image_url, &config).await?;
+    let text = openai_vision_completions(
+        &client,
+        prompt,
+        &[image_url.to_string()],
+        VisionMode::Describe,
+        &config,
+    )
+    .await?;
     Ok(format!("{text}\nprovider=openai\nmodel={model}"))
 }
