@@ -2091,13 +2091,23 @@ html[data-theme="dark"] .skills-header-search-input:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 0;
   min-height: min(320px, 50vh);
   padding: 28px 16px;
   color: var(--ink-mute);
-  font-size: 13px;
-  font-weight: 600;
   animation: skills-loading-fade 0.22s ease;
+}
+
+.skills-loading-block .msg-stream-loader {
+  grid-template-columns: repeat(3, 7px);
+  gap: 5px;
+  margin-top: 0;
+}
+
+.skills-loading-block .msg-stream-loader span {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
 }
 
 @keyframes skills-loading-fade {

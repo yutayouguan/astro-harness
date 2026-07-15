@@ -60,6 +60,7 @@ import { useAgentsChanged } from "../lib/agentsChanged";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
+import MsgStreamLoader from "./MsgStreamLoader";
 import { IconRefresh } from "./NavIcons";
 import { SelectMenu } from "./SelectMenu";
 import {
