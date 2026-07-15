@@ -298,15 +298,15 @@ html[data-theme="dark"] .mem-view-nav {
 }
 
 html[data-theme="dark"] .mem-view-flow-wash {
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 html[data-theme="dark"] .mem-view-flow-path.is-core {
-  opacity: 0.55;
+  opacity: 0.38;
 }
 
 html[data-theme="dark"] .mem-view-flow-path.is-soft {
-  opacity: 0.35;
+  opacity: 0.22;
 }
 
 html[data-theme="dark"] .mem-view-tab {
@@ -507,8 +507,8 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
 
 .mem-stat-label {
   font-size: 9px;
-  font-weight: 550;
-  color: var(--ink-mute);
+  font-weight: 600;
+  color: var(--ink-soft);
   white-space: nowrap;
   line-height: 1.05;
 }
