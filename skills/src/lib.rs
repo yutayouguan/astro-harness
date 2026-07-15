@@ -15,6 +15,7 @@ pub mod install;
 pub mod installed;
 pub mod models;
 pub mod origins;
+pub mod preview;
 pub mod registry;
 pub mod seed;
 pub mod skill;
@@ -34,8 +35,9 @@ pub use installed::{
 };
 pub use models::{
     InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,
-    SkillUpdateItemResult, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
+    SkillUpdateItemResult, SkillUpdatePreview, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
 };
+pub use preview::preview_skill_update;
 pub use check::{
     check_origin_against_detail, check_updates_for_agent, classify_update_status,
     filter_outdated_folders, origin_to_store_skill,

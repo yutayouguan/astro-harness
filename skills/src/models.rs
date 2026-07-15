@@ -197,3 +197,13 @@ pub struct SkillUpdateCheckResult {
     pub remote_updated_at: Option<i64>,
     pub message: String,
 }
+
+/// 更新前本地改动预览（与安装时 `content_digest` baseline 比对）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillUpdatePreview {
+    pub folder: String,
+    pub has_local_changes: bool,
+    pub has_baseline_digest: bool,
+    pub current_digest: Option<String>,
+    pub baseline_digest: Option<String>,
+}
