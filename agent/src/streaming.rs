@@ -1664,8 +1664,15 @@ fn run_tool_on_snapshot(
             Ok(m) => m,
             Err(e) => return format!("工具错误: memory: {e}"),
         };
+        let sessions = match session::SessionStore::open_sessions_dir(
+            &snap.memory_dir.join("sessions"),
+        ) {
+            Ok(s) => s,
+            Err(e) => return format!("工具错误: sessions: {e}"),
+        };
         let mut ctx = tools::ToolContext {
             memory: &mut memory,
+            sessions: &sessions,
             memory_dir: snap.memory_dir.clone(),
             workspace_dir: snap.workspace_dir.clone(),
             project_root: snap.project_root.clone(),

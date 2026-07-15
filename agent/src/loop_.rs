@@ -654,11 +654,14 @@ impl AgentLoop {
         let chat_model = self.chat_model.clone();
         let chat_targets = self.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+            .map_err(|e| anyhow::anyhow!("open sessions: {e}"))?;
         let delegate_runner = Some(self.delegate_runner());
         let async_spawner = Some(self.async_spawner());
         let orchestration_spawner = Some(self.orchestration_spawner());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
+            sessions: &sessions,
             memory_dir,
             workspace_dir,
             project_root: self.project_root.clone(),
