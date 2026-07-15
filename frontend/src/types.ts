@@ -372,6 +372,15 @@ export type SkillUpdateCheckResult = {
   message: string;
 };
 
+/** 技能更新本地备份条目（与 Rust `SkillBackupEntry` 对齐） */
+export type SkillBackupEntry = {
+  agent_id: string;
+  folder: string;
+  timestamp: string;
+  path: string;
+  created_at: number | null;
+};
+
 /** 「更新」Tab 筛选：v2 中 `updatable` 仅含 `outdated` */
 export type SkillUpdateFilter = "with_origin" | "no_origin" | "updatable";
 
