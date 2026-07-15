@@ -4,10 +4,11 @@ import {
   applyReasoningDelta,
   applyActivityUpsert,
   applySurfaceUpsert,
+  coalesceReasoningSegments,
   sealOpenReasoning,
   sumReasoningDurations,
 } from "./chatTimeline.ts";
-import type { ChatMessage } from "../types.ts";
+import type { ChatMessage, ChatTimelineSegment } from "../types.ts";
 
 function emptyAssistant(id = "a1"): ChatMessage {
   return { id, role: "assistant", content: "" };
@@ -138,4 +139,51 @@ test("sealOpenReasoning does not paint total onto sealed earlier segments", () =
     .filter((s) => s.type === "reasoning")
     .map((s) => (s.type === "reasoning" ? s.durationSec : undefined));
   assert.deepEqual(durs, [1, 1]);
+});
+
+test("coalesceReasoningSegments merges all reasoning into one at first position", () => {
+  const segments: ChatTimelineSegment[] = [
+    { type: "reasoning", id: "r1", text: "think1", at: 100, durationSec: 1 },
+    { type: "activity", id: "t1", at: 200 },
+    { type: "reasoning", id: "r2", text: "think2", at: 300, durationSec: 2 },
+    { type: "activity", id: "t2", at: 400 },
+    { type: "reasoning", id: "r3", text: "think3", at: 500, durationSec: 0.5 },
+  ];
+  const out = coalesceReasoningSegments(segments);
+  assert.equal(out?.length, 3);
+  assert.equal(out?.[0]?.type, "reasoning");
+  if (out?.[0]?.type === "reasoning") {
+    assert.equal(out[0].text, "think1think2think3");
+    assert.equal(out[0].id, "r1");
+    assert.equal(out[0].at, 100);
+    assert.equal(out[0].durationSec, 3.5);
+  }
+  assert.equal(out?.[1]?.type, "activity");
+  assert.equal(out?.[1]?.type === "activity" ? out[1].id : null, "t1");
+  assert.equal(out?.[2]?.type, "activity");
+  assert.equal(out?.[2]?.type === "activity" ? out[2].id : null, "t2");
+});
+
+test("coalesceReasoningSegments leaves single reasoning unchanged", () => {
+  const segments: ChatTimelineSegment[] = [
+    { type: "reasoning", id: "r1", text: "only", at: 1, durationSec: 2 },
+    { type: "activity", id: "t1", at: 2 },
+  ];
+  const out = coalesceReasoningSegments(segments);
+  assert.deepEqual(out, segments);
+});
+
+test("coalesceReasoningSegments keeps last open (no duration) while streaming", () => {
+  const segments: ChatTimelineSegment[] = [
+    { type: "reasoning", id: "r1", text: "a", at: 1000, durationSec: 1 },
+    { type: "activity", id: "t1", at: 2000 },
+    { type: "reasoning", id: "r2", text: "b", at: 3000 },
+  ];
+  const out = coalesceReasoningSegments(segments);
+  assert.equal(out?.[0]?.type, "reasoning");
+  if (out?.[0]?.type === "reasoning") {
+    assert.equal(out[0].text, "ab");
+    assert.equal(out[0].durationSec, undefined);
+    assert.equal(out[0].at, 1000);
+  }
 });

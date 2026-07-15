@@ -34,6 +34,48 @@ export function sumReasoningDurations(
 }
 
 /**
+ * 同回合展示用：把多段 reasoning 合并成一块（放在首个 reasoning 位置），
+ * activity / surface 保持相对顺序。末段仍开放（无 duration）则合并块也不封口。
+ */
+export function coalesceReasoningSegments(
+  segments: ChatTimelineSegment[] | undefined,
+): ChatTimelineSegment[] | undefined {
+  if (!segments?.length) return segments;
+  const reasoning = segments.filter(
+    (s): s is Extract<ChatTimelineSegment, { type: "reasoning" }> =>
+      s.type === "reasoning",
+  );
+  if (reasoning.length <= 1) return segments;
+
+  const first = reasoning[0]!;
+  const last = reasoning[reasoning.length - 1]!;
+  const lastOpen = last.durationSec == null || last.durationSec <= 0;
+  const merged: ChatTimelineSegment = {
+    type: "reasoning",
+    id: first.id,
+    text: reasoning.map((r) => r.text).join(""),
+    at: first.at,
+    ...(lastOpen
+      ? {}
+      : { durationSec: sumReasoningDurations(segments) }),
+  };
+
+  let emitted = false;
+  const out: ChatTimelineSegment[] = [];
+  for (const seg of segments) {
+    if (seg.type === "reasoning") {
+      if (!emitted) {
+        out.push(merged);
+        emitted = true;
+      }
+      continue;
+    }
+    out.push(seg);
+  }
+  return out;
+}
+
+/**
  * 封口最近一条尚无 duration 的 reasoning（按段 at 墙钟）。
  * @param endedAt 封口时刻（ms）
  * @param durationSec 可选显式耗时；缺省用 endedAt - seg.at

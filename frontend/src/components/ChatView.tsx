@@ -83,6 +83,7 @@ import { useMcpTools } from "../hooks/useMcpTools";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import { formatElapsedSec } from "../lib/elapsedSec";
+import { coalesceReasoningSegments } from "../lib/chatTimeline";
 import {
   buildMentionCandidates,
   buildSlashPaletteEntries,
@@ -1089,12 +1090,13 @@ export default function ChatView({
                       )}
                       {m.segments && m.segments.length > 0 ? (
                         <>
-                          {m.segments.map((seg, segIdx) => {
+                          {(coalesceReasoningSegments(m.segments) ?? m.segments).map(
+                            (seg, segIdx, displaySegs) => {
                             if (seg.type === "reasoning") {
                               const openReasoning =
                                 seg.durationSec == null || seg.durationSec <= 0;
                               const isLastReasoning =
-                                !m.segments!
+                                !displaySegs
                                   .slice(segIdx + 1)
                                   .some((s) => s.type === "reasoning");
                               const active = Boolean(
