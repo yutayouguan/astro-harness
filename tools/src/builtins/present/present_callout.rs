@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
-use crate::builtins::present_shared::dispatch_present;
+use crate::builtins::present::present_shared::dispatch_present;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PresentCalloutArgs {

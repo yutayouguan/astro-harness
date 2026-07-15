@@ -1,28 +1,20 @@
 //! 内置工具实现；经 [`crate::dispatch`] 按名称路由。
+//!
+//! 按领域分子目录（磁盘组织）；对外仍 re-export 各工具模块名，
+//! 使 `crate::image_gen` 等路径与历史 `register` / `dispatch` 兼容。
 
-pub mod memory_tools;
-pub mod scheduled;
-pub mod image_gen;
-pub mod video_gen;
-pub mod file_ops;
-pub mod terminal;
-pub mod web_search;
-pub mod code_exec;
-pub mod vision;
-pub mod tts;
-pub mod skills_tool;
-pub mod clarify;
-pub mod confirm;
-pub mod request_user_location;
-pub mod present_ui;
-pub mod present_shared;
-pub mod present_metrics;
-pub mod present_callout;
-pub mod present_result;
-pub mod delegate;
-pub mod multi_agent;
-pub mod orchestration;
-pub mod task_plan;
-pub mod browser;
-pub mod create_agent;
-pub mod music;
+pub mod media;
+pub mod system;
+pub mod memory;
+pub mod hitl;
+pub mod present;
+pub mod agents;
+
+pub use media::{image_gen, music, tts, video_gen, vision};
+pub use system::{browser, code_exec, file_ops, terminal, web_search};
+pub use memory::{memory_tools, scheduled, skills_tool, task_plan};
+pub use hitl::{clarify, confirm, request_user_location};
+pub use present::{
+    present_callout, present_metrics, present_result, present_shared, present_ui,
+};
+pub use agents::{create_agent, delegate, multi_agent, orchestration};
