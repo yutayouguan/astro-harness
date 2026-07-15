@@ -839,7 +839,7 @@ html[data-theme="dark"] .cron-sched {
   display: flex;
   gap: 4px;
   padding: 4px;
-  border-radius: var(--radius-lg);
+  border-radius: 10px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
     color-mix(in srgb, var(--glass-fill) 60%, transparent);
