@@ -758,6 +758,37 @@ export default function ToolsPanel({
 
   return (
     <div className="agent-tools-page">
+      <div
+        className="tool-main-tabs"
+        role="tablist"
+        aria-label={t("tools.mainTabs")}
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "builtin"}
+          className={`tool-main-tab ${tab === "builtin" ? "active" : ""}`}
+          onClick={() => setTab("builtin")}
+        >
+          <Wrench size={15} strokeWidth={2.25} aria-hidden />
+          {t("tools.tab.builtin")}
+          <span className="tool-main-tab-count">{agentTools.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "mcp"}
+          className={`tool-main-tab ${tab === "mcp" ? "active" : ""}`}
+          onClick={() => setTab("mcp")}
+        >
+          <McpIcon size={15} />
+          {t("tools.tab.mcp")}
+          {servers.length > 0 && (
+            <span className="tool-main-tab-count">{servers.length}</span>
+          )}
+        </button>
+      </div>
+
       <div className="panel-agent-toolbar">
         <div className="panel-agent-toolbar-start">
           <AgentPicker
@@ -804,36 +835,6 @@ export default function ToolsPanel({
             </button>
           )}
         </div>
-      </div>
-      <div
-        className="tool-main-tabs"
-        role="tablist"
-        aria-label={t("tools.mainTabs")}
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "builtin"}
-          className={`tool-main-tab ${tab === "builtin" ? "active" : ""}`}
-          onClick={() => setTab("builtin")}
-        >
-          <Wrench size={15} strokeWidth={2.25} aria-hidden />
-          {t("tools.tab.builtin")}
-          <span className="tool-main-tab-count">{agentTools.length}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "mcp"}
-          className={`tool-main-tab ${tab === "mcp" ? "active" : ""}`}
-          onClick={() => setTab("mcp")}
-        >
-          <McpIcon size={15} />
-          {t("tools.tab.mcp")}
-          {servers.length > 0 && (
-            <span className="tool-main-tab-count">{servers.length}</span>
-          )}
-        </button>
       </div>
 
       <div className="agent-tools-body">
