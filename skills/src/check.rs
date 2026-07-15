@@ -13,6 +13,7 @@ pub fn classify_update_status(
     }
 
     if remote_version.is_some()
+        && remote_updated_at.is_none()
         && origin.remote_version.is_none()
         && origin.remote_updated_at.is_none()
         && origin.last_updated_at.is_none()
@@ -122,6 +123,15 @@ mod tests {
         assert_eq!(
             classify_update_status(&origin, Some("1.0.0"), None),
             SkillUpdateStatus::Current
+        );
+    }
+
+    #[test]
+    fn classify_first_baseline_remote_version_and_updated_at_compares_time() {
+        let origin = sample_origin(None, None, None, 100);
+        assert_eq!(
+            classify_update_status(&origin, Some("1.0"), Some(200)),
+            SkillUpdateStatus::Outdated
         );
     }
 }
