@@ -175,14 +175,14 @@ impl AgentBuilder {
 
     /// 解析默认值并产出不可变的 [`BuiltAgentSpec`]，不创建 [`AgentLoop`]。
     ///
-    /// `agent_id` 缺省时调用 `memory::active_agent_id`；`preamble` 缺省时读取
+    /// `agent_id` 缺省时调用 `home::active_agent_id`；`preamble` 缺省时读取
     /// `agents/{id}/SOUL.md`，读取失败则使用内置 Astro 默认文案。
     pub fn build_spec(self) -> BuiltAgentSpec {
         let agent_id = self
             .agent_id
-            .unwrap_or_else(|| memory::active_agent_id(&self.memory_dir));
+            .unwrap_or_else(|| home::active_agent_id(&self.memory_dir));
         let soul = self.preamble.unwrap_or_else(|| {
-            let ws = memory::agent_workspace_dir(&self.memory_dir, &agent_id);
+            let ws = home::agent_workspace_dir(&self.memory_dir, &agent_id);
             std::fs::read_to_string(ws.join("SOUL.md"))
                 .unwrap_or_else(|_| "你是 Astro，一个自我进化的 AI 助手".to_string())
         });

@@ -60,8 +60,8 @@ impl AgentConfig {
     /// 不变量：`memory_dir` 必须可写；`ensure_workspace` 失败时仍继续，使用内置默认 soul。
     pub fn with_defaults(memory_dir: PathBuf) -> Self {
         let _ = memory::ensure_workspace(&memory_dir);
-        let agent_id = memory::active_agent_id(&memory_dir);
-        let ws = memory::agent_workspace_dir(&memory_dir, &agent_id);
+        let agent_id = home::active_agent_id(&memory_dir);
+        let ws = home::agent_workspace_dir(&memory_dir, &agent_id);
         let soul = std::fs::read_to_string(ws.join("SOUL.md"))
             .unwrap_or_else(|_| "你是 Astro，一个自我进化的 AI 助手".to_string());
         Self {

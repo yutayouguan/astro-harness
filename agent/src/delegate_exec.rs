@@ -221,7 +221,7 @@ async fn run_one_child_inner(
     let agent_id = creds.parent_agent_id.clone();
 
     let mut config = AgentConfig::with_defaults(memory_dir.clone());
-    let ws = memory::agent_workspace_dir(&memory_dir, &agent_id);
+    let ws = home::agent_workspace_dir(&memory_dir, &agent_id);
     if let Ok(soul) = std::fs::read_to_string(ws.join("SOUL.md")) {
         config.soul = soul;
     }

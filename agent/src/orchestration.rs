@@ -212,7 +212,7 @@ async fn run_step(
 
     let mut config = AgentConfig::with_defaults(memory_dir.clone());
     // 覆盖 soul 为该 agent 的 SOUL.md（with_defaults 读的是活跃 agent）
-    let ws = memory::agent_workspace_dir(&memory_dir, &target_agent_id);
+    let ws = home::agent_workspace_dir(&memory_dir, &target_agent_id);
     if let Ok(soul) = std::fs::read_to_string(ws.join("SOUL.md")) {
         config.soul = soul;
     }

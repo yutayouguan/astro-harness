@@ -67,11 +67,11 @@ pub async fn refresh_memory(
     agent_id: Option<String>,
     session_id: Option<String>,
 ) -> Result<RefreshMemoryDto, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
     let id = agent_id
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| memory::active_agent_id(&root));
+        .unwrap_or_else(|| home::active_agent_id(&root));
     let mut mgr = memory::MemoryManager::for_agent(root, &id).map_err(|e| e.to_string())?;
     mgr.refresh_memory_snapshot().map_err(|e| e.to_string())?;
     let (memory_content, user_content) = mgr.prompt_content();
@@ -97,7 +97,7 @@ pub async fn refresh_memory(
 /// 列出 `write_approval` pending 队列。
 #[tauri::command]
 pub async fn list_pending_memory_writes() -> Result<Vec<PendingMemoryWriteDto>, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     memory::list_pending(&root)
         .map(|items| items.into_iter().map(PendingMemoryWriteDto::from).collect())
         .map_err(|e| e.to_string())
@@ -116,7 +116,7 @@ pub async fn approve_pending_memory_write(
     app: AppHandle,
     id: String,
 ) -> Result<String, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     let item = memory::list_pending(&root)
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -154,7 +154,7 @@ pub async fn approve_pending_memory_write(
 /// 拒绝并丢弃一条 pending；成功后 emit `session_event`。
 #[tauri::command]
 pub async fn reject_pending_memory_write(app: AppHandle, id: String) -> Result<(), String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     let item = memory::list_pending(&root)
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -195,7 +195,7 @@ pub struct MemorySettingsDto {
 /// 读取记忆相关开关。
 #[tauri::command]
 pub async fn get_memory_settings() -> Result<MemorySettingsDto, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     let mem = memory::load_memory_config(&root);
     let aux = memory::load_auxiliary_config(&root);
     Ok(MemorySettingsDto {
@@ -208,7 +208,7 @@ pub async fn get_memory_settings() -> Result<MemorySettingsDto, String> {
 /// 设置 `memory.write_approval`。
 #[tauri::command]
 pub async fn set_memory_write_approval(enabled: bool) -> Result<MemorySettingsDto, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     memory::set_write_approval(&root, enabled).map_err(|e| e.to_string())?;
     get_memory_settings().await
 }
@@ -216,7 +216,7 @@ pub async fn set_memory_write_approval(enabled: bool) -> Result<MemorySettingsDt
 /// 设置 `memory.auto_refresh_on_update`。
 #[tauri::command]
 pub async fn set_memory_auto_refresh(enabled: bool) -> Result<MemorySettingsDto, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     memory::set_auto_refresh_on_update(&root, enabled).map_err(|e| e.to_string())?;
     get_memory_settings().await
 }
@@ -224,7 +224,7 @@ pub async fn set_memory_auto_refresh(enabled: bool) -> Result<MemorySettingsDto,
 /// 设置 `auxiliary.background_review_enabled`。
 #[tauri::command]
 pub async fn set_background_review_enabled(enabled: bool) -> Result<MemorySettingsDto, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     memory::set_background_review_enabled(&root, enabled).map_err(|e| e.to_string())?;
     get_memory_settings().await
 }
@@ -232,11 +232,11 @@ pub async fn set_background_review_enabled(enabled: bool) -> Result<MemorySettin
 /// 批准全部 pending；逐条 emit（末条角标为准）。
 #[tauri::command]
 pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     let items = memory::list_pending(&root).map_err(|e| e.to_string())?;
     let mut ok = 0usize;
     let mut err = 0usize;
-    let mut last_agent = memory::active_agent_id(&root);
+    let mut last_agent = home::active_agent_id(&root);
     for p in items {
         last_agent = p.agent_id.clone();
         match memory::approve_pending_memory(&root, &p.id) {
@@ -274,7 +274,7 @@ pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String,
 /// 拒绝全部 pending。
 #[tauri::command]
 pub async fn reject_all_pending_memory_writes(app: AppHandle) -> Result<String, String> {
-    let root = memory::default_memory_dir();
+    let root = home::default_memory_dir();
     let items = memory::list_pending(&root).map_err(|e| e.to_string())?;
     let mut ok = 0usize;
     let mut err = 0usize;

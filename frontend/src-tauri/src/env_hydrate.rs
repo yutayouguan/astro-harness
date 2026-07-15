@@ -52,7 +52,7 @@ fn known_api_key_names() -> HashSet<&'static str> {
 
 /// `~/.astro/.env` 路径。
 fn astro_env_file() -> PathBuf {
-    memory::default_memory_dir().join(".env")
+    home::default_memory_dir().join(".env")
 }
 
 /// 解析单行 dotenv（KEY=VALUE）。

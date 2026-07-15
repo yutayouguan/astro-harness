@@ -457,12 +457,12 @@ pub struct ProviderTestResult {
 
 /// providers.json 路径。
 fn providers_path() -> PathBuf {
-    memory::default_memory_dir().join("providers.json")
+    home::default_memory_dir().join("providers.json")
 }
 
 /// 模型缓存文件路径。
 fn models_path() -> PathBuf {
-    memory::default_memory_dir().join("models.json")
+    home::default_memory_dir().join("models.json")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

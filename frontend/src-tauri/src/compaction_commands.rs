@@ -4,8 +4,9 @@ use futures::StreamExt;
 use serde::Serialize;
 use uuid::Uuid;
 
-use memory::session_store::StoredMessage;
-use memory::{default_memory_dir, MemoryManager};
+use session::StoredMessage;
+use home::default_memory_dir;
+use memory::MemoryManager;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 

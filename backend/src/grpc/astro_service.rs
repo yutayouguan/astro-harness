@@ -195,7 +195,7 @@ impl AstroServiceImpl {
             return Ok(handle.clone());
         }
 
-        let agent_id = memory::active_agent_id(&self.memory_dir);
+        let agent_id = home::active_agent_id(&self.memory_dir);
         let mut builder = AgentBuilder::new(self.memory_dir.clone()).agent_id(agent_id.clone());
         if let Ok(rt) = AgentRuntimeConfig::load(&self.memory_dir, &agent_id) {
             builder = builder.from_runtime_config(&rt);
@@ -1153,7 +1153,7 @@ impl AstroService for AstroServiceImpl {
         _request: Request<Empty>,
     ) -> Result<Response<McpServerList>, Status> {
         // 优先：active agent 的 hub（实时连接状态）；勿用任意会话以免串 agent
-        let active = memory::active_agent_id(&self.memory_dir);
+        let active = home::active_agent_id(&self.memory_dir);
         let sessions = self.sessions.read().await;
         for handle in sessions.values() {
             let agent = handle.lock().await;
