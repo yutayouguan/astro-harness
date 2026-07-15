@@ -7,6 +7,7 @@ fn make_ctx(
     dir: &TempDir,
 ) -> (
     memory::MemoryManager,
+    session::SessionStore,
     providers::registry::ProviderRegistry,
     tools::ImageGenTargets,
     std::path::PathBuf,
@@ -14,17 +15,19 @@ fn make_ctx(
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
     let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    (memory, providers, targets, workspace)
+    (memory, sessions, providers, targets, workspace)
 }
 
 #[tokio::test]
 async fn confirm_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
+        sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
@@ -64,9 +67,10 @@ async fn confirm_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
+        sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
@@ -106,9 +110,10 @@ async fn clarify_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn request_user_location_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
+        sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
@@ -147,9 +152,10 @@ async fn request_user_location_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn present_ui_emits_valid_astro_ui() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
+        sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,

@@ -1,4 +1,4 @@
-//! 记忆工具：单一 `memory` 写操作与 `session_search` 会话全文检索。
+//! 记忆工具：单一 `memory` 写操作；`session_search` 走 `session` crate。
 //!
 //! `memory` 通过 `action` + `target` 覆盖 add / replace / remove；
 //! 实际逻辑委托给 `memory` crate。`session_search` 检索历史消息（FTS），
@@ -92,4 +92,12 @@ pub fn register(registry: &mut ToolRegistry) {
 /// 需要可变 `ToolContext` 以访问 `MemoryManager`。
 pub fn dispatch(ctx: &mut ToolContext<'_>, name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
     memory::dispatch_memory_tool(ctx.memory, name, args)
+}
+
+/// 将 `session_search` 委托给 `session::dispatch_session_tool`。
+pub fn dispatch_session_search(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    session::dispatch_session_tool(ctx.sessions, "session_search", args)
 }

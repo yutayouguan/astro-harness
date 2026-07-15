@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use memory::MemoryManager;
+use session::SessionStore;
 use providers::registry::ProviderRegistry;
 
 /// 单个媒体生成 Provider 的调用凭证。
@@ -130,6 +131,8 @@ impl ImageGenTargets {
 pub struct ToolContext<'a> {
     /// 当前 Agent 的记忆管理器；`memory_*` 与 `create_agent`（激活时）会修改此字段。
     pub memory: &'a mut MemoryManager,
+    /// 共享会话库（`{memory_dir}/sessions`），供 `session_search` 使用。
+    pub sessions: &'a SessionStore,
     /// Agent 根目录（`~/.astro`），用于定位 `agents/{id}/` 等全局路径。
     pub memory_dir: PathBuf,
     /// 当前 Agent 工作区目录（记忆空间），与代码仓分离。

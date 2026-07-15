@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 memory = { path = "../memory" }
+session = { path = "../session" }
 home = { path = "../home" }
 orchestration = { path = "../orchestration" }
 delegate = { path = "../delegate" }
