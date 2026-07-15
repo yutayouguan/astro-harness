@@ -551,6 +551,10 @@ export const zh = {
   "sidebar.hideLabels": "仅显示图标",
   "sidebar.showLabelsAria": "展开侧栏文字",
   "sidebar.hideLabelsAria": "收起侧栏文字，仅保留图标",
+  "sidebar.menu.showLabels": "显示名称",
+  "sidebar.menu.hideLabels": "隐藏名称",
+  "sidebar.menu.expand": "展开导航栏",
+  "sidebar.menu.collapse": "关闭导航栏",
 
   "memory.title": "记忆内容",
   "memory.back": "返回对话",
@@ -1691,6 +1695,10 @@ export const en: Record<MessageKey, string> = {
   "sidebar.hideLabels": "Icons only",
   "sidebar.showLabelsAria": "Expand sidebar labels",
   "sidebar.hideLabelsAria": "Collapse sidebar to icons only",
+  "sidebar.menu.showLabels": "Show labels",
+  "sidebar.menu.hideLabels": "Hide labels",
+  "sidebar.menu.expand": "Expand sidebar",
+  "sidebar.menu.collapse": "Collapse sidebar",
 
   "memory.title": "Memory",
   "memory.back": "Back to chat",

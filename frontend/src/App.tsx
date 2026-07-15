@@ -13,6 +13,9 @@ import MemoryPanel from "./components/MemoryPanel";
 import ModelPicker from "./components/ModelPicker";
 import PreferencesPanel from "./components/PreferencesPanel";
 import ProvidersPanel from "./components/ProvidersPanel";
+import SidebarContextMenu, {
+  type SidebarMenuAction,
+} from "./components/SidebarContextMenu";
 import SkillsPanel from "./components/SkillsPanel";
 import ToolsPanel from "./components/ToolsPanel";
 import { TOAST_ERROR_DURATION_MS } from "./components/Toast";
@@ -319,6 +322,9 @@ export default function App() {
       return false;
     }
   });
+  const [sidebarCtx, setSidebarCtx] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const stored = loadChatSession();
     if (stored?.messages?.length) return stored.messages;
@@ -383,6 +389,8 @@ export default function App() {
   /** 当前回合 turn_id（run_started，会话切换时清空） */
   const [currentTurnId, setCurrentTurnId] = useState<string | null>(null);
   const hideTimerRef = useRef<number | null>(null);
+  /** 侧栏右键菜单打开时阻断悬停收起（portal 不在 aside 内） */
+  const sidebarCtxOpenRef = useRef(false);
   const dissolveTimerRef = useRef<number | null>(null);
   const dissolvingIdsRef = useRef<string[]>([]);
   dissolvingIdsRef.current = dissolvingIds;
@@ -951,7 +959,7 @@ export default function App() {
   };
 
   const scheduleHideSidebar = () => {
-    if (sidebarPinned) return;
+    if (sidebarPinned || sidebarCtxOpenRef.current) return;
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = window.setTimeout(() => {
       setSidebarOpen(false);
@@ -986,6 +994,30 @@ export default function App() {
       }
       return next;
     });
+  };
+
+  const openSidebarContextMenu = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    if (hideTimerRef.current) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    sidebarCtxOpenRef.current = true;
+    setSidebarOpen(true);
+    setSidebarCtx({ x: e.clientX, y: e.clientY });
+  };
+
+  const closeSidebarContextMenu = () => {
+    sidebarCtxOpenRef.current = false;
+    setSidebarCtx(null);
+    if (!sidebarPinned) scheduleHideSidebar();
+  };
+
+  const onSidebarContextAction = (action: SidebarMenuAction) => {
+    if (action === "toggleLabels") toggleSidebarLabels();
+    else toggleSidebar();
+    sidebarCtxOpenRef.current = false;
+    setSidebarCtx(null);
   };
 
   /** 悬停临时展开：始终出文字；固定后跟偏好（默认仅图标） */
@@ -2952,6 +2984,7 @@ export default function App() {
           className={`sidebar ${sidebarOpen || sidebarPinned ? "is-open" : "is-collapsed"} ${sidebarPinned ? "is-pinned" : ""} ${showSidebarLabels ? "is-labels" : "is-icons"}`}
           onMouseEnter={openSidebar}
           onMouseLeave={scheduleHideSidebar}
+          onContextMenu={openSidebarContextMenu}
         >
           <div className="sidebar-brand">
             <div className="sidebar-logo" data-tone={activeTone}>
@@ -3012,6 +3045,16 @@ export default function App() {
             );
           })}
         </aside>
+        {sidebarCtx ? (
+          <SidebarContextMenu
+            x={sidebarCtx.x}
+            y={sidebarCtx.y}
+            labelsVisible={sidebarLabels}
+            pinned={sidebarPinned}
+            onAction={onSidebarContextAction}
+            onClose={closeSidebarContextMenu}
+          />
+        ) : null}
 
         <section className="content-pane">
           <div className="content-header">
