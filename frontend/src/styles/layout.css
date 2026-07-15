@@ -16,6 +16,15 @@
   white-space: nowrap;
 }
 
+/* 仅图标：固定方形命中区，避免侧栏加宽后选中态被拉成长胶囊 */
+.sidebar.is-icons .nav-item {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  align-self: center;
+  border-radius: 12px;
+}
+
 .nav-item:hover {
   background: var(--glass);
   color: var(--ink);
