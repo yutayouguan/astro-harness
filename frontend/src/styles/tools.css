@@ -552,7 +552,6 @@ html[data-theme="dark"] .mcp-add-btn:hover {
 }
 
 html[data-theme="dark"] .tool-main-tabs,
-html[data-theme="dark"] .mcp-tools-empty,
 html[data-theme="dark"] .mcp-server-card {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
