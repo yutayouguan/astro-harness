@@ -128,36 +128,7 @@ html[data-theme="dark"] .astro-cover-swatch {
     color-mix(in srgb, var(--cover-tone) 14%, transparent);
 }
 
-/* 聊天空欢迎页内嵌插画 */
-.chat-welcome-illust {
-  position: absolute;
-  left: 50%;
-  top: 42%;
-  transform: translate(-50%, -50%);
-  width: min(220px, 56vw);
-  color: var(--tone-blue, #2563eb);
-  line-height: 0;
-  opacity: 0.92;
-  z-index: 1;
-}
-
-.chat-welcome-empty {
-  padding: 0;
-  width: 100%;
-}
-
-.chat-welcome-empty .astro-empty-art {
-  width: 100%;
-  max-width: none;
-}
-
-.chat-welcome-illust svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--tone-blue, #2563eb) 18%, transparent));
-}
-
+/* 聊天空欢迎页内嵌插画（布局由 chat.css .chat-welcome-mark 控制） */
 .chat-agent-covers {
   margin-top: 4px;
   display: flex;

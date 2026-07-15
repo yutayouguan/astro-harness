@@ -64,20 +64,42 @@ const CARD_META: Record<
 
 export function ChatWelcome({ onPickCard }: Props) {
   const { t } = useI18n();
+  const brandLabel = `${t("chat.welcomeGreeting")} Astro`;
+
   return (
-    <div className="chat-empty chat-welcome" role="region" aria-label={t("chat.welcomeTitle")}>
+    <div className="chat-empty chat-welcome" role="region" aria-label={brandLabel}>
       <div className="chat-welcome-hero" aria-hidden>
         <span className="chat-welcome-orb" />
         <span className="chat-welcome-orb chat-welcome-orb--soft" />
-        <div className="chat-welcome-illust">
-          <EmptyIllustration scene="chat" size="lg" className="chat-welcome-empty" />
-        </div>
+        <span className="chat-welcome-orb chat-welcome-orb--spark" />
       </div>
+
       <div className="chat-welcome-copy">
-        <p className="chat-welcome-eyebrow">Astro Agent</p>
-        <h2 className="chat-welcome-title">{t("chat.welcomeTitle")}</h2>
+        <div className="chat-welcome-brand">
+          <div className="chat-welcome-mark">
+            <span className="chat-welcome-mark-glow" />
+            <span className="chat-welcome-mark-ring" />
+            <div className="chat-welcome-illust">
+              <EmptyIllustration
+                scene="chat"
+                size="lg"
+                className="chat-welcome-empty"
+              />
+            </div>
+          </div>
+          <p className="chat-welcome-wordmark">
+            <span className="chat-welcome-wordmark-astro">Astro</span>
+            <span className="chat-welcome-wordmark-agent">Agent</span>
+          </p>
+        </div>
+
+        <h2 className="chat-welcome-title">
+          <span className="chat-welcome-greeting">{t("chat.welcomeGreeting")}</span>{" "}
+          <span className="chat-welcome-title-brand">Astro</span>
+        </h2>
         <p className="chat-welcome-sub">{t("chat.welcomeSub")}</p>
       </div>
+
       <div className="chat-welcome-grid">
         {CARDS.map((id, index) => {
           const meta = CARD_META[id];

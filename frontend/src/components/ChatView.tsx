@@ -82,6 +82,7 @@ import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
 import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
 import { useMcpTools } from "../hooks/useMcpTools";
+import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import { formatElapsedSec } from "../lib/elapsedSec";
@@ -995,6 +996,37 @@ export default function ChatView({
     !interruptBlocked &&
     (input.trim().length > 0 || attachments.length > 0);
 
+  const welcomeHints = useMemo(
+    () => [
+      t("chat.welcomeHint.1"),
+      t("chat.welcomeHint.2"),
+      t("chat.welcomeHint.3"),
+      t("chat.welcomeHint.4"),
+      t("chat.welcomeHint.5"),
+    ],
+    [t],
+  );
+  const typingPlaceholderEnabled =
+    emptyMode === "chat" &&
+    !streaming &&
+    !interruptBlocked &&
+    input.length === 0 &&
+    attachments.length === 0;
+  const typedWelcomeHint = useTypingPlaceholder(
+    welcomeHints,
+    typingPlaceholderEnabled,
+  );
+
+  const composerPlaceholder = streaming
+    ? t("chat.placeholderStreaming")
+    : interruptBlocked
+      ? t("chat.interrupt.pending")
+      : emptyMode === "chat"
+        ? ""
+        : attachments.length
+          ? t("chat.placeholderWithAttach")
+          : t("chat.placeholder");
+
   return (
     <section
       className="chat-pane"
@@ -1362,49 +1394,54 @@ export default function ChatView({
             onChange={(e) => void onFileChange(e)}
             disabled={streaming || attachments.length >= MAX_ATTACHMENTS}
           />
-          <textarea
-            ref={textareaRef}
-            className="composer-input"
-            value={input}
-            rows={2}
-            onChange={(e) => {
-              const v = e.target.value;
-              onInputChange(v);
-              syncTriggerFromCaret(v, e.target.selectionStart ?? v.length);
-            }}
-            onSelect={(e) => {
-              const el = e.currentTarget;
-              syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
-            }}
-            onPaste={(e) => void onPaste(e)}
-            onClick={() => {
-              const el = textareaRef.current;
-              if (!el) return;
-              if (emptyMode === "agent") {
-                const caret = el.selectionStart ?? 0;
-                const slot = findSlotAt(input, caret);
-                if (slot) {
-                  el.setSelectionRange(slot.innerStart, slot.innerEnd);
-                  return;
+          <div className="composer-input-wrap">
+            {typingPlaceholderEnabled ? (
+              <div className="composer-typed-hint" aria-hidden>
+                <span className="composer-typed-text">
+                  {typedWelcomeHint || "\u00a0"}
+                </span>
+                <span className="composer-typed-caret" />
+              </div>
+            ) : null}
+            <textarea
+              ref={textareaRef}
+              className="composer-input"
+              value={input}
+              rows={2}
+              onChange={(e) => {
+                const v = e.target.value;
+                onInputChange(v);
+                syncTriggerFromCaret(v, e.target.selectionStart ?? v.length);
+              }}
+              onSelect={(e) => {
+                const el = e.currentTarget;
+                syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
+              }}
+              onPaste={(e) => void onPaste(e)}
+              onClick={() => {
+                const el = textareaRef.current;
+                if (!el) return;
+                if (emptyMode === "agent") {
+                  const caret = el.selectionStart ?? 0;
+                  const slot = findSlotAt(input, caret);
+                  if (slot) {
+                    el.setSelectionRange(slot.innerStart, slot.innerEnd);
+                    return;
+                  }
                 }
+                syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
+              }}
+              onKeyDown={onComposerKeyDown}
+              placeholder={composerPlaceholder}
+              aria-label={
+                emptyMode === "chat"
+                  ? t("chat.welcomePlaceholder")
+                  : composerPlaceholder || t("chat.placeholder")
               }
-              syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
-            }}
-            onKeyDown={onComposerKeyDown}
-            placeholder={
-              streaming
-                ? t("chat.placeholderStreaming")
-                : interruptBlocked
-                  ? t("chat.interrupt.pending")
-                  : emptyMode === "chat"
-                    ? t("chat.welcomePlaceholder")
-                    : attachments.length
-                      ? t("chat.placeholderWithAttach")
-                      : t("chat.placeholder")
-            }
-            disabled={streaming || interruptBlocked}
-            autoFocus
-          />
+              disabled={streaming || interruptBlocked}
+              autoFocus
+            />
+          </div>
           <div className="composer-bar">
             <div className="composer-bar-left">
               <div className="composer-mode" ref={modeMenuRef}>
