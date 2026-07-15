@@ -521,6 +521,7 @@ export default function ChatView({
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typedHintRef = useRef<HTMLSpanElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const contextWrapRef = useRef<HTMLDivElement>(null);
@@ -556,6 +557,24 @@ export default function ChatView({
   useEffect(() => {
     void loadMentionSources();
   }, [loadMentionSources]);
+
+  const welcomeHints = useMemo(
+    () => [
+      t("chat.welcomeHint.1"),
+      t("chat.welcomeHint.2"),
+      t("chat.welcomeHint.3"),
+      t("chat.welcomeHint.4"),
+      t("chat.welcomeHint.5"),
+    ],
+    [t],
+  );
+  const typingPlaceholderEnabled =
+    emptyMode === "chat" &&
+    !streaming &&
+    pendingInterrupts.length === 0 &&
+    input.length === 0 &&
+    attachments.length === 0;
+  useTypingPlaceholder(welcomeHints, typingPlaceholderEnabled, typedHintRef);
 
   useEffect(() => {
     if (!modeMenuOpen) return;
@@ -996,27 +1015,6 @@ export default function ChatView({
     !interruptBlocked &&
     (input.trim().length > 0 || attachments.length > 0);
 
-  const welcomeHints = useMemo(
-    () => [
-      t("chat.welcomeHint.1"),
-      t("chat.welcomeHint.2"),
-      t("chat.welcomeHint.3"),
-      t("chat.welcomeHint.4"),
-      t("chat.welcomeHint.5"),
-    ],
-    [t],
-  );
-  const typingPlaceholderEnabled =
-    emptyMode === "chat" &&
-    !streaming &&
-    !interruptBlocked &&
-    input.length === 0 &&
-    attachments.length === 0;
-  const typedWelcomeHint = useTypingPlaceholder(
-    welcomeHints,
-    typingPlaceholderEnabled,
-  );
-
   const composerPlaceholder = streaming
     ? t("chat.placeholderStreaming")
     : interruptBlocked
@@ -1395,14 +1393,14 @@ export default function ChatView({
             disabled={streaming || attachments.length >= MAX_ATTACHMENTS}
           />
           <div className="composer-input-wrap">
-            {typingPlaceholderEnabled ? (
-              <div className="composer-typed-hint" aria-hidden>
-                <span className="composer-typed-text">
-                  {typedWelcomeHint || "\u00a0"}
-                </span>
-                <span className="composer-typed-caret" />
-              </div>
-            ) : null}
+            <div
+              className="composer-typed-hint"
+              hidden={!typingPlaceholderEnabled}
+              aria-hidden
+            >
+              <span ref={typedHintRef} className="composer-typed-text" />
+              <span className="composer-typed-caret" />
+            </div>
             <textarea
               ref={textareaRef}
               className="composer-input"

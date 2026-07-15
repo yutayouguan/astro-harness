@@ -1,5 +1,5 @@
-/** 空会话输入框：循环打字 / 删除的建议话术。 */
-import { useEffect, useMemo, useState } from "react";
+/** 空会话输入框：循环打字 / 删除的建议话术（直接写 DOM，避免高频 setState）。 */
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 
 type Options = {
   /** 每个字符打出间隔 */
@@ -13,14 +13,15 @@ type Options = {
 };
 
 /**
- * `enabled` 为 false 时返回空串（由调用方改用静态 placeholder）。
- * 尊重 `prefers-reduced-motion`：减少动效时整句轮播、不逐字打字。
+ * 将打字文案写入 `textRef` 指向的节点。
+ * `enabled` 为 false 时清空；尊重 `prefers-reduced-motion`。
  */
 export function useTypingPlaceholder(
   phrases: string[],
   enabled: boolean,
+  textRef: RefObject<HTMLElement | null>,
   opts: Options = {},
-): string {
+): void {
   const typeMs = opts.typeMs ?? 46;
   const deleteMs = opts.deleteMs ?? 28;
   const holdMs = opts.holdMs ?? 1800;
@@ -29,18 +30,25 @@ export function useTypingPlaceholder(
     () => phrases.map((p) => p.trim()).filter(Boolean).join("\0"),
     [phrases],
   );
-
-  const [text, setText] = useState("");
+  const optsRef = useRef({ typeMs, deleteMs, holdMs, gapMs });
+  optsRef.current = { typeMs, deleteMs, holdMs, gapMs };
 
   useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+
+    const write = (value: string) => {
+      if (textRef.current) textRef.current.textContent = value;
+    };
+
     if (!enabled) {
-      setText("");
+      write("");
       return;
     }
 
     const clean = phraseKey ? phraseKey.split("\0") : [];
     if (!clean.length) {
-      setText("");
+      write("");
       return;
     }
 
@@ -55,6 +63,7 @@ export function useTypingPlaceholder(
     let cursor = 0;
 
     const schedule = (fn: () => void, ms: number) => {
+      window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         if (!cancelled) fn();
       }, ms);
@@ -62,43 +71,45 @@ export function useTypingPlaceholder(
 
     const tick = () => {
       if (cancelled) return;
+      const { typeMs: tMs, deleteMs: dMs, holdMs: hMs, gapMs: gMs } =
+        optsRef.current;
       const full = clean[index] ?? clean[0];
 
       if (reduceMotion) {
-        setText(full);
+        write(full);
         schedule(() => {
           index = (index + 1) % clean.length;
           tick();
-        }, holdMs + gapMs);
+        }, hMs + gMs);
         return;
       }
 
       if (phase === "type") {
         cursor = Math.min(full.length, cursor + 1);
-        setText(full.slice(0, cursor));
+        write(full.slice(0, cursor));
         if (cursor >= full.length) {
           phase = "hold";
-          schedule(tick, holdMs);
+          schedule(tick, hMs);
         } else {
-          schedule(tick, typeMs);
+          schedule(tick, tMs);
         }
         return;
       }
 
       if (phase === "hold") {
         phase = "delete";
-        schedule(tick, deleteMs);
+        schedule(tick, dMs);
         return;
       }
 
       if (phase === "delete") {
         cursor = Math.max(0, cursor - 1);
-        setText(full.slice(0, cursor));
+        write(full.slice(0, cursor));
         if (cursor <= 0) {
           phase = "gap";
-          schedule(tick, gapMs);
+          schedule(tick, gMs);
         } else {
-          schedule(tick, deleteMs);
+          schedule(tick, dMs);
         }
         return;
       }
@@ -106,7 +117,7 @@ export function useTypingPlaceholder(
       index = (index + 1) % clean.length;
       phase = "type";
       cursor = 0;
-      schedule(tick, typeMs);
+      schedule(tick, tMs);
     };
 
     tick();
@@ -115,7 +126,5 @@ export function useTypingPlaceholder(
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [enabled, phraseKey, typeMs, deleteMs, holdMs, gapMs]);
-
-  return text;
+  }, [enabled, phraseKey, textRef]);
 }

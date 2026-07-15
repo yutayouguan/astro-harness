@@ -1977,6 +1977,10 @@ html[data-theme="dark"] .msg-md-codeblock {
   z-index: 0;
 }
 
+.composer-typed-hint[hidden] {
+  display: none;
+}
+
 .composer-typed-text {
   white-space: pre-wrap;
   word-break: break-word;
