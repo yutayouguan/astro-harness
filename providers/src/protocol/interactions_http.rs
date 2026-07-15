@@ -734,6 +734,9 @@ pub fn parse_interaction_audio_text(v: &Value) -> Result<String> {
     let mut out = String::new();
     if let Some(steps) = v.get("steps").and_then(|s| s.as_array()) {
         for step in steps {
+            if step.get("type").and_then(|t| t.as_str()) != Some("model_output") {
+                continue;
+            }
             if let Some(content) = step.get("content").and_then(|c| c.as_array()) {
                 for part in content {
                     if part.get("type").and_then(|t| t.as_str()) == Some("text") {
@@ -1070,6 +1073,23 @@ mod audio_understand_tests {
             }]
         });
         assert_eq!(parse_interaction_audio_text(&v).unwrap(), "hello audio");
+    }
+
+    #[test]
+    fn parse_ignores_thought_steps() {
+        let v = json!({
+            "steps": [
+                {
+                    "type": "thought",
+                    "content": [{ "type": "text", "text": "internal reasoning" }]
+                },
+                {
+                    "type": "model_output",
+                    "content": [{ "type": "text", "text": "final answer" }]
+                }
+            ]
+        });
+        assert_eq!(parse_interaction_audio_text(&v).unwrap(), "final answer");
     }
 
     #[test]
