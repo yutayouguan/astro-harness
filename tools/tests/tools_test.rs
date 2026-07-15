@@ -19,6 +19,7 @@ async fn register_all_includes_panel_tools() {
         "cron_add",
         "image_gen",
         "video_gen",
+        "video_understand",
         "file_ops",
         "terminal",
         "web_search",

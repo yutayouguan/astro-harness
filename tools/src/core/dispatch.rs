@@ -50,6 +50,7 @@ pub async fn dispatch_tool(
         }
         "image_gen" => crate::image_gen::dispatch(ctx, args).await,
         "video_gen" => crate::video_gen::dispatch(ctx, args).await,
+        "video_understand" => crate::video_understand::dispatch(ctx, args).await,
         "file_ops" => crate::file_ops::dispatch(ctx, args),
         "terminal" => crate::terminal::dispatch(ctx, args).await,
         "web_search" => crate::web_search::dispatch(ctx, args).await,
