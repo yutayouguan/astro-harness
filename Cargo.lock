@@ -2358,12 +2358,14 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "session",
  "skills",
  "tempfile",
  "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "usage",
  "uuid",
 ]
 
@@ -3935,6 +3937,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "session"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5248,6 +5262,23 @@ dependencies = [
  "serde",
  "unic-ucd-ident",
  "url",
+]
+
+[[package]]
+name = "usage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "home",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "session",
+ "tempfile",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

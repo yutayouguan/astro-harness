@@ -1,5 +1,6 @@
-//! 会话持久化、消息库与 MemoryManager。
+//! 会话：MemoryManager（仍属 memory）+ SessionStore（实现在 `session` crate）。
 
 pub mod manager;
-pub mod message_db;
-pub mod store;
+
+pub use ::session::message_db;
+pub use ::session::store;

@@ -8,6 +8,8 @@ anyhow          = { workspace = true }
 common          = { path = "../common" }
 skills          = { path = "../skills" }
 home            = { path = "../home" }
+session         = { path = "../session" }
+usage           = { path = "../usage" }
 tokio = { workspace = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }

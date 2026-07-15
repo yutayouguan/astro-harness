@@ -1,8 +1,8 @@
-//! Astro 记忆子系统：Agent 工作区、会话持久化、工具开关与用量统计的统一入口。
+//! Astro 记忆子系统 facade：精炼记忆、会话（via `session`）、用量（via `usage`）等入口。
 //!
-//! 本 crate 将 Markdown 记忆文件（`MEMORY.md`、`USER.md`、每日记忆）、SQLite 消息/会话库、
-//! 工具启用配置、调用计数、定时任务与图标资源等能力聚合为可被 agent 与前端调用的 API。
-//! 数据根目录默认为 `~/.astro`（可通过环境变量覆盖，见 `workspace` 模块）。
+//! 精炼记忆为 Markdown（`MEMORY.md` / `USER.md`）；会话/用量在独立 crate，
+//! 本包继续 `pub use` 以保持 `memory::SessionStore` / `memory::UsageDb` 等调用方不变。
+//! 数据根目录默认为 `~/.astro`（可通过 `ASTRO_MEMORY_DIR` 覆盖）。
 
 pub mod agent;
 pub mod artifacts;
@@ -14,7 +14,6 @@ pub mod orchestration;
 pub mod pending;
 pub mod review;
 pub mod session;
-pub mod usage;
 pub mod delegate_async;
 pub mod delegate_spawn;
 pub mod git_worktree;
@@ -51,10 +50,10 @@ pub use session::store as session_store;
 
 pub use cron::run_db as cron_run_db;
 
-pub use usage::db as usage_db;
-pub use usage::pricing as usage_pricing;
-pub use usage::stats as usage_stats;
-pub use usage::trace_insights;
+pub use ::usage::db as usage_db;
+pub use ::usage::pricing as usage_pricing;
+pub use ::usage::stats as usage_stats;
+pub use ::usage::trace_insights;
 
 pub use orchestration::collab_insights;
 pub use orchestration::db as orchestration_db;

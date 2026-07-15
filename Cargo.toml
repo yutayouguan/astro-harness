@@ -3,6 +3,8 @@ members = [
     "proto",
     "common",
     "home",
+    "session",
+    "usage",
     "backend",
     "agent",
     "providers",
