@@ -322,7 +322,11 @@ export function SkillFileViewer({
         {showPreview ? (
           <div className="skills-file-viewer-md">
             {split?.frontmatter ? (
-              <SkillFrontmatterCard meta={split.frontmatter} />
+              <SkillFrontmatterCard
+                meta={split.frontmatter}
+                knownName={skillName}
+                knownDescription={skillDescription}
+              />
             ) : null}
             {split?.body.trim() ? (
               <ChatMarkdown content={split.body} />
