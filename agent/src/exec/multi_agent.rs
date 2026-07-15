@@ -1,11 +1,11 @@
-//! 多子 Agent 并行编排：转调 [`crate::delegate_exec`]。
+//! 多子 Agent 并行编排：转调 [`crate::exec::delegate`]。
 //!
 //! 工具层 `multi_agent` 已改为串行 orchestration；本模块 API 供程序化并行派发。
 
-use delegate::DelegateRunRequest;
+use ::delegate::spawn::DelegateRunRequest;
 use tokio::task::JoinSet;
 
-use crate::delegate_exec;
+use crate::exec::delegate as delegate_exec;
 
 /// 编排器全局约束：并发子 Agent 数量与单任务最大轮次。
 pub struct OrchestratorConfig {

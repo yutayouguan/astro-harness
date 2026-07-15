@@ -9,22 +9,14 @@ pub mod builder;
 pub mod chat_fallback;
 /// 控制型运行时能力（HITL / interrupt / schema 校验）。
 pub mod control;
-/// 定时任务执行逻辑。
-pub mod cron_exec;
+/// 执行域聚合模块。
+pub mod exec;
 /// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。
 pub mod event_bus;
 /// Hermes 风格迭代预算（consume / refund）。
 pub mod iteration_budget;
 /// 多轮对话主循环：工具调用、深度限制与回合结果。
 pub mod loop_;
-/// 程序化并行子任务调度（转调 delegate_exec）。
-pub mod multi_agent;
-/// 多 Agent 串行编排执行器（orchestration.db + spawn hook）。
-pub mod orchestration;
-/// 同步真委派执行器（delegate_task 对齐）。
-pub mod delegate_exec;
-/// 回合后记忆 background review 调度。
-pub mod memory_review_spawn;
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
 pub mod prompt;
 /// 流式补全与多轮流式迭代抽象。
@@ -57,7 +49,7 @@ pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, Resume
 /// 对话循环核心类型 re-export。
 pub use loop_::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
 /// 回合后记忆 review。
-pub use memory_review_spawn::{
+pub use exec::memory_review::{
     job_from_agent, maybe_run_background_review, review_notify_from_applied,
     spawn_background_review_after_turn, BackgroundReviewJob, MemoryReviewNotify,
 };
@@ -81,5 +73,9 @@ pub use streaming::{
 pub use tools::{ToolEntry, ToolRegistry};
 /// 临时保留旧模块名，确保外部旧路径仍可编译；Task 5 再收紧。
 pub use control::{hitl, interrupt, schema_validate, smart_approval};
-/// 临时保留旧提示词模块名，确保外部旧路径仍可编译；Task 5 再收紧。
-pub use prompt::{context, context_usage, hooks, messages, prompt_builder};
+/// 执行域的过渡根别名；Task 5 再收紧。
+pub use exec::cron as cron_exec;
+pub use exec::delegate as delegate_exec;
+pub use exec::orchestration;
+pub use exec::multi_agent;
+

@@ -1,6 +1,6 @@
 //! 多代理编排（`Orchestrator`）并行分发测试。
 
-use agent::multi_agent::*;
+use agent::exec::multi_agent::*;
 
 #[tokio::test]
 async fn test_orchestrator_dispatches_sub_agents() {
