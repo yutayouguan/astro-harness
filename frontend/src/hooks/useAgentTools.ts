@@ -318,6 +318,13 @@ type CatalogParamDto = {
   description?: string | null;
 };
 
+type CatalogFnDto = {
+  name: string;
+  description: string;
+  icon: string;
+  params: CatalogParamDto[];
+};
+
 type CatalogItemDto = {
   id: string;
   name: string;
@@ -326,6 +333,7 @@ type CatalogItemDto = {
   icon: string;
   params: CatalogParamDto[];
   tools: string[];
+  functions?: CatalogFnDto[];
 };
 
 const isTauri = () =>
@@ -351,20 +359,45 @@ function mergeEnabled(
   return base;
 }
 
+function mapCatalogParam(p: CatalogParamDto): ToolParam {
+  return {
+    name: p.name,
+    type: p.type,
+    optional: p.optional,
+    description: p.description ?? undefined,
+  };
+}
+
 function mergeCatalog(catalog: CatalogItemDto[]): AgentToolDef[] {
   const byId = new Map(catalog.map((c) => [c.id, c]));
   return AGENT_TOOLS.map((tool) => {
     const item = byId.get(tool.id);
     if (!item) return tool;
+
+    const params = item.params.map(mapCatalogParam);
+    const functions: AgentToolFnDef[] =
+      item.functions && item.functions.length > 0
+        ? item.functions.map((fn) => ({
+            name: fn.name,
+            description: fn.description || undefined,
+            emoji: fn.icon || undefined,
+            params: fn.params.map(mapCatalogParam),
+          }))
+        : (item.tools ?? []).map((name) => ({
+            name,
+            description:
+              name === item.name ? item.description || undefined : undefined,
+            emoji: item.icon || undefined,
+            params: name === item.name ? params : undefined,
+          }));
+
     return {
       ...tool,
-      params: item.params.map((p) => ({
-        name: p.name,
-        type: p.type,
-        optional: p.optional,
-        description: p.description ?? undefined,
-      })),
-      tools: item.tools,
+      params,
+      tools: item.tools.length > 0 ? item.tools : functions.map((f) => f.name),
+      emoji: item.icon || tool.emoji,
+      apiDescription: item.description || tool.apiDescription,
+      functions: functions.length > 0 ? functions : tool.functions,
     };
   });
 }

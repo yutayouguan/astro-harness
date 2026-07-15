@@ -92,9 +92,27 @@ pub fn params_from_schema(schema: &Value) -> Vec<ToolParamInfo> {
 
 /// 从单个 schema 属性节点推断类型字符串。
 ///
-/// 支持 `type` 字符串/数组（忽略 `"null"`）、`anyOf`/`oneOf`、`enum`、`$ref` 等常见形态。
+/// 支持 `type` 字符串/数组（忽略 `"null"`）、`anyOf`/`oneOf`、`enum`、`$ref`、
+/// `array` 的 `items` 等常见形态；尽量给出可读的短标签供 UI 展示。
 fn json_schema_type(prop: &Value) -> String {
-    match prop.get("type") {
+    if let Some(enums) = prop.get("enum").and_then(|e| e.as_array()) {
+        let vals: Vec<String> = enums
+            .iter()
+            .filter_map(|v| match v {
+                Value::String(s) => Some(s.clone()),
+                Value::Number(n) => Some(n.to_string()),
+                Value::Bool(b) => Some(b.to_string()),
+                _ => None,
+            })
+            .take(6)
+            .collect();
+        if !vals.is_empty() {
+            let more = if enums.len() > vals.len() { ",…" } else { "" };
+            return format!("enum({})", vals.join("|") + more);
+        }
+    }
+
+    let base = match prop.get("type") {
         Some(Value::String(t)) => t.clone(),
         Some(Value::Array(arr)) => arr
             .iter()
@@ -105,15 +123,24 @@ fn json_schema_type(prop: &Value) -> String {
         _ => {
             if prop.get("anyOf").is_some() || prop.get("oneOf").is_some() {
                 "any".to_string()
-            } else if prop.get("enum").is_some() {
-                "string".to_string()
             } else if prop.get("$ref").is_some() {
                 "object".to_string()
             } else {
                 "any".to_string()
             }
         }
+    };
+
+    if base == "array" {
+        if let Some(items) = prop.get("items") {
+            let inner = json_schema_type(items);
+            if inner != "any" {
+                return format!("array<{inner}>");
+            }
+        }
     }
+
+    base
 }
 
 /// 将同一 toolset 下的多个 [`ToolEntry`] 聚合为一个 [`ToolCatalogItem`]。
@@ -206,6 +233,38 @@ mod tests {
         assert_eq!(params[0].name, "query");
         assert!(!params[0].optional);
         assert!(params.iter().any(|p| p.name == "limit" && p.optional));
+    }
+
+    #[test]
+    fn type_labels_enum_and_array_items() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "mode": { "enum": ["a", "b", "c"] },
+                "tags": { "type": "array", "items": { "type": "string" } }
+            }
+        });
+        let params = params_from_schema(&schema);
+        let mode = params.iter().find(|p| p.name == "mode").unwrap();
+        let tags = params.iter().find(|p| p.name == "tags").unwrap();
+        assert!(mode.type_name.starts_with("enum("), "{}", mode.type_name);
+        assert_eq!(tags.type_name, "array<string>");
+    }
+
+    #[test]
+    fn extracts_enum_and_array_item_types() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "mode": { "enum": ["a", "b", "c"] },
+                "tags": { "type": "array", "items": { "type": "string" } }
+            }
+        });
+        let params = params_from_schema(&schema);
+        let mode = params.iter().find(|p| p.name == "mode").unwrap();
+        assert!(mode.type_name.starts_with("enum("), "{}", mode.type_name);
+        let tags = params.iter().find(|p| p.name == "tags").unwrap();
+        assert_eq!(tags.type_name, "array<string>");
     }
 
     #[test]

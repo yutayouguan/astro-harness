@@ -904,6 +904,24 @@ export default function ToolsPanel({
                           <h3 className="tools-detail-title">
                             {t(selectedTool.titleKey)}
                           </h3>
+                          <div className="tools-detail-ids">
+                            <span className="tools-detail-id-chip" title={t("tools.detail.toolset")}>
+                              <span className="tools-detail-id-label">
+                                {t("tools.detail.toolset")}
+                              </span>
+                              <code>{selectedTool.id}</code>
+                            </span>
+                            <span className="tools-detail-id-chip" title={t("tools.detail.apiName")}>
+                              <span className="tools-detail-id-label">
+                                {t("tools.detail.apiName")}
+                              </span>
+                              <code>
+                                {activeFn?.name ??
+                                  selectedTool.tools?.[0] ??
+                                  selectedTool.id}
+                              </code>
+                            </span>
+                          </div>
                           <button
                             type="button"
                             role="switch"
@@ -929,16 +947,28 @@ export default function ToolsPanel({
                       </h4>
                       <p className="tools-detail-body">{t(selectedTool.descKey)}</p>
                       {detailApiDesc ? (
-                        <p className="tools-detail-api-desc">{detailApiDesc}</p>
+                        <div className="tools-detail-api-block">
+                          <span className="tools-detail-api-label">
+                            {t("tools.detail.apiSchema")}
+                          </span>
+                          <p className="tools-detail-api-desc">{detailApiDesc}</p>
+                        </div>
                       ) : null}
                     </section>
-                    {selectedTool.functions && selectedTool.functions.length > 0 && (
+                    {(selectedTool.functions?.length ?? 0) > 0 && (
                       <section className="tools-detail-section">
                         <h4 className="tools-detail-label">
                           {t("tools.detail.functions")}
+                          <span className="tools-detail-label-hint">
+                            {" "}
+                            ·{" "}
+                            {t("tools.detail.fnCount", {
+                              n: String(selectedTool.functions!.length),
+                            })}
+                          </span>
                         </h4>
                         <div className="tools-fn-chips" role="tablist">
-                          {selectedTool.functions.map((fn) => (
+                          {selectedTool.functions!.map((fn) => (
                             <button
                               key={fn.name}
                               type="button"
@@ -948,6 +978,7 @@ export default function ToolsPanel({
                                 activeFn?.name === fn.name ? "is-active" : ""
                               }`}
                               onClick={() => setSelectedFnName(fn.name)}
+                              title={fn.description || fn.name}
                             >
                               <span className="tool-lucide-inline" aria-hidden>
                                 <LucideByName
@@ -960,20 +991,25 @@ export default function ToolsPanel({
                             </button>
                           ))}
                         </div>
+                        {activeFn?.description ? (
+                          <p className="tools-detail-fn-desc">
+                            {activeFn.description}
+                          </p>
+                        ) : null}
                       </section>
                     )}
-                    {detailParams.length > 0 && (
-                      <section className="tools-detail-section">
-                        <h4 className="tools-detail-label">
-                          <Braces size={15} strokeWidth={2.25} aria-hidden />
-                          {t("tools.detail.params")}
-                          {activeFn ? (
-                            <span className="tools-detail-label-hint">
-                              {" "}
-                              · {activeFn.name}
-                            </span>
-                          ) : null}
-                        </h4>
+                    <section className="tools-detail-section">
+                      <h4 className="tools-detail-label">
+                        <Braces size={15} strokeWidth={2.25} aria-hidden />
+                        {t("tools.detail.params")}
+                        {activeFn ? (
+                          <span className="tools-detail-label-hint">
+                            {" "}
+                            · <code>{activeFn.name}</code>
+                          </span>
+                        ) : null}
+                      </h4>
+                      {detailParams.length > 0 ? (
                         <ul className="agent-tool-params-list is-detail">
                           {detailParams.map((param) => (
                             <li key={param.name} className="agent-tool-param is-detail">
@@ -984,7 +1020,13 @@ export default function ToolsPanel({
                                 <span className="agent-tool-param-type">
                                   <ParamTypeGlyph type={param.type} />
                                   {param.type}
-                                  {param.optional ? "?" : ""}
+                                </span>
+                                <span
+                                  className={`agent-tool-param-req ${param.optional ? "is-optional" : "is-required"}`}
+                                >
+                                  {param.optional
+                                    ? t("tools.detail.optional")
+                                    : t("tools.detail.required")}
                                 </span>
                               </div>
                               {param.description ? (
@@ -995,8 +1037,12 @@ export default function ToolsPanel({
                             </li>
                           ))}
                         </ul>
-                      </section>
-                    )}
+                      ) : (
+                        <p className="tools-detail-empty-params">
+                          {t("tools.detail.noParams")}
+                        </p>
+                      )}
+                    </section>
                   </>
                 ) : (
                   <p className="agent-tools-empty">{t("tools.detail.selectHint")}</p>

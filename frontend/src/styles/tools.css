@@ -1584,6 +1584,96 @@ html[data-theme="dark"] .mcp-type-menu {
     border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
+.tools-detail-ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.tools-detail-id-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 55%, transparent);
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+
+.tools-detail-id-label {
+  font-weight: 650;
+  color: color-mix(in srgb, var(--tone) 70%, var(--ink-mute));
+}
+
+.tools-detail-id-chip code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--tone);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tools-detail-api-block {
+  margin-top: 10px;
+}
+
+.tools-detail-api-label {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tone) 65%, var(--ink-mute));
+}
+
+.tools-detail-api-block .tools-detail-api-desc {
+  margin: 0;
+}
+
+.tools-detail-fn-desc {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.tools-detail-empty-params {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-mute);
+}
+
+.agent-tool-param-req {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.agent-tool-param-req.is-required {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.agent-tool-param-req.is-optional {
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.tools-detail-label-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--tone);
+}
+
 .tools-detail-label-hint {
   font-weight: 500;
   text-transform: none;
