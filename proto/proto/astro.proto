@@ -73,6 +73,14 @@ message ChatRequest {
   string image_gen_fallback_tts_model = 23;
   string image_gen_vision_model = 24;
   string image_gen_fallback_vision_model = 25;
+  // 本轮用户图片附件（mime + raw base64；由 Tauri 内联，不经 extra_body）
+  repeated ChatImageAttachment images = 26;
+}
+
+// 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。
+message ChatImageAttachment {
+  string mime = 1;
+  string data_base64 = 2;
 }
 
 // Chat 流控制动作。

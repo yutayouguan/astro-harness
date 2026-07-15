@@ -159,13 +159,23 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
-/// 把用户文本与附件拼成发给模型的 content 结构。
-fn build_chat_content(content: &str, attachments: &[ChatAttachmentDto]) -> String {
+/// 用户文本 + 非图附件拼成 content；图片单独走 `images`（多模态 parts）。
+struct BuiltChatPayload {
+    content: String,
+    images: Vec<proto::ChatImageAttachment>,
+}
+
+/// 把用户文本与附件拆成文本 content 与图片附件列表。
+fn build_chat_payload(content: &str, attachments: &[ChatAttachmentDto]) -> BuiltChatPayload {
     if attachments.is_empty() {
-        return content.to_string();
+        return BuiltChatPayload {
+            content: content.to_string(),
+            images: vec![],
+        };
     }
 
     let mut out = String::new();
+    let mut images = Vec::new();
     if !content.trim().is_empty() {
         out.push_str(content.trim());
         out.push_str("\n\n");
@@ -185,12 +195,18 @@ fn build_chat_content(content: &str, attachments: &[ChatAttachmentDto]) -> Strin
 
         if let Some(data) = att.data_base64.as_ref().filter(|s| !s.is_empty()) {
             if att.kind == "image" {
-                // 控制提示词体积：过大图片只保留元数据说明
+                // 控制体积：过大图片只保留元数据，不进 multimodal parts
                 if data.len() <= 600_000 {
-                    out.push_str(&format!(
-                        "   data_url: data:{};base64,{}\n",
-                        att.mime, data
-                    ));
+                    let mime = if att.mime.trim().is_empty() {
+                        "image/png".to_string()
+                    } else {
+                        att.mime.clone()
+                    };
+                    images.push(proto::ChatImageAttachment {
+                        mime,
+                        data_base64: data.clone(),
+                    });
+                    out.push_str("   (图片已作为多模态附件发送)\n");
                 } else {
                     out.push_str("   (图片已附带，体积较大，仅提供元数据；请结合文件名理解)\n");
                 }
@@ -206,14 +222,14 @@ fn build_chat_content(content: &str, attachments: &[ChatAttachmentDto]) -> Strin
                 || att.name.ends_with(".py")
             {
                 if let Some(text) = decode_base64_approx(data) {
-                        let clipped: String = text.chars().take(8000).collect();
-                        out.push_str("   --- file content ---\n");
-                        out.push_str(&clipped);
-                        if text.chars().count() > 8000 {
-                            out.push_str("\n   ...[truncated]");
-                        }
-                        out.push('\n');
+                    let clipped: String = text.chars().take(8000).collect();
+                    out.push_str("   --- file content ---\n");
+                    out.push_str(&clipped);
+                    if text.chars().count() > 8000 {
+                        out.push_str("\n   ...[truncated]");
                     }
+                    out.push('\n');
+                }
             } else {
                 out.push_str(&format!(
                     "   (已附带二进制数据 {} bytes base64)\n",
@@ -225,7 +241,10 @@ fn build_chat_content(content: &str, attachments: &[ChatAttachmentDto]) -> Strin
         }
     }
 
-    out
+    BuiltChatPayload {
+        content: out,
+        images,
+    }
 }
 
 /// 粗略估算 / 解码 Base64 附件体积，用于上限检查。
@@ -520,7 +539,10 @@ pub async fn start_chat(
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
     let attachments = attachments.unwrap_or_default();
-    let merged = build_chat_content(&content, &attachments);
+    let BuiltChatPayload {
+        content: merged,
+        images,
+    } = build_chat_payload(&content, &attachments);
     let resume_json = resume_json.unwrap_or_default();
     let grpc_address = default_grpc_address();
     let event_name = format!("chat-stream-{sid}");
@@ -595,6 +617,7 @@ pub async fn start_chat(
             &grpc_address,
             &sid2,
             &merged,
+            &images,
             &primary.backend_id,
             &primary.model,
             use_memory,
@@ -718,6 +741,7 @@ async fn run_chat_stream(
     grpc_address: &str,
     session_id: &str,
     content: &str,
+    images: &[proto::ChatImageAttachment],
     provider: &str,
     model: &str,
     use_memory: bool,
@@ -772,6 +796,7 @@ async fn run_chat_stream(
             reasoning_effort: reasoning_effort.to_string(),
             resume_json: resume_json.to_string(),
             chat_fallbacks: chat_fallbacks.to_vec(),
+            images: images.to_vec(),
         })
         .await
         .map_err(|e| e.to_string())?

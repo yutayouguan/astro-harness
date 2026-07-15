@@ -875,6 +875,18 @@ impl AgentLoop {
         user_message: &str,
         _task_id: &str,
     ) -> anyhow::Result<TurnResult> {
+        self.run_turn_with_images(user_message, &[], _task_id).await
+    }
+
+    /// 同 [`Self::run_turn`]，附带本轮图片 data URL（`data:image/...;base64,...`）。
+    ///
+    /// FTS / `record_message` 仍只记文本；图片只进内存 `session_messages` 的 Parts。
+    pub async fn run_turn_with_images(
+        &mut self,
+        user_message: &str,
+        image_data_urls: &[String],
+        _task_id: &str,
+    ) -> anyhow::Result<TurnResult> {
         if self.cancel.is_cancelled() {
             return Ok(TurnResult::Interrupted);
         }
@@ -901,7 +913,8 @@ impl AgentLoop {
         )?;
         self.last_recalled_context = format_recalled_context(&recalled);
 
-        self.session_messages.push(Message::user(user_message));
+        self.session_messages
+            .push(Message::user_with_images(user_message, image_data_urls));
         self.increment_turn();
         let system_prompt = self.build_system_prompt();
         let _ = self.fire_hook(

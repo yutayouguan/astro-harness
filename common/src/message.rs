@@ -33,24 +33,54 @@ pub struct Message {
     pub tool_call_id: Option<String>,
 }
 
-/// 消息正文：单段文本，或分段（预留多模态）。
+/// 消息正文：单段文本，或分段（多模态 text + image_url）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MessageContent {
     /// 纯文本。
     Text(String),
-    /// 多段内容（取首段文本用于 `content_str`）。
+    /// 多段内容（text / image_url）。
     Parts(Vec<ContentPart>),
 }
 
-/// 多段正文中的一段。
+/// 多段正文中的一段（对齐 OpenAI 兼容 vision：`type` + `text` 或 `image_url.url`）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentPart {
-    /// 段类型（如 `text`）。
+    /// 段类型：`text` / `image_url`。
     #[serde(rename = "type")]
     pub kind: String,
-    /// 文本载荷。
+    /// 文本载荷（`type=text`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// 图片 URL 或 `data:image/...;base64,...`（`type=image_url`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<ContentImageUrl>,
+}
+
+/// `image_url` 载荷。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentImageUrl {
+    pub url: String,
+}
+
+impl ContentPart {
+    /// 文本段。
+    pub fn text(s: impl Into<String>) -> Self {
+        Self {
+            kind: "text".into(),
+            text: Some(s.into()),
+            image_url: None,
+        }
+    }
+
+    /// 图片段（data URL 或 http(s)）。
+    pub fn image_url(url: impl Into<String>) -> Self {
+        Self {
+            kind: "image_url".into(),
+            text: None,
+            image_url: Some(ContentImageUrl { url: url.into() }),
+        }
+    }
 }
 
 impl Message {
@@ -114,14 +144,57 @@ impl Message {
         }
     }
 
-    /// 取可读文本：`Text` 全文，或 `Parts` 首段文本；否则空串。
+    /// 构造带图片 parts 的用户消息（OpenAI 兼容多模态）。
+    pub fn user_with_images(text: &str, image_data_urls: &[String]) -> Self {
+        if image_data_urls.is_empty() {
+            return Self::user(text);
+        }
+        let mut parts = Vec::new();
+        let t = text.trim();
+        if !t.is_empty() {
+            parts.push(ContentPart::text(t));
+        }
+        for url in image_data_urls {
+            let u = url.trim();
+            if !u.is_empty() {
+                parts.push(ContentPart::image_url(u));
+            }
+        }
+        if parts.is_empty() {
+            return Self::user(text);
+        }
+        // 若无文本仅有图，补一句默认提示，避免部分模型拒空 text
+        if parts.iter().all(|p| p.kind != "text") {
+            parts.insert(0, ContentPart::text("请结合附图回答。"));
+        }
+        Message {
+            role: Role::User,
+            content: MessageContent::Parts(parts),
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// 取可读文本：`Text` 全文；`Parts` 取首个 text 段（兼容旧调用）。
     pub fn content_str(&self) -> &str {
         match &self.content {
             MessageContent::Text(s) => s,
             MessageContent::Parts(parts) => parts
-                .first()
-                .and_then(|p| p.text.as_deref())
+                .iter()
+                .find_map(|p| p.text.as_deref())
                 .unwrap_or(""),
+        }
+    }
+
+    /// 拼接 Parts 中全部文本段（FTS / 记录用）。
+    pub fn content_text(&self) -> String {
+        match &self.content {
+            MessageContent::Text(s) => s.clone(),
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|p| p.text.as_deref())
+                .collect::<Vec<_>>()
+                .join("\n"),
         }
     }
 }

@@ -3,8 +3,10 @@
 //! 将应用内 `common::message::Message` 序列转为各 LLM Provider 统一的 `ChatMessage` 格式，
 //! 并补齐 system 前缀与 tool 角色的 `name` 回溯（Provider 要求 tool 消息关联原调用名）。
 
-use common::message::{Message, Role};
-use providers::trait_::{ChatMessage as ProviderMessage, ChatToolCall};
+use common::message::{Message, MessageContent, Role};
+use providers::trait_::{
+    ChatContentPart, ChatMessage as ProviderMessage, ChatToolCall,
+};
 
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
@@ -56,9 +58,33 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
         } else {
             None
         };
+        let (content, parts) = match &message.content {
+            MessageContent::Text(s) => (s.clone(), None),
+            MessageContent::Parts(ps) => {
+                let text = message.content_text();
+                let parts: Vec<ChatContentPart> = ps
+                    .iter()
+                    .filter_map(|p| {
+                        if p.kind == "text" {
+                            Some(ChatContentPart::Text {
+                                text: p.text.clone().unwrap_or_default(),
+                            })
+                        } else if p.kind == "image_url" {
+                            p.image_url.as_ref().map(|u| ChatContentPart::ImageUrl {
+                                url: u.url.clone(),
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                (text, Some(parts).filter(|v| !v.is_empty()))
+            }
+        };
         messages.push(ProviderMessage {
             role: role.to_string(),
-            content: message.content_str().to_string(),
+            content,
+            parts,
             tool_calls,
             tool_call_id: message.tool_call_id.clone(),
             name: tool_name,
@@ -73,6 +99,27 @@ mod tests {
     use super::*;
     use common::message::ToolCall;
     use serde_json::json;
+
+    #[test]
+    fn multimodal_parts_map_to_provider_parts() {
+        let session = vec![Message::user_with_images(
+            "描述",
+            &["data:image/png;base64,xx".into()],
+        )];
+        let msgs = to_provider_messages("sys", &session);
+        assert_eq!(msgs.len(), 2);
+        let user = &msgs[1];
+        assert_eq!(user.role, "user");
+        let parts = user.parts.as_ref().expect("parts");
+        assert!(matches!(
+            &parts[0],
+            ChatContentPart::Text { text } if text == "描述"
+        ));
+        assert!(matches!(
+            &parts[1],
+            ChatContentPart::ImageUrl { url } if url.starts_with("data:image/png")
+        ));
+    }
 
     #[test]
     fn tool_without_id_is_skipped() {

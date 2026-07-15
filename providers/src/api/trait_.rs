@@ -23,8 +23,10 @@ pub struct ChatToolCall {
 pub struct ChatMessage {
     /// 角色：`system` / `user` / `assistant` / `tool`。
     pub role: String,
-    /// 文本内容；纯 tool_calls 时可为空。
+    /// 文本内容；纯 tool_calls 时可为空；有 `parts` 时作摘要。
     pub content: String,
+    /// 多模态 parts（OpenAI 兼容 text + image_url）；`None` 则 content 为纯字符串。
+    pub parts: Option<Vec<ChatContentPart>>,
     /// assistant 消息附带的工具调用列表。
     pub tool_calls: Option<Vec<ChatToolCall>>,
     /// tool 角色消息对应的 `tool_call_id`。
@@ -33,12 +35,35 @@ pub struct ChatMessage {
     pub name: Option<String>,
 }
 
+/// OpenAI 兼容 content 数组元素。
+#[derive(Debug, Clone)]
+pub enum ChatContentPart {
+    /// 文本。
+    Text { text: String },
+    /// 图片（data URL 或 http(s)）。
+    ImageUrl { url: String },
+}
+
 impl ChatMessage {
     /// 构造纯文本消息（无工具调用字段）。
     pub fn text(role: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             role: role.into(),
             content: content.into(),
+            parts: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    /// 构造带多模态 parts 的用户消息。
+    pub fn user_parts(text: impl Into<String>, parts: Vec<ChatContentPart>) -> Self {
+        let content = text.into();
+        Self {
+            role: "user".into(),
+            content,
+            parts: Some(parts),
             tool_calls: None,
             tool_call_id: None,
             name: None,

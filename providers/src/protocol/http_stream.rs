@@ -12,7 +12,7 @@ use crate::profile::{self, ApiMode};
 use crate::streaming::Usage;
 use crate::tool_format::openai_tools_to_anthropic;
 use crate::trait_::{
-    ChatChunk, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
+    ChatChunk, ChatContentPart, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
 };
 
 /// 将 `additional_params` 浅合并进请求体（对象字段覆盖同名键；非对象则忽略）
@@ -222,6 +222,24 @@ fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
                     })
                     .collect();
                 obj.insert("tool_calls".into(), Value::Array(tool_calls));
+            } else if let Some(ref parts) = m.parts {
+                if !parts.is_empty() {
+                    let arr: Vec<Value> = parts
+                        .iter()
+                        .map(|p| match p {
+                            ChatContentPart::Text { text } => {
+                                json!({ "type": "text", "text": text })
+                            }
+                            ChatContentPart::ImageUrl { url } => json!({
+                                "type": "image_url",
+                                "image_url": { "url": url }
+                            }),
+                        })
+                        .collect();
+                    obj.insert("content".into(), Value::Array(arr));
+                } else {
+                    obj.insert("content".into(), json!(m.content));
+                }
             } else {
                 obj.insert("content".into(), json!(m.content));
             }
@@ -479,6 +497,20 @@ pub async fn openai_compatible_chat_stream(
             body["reasoning_effort"] = json!(effort);
         }
     }
+    // Gemini OpenAI 兼容：thinking 走 extra_body.google.thinking_config（附件仍用 messages content）
+    if provider == "google" && config.thinking_enabled {
+        let level = match config.reasoning_effort.trim() {
+            "max" | "xhigh" => "HIGH",
+            _ => "MEDIUM",
+        };
+        body["extra_body"] = json!({
+            "google": {
+                "thinking_config": {
+                    "thinking_level": level
+                }
+            }
+        });
+    }
 
     merge_additional_params(&mut body, &config.additional_params);
     let mut req = client
@@ -660,15 +692,66 @@ fn to_anthropic_messages(messages: &[ChatMessage]) -> (String, Vec<Value>) {
             }
             _ => {
                 flush_tool_results(&mut pending_tool_results, &mut api_messages);
+                let content = anthropic_user_content(m);
                 api_messages.push(json!({
                     "role": "user",
-                    "content": m.content,
+                    "content": content,
                 }));
             }
         }
     }
     flush_tool_results(&mut pending_tool_results, &mut api_messages);
     (system, api_messages)
+}
+
+/// Anthropic user content：纯字符串或 text + image base64 blocks。
+fn anthropic_user_content(m: &ChatMessage) -> Value {
+    let Some(parts) = m.parts.as_ref().filter(|p| !p.is_empty()) else {
+        return json!(m.content);
+    };
+    let mut blocks = Vec::new();
+    for p in parts {
+        match p {
+            ChatContentPart::Text { text } => {
+                blocks.push(json!({ "type": "text", "text": text }));
+            }
+            ChatContentPart::ImageUrl { url } => {
+                if let Some((media_type, data)) = parse_data_url(url) {
+                    blocks.push(json!({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": data,
+                        }
+                    }));
+                } else if url.starts_with("http://") || url.starts_with("https://") {
+                    blocks.push(json!({
+                        "type": "image",
+                        "source": {
+                            "type": "url",
+                            "url": url,
+                        }
+                    }));
+                }
+            }
+        }
+    }
+    if blocks.is_empty() {
+        json!(m.content)
+    } else {
+        Value::Array(blocks)
+    }
+}
+
+fn parse_data_url(url: &str) -> Option<(String, String)> {
+    let rest = url.strip_prefix("data:")?;
+    let (meta, data) = rest.split_once(";base64,")?;
+    let media_type = meta.trim();
+    if media_type.is_empty() || data.is_empty() {
+        return None;
+    }
+    Some((media_type.to_string(), data.to_string()))
 }
 
 /// Anthropic Messages API 流式
@@ -810,6 +893,52 @@ mod tests {
     }
 
     #[test]
+    fn to_openai_messages_string_content_when_no_parts() {
+        let msgs = to_openai_messages(&[ChatMessage::text("user", "hi")]);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0]["role"], "user");
+        assert_eq!(msgs[0]["content"], "hi");
+    }
+
+    #[test]
+    fn to_openai_messages_array_when_parts() {
+        let msgs = to_openai_messages(&[ChatMessage::user_parts(
+            "看图",
+            vec![
+                ChatContentPart::Text {
+                    text: "看图".into(),
+                },
+                ChatContentPart::ImageUrl {
+                    url: "data:image/png;base64,abc".into(),
+                },
+            ],
+        )]);
+        let content = msgs[0]["content"].as_array().expect("array content");
+        assert_eq!(content.len(), 2);
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "看图");
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(content[1]["image_url"]["url"], "data:image/png;base64,abc");
+    }
+
+    #[test]
+    fn anthropic_user_content_parses_data_url() {
+        let m = ChatMessage::user_parts(
+            "x",
+            vec![
+                ChatContentPart::Text { text: "x".into() },
+                ChatContentPart::ImageUrl {
+                    url: "data:image/jpeg;base64,zzz".into(),
+                },
+            ],
+        );
+        let v = anthropic_user_content(&m);
+        let blocks = v.as_array().expect("blocks");
+        assert_eq!(blocks[1]["type"], "image");
+        assert_eq!(blocks[1]["source"]["media_type"], "image/jpeg");
+        assert_eq!(blocks[1]["source"]["data"], "zzz");
+    }
+
     #[test]
     fn gemini_openai_base_not_suffixed_with_v1() {
         let base = openai_compatible_base(

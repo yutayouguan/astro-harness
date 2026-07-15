@@ -603,6 +603,7 @@ impl AstroService for AstroServiceImpl {
         let base_url = req.base_url;
         let chat_fallbacks = req.chat_fallbacks;
         let thinking_enabled = req.thinking_enabled;
+        let images = req.images;
         let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
             "high".to_string()
         } else {
@@ -699,10 +700,23 @@ impl AstroService for AstroServiceImpl {
             };
 
             let turn_content = content;
+            let image_data_urls: Vec<String> = images
+                .iter()
+                .filter_map(|img| {
+                    let mime = img.mime.trim();
+                    let data = img.data_base64.trim();
+                    if mime.is_empty() || data.is_empty() {
+                        return None;
+                    }
+                    Some(format!("data:{mime};base64,{data}"))
+                })
+                .collect();
 
             let run_result = {
                 let mut agent = session.lock().await;
-                agent.run_turn(&turn_content, "grpc-chat").await
+                agent
+                    .run_turn_with_images(&turn_content, &image_data_urls, "grpc-chat")
+                    .await
             };
 
             let turn_result = match run_result {
