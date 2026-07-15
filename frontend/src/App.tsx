@@ -2932,9 +2932,9 @@ export default function App() {
           aria-pressed={sidebarPinned}
         >
           {sidebarPinned ? (
-            <IconPanelClose width={15} height={15} />
+            <IconPanelClose width={13} height={13} />
           ) : (
-            <IconPanelOpen width={15} height={15} />
+            <IconPanelOpen width={13} height={13} />
           )}
         </button>
       </div>
