@@ -437,14 +437,16 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
 
 html[data-theme="dark"] .mem-stat {
   border: none;
-  background: transparent;
-  box-shadow: none;
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.08) 50%, rgba(8, 6, 18, 0.55));
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: var(--ink-soft);
 }
 
 html[data-theme="dark"] .mem-stat-icon {
-  background: transparent;
-  box-shadow: none;
+  background: color-mix(in srgb, var(--tone, var(--tone-green)) 16%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 html[data-theme="dark"] .mem-stat-label {
