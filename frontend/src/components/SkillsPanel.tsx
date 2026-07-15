@@ -60,6 +60,7 @@ import {
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agentsChanged";
+import { useTransientToast } from "../hooks/useTransientToast";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
@@ -310,6 +311,7 @@ const VIEW_OPTIONS = [
 
 export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const { t } = useI18n();
+  const { showToast, toastHost } = useTransientToast();
   const [tab, setTab] = useState<SkillsTab>("installed");
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [machineSkills, setMachineSkills] = useState<InstalledSkill[]>([]);
@@ -327,7 +329,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [installMsg, setInstallMsg] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentId, setAgentId] = useState("workspace");
   const [viewMode, setViewMode] = useState<SkillsView>(() => readSkillsView());
@@ -890,18 +891,18 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const installSkill = async (skill: StoreSkill) => {
     if (!isTauri()) return;
     setInstallingId(skill.id);
-    setInstallMsg(null);
     setError(null);
     try {
-      const msg = await invoke<string>("install_store_skill", {
+      await invoke<string>("install_store_skill", {
         installRef: skill.install_ref,
         agentId,
       });
-      setInstallMsg(msg);
+      // 留在商店：刷新已安装态后卡片按钮变为「已安装」
       await refreshInstalled({ mode: "hard" });
-      setTab("installed");
+      showToast(t("skills.installDone").replace("{name}", skill.name));
     } catch (err) {
       setError(String(err));
+      showToast(String(err), { error: true });
     } finally {
       setInstallingId(null);
     }
@@ -2457,7 +2458,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           </div>
 
           {error && <p className="skills-error">{error}</p>}
-          {installMsg && <p className="skills-success">{installMsg}</p>}
 
           {loadingStore ? (
             <div
@@ -2498,6 +2498,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         </section>
       )}
       </AnimatedSwitch>
+
+      {toastHost}
 
       {preview &&
         createPortal(
