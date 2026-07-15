@@ -1,5 +1,5 @@
 /** 内置工具目录定义（id / 图标 / 文案 key）。 */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -14,6 +14,7 @@ import {
   IconLocation,
   IconMemoryTool,
   IconMultiAgent,
+  IconMusic,
   IconPresentUi,
   IconScheduled,
   IconSessionSearch,
@@ -25,6 +26,10 @@ import {
 } from "../components/ToolIcons";
 import type { MessageKey } from "../i18n/messages";
 
+const IS_TAURI =
+  typeof window !== "undefined" &&
+  !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+
 export type AgentToolId =
   | "web_search"
   | "browser"
@@ -34,6 +39,7 @@ export type AgentToolId =
   | "vision"
   | "image_gen"
   | "tts"
+  | "music"
   | "skills"
   | "memory"
   | "session_search"
@@ -309,6 +315,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "items", type: "array" },
     ],
   },
+  {
+    id: "music",
+    titleKey: "agentTools.music.title",
+    descKey: "agentTools.music.desc",
+    Icon: IconMusic,
+    tone: "pink",
+    params: [
+      { name: "query", type: "string", optional: true },
+      { name: "action", type: "string", optional: true },
+      { name: "player", type: "string", optional: true },
+    ],
+  },
 ];
 
 type CatalogParamDto = {
@@ -336,9 +354,6 @@ type CatalogItemDto = {
   functions?: CatalogFnDto[];
 };
 
-const isTauri = () =>
-  typeof window !== "undefined" &&
-  !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 
 function defaultEnabled(): Record<AgentToolId, boolean> {
   return Object.fromEntries(
@@ -410,7 +425,7 @@ export function useAgentToolDefs() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!isTauri()) {
+      if (!IS_TAURI) {
         if (!cancelled) setCatalogReady(true);
         return;
       }
@@ -435,15 +450,15 @@ export function useAgentToolDefs() {
 export function useAgentTools(agentId?: string | null) {
   const [enabled, setEnabled] = useState<Record<AgentToolId, boolean>>(defaultEnabled);
   const [ready, setReady] = useState(false);
-  const [skipNextSave, setSkipNextSave] = useState(true);
+  const skipNextSave = useRef(true);
   const { tools, catalogReady } = useAgentToolDefs();
 
   useEffect(() => {
     let cancelled = false;
     setReady(false);
-    setSkipNextSave(true);
+    skipNextSave.current = true;
     (async () => {
-      if (!isTauri()) {
+      if (!IS_TAURI) {
         try {
           const key = agentId ? `agent-tools:${agentId}` : "agent-tools";
           const raw = localStorage.getItem(key);
@@ -475,11 +490,11 @@ export function useAgentTools(agentId?: string | null) {
 
   useEffect(() => {
     if (!ready) return;
-    if (skipNextSave) {
-      setSkipNextSave(false);
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
       return;
     }
-    if (!isTauri()) {
+    if (!IS_TAURI) {
       try {
         const key = agentId ? `agent-tools:${agentId}` : "agent-tools";
         localStorage.setItem(key, JSON.stringify(enabled));
@@ -489,7 +504,7 @@ export function useAgentTools(agentId?: string | null) {
       return;
     }
     void invoke("set_tools_enabled", { enabled, agentId: agentId || null }).catch(() => {});
-  }, [enabled, ready, agentId, skipNextSave]);
+  }, [enabled, ready, agentId]);
 
   const toggle = useCallback((id: AgentToolId) => {
     setEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -499,13 +514,11 @@ export function useAgentTools(agentId?: string | null) {
     setEnabled((prev) => ({ ...prev, [id]: value }));
   }, []);
 
-  const toolList = useMemo(() => tools, [tools]);
-
   return {
     enabled,
     toggle,
     setToolEnabled,
     ready: ready && catalogReady,
-    tools: toolList,
+    tools,
   };
 }
