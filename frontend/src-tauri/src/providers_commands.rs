@@ -236,6 +236,15 @@ pub struct ProviderConfig {
     /// 显式聊天后备链（最多 3；老配置无此字段时默认空）。
     #[serde(default)]
     pub fallback: Vec<ProviderFallbackEntry>,
+    /// 生图模型（空=内置默认）。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub image_model: String,
+    /// 生视频模型（空=内置默认；主要 Google）。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub video_model: String,
+    /// 生音频 / TTS 模型（空=内置默认）。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tts_model: String,
 }
 
 impl ProviderConfig {
@@ -249,6 +258,9 @@ impl ProviderConfig {
             id: format!("prov-{}", uuid::Uuid::new_v4().simple()),
             kind,
             fallback: Vec::new(),
+            image_model: String::new(),
+            video_model: String::new(),
+            tts_model: String::new(),
         }
     }
 
@@ -392,6 +404,9 @@ pub struct ProviderConfigDto {
     pub official_key_url: Option<String>,
     /// 聊天后备链（显式配置）
     pub fallback: Vec<ProviderFallbackEntry>,
+    pub image_model: String,
+    pub video_model: String,
+    pub tts_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -410,6 +425,12 @@ pub struct ProviderConfigInput {
     pub enabled: bool,
     #[serde(default)]
     pub fallback: Vec<ProviderFallbackEntry>,
+    #[serde(default)]
+    pub image_model: String,
+    #[serde(default)]
+    pub video_model: String,
+    #[serde(default)]
+    pub tts_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -572,6 +593,9 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         backend_id: p.kind.backend_id().to_string(),
         official_key_url: p.kind.official_key_url().map(str::to_string),
         fallback: p.fallback.clone(),
+        image_model: p.image_model.clone(),
+        video_model: p.video_model.clone(),
+        tts_model: p.tts_model.clone(),
     }
 }
 
@@ -682,6 +706,9 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             model: provider.model,
             enabled: provider.enabled,
             fallback,
+            image_model: provider.image_model.trim().to_string(),
+            video_model: provider.video_model.trim().to_string(),
+            tts_model: provider.tts_model.trim().to_string(),
         };
         Ok(to_state_dto(s))
     })
@@ -922,17 +949,43 @@ pub struct ImageGenTarget {
     pub api_key: String,
     pub base_url: String,
     pub display_name: String,
+    pub video_model: String,
+    pub tts_model: String,
 }
 
 const IMAGE_GEN_NO_PROVIDER_MSG: &str =
     "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google 或 OpenAI，并配置 API Key。";
 
 /// 按供应商类型选择默认图片模型。
-fn image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
+fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
     match kind {
-        ProviderKind::Google => Some("gemini-2.5-flash-image"),
+        ProviderKind::Google => Some("gemini-3.1-flash-image"),
         ProviderKind::Openai => Some("gpt-image-2"),
         _ => None,
+    }
+}
+
+fn default_video_model_for_kind(kind: &ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::Google => "veo-3.1-generate-preview",
+        _ => "",
+    }
+}
+
+fn default_tts_model_for_kind(kind: &ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::Google => "gemini-3.1-flash-tts-preview",
+        ProviderKind::Openai => "gpt-4o-mini-tts",
+        _ => "",
+    }
+}
+
+fn resolve_media_model(configured: &str, default: &str) -> String {
+    let t = configured.trim();
+    if t.is_empty() {
+        default.to_string()
+    } else {
+        t.to_string()
     }
 }
 
@@ -946,7 +999,7 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
             if !p.enabled {
                 continue;
             }
-            let Some(model) = image_model_for_kind(&p.kind) else {
+            let Some(default_image) = default_image_model_for_kind(&p.kind) else {
                 continue;
             };
             let (has, _source, _env, key) = resolve_api_key(p);
@@ -958,10 +1011,15 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
             };
             let target = ImageGenTarget {
                 provider: p.kind.backend_id().to_string(),
-                model: model.to_string(),
+                model: resolve_media_model(&p.image_model, default_image),
                 api_key,
                 base_url: p.endpoint.clone(),
                 display_name: p.display_name.clone(),
+                video_model: resolve_media_model(
+                    &p.video_model,
+                    default_video_model_for_kind(&p.kind),
+                ),
+                tts_model: resolve_media_model(&p.tts_model, default_tts_model_for_kind(&p.kind)),
             };
             match p.kind {
                 ProviderKind::Google if google.is_none() => google = Some(target),
@@ -1561,6 +1619,9 @@ mod tests {
                     model: "kimi-k2-0711-preview".into(),
                     enabled: false,
                     fallback: vec![],
+                    image_model: String::new(),
+                    video_model: String::new(),
+                    tts_model: String::new(),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -1570,6 +1631,9 @@ mod tests {
                     model: "doubao-pro-32k".into(),
                     enabled: false,
                     fallback: vec![],
+                    image_model: String::new(),
+                    video_model: String::new(),
+                    tts_model: String::new(),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -1579,6 +1643,9 @@ mod tests {
                     model: "MiniMax-M2.5".into(),
                     enabled: false,
                     fallback: vec![],
+                    image_model: String::new(),
+                    video_model: String::new(),
+                    tts_model: String::new(),
                 },
             ],
         };

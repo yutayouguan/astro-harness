@@ -113,7 +113,64 @@ type Draft = {
   enabled: boolean;
   /** 聊天后备链（最多 3） */
   fallback: ProviderFallbackEntry[];
+  image_model: string;
+  video_model: string;
+  tts_model: string;
 };
+
+type DetailTab = "chat" | "media";
+
+const MEDIA_MODEL_DEFAULTS: Record<
+  string,
+  { image: string; video: string; tts: string }
+> = {
+  google: {
+    image: "gemini-3.1-flash-image",
+    video: "veo-3.1-generate-preview",
+    tts: "gemini-3.1-flash-tts-preview",
+  },
+  openai: {
+    image: "gpt-image-2",
+    video: "",
+    tts: "gpt-4o-mini-tts",
+  },
+};
+
+function supportsMediaModels(kind: string): boolean {
+  return kind === "google" || kind === "openai";
+}
+
+function draftFromProvider(p: ProviderDto): Draft {
+  return {
+    display_name: p.display_name,
+    endpoint: p.endpoint,
+    model: p.model,
+    enabled: p.enabled,
+    fallback: normalizeFallback(p.fallback),
+    image_model: p.image_model?.trim() ?? "",
+    video_model: p.video_model?.trim() ?? "",
+    tts_model: p.tts_model?.trim() ?? "",
+  };
+}
+
+function providerSaveInput(
+  selected: ProviderDto,
+  draft: Draft,
+  overrides?: { enabled?: boolean; model?: string },
+) {
+  return {
+    id: selected.id,
+    kind: selected.kind,
+    display_name: draft.display_name.trim() || selected.display_name,
+    endpoint: draft.endpoint.trim() || selected.endpoint,
+    model: (overrides?.model ?? draft.model).trim() || selected.model,
+    enabled: overrides?.enabled ?? draft.enabled,
+    fallback: normalizeFallback(draft.fallback),
+    image_model: draft.image_model.trim(),
+    video_model: draft.video_model.trim(),
+    tts_model: draft.tts_model.trim(),
+  };
+}
 
 /** 模型列表探测延迟结果 */
 type ModelLatency = {
@@ -240,6 +297,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [state, setState] = useState<ProvidersStateDto | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("chat");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [storedApiKey, setStoredApiKey] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -389,13 +447,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       autoFetchIdRef.current = null;
       return;
     }
-    setDraft({
-      display_name: selected.display_name,
-      endpoint: selected.endpoint,
-      model: selected.model,
-      enabled: selected.enabled,
-      fallback: normalizeFallback(selected.fallback),
-    });
+    setDraft(draftFromProvider(selected));
+    setDetailTab("chat");
     setApiKeyInput("");
     setStoredApiKey(null);
     setShowApiKey(false);
@@ -427,19 +480,16 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   // selected 字段外部更新时同步草稿（不重置模型列表）
   useEffect(() => {
     if (!selected) return;
-    setDraft({
-      display_name: selected.display_name,
-      endpoint: selected.endpoint,
-      model: selected.model,
-      enabled: selected.enabled,
-      fallback: normalizeFallback(selected.fallback),
-    });
+    setDraft(draftFromProvider(selected));
   }, [
     selected?.display_name,
     selected?.endpoint,
     selected?.model,
     selected?.enabled,
     selected?.fallback,
+    selected?.image_model,
+    selected?.video_model,
+    selected?.tts_model,
   ]);
 
   const saveDraft = async () => {
@@ -448,15 +498,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     setError(null);
     try {
       const next = await invoke<ProvidersStateDto>("save_provider", {
-        provider: {
-          id: selected.id,
-          kind: selected.kind,
-          display_name: draft.display_name.trim() || selected.display_name,
-          endpoint: draft.endpoint.trim() || selected.endpoint,
-          model: draft.model.trim() || selected.model,
-          enabled: draft.enabled,
-          fallback: normalizeFallback(draft.fallback),
-        },
+        provider: providerSaveInput(selected, draft),
       });
       applyState(next);
       const saved = next.providers.find((p) => p.id === selected.id);
@@ -517,15 +559,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     setError(null);
     try {
       const next = await invoke<ProvidersStateDto>("save_provider", {
-        provider: {
-          id: selected.id,
-          kind: selected.kind,
-          display_name: draft.display_name.trim() || selected.display_name,
-          endpoint: draft.endpoint.trim() || selected.endpoint,
-          model: draft.model.trim() || selected.model,
-          enabled: nextEnabled,
-          fallback: normalizeFallback(draft.fallback),
-        },
+        provider: providerSaveInput(selected, draft, { enabled: nextEnabled }),
       });
       applyState(next);
       const saved = next.providers.find((p) => p.id === selected.id);
@@ -778,15 +812,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       // 手动拉取时先落盘草稿；自动拉取跳过，避免切提供商时用到旧草稿
       if (draft && !opts?.skipSave) {
         await invoke<ProvidersStateDto>("save_provider", {
-          provider: {
-            id: selected.id,
-            kind: selected.kind,
-            display_name: draft.display_name.trim() || selected.display_name,
-            endpoint: draft.endpoint.trim() || selected.endpoint,
-            model: draft.model.trim() || selected.model,
-            enabled: draft.enabled,
-            fallback: normalizeFallback(draft.fallback),
-          },
+          provider: providerSaveInput(selected, draft),
         }).then(applyState);
       }
       const result = await invoke<ProviderModelsResult>("list_provider_models", {
@@ -848,15 +874,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     try {
       if (draft) {
         await invoke<ProvidersStateDto>("save_provider", {
-          provider: {
-            id: selected.id,
-            kind: selected.kind,
-            display_name: draft.display_name.trim() || selected.display_name,
-            endpoint: draft.endpoint.trim() || selected.endpoint,
-            model: modelId.trim() || selected.model,
-            enabled: draft.enabled,
-            fallback: normalizeFallback(draft.fallback),
-          },
+          provider: providerSaveInput(selected, draft, { model: modelId }),
         }).then(applyState);
       }
       const result = await invoke<ProviderTestResult>("test_provider", {
@@ -1348,6 +1366,31 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 </div>
               </div>
 
+              {supportsMediaModels(selected.kind) ? (
+                <div className="providers-detail-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "chat"}
+                    className={`providers-detail-tab ${detailTab === "chat" ? "is-active" : ""}`}
+                    onClick={() => setDetailTab("chat")}
+                  >
+                    {t("providers.tabChat")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "media"}
+                    className={`providers-detail-tab ${detailTab === "media" ? "is-active" : ""}`}
+                    onClick={() => setDetailTab("media")}
+                  >
+                    {t("providers.tabMedia")}
+                  </button>
+                </div>
+              ) : null}
+
+              {(detailTab === "chat" || !supportsMediaModels(selected.kind)) && (
+              <>
               <div className="providers-form-grid">
                 <label className="providers-field">
                   <span className="providers-field-label">
@@ -1884,6 +1927,74 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                   </ul>
                 )}
               </div>
+              </>
+              )}
+
+              {detailTab === "media" && supportsMediaModels(selected.kind) && (
+                <div className="providers-media-panel">
+                  <p className="providers-field-hint providers-media-hint">
+                    {t("providers.mediaHint")}
+                  </p>
+                  <div className="providers-form-grid">
+                    <label className="providers-field providers-field-span">
+                      <span className="providers-field-label">
+                        <IconBox />
+                        {t("providers.imageModel")}
+                      </span>
+                      <input
+                        type="text"
+                        value={draft.image_model}
+                        placeholder={
+                          MEDIA_MODEL_DEFAULTS[selected.kind]?.image ?? ""
+                        }
+                        onChange={(e) =>
+                          setDraft((d) =>
+                            d ? { ...d, image_model: e.target.value } : d,
+                          )
+                        }
+                      />
+                    </label>
+                    {selected.kind === "google" ? (
+                      <label className="providers-field providers-field-span">
+                        <span className="providers-field-label">
+                          <IconBox />
+                          {t("providers.videoModel")}
+                        </span>
+                        <input
+                          type="text"
+                          value={draft.video_model}
+                          placeholder={
+                            MEDIA_MODEL_DEFAULTS.google?.video ?? ""
+                          }
+                          onChange={(e) =>
+                            setDraft((d) =>
+                              d ? { ...d, video_model: e.target.value } : d,
+                            )
+                          }
+                        />
+                      </label>
+                    ) : null}
+                    <label className="providers-field providers-field-span">
+                      <span className="providers-field-label">
+                        <IconBox />
+                        {t("providers.ttsModel")}
+                      </span>
+                      <input
+                        type="text"
+                        value={draft.tts_model}
+                        placeholder={
+                          MEDIA_MODEL_DEFAULTS[selected.kind]?.tts ?? ""
+                        }
+                        onChange={(e) =>
+                          setDraft((d) =>
+                            d ? { ...d, tts_model: e.target.value } : d,
+                          )
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -52,12 +52,12 @@ fn test_image_request_builder() {
         .build();
     assert_eq!(req.provider, "google");
     assert_eq!(req.width, 1024);
-    assert_eq!(req.model, "gemini-2.5-flash-image");
+    assert_eq!(req.model, "gemini-3.1-flash-image");
 }
 
 #[test]
 fn test_default_image_models() {
-    assert_eq!(default_image_model("google"), "gemini-2.5-flash-image");
+    assert_eq!(default_image_model("google"), "gemini-3.1-flash-image");
     assert_eq!(default_image_model("openai"), "gpt-image-2");
     let openai_req = ImageGenRequest::builder()
         .prompt("cat")

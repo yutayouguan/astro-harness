@@ -73,6 +73,11 @@ async fn synthesize_google(
     voice: &str,
     creds: &crate::context::ImageGenCreds,
 ) -> anyhow::Result<String> {
+    let model = if creds.tts_model.trim().is_empty() {
+        default_tts_model().to_string()
+    } else {
+        creds.tts_model.trim().to_string()
+    };
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
         base_url: if creds.base_url.trim().is_empty() {
@@ -80,7 +85,7 @@ async fn synthesize_google(
         } else {
             Some(creds.base_url.clone())
         },
-        model: default_tts_model().to_string(),
+        model: model.clone(),
         ..ProviderConfig::default()
     };
     let client = reqwest::Client::new();
@@ -94,9 +99,8 @@ async fn synthesize_google(
     ));
     std::fs::write(&path, &wav)?;
     Ok(format!(
-        "语音已生成：{}\nprovider=google\nmodel={}",
-        path.display(),
-        default_tts_model()
+        "语音已生成：{}\nprovider=google\nmodel={model}",
+        path.display()
     ))
 }
 

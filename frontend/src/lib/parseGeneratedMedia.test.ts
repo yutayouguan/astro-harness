@@ -6,7 +6,7 @@ test("parses labeled image_gen / video_gen / tts output", () => {
   const text = [
     "图片已生成：/Users/a/.astro/ws/generated/img-1.png",
     "provider=google",
-    "model=gemini-2.5-flash-image",
+    "model=gemini-3.1-flash-image",
   ].join("\n");
   assert.deepEqual(parseGeneratedMedia(text), [
     { kind: "image", path: "/Users/a/.astro/ws/generated/img-1.png" },

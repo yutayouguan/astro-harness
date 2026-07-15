@@ -61,12 +61,12 @@ pub fn default_video_model() -> &'static str {
 
 /// 默认 Gemini TTS 模型。
 pub fn default_tts_model() -> &'static str {
-    "gemini-2.5-flash-preview-tts"
+    "gemini-3.1-flash-tts-preview"
 }
 
 /// 默认 Google 图片兼容模型。
 pub fn default_google_compat_image_model() -> &'static str {
-    "gemini-2.5-flash-image"
+    "gemini-3.1-flash-image"
 }
 
 /// Google OpenAI 兼容出图：`POST …/images/generations`。

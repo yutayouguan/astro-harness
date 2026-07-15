@@ -183,6 +183,12 @@ export type ProviderDto = {
   official_key_url?: string | null;
   /** 显式聊天后备链（最多 3；缺省为空） */
   fallback?: ProviderFallbackEntry[];
+  /** 生图模型（空=内置默认） */
+  image_model?: string;
+  /** 生视频模型（空=内置默认） */
+  video_model?: string;
+  /** 生音频 / TTS 模型（空=内置默认） */
+  tts_model?: string;
 };
 
 /** 全部供应商 + 当前激活 id */

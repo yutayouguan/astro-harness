@@ -46,7 +46,7 @@ Google 官方 OpenAI 兼容层已提供：
 ### `image_gen`（已有，改 Google 路径）
 
 - 参数：保持现有 `prompt`（及已有可选字段）
-- Google：`POST {openai_compat_base}/images/generations`，Bearer，`response_format=b64_json`，默认模型 `gemini-2.5-flash-image`
+- Google：`POST {openai_compat_base}/images/generations`，Bearer，`response_format=b64_json`，默认模型 `gemini-3.1-flash-image`
 - 失败时可回退现有原生 `generateContent` IMAGE，再试 OpenAI
 - 输出：`generated/img-*.{png|jpg|webp}`
 
@@ -62,7 +62,7 @@ Google 官方 OpenAI 兼容层已提供：
 ### `tts`（扩）
 
 - 参数：`text`；`voice`（可选：Google 预置如 `Kore`；OpenAI 路径保留 alloy 等）
-- Google：原生 `…/v1beta/models/{tts_model}:generateContent`，`responseModalities: ["AUDIO"]` + `speechConfig.voiceConfig`；默认 `gemini-2.5-flash-preview-tts`（若上线稳定可换 `gemini-3.1-flash-tts-preview`）
+- Google：原生 `…/v1beta/models/{tts_model}:generateContent`，`responseModalities: ["AUDIO"]` + `speechConfig.voiceConfig`；默认 `gemini-3.1-flash-tts-preview`
 - PCM → wav 落盘（与官方示例一致，24kHz / 16-bit / mono）
 - 回落：现有 OpenAI `/audio/speech` + `gpt-4o-mini-tts`
 - 工具描述改为表明 Google 或 OpenAI
@@ -94,6 +94,13 @@ resolve_media_targets / 扩展 ImageGenTargets
 
 - `tools`：`register` / `dispatch_tool` + 新 `video_gen.rs`
 - `KNOWN_TOOLSET_IDS` / `tools-enabled` / `useAgentTools`：加入 `video_gen`；更新 `tts` / `image_gen` 文案
+
+## 媒体模型可配置（补充）
+
+- 默认：图 `gemini-3.1-flash-image` / 视频 `veo-3.1-generate-preview` / 音 `gemini-3.1-flash-tts-preview`；OpenAI 图 `gpt-image-2`、TTS `gpt-4o-mini-tts`
+- `ProviderConfig` 可选 `image_model` / `video_model` / `tts_model`（空 = 上述默认）
+- 提供商详情「聊天 | 媒体」Tab：Google 三项；OpenAI 图 + TTS（视频隐藏）
+- 经 `resolve_image_gen_targets` → ChatRequest / `ImageGenCreds` 透传到三工具
 
 ## 错误与超时
 

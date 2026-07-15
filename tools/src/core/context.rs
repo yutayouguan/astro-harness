@@ -9,34 +9,41 @@ use std::sync::Arc;
 use memory::MemoryManager;
 use providers::registry::ProviderRegistry;
 
-/// 单个图片生成 Provider 的调用凭证。
+/// 单个媒体生成 Provider 的调用凭证。
 ///
-/// 由 Tauri 前端从「模型提供商」面板注入，经 [`ImageGenTargets`] 传给 `image_gen` 工具。
+/// 由 Tauri 前端从「模型提供商」面板注入，经 [`ImageGenTargets`] 传给
+/// `image_gen` / `video_gen` / `tts` 工具。
 #[derive(Debug, Clone, Default)]
 pub struct ImageGenCreds {
     /// Provider id，如 `"google"`、`"openai"`。
     pub provider: String,
-    /// 图片模型名称；为空时由 `providers::image_gen::default_image_model` 补全。
+    /// 生图模型；为空时由 `providers::image_gen::default_image_model` 补全。
     pub model: String,
     /// API Key。
     pub api_key: String,
     /// 自定义 Base URL；为空时使用 Provider 默认值。
     pub base_url: String,
+    /// 生视频模型（主要为 Google）；空则用 `default_video_model`。
+    pub video_model: String,
+    /// 生音频 / TTS 模型；空则用供应商默认。
+    pub tts_model: String,
 }
 
-/// 主备图片生成凭证对：主 Provider 失败时自动尝试备用。
+/// 主备媒体凭证对：主 Provider 失败时自动尝试备用（图 / 音）。
 #[derive(Debug, Clone, Default)]
 pub struct ImageGenTargets {
-    /// 优先使用的图片生成凭证。
+    /// 优先使用的媒体生成凭证。
     pub primary: Option<ImageGenCreds>,
     /// 主 Provider 失败时的备用凭证。
     pub fallback: Option<ImageGenCreds>,
 }
 
 impl ImageGenTargets {
-    /// 从 Tauri 面板传入的字符串字段构建主备凭证。
+    /// 从 Tauri / gRPC 注入的字符串字段构建主备凭证。
     ///
-    /// Provider 或 API Key 为空时，对应槽位为 `None`；model 为空则使用 Provider 默认图片模型。
+    /// Provider 或 API Key 为空时，对应槽位为 `None`；
+    /// 图片 model 为空则使用 Provider 默认图片模型。
+    #[allow(clippy::too_many_arguments)]
     pub fn from_parts(
         provider: &str,
         model: &str,
@@ -46,6 +53,9 @@ impl ImageGenTargets {
         fb_model: &str,
         fb_api_key: &str,
         fb_base_url: &str,
+        video_model: &str,
+        tts_model: &str,
+        fb_tts_model: &str,
     ) -> Self {
         let primary = if !provider.is_empty() && !api_key.is_empty() {
             Some(ImageGenCreds {
@@ -57,6 +67,8 @@ impl ImageGenTargets {
                 },
                 api_key: api_key.to_string(),
                 base_url: base_url.to_string(),
+                video_model: video_model.trim().to_string(),
+                tts_model: tts_model.trim().to_string(),
             })
         } else {
             None
@@ -71,6 +83,8 @@ impl ImageGenTargets {
                 },
                 api_key: fb_api_key.to_string(),
                 base_url: fb_base_url.to_string(),
+                video_model: String::new(),
+                tts_model: fb_tts_model.trim().to_string(),
             })
         } else {
             None
@@ -116,7 +130,7 @@ pub struct ToolContext<'a> {
     pub workspace_dir: PathBuf,
     /// 可选代码/项目根（git worktree 或 `ASTRO_PROJECT_ROOT`）；有值时 terminal/file_ops 以此为根。
     pub project_root: Option<PathBuf>,
-    /// 图片生成主备凭证，由前端 Provider 面板注入。
+    /// 媒体生成主备凭证，由前端 Provider 面板注入。
     pub image_gen_targets: &'a ImageGenTargets,
     /// 已注册的 LLM Provider 列表，供 `image_gen` 查找实现。
     pub providers: &'a ProviderRegistry,

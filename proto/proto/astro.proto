@@ -67,6 +67,10 @@ message ChatRequest {
   string resume_json = 19;
   // 不含 primary 的聊天后备链（最多 3；由前端 expand 后下传）
   repeated ChatFallbackTarget chat_fallbacks = 20;
+  // 媒体生成模型覆盖（空=后端默认）；挂在 primary / fallback 供应商上
+  string image_gen_video_model = 21;
+  string image_gen_tts_model = 22;
+  string image_gen_fallback_tts_model = 23;
 }
 
 // Chat 流控制动作。

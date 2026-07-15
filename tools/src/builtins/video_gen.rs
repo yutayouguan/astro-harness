@@ -50,6 +50,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         )
     })?;
 
+    let model = if creds.video_model.trim().is_empty() {
+        default_video_model().to_string()
+    } else {
+        creds.video_model.trim().to_string()
+    };
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
         base_url: if creds.base_url.trim().is_empty() {
@@ -57,7 +62,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         } else {
             Some(creds.base_url.clone())
         },
-        model: default_video_model().to_string(),
+        model: model.clone(),
         ..ProviderConfig::default()
     };
 
@@ -83,9 +88,8 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let path = dir.join(&filename);
     std::fs::write(&path, &video.data)?;
     Ok(format!(
-        "视频已生成：{}\nprovider=google\nmodel={}\noperation_id={}",
+        "视频已生成：{}\nprovider=google\nmodel={model}\noperation_id={}",
         path.display(),
-        default_video_model(),
         video.operation_id
     ))
 }
