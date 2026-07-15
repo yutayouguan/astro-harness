@@ -2,9 +2,11 @@
 
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
+use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::trait_::GeneratedImage;
+use crate::media_http::google_native_base;
+use crate::trait_::{GeneratedImage, ProviderConfig};
 
 pub struct InteractionImagePart {
     pub data: Vec<u8>,
@@ -185,6 +187,51 @@ pub fn parse_interaction_image_response(v: &Value) -> Result<InteractionImageRes
         },
         search_suggestions,
     })
+}
+
+pub async fn google_interactions_image(
+    client: &Client,
+    config: &ProviderConfig,
+    req: &InteractionImageRequest,
+) -> Result<InteractionImageResult> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("Google API Key 为空");
+    }
+    let model = if config.model.trim().is_empty() {
+        "gemini-3.1-flash-image"
+    } else {
+        config.model.trim()
+    };
+    let base = google_native_base(config);
+    let url = if base.contains("/v1beta") {
+        format!("{base}/interactions")
+    } else {
+        format!("{base}/v1beta/interactions")
+    };
+    let body = build_interaction_image_body(model, req);
+
+    let response = client
+        .post(&url)
+        .header("x-goog-api-key", &config.api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("连接 Google Interactions API 失败: {url}"))?;
+
+    let status = response.status();
+    let v: Value = response
+        .json()
+        .await
+        .context("解析 Google Interactions 响应失败")?;
+    if !status.is_success() {
+        let msg = v
+            .pointer("/error/message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Google Interactions 出图失败");
+        anyhow::bail!("Google interactions HTTP {status}: {msg}");
+    }
+    parse_interaction_image_response(&v)
 }
 
 #[cfg(test)]
