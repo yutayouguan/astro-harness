@@ -267,13 +267,14 @@ fn detail_from_list(skill: &StoreSkill) -> StoreSkillDetail {
         .next()
         .unwrap_or(&skill.name)
         .to_string();
-    let detail_url = skill
-        .homepage
-        .clone()
-        .unwrap_or_else(|| match skill.store.as_str() {
-            "skillhub" => format!("https://skillhub.cn/skills/{slug}"),
-            _ => format!("https://skills.sh/{}/{}", skill.source, slug),
-        });
+    // SkillHub homepage 常为 api.skillhub.cn/...（非网页）；官网路由仅为 /skills/:slug
+    let detail_url = match skill.store.as_str() {
+        "skillhub" => format!("https://skillhub.cn/skills/{slug}"),
+        _ => skill
+            .homepage
+            .clone()
+            .unwrap_or_else(|| format!("https://skills.sh/{}/{}", skill.source, slug)),
+    };
 
     StoreSkillDetail {
         name: skill.name.clone(),
@@ -417,6 +418,26 @@ mod tests {
             list[0].install_ref,
             "skillsdotsh:vercel-labs/skills/find-skills"
         );
+    }
+
+    #[test]
+    fn skillhub_detail_url_ignores_api_homepage() {
+        let skill = StoreSkill {
+            id: "skillhub:user_x/web-tools-guide".into(),
+            name: "web-tools-guide".into(),
+            description: "d".into(),
+            source: "community".into(),
+            store: "skillhub".into(),
+            installs: Some(1),
+            install_ref: "skillhub:user_x/web-tools-guide".into(),
+            homepage: Some("https://api.skillhub.cn/user_x/web-tools-guide".into()),
+        };
+        let detail = detail_from_list(&skill);
+        assert_eq!(
+            detail.detail_url,
+            "https://skillhub.cn/skills/web-tools-guide"
+        );
+        assert_eq!(detail.slug, "web-tools-guide");
     }
 
     #[test]

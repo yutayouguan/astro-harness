@@ -832,7 +832,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   }, [preview, previewFile]);
 
   const viewStoreDetail = async (skill: StoreSkill) => {
-    const url = storeSkillDetailUrl(skill);
+    const fromDetail =
+      storeDetail &&
+      (storeDetail.install_ref === skill.install_ref ||
+        storeDetail.name === skill.name) &&
+      storeDetail.detail_url?.startsWith("http")
+        ? storeDetail.detail_url
+        : null;
+    const url = fromDetail || storeSkillDetailUrl(skill);
     if (!url) {
       setError(t("skills.detailUnavailable"));
       return;
