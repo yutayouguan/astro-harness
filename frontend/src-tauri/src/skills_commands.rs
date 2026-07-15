@@ -100,7 +100,7 @@ pub async fn update_all_skills(
     only_outdated: Option<bool>,
 ) -> Result<Vec<SkillUpdateItemResult>, String> {
     let agent = normalize_agent_id(agent_id);
-    if only_outdated.unwrap_or(true) {
+    if only_outdated.unwrap_or(false) {
         update_outdated_skills(agent.as_deref())
             .await
             .map_err(|e| e.to_string())

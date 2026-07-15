@@ -26,7 +26,7 @@ pub fn classify_update_status(
         && origin.remote_updated_at.is_none()
         && origin.last_updated_at.is_none()
     {
-        return SkillUpdateStatus::Current;
+        return SkillUpdateStatus::Unknown;
     }
 
     if let (Some(local_v), Some(remote_v)) = (&origin.remote_version, remote_version) {
@@ -239,11 +239,11 @@ mod tests {
     }
 
     #[test]
-    fn classify_first_baseline_remote_version_only_is_current() {
+    fn classify_first_baseline_remote_version_only_is_unknown() {
         let origin = sample_origin(None, None, None, 100);
         assert_eq!(
             classify_update_status(&origin, Some("1.0.0"), None),
-            SkillUpdateStatus::Current
+            SkillUpdateStatus::Unknown
         );
     }
 

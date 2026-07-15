@@ -1059,7 +1059,9 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       setLastCheckResults(checks);
       const count = checks.filter((c) => c.status === "outdated").length;
       showToast(
-        t("skills.checkUpdatesDone").replace("{count}", String(count)),
+        count > 0
+          ? t("skills.checkUpdatesDone").replace("{count}", String(count))
+          : t("skills.upToDate"),
         { tone: count > 0 ? "info" : "success" },
       );
     } catch (err) {
@@ -2829,7 +2831,11 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               !loadingMachine &&
               !loadingOrigins && (
                 <p className="skills-empty" role="listitem">
-                  {t("skills.installedSearchEmpty")}
+                  {updateFilter === "updatable"
+                    ? lastCheckResults.length === 0
+                      ? t("skills.updatesNeedCheck")
+                      : t("skills.upToDate")
+                    : t("skills.installedSearchEmpty")}
                 </p>
               )}
             {filteredUpdateRows.map(renderUpdateCard)}
