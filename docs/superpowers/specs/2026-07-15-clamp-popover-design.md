@@ -131,8 +131,8 @@ type ClampPopoverResult = {
 - [ ] 共享 API 有单测且通过。
 - [ ] ModelPicker / AgentPicker / SelectMenu 共用该实现，无重复钳制代码（允许薄包装）。
 - [ ] 模型编辑展开后整块在 content-pane 内可见（回归）。
-- [ ] 阶段 B 完成后 Composer 相关菜单贴边不被裁切。
-- [ ] 未迁移菜单行为不回归。
+- [x] 阶段 B 完成后 Composer 相关菜单贴边不被裁切。
+- [ ] 未迁移菜单行为不回归（阶段 C）。
 
 ## 风险
 
