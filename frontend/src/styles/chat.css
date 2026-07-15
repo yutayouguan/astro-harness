@@ -3141,6 +3141,7 @@ html[data-theme="light"] .send-btn--round {
 
 .chat-empty {
   flex: 1;
+  min-height: 0; /* 允许在 chat-pane 内收缩，否则 overflow:auto 无法滚动 */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3148,6 +3149,7 @@ html[data-theme="light"] .send-btn--round {
   padding: 24px 20px 12px;
   gap: 12px;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .chat-welcome {
@@ -3561,7 +3563,8 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 
 .chat-agent-guide {
   position: relative;
-  justify-content: center;
+  /* 内容超高时用 flex-start，避免 justify-content:center 把顶部裁掉且滚不到 */
+  justify-content: flex-start;
   align-items: center;
   padding: 20px 20px 8px;
   width: 100%;
@@ -3608,6 +3611,9 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   position: relative;
   z-index: 1;
   width: min(100%, 580px);
+  /* 内容不足一屏时垂直居中；超高时 margin 归零，整卡可随父级滚动 */
+  margin-block: auto;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
