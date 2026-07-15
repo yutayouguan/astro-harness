@@ -852,8 +852,8 @@ html[data-theme="dark"] .mcp-add-drawer-tabs {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.2)),
-    rgba(255, 255, 255, 0.28);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    rgba(255, 255, 255, 0.38);
   color: inherit;
   font-size: 12px;
   font-family: var(--font-mono, monospace);
@@ -987,8 +987,8 @@ html[data-theme="dark"] .mcp-add-drawer-foot {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.2)),
-    rgba(255, 255, 255, 0.28);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    rgba(255, 255, 255, 0.38);
   color: inherit;
   font-size: 13px;
   font-family: inherit;
@@ -1033,11 +1033,11 @@ html[data-theme="dark"] .mcp-field-textarea {
   width: 100%;
   min-width: 0;
   --select-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-    rgba(255, 255, 255, 0.28);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.64) 0%, rgba(255, 255, 255, 0.3) 100%),
+    rgba(255, 255, 255, 0.38);
   --select-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.28) 100%),
-    rgba(255, 255, 255, 0.34);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.38) 100%),
+    rgba(255, 255, 255, 0.44);
 }
 
 .mcp-type-select .select-menu-value-icon,
