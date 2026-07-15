@@ -235,25 +235,93 @@ fn map_clawhub(s: ClawHubListSkill) -> StoreSkill {
     }
 }
 
-fn clawhub_matches_query(skill: &StoreSkill, q: &str) -> bool {
-    if q.is_empty() {
-        return true;
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubSearchResponse {
+    results: Vec<ClawHubSearchHit>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubSearchHit {
+    slug: String,
+    display_name: Option<String>,
+    summary: Option<String>,
+    downloads: Option<u64>,
+    owner_handle: Option<String>,
+}
+
+fn map_clawhub_search_hit(s: ClawHubSearchHit) -> StoreSkill {
+    let slug = s.slug;
+    let handle = s.owner_handle.filter(|h| !h.is_empty());
+    let name = s
+        .display_name
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| slug.clone());
+    let desc = s.summary.unwrap_or_default();
+    let (id, install_ref, homepage) = match &handle {
+        Some(h) => (
+            format!("clawhub:{h}/{slug}"),
+            format!("clawhub:{h}--{slug}"),
+            format!("https://clawhub.ai/{h}/skills/{slug}"),
+        ),
+        None => (
+            format!("clawhub:{slug}"),
+            format!("clawhub:{slug}"),
+            format!("https://clawhub.ai/s/skills/{slug}"),
+        ),
+    };
+    StoreSkill {
+        id,
+        name,
+        description: desc,
+        source: handle.unwrap_or_else(|| "clawhub".into()),
+        store: "clawhub".into(),
+        installs: s.downloads,
+        install_ref,
+        homepage: Some(homepage),
     }
-    [skill.name.as_str(), skill.description.as_str(), skill.id.as_str()]
-        .iter()
-        .any(|v| v.to_lowercase().contains(q))
+}
+
+async fn fetch_clawhub_search(query: &str, limit: usize, page: usize) -> Result<Vec<StoreSkill>> {
+    let client = http_client()?;
+    let page = page.max(1);
+    // 搜索接口无 offset 分页时表现不一，先拉一页再本地切片
+    let fetch_limit = (page.saturating_mul(limit)).clamp(limit, 50);
+    let url = format!(
+        "{CLAWHUB_API}/api/v1/search?q={}&limit={fetch_limit}",
+        urlencoding::encode(query.trim())
+    );
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/json")
+        .header("User-Agent", "Astro/0.1 (+skills catalog crawler)")
+        .send()
+        .await
+        .with_context(|| format!("GET {url}"))?;
+    if !resp.status().is_success() {
+        return Err(anyhow!("ClawHub search HTTP {}", resp.status()));
+    }
+    let body: ClawHubSearchResponse = resp.json().await.context("parse ClawHub search JSON")?;
+    let all: Vec<StoreSkill> = body.results.into_iter().map(map_clawhub_search_hit).collect();
+    let start = (page - 1).saturating_mul(limit);
+    Ok(all.into_iter().skip(start).take(limit).collect())
 }
 
 async fn fetch_clawhub(query: &str, limit: usize, page: usize) -> Result<Vec<StoreSkill>> {
+    let q = query.trim();
+    if !q.is_empty() {
+        return fetch_clawhub_search(q, limit, page).await;
+    }
+
     let client = http_client()?;
     let page = page.max(1);
-    let q = query.trim().to_lowercase();
     let need = page.saturating_mul(limit);
-    let mut filtered: Vec<StoreSkill> = Vec::new();
+    let mut collected: Vec<StoreSkill> = Vec::new();
     let mut cursor: Option<String> = None;
     // 首屏偶发空 items + cursor，最多跟几轮
     for _ in 0..10 {
-        if filtered.len() >= need {
+        if collected.len() >= need {
             break;
         }
         let mut url = format!("{CLAWHUB_API}/api/v1/skills?limit=50&sortBy=downloads");
@@ -273,16 +341,12 @@ async fn fetch_clawhub(query: &str, limit: usize, page: usize) -> Result<Vec<Sto
         let body: ClawHubListResponse = resp.json().await.context("parse ClawHub list JSON")?;
         let batch_len = body.items.len();
         for item in body.items {
-            let skill = map_clawhub(item);
-            if clawhub_matches_query(&skill, &q) {
-                filtered.push(skill);
-            }
+            collected.push(map_clawhub(item));
         }
         cursor = body.next_cursor.filter(|c| !c.is_empty());
         if cursor.is_none() {
             break;
         }
-        // 空页但有 cursor：继续翻；有数据也继续直到凑够 need
         if batch_len == 0 && cursor.is_some() {
             continue;
         }
@@ -292,7 +356,7 @@ async fn fetch_clawhub(query: &str, limit: usize, page: usize) -> Result<Vec<Sto
     }
 
     let start = (page - 1).saturating_mul(limit);
-    Ok(filtered.into_iter().skip(start).take(limit).collect())
+    Ok(collected.into_iter().skip(start).take(limit).collect())
 }
 
 fn merge_store_lists(lists: impl IntoIterator<Item = Vec<StoreSkill>>, limit: usize) -> Vec<StoreSkill> {
@@ -398,11 +462,12 @@ struct SkillHubV1Stats {
 
 fn store_skill_slug(skill: &StoreSkill) -> String {
     if let Some(rest) = skill.id.strip_prefix("clawhub:") {
-        // clawhub:slug 或 clawhub:owner--slug
-        return rest
-            .rsplit("--")
+        // clawhub:slug / clawhub:owner--slug / clawhub:owner/slug
+        let after_owner = rest.rsplit_once("--").map(|(_, s)| s).unwrap_or(rest);
+        return after_owner
+            .rsplit('/')
             .next()
-            .unwrap_or(rest)
+            .unwrap_or(after_owner)
             .to_string();
     }
     skill.id
@@ -711,6 +776,35 @@ mod tests {
         assert_eq!(
             detail_from_list(&skill).detail_url,
             "https://clawhub.ai/s/skills/outlit-sdk"
+        );
+        let owned = StoreSkill {
+            id: "clawhub:steipete/weather".into(),
+            name: "Weather".into(),
+            description: "d".into(),
+            source: "steipete".into(),
+            store: "clawhub".into(),
+            installs: Some(1),
+            install_ref: "clawhub:steipete--weather".into(),
+            homepage: Some("https://clawhub.ai/steipete/skills/weather".into()),
+        };
+        assert_eq!(store_skill_slug(&owned), "weather");
+    }
+
+    #[test]
+    fn clawhub_search_hit_maps_owner() {
+        let hit = ClawHubSearchHit {
+            slug: "weather".into(),
+            display_name: Some("Weather".into()),
+            summary: Some("Get weather".into()),
+            downloads: Some(163969),
+            owner_handle: Some("steipete".into()),
+        };
+        let mapped = map_clawhub_search_hit(hit);
+        assert_eq!(mapped.id, "clawhub:steipete/weather");
+        assert_eq!(mapped.install_ref, "clawhub:steipete--weather");
+        assert_eq!(
+            mapped.homepage.as_deref(),
+            Some("https://clawhub.ai/steipete/skills/weather")
         );
     }
 
