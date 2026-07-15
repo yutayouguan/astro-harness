@@ -16,6 +16,9 @@ use crate::schema::schema_for_args;
 pub struct ImageGenArgs {
     /// 图片的详细文字描述（不可为空）。
     pub prompt: String,
+    /// 宽高比（可选，主要 Google）：如 `1:1` / `16:9` / `9:16`。
+    #[serde(default)]
+    pub aspect_ratio: Option<String>,
 }
 
 /// 向注册表登记 `image_gen` 工具。
@@ -23,7 +26,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate an image from a text prompt. Uses Gemini OpenAI-compatible images API when Google is enabled, otherwise OpenAI gpt-image-2."
+        description: "Generate an image from a text prompt. Uses Gemini OpenAI-compatible images API when Google is enabled, otherwise OpenAI gpt-image-2. Optional aspect_ratio (e.g. 1:1, 16:9) for Google."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
@@ -36,12 +39,17 @@ pub fn register(registry: &mut ToolRegistry) {
 /// # 错误
 /// 无可用 Provider、全部尝试失败，或缺少 `prompt`。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let prompt = args
-        .get("prompt")
-        .and_then(|v| v.as_str())
+    let parsed: ImageGenArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
+    let prompt = parsed.prompt.trim();
+    if prompt.is_empty() {
+        anyhow::bail!("image_gen 需要 prompt 参数");
+    }
+    let aspect_ratio = parsed
+        .aspect_ratio
+        .as_deref()
         .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("image_gen 需要 prompt 参数"))?;
+        .filter(|s| !s.is_empty());
 
     if ctx.image_gen_targets.is_empty() {
         anyhow::bail!(
@@ -57,7 +65,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     .into_iter()
     .flatten()
     {
-        match generate_one(ctx, prompt, creds).await {
+        match generate_one(ctx, prompt, aspect_ratio, creds).await {
             Ok(path) => {
                 return Ok(format!(
                     "图片已生成：{path}\nprovider={}\nmodel={}",
@@ -80,12 +88,19 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 async fn generate_one(
     ctx: &ToolContext<'_>,
     prompt: &str,
+    aspect_ratio: Option<&str>,
     creds: &ImageGenCreds,
 ) -> anyhow::Result<String> {
     let provider = ctx
         .providers
         .get(&creds.provider)
         .ok_or_else(|| anyhow::anyhow!("未知 Provider: {}", creds.provider))?;
+
+    let additional_params = if let Some(ar) = aspect_ratio.filter(|_| creds.provider == "google") {
+        serde_json::json!({ "aspect_ratio": ar })
+    } else {
+        serde_json::Value::Null
+    };
 
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
@@ -95,6 +110,7 @@ async fn generate_one(
             Some(creds.base_url.clone())
         },
         model: creds.model.clone(),
+        additional_params,
         ..ProviderConfig::default()
     };
 

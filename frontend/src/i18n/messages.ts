@@ -196,7 +196,7 @@ export const zh = {
   "agentTools.vision.title": "视觉",
   "agentTools.vision.desc": "用 Google/OpenAI 兼容接口看图：工作区路径或 http(s) URL + 提问",
   "agentTools.imageGen.title": "图像生成",
-  "agentTools.imageGen.desc": "优先 Gemini 兼容出图，备用 GPT Image 2",
+  "agentTools.imageGen.desc": "优先 Gemini 兼容出图，备用 GPT Image 2；可选 aspect_ratio",
   "agentTools.videoGen.title": "视频生成",
   "agentTools.videoGen.desc": "通过 Google Veo 根据文字生成短视频（可能较久）",
   "agentTools.tts.title": "文本转语音",

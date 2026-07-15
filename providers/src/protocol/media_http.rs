@@ -188,12 +188,22 @@ pub async fn google_openai_generate_image(
     };
     let base = google_openai_base(config);
     let url = format!("{base}/images/generations");
-    let body = json!({
+    let mut body = json!({
         "model": model,
         "prompt": prompt,
         "response_format": "b64_json",
         "n": 1,
     });
+    // Gemini 专有：宽高比（工具可经 additional_params.aspect_ratio 注入）
+    if let Some(ar) = config
+        .additional_params
+        .get("aspect_ratio")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        body["aspect_ratio"] = json!(ar);
+    }
 
     let response = client
         .post(&url)
@@ -255,6 +265,8 @@ pub async fn google_openai_generate_video(
     config: &ProviderConfig,
     aspect_ratio: Option<&str>,
     duration_seconds: Option<u32>,
+    resolution: Option<&str>,
+    negative_prompt: Option<&str>,
 ) -> Result<GeneratedVideo> {
     if config.api_key.trim().is_empty() {
         anyhow::bail!("Google API Key 为空");
@@ -275,6 +287,12 @@ pub async fn google_openai_generate_video(
     }
     if let Some(sec) = duration_seconds.filter(|s| *s > 0) {
         form = form.text("duration_seconds", sec.to_string());
+    }
+    if let Some(res) = resolution.map(str::trim).filter(|s| !s.is_empty()) {
+        form = form.text("resolution", res.to_string());
+    }
+    if let Some(neg) = negative_prompt.map(str::trim).filter(|s| !s.is_empty()) {
+        form = form.text("negative_prompt", neg.to_string());
     }
 
     let create_resp = client

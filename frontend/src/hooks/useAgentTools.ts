@@ -184,6 +184,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     tone: "indigo",
     params: [
       { name: "prompt", type: "string" },
+      { name: "aspect_ratio", type: "string", optional: true },
     ],
   },
   {
@@ -196,6 +197,8 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "prompt", type: "string" },
       { name: "aspect_ratio", type: "string", optional: true },
       { name: "duration_seconds", type: "number", optional: true },
+      { name: "resolution", type: "string", optional: true },
+      { name: "negative_prompt", type: "string", optional: true },
     ],
   },
   {

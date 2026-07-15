@@ -20,6 +20,12 @@ pub struct VideoGenArgs {
     /// 时长秒数（可选，取决于 Veo 支持范围）。
     #[serde(default)]
     pub duration_seconds: Option<u32>,
+    /// 输出分辨率（可选）：`720p` / `1080p` / `4K`。
+    #[serde(default)]
+    pub resolution: Option<String>,
+    /// 负面提示：希望排除的内容（可选）。
+    #[serde(default)]
+    pub negative_prompt: Option<String>,
 }
 
 /// 向注册表登记 `video_gen` 工具。
@@ -27,7 +33,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video from a text prompt via Google Veo (OpenAI-compatible videos API). Requires an enabled Google provider with API key. May take several minutes."
+        description: "Generate a short video from a text prompt via Google Veo (OpenAI-compatible videos API). May take several minutes. Optional: aspect_ratio, duration_seconds, resolution (720p|1080p|4K), negative_prompt."
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,
@@ -75,6 +81,8 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         &config,
         parsed.aspect_ratio.as_deref(),
         parsed.duration_seconds,
+        parsed.resolution.as_deref(),
+        parsed.negative_prompt.as_deref(),
     )
     .await?;
 
