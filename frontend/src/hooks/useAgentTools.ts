@@ -40,6 +40,7 @@ export type AgentToolId =
   | "vision"
   | "image_gen"
   | "video_gen"
+  | "video_understand"
   | "tts"
   | "music"
   | "skills"
@@ -206,6 +207,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "last_frame", type: "string", optional: true },
       { name: "person_generation", type: "string", optional: true },
       { name: "seed", type: "number", optional: true },
+    ],
+  },
+  {
+    id: "video_understand",
+    titleKey: "agentTools.videoUnderstand.title",
+    descKey: "agentTools.videoUnderstand.desc",
+    Icon: IconVideoGen,
+    tone: "rose",
+    params: [
+      { name: "video_url", type: "string" },
+      { name: "prompt", type: "string", optional: true },
+      { name: "mode", type: "string", optional: true },
     ],
   },
   {
