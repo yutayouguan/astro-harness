@@ -1,28 +1,51 @@
-//! 文本转语音：Google Gemini TTS 优先，OpenAI `audio/speech` 备用。
+//! 文本转语音：Google Gemini Interactions TTS 优先，OpenAI `audio/speech` 备用。
 //!
 //! Google 凭证来自 [`ToolContext::image_gen_targets`]（与出图共用 Google key）；
-//! OpenAI 依次尝试 targets、当前聊天 OpenAI、`OPENAI_API_KEY`。
+//! 配置了 Google 时失败**不**回退 OpenAI。无 Google 时才走 OpenAI
+//!（依次尝试 targets、当前聊天 OpenAI、`OPENAI_API_KEY`）。
 //! 音频写入工作区 `generated/audio/`。
 
 use home::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::http_stream::openai_compatible_base;
-use providers::media_http::{default_tts_model, google_tts_generate};
+use providers::interactions_http::{
+    build_tts_input, google_interactions_tts, InteractionSpeechConfig, InteractionTtsRequest,
+};
+use providers::media_http::default_tts_model;
 use providers::trait_::ProviderConfig;
 
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
+/// 多说话人条目（与转写中角色名一致）。
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct TtsSpeaker {
+    /// 说话人名称（出现在 text/转写中）。
+    pub speaker: String,
+    /// Google 预置音色，如 `Kore` / `Puck`。
+    pub voice: String,
+}
+
 /// `tts` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TtsArgs {
-    /// 待合成的文本（不可为空）。
+    /// 待合成的文本（不可为空；可含 `[whispers]` 等音频标记）。
     pub text: String,
-    /// 音色：Google 预置如 `Kore`；OpenAI 路径可用 `alloy` / `echo` 等；缺省按供应商默认。
+    /// 单说话人音色：Google 预置如 `Kore`；OpenAI 路径可用 `alloy` 等。
+    /// 若同时提供 `speakers`，以 `speakers` 为准。
     #[serde(default)]
     pub voice: Option<String>,
+    /// 多说话人（最多 2）；Google Interactions 专用。
+    #[serde(default)]
+    pub speakers: Option<Vec<TtsSpeaker>>,
+    /// 导演/风格说明（口音、语气、节奏等）；仅 Google Interactions 生效。
+    #[serde(default)]
+    pub style: Option<String>,
+    /// 是否流式生成并聚合落盘；仅 Google Interactions（默认 false）。
+    #[serde(default)]
+    pub stream: Option<bool>,
 }
 
 /// 向注册表登记 `tts` 工具。
@@ -30,7 +53,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "tts".to_string(),
         toolset: "tts".to_string(),
-        description: "Convert text to speech. Uses Gemini TTS when Google is enabled, otherwise OpenAI audio/speech."
+        description: "Convert text to speech. Google: Gemini Interactions TTS (voices, optional speakers[max 2], style director notes, stream). OpenAI: /audio/speech fallback when Google is not configured. Advanced speakers/style/stream are Google-only."
             .to_string(),
         schema: schema_for_args::<TtsArgs>(),
         check_fn: None,
@@ -46,33 +69,48 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     if text.is_empty() {
         anyhow::bail!("tts 需要 text");
     }
-    let voice = parsed.voice.as_deref().unwrap_or("");
 
-    let mut errors = Vec::new();
-    if let Some(creds) = ctx.image_gen_targets.google() {
-        match synthesize_google(ctx, text, voice, creds).await {
-            Ok(msg) => return Ok(msg),
-            Err(e) => errors.push(format!("google: {e}")),
+    if let Some(ref speakers) = parsed.speakers {
+        if speakers.len() > 2 {
+            anyhow::bail!("tts speakers 最多 2 个");
+        }
+        for (i, s) in speakers.iter().enumerate() {
+            if s.speaker.trim().is_empty() || s.voice.trim().is_empty() {
+                anyhow::bail!("tts speakers[{i}] 需要非空 speaker 与 voice");
+            }
         }
     }
 
-    match synthesize_openai(ctx, text, if voice.is_empty() { "alloy" } else { voice }).await
-    {
-        Ok(msg) => Ok(msg),
-        Err(e) => {
-            errors.push(format!("openai: {e}"));
-            anyhow::bail!(
-                "tts 失败：{}。请配置 Google 或 OpenAI API Key。",
-                errors.join("；")
-            )
-        }
+    let stream = parsed.stream.unwrap_or(false);
+    let style = parsed.style.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let advanced = parsed.speakers.is_some() || style.is_some() || parsed.stream == Some(true);
+
+    if let Some(creds) = ctx.image_gen_targets.google() {
+        return synthesize_google(ctx, text, &parsed, style, stream, creds).await;
+    }
+
+    let voice = parsed
+        .voice
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("alloy");
+    let msg = synthesize_openai(ctx, text, voice).await?;
+    if advanced {
+        Ok(format!(
+            "{msg}\nnote: speakers/style/stream 仅 Google Interactions TTS 生效"
+        ))
+    } else {
+        Ok(msg)
     }
 }
 
 async fn synthesize_google(
     ctx: &ToolContext<'_>,
     text: &str,
-    voice: &str,
+    parsed: &TtsArgs,
+    style: Option<&str>,
+    stream: bool,
     creds: &crate::context::ImageGenCreds,
 ) -> anyhow::Result<String> {
     let model = if creds.tts_model.trim().is_empty() {
@@ -80,6 +118,8 @@ async fn synthesize_google(
     } else {
         creds.tts_model.trim().to_string()
     };
+    let speech_config = resolve_speech_config(parsed)?;
+    let input = build_tts_input(text, style);
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
         base_url: if creds.base_url.trim().is_empty() {
@@ -90,8 +130,16 @@ async fn synthesize_google(
         model: model.clone(),
         ..ProviderConfig::default()
     };
-    let client = reqwest::Client::new();
-    let wav = google_tts_generate(&client, text, voice, &config).await?;
+    let req = InteractionTtsRequest {
+        model: model.clone(),
+        input,
+        speech_config,
+        stream,
+    };
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
+    let result = google_interactions_tts(&client, &config, &req).await?;
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(format!(
@@ -99,14 +147,54 @@ async fn synthesize_google(
         chrono::Local::now().format("%Y%m%d-%H%M%S"),
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     ));
-    std::fs::write(&path, &wav)?;
+    std::fs::write(&path, &result.wav_bytes)?;
     let rel = path
         .strip_prefix(&ctx.workspace_dir)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
     Ok(format!(
-        "语音已生成：{rel}\nprovider=google\nmodel={model}"
+        "语音已生成：{rel}\nprovider=google\nmodel={model}\ninteraction_id={}\nstream={}",
+        result.interaction_id,
+        stream
     ))
+}
+
+fn resolve_speech_config(parsed: &TtsArgs) -> anyhow::Result<Vec<InteractionSpeechConfig>> {
+    if let Some(ref speakers) = parsed.speakers {
+        if !speakers.is_empty() {
+            return Ok(speakers
+                .iter()
+                .map(|s| InteractionSpeechConfig {
+                    speaker: Some(s.speaker.trim().to_string()),
+                    voice: normalize_google_voice(&s.voice),
+                })
+                .collect());
+        }
+    }
+    let voice = parsed
+        .voice
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Kore");
+    Ok(vec![InteractionSpeechConfig {
+        speaker: None,
+        voice: normalize_google_voice(voice),
+    }])
+}
+
+fn normalize_google_voice(voice: &str) -> String {
+    let v = voice.trim();
+    if v.is_empty()
+        || matches!(
+            v.to_ascii_lowercase().as_str(),
+            "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"
+        )
+    {
+        "Kore".to_string()
+    } else {
+        v.to_string()
+    }
 }
 
 async fn synthesize_openai(
@@ -171,7 +259,36 @@ fn resolve_openai_tts(ctx: &ToolContext<'_>) -> anyhow::Result<(String, String)>
     }
     let env_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
     if env_key.is_empty() {
-        anyhow::bail!("无可用 OpenAI API Key");
+        anyhow::bail!("无可用 OpenAI API Key（且未配置 Google）");
     }
     Ok((env_key, "https://api.openai.com/v1".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_maps_openai_voices() {
+        assert_eq!(normalize_google_voice("alloy"), "Kore");
+        assert_eq!(normalize_google_voice("Puck"), "Puck");
+    }
+
+    #[test]
+    fn resolve_speakers_prefers_speakers_over_voice() {
+        let args = TtsArgs {
+            text: "Joe: hi".into(),
+            voice: Some("Fenrir".into()),
+            speakers: Some(vec![TtsSpeaker {
+                speaker: "Joe".into(),
+                voice: "Kore".into(),
+            }]),
+            style: None,
+            stream: None,
+        };
+        let sc = resolve_speech_config(&args).unwrap();
+        assert_eq!(sc.len(), 1);
+        assert_eq!(sc[0].speaker.as_deref(), Some("Joe"));
+        assert_eq!(sc[0].voice, "Kore");
+    }
 }

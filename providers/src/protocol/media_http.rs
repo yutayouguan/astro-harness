@@ -1,4 +1,6 @@
-//! Google OpenAI 兼容出图/视频/视觉，以及 Gemini 原生 TTS。
+//! Google OpenAI 兼容出图/视频/视觉，以及旧版 Gemini `generateContent` TTS。
+//!
+//! TTS 主路径请用 [`crate::interactions_http::google_interactions_tts`]。
 
 use std::time::Duration;
 
@@ -487,6 +489,12 @@ pub async fn google_openai_generate_video(
 }
 
 /// Google 原生 TTS：`generateContent` + AUDIO modality；返回 wav 字节。
+///
+/// **已弃用**：请改用 [`crate::interactions_http::google_interactions_tts`]
+///（Interactions API）。本函数保留供兼容，工具层不再调用。
+#[deprecated(
+    note = "use interactions_http::google_interactions_tts (Gemini Interactions API)"
+)]
 pub async fn google_tts_generate(
     client: &Client,
     text: &str,
