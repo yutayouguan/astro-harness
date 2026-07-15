@@ -1,8 +1,9 @@
 //! 图片生成工具：按文本提示调用 Google / OpenAI 等图片 Provider。
 //!
 //! 凭据来自 [`ToolContext::image_gen_targets`]：先试 primary，失败再试 fallback。
-//! 成功图片写入工作区 `generated/`。
+//! 成功图片写入工作区 `generated/images/`。
 
+use memory::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::trait_::ProviderConfig;
@@ -120,7 +121,7 @@ async fn generate_one(
         .next()
         .ok_or_else(|| anyhow::anyhow!("未返回图片数据"))?;
 
-    let dir = ctx.workspace_dir.join("generated");
+    let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Images);
     std::fs::create_dir_all(&dir)?;
     let ext = if img.mime_type.contains("jpeg") || img.mime_type.contains("jpg") {
         "jpg"
@@ -138,4 +139,16 @@ async fn generate_one(
     let path = dir.join(filename);
     std::fs::write(&path, &img.data)?;
     Ok(path.display().to_string())
+}
+
+#[cfg(test)]
+mod path_tests {
+    use memory::{generated_dir, GeneratedKind};
+    use std::path::Path;
+
+    #[test]
+    fn image_gen_target_dir_is_images() {
+        let d = generated_dir(Path::new("/ws"), GeneratedKind::Images);
+        assert!(d.ends_with("generated/images"));
+    }
 }

@@ -2,7 +2,9 @@
 //!
 //! Google 凭证来自 [`ToolContext::image_gen_targets`]（与出图共用 Google key）；
 //! OpenAI 依次尝试 targets、当前聊天 OpenAI、`OPENAI_API_KEY`。
+//! 音频写入工作区 `generated/audio/`。
 
+use memory::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::http_stream::openai_compatible_base;
@@ -90,7 +92,7 @@ async fn synthesize_google(
     };
     let client = reqwest::Client::new();
     let wav = google_tts_generate(&client, text, voice, &config).await?;
-    let dir = ctx.workspace_dir.join("generated");
+    let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(format!(
         "tts-{}-{}.wav",
@@ -130,7 +132,7 @@ async fn synthesize_openai(
         anyhow::bail!("OpenAI TTS HTTP {status}: {err}");
     }
     let bytes = resp.bytes().await?;
-    let dir = ctx.workspace_dir.join("generated");
+    let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(format!(
         "tts-{}-{}.mp3",

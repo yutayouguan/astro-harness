@@ -1,5 +1,6 @@
-//! 视频生成：Google OpenAI 兼容 `…/videos`（Veo），写入工作区 `generated/`。
+//! 视频生成：Google OpenAI 兼容 `…/videos`（Veo），写入工作区 `generated/videos/`。
 
+use memory::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::media_http::{default_video_model, google_openai_generate_video};
@@ -86,7 +87,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     )
     .await?;
 
-    let dir = ctx.workspace_dir.join("generated");
+    let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Videos);
     std::fs::create_dir_all(&dir)?;
     let filename = format!(
         "vid-{}-{}.mp4",
