@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   fileExt,
   isExternalOnlyFile,
+  isPdfFile,
   mediaKindOf,
   resolveFileType,
 } from "./fileTypeIcon.ts";
@@ -19,9 +20,12 @@ test("office and archives resolve with dedicated icons and external open", () =>
   assert.equal(resolveFileType("book.xlsx").kind, "sheet");
   assert.equal(resolveFileType("deck.pptx").kind, "slides");
   assert.equal(resolveFileType("spec.pdf").kind, "pdf");
+  assert.equal(resolveFileType("spec.pdf").open, "media-pdf");
+  assert.ok(isPdfFile("spec.pdf"));
   assert.equal(resolveFileType("src.zip").kind, "archive");
   assert.ok(isExternalOnlyFile("deck.pptx"));
   assert.ok(isExternalOnlyFile("src.zip"));
+  assert.equal(isExternalOnlyFile("spec.pdf"), false);
 });
 
 test("language extensions map to distinct glyph kinds", () => {

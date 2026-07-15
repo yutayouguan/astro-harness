@@ -218,7 +218,7 @@ const EXT_MAP: Record<string, ResolvedFileType> = {
   ipa: entry("archive", Package, "external"),
 
   // 办公文档
-  pdf: entry("pdf", ScrollText, "external"),
+  pdf: entry("pdf", ScrollText, "media-pdf"),
   doc: entry("word", FileText, "external"),
   docx: entry("word", FileText, "external"),
   odt: entry("word", FileText, "external"),
@@ -414,6 +414,11 @@ export function resolveFileType(
 /** 是否宜用系统默认应用打开（不宜内置文本编辑器） */
 export function isExternalOnlyFile(name: string): boolean {
   return resolveFileType(name, false).open === "external";
+}
+
+/** 是否可在应用内嵌 PDF 预览 */
+export function isPdfFile(name: string): boolean {
+  return resolveFileType(name, false).open === "media-pdf";
 }
 
 /** 若可内嵌预览则返回 image / video / audio / html */
