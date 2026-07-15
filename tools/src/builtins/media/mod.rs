@@ -4,4 +4,5 @@ pub mod image_gen;
 pub mod video_gen;
 pub mod tts;
 pub mod music;
+pub mod music_gen;
 pub mod vision;
