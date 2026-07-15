@@ -7,5 +7,6 @@ pub mod image_http;
 pub mod image_gen;
 pub mod interactions_http;
 pub mod media_http;
+pub mod robotics_http;
 pub mod tool_format;
 pub mod extractor;
