@@ -1,2 +1,2 @@
-// Memory content safety scan lives in home (no SQLite).
-pub use home::agent::scan::*;
+// Memory content safety scan lives in home::config (no SQLite).
+pub use home::config::scan::*;

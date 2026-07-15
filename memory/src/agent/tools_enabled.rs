@@ -1,2 +1,2 @@
-// Tool-enabled switch logic lives in home (no SQLite).
-pub use home::agent::tools_enabled::*;
+// Tool-enabled switch logic lives in home::config (no SQLite).
+pub use home::config::tools_enabled::*;

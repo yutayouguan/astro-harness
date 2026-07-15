@@ -1,4 +1,4 @@
-//! Agent 配置层：图标、工具开关、内容安全扫描——无 SQLite。
+//! 本机配置层：图标、工具开关、内容安全扫描——无 SQLite。
 
 pub mod agent_icons;
 pub mod auto_icon;

@@ -1,2 +1,2 @@
-// Auto-icon selection lives in home (no SQLite).
-pub use home::agent::auto_icon::*;
+// Auto-icon selection lives in home::config (no SQLite).
+pub use home::config::auto_icon::*;
