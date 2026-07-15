@@ -226,7 +226,13 @@ pub async fn fill_origin_remote_baseline(
     let store_skill = origin_to_store_skill(&origin);
     match fetch_detail(&store_skill).await {
         Ok(detail) => {
-            upsert_origin(origin_with_remote_baseline(&origin, &detail))?;
+            if let Err(e) = upsert_origin(origin_with_remote_baseline(&origin, &detail)) {
+                tracing::debug!(
+                    folder = %folder,
+                    error = %e,
+                    "upsert remote baseline after install failed; continuing"
+                );
+            }
         }
         Err(e) => {
             tracing::debug!(

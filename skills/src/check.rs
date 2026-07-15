@@ -125,6 +125,15 @@ pub async fn check_updates_for_agent(
     Ok(results)
 }
 
+/// 从检查结果中取出 `Outdated` 技能的 folder 列表。
+pub fn filter_outdated_folders(results: &[SkillUpdateCheckResult]) -> Vec<String> {
+    results
+        .iter()
+        .filter(|r| r.status == SkillUpdateStatus::Outdated)
+        .map(|r| r.folder.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,6 +286,58 @@ mod tests {
         assert_eq!(result.status, SkillUpdateStatus::Outdated);
         assert_eq!(result.folder, "demo-skill");
         assert_eq!(result.remote_version.as_deref(), Some("2.0.0"));
+    }
+
+    #[test]
+    fn filter_outdated_folders_returns_only_outdated() {
+        let results = vec![
+            SkillUpdateCheckResult {
+                folder: "a".into(),
+                status: SkillUpdateStatus::Outdated,
+                remote_version: Some("2.0.0".into()),
+                remote_updated_at: None,
+                message: String::new(),
+            },
+            SkillUpdateCheckResult {
+                folder: "b".into(),
+                status: SkillUpdateStatus::Current,
+                remote_version: Some("1.0.0".into()),
+                remote_updated_at: None,
+                message: String::new(),
+            },
+            SkillUpdateCheckResult {
+                folder: "c".into(),
+                status: SkillUpdateStatus::Unknown,
+                remote_version: None,
+                remote_updated_at: None,
+                message: String::new(),
+            },
+        ];
+        assert_eq!(
+            filter_outdated_folders(&results),
+            vec!["a".to_string()]
+        );
+    }
+
+    #[test]
+    fn filter_outdated_folders_empty_when_none_outdated() {
+        let results = vec![
+            SkillUpdateCheckResult {
+                folder: "b".into(),
+                status: SkillUpdateStatus::Current,
+                remote_version: Some("1.0.0".into()),
+                remote_updated_at: None,
+                message: String::new(),
+            },
+            SkillUpdateCheckResult {
+                folder: "c".into(),
+                status: SkillUpdateStatus::Error,
+                remote_version: None,
+                remote_updated_at: None,
+                message: "fetch failed".into(),
+            },
+        ];
+        assert!(filter_outdated_folders(&results).is_empty());
     }
 
     #[test]

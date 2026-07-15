@@ -21,7 +21,7 @@ pub mod store;
 pub mod update;
 
 pub use install::{install_from_ref, InstallOriginHint};
-pub use update::{update_all_with_origin, update_installed_skill};
+pub use update::{update_all_with_origin, update_installed_skill, update_outdated_skills};
 pub use seed::{
     is_public_skill_installed, seed_default_public_skills, SeedReport, DEFAULT_PUBLIC_SKILLS,
 };
@@ -37,7 +37,7 @@ pub use models::{
 };
 pub use check::{
     check_origin_against_detail, check_updates_for_agent, classify_update_status,
-    origin_to_store_skill,
+    filter_outdated_folders, origin_to_store_skill,
 };
 pub use registry::SkillRegistry;
 pub use skill::{LoadedSkill, SkillMetadata};
