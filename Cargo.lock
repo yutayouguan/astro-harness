@@ -1586,6 +1586,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "home"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "hooks"
 version = "0.1.0"
 dependencies = [
@@ -2304,8 +2319,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "common",
+ "home",
  "http 1.4.2",
- "memory-paths",
  "rmcp",
  "serde",
  "serde_json",
@@ -2336,8 +2351,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "common",
- "memory-agent",
- "memory-paths",
+ "home",
  "reqwest 0.12.28",
  "rusqlite",
  "schemars 0.8.22",
@@ -2351,33 +2365,6 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
-]
-
-[[package]]
-name = "memory-agent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "memory-paths",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "memory-paths"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]

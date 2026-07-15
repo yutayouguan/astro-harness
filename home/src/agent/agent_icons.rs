@@ -221,8 +221,8 @@ pub fn update_agent_icons(
     emoji: Option<(&[u8], &str)>,
     avatar: Option<(&[u8], &str)>,
 ) -> anyhow::Result<()> {
-    let id = memory_paths::normalize_agent_id(agent_id);
-    let ws = memory_paths::agent_workspace_dir(base, &id);
+    let id = crate::normalize_agent_id(agent_id);
+    let ws = crate::agent_workspace_dir(base, &id);
     if !ws.is_dir() {
         anyhow::bail!("Agent 工作区不存在: {}", ws.display());
     }

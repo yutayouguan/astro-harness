@@ -7,8 +7,7 @@ edition = "2021"
 anyhow          = { workspace = true }
 common          = { path = "../common" }
 skills          = { path = "../skills" }
-memory-paths    = { path = "../memory-paths" }
-memory-agent    = { path = "../memory-agent" }
+home            = { path = "../home" }
 tokio = { workspace = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }

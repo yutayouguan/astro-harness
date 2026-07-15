@@ -1,6 +1,4 @@
-//! Agent 配置层——无 SQLite 依赖。
-//!
-//! 包含：图标资源、工具开关、内容安全扫描。
+//! Agent 配置层：图标、工具开关、内容安全扫描——无 SQLite。
 
 pub mod agent_icons;
 pub mod auto_icon;

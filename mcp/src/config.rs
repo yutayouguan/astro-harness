@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use memory_paths::{
+use home::{
     active_agent_id, agent_config_dir, default_memory_dir, ensure_default_workspace_dirs,
     DEFAULT_AGENT_ID,
 };

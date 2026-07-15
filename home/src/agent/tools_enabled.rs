@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use memory_paths::{
+use crate::{
     active_agent_id, agent_workspace_dir, default_memory_dir, ensure_default_workspace_dirs,
     AgentRuntimeConfig, DEFAULT_AGENT_ID,
 };
@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn missing_defaults_to_enabled() {
         let dir = TempDir::new().unwrap();
-        let _env = memory_paths::test_env::AstroMemoryDirGuard::set(dir.path());
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         assert!(is_toolset_enabled("memory"));
         assert!(is_tool_call_allowed("memory"));
     }
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn disabled_toolset_blocks_calls() {
         let dir = TempDir::new().unwrap();
-        let _env = memory_paths::test_env::AstroMemoryDirGuard::set(dir.path());
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         let mut state = HashMap::new();
         state.insert("memory".into(), false);
         state.insert("scheduled".into(), true);
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn non_default_agent_tools_enabled_overrides_global() {
         let dir = TempDir::new().unwrap();
-        let _env = memory_paths::test_env::AstroMemoryDirGuard::set(dir.path());
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let mut global = HashMap::new();
         global.insert("memory".into(), true);

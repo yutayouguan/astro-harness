@@ -2,8 +2,7 @@
 members = [
     "proto",
     "common",
-    "memory-paths",
-    "memory-agent",
+    "home",
     "backend",
     "agent",
     "providers",

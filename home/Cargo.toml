@@ -1,7 +1,8 @@
 [package]
-name = "memory-paths"
+name = "home"
 version = "0.1.0"
 edition = "2021"
+description = "Astro 本机根（~/.astro）：路径、日志、Agent 配置层——无 SQLite"
 
 [dependencies]
 anyhow          = { workspace = true }

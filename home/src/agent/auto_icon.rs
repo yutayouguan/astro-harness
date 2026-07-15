@@ -272,7 +272,7 @@ pub fn apply_auto_lucide_icon(
     focus: &str,
     style: &str,
 ) -> anyhow::Result<Option<&'static str>> {
-    use crate::agent_icons::{write_agent_icon, AgentIconKind};
+    use crate::agent::agent_icons::{write_agent_icon, AgentIconKind};
 
     let assets = ws.join("assets");
     if assets.is_dir() {

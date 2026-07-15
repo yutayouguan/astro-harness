@@ -1,2 +1,2 @@
-// Agent icon storage lives in memory-agent (no SQLite).
-pub use memory_agent::agent_icons::*;
+// Agent icon storage lives in home (no SQLite).
+pub use home::agent::agent_icons::*;

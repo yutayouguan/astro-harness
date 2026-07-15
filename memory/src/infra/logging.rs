@@ -1,2 +1,2 @@
-// Logging init lives in memory-paths (no SQLite).
-pub use memory_paths::infra::logging::*;
+// Logging init lives in home (no SQLite).
+pub use home::infra::logging::*;

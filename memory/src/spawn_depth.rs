@@ -1,2 +1,2 @@
-// Spawn-depth task-local tracking lives in memory-paths (no SQLite).
-pub use memory_paths::spawn_depth::*;
+// Spawn-depth task-local tracking lives in home (no SQLite).
+pub use home::spawn_depth::*;

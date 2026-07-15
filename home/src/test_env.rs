@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
-/// 跨 memory-paths / memory-agent / memory crate 内所有单测共享的环境变量锁。
+/// 跨 home / memory crate 内所有单测共享的环境变量锁。
 pub fn lock_astro_memory_dir() -> MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
     LOCK.lock().unwrap_or_else(|e| e.into_inner())
