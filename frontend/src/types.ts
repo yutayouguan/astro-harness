@@ -341,6 +341,7 @@ export type SkillOriginRecord = {
   last_updated_at?: number | null;
   remote_version?: string | null;
   remote_updated_at?: number | null;
+  content_digest?: string | null;
 };
 
 /** 更新前本地改动预览（与 Rust `SkillUpdatePreview` 对齐） */
