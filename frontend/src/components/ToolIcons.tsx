@@ -82,12 +82,17 @@ export function IconEye(props: IconProps) {
 
 export function IconRobotics(props: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <rect x="7" y="9" width="10" height="8" rx="1.5" />
-      <circle cx="10" cy="13" r="1" />
-      <circle cx="14" cy="13" r="1" />
-      <path d="M12 5v4M9 17v2M15 17v2M5 12H3M21 12h-2" />
-    </svg>
+    <IconBase {...props}>
+      <path d="M4 21h6" />
+      <path d="M7 21v-4" />
+      <circle cx="7" cy="15" r="1.5" />
+      <path d="M7 15 11 10" />
+      <circle cx="11" cy="10" r="1.5" />
+      <path d="M11 10 18 6" />
+      <circle cx="18" cy="6" r="1.5" />
+      <path d="M18 6 21 3" />
+      <path d="M18 6 21 9" />
+    </IconBase>
   );
 }
 
