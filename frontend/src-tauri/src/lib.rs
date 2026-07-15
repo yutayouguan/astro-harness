@@ -330,6 +330,7 @@ pub fn run() {
             skills_commands::open_skill_file,
             skills_commands::list_skill_origins,
             skills_commands::update_installed_skill,
+            skills_commands::check_skill_updates,
             skills_commands::update_all_skills,
             artifacts_commands::list_artifacts,
             artifacts_commands::reconcile_artifacts,
