@@ -396,6 +396,19 @@ html[data-theme="dark"][data-tone="amber"] {
 html[data-theme="dark"][data-tone="teal"] {
   --window-underlay: #071412;
 }
+
+/* 全局 --tone 映射：使弹窗/浮层/Portal 等元素自动跟随当前 Tab 主题色。
+   各 Panel 内部的局部 --tone 定义（更近的祖先）仍优先，不受影响。     */
+html[data-tone="blue"]   { --tone: var(--tone-blue);   --tone-soft: var(--tone-blue-soft);   }
+html[data-tone="green"]  { --tone: var(--tone-green);  --tone-soft: var(--tone-green-soft);  }
+html[data-tone="purple"] { --tone: var(--tone-purple); --tone-soft: var(--tone-purple-soft); }
+html[data-tone="orange"] { --tone: var(--tone-orange); --tone-soft: var(--tone-orange-soft); }
+html[data-tone="pink"]   { --tone: var(--tone-pink);   --tone-soft: var(--tone-pink-soft);   }
+html[data-tone="cyan"]   { --tone: var(--tone-cyan);   --tone-soft: var(--tone-cyan-soft);   }
+html[data-tone="indigo"] { --tone: var(--tone-indigo); --tone-soft: var(--tone-indigo-soft); }
+html[data-tone="amber"]  { --tone: var(--tone-amber);  --tone-soft: var(--tone-amber-soft);  }
+html[data-tone="teal"]   { --tone: var(--tone-teal);   --tone-soft: var(--tone-teal-soft);   }
+
 button,
 input,
 select,

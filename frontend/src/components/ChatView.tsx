@@ -10,7 +10,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { useClampPopover } from "../hooks/useClampPopover";
 import {
   AtSign,
   ChartPie,
@@ -530,6 +532,8 @@ export default function ChatView({
   const typedHintRef = useRef<HTMLSpanElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
+  const modeMenuPanelRef = useRef<HTMLDivElement>(null);
+  const mcpWrapRef = useRef<HTMLDivElement>(null);
   const contextWrapRef = useRef<HTMLDivElement>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
@@ -585,13 +589,27 @@ export default function ChatView({
   useEffect(() => {
     if (!modeMenuOpen) return;
     const onDoc = (ev: MouseEvent) => {
-      if (!modeMenuRef.current?.contains(ev.target as Node)) {
-        setModeMenuOpen(false);
-      }
+      const target = ev.target as Node;
+      if (modeMenuRef.current?.contains(target)) return;
+      if (modeMenuPanelRef.current?.contains(target)) return;
+      setModeMenuOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [modeMenuOpen]);
+
+  const modeMenuStyle = useClampPopover({
+    open: modeMenuOpen,
+    anchorRef: modeMenuRef,
+    popoverRef: modeMenuPanelRef,
+    mode: "fixed",
+    preferAlign: "start",
+    placement: "above",
+    gap: 8,
+    maxHeightCap: 320,
+    minMaxHeight: 96,
+    sizeKey: chatMode,
+  });
 
   const modeMeta = useMemo(() => {
     const map: Record<
@@ -1478,32 +1496,42 @@ export default function ChatView({
                     );
                   })()}
                 </button>
-                {modeMenuOpen ? (
-                  <div className="composer-mode-menu" role="listbox">
-                    {CHAT_MODES.map((mode) => {
-                      const Meta = modeMeta[mode];
-                      const Icon = Meta.Icon;
-                      const selected = mode === chatMode;
-                      return (
-                        <button
-                          key={mode}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          className={`composer-mode-item ${selected ? "is-selected" : ""}`}
-                          onClick={() => {
-                            onChatModeChange(mode);
-                            setModeMenuOpen(false);
-                          }}
-                        >
-                          <Icon size={16} strokeWidth={2} />
-                          <span>{Meta.label}</span>
-                          {selected ? <Check size={14} strokeWidth={2.4} /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
+                {modeMenuOpen && typeof document !== "undefined"
+                  ? createPortal(
+                      <div
+                        ref={modeMenuPanelRef}
+                        className="composer-mode-menu"
+                        role="listbox"
+                        style={modeMenuStyle ?? { visibility: "hidden" }}
+                      >
+                        {CHAT_MODES.map((mode) => {
+                          const Meta = modeMeta[mode];
+                          const Icon = Meta.Icon;
+                          const selected = mode === chatMode;
+                          return (
+                            <button
+                              key={mode}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              className={`composer-mode-item ${selected ? "is-selected" : ""}`}
+                              onClick={() => {
+                                onChatModeChange(mode);
+                                setModeMenuOpen(false);
+                              }}
+                            >
+                              <Icon size={16} strokeWidth={2} />
+                              <span>{Meta.label}</span>
+                              {selected ? (
+                                <Check size={14} strokeWidth={2.4} />
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>,
+                      document.body,
+                    )
+                  : null}
               </div>
 
               {showThinkingControls ? (
@@ -1531,7 +1559,7 @@ export default function ChatView({
                 </button>
               ) : null}
 
-              <div className="composer-mcp-wrap">
+              <div className="composer-mcp-wrap" ref={mcpWrapRef}>
                 <button
                   type="button"
                   className={`composer-icon-btn ${mcpOpen ? "is-open" : ""} ${
@@ -1552,6 +1580,7 @@ export default function ChatView({
                 </button>
                 <ComposerMcpMenu
                   open={mcpOpen}
+                  anchorRef={mcpWrapRef}
                   agentId={agentId}
                   onClose={() => setMcpOpen(false)}
                   onOpenSettings={() => onOpenMcpSettings?.()}

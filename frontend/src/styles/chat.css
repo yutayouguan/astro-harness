@@ -2132,9 +2132,8 @@ html[data-theme="dark"] .msg-md-codeblock {
 }
 
 .composer-mode-menu {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
+  position: fixed;
+  z-index: 1400;
   min-width: 168px;
   padding: 0.35rem;
   border-radius: 14px;
@@ -2145,7 +2144,7 @@ html[data-theme="dark"] .msg-md-codeblock {
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(18px) saturate(1.25);
   -webkit-backdrop-filter: blur(18px) saturate(1.25);
-  z-index: 40;
+  overflow: auto;
 }
 
 html[data-theme="light"] .composer-mode-menu {
@@ -2205,20 +2204,21 @@ html[data-theme="light"] .composer-mode-menu {
 }
 
 .ctx-usage-popover {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 40;
+  position: fixed;
+  z-index: 1400;
   width: min(320px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
   border-radius: 14px;
   border: 1px solid var(--menu-glass-border);
+  border-top: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 45%, transparent);
   background: var(--menu-glass-bg);
-  box-shadow: var(--menu-glass-shadow);
+  box-shadow:
+    var(--menu-glass-shadow),
+    0 0 24px color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
   backdrop-filter: var(--menu-glass-blur);
   -webkit-backdrop-filter: var(--menu-glass-blur);
-  overflow: hidden;
+  overflow: auto;
   color: var(--ink);
 }
 
@@ -2248,17 +2248,18 @@ html[data-theme="light"] .composer-mode-menu {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--ink-mute);
+  color: var(--tone, var(--accent));
   font: inherit;
   font-size: 0.75rem;
   font-weight: 600;
   padding: 4px 8px;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
 
 .ctx-usage-popover-detail:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--tone, var(--accent));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
 }
 
 .ctx-usage-popover-close {
@@ -2573,12 +2574,9 @@ html[data-theme="dark"] .composer-palette {
 }
 
 .composer-mcp-menu {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
-  z-index: 40;
+  position: fixed;
+  z-index: 1400;
   width: min(320px, calc(100vw - 24px));
-  max-height: min(420px, 55vh);
   display: flex;
   flex-direction: column;
   border-radius: 14px;
