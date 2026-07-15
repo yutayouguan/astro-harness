@@ -3,8 +3,10 @@ import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import {
   Braces,
   Columns2,
+  FileJson2,
   FileText,
   FormInput,
+  FunctionSquare,
   Hash,
   LayoutGrid,
   List,
@@ -946,9 +948,10 @@ export default function ToolsPanel({
                       <p className="tools-detail-body">{t(selectedTool.descKey)}</p>
                       {detailApiDesc ? (
                         <div className="tools-detail-api-block">
-                          <span className="tools-detail-api-label">
+                          <h4 className="tools-detail-label">
+                            <FileJson2 size={15} strokeWidth={2.25} aria-hidden />
                             {t("tools.detail.apiSchema")}
-                          </span>
+                          </h4>
                           <p className="tools-detail-api-desc">{detailApiDesc}</p>
                         </div>
                       ) : null}
@@ -956,6 +959,7 @@ export default function ToolsPanel({
                     {(selectedTool.functions?.length ?? 0) > 0 && (
                       <section className="tools-detail-section">
                         <h4 className="tools-detail-label">
+                          <FunctionSquare size={15} strokeWidth={2.25} aria-hidden />
                           {t("tools.detail.functions")}
                           <span className="tools-detail-label-hint">
                             {" "}
