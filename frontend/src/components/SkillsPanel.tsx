@@ -338,6 +338,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [loadingStoreDetail, setLoadingStoreDetail] = useState(false);
 
   const loadMoreLock = useRef(false);
+  /** 递增以丢弃切换 Tab / 重新搜索后的过期响应 */
+  const storeFetchGen = useRef(0);
   const lazyGateRef = useRef<LazyLoadGate>(createLazyLoadGate());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const onlinePaneRef = useRef<HTMLElement | null>(null);
@@ -420,12 +422,21 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   const fetchStorePage = useCallback(async (page: number, append: boolean) => {
     if (!isTauri()) return;
+    const gen = append ? storeFetchGen.current : ++storeFetchGen.current;
     if (append) {
       if (loadMoreLock.current) return;
       loadMoreLock.current = true;
       setLoadingMore(true);
     } else {
-      lazyGateRef.current = createLazyLoadGate({ suppressInitial: true });
+      // 切换商店 / 重新搜索：立刻清空旧列表，展示加载过渡，避免短暂显示上一 Tab 数据
+      loadMoreLock.current = false;
+      setLoadingMore(false);
+      storeResultsRef.current = [];
+      setStoreResults([]);
+      setStorePage(1);
+      setSelectedDetailId(null);
+      setStoreDetail(null);
+      lazyGateRef.current = createLazyLoadGate();
       setLoadingStore(true);
       setHasMore(true);
     }
@@ -437,6 +448,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         limit: STORE_PAGE_SIZE,
         page,
       });
+      if (gen !== storeFetchGen.current) return;
       if (!append) {
         storeResultsRef.current = list;
         setStoreResults(list);
@@ -459,10 +471,15 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
       }
       setStorePage(page);
     } catch (err) {
+      if (gen !== storeFetchGen.current) return;
       setError(String(err));
       if (!append) setStoreResults([]);
       setHasMore(false);
     } finally {
+      if (gen !== storeFetchGen.current) {
+        if (append) loadMoreLock.current = false;
+        return;
+      }
       if (append) {
         setLoadingMore(false);
         loadMoreLock.current = false;
@@ -548,7 +565,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   }, [active, tab, storeId, refreshInstalled, refreshMachine, fetchStorePage]);
 
   useEffect(() => {
-    if (!active || tab !== "online" || !hasMore) return;
+    if (!active || tab !== "online" || !hasMore || loadingStore) return;
     const node = sentinelRef.current;
     const root =
       viewMode === "detail"
@@ -570,11 +587,11 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           void loadMoreRef.current();
         }
       },
-      { root, rootMargin: "120px", threshold: 0 },
+      { root, rootMargin: "160px", threshold: 0 },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [active, tab, hasMore, viewMode, storeResults.length]);
+  }, [active, tab, storeId, hasMore, loadingStore, viewMode, storeResults.length]);
 
   const storeLoadMoreFooter = (
     <>
@@ -2204,7 +2221,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           {error && <p className="skills-error">{error}</p>}
           {installMsg && <p className="skills-success">{installMsg}</p>}
 
-          {loadingStore && storeResults.length === 0 ? (
+          {loadingStore ? (
             <div className="skills-loading-block" aria-busy="true">
               <IconLoader className="is-spin skills-loader-lg" />
               <span>{t("skills.searching")}</span>
@@ -2224,12 +2241,13 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               className={`skills-gallery is-${viewMode}`}
               role="list"
             >
-              {storeResults.length === 0 && !loadingStore && (
+              {storeResults.length === 0 ? (
                 <p className="skills-empty" role="listitem">
                   {t("skills.storeEmpty")}
                 </p>
+              ) : (
+                sortedStoreResults.map(renderStoreCard)
               )}
-              {sortedStoreResults.map(renderStoreCard)}
               <div className="skills-store-footer" role="listitem">
                 {storeLoadMoreFooter}
               </div>
