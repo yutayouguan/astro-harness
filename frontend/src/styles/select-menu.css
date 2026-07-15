@@ -115,7 +115,8 @@
 
 .select-menu-list {
   position: fixed;
-  z-index: 120;
+  /* 需高于右侧抽屉（cron / mcp / skills ≈ 1300），否则在抽屉内点开看不见 */
+  z-index: 1400;
   margin: 0;
   padding: 6px;
   list-style: none;
