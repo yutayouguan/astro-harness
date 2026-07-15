@@ -353,7 +353,7 @@ export default function PreferencesPanel({
               autoComplete="off"
             />
           </label>
-          <div className="prefs-diag-row">
+          <label className="prefs-diag-row">
             <span className="prefs-diag-label">{t("prefs.diag.source")}</span>
             <SelectMenu
               className="prefs-diag-select"
@@ -366,7 +366,7 @@ export default function PreferencesPanel({
                 { value: "errors", label: t("prefs.diag.source.errors") },
               ]}
             />
-          </div>
+          </label>
           <label className="prefs-diag-row">
             <span className="prefs-diag-label">{t("prefs.diag.lines")}</span>
             <input

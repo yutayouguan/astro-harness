@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -232,6 +233,10 @@ function IconLayers(props: SVGProps<SVGSVGElement>) {
 
 export default function ProvidersPanel({ active, onStateChange }: Props) {
   const { t } = useI18n();
+  const addKindOptions = useMemo(
+    () => ADD_KINDS.map((k) => ({ value: k, label: t(kindLabelKey(k)), icon: <ProviderBrandIcon kind={k} /> })),
+    [t],
+  );
   const [state, setState] = useState<ProvidersStateDto | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -1235,12 +1240,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 className="providers-kind-select"
                 value={addKind}
                 aria-label={t("providers.add")}
+                openDirection="up"
                 onChange={(v) => setAddKind(v as ProviderKindId)}
-                options={ADD_KINDS.map((k) => ({
-                  value: k,
-                  label: t(kindLabelKey(k)),
-                  icon: <ProviderBrandIcon kind={k} />,
-                }))}
+                options={addKindOptions}
               />
             </div>
             <button
@@ -1440,7 +1442,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         <SelectMenu
                           className="providers-fallback-model"
                           value={selectedModel}
-                          aria-label={`${providerLabel(entry.provider_id)} 模型覆盖`}
+                          placeholder={t("providers.fallback.defaultModel")}
+                          aria-label={t("providers.fallback.modelOverride", { name: providerLabel(entry.provider_id) })}
                           onChange={(v) => updateFallbackModel(index, v)}
                           options={[
                             {
@@ -1472,8 +1475,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         <button
                           type="button"
                           className="providers-icon-btn"
-                          title="移除后备"
-                          aria-label={`移除后备 ${providerLabel(entry.provider_id)}`}
+                          title={t("providers.fallback.removeTitle")}
+                          aria-label={t("providers.fallback.removeAriaLabel", { name: providerLabel(entry.provider_id) })}
                           onClick={() => removeFallback(index)}
                         >
                           <IconTrash />
@@ -1491,16 +1494,14 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     <SelectMenu
                       className="providers-fallback-add-select"
                       value=""
-                      aria-label="添加后备供应商"
+                      aria-label={t("providers.fallback.addAriaLabel")}
                       disabled={fallbackCandidateProviders.length === 0}
                       placeholder={
                         fallbackCandidateProviders.length === 0
-                          ? "暂无可用供应商"
-                          : "添加后备供应商…"
+                          ? t("providers.fallback.noneAvailable")
+                          : t("providers.fallback.addPlaceholder")
                       }
-                      onChange={(id) => {
-                        if (id) addFallback(id);
-                      }}
+                      onChange={addFallback}
                       options={fallbackCandidateProviders.map((p) => ({
                         value: p.id,
                         label: p.display_name,

@@ -76,20 +76,6 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   --toast-tone: #fbbf24;
 }
 
-/* 边框倒计时 SVG 叠层 */
-.astro-toast-border {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.astro-toast-border-rect {
-  fill: none;
-  stroke: var(--toast-tone);
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
 .astro-toast-sticky-mark {
   height: 3px;
   background: color-mix(in srgb, var(--toast-tone) 85%, #f59e0b);
@@ -168,8 +154,5 @@ html[data-theme="dark"] .astro-toast.tone-warning {
 @media (prefers-reduced-motion: reduce) {
   .astro-toast {
     animation: none;
-  }
-  .astro-toast-border {
-    display: none;
   }
 }
