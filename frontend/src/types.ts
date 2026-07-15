@@ -328,6 +328,38 @@ export type SkillBundle = {
   files: SkillFileEntry[];
 };
 
+/** 技能安装来源记录（`skill-origins.json` 单条，与 Rust `SkillOriginRecord` 对齐） */
+export type SkillOriginRecord = {
+  folder: string;
+  skill_id?: string | null;
+  name: string;
+  store: string;
+  install_ref: string;
+  agent_id?: string | null;
+  scope?: "astro" | "machine" | string | null;
+  installed_at: number;
+  last_updated_at?: number | null;
+  remote_version?: string | null;
+  remote_updated_at?: number | null;
+};
+
+/** 批量更新单条结果（「更新」Tab，与 Rust `SkillUpdateItemResult` 对齐） */
+export type SkillUpdateItemResult = {
+  folder: string;
+  ok: boolean;
+  message: string;
+};
+
+/** 「更新」Tab 筛选：v1 中 `updatable` 与 `with_origin` 等价 */
+export type SkillUpdateFilter = "with_origin" | "no_origin" | "updatable";
+
+/** 「更新」Tab 合并行：已安装技能 + 可选来源记录 */
+export type SkillUpdateRow = {
+  skill: InstalledSkill;
+  origin: SkillOriginRecord | null;
+  status: "with_origin" | "no_origin";
+};
+
 /** 侧栏近期会话 */
 export type RecentSessionDto = {
   sessionId: string;
