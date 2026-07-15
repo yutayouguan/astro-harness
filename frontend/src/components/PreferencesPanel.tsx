@@ -17,6 +17,7 @@ import type { ChatDisplayPrefs, ChatVerbosity } from "../hooks/useChatDisplayPre
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "./NavIcons";
+import { SelectMenu } from "./SelectMenu";
 
 /** 查询返回的单行日志 */
 type AgentLogLine = { raw: string; source: string };
@@ -352,18 +353,20 @@ export default function PreferencesPanel({
               autoComplete="off"
             />
           </label>
-          <label className="prefs-diag-row">
+          <div className="prefs-diag-row">
             <span className="prefs-diag-label">{t("prefs.diag.source")}</span>
-            <select
+            <SelectMenu
               className="prefs-diag-select"
               value={source}
-              onChange={(e) => setSource(e.target.value as LogSourceFilter)}
-            >
-              <option value="both">{t("prefs.diag.source.both")}</option>
-              <option value="agent">{t("prefs.diag.source.agent")}</option>
-              <option value="errors">{t("prefs.diag.source.errors")}</option>
-            </select>
-          </label>
+              aria-label={t("prefs.diag.source")}
+              onChange={(v) => setSource(v as LogSourceFilter)}
+              options={[
+                { value: "both", label: t("prefs.diag.source.both") },
+                { value: "agent", label: t("prefs.diag.source.agent") },
+                { value: "errors", label: t("prefs.diag.source.errors") },
+              ]}
+            />
+          </div>
           <label className="prefs-diag-row">
             <span className="prefs-diag-label">{t("prefs.diag.lines")}</span>
             <input

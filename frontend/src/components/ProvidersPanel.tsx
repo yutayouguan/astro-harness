@@ -2,16 +2,13 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type SVGProps,
 } from "react";
 import {
   Box,
-  ChevronsUpDown,
   Eye,
   EyeOff,
   Globe,
@@ -37,6 +34,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { ModelBrandIcon, ProviderBrandIcon } from "./ProviderIcons";
+import { SelectMenu } from "./SelectMenu";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
 import { EmptyIllustration } from "../illustrations";
@@ -203,11 +201,6 @@ function IconPlus(props: SVGProps<SVGSVGElement>) {
   return <Plus size={16} strokeWidth={2} aria-hidden {...props} />;
 }
 
-/** 展开/折叠 */
-function IconChevronUpDown(props: SVGProps<SVGSVGElement>) {
-  return <ChevronsUpDown size={14} strokeWidth={2} aria-hidden {...props} />;
-}
-
 /** 拖拽排序手柄 */
 function IconGrip(props: SVGProps<SVGSVGElement>) {
   return <GripVertical size={14} strokeWidth={2} aria-hidden {...props} />;
@@ -253,12 +246,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [listingModels, setListingModels] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addKind, setAddKind] = useState<ProviderKindId>("openai");
-  const [addKindOpen, setAddKindOpen] = useState(false);
-  const [addKindPos, setAddKindPos] = useState<{
-    left: number;
-    bottom: number;
-    width: number;
-  } | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLatency, setModelsLatency] = useState<number | null>(null);
   const [modelLatencies, setModelLatencies] = useState<
@@ -289,8 +276,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   >({});
   const autoFetchIdRef = useRef<string | null>(null);
   const healthRunRef = useRef(0);
-  const addKindRef = useRef<HTMLDivElement | null>(null);
-  const addKindMenuRef = useRef<HTMLUListElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
@@ -371,51 +356,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     if (!active) return;
     void refresh();
   }, [active, refresh]);
-
-  useLayoutEffect(() => {
-    if (!addKindOpen) {
-      setAddKindPos(null);
-      return;
-    }
-    const update = () => {
-      const trigger = addKindRef.current?.querySelector(
-        ".providers-kind-trigger",
-      ) as HTMLElement | null;
-      if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      setAddKindPos({
-        left: rect.left,
-        bottom: window.innerHeight - rect.top + 6,
-        width: rect.width,
-      });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [addKindOpen]);
-
-  useEffect(() => {
-    if (!addKindOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (addKindRef.current?.contains(target)) return;
-      if (addKindMenuRef.current?.contains(target)) return;
-      setAddKindOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAddKindOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [addKindOpen]);
 
   const statusDotClass = (enabled: boolean, health?: HealthStatus) => {
     if (!enabled) return "off";
@@ -1290,62 +1230,18 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
             )}
 
           <div className="providers-add-row">
-            <div className="providers-kind-picker" ref={addKindRef}>
-              <button
-                type="button"
-                className={`providers-kind-trigger ${addKindOpen ? "is-open" : ""}`}
+            <div className="providers-kind-picker">
+              <SelectMenu
+                className="providers-kind-select"
+                value={addKind}
                 aria-label={t("providers.add")}
-                aria-haspopup="listbox"
-                aria-expanded={addKindOpen}
-                onClick={() => setAddKindOpen((v) => !v)}
-              >
-                <span className="providers-kind-logo" aria-hidden>
-                  <ProviderBrandIcon kind={addKind} />
-                </span>
-                <span className="providers-kind-label">
-                  {t(kindLabelKey(addKind))}
-                </span>
-                <IconChevronUpDown className="providers-kind-chevron" />
-              </button>
-              {addKindOpen &&
-                addKindPos &&
-                createPortal(
-                  <ul
-                    ref={addKindMenuRef}
-                    className="providers-kind-menu is-portal"
-                    role="listbox"
-                    aria-label={t("providers.add")}
-                    style={
-                      {
-                        left: addKindPos.left,
-                        bottom: addKindPos.bottom,
-                        width: addKindPos.width,
-                        minWidth: addKindPos.width,
-                      } as CSSProperties
-                    }
-                  >
-                    {ADD_KINDS.map((k) => (
-                      <li key={k} role="option" aria-selected={addKind === k}>
-                        <button
-                          type="button"
-                          className={`providers-kind-option ${addKind === k ? "is-selected" : ""}`}
-                          onClick={() => {
-                            setAddKind(k);
-                            setAddKindOpen(false);
-                          }}
-                        >
-                          <span className="providers-kind-logo" aria-hidden>
-                            <ProviderBrandIcon kind={k} />
-                          </span>
-                          <span className="providers-kind-label">
-                            {t(kindLabelKey(k))}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>,
-                  document.body,
-                )}
+                onChange={(v) => setAddKind(v as ProviderKindId)}
+                options={ADD_KINDS.map((k) => ({
+                  value: k,
+                  label: t(kindLabelKey(k)),
+                  icon: <ProviderBrandIcon kind={k} />,
+                }))}
+              />
             </div>
             <button
               type="button"
@@ -1541,28 +1437,38 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         <span className="providers-fallback-name" title={entry.provider_id}>
                           {providerLabel(entry.provider_id)}
                         </span>
-                        <select
+                        <SelectMenu
                           className="providers-fallback-model"
                           value={selectedModel}
                           aria-label={`${providerLabel(entry.provider_id)} 模型覆盖`}
-                          onChange={(e) => updateFallbackModel(index, e.target.value)}
-                        >
-                          <option value="">
-                            {defaultModel
-                              ? `默认（${defaultModel}）`
-                              : "默认模型"}
-                          </option>
-                          {orphanSelected && (
-                            <option value={orphanSelected}>{orphanSelected}</option>
-                          )}
-                          {options.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.display_name?.trim()
+                          onChange={(v) => updateFallbackModel(index, v)}
+                          options={[
+                            {
+                              value: "",
+                              label: defaultModel
+                                ? `默认（${defaultModel}）`
+                                : "默认模型",
+                            },
+                            ...(orphanSelected
+                              ? [
+                                  {
+                                    value: orphanSelected,
+                                    label: orphanSelected,
+                                    icon: (
+                                      <ModelBrandIcon modelId={orphanSelected} />
+                                    ),
+                                  },
+                                ]
+                              : []),
+                            ...options.map((m) => ({
+                              value: m.id,
+                              label: m.display_name?.trim()
                                 ? `${m.display_name} (${m.id})`
-                                : m.id}
-                            </option>
-                          ))}
-                        </select>
+                                : m.id,
+                              icon: <ModelBrandIcon modelId={m.id} />,
+                            })),
+                          ]}
+                        />
                         <button
                           type="button"
                           className="providers-icon-btn"
@@ -1582,26 +1488,25 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     <span className="providers-fallback-add-icon" aria-hidden>
                       <IconPlus />
                     </span>
-                    <select
+                    <SelectMenu
+                      className="providers-fallback-add-select"
                       value=""
                       aria-label="添加后备供应商"
                       disabled={fallbackCandidateProviders.length === 0}
-                      onChange={(e) => {
-                        const id = e.target.value;
+                      placeholder={
+                        fallbackCandidateProviders.length === 0
+                          ? "暂无可用供应商"
+                          : "添加后备供应商…"
+                      }
+                      onChange={(id) => {
                         if (id) addFallback(id);
                       }}
-                    >
-                      <option value="">
-                        {fallbackCandidateProviders.length === 0
-                          ? "暂无可用供应商"
-                          : "添加后备供应商…"}
-                      </option>
-                      {fallbackCandidateProviders.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.display_name}
-                        </option>
-                      ))}
-                    </select>
+                      options={fallbackCandidateProviders.map((p) => ({
+                        value: p.id,
+                        label: p.display_name,
+                        icon: <ProviderBrandIcon kind={p.kind} />,
+                      }))}
+                    />
                   </div>
                 )}
               </div>
