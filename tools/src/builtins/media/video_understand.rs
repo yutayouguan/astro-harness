@@ -14,6 +14,8 @@ use providers::trait_::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use std::path::PathBuf;
+
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
@@ -49,6 +51,29 @@ fn classify_video_source(url: &str) -> VideoSourceKind {
 
 fn should_use_files_api(len: u64) -> bool {
     len >= INLINE_MAX_BYTES
+}
+
+fn resolve_workspace_file(ctx: &ToolContext<'_>, input: &str) -> anyhow::Result<PathBuf> {
+    let p = PathBuf::from(input);
+    let path = if p.is_absolute() {
+        p
+    } else {
+        ctx.workspace_dir.join(input)
+    };
+    let canon_ws = ctx
+        .workspace_dir
+        .canonicalize()
+        .unwrap_or_else(|_| ctx.workspace_dir.clone());
+    let canon = path
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("文件不存在: {}", path.display()))?;
+    if !canon.starts_with(&canon_ws) {
+        anyhow::bail!("文件必须位于工作区内: {}", path.display());
+    }
+    if !canon.is_file() {
+        anyhow::bail!("文件不存在: {}", path.display());
+    }
+    Ok(canon)
 }
 
 fn mime_from_path(path: &std::path::Path) -> &'static str {
@@ -184,10 +209,7 @@ async fn resolve_video_input(
             bytes_to_part(client, config, &bytes, mime_from_url(video_url), "remote").await
         }
         VideoSourceKind::LocalPath => {
-            let path = ctx.workspace_dir.join(video_url);
-            if !path.exists() {
-                anyhow::bail!("本地文件不存在: {}", path.display());
-            }
+            let path = resolve_workspace_file(ctx, video_url)?;
             let bytes = std::fs::read(&path)
                 .map_err(|e| anyhow::anyhow!("读取视频失败 {}: {e}", path.display()))?;
             let mime = mime_from_path(&path);
@@ -297,5 +319,52 @@ mod tests {
         assert!(!should_use_files_api(INLINE_MAX_BYTES - 1));
         assert!(should_use_files_api(INLINE_MAX_BYTES));
         assert!(should_use_files_api(INLINE_MAX_BYTES + 1));
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    use crate::context::{ImageGenTargets, ToolContext};
+    use memory::MemoryManager;
+    use providers::registry::ProviderRegistry;
+    use tempfile::TempDir;
+
+    #[test]
+    fn resolve_workspace_file_rejects_escape() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(&ws).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.mp4"), b"x").unwrap();
+
+        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let targets = ImageGenTargets::default();
+        let providers = ProviderRegistry::new();
+        let ctx = ToolContext {
+            memory: &mut memory,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: ws,
+            project_root: None,
+            image_gen_targets: &targets,
+            providers: &providers,
+            session_id: "test".into(),
+            turn_id: None,
+            chat_api_key: String::new(),
+            chat_base_url: String::new(),
+            chat_provider: String::new(),
+            chat_model: String::new(),
+            chat_targets: vec![],
+            delegate_runner: None,
+            async_spawner: None,
+            orchestration_spawner: None,
+        };
+
+        let err = resolve_workspace_file(&ctx, "../outside/secret.mp4").unwrap_err();
+        assert!(
+            err.to_string().contains("工作区内"),
+            "unexpected: {err}"
+        );
     }
 }
