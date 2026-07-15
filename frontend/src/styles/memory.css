@@ -1330,7 +1330,5 @@ html[data-theme="dark"] .memory-dirty-badge {
 }
 
 .mem-view-tab--pending.active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55)),
-    color-mix(in srgb, var(--tone-soft, var(--tone-amber-soft, #f5e6c8)) 70%, transparent);
+  background: color-mix(in srgb, var(--tone-soft, var(--tone-amber-soft, #f5e6c8)) 55%, transparent);
 }
