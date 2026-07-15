@@ -78,7 +78,6 @@ export function ChatWelcome({ onPickCard }: Props) {
         <div className="chat-welcome-brand">
           <div className="chat-welcome-mark">
             <span className="chat-welcome-mark-glow" />
-            <span className="chat-welcome-mark-ring" />
             <div className="chat-welcome-illust">
               <EmptyIllustration
                 scene="chat"

@@ -3242,38 +3242,23 @@ html[data-theme="light"] .send-btn--round {
 
 .chat-welcome-mark-glow {
   position: absolute;
-  inset: 10%;
+  inset: 6%;
   border-radius: 50%;
   background:
     radial-gradient(
       circle at 50% 45%,
-      color-mix(in srgb, var(--tone-blue) 26%, transparent),
-      transparent 68%
+      color-mix(in srgb, var(--tone-blue) 22%, transparent),
+      transparent 70%
     );
   filter: blur(10px);
-  opacity: 0.85;
-}
-
-.chat-welcome-mark-ring {
-  position: absolute;
-  inset: 6%;
-  border-radius: 20px;
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.22)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone-blue) 22%, rgba(255, 255, 255, 0.5));
-  box-shadow:
-    0 10px 22px color-mix(in srgb, var(--tone-blue) 14%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    var(--glass-rim, 0 0 0 0.5px rgba(255, 255, 255, 0.35));
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 .chat-welcome-illust {
   position: relative;
   z-index: 1;
-  width: 72%;
+  width: 100%;
   color: var(--tone-blue, #2563eb);
   line-height: 0;
   opacity: 0.95;
@@ -3395,7 +3380,7 @@ html[data-theme="dark"] .chat-welcome-wordmark-agent {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-5px);
+    transform: translateY(-3px);
   }
 }
 
