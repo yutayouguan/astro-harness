@@ -86,14 +86,16 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
       return false;
     }
     setError(null);
-    const previewUrl = URL.createObjectURL(file);
-    const setter = kind === "emoji" ? setEmoji : setAvatar;
-    setter((prev) => {
-      if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
-      return { previewUrl, fileName: file.name, lucideId: null };
-    });
-    if (kind === "avatar") setCoverId(null);
-    if (!isTauri()) return true;
+    if (!isTauri()) {
+      const previewUrl = URL.createObjectURL(file);
+      const setter = kind === "emoji" ? setEmoji : setAvatar;
+      setter((prev) => {
+        if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return { previewUrl, fileName: file.name, lucideId: null };
+      });
+      if (kind === "avatar") setCoverId(null);
+      return true;
+    }
     try {
       const dataBase64 = await fileToBase64(file);
       await invoke("set_pending_agent_icon", {
@@ -101,6 +103,13 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
         dataBase64,
         fileName: file.name,
       });
+      const previewUrl = URL.createObjectURL(file);
+      const setter = kind === "emoji" ? setEmoji : setAvatar;
+      setter((prev) => {
+        if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return { previewUrl, fileName: file.name, lucideId: null };
+      });
+      if (kind === "avatar") setCoverId(null);
       return true;
     } catch (e) {
       setError(String(e));
@@ -127,22 +136,12 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     icon: LucideAgentIcon,
     paint: LucidePaint,
     style: LucideRenderStyle,
-  ) => {
+  ): Promise<boolean> => {
     setLucideBusy(true);
     setError(null);
     try {
       const dataBase64 = await lucideIconToSvgBase64Async(icon.Icon, { paint, style });
-      const binary = atob(dataBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "image/svg+xml" });
-      const previewUrl = URL.createObjectURL(blob);
       const fileName = `emoji-${icon.id}.svg`;
-
-      setEmoji((prev) => {
-        if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
-        return { previewUrl, fileName, lucideId: icon.id };
-      });
 
       if (isTauri()) {
         await invoke("set_pending_agent_icon", {
@@ -151,9 +150,22 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
           fileName,
         });
       }
+
+      const binary = atob(dataBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "image/svg+xml" });
+      const previewUrl = URL.createObjectURL(blob);
+
+      setEmoji((prev) => {
+        if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return { previewUrl, fileName, lucideId: icon.id };
+      });
       setLucideOpen(false);
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     } finally {
       setLucideBusy(false);
     }
@@ -164,17 +176,7 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     setError(null);
     try {
       const dataBase64 = await coverIllustrationToSvgBase64(id);
-      const binary = atob(dataBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "image/svg+xml" });
-      const previewUrl = URL.createObjectURL(blob);
       const fileName = `avatar-cover-${id}.svg`;
-      setCoverId(id);
-      setAvatar((prev) => {
-        if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
-        return { previewUrl, fileName, lucideId: null };
-      });
       if (isTauri()) {
         await invoke("set_pending_agent_icon", {
           kind: "avatar",
@@ -182,6 +184,16 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
           fileName,
         });
       }
+      const binary = atob(dataBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "image/svg+xml" });
+      const previewUrl = URL.createObjectURL(blob);
+      setCoverId(id);
+      setAvatar((prev) => {
+        if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+        return { previewUrl, fileName, lucideId: null };
+      });
       return true;
     } catch (e) {
       setError(String(e));
@@ -383,6 +395,7 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
       <LucideIconPicker
         open={lucideOpen}
         selectedId={emoji.lucideId}
+        busy={lucideBusy}
         onClose={() => setLucideOpen(false)}
         onSelect={(icon, paint, style) => {
           void pickLucide(icon, paint, style);

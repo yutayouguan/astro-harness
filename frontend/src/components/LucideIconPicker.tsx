@@ -33,6 +33,8 @@ type Props = {
   onSelect: (icon: LucideAgentIcon, paint: LucidePaint, style: LucideRenderStyle) => void;
   /** 若提供，抽屉内显示上传按钮并回调 File */
   onUploadImage?: (file: File) => void;
+  /** 异步操作进行中时禁止关闭与上传 */
+  busy?: boolean;
 };
 
 function paintKey(paint: LucidePaint): string {
@@ -81,6 +83,7 @@ export default function LucideIconPicker({
   onClose,
   onSelect,
   onUploadImage,
+  busy,
 }: Props) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -112,11 +115,11 @@ export default function LucideIconPicker({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !busy) onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, busy, onClose]);
 
   if (!open) return null;
 
@@ -133,7 +136,7 @@ export default function LucideIconPicker({
       className="agent-icon-drawer-backdrop"
       role="presentation"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !busy) onClose();
       }}
     >
       <div
@@ -155,6 +158,7 @@ export default function LucideIconPicker({
             type="button"
             className="lucide-picker-close"
             onClick={onClose}
+            disabled={busy}
             aria-label={t("chat.lucidePickerClose")}
           >
             <X size={16} />
@@ -167,6 +171,7 @@ export default function LucideIconPicker({
               <button
                 type="button"
                 className="chat-agent-icon-btn"
+                disabled={busy}
                 onClick={() => uploadRef.current?.click()}
               >
                 {t("chat.agentIconUpload")}
@@ -176,6 +181,7 @@ export default function LucideIconPicker({
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg"
                 hidden
+                disabled={busy}
                 onChange={(e) => {
                   const file = e.target.files?.[0] ?? null;
                   e.target.value = "";
