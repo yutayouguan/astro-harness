@@ -1,7 +1,20 @@
 /** 新建/编辑定时任务：右侧抽屉。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarPlus, Pencil, X } from "lucide-react";
+import {
+  Bot,
+  CalendarPlus,
+  ChevronDown,
+  Cpu,
+  MessageSquareText,
+  MessagesSquare,
+  Pencil,
+  Save,
+  Server,
+  SlidersHorizontal,
+  Type,
+  X,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { SelectMenu } from "./SelectMenu";
@@ -271,103 +284,130 @@ export function CreateCronDialog({
         <div className="cron-create-drawer-scroll">
           <div className="cron-dialog-row">
             <label className="cron-dialog-field">
-              <span>
+              <span className="cron-dialog-label">
+                <Type size={13} strokeWidth={2.2} aria-hidden />
                 {t("cron.field.name")}
                 <span className="cron-dialog-req" aria-hidden>
-                  {" "}
                   *
                 </span>
               </span>
-              <input
-                type="text"
-                className="cron-dialog-input"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={t("cron.field.namePlaceholder")}
-                autoFocus
-              />
+              <div className="cron-dialog-control">
+                <Type size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
+                <input
+                  type="text"
+                  className="cron-dialog-input has-leading-icon"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={t("cron.field.namePlaceholder")}
+                  autoFocus
+                />
+              </div>
             </label>
             <label className="cron-dialog-field">
-              <span>{t("cron.field.agent")}</span>
-              <SelectMenu
-                value={selectedAgentId}
-                onChange={setSelectedAgentId}
-                aria-label={t("cron.field.agent")}
-                options={agentOptions.map((a) => ({
-                  value: a.id,
-                  label: a.is_default
-                    ? `${a.name} (${t("workspace.defaultAgent")})`
-                    : a.name,
-                }))}
-              />
+              <span className="cron-dialog-label">
+                <Bot size={13} strokeWidth={2.2} aria-hidden />
+                {t("cron.field.agent")}
+              </span>
+              <div className="cron-dialog-control">
+                <Bot size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
+                <SelectMenu
+                  className="cron-dialog-select has-leading-icon"
+                  value={selectedAgentId}
+                  onChange={setSelectedAgentId}
+                  aria-label={t("cron.field.agent")}
+                  options={agentOptions.map((a) => ({
+                    value: a.id,
+                    label: a.is_default
+                      ? `${a.name} (${t("workspace.defaultAgent")})`
+                      : a.name,
+                  }))}
+                />
+              </div>
             </label>
           </div>
 
           <label className="cron-dialog-field">
-            <span>
+            <span className="cron-dialog-label">
+              <MessageSquareText size={13} strokeWidth={2.2} aria-hidden />
               {t("cron.field.task")}
               <span className="cron-dialog-req" aria-hidden>
-                {" "}
                 *
               </span>
             </span>
-            <textarea
-              className="cron-dialog-textarea"
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder={t("cron.field.taskPlaceholder")}
-              rows={4}
-            />
+            <div className="cron-dialog-control cron-dialog-control--textarea">
+              <MessageSquareText
+                size={14}
+                strokeWidth={2.1}
+                className="cron-dialog-control-icon"
+                aria-hidden
+              />
+              <textarea
+                className="cron-dialog-textarea has-leading-icon"
+                value={task}
+                onChange={(e) => setTask(e.target.value)}
+                placeholder={t("cron.field.taskPlaceholder")}
+                rows={4}
+              />
+            </div>
           </label>
 
           <ScheduleEditor value={draft} onChange={setDraft} />
 
           <details className="cron-dialog-advanced">
             <summary>
-              <span>{t("cron.advanced")}</span>
-              <svg
+              <span className="cron-dialog-advanced-label">
+                <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden />
+                {t("cron.advanced")}
+              </span>
+              <ChevronDown
                 className="cron-dialog-advanced-chevron"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                size={14}
+                strokeWidth={2.2}
                 aria-hidden
-              >
-                <path d="m6 9 6 6 6-6" />
-              </svg>
+              />
             </summary>
             <div className="cron-dialog-advanced-body">
               {providers.length > 1 && (
                 <label className="cron-dialog-field">
-                  <span>{t("cron.field.provider")}</span>
-                  <SelectMenu
-                    value={selectedProviderId}
-                    onChange={setSelectedProviderId}
-                    aria-label={t("cron.field.provider")}
-                    options={providers.map((p) => ({
-                      value: p.id,
-                      label: p.name,
-                    }))}
-                  />
+                  <span className="cron-dialog-label">
+                    <Server size={13} strokeWidth={2.2} aria-hidden />
+                    {t("cron.field.provider")}
+                  </span>
+                  <div className="cron-dialog-control">
+                    <Server size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
+                    <SelectMenu
+                      className="cron-dialog-select has-leading-icon"
+                      value={selectedProviderId}
+                      onChange={setSelectedProviderId}
+                      aria-label={t("cron.field.provider")}
+                      options={providers.map((p) => ({
+                        value: p.id,
+                        label: p.name,
+                      }))}
+                    />
+                  </div>
                 </label>
               )}
               <label className="cron-dialog-field">
-                <span>{t("cron.field.model")}</span>
-                <SelectMenu
-                  value={selectedModel}
-                  onChange={setSelectedModel}
-                  aria-label={t("cron.field.model")}
-                  disabled={modelOptions.length === 0}
-                  options={
-                    modelOptions.length === 0
-                      ? [{ value: "", label: "—" }]
-                      : modelOptions.map((m) => ({ value: m, label: m }))
-                  }
-                />
+                <span className="cron-dialog-label">
+                  <Cpu size={13} strokeWidth={2.2} aria-hidden />
+                  {t("cron.field.model")}
+                </span>
+                <div className="cron-dialog-control">
+                  <Cpu size={14} strokeWidth={2.1} className="cron-dialog-control-icon" aria-hidden />
+                  <SelectMenu
+                    className="cron-dialog-select has-leading-icon"
+                    value={selectedModel}
+                    onChange={setSelectedModel}
+                    aria-label={t("cron.field.model")}
+                    disabled={modelOptions.length === 0}
+                    options={
+                      modelOptions.length === 0
+                        ? [{ value: "", label: "—" }]
+                        : modelOptions.map((m) => ({ value: m, label: m }))
+                    }
+                  />
+                </div>
               </label>
               <label className="cron-dialog-check">
                 <input
@@ -376,7 +416,10 @@ export function CreateCronDialog({
                   onChange={(e) => setShowInChat(e.target.checked)}
                 />
                 <span>
-                  <strong>{t("cron.field.showInChat")}</strong>
+                  <strong>
+                    <MessagesSquare size={13} strokeWidth={2.2} aria-hidden />
+                    {t("cron.field.showInChat")}
+                  </strong>
                   <small>{t("cron.field.showInChatHint")}</small>
                 </span>
               </label>
@@ -388,6 +431,7 @@ export function CreateCronDialog({
 
         <footer className="cron-create-drawer-foot">
           <button type="button" className="cron-btn-ghost" onClick={onClose}>
+            <X size={14} strokeWidth={2.3} aria-hidden />
             {t("cron.cancel")}
           </button>
           <button
@@ -396,6 +440,7 @@ export function CreateCronDialog({
             onClick={() => void handleSave()}
             disabled={saving}
           >
+            <Save size={14} strokeWidth={2.3} aria-hidden />
             {t("cron.save")}
           </button>
         </footer>

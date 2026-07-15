@@ -1,4 +1,11 @@
 /** 调度表达式编辑器。 */
+import type { ComponentType } from "react";
+import {
+  CalendarClock,
+  CalendarDays,
+  Timer,
+  type LucideProps,
+} from "lucide-react";
 import type { ScheduleDraft, ScheduleMode, Weekday } from "../lib/cronSchedule";
 import { UI_WEEKDAYS } from "../lib/cronSchedule";
 import { useI18n } from "../i18n/LocaleContext";
@@ -10,10 +17,12 @@ type Props = {
   onChange: (next: ScheduleDraft) => void;
 };
 
-const MODES: { mode: ScheduleMode; labelKey: MessageKey }[] = [
-  { mode: "daily", labelKey: "cron.mode.daily" },
-  { mode: "interval", labelKey: "cron.mode.interval" },
-  { mode: "once", labelKey: "cron.mode.once" },
+type ModeIcon = ComponentType<LucideProps>;
+
+const MODES: { mode: ScheduleMode; labelKey: MessageKey; Icon: ModeIcon }[] = [
+  { mode: "daily", labelKey: "cron.mode.daily", Icon: CalendarDays },
+  { mode: "interval", labelKey: "cron.mode.interval", Icon: Timer },
+  { mode: "once", labelKey: "cron.mode.once", Icon: CalendarClock },
 ];
 
 /** 可视化编辑 daily / interval / once 调度 */
@@ -35,10 +44,13 @@ export function ScheduleEditor({ value, onChange }: Props) {
 
   return (
     <div className="cron-sched">
-      <div className="cron-sched-label">{t("cron.field.schedule")}</div>
+      <div className="cron-sched-label">
+        <CalendarClock size={13} strokeWidth={2.2} aria-hidden />
+        <span>{t("cron.field.schedule")}</span>
+      </div>
 
       <div className="cron-sched-modes" role="tablist" aria-label={t("cron.field.schedule")}>
-        {MODES.map(({ mode, labelKey }) => (
+        {MODES.map(({ mode, labelKey, Icon }) => (
           <button
             key={mode}
             type="button"
@@ -47,7 +59,8 @@ export function ScheduleEditor({ value, onChange }: Props) {
             className={`cron-sched-mode${value.mode === mode ? " active" : ""}`}
             onClick={() => setMode(mode)}
           >
-            {t(labelKey)}
+            <Icon size={14} strokeWidth={2.2} aria-hidden />
+            <span>{t(labelKey)}</span>
           </button>
         ))}
       </div>
@@ -125,7 +138,6 @@ export function ScheduleEditor({ value, onChange }: Props) {
   );
 }
 
-/** 星期多选芯片 */
 /** 星期多选芯片 */
 function WeekdayChips({
   selected,
