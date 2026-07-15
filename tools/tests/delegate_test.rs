@@ -9,12 +9,14 @@ static ASYNC_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn make_ctx<'a>(
     memory: &'a mut memory::MemoryManager,
+    sessions: &'a session::SessionStore,
     dir: &std::path::Path,
     providers: &'a providers::registry::ProviderRegistry,
     targets: &'a tools::ImageGenTargets,
 ) -> ToolContext<'a> {
     ToolContext {
         memory,
+        sessions,
         memory_dir: dir.to_path_buf(),
         workspace_dir: dir.to_path_buf(),
         project_root: None,
@@ -38,9 +40,10 @@ async fn delegate_requires_goal() {
     let _registry = ToolRegistry::new();
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
     let args = serde_json::json!({});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "delegate", &args)
         .await
@@ -56,9 +59,10 @@ async fn delegate_requires_goal() {
 async fn delegate_goal_hits_runner_or_key() {
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
     let args = serde_json::json!({"goal": "do thing"});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "delegate", &args)
         .await
@@ -85,9 +89,10 @@ async fn delegate_async_status_collect_cancel_flow() {
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
     ctx.async_spawner = Some(spawner);
 
     let started = tools::dispatch_tool(
@@ -143,9 +148,10 @@ async fn delegate_async_cancel_marks_cancelled() {
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
     ctx.async_spawner = Some(spawner);
 
     let started = tools::dispatch_tool(
@@ -180,7 +186,8 @@ async fn delegate_blocked_at_max_spawn_depth() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, dir.path(), &providers, &targets);
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
 
     let ctx_depth = home::SpawnDepthCtx {
         depth: 1,
