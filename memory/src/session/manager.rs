@@ -6,10 +6,9 @@
 
 use std::path::PathBuf;
 
-use crate::build_conversation_context;
+use session::build_conversation_context;
+use session::{NewMessage, RecentSession, ScrolledMessage, SearchHit, SessionStore};
 use crate::config::{load_memory_config, MemoryConfig};
-use crate::message_db::ScrolledMessage;
-use crate::session_store::{NewMessage, RecentSession, SearchHit, SessionStore};
 use crate::MemoryStore;
 use crate::workspace::{
     active_agent_id, daily_memory_path, ensure_daily_memory, today_date_string, DEFAULT_AGENT_ID,

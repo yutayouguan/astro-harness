@@ -2405,15 +2405,9 @@ name = "memory"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "artifacts",
  "chrono",
  "common",
- "cron",
- "delegate",
  "home",
- "orchestration",
- "reqwest 0.12.28",
- "rusqlite",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -2421,11 +2415,7 @@ dependencies = [
  "session",
  "skills",
  "tempfile",
- "tokio",
  "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "usage",
  "uuid",
 ]
 

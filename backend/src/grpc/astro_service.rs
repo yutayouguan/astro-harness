@@ -12,7 +12,8 @@ use agent::streaming::{
 };
 use agent::{HitlGate, HitlRegistry};
 use futures::StreamExt;
-use memory::{AgentRuntimeConfig, MemoryManager};
+use home::AgentRuntimeConfig;
+use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
@@ -1086,7 +1087,7 @@ impl AstroService for AstroServiceImpl {
         let (tx, rx) = tokio::sync::mpsc::channel(8);
 
         tokio::spawn(async move {
-            if !memory::is_toolset_enabled("skills") {
+            if !home::is_toolset_enabled("skills") {
                 let _ = tx
                     .send(Ok(SkillEvent {
                         payload: Some(proto::skill_event::Payload::Error(
