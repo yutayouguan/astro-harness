@@ -34,7 +34,7 @@
 }
 
 .astro-toast.tone-success {
-  --toast-tone: #16a34a;
+  --toast-tone: var(--tone, var(--tone-green, #16a34a));
 }
 
 .astro-toast.tone-error {
@@ -65,7 +65,7 @@ html[data-theme="dark"] .astro-toast.tone-info {
 }
 
 html[data-theme="dark"] .astro-toast.tone-success {
-  --toast-tone: #4ade80;
+  --toast-tone: var(--tone, #4ade80);
 }
 
 html[data-theme="dark"] .astro-toast.tone-error {
