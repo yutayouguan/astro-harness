@@ -14,7 +14,8 @@
 | **2 ✅** | `usage` | usage db/pricing/stats/trace | — |
 | **3 ✅** | `orchestration` | orchestration db/spawn/collab | 执行仍在 `agent` |
 | **4 ✅** | `cron` | jobs.json + cron.db + tick/dispatch | 执行仍 backend/agent |
-| **5 ✅** | `artifacts` + `delegate` | artifacts.db；委派类型/异步登记/worktree | store/pending/review/dreaming/config + workspace lifecycle + MemoryManager |
+| **5 ✅** | `artifacts` + `delegate` | artifacts.db；委派类型/异步登记/worktree | store/pending/review/dreaming/config + MemoryManager |
+| **6 ✅** | lifecycle → `home` | templates + Agent 脚手架（无 SQLite） | `ensure_workspace` 仍编排 SessionStore + skills |
 
 ---
 
