@@ -2,6 +2,7 @@
 import type {
   InstalledSkill,
   SkillOriginRecord,
+  SkillUpdateCheckResult,
   SkillUpdateFilter,
   SkillUpdateRow,
 } from "../types";
@@ -117,7 +118,21 @@ export function canUpdateSkillFromOrigin(
   return true;
 }
 
-/** 按筛选芯片过滤合并行；`updatable` 仅保留可写入 astro skills 目录的行 */
+/** 将远端检查结果按 origin.folder 合并到行状态 */
+export function applyCheckResults(
+  rows: SkillUpdateRow[],
+  checks: SkillUpdateCheckResult[],
+): SkillUpdateRow[] {
+  const byFolder = new Map(checks.map((c) => [c.folder, c]));
+  return rows.map((row) => {
+    if (!row.origin) return row;
+    const check = byFolder.get(row.origin.folder);
+    if (!check) return row;
+    return { ...row, status: check.status };
+  });
+}
+
+/** 按筛选芯片过滤合并行；`updatable` 仅保留远端检查为 outdated 的行 */
 export function filterUpdateRows(
   rows: SkillUpdateRow[],
   filter: SkillUpdateFilter,
@@ -126,10 +141,7 @@ export function filterUpdateRows(
     return rows.filter((r) => r.status === "no_origin");
   }
   if (filter === "updatable") {
-    return rows.filter(
-      (r) =>
-        r.status === "with_origin" && canUpdateSkillFromOrigin(r.skill, r.origin),
-    );
+    return rows.filter((r) => r.status === "outdated");
   }
-  return rows.filter((r) => r.status === "with_origin");
+  return rows.filter((r) => r.origin !== null);
 }

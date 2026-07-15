@@ -174,3 +174,24 @@ pub struct SkillUpdateItemResult {
     pub ok: bool,
     pub message: String,
 }
+
+/// 技能更新检查状态（与远端元数据比对）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillUpdateStatus {
+    Outdated,
+    Current,
+    /// 无可用远端 version/updated_at。
+    Unknown,
+    Error,
+}
+
+/// 单条技能更新检查结果（「更新」Tab 检查 API）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillUpdateCheckResult {
+    pub folder: String,
+    pub status: SkillUpdateStatus,
+    pub remote_version: Option<String>,
+    pub remote_updated_at: Option<i64>,
+    pub message: String,
+}

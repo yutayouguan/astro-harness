@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
-use crate::models::{SkillOriginRecord, SkillOriginsFile};
+use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillDetail};
+use crate::store::fetch_detail;
 
 const ORIGINS_FILE: &str = "skill-origins.json";
 
@@ -147,6 +148,103 @@ pub fn infer_folder(install_ref: &str) -> Option<String> {
     None
 }
 
+fn derive_store_skill_id(origin: &SkillOriginRecord) -> String {
+    let r = origin.install_ref.trim();
+    if let Some(rest) = r.strip_prefix("skillhub:") {
+        return format!("skillhub:{rest}");
+    }
+    if let Some(rest) = r.strip_prefix("clawhub:") {
+        if let Some((handle, slug)) = rest.rsplit_once("--") {
+            return format!("clawhub:{handle}/{slug}");
+        }
+        return format!("clawhub:{rest}");
+    }
+    if r.contains(':') {
+        return r.to_string();
+    }
+    format!("{}:{}", origin.store, origin.folder)
+}
+
+fn derive_source(install_ref: &str, store: &str) -> String {
+    let r = install_ref.trim();
+    if let Some(rest) = r.strip_prefix("skillhub:") {
+        if let Some((owner, _)) = rest.split_once('/') {
+            return owner.to_string();
+        }
+    }
+    if let Some(rest) = r.strip_prefix("clawhub:") {
+        if let Some((handle, _)) = rest.rsplit_once("--") {
+            return handle.to_string();
+        }
+    }
+    if let Some((_, path)) = r.split_once(':') {
+        if let Some((source, _)) = path.split_once('/') {
+            return source.to_string();
+        }
+    }
+    store.to_string()
+}
+
+/// 从 origin 记录构造商店查询用的 `StoreSkill`（供 `fetch_detail`）。
+pub fn origin_to_store_skill(origin: &SkillOriginRecord) -> StoreSkill {
+    let id = origin
+        .skill_id
+        .clone()
+        .unwrap_or_else(|| derive_store_skill_id(origin));
+    StoreSkill {
+        id,
+        name: origin.name.clone(),
+        description: String::new(),
+        source: derive_source(&origin.install_ref, &origin.store),
+        store: origin.store.clone(),
+        installs: None,
+        install_ref: origin.install_ref.clone(),
+        homepage: None,
+    }
+}
+
+/// 用远端详情填充 origin 的 baseline `remote_*`，保留其余字段（含 `installed_at`）。
+pub fn origin_with_remote_baseline(
+    origin: &SkillOriginRecord,
+    detail: &StoreSkillDetail,
+) -> SkillOriginRecord {
+    SkillOriginRecord {
+        remote_version: detail.version.clone(),
+        remote_updated_at: detail.updated_at,
+        ..origin.clone()
+    }
+}
+
+/// 安装成功后 best-effort 拉取远端元数据并写回 origin baseline；fetch 失败不报错。
+pub async fn fill_origin_remote_baseline(
+    agent_id: Option<&str>,
+    folder: &str,
+) -> Result<()> {
+    let Some(origin) = find_origin(agent_id, folder)? else {
+        return Ok(());
+    };
+    let store_skill = origin_to_store_skill(&origin);
+    match fetch_detail(&store_skill).await {
+        Ok(detail) => {
+            if let Err(e) = upsert_origin(origin_with_remote_baseline(&origin, &detail)) {
+                tracing::debug!(
+                    folder = %folder,
+                    error = %e,
+                    "upsert remote baseline after install failed; continuing"
+                );
+            }
+        }
+        Err(e) => {
+            tracing::debug!(
+                folder = %folder,
+                error = %e,
+                "fetch remote baseline after install failed; continuing"
+            );
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,8 +362,107 @@ mod tests {
         assert_eq!(infer_store("clawhub:owner--slug"), "clawhub");
     }
 
+    fn sample_detail(version: Option<&str>, updated_at: Option<i64>) -> StoreSkillDetail {
+        StoreSkillDetail {
+            name: "Demo".into(),
+            slug: "demo-skill".into(),
+            description: String::new(),
+            overview: String::new(),
+            source: "owner".into(),
+            store: "skillhub".into(),
+            installs: None,
+            downloads: None,
+            stars: None,
+            install_ref: "skillhub:owner/demo-skill".into(),
+            homepage: None,
+            detail_url: "https://skillhub.cn/skills/demo-skill".into(),
+            icon_url: None,
+            category: None,
+            sub_categories: vec![],
+            version: version.map(str::to_string),
+            updated_at,
+            owner_name: None,
+            verified: None,
+        }
+    }
+
     #[test]
-    fn record_after_install_upserts() {
+    fn origin_with_remote_baseline_preserves_installed_at() {
+        let origin = SkillOriginRecord {
+            folder: "demo-skill".into(),
+            skill_id: None,
+            name: "Demo".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:owner/demo-skill".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 42,
+            last_updated_at: None,
+            remote_version: None,
+            remote_updated_at: None,
+        };
+        let detail = sample_detail(Some("1.2.3"), Some(999));
+        let updated = origin_with_remote_baseline(&origin, &detail);
+        assert_eq!(updated.installed_at, 42);
+        assert_eq!(updated.remote_version.as_deref(), Some("1.2.3"));
+        assert_eq!(updated.remote_updated_at, Some(999));
+    }
+
+    #[test]
+    fn origin_with_remote_baseline_empty_detail_leaves_remote_none() {
+        let origin = SkillOriginRecord {
+            folder: "demo-skill".into(),
+            skill_id: None,
+            name: "Demo".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:owner/demo-skill".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 1,
+            last_updated_at: None,
+            remote_version: None,
+            remote_updated_at: None,
+        };
+        let detail = sample_detail(None, None);
+        let updated = origin_with_remote_baseline(&origin, &detail);
+        assert!(updated.remote_version.is_none());
+        assert!(updated.remote_updated_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn fill_origin_remote_baseline_fetch_failure_leaves_remote_none() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        upsert_origin(SkillOriginRecord {
+            folder: "demo-skill".into(),
+            skill_id: None,
+            name: "Demo".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:nonexistent-slug-xyz".into(),
+            agent_id: Some("workspace".into()),
+            scope: None,
+            installed_at: 1,
+            last_updated_at: None,
+            remote_version: None,
+            remote_updated_at: None,
+        })
+        .unwrap();
+
+        fill_origin_remote_baseline(Some("workspace"), "demo-skill")
+            .await
+            .unwrap();
+
+        let o = find_origin(Some("workspace"), "demo-skill")
+            .unwrap()
+            .unwrap();
+        assert!(o.remote_version.is_none());
+        assert!(o.remote_updated_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn record_after_install_upserts() {
         use crate::install::{record_after_install, InstallOriginHint};
 
         let _guard = ENV_TEST_LOCK.lock().unwrap();
@@ -281,6 +478,7 @@ mod tests {
                 folder: Some("demo-skill".into()),
             },
         )
+        .await
         .unwrap();
         let o = find_origin(Some("workspace"), "demo-skill")
             .unwrap()

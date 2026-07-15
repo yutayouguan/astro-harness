@@ -1,12 +1,13 @@
 //! Tauri IPC 薄封装 → `skills` 领域层
 
 use skills::{
-    fetch_detail, install_from_ref, link_skill_to_agent, list_installed_for_agent,
-    list_skill_files_ex, load_skill_by_name, update_all_with_origin,
-    update_installed_skill as skills_update_installed_skill, InstallOriginHint,
-    open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
-    read_skill_file_ex, reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
-    InstalledSkill, SkillBundle, SkillStoreFilter, SkillUpdateItemResult, StoreSkill,
+    check_updates_for_agent, fetch_detail, install_from_ref, link_skill_to_agent,
+    list_installed_for_agent, list_skill_files_ex, load_skill_by_name, update_all_with_origin,
+    update_installed_skill as skills_update_installed_skill, update_outdated_skills,
+    InstallOriginHint, open_skill_file_externally as open_skill_file_fs,
+    open_skill_folder as open_skill_folder_fs, read_skill_file_ex,
+    reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent, InstalledSkill,
+    SkillBundle, SkillStoreFilter, SkillUpdateCheckResult, SkillUpdateItemResult, StoreSkill,
     StoreSkillDetail,
 };
 use skills::models::SkillOriginRecord;
@@ -81,15 +82,33 @@ pub async fn update_installed_skill(
         .map_err(|e| e.to_string())
 }
 
+/// Tauri 命令：check_skill_updates。
+#[tauri::command]
+pub async fn check_skill_updates(
+    agent_id: Option<String>,
+) -> Result<Vec<SkillUpdateCheckResult>, String> {
+    let agent = normalize_agent_id(agent_id);
+    check_updates_for_agent(agent.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// Tauri 命令：update_all_skills。
 #[tauri::command]
 pub async fn update_all_skills(
     agent_id: Option<String>,
+    only_outdated: Option<bool>,
 ) -> Result<Vec<SkillUpdateItemResult>, String> {
     let agent = normalize_agent_id(agent_id);
-    update_all_with_origin(agent.as_deref())
-        .await
-        .map_err(|e| e.to_string())
+    if only_outdated.unwrap_or(false) {
+        update_outdated_skills(agent.as_deref())
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        update_all_with_origin(agent.as_deref())
+            .await
+            .map_err(|e| e.to_string())
+    }
 }
 
 /// Tauri 命令：list_installed_skills。

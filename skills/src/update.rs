@@ -2,6 +2,7 @@
 
 use anyhow::{bail, Result};
 
+use crate::check::{check_updates_for_agent, filter_outdated_folders};
 use crate::install::{agent_skills_dir, install_from_ref, InstallOriginHint};
 use crate::models::{SkillOriginRecord, SkillUpdateItemResult};
 use crate::origins::{find_origin, load_origins};
@@ -46,6 +47,57 @@ fn installed_skill_folder_exists(agent_id: Option<&str>, folder: &str) -> Result
     Ok(skills_dir.join(folder).is_dir())
 }
 
+async fn update_folders_serial(
+    agent_id: Option<&str>,
+    folders: Vec<String>,
+    skip_missing_local: bool,
+) -> Result<Vec<SkillUpdateItemResult>> {
+    let mut results = Vec::with_capacity(folders.len());
+    for folder in folders {
+        let item = if skip_missing_local {
+            match installed_skill_folder_exists(agent_id, &folder) {
+                Ok(false) => SkillUpdateItemResult {
+                    folder,
+                    ok: false,
+                    message: "本地未找到技能目录，已跳过".to_string(),
+                },
+                Ok(true) => match update_installed_skill(agent_id, &folder).await {
+                    Ok(message) => SkillUpdateItemResult {
+                        folder,
+                        ok: true,
+                        message,
+                    },
+                    Err(e) => SkillUpdateItemResult {
+                        folder,
+                        ok: false,
+                        message: e.to_string(),
+                    },
+                },
+                Err(e) => SkillUpdateItemResult {
+                    folder,
+                    ok: false,
+                    message: e.to_string(),
+                },
+            }
+        } else {
+            match update_installed_skill(agent_id, &folder).await {
+                Ok(message) => SkillUpdateItemResult {
+                    folder,
+                    ok: true,
+                    message,
+                },
+                Err(e) => SkillUpdateItemResult {
+                    folder,
+                    ok: false,
+                    message: e.to_string(),
+                },
+            }
+        };
+        results.push(item);
+    }
+    Ok(results)
+}
+
 /// 串行更新当前 Agent 下所有有来源记录的技能；单条失败写入结果 Vec，不中断。
 pub async fn update_all_with_origin(
     agent_id: Option<&str>,
@@ -59,35 +111,16 @@ pub async fn update_all_with_origin(
         .map(|r| r.folder.clone())
         .collect();
 
-    let mut results = Vec::with_capacity(folders.len());
-    for folder in folders {
-        let item = match installed_skill_folder_exists(agent_id, &folder) {
-            Ok(false) => SkillUpdateItemResult {
-                folder,
-                ok: false,
-                message: "本地未找到技能目录，已跳过".to_string(),
-            },
-            Ok(true) => match update_installed_skill(agent_id, &folder).await {
-                Ok(message) => SkillUpdateItemResult {
-                    folder,
-                    ok: true,
-                    message,
-                },
-                Err(e) => SkillUpdateItemResult {
-                    folder,
-                    ok: false,
-                    message: e.to_string(),
-                },
-            },
-            Err(e) => SkillUpdateItemResult {
-                folder,
-                ok: false,
-                message: e.to_string(),
-            },
-        };
-        results.push(item);
-    }
-    Ok(results)
+    update_folders_serial(agent_id, folders, true).await
+}
+
+/// 先检查更新状态，仅对 Outdated 技能串行重装。
+pub async fn update_outdated_skills(
+    agent_id: Option<&str>,
+) -> Result<Vec<SkillUpdateItemResult>> {
+    let check_results = check_updates_for_agent(agent_id).await?;
+    let folders = filter_outdated_folders(&check_results);
+    update_folders_serial(agent_id, folders, false).await
 }
 
 #[cfg(test)]
@@ -147,6 +180,16 @@ mod tests {
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
         let r = update_all_with_origin(Some("workspace")).await.unwrap();
+        assert!(r.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_outdated_skills_empty_when_none_outdated() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let r = update_outdated_skills(Some("workspace")).await.unwrap();
         assert!(r.is_empty());
     }
 }

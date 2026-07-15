@@ -9,6 +9,7 @@
 //! ├── skill / registry   运行时 LoadedSkill
 //! ```
 
+pub mod check;
 pub mod install;
 pub mod installed;
 pub mod models;
@@ -20,7 +21,7 @@ pub mod store;
 pub mod update;
 
 pub use install::{install_from_ref, InstallOriginHint};
-pub use update::{update_all_with_origin, update_installed_skill};
+pub use update::{update_all_with_origin, update_installed_skill, update_outdated_skills};
 pub use seed::{
     is_public_skill_installed, seed_default_public_skills, SeedReport, DEFAULT_PUBLIC_SKILLS,
 };
@@ -31,8 +32,12 @@ pub use installed::{
     set_enabled_for_agent,
 };
 pub use models::{
-    InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateItemResult,
-    StoreSkill, StoreSkillDetail,
+    InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,
+    SkillUpdateItemResult, SkillUpdateStatus, StoreSkill, StoreSkillDetail,
+};
+pub use check::{
+    check_origin_against_detail, check_updates_for_agent, classify_update_status,
+    filter_outdated_folders, origin_to_store_skill,
 };
 pub use registry::SkillRegistry;
 pub use skill::{LoadedSkill, SkillMetadata};
