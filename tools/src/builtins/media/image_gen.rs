@@ -20,6 +20,72 @@ pub struct ImageGenArgs {
     /// 宽高比（可选，主要 Google）：如 `1:1` / `16:9` / `9:16`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
+    /// 输出分辨率（Google Interactions）：`0.5K` / `1K` / `2K` / `4K`（K 须大写）。
+    #[serde(default)]
+    pub image_size: Option<String>,
+    /// 参考图工作区相对路径（最多 14 张）。
+    #[serde(default)]
+    pub reference_images: Option<Vec<String>>,
+    /// 上一轮 Interactions 会话 ID（多轮编辑）。
+    #[serde(default)]
+    pub previous_interaction_id: Option<String>,
+    /// 启用 Google Search grounding。
+    #[serde(default)]
+    pub google_search: bool,
+    /// 启用图片搜索（须同时 `google_search=true`）。
+    #[serde(default)]
+    pub image_search: bool,
+    /// 思考深度：`minimal` / `high`。
+    #[serde(default)]
+    pub thinking_level: Option<String>,
+    /// YouTube 等外部视频 URL（与 `video` 二选一）。
+    #[serde(default)]
+    pub video_uri: Option<String>,
+    /// 工作区内已生成视频相对路径（与 `video_uri` 二选一）。
+    #[serde(default)]
+    pub video: Option<String>,
+}
+
+fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()> {
+    if args.prompt.trim().is_empty() {
+        anyhow::bail!("image_gen 需要 prompt 参数");
+    }
+    if let Some(sz) = args.image_size.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        match sz {
+            "0.5K" | "1K" | "2K" | "4K" => {}
+            _ => anyhow::bail!(
+                "image_size 无效: {sz}（仅支持 0.5K / 1K / 2K / 4K，须大写 K）"
+            ),
+        }
+    }
+    if let Some(level) = args.thinking_level.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        match level {
+            "minimal" | "high" => {}
+            _ => anyhow::bail!("thinking_level 无效: {level}（仅支持 minimal / high）"),
+        }
+    }
+    if args.image_search && !args.google_search {
+        anyhow::bail!("image_search 需要同时设置 google_search=true");
+    }
+    let has_uri = args
+        .video_uri
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|s| !s.is_empty());
+    let has_file = args
+        .video
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|s| !s.is_empty());
+    if has_uri && has_file {
+        anyhow::bail!("video 与 video_uri 不能同时使用");
+    }
+    if let Some(refs) = &args.reference_images {
+        if refs.iter().filter(|p| !p.trim().is_empty()).count() > 14 {
+            anyhow::bail!("reference_images 最多 14 张");
+        }
+    }
+    Ok(())
 }
 
 /// 向注册表登记 `image_gen` 工具。
@@ -42,10 +108,8 @@ pub fn register(registry: &mut ToolRegistry) {
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
+    validate_image_gen_args(&parsed)?;
     let prompt = parsed.prompt.trim();
-    if prompt.is_empty() {
-        anyhow::bail!("image_gen 需要 prompt 参数");
-    }
     let aspect_ratio = parsed
         .aspect_ratio
         .as_deref()
@@ -143,6 +207,79 @@ async fn generate_one(
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
     Ok(rel)
+}
+
+#[cfg(test)]
+mod arg_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_lowercase_image_size() {
+        let a = ImageGenArgs {
+            prompt: "x".into(),
+            aspect_ratio: None,
+            image_size: Some("1k".into()),
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: false,
+            thinking_level: None,
+            video_uri: None,
+            video: None,
+        };
+        assert!(validate_image_gen_args(&a).is_err());
+    }
+
+    #[test]
+    fn rejects_image_search_without_google_search() {
+        let a = ImageGenArgs {
+            prompt: "x".into(),
+            aspect_ratio: None,
+            image_size: None,
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: true,
+            thinking_level: None,
+            video_uri: None,
+            video: None,
+        };
+        assert!(validate_image_gen_args(&a).is_err());
+    }
+
+    #[test]
+    fn rejects_both_video_inputs() {
+        let a = ImageGenArgs {
+            prompt: "x".into(),
+            aspect_ratio: None,
+            image_size: None,
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: false,
+            thinking_level: None,
+            video_uri: Some("https://www.youtube.com/watch?v=x".into()),
+            video: Some("generated/videos/a.mp4".into()),
+        };
+        assert!(validate_image_gen_args(&a).is_err());
+    }
+
+    #[test]
+    fn accepts_valid_size_and_thinking() {
+        let a = ImageGenArgs {
+            prompt: "x".into(),
+            aspect_ratio: Some("1:1".into()),
+            image_size: Some("1K".into()),
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: true,
+            image_search: true,
+            thinking_level: Some("minimal".into()),
+            video_uri: None,
+            video: None,
+        };
+        assert!(validate_image_gen_args(&a).is_ok());
+    }
 }
 
 #[cfg(test)]
