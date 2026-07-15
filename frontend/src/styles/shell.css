@@ -29,6 +29,7 @@
 }
 
 .titlebar-sidebar-toggle .sidebar-pin-btn {
+  box-sizing: border-box;
   width: 22px;
   height: 22px;
   border-radius: 6px;
@@ -41,8 +42,10 @@
 
 .titlebar-sidebar-toggle .sidebar-pin-btn svg {
   display: block;
-  /* Lucide panel-* 字形偏右、偏下，光学居中微调 */
-  transform: translate(-1px, -0.5px);
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .app-shell {
