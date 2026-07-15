@@ -1,5 +1,5 @@
 /** 记忆面板：MEMORY/USER/日记编辑与召回。 */
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Book,
@@ -178,9 +178,6 @@ function IconSave(props: { width?: number; height?: number }) {
 
 export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const { t, locale } = useI18n();
-  const flowUid = useId().replace(/:/g, "");
-  const flowStrokeId = `memFlowStroke-${flowUid}`;
-  const flowSoftId = `memFlowSoft-${flowUid}`;
   const [view, setView] = useState<MemoryView>("diary");
   const [, setMemoryDir] = useState("");
   const [workspaceDir, setWorkspaceDir] = useState("");
@@ -845,50 +842,15 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
         <nav className="mem-view-nav" aria-label={t("memory.views")}>
           <span className="mem-view-flow" aria-hidden>
-            <span className="mem-view-flow-wash" />
-            <svg className="mem-view-flow-svg" viewBox="0 0 320 40" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id={flowStrokeId} x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#34d399" stopOpacity="0" />
-                  <stop offset="12%" stopColor="#34d399" stopOpacity="0.9" />
-                  <stop offset="48%" stopColor="#8b9cf7" stopOpacity="0.75" />
-                  <stop offset="88%" stopColor="#34d399" stopOpacity="0.9" />
-                  <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
-                </linearGradient>
-                <linearGradient id={flowSoftId} x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0" />
-                  <stop offset="20%" stopColor="#6ee7b7" stopOpacity="0.4" />
-                  <stop offset="50%" stopColor="#a5b4fc" stopOpacity="0.32" />
-                  <stop offset="80%" stopColor="#6ee7b7" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#6ee7b7" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {[
-                { y: 10, dip: 9, w: 0.55 },
-                { y: 12.2, dip: 10.2, w: 0.7 },
-                { y: 14.4, dip: 11, w: 0.85 },
-                { y: 16.6, dip: 11.6, w: 1 },
-                { y: 18.8, dip: 11, w: 0.85 },
-                { y: 21, dip: 10.2, w: 0.7 },
-                { y: 23.2, dip: 9, w: 0.55 },
-                { y: 25.2, dip: 8.2, w: 0.45 },
-                { y: 27, dip: 7.4, w: 0.4 },
-              ].map((line, i) => (
-                <path
-                  key={i}
-                  className={`mem-view-flow-path ${i % 2 === 0 ? "is-core" : "is-soft"}`}
-                  stroke={`url(#${i % 2 === 0 ? flowStrokeId : flowSoftId})`}
-                  strokeWidth={line.w}
-                  d={`M 8 ${line.y} C 78 ${line.y}, 118 ${line.y + line.dip}, 160 ${line.y + line.dip} S 242 ${line.y}, 312 ${line.y}`}
-                />
-              ))}
-            </svg>
             <span className="mem-view-flow-ember mem-view-flow-ember--src" />
             <span className="mem-view-flow-ember mem-view-flow-ember--dst" />
-            <span className="mem-view-flow-pulse" />
-            <span className="mem-view-flow-pulse" />
-            <span className="mem-view-flow-pulse" />
-            <span className="mem-view-flow-pulse" />
+            {Array.from({ length: 10 }, (_, i) => (
+              <span
+                key={i}
+                className={`mem-view-flow-pulse mem-view-flow-pulse--${i % 5}`}
+                style={{ animationDelay: `${(i * 0.42).toFixed(2)}s` }}
+              />
+            ))}
           </span>
           {(
             [
