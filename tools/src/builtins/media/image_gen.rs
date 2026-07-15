@@ -69,7 +69,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         match generate_one(ctx, prompt, aspect_ratio, creds).await {
             Ok(path) => {
                 return Ok(format!(
-                    "图片已生成：{path}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）",
+                    "图片已生成：{path}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）",
                     creds.provider, creds.model
                 ));
             }
