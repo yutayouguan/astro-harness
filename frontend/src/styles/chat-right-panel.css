@@ -166,13 +166,92 @@
   gap: 10px;
 }
 
+/* [🔍] [新建会话] [Agent▾]；搜索展开时占满整行 */
+.chat-session-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  position: relative;
+  z-index: 30;
+}
+
+.chat-session-toolbar .chat-session-search {
+  flex-shrink: 0;
+}
+
+.chat-session-toolbar .chat-session-new {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chat-session-toolbar .chat-session-agent-picker {
+  flex: 0 1 7.5rem;
+  max-width: 8.5rem;
+  min-width: 0;
+}
+
+.chat-session-toolbar:has(.expandable-search.is-open) .chat-session-new,
+.chat-session-toolbar:has(.expandable-search.is-open) .chat-session-agent-picker {
+  display: none;
+}
+
+.chat-session-toolbar:has(.expandable-search.is-open) .chat-session-search {
+  flex: 1 1 auto;
+  width: 100%;
+  justify-content: stretch;
+}
+
+.chat-session-toolbar:has(.expandable-search.is-open) .expandable-search-field {
+  width: 100%;
+}
+
+.chat-session-toolbar .expandable-search-btn,
+.chat-session-toolbar .expandable-search-field {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--tone-blue, #2563eb);
+  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 16%, rgba(255, 255, 255, 0.5));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--tone-blue, #2563eb) 8%, rgba(255, 255, 255, 0.18));
+}
+
+.chat-session-toolbar .expandable-search-btn:hover {
+  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 32%, rgba(255, 255, 255, 0.75));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
+    color-mix(in srgb, var(--tone-blue, #2563eb) 14%, rgba(255, 255, 255, 0.22));
+}
+
+.chat-session-agent-picker .agent-picker-chip {
+  width: 100%;
+  height: 36px;
+  padding: 0 8px 0 6px;
+  border-radius: 12px;
+}
+
+.chat-session-agent-picker .agent-picker-vibe {
+  display: none;
+}
+
+.chat-session-agent-picker .agent-picker-name {
+  font-size: 12px;
+}
+
+.chat-session-agent-picker .agent-picker-chip .agent-avatar {
+  width: 22px;
+  height: 22px;
+}
+
 .chat-session-new {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  width: 100%;
   height: 36px;
+  padding: 0 12px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 28%, var(--chip-border));
   background: color-mix(in srgb, var(--tone-blue, #2563eb) 10%, transparent);
@@ -181,6 +260,7 @@
   font-weight: 650;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+  white-space: nowrap;
 }
 
 .chat-session-new:hover {

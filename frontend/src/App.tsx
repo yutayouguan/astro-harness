@@ -3156,6 +3156,7 @@ export default function App() {
                       contextWindow={contextWindow}
                       onOpenSession={(id) => void openSessionFromFilespace(id)}
                       onNewSession={startNewChat}
+                      onNewAgent={startNewAgent}
                       onOpenMemory={() => setNav("memory")}
                       onOpenSkills={() => setNav("skills")}
                     />

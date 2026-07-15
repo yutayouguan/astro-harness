@@ -39,6 +39,8 @@ type Props = {
   onOpenSession: (sessionId: string) => void;
   /** 新建空白会话 */
   onNewSession: () => void;
+  /** 新建 Agent 引导 */
+  onNewAgent: () => void;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
 };
@@ -66,6 +68,7 @@ export default function ChatRightPanel({
   contextWindow = 128_000,
   onOpenSession,
   onNewSession,
+  onNewAgent,
   onOpenMemory,
   onOpenSkills,
 }: Props) {
@@ -129,6 +132,7 @@ export default function ChatRightPanel({
                 activeSessionId={sessionId}
                 onOpenSession={onOpenSession}
                 onNewSession={onNewSession}
+                onNewAgent={onNewAgent}
               />
             )}
             {tab === "context" && (

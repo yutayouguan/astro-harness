@@ -22,6 +22,10 @@ type Props = {
   /** 无障碍 / 菜单标题 */
   labelKey?: MessageKey;
   className?: string;
+  /** 菜单末项「新建 Agent」；提供时渲染分隔线 + 操作项 */
+  onCreateNew?: () => void;
+  /** 新建项文案；默认 chat.newAgent */
+  createLabelKey?: MessageKey;
 };
 
 const VIEWPORT_PAD = 8;
@@ -61,6 +65,8 @@ export default function AgentPicker({
   disabled = false,
   labelKey = "filespace.agentFilter",
   className = "",
+  onCreateNew,
+  createLabelKey = "chat.newAgent",
 }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -207,6 +213,31 @@ export default function AgentPicker({
               </li>
             );
           })}
+          {onCreateNew ? (
+            <li
+              role="option"
+              className="agent-picker-create"
+              aria-selected={false}
+            >
+              <button
+                type="button"
+                className="agent-picker-option agent-picker-option--create"
+                onClick={() => {
+                  setOpen(false);
+                  onCreateNew();
+                }}
+              >
+                <span className="agent-picker-create-icon" aria-hidden>
+                  +
+                </span>
+                <span className="agent-picker-option-text">
+                  <span className="agent-picker-option-name">
+                    {t(createLabelKey)}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ) : null}
         </ul>
       ) : null}
     </div>
