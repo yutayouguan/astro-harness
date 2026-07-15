@@ -47,13 +47,31 @@ export function originMatchesSkill(
   return Boolean(skillName && originName && skillName === originName);
 }
 
+/** 本机链接技能是否已与已安装（astro）条目重复（文件夹末段或名称） */
+function machineSkillDuplicatesInstalled(
+  machineSkill: InstalledSkill,
+  installed: InstalledSkill[],
+): boolean {
+  const machineFolder = norm(folderFromId(machineSkill.id));
+  const machineName = norm(machineSkill.name);
+  for (const skill of installed) {
+    const folder = norm(folderFromId(skill.id));
+    const name = norm(skill.name);
+    if (machineFolder && folder && machineFolder === folder) return true;
+    if (machineName && name && machineName === name) return true;
+  }
+  return false;
+}
+
 function collectAgentSkills(
   installed: InstalledSkill[],
   linkedMachine: InstalledSkill[],
 ): InstalledSkill[] {
   const rows: InstalledSkill[] = [...installed];
   for (const skill of linkedMachine) {
-    if (skill.linked) rows.push(skill);
+    if (!skill.linked) continue;
+    if (machineSkillDuplicatesInstalled(skill, installed)) continue;
+    rows.push(skill);
   }
   return rows;
 }
@@ -86,13 +104,32 @@ export function mergeUpdateRows(
   });
 }
 
-/** 按筛选芯片过滤合并行；v1 中 `updatable` 与 `with_origin` 相同 */
+/**
+ * v1：`update_installed_skill` 会重装到 Agent 工作区 skills 目录（astro 安装目标）。
+ * 纯本机 scope 的技能不在此更新，避免误写到机器路径；请从「已安装」或「更新」Tab 操作。
+ */
+export function canUpdateSkillFromOrigin(
+  skill: InstalledSkill,
+  origin: SkillOriginRecord | null,
+): boolean {
+  if (!origin) return false;
+  if (skill.scope === "machine") return false;
+  return true;
+}
+
+/** 按筛选芯片过滤合并行；`updatable` 仅保留可写入 astro skills 目录的行 */
 export function filterUpdateRows(
   rows: SkillUpdateRow[],
   filter: SkillUpdateFilter,
 ): SkillUpdateRow[] {
   if (filter === "no_origin") {
     return rows.filter((r) => r.status === "no_origin");
+  }
+  if (filter === "updatable") {
+    return rows.filter(
+      (r) =>
+        r.status === "with_origin" && canUpdateSkillFromOrigin(r.skill, r.origin),
+    );
   }
   return rows.filter((r) => r.status === "with_origin");
 }

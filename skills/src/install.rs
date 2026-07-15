@@ -44,8 +44,8 @@ fn agent_workspace(agent_id: &str) -> PathBuf {
     }
 }
 
-/// 当前 Agent 工作区 skills 目录（在线安装目标）
-fn agent_skills_dir(agent_id: Option<&str>) -> Result<PathBuf> {
+/// 当前 Agent 工作区 skills 目录（在线安装 / 更新目标）
+pub fn agent_skills_dir(agent_id: Option<&str>) -> Result<PathBuf> {
     let id = normalize_agent_id(agent_id);
     let dir = agent_workspace(&id).join("skills");
     fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;

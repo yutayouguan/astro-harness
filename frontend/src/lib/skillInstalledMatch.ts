@@ -16,13 +16,25 @@ function folderFromId(id: string): string | undefined {
 export function inferFolderFromInstallRef(installRef: string): string | undefined {
   const trimmed = installRef.trim();
   if (!trimmed) return undefined;
+  if (trimmed.startsWith("skillhub:")) {
+    const slug = trimmed
+      .slice("skillhub:".length)
+      .split("/")
+      .filter(Boolean)
+      .pop();
+    return slug?.trim() || undefined;
+  }
+  if (trimmed.startsWith("clawhub:")) {
+    const slug = trimmed.slice("clawhub:".length).trim();
+    if (slug.includes("--")) {
+      const after = slug.split("--").pop();
+      if (after?.trim()) return after.trim();
+    }
+    return undefined;
+  }
   const withoutScheme = trimmed.includes(":")
     ? trimmed.slice(trimmed.indexOf(":") + 1)
     : trimmed;
-  if (withoutScheme.includes("--")) {
-    const after = withoutScheme.split("--").pop();
-    if (after?.trim()) return after.trim();
-  }
   const pathTail = withoutScheme.split("/").filter(Boolean).pop();
   return pathTail?.trim() || undefined;
 }

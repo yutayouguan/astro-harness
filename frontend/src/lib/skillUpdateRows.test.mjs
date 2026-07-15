@@ -178,15 +178,56 @@ test("filter no_origin keeps only unmatched rows", () => {
   assert.equal(filtered[0].skill.name, "orphan");
 });
 
-test("filter updatable equals with_origin in v1", () => {
+test("linked machine skill duplicates installed row is collapsed", () => {
   const rows = mergeUpdateRows(
-    [pptInstalled, { ...pptInstalled, id: "/tmp/orphan", name: "orphan" }],
-    [],
+    [pptInstalled],
+    [
+      {
+        id: "/tmp/machine/skills/ppt-generator-skill",
+        name: "ppt-generator",
+        description: "",
+        path: "",
+        source_dir: "",
+        enabled: true,
+        linked: true,
+        scope: "machine",
+      },
+    ],
     [pptOrigin],
     "workspace",
   );
-  assert.deepEqual(
-    filterUpdateRows(rows, "updatable"),
-    filterUpdateRows(rows, "with_origin"),
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].skill.id, pptInstalled.id);
+  assert.equal(rows[0].status, "with_origin");
+});
+
+test("filter updatable excludes machine-scoped rows with origin", () => {
+  const rows = mergeUpdateRows(
+    [],
+    [
+      {
+        id: "/tmp/machine/skills/find-skills",
+        name: "find-skills",
+        description: "",
+        path: "",
+        source_dir: "",
+        enabled: true,
+        linked: true,
+        scope: "machine",
+      },
+    ],
+    [
+      {
+        folder: "find-skills",
+        name: "find-skills",
+        store: "clawhub",
+        install_ref: "clawhub:find-skills",
+        agent_id: "workspace",
+        installed_at: 1,
+      },
+    ],
+    "workspace",
   );
+  assert.equal(filterUpdateRows(rows, "with_origin").length, 1);
+  assert.equal(filterUpdateRows(rows, "updatable").length, 0);
 });

@@ -64,6 +64,7 @@ import {
   isStoreSkillInstalled as matchStoreSkillInstalled,
 } from "../lib/skillInstalledMatch";
 import {
+  canUpdateSkillFromOrigin,
   filterUpdateRows,
   mergeUpdateRows,
   originMatchesSkill,
@@ -1370,7 +1371,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   const renderSkillUpdateButton = (skill: InstalledSkill) => {
     const origin = originForSkill(skill);
-    if (!origin) return null;
+    if (!canUpdateSkillFromOrigin(skill, origin)) return null;
     const row: SkillUpdateRow = { skill, origin, status: "with_origin" };
     const folder = updateFolderForRow(row);
     const isUpdating = updatingFolder === folder || updatingAll;
@@ -1717,7 +1718,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const renderUpdateCard = (row: SkillUpdateRow) => {
     const { skill, origin } = row;
     const folder = updateFolderForRow(row);
-    const canUpdate = Boolean(origin);
+    const canUpdate = canUpdateSkillFromOrigin(skill, origin);
     const isUpdating =
       updatingFolder === folder || (updatingAll && canUpdate);
     return (

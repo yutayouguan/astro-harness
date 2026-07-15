@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   collectInstalledSkillKeys,
+  inferFolderFromInstallRef,
   isStoreSkillInstalled,
 } from "./skillInstalledMatch.ts";
 
@@ -90,6 +91,14 @@ test("ClawHub display_name matches via install_ref slug", () => {
       keys,
     ),
     true,
+  );
+});
+
+test("clawhub without -- does not invent folder", () => {
+  assert.equal(inferFolderFromInstallRef("clawhub:weather"), undefined);
+  assert.equal(
+    inferFolderFromInstallRef("clawhub:steipete--weather"),
+    "weather",
   );
 });
 
