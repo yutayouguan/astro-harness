@@ -17,7 +17,7 @@
 .titlebar-sidebar-toggle {
   position: absolute;
   /* 略高于默认红绿灯中线，视觉更贴窗顶 */
-  top: 6px;
+  top: 4px;
   left: var(--titlebar-traffic-w);
   z-index: 45;
   display: flex;
