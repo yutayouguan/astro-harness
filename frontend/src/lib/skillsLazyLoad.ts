@@ -65,6 +65,9 @@ export function pageHasMore(
 /** 商店列表会话缓存 TTL（过期后切回 Tab 会静默刷新） */
 export const STORE_CACHE_TTL_MS = 5 * 60 * 1000;
 
+/** 已安装 / 本机列表 TTL（同 Agent 切 Tab 时在此窗口内可跳过请求） */
+export const LOCAL_SKILLS_TTL_MS = 60 * 1000;
+
 export function storeCacheKey(storeId: string, query: string): string {
   return `${storeId}\0${query.trim().toLowerCase()}`;
 }

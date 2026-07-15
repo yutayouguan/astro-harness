@@ -52,6 +52,7 @@ import {
   createLazyLoadGate,
   decideLazyLoad,
   isStoreCacheFresh,
+  LOCAL_SKILLS_TTL_MS,
   pageHasMore,
   storeCacheKey,
   type LazyLoadGate,
@@ -357,6 +358,18 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const activeStoreCacheKeyRef = useRef<string | null>(null);
   const storePageRef = useRef(1);
   const selectedDetailIdRef = useRef<string | null>(null);
+  const installedMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
+    null,
+  );
+  const machineMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
+    null,
+  );
+  const skillCallsMetaRef = useRef<{
+    agentId: string;
+    fetchedAt: number;
+  } | null>(null);
+  const installedRef = useRef<InstalledSkill[]>([]);
+  const machineRef = useRef<InstalledSkill[]>([]);
   const lazyGateRef = useRef<LazyLoadGate>(createLazyLoadGate());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const onlinePaneRef = useRef<HTMLElement | null>(null);
@@ -375,6 +388,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   hasMoreRef.current = hasMore;
   storePageRef.current = storePage;
   selectedDetailIdRef.current = selectedDetailId;
+  installedRef.current = installed;
+  machineRef.current = machineSkills;
 
   useEffect(() => {
     try {
@@ -384,60 +399,147 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
     }
   }, [viewMode]);
 
-  const refreshInstalled = useCallback(async () => {
-    if (!isTauri()) {
-      setInstalled([]);
-      return;
-    }
-    setLoadingInstalled(true);
-    setError(null);
-    try {
-      const list = await invoke<InstalledSkill[]>("list_installed_skills", {
-        agentId,
-        scope: "astro",
-      });
-      setInstalled(list);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setLoadingInstalled(false);
-    }
-  }, [agentId]);
+  const refreshInstalled = useCallback(
+    async (opts?: { mode?: "hard" | "silent" }) => {
+      if (!isTauri()) {
+        setInstalled([]);
+        installedRef.current = [];
+        return;
+      }
+      const agentChanged = installedMetaRef.current?.agentId !== agentId;
+      if (agentChanged) {
+        setInstalled([]);
+        installedRef.current = [];
+        installedMetaRef.current = null;
+      }
+      const silent =
+        opts?.mode === "silent" && installedRef.current.length > 0 && !agentChanged;
+      if (!silent) setLoadingInstalled(true);
+      setError(null);
+      try {
+        const list = await invoke<InstalledSkill[]>("list_installed_skills", {
+          agentId,
+          scope: "astro",
+        });
+        setInstalled(list);
+        installedRef.current = list;
+        installedMetaRef.current = { agentId, fetchedAt: Date.now() };
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        if (!silent) setLoadingInstalled(false);
+      }
+    },
+    [agentId],
+  );
 
-  const refreshMachine = useCallback(async () => {
-    if (!isTauri()) {
-      setMachineSkills([]);
-      return;
-    }
-    setLoadingMachine(true);
-    setError(null);
-    try {
-      const list = await invoke<InstalledSkill[]>("list_installed_skills", {
-        agentId,
-        scope: "machine",
-      });
-      setMachineSkills(list);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setLoadingMachine(false);
-    }
-  }, [agentId]);
+  const refreshMachine = useCallback(
+    async (opts?: { mode?: "hard" | "silent" }) => {
+      if (!isTauri()) {
+        setMachineSkills([]);
+        machineRef.current = [];
+        return;
+      }
+      const agentChanged = machineMetaRef.current?.agentId !== agentId;
+      if (agentChanged) {
+        setMachineSkills([]);
+        machineRef.current = [];
+        machineMetaRef.current = null;
+      }
+      const silent =
+        opts?.mode === "silent" && machineRef.current.length > 0 && !agentChanged;
+      if (!silent) setLoadingMachine(true);
+      setError(null);
+      try {
+        const list = await invoke<InstalledSkill[]>("list_installed_skills", {
+          agentId,
+          scope: "machine",
+        });
+        setMachineSkills(list);
+        machineRef.current = list;
+        machineMetaRef.current = { agentId, fetchedAt: Date.now() };
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        if (!silent) setLoadingMachine(false);
+      }
+    },
+    [agentId],
+  );
 
-  const refreshSkillCalls = useCallback(async () => {
-    if (!isTauri()) {
-      setSkillCalls({});
-      return;
-    }
-    try {
-      const stats = await invoke<AgentUsageSummary>("get_agent_usage_stats", {
-        agentId,
-      });
-      setSkillCalls(stats.skills ?? {});
-    } catch {
-      setSkillCalls({});
-    }
-  }, [agentId]);
+  const refreshSkillCalls = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!isTauri()) {
+        setSkillCalls({});
+        return;
+      }
+      const meta = skillCallsMetaRef.current;
+      if (
+        !opts?.force &&
+        meta?.agentId === agentId &&
+        isStoreCacheFresh(meta.fetchedAt, Date.now(), LOCAL_SKILLS_TTL_MS)
+      ) {
+        return;
+      }
+      try {
+        const stats = await invoke<AgentUsageSummary>("get_agent_usage_stats", {
+          agentId,
+        });
+        setSkillCalls(stats.skills ?? {});
+        skillCallsMetaRef.current = { agentId, fetchedAt: Date.now() };
+      } catch {
+        setSkillCalls({});
+      }
+    },
+    [agentId],
+  );
+
+  /** 切 Tab：新鲜则跳过；过期则静默刷新；Agent 变更/无数据则硬刷 */
+  const ensureInstalled = useCallback(
+    (force = false) => {
+      const meta = installedMetaRef.current;
+      const hasData = installedRef.current.length > 0;
+      const sameAgent = meta?.agentId === agentId;
+      if (
+        !force &&
+        sameAgent &&
+        hasData &&
+        meta &&
+        isStoreCacheFresh(meta.fetchedAt, Date.now(), LOCAL_SKILLS_TTL_MS)
+      ) {
+        return;
+      }
+      if (!force && sameAgent && hasData) {
+        void refreshInstalled({ mode: "silent" });
+        return;
+      }
+      void refreshInstalled({ mode: force || !hasData ? "hard" : "silent" });
+    },
+    [agentId, refreshInstalled],
+  );
+
+  const ensureMachine = useCallback(
+    (force = false) => {
+      const meta = machineMetaRef.current;
+      const hasData = machineRef.current.length > 0;
+      const sameAgent = meta?.agentId === agentId;
+      if (
+        !force &&
+        sameAgent &&
+        hasData &&
+        meta &&
+        isStoreCacheFresh(meta.fetchedAt, Date.now(), LOCAL_SKILLS_TTL_MS)
+      ) {
+        return;
+      }
+      if (!force && sameAgent && hasData) {
+        void refreshMachine({ mode: "silent" });
+        return;
+      }
+      void refreshMachine({ mode: force || !hasData ? "hard" : "silent" });
+    },
+    [agentId, refreshMachine],
+  );
 
   const persistActiveStoreCache = useCallback(() => {
     const key = activeStoreCacheKeyRef.current;
@@ -652,22 +754,22 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   useEffect(() => {
     if (!active || tab !== "installed") return;
-    void refreshInstalled();
+    ensureInstalled();
     void refreshSkillCalls();
-  }, [active, tab, refreshInstalled, refreshSkillCalls]);
+  }, [active, tab, ensureInstalled, refreshSkillCalls]);
 
   useEffect(() => {
     if (!active || tab !== "machine") return;
-    void refreshMachine();
+    ensureMachine();
     void refreshSkillCalls();
-  }, [active, tab, refreshMachine, refreshSkillCalls]);
+  }, [active, tab, ensureMachine, refreshSkillCalls]);
 
   useEffect(() => {
     if (!active || tab !== "online") return;
-    // 在线「已安装」依赖本机/Astro 列表：切到 online 时一并刷新
-    void refreshInstalled();
-    void refreshMachine();
-  }, [active, tab, refreshInstalled, refreshMachine]);
+    // 在线安装态依赖本机/Astro 列表：有缓存则轻量保证新鲜，不硬刷
+    ensureInstalled();
+    ensureMachine();
+  }, [active, tab, ensureInstalled, ensureMachine]);
 
   useEffect(() => {
     if (!active || tab !== "online") return;
@@ -1438,52 +1540,52 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
             {skill.source}
           </span>
         </div>
-        <div className="skill-card-actions is-store">
-          <div className="skill-card-action-row is-primary">
-            {already ? (
+        <div className="skill-card-actions">
+          {already ? (
+            <button
+              type="button"
+              className="skills-action-btn skill-card-primary is-installed"
+              disabled
+            >
+              <Check size={14} strokeWidth={2.25} aria-hidden />
+              <span>{t("skills.alreadyInstalled")}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="skills-action-btn primary skill-card-primary"
+              disabled={installingId === skill.id}
+              onClick={() => void installSkill(skill)}
+            >
+              {installingId === skill.id ? (
+                <LoaderCircle
+                  size={14}
+                  strokeWidth={2.25}
+                  className="is-spin"
+                  aria-hidden
+                />
+              ) : (
+                <Download size={14} strokeWidth={2.25} aria-hidden />
+              )}
+              <span>
+                {installingId === skill.id
+                  ? t("skills.installing")
+                  : t("skills.install")}
+              </span>
+            </button>
+          )}
+          <div className="skill-card-action-icons">
+            {!already ? (
               <button
                 type="button"
-                className="skills-action-btn skill-card-install is-installed"
-                disabled
+                className="skills-action-btn is-icon"
+                onClick={() => installWithAgent(skill)}
+                title={t("skills.installWithAgent")}
+                aria-label={t("skills.installWithAgent")}
               >
-                <Check size={14} strokeWidth={2.25} aria-hidden />
-                {t("skills.alreadyInstalled")}
+                <Bot size={15} strokeWidth={2.25} aria-hidden />
               </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="skills-action-btn primary skill-card-install"
-                  disabled={installingId === skill.id}
-                  onClick={() => void installSkill(skill)}
-                >
-                  {installingId === skill.id ? (
-                    <LoaderCircle
-                      size={14}
-                      strokeWidth={2.25}
-                      className="is-spin"
-                      aria-hidden
-                    />
-                  ) : (
-                    <Download size={14} strokeWidth={2.25} aria-hidden />
-                  )}
-                  {installingId === skill.id
-                    ? t("skills.installing")
-                    : t("skills.install")}
-                </button>
-                <button
-                  type="button"
-                  className="skills-action-btn is-icon"
-                  onClick={() => installWithAgent(skill)}
-                  title={t("skills.installWithAgent")}
-                  aria-label={t("skills.installWithAgent")}
-                >
-                  <Bot size={15} strokeWidth={2.25} aria-hidden />
-                </button>
-              </>
-            )}
-          </div>
-          <div className="skill-card-action-row is-secondary">
+            ) : null}
             <button
               type="button"
               className="skills-action-btn is-icon"
@@ -2133,8 +2235,8 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                 type="button"
                 className="skills-icon-btn"
                 onClick={() => {
-                  void refreshInstalled();
-                  void refreshSkillCalls();
+                  void refreshInstalled({ mode: "hard" });
+                  void refreshSkillCalls({ force: true });
                 }}
                 disabled={loadingInstalled}
                 title={
