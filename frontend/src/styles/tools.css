@@ -1597,7 +1597,7 @@ html[data-theme="dark"] .mcp-type-menu {
   gap: 6px;
   max-width: 100%;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--tone) 16%, transparent);
   background: color-mix(in srgb, var(--tone-soft) 55%, transparent);
   font-size: 11px;
@@ -1692,7 +1692,7 @@ html[data-theme="dark"] .mcp-type-menu {
   align-items: center;
   gap: 6px;
     padding: 6px 10px;
-    border-radius: 999px;
+    border-radius: 11px;
     border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
     background: color-mix(in srgb, var(--glass-panel, #fff) 70%, transparent);
     color: var(--ink);

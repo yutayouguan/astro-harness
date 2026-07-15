@@ -991,7 +991,9 @@ export default function ToolsPanel({
                             </button>
                           ))}
                         </div>
-                        {activeFn?.description ? (
+                        {activeFn?.description &&
+                        activeFn.description.trim() !==
+                          (detailApiDesc ?? "").trim() ? (
                           <p className="tools-detail-fn-desc">
                             {activeFn.description}
                           </p>
