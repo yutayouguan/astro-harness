@@ -604,6 +604,8 @@ html[data-theme="light"] .mcp-add-drawer-backdrop {
 .mcp-add-drawer {
   --tone: var(--tone-orange);
   --tone-soft: var(--tone-orange-soft);
+  --select-tone: var(--tone-orange);
+  --select-tone-soft: var(--tone-orange-soft);
   position: relative;
   isolation: isolate;
   width: min(480px, 92vw);
@@ -755,8 +757,23 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
 .mcp-add-drawer-tabs {
   display: flex;
   gap: 4px;
-  padding: 12px 16px 0;
+  margin: 12px 16px 0;
+  padding: 4px;
   flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border, transparent));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
+    color-mix(in srgb, var(--glass-fill, transparent) 60%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+html[data-theme="dark"] .mcp-add-drawer-tabs {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(8, 6, 18, 0.35);
+  border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .mcp-add-drawer-tab {
@@ -765,15 +782,15 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 12px;
+  padding: 8px 10px;
   border: none;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 650;
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .mcp-add-drawer-tab > svg {
@@ -781,9 +798,19 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
   opacity: 0.85;
 }
 
+.mcp-add-drawer-tab:hover:not(.active) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 7%, transparent);
+}
+
 .mcp-add-drawer-tab.active {
   color: var(--tone);
-  background: var(--tone-soft);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 .mcp-add-drawer-tab.active > svg {
@@ -822,19 +849,39 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
   box-sizing: border-box;
   min-height: 220px;
   padding: 12px;
-  border-radius: 14px;
-  border: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--glass-panel, #fff) 88%, transparent);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-border, transparent));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--tone-soft) 28%, var(--glass-fill, transparent));
   color: inherit;
   font-size: 12px;
   font-family: var(--font-mono, monospace);
   resize: vertical;
   line-height: 1.55;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+
+html[data-theme="dark"] .mcp-add-drawer-textarea {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.5));
+  border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.mcp-add-drawer-textarea.has-leading-icon {
+  padding-left: 36px;
 }
 
 .mcp-add-drawer-textarea:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--tone) 40%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
 .mcp-add-drawer-error {
@@ -881,10 +928,10 @@ html[data-theme="dark"] .mcp-add-drawer-foot {
 .mcp-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--ink-mute);
   font-weight: 500;
 }
 
@@ -892,21 +939,102 @@ html[data-theme="dark"] .mcp-add-drawer-foot {
   grid-column: 1 / -1;
 }
 
-.mcp-field input {
+.mcp-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-mute);
+}
+
+.mcp-field-label > svg {
+  flex-shrink: 0;
+  color: var(--tone);
+  opacity: 0.9;
+}
+
+.mcp-field-control {
+  position: relative;
+  min-width: 0;
+}
+
+.mcp-field-control-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  pointer-events: none;
+  color: color-mix(in srgb, var(--tone) 70%, var(--ink-mute));
+  opacity: 0.9;
+}
+
+.mcp-field-control--textarea .mcp-field-control-icon {
+  top: 14px;
+  transform: none;
+}
+
+.mcp-field input,
+.mcp-field-textarea {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
   padding: 10px 12px;
+  min-height: 40px;
   border-radius: 12px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-panel);
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-border, transparent));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--tone-soft) 30%, var(--glass-fill, transparent));
   color: inherit;
   font-size: 13px;
+  font-family: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
-.mcp-field input:focus {
+.mcp-field-textarea {
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  resize: vertical;
+  line-height: 1.5;
+  min-height: 84px;
+}
+
+html[data-theme="dark"] .mcp-field input,
+html[data-theme="dark"] .mcp-field-textarea {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.5));
+  border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.mcp-field input.has-leading-icon,
+.mcp-field-textarea.has-leading-icon {
+  padding-left: 36px;
+}
+
+.mcp-field input:focus,
+.mcp-field-textarea:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--tone-orange) 40%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.mcp-type-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.mcp-type-select .select-menu-value-icon,
+.mcp-type-select .select-menu-option-icon {
+  color: var(--tone);
 }
 
 .mcp-field-select {
@@ -1053,42 +1181,42 @@ html[data-theme="dark"] .mcp-type-menu {
   box-shadow: var(--menu-glass-shadow);
 }
 
-.mcp-field-textarea {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--glass-border);
-    background: var(--glass-panel);
-  color: inherit;
-  font-size: 12px;
-    font-family: var(--font-mono, monospace);
-    resize: vertical;
-    line-height: 1.5;
-}
-
-.mcp-field-textarea:focus {
-  outline: none;
-  border-color: color-mix(in srgb, var(--tone-orange) 40%, transparent);
-}
-
 /* action buttons */
+.mcp-btn-primary,
+.mcp-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .mcp-btn-primary {
   padding: 9px 20px;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.55));
   border-radius: 12px;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
-  color: var(--tone-orange);
-  background: var(--tone-orange-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-orange) 28%, transparent);
-  transition: opacity 0.15s ease;
+  color: var(--tone);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft) 70%, transparent);
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--tone) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .mcp-btn-primary:hover:not(:disabled) {
-  opacity: 0.85;
+  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.55));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.3) 100%),
+    var(--tone-soft);
+  box-shadow:
+    0 10px 22px color-mix(in srgb, var(--tone) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .mcp-btn-primary:disabled {

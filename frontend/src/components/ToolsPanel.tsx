@@ -2,15 +2,24 @@
 import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { createPortal } from "react-dom";
 import {
+  AlignLeft,
   Braces,
   Columns2,
   FileJson2,
   FileText,
   FormInput,
   FunctionSquare,
+  Globe,
   Hash,
+  Heading,
+  KeyRound,
   LayoutGrid,
+  Link2,
   List,
+  Plus,
+  Radio,
+  Tag,
+  Terminal,
   Trash2,
   Type,
   Wrench,
@@ -35,6 +44,7 @@ import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
 import LucideByName from "./LucideByName";
 import { IconRefresh } from "./NavIcons";
+import { SelectMenu } from "./SelectMenu";
 
 /** 工具面板 Tab：内置 / MCP */
 type ToolTab = "builtin" | "mcp";
@@ -111,6 +121,12 @@ const MCP_TYPE_LABEL: Record<McpTransportType, MessageKey> = {
   streamableHttp: "mcpTools.type.streamableHttp",
 };
 
+const MCP_TYPE_ICON: Record<McpTransportType, typeof Terminal> = {
+  stdio: Terminal,
+  sse: Radio,
+  streamableHttp: Globe,
+};
+
 /** Tools 面板入参 */
 type Props = {
   /** 面板是否可见（用于刷新统计） */
@@ -159,37 +175,18 @@ function McpAddDialog({
   const [formUrl, setFormUrl] = useState("");
   const [formHeaders, setFormHeaders] = useState("");
   const [formError, setFormError] = useState("");
-  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
-  const typeMenuRef = useRef<HTMLDivElement>(null);
 
   const backdropRef = useRef<HTMLDivElement>(null);
   const isStdio = formType === "stdio";
+  const TypeIcon = MCP_TYPE_ICON[formType];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (typeMenuOpen) {
-        setTypeMenuOpen(false);
-        return;
-      }
-      onClose();
+      if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, typeMenuOpen]);
-
-  useEffect(() => {
-    if (!typeMenuOpen) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (!typeMenuRef.current?.contains(e.target as Node)) {
-        setTypeMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-    };
-  }, [typeMenuOpen]);
+  }, [onClose]);
 
   function handleBackdrop(e: React.MouseEvent) {
     if (e.target === backdropRef.current) onClose();
@@ -287,7 +284,7 @@ function McpAddDialog({
             }}
           >
             <Braces size={14} strokeWidth={2.25} aria-hidden />
-            {t("mcpTools.tabJson")}
+            <span>{t("mcpTools.tabJson")}</span>
           </button>
           <button
             type="button"
@@ -300,7 +297,7 @@ function McpAddDialog({
             }}
           >
             <FormInput size={14} strokeWidth={2.25} aria-hidden />
-            {t("mcpTools.tabForm")}
+            <span>{t("mcpTools.tabForm")}</span>
           </button>
         </div>
 
@@ -308,14 +305,28 @@ function McpAddDialog({
           <AnimatedSwitch switchKey={addTab} variant="fade">
             {addTab === "json" && (
               <div className="mcp-add-drawer-body">
-                <textarea
-                  className="mcp-add-drawer-textarea"
-                  value={jsonText}
-                  onChange={(e) => setJsonText(e.target.value)}
-                  placeholder={t("mcpTools.jsonPlaceholder")}
-                  spellCheck={false}
-                  rows={10}
-                />
+                <label className="mcp-field mcp-field--full">
+                  <span className="mcp-field-label">
+                    <Braces size={13} strokeWidth={2.2} aria-hidden />
+                    {t("mcpTools.tabJson")}
+                  </span>
+                  <div className="mcp-field-control mcp-field-control--textarea">
+                    <Braces
+                      size={14}
+                      strokeWidth={2.1}
+                      className="mcp-field-control-icon"
+                      aria-hidden
+                    />
+                    <textarea
+                      className="mcp-add-drawer-textarea has-leading-icon"
+                      value={jsonText}
+                      onChange={(e) => setJsonText(e.target.value)}
+                      placeholder={t("mcpTools.jsonPlaceholder")}
+                      spellCheck={false}
+                      rows={10}
+                    />
+                  </div>
+                </label>
                 {jsonError ? (
                   <p className="mcp-add-drawer-error">{jsonError}</p>
                 ) : null}
@@ -326,125 +337,142 @@ function McpAddDialog({
               <div className="mcp-add-drawer-body">
                 <div className="mcp-form-grid">
                   <label className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formName")}</span>
-                    <input
-                      type="text"
-                      value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
-                      placeholder={t("mcpTools.formNamePlaceholder")}
-                    />
+                    <span className="mcp-field-label">
+                      <Tag size={13} strokeWidth={2.2} aria-hidden />
+                      {t("mcpTools.formName")}
+                    </span>
+                    <div className="mcp-field-control">
+                      <Tag size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
+                      <input
+                        type="text"
+                        className="has-leading-icon"
+                        value={formName}
+                        onChange={(e) => setFormName(e.target.value)}
+                        placeholder={t("mcpTools.formNamePlaceholder")}
+                      />
+                    </div>
                   </label>
                   <label className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formDesc")}</span>
-                    <input
-                      type="text"
-                      value={formDesc}
-                      onChange={(e) => setFormDesc(e.target.value)}
-                      placeholder={t("mcpTools.formDescPlaceholder")}
-                    />
+                    <span className="mcp-field-label">
+                      <AlignLeft size={13} strokeWidth={2.2} aria-hidden />
+                      {t("mcpTools.formDesc")}
+                    </span>
+                    <div className="mcp-field-control">
+                      <AlignLeft size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
+                      <input
+                        type="text"
+                        className="has-leading-icon"
+                        value={formDesc}
+                        onChange={(e) => setFormDesc(e.target.value)}
+                        placeholder={t("mcpTools.formDescPlaceholder")}
+                      />
+                    </div>
                   </label>
                   <div className="mcp-field mcp-field--full">
-                    <span>{t("mcpTools.formType")}</span>
-                    <div className="mcp-type-picker" ref={typeMenuRef}>
-                      <button
-                        type="button"
-                        className={`mcp-type-trigger ${typeMenuOpen ? "is-open" : ""}`}
-                        aria-haspopup="listbox"
-                        aria-expanded={typeMenuOpen}
-                        aria-label={t("mcpTools.formType")}
-                        onClick={() => setTypeMenuOpen((v) => !v)}
-                      >
-                        <span className="mcp-type-trigger-text">
-                          {t(MCP_TYPE_LABEL[formType])}
-                        </span>
-                        <span className="mcp-type-chevron" aria-hidden>
-                          ▾
-                        </span>
-                      </button>
-                      {typeMenuOpen ? (
-                        <ul
-                          className="mcp-type-menu"
-                          role="listbox"
-                          aria-label={t("mcpTools.formType")}
-                        >
-                          {MCP_TYPES.map((type) => (
-                            <li
-                              key={type}
-                              role="option"
-                              aria-selected={type === formType}
-                            >
-                              <button
-                                type="button"
-                                className={`mcp-type-option ${type === formType ? "is-active" : ""}`}
-                                onClick={() => {
-                                  setFormType(type);
-                                  setTypeMenuOpen(false);
-                                }}
-                              >
-                                <span className="mcp-type-option-name">
-                                  {t(MCP_TYPE_LABEL[type])}
-                                </span>
-                                <span className="mcp-type-option-id">{type}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
+                    <span className="mcp-field-label">
+                      <TypeIcon size={13} strokeWidth={2.2} aria-hidden />
+                      {t("mcpTools.formType")}
+                    </span>
+                    <SelectMenu
+                      className="mcp-type-select"
+                      value={formType}
+                      onChange={(v) => setFormType(v as McpTransportType)}
+                      aria-label={t("mcpTools.formType")}
+                      options={MCP_TYPES.map((type) => {
+                        const Icon = MCP_TYPE_ICON[type];
+                        return {
+                          value: type,
+                          label: t(MCP_TYPE_LABEL[type]),
+                          icon: <Icon size={13} strokeWidth={2.2} aria-hidden />,
+                        };
+                      })}
+                    />
                   </div>
 
                   {isStdio ? (
                     <>
                       <label className="mcp-field mcp-field--full">
-                        <span>{t("mcpTools.formCommand")}</span>
-                        <input
-                          type="text"
-                          value={formCommand}
-                          onChange={(e) => setFormCommand(e.target.value)}
-                          placeholder={t("mcpTools.formCommandPlaceholder")}
-                        />
+                        <span className="mcp-field-label">
+                          <Terminal size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formCommand")}
+                        </span>
+                        <div className="mcp-field-control">
+                          <Terminal size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
+                          <input
+                            type="text"
+                            className="has-leading-icon"
+                            value={formCommand}
+                            onChange={(e) => setFormCommand(e.target.value)}
+                            placeholder={t("mcpTools.formCommandPlaceholder")}
+                          />
+                        </div>
                       </label>
                       <label className="mcp-field mcp-field--full">
-                        <span>{t("mcpTools.formArgs")}</span>
-                        <textarea
-                          className="mcp-field-textarea"
-                          value={formArgs}
-                          onChange={(e) => setFormArgs(e.target.value)}
-                          placeholder={t("mcpTools.formArgsPlaceholder")}
-                          rows={3}
-                        />
+                        <span className="mcp-field-label">
+                          <List size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formArgs")}
+                        </span>
+                        <div className="mcp-field-control mcp-field-control--textarea">
+                          <List size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
+                          <textarea
+                            className="mcp-field-textarea has-leading-icon"
+                            value={formArgs}
+                            onChange={(e) => setFormArgs(e.target.value)}
+                            placeholder={t("mcpTools.formArgsPlaceholder")}
+                            rows={3}
+                          />
+                        </div>
                       </label>
                       <label className="mcp-field mcp-field--full">
-                        <span>{t("mcpTools.formEnv")}</span>
-                        <textarea
-                          className="mcp-field-textarea"
-                          value={formEnv}
-                          onChange={(e) => setFormEnv(e.target.value)}
-                          placeholder={t("mcpTools.formEnvPlaceholder")}
-                          rows={3}
-                        />
+                        <span className="mcp-field-label">
+                          <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formEnv")}
+                        </span>
+                        <div className="mcp-field-control mcp-field-control--textarea">
+                          <KeyRound size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
+                          <textarea
+                            className="mcp-field-textarea has-leading-icon"
+                            value={formEnv}
+                            onChange={(e) => setFormEnv(e.target.value)}
+                            placeholder={t("mcpTools.formEnvPlaceholder")}
+                            rows={3}
+                          />
+                        </div>
                       </label>
                     </>
                   ) : (
                     <>
                       <label className="mcp-field mcp-field--full">
-                        <span>{t("mcpTools.formUrl")}</span>
-                        <input
-                          type="url"
-                          value={formUrl}
-                          onChange={(e) => setFormUrl(e.target.value)}
-                          placeholder={t("mcpTools.formUrlPlaceholder")}
-                        />
+                        <span className="mcp-field-label">
+                          <Link2 size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formUrl")}
+                        </span>
+                        <div className="mcp-field-control">
+                          <Link2 size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
+                          <input
+                            type="url"
+                            className="has-leading-icon"
+                            value={formUrl}
+                            onChange={(e) => setFormUrl(e.target.value)}
+                            placeholder={t("mcpTools.formUrlPlaceholder")}
+                          />
+                        </div>
                       </label>
                       <label className="mcp-field mcp-field--full">
-                        <span>{t("mcpTools.formHeaders")}</span>
-                        <textarea
-                          className="mcp-field-textarea"
-                          value={formHeaders}
-                          onChange={(e) => setFormHeaders(e.target.value)}
-                          placeholder={t("mcpTools.formHeadersPlaceholder")}
-                          rows={3}
-                        />
+                        <span className="mcp-field-label">
+                          <Heading size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formHeaders")}
+                        </span>
+                        <div className="mcp-field-control mcp-field-control--textarea">
+                          <Heading size={14} strokeWidth={2.1} className="mcp-field-control-icon" aria-hidden />
+                          <textarea
+                            className="mcp-field-textarea has-leading-icon"
+                            value={formHeaders}
+                            onChange={(e) => setFormHeaders(e.target.value)}
+                            placeholder={t("mcpTools.formHeadersPlaceholder")}
+                            rows={3}
+                          />
+                        </div>
                       </label>
                     </>
                   )}
@@ -459,6 +487,7 @@ function McpAddDialog({
 
         <footer className="mcp-add-drawer-foot">
           <button type="button" className="mcp-btn-ghost" onClick={onClose}>
+            <X size={14} strokeWidth={2.3} aria-hidden />
             {t("mcpTools.cancel")}
           </button>
           {addTab === "json" ? (
@@ -468,6 +497,7 @@ function McpAddDialog({
               onClick={handleJsonImport}
               disabled={!jsonText.trim()}
             >
+              <Plus size={14} strokeWidth={2.3} aria-hidden />
               {t("mcpTools.jsonImport")}
             </button>
           ) : (
@@ -476,6 +506,7 @@ function McpAddDialog({
               className="mcp-btn-primary"
               onClick={handleFormAdd}
             >
+              <Plus size={14} strokeWidth={2.3} aria-hidden />
               {t("mcpTools.formAdd")}
             </button>
           )}
