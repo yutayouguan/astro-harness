@@ -2214,6 +2214,7 @@ html[data-theme="dark"] .skills-end-hint {
 .skills-action-btn .is-spin {
   width: 14px;
   height: 14px;
+  animation: skills-icon-spin 0.8s linear infinite;
 }
 
 .skills-action-btn.is-icon {
