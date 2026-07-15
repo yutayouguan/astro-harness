@@ -3195,7 +3195,8 @@ html[data-theme="light"] .send-btn--round {
   width: 72px;
   height: 72px;
   top: 28%;
-  left: 56%;
+  left: 50%;
+  translate: -50% -50%;
   background:
     radial-gradient(circle, color-mix(in srgb, var(--tone-cyan) 35%, transparent), transparent 70%);
   filter: blur(12px);
@@ -3235,8 +3236,9 @@ html[data-theme="light"] .send-btn--round {
 
 .chat-welcome-mark {
   position: relative;
-  width: min(84px, 22vw);
-  aspect-ratio: 1;
+  width: min(112px, 28vw);
+  aspect-ratio: 4 / 3;
+  margin-inline: auto;
   display: grid;
   place-items: center;
   animation: welcome-mark-float 5.5s ease-in-out infinite;
@@ -3261,16 +3263,21 @@ html[data-theme="light"] .send-btn--round {
   position: relative;
   z-index: 1;
   width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   color: var(--tone-blue, #2563eb);
   line-height: 0;
   opacity: 0.95;
 }
 
-.chat-welcome-empty {
+.chat-welcome-empty.astro-empty {
   padding: 0;
   width: 100%;
+  max-width: 100%;
 }
 
+.chat-welcome-empty.astro-empty--lg .astro-empty-art,
 .chat-welcome-empty .astro-empty-art {
   width: 100%;
   max-width: none;
@@ -3280,6 +3287,7 @@ html[data-theme="light"] .send-btn--round {
   width: 100%;
   height: auto;
   display: block;
+  margin-inline: auto;
   filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--tone-blue, #2563eb) 16%, transparent));
 }
 

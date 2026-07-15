@@ -128,6 +128,17 @@ html[data-theme="dark"] .astro-cover-swatch {
     color-mix(in srgb, var(--cover-tone) 14%, transparent);
 }
 
+/* 聊天空欢迎页：覆盖 --lg 默认 200px，保持居中 */
+.chat-welcome-empty.astro-empty--lg .astro-empty-art,
+.chat-welcome-empty .astro-empty-art {
+  width: 100%;
+  max-width: none;
+}
+
+.chat-welcome-empty.astro-empty {
+  padding: 0;
+}
+
 /* 聊天空欢迎页内嵌插画（布局由 chat.css .chat-welcome-mark 控制） */
 .chat-agent-covers {
   margin-top: 4px;
