@@ -1939,6 +1939,14 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   {t("skills.outdatedBadge")}
                 </span>
               )}
+              {row.status === "current" && (
+                <span
+                  className="skill-card-link-badge is-current"
+                  title={t("skills.upToDate")}
+                >
+                  {t("skills.upToDate")}
+                </span>
+              )}
               <span className="skill-card-tag" title={origin.install_ref}>
                 {storeBadge(origin.store)} {origin.store}
               </span>
@@ -1949,6 +1957,17 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
         </header>
         <div className="skill-card-desc">
           <p>{skill.description || skill.path}</p>
+          {origin &&
+            updateFilter === "with_origin" &&
+            (row.status === "unknown" || row.status === "error") && (
+              <p className="skill-card-status-hint">
+                {t(
+                  row.status === "error"
+                    ? "skills.updateCheckFailed"
+                    : "skills.updateStatusUnknown",
+                )}
+              </p>
+            )}
           <span className="skill-card-tag" title={skill.source_dir}>
             {formatTildePath(skill.source_dir)}
           </span>
@@ -2986,9 +3005,11 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               !loadingOrigins && (
                 <p className="skills-empty" role="listitem">
                   {updateFilter === "updatable"
-                    ? lastCheckResults.length === 0
-                      ? t("skills.updatesNeedCheck")
-                      : t("skills.upToDate")
+                    ? checkingUpdates
+                      ? t("skills.checkingUpdates")
+                      : lastCheckResults.length === 0
+                        ? t("skills.updatesNeedCheck")
+                        : t("skills.upToDate")
                     : t("skills.installedSearchEmpty")}
                 </p>
               )}
