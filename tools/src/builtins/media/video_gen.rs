@@ -113,7 +113,9 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let extend_id = opt_path(parsed.extend_video_id.as_deref());
 
     if last_frame_path.is_some() && image_path.is_none() {
-        anyhow::bail!("video_gen: last_frame 需要同时提供 image");
+        anyhow::bail!(
+            "video_gen: last_frame 需要同时提供 image（首帧）。建议先用 image_gen 生成首尾帧。"
+        );
     }
     if !refs.is_empty() && (image_path.is_some() || last_frame_path.is_some()) {
         anyhow::bail!("video_gen: reference_images 不能与 image/last_frame 同时使用");
@@ -170,17 +172,27 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         reference_parts.push(load_image_part(ctx, r)?);
     }
 
+    let extend_video = extend_path
+        .map(|p| load_video_part(ctx, p))
+        .transpose()?;
+    let (extend_video, extend_video_uri, extend_video_id) = if extend_video.is_some() {
+        (extend_video, None, None)
+    } else if extend_uri.is_some() {
+        (None, extend_uri.map(|s| s.to_string()), None)
+    } else {
+        (None, None, extend_id.map(|s| s.to_string()))
+    };
+    let extend_native_only = extend_video.is_some() || extend_video_uri.is_some();
+
     let extras = VideoGenExtras {
         aspect_ratio: opt_owned(parsed.aspect_ratio.as_deref()),
         duration_seconds: duration,
         resolution: opt_owned(parsed.resolution.as_deref()),
         negative_prompt: opt_owned(parsed.negative_prompt.as_deref()),
         style: opt_owned(parsed.style.as_deref()),
-        extend_video_id: extend_id.map(|s| s.to_string()),
-        extend_video_uri: extend_uri.map(|s| s.to_string()),
-        extend_video: extend_path
-            .map(|p| load_video_part(ctx, p))
-            .transpose()?,
+        extend_video_id,
+        extend_video_uri,
+        extend_video,
         person_generation: opt_owned(parsed.person_generation.as_deref()),
         seed: parsed.seed,
         image: image_path
@@ -225,6 +237,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
             (v, "native")
         }
         Err(native_err) => {
+            if extend_native_only {
+                anyhow::bail!(
+                    "Google 原生视频失败: {native_err}；兼容回退需要 extend_video_id（本地/URI 续拍仅原生支持）"
+                );
+            }
             on_progress(&format!(
                 "fallback=openai_compat reason={}",
                 native_err.to_string().replace('\n', " ")
