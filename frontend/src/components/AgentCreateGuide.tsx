@@ -1,5 +1,5 @@
 /** 创建 Agent 引导与图标上传。 */
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
@@ -14,11 +14,8 @@ import {
 } from "../lib/lucideAgentIcons";
 import { IconSparkles, IconSkills, IconWorkspace } from "./NavIcons";
 import LucideIconPicker from "./LucideIconPicker";
-import {
-  CoverPicker,
-  coverIllustrationToSvgBase64,
-  type CoverId,
-} from "../illustrations";
+import AvatarPickerDrawer from "./AvatarPickerDrawer";
+import { coverIllustrationToSvgBase64, type CoverId } from "../illustrations";
 
 /** 创建 Agent 引导卡片入参 */
 type Props = {
@@ -59,11 +56,20 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
   const [avatar, setAvatar] = useState<SlotState>({ previewUrl: null, fileName: null });
   const [coverId, setCoverId] = useState<CoverId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [avatarOpen, setAvatarOpen] = useState(false);
   const [lucideOpen, setLucideOpen] = useState(false);
   const [lucideBusy, setLucideBusy] = useState(false);
   const [coverBusy, setCoverBusy] = useState(false);
-  const emojiInputRef = useRef<HTMLInputElement | null>(null);
-  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+
+  const openAvatar = () => {
+    setLucideOpen(false);
+    setAvatarOpen(true);
+  };
+
+  const openLucide = () => {
+    setAvatarOpen(false);
+    setLucideOpen(true);
+  };
 
   useEffect(() => {
     return () => {
@@ -73,11 +79,11 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only revoke on unmount
   }, []);
 
-  const pick = async (kind: IconKind, file: File | null) => {
-    if (!file) return;
+  const pick = async (kind: IconKind, file: File | null): Promise<boolean> => {
+    if (!file) return false;
     if (!file.type.startsWith("image/")) {
       setError(t("chat.agentIconInvalid"));
-      return;
+      return false;
     }
     setError(null);
     const previewUrl = URL.createObjectURL(file);
@@ -87,7 +93,7 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
       return { previewUrl, fileName: file.name, lucideId: null };
     });
     if (kind === "avatar") setCoverId(null);
-    if (!isTauri()) return;
+    if (!isTauri()) return true;
     try {
       const dataBase64 = await fileToBase64(file);
       await invoke("set_pending_agent_icon", {
@@ -95,8 +101,10 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
         dataBase64,
         fileName: file.name,
       });
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     }
   };
 
@@ -151,7 +159,7 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     }
   };
 
-  const pickCover = async (id: CoverId) => {
+  const pickCover = async (id: CoverId): Promise<boolean> => {
     setCoverBusy(true);
     setError(null);
     try {
@@ -174,8 +182,10 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
           fileName,
         });
       }
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     } finally {
       setCoverBusy(false);
     }
@@ -201,103 +211,6 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     { key: "icon", icon: <IconSparkles width={13} height={13} />, label: t("chat.agentGuideStep2") },
     { key: "send", icon: <IconWorkspace width={13} height={13} />, label: t("chat.agentGuideStep3") },
   ] as const;
-
-  const renderSlot = (
-    kind: IconKind,
-    state: SlotState,
-    inputRef: MutableRefObject<HTMLInputElement | null>,
-    label: string,
-    hint: string,
-    tone: "emoji" | "avatar",
-    delay: string,
-    layout: "stack" | "row" = "stack",
-  ) => (
-    <div
-      className={`chat-agent-icon-slot tone-${tone}${layout === "row" ? " is-row" : ""}`}
-      data-tone={tone === "emoji" ? "blue" : "purple"}
-      style={{ animationDelay: delay }}
-    >
-      <button
-        type="button"
-        className={`chat-agent-icon-preview ${state.previewUrl ? "has-image" : ""}`}
-        onClick={() => {
-          if (kind === "emoji") setLucideOpen(true);
-          else inputRef.current?.click();
-        }}
-        aria-label={label}
-      >
-        <span className="chat-agent-icon-preview-glow" aria-hidden />
-        {state.previewUrl ? (
-          <img src={state.previewUrl} alt="" draggable={false} />
-        ) : (
-          <>
-            <span className="chat-agent-icon-fallback">{initial}</span>
-            <span className="chat-agent-icon-plus" aria-hidden>
-              +
-            </span>
-          </>
-        )}
-      </button>
-      <div className="chat-agent-icon-slot-meta">
-        <span className="chat-agent-icon-slot-label">{label}</span>
-        <span className="chat-agent-icon-slot-hint">{hint}</span>
-        <div className="chat-agent-icon-actions">
-          {kind === "emoji" ? (
-            <>
-              <button
-                type="button"
-                className="chat-agent-icon-btn"
-                onClick={() => setLucideOpen(true)}
-                disabled={lucideBusy}
-              >
-                {state.lucideId
-                  ? t("chat.agentIconLucideChange")
-                  : t("chat.agentIconLucidePick")}
-              </button>
-              <button
-                type="button"
-                className="chat-agent-icon-btn subtle"
-                onClick={() => inputRef.current?.click()}
-                disabled={lucideBusy}
-              >
-                {t("chat.agentIconUpload")}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="chat-agent-icon-btn"
-              onClick={() => inputRef.current?.click()}
-            >
-              {state.previewUrl ? t("chat.agentIconReplace") : t("chat.agentIconUpload")}
-            </button>
-          )}
-          {state.previewUrl ? (
-            <button
-              type="button"
-              className="chat-agent-icon-btn subtle"
-              onClick={() => void clear(kind)}
-              disabled={lucideBusy}
-            >
-              {t("chat.agentIconClear")}
-            </button>
-          ) : null}
-        </div>
-        {state.fileName ? <span className="chat-agent-icon-filename">{state.fileName}</span> : null}
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0] ?? null;
-          e.target.value = "";
-          void pick(kind, file);
-        }}
-      />
-    </div>
-  );
 
   return (
     <div className="chat-empty chat-agent-guide" role="region" aria-label={t("chat.agentGuideTitle")}>
@@ -359,42 +272,89 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
             <p className="chat-agent-icons-sub">{t("chat.agentIconsSub")}</p>
           </div>
 
-          <section className="chat-agent-avatar-block" aria-labelledby="chat-agent-avatar-heading">
-            <div className="chat-agent-covers-head">
-              <p id="chat-agent-avatar-heading" className="chat-agent-covers-title">
-                {t("chat.agentCoversTitle")}
-              </p>
-              <p className="chat-agent-covers-sub">{t("chat.agentCoversSub")}</p>
+          <div
+            className="chat-agent-icon-slot tone-avatar is-row"
+            data-tone="purple"
+            style={{ animationDelay: "0.14s" }}
+          >
+            <button
+              type="button"
+              className={`chat-agent-icon-preview ${avatar.previewUrl ? "has-image" : ""}`}
+              onClick={openAvatar}
+              aria-label={t("chat.agentCoversTitle")}
+            >
+              <span className="chat-agent-icon-preview-glow" aria-hidden />
+              {avatar.previewUrl ? (
+                <img src={avatar.previewUrl} alt="" draggable={false} />
+              ) : (
+                <span className="chat-agent-icon-fallback">{initial}</span>
+              )}
+            </button>
+            <div className="chat-agent-icon-slot-meta">
+              <span className="chat-agent-icon-slot-label">{t("chat.agentCoversTitle")}</span>
+              <span className="chat-agent-icon-slot-hint">{t("chat.agentCoversSub")}</span>
+              <div className="chat-agent-icon-actions">
+                <button type="button" className="chat-agent-icon-btn" onClick={openAvatar}>
+                  {avatar.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
+                </button>
+                {avatar.previewUrl ? (
+                  <button
+                    type="button"
+                    className="chat-agent-icon-btn subtle"
+                    onClick={() => void clear("avatar")}
+                  >
+                    {t("chat.agentIconClear")}
+                  </button>
+                ) : null}
+              </div>
             </div>
-            <CoverPicker
-              value={coverId}
-              busy={coverBusy}
-              onChange={(id) => void pickCover(id)}
-            />
-            {renderSlot(
-              "avatar",
-              avatar,
-              avatarInputRef,
-              t("chat.agentAvatarCustom"),
-              t("chat.agentAvatarCustomHint"),
-              "avatar",
-              "0.14s",
-              "row",
-            )}
-          </section>
+          </div>
 
-          <section className="chat-agent-emoji-block" aria-label={t("chat.agentIconEmoji")}>
-            {renderSlot(
-              "emoji",
-              emoji,
-              emojiInputRef,
-              t("chat.agentIconEmoji"),
-              t("chat.agentIconEmojiHint"),
-              "emoji",
-              "0.2s",
-              "row",
-            )}
-          </section>
+          <div
+            className="chat-agent-icon-slot tone-emoji is-row"
+            data-tone="blue"
+            style={{ animationDelay: "0.2s" }}
+          >
+            <button
+              type="button"
+              className={`chat-agent-icon-preview ${emoji.previewUrl ? "has-image" : ""}`}
+              onClick={openLucide}
+              aria-label={t("chat.agentIconEmoji")}
+              disabled={lucideBusy}
+            >
+              <span className="chat-agent-icon-preview-glow" aria-hidden />
+              {emoji.previewUrl ? (
+                <img src={emoji.previewUrl} alt="" draggable={false} />
+              ) : (
+                <span className="chat-agent-icon-fallback">{initial}</span>
+              )}
+            </button>
+            <div className="chat-agent-icon-slot-meta">
+              <span className="chat-agent-icon-slot-label">{t("chat.agentIconEmoji")}</span>
+              <span className="chat-agent-icon-slot-hint">{t("chat.agentIconEmojiHint")}</span>
+              <div className="chat-agent-icon-actions">
+                <button
+                  type="button"
+                  className="chat-agent-icon-btn"
+                  onClick={openLucide}
+                  disabled={lucideBusy}
+                >
+                  {emoji.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
+                </button>
+                {emoji.previewUrl ? (
+                  <button
+                    type="button"
+                    className="chat-agent-icon-btn subtle"
+                    onClick={() => void clear("emoji")}
+                    disabled={lucideBusy}
+                  >
+                    {t("chat.agentIconClear")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
           {error ? <p className="chat-agent-icons-error">{error}</p> : null}
         </div>
 
@@ -403,11 +363,35 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
         </button>
       </div>
 
+      <AvatarPickerDrawer
+        open={avatarOpen}
+        coverId={coverId}
+        busy={coverBusy}
+        onClose={() => setAvatarOpen(false)}
+        onPickCover={(id) => {
+          void pickCover(id).then((ok) => {
+            if (ok) setAvatarOpen(false);
+          });
+        }}
+        onUpload={(file) => {
+          void pick("avatar", file).then((ok) => {
+            if (ok) setAvatarOpen(false);
+          });
+        }}
+      />
+
       <LucideIconPicker
         open={lucideOpen}
         selectedId={emoji.lucideId}
         onClose={() => setLucideOpen(false)}
-        onSelect={(icon, paint, style) => void pickLucide(icon, paint, style)}
+        onSelect={(icon, paint, style) => {
+          void pickLucide(icon, paint, style);
+        }}
+        onUploadImage={(file) => {
+          void pick("emoji", file).then((ok) => {
+            if (ok) setLucideOpen(false);
+          });
+        }}
       />
     </div>
   );

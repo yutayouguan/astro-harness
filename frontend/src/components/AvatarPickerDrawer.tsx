@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { CoverPicker, type CoverId } from "../illustrations";
 
-type Props = {
+export type AvatarPickerDrawerProps = {
   open: boolean;
   coverId: CoverId | null;
   busy?: boolean;
@@ -20,7 +20,7 @@ export default function AvatarPickerDrawer({
   onClose,
   onPickCover,
   onUpload,
-}: Props) {
+}: AvatarPickerDrawerProps) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
