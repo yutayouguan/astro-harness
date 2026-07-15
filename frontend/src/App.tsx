@@ -1727,6 +1727,13 @@ export default function App() {
     settleMessageUsage,
   ]);
 
+  const showTransientToast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    if (hideTimerRef.current != null) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
+  }, []);
+
   const onUiAction = useCallback(
     async (
       messageId: string,
@@ -1747,8 +1754,7 @@ export default function App() {
           typeof navigator === "undefined" ||
           !navigator.geolocation?.getCurrentPosition
         ) {
-          setToastMsg(t("chat.location.geoUnavailable"));
-          setToastVisible(true);
+          showTransientToast(t("chat.location.geoUnavailable"));
           return;
         }
         try {
@@ -1765,16 +1771,14 @@ export default function App() {
             accuracy_m: pos.coords.accuracy,
           };
         } catch {
-          setToastMsg(t("chat.location.geoFailed"));
-          setToastVisible(true);
+          showTransientToast(t("chat.location.geoFailed"));
           return;
         }
       } else if (name === "choose_city") {
         const cityRaw = context.city;
         const city = typeof cityRaw === "string" ? cityRaw.trim() : "";
         if (!city) {
-          setToastMsg(t("chat.location.cityRequired"));
-          setToastVisible(true);
+          showTransientToast(t("chat.location.cityRequired"));
           return;
         }
         payload = { city };
@@ -1810,7 +1814,7 @@ export default function App() {
       );
       setSessionPendingInterrupts([]);
       if (!sessionId) {
-        setToastMsg(t("chat.interrupt.pending"));
+        showTransientToast(t("chat.interrupt.pending"));
         return;
       }
       try {
@@ -1819,12 +1823,18 @@ export default function App() {
           resumeJson,
         });
       } catch (e) {
-        setToastMsg(
+        showTransientToast(
           e instanceof Error ? e.message : String(e ?? "HITL resume failed"),
         );
       }
     },
-    [activeProvider, sessionPendingInterrupts, sessionId, t],
+    [
+      activeProvider,
+      sessionPendingInterrupts,
+      sessionId,
+      showTransientToast,
+      t,
+    ],
   );
 
   const regenerateMessage = useCallback(
@@ -1854,13 +1864,6 @@ export default function App() {
     },
     [messages, streaming, send],
   );
-
-  const showTransientToast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    setToastVisible(true);
-    if (hideTimerRef.current != null) window.clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = window.setTimeout(() => setToastVisible(false), 4000);
-  }, []);
 
   /** listen session_event → toast / 角标 / 可选 refresh */
   useEffect(() => {
