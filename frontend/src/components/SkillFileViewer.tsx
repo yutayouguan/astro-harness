@@ -1,13 +1,26 @@
 /** 技能包文件只读预览：CodeMirror 高亮、MD 预览/源码、复制。 */
 import { useCallback, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { Check, Copy, Eye, FileCode2, FolderOpen } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Eye,
+  FileCode2,
+  FolderOpen,
+  Tags,
+} from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { useTheme } from "../hooks/useTheme";
 import {
   codeMirrorTheme,
   languageForFilename,
 } from "../lib/codeMirrorLanguage";
+import {
+  splitSkillFrontmatter,
+  type SkillFrontmatter,
+} from "../lib/skillFrontmatter";
 import { ChatMarkdown } from "./ChatMarkdown";
 
 const MD_MODE_KEY = "astro.skills.mdPreviewMode";
@@ -28,6 +41,93 @@ function readMdMode(): MdMode {
 function isMarkdownPath(filename: string): boolean {
   const lower = filename.toLowerCase();
   return lower.endsWith(".md") || lower.endsWith(".markdown");
+}
+
+function SkillFrontmatterCard({ meta }: { meta: SkillFrontmatter }) {
+  const { t } = useI18n();
+  const [descOpen, setDescOpen] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const desc = meta.description?.trim() ?? "";
+  const descLong = desc.length > 160 || desc.includes("\n");
+
+  if (!meta.name && !desc && meta.extras.length === 0) return null;
+
+  return (
+    <section className="skills-frontmatter" aria-label={t("skills.frontmatterTitle")}>
+      <header className="skills-frontmatter-head">
+        <Tags size={13} strokeWidth={2.3} aria-hidden />
+        <span>{t("skills.frontmatterTitle")}</span>
+      </header>
+      <dl className="skills-frontmatter-fields">
+        {meta.name ? (
+          <div className="skills-frontmatter-row">
+            <dt>{t("skills.frontmatterName")}</dt>
+            <dd>
+              <code className="skills-frontmatter-name">{meta.name}</code>
+            </dd>
+          </div>
+        ) : null}
+        {desc ? (
+          <div className="skills-frontmatter-row">
+            <dt>{t("skills.frontmatterDescription")}</dt>
+            <dd>
+              <p
+                className={`skills-frontmatter-desc ${descOpen || !descLong ? "is-open" : ""}`}
+              >
+                {desc}
+              </p>
+              {descLong ? (
+                <button
+                  type="button"
+                  className="skills-frontmatter-toggle"
+                  onClick={() => setDescOpen((v) => !v)}
+                >
+                  {descOpen ? (
+                    <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
+                  ) : (
+                    <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
+                  )}
+                  {descOpen
+                    ? t("skills.frontmatterCollapse")
+                    : t("skills.frontmatterExpand")}
+                </button>
+              ) : null}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+      {meta.extras.length > 0 ? (
+        <div className="skills-frontmatter-extras">
+          <button
+            type="button"
+            className="skills-frontmatter-toggle"
+            onClick={() => setExtrasOpen((v) => !v)}
+            aria-expanded={extrasOpen}
+          >
+            {extrasOpen ? (
+              <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
+            ) : (
+              <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
+            )}
+            {t("skills.frontmatterMore")}
+            <span className="skills-frontmatter-extra-count">
+              {meta.extras.length}
+            </span>
+          </button>
+          {extrasOpen ? (
+            <dl className="skills-frontmatter-extra-list">
+              {meta.extras.map((item) => (
+                <div key={item.key} className="skills-frontmatter-row">
+                  <dt>{item.key}</dt>
+                  <dd>{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 type Props = {
@@ -62,6 +162,11 @@ export function SkillFileViewer({
   const tooLarge = size > SKILL_PREVIEW_MAX_BYTES;
   const isMd = isMarkdownPath(filename);
   const showPreview = isMd && mdMode === "preview" && !tooLarge && content != null;
+
+  const split = useMemo(
+    () => (content != null ? splitSkillFrontmatter(content) : null),
+    [content],
+  );
 
   const extensions = useMemo(
     () => [codeMirrorTheme(resolved), ...languageForFilename(filename)],
@@ -187,7 +292,14 @@ export function SkillFileViewer({
       <div className="skills-file-viewer-body">
         {showPreview ? (
           <div className="skills-file-viewer-md">
-            <ChatMarkdown content={content} />
+            {split?.frontmatter ? (
+              <SkillFrontmatterCard meta={split.frontmatter} />
+            ) : null}
+            {split?.body.trim() ? (
+              <ChatMarkdown content={split.body} />
+            ) : !split?.frontmatter ? (
+              <ChatMarkdown content={content} />
+            ) : null}
           </div>
         ) : (
           <CodeMirror
