@@ -549,6 +549,29 @@ export function useChatSession({
     setNav("chat");
   }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
 
+  /** 永久删除当前会话前：先取消流并丢弃本地监听，避免 ghost token。 */
+  const prepareDeleteCurrentSession = useCallback(async () => {
+    if (!sessionId) return;
+    streamGenRef.current += 1;
+    unlistenRef.current?.();
+    unlistenRef.current = null;
+    if (streamRafRef.current != null) {
+      cancelAnimationFrame(streamRafRef.current);
+      streamRafRef.current = null;
+    }
+    if (toolDeltaRafRef.current != null) {
+      cancelAnimationFrame(toolDeltaRafRef.current);
+      toolDeltaRafRef.current = null;
+    }
+    setStreaming(false);
+    setStreamPaused(false);
+    try {
+      await invoke("chat_control", { sessionId, action: "cancel" });
+    } catch (e) {
+      console.warn("chat_control cancel before delete failed", e);
+    }
+  }, [sessionId]);
+
   useEffect(() => {
     if (nav !== "chat") return;
     void restoreChatHistory();
@@ -1342,6 +1365,7 @@ export function useChatSession({
     attachArtifactsToChat,
     applyRestoredHistory,
     confirmIfStreaming,
+    prepareDeleteCurrentSession,
     clearDeletedCurrentSession: clearLocalChatSurface,
   };
 }

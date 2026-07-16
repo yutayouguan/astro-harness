@@ -4,7 +4,8 @@
 //! `auto`：preferred 就是当前会话主模型（`primary`），fallback 为 `None`。
 //! 显式路由的 `provider` 字段保存 **UI Provider ID**（`providers.json` 条目 `id`，
 //! 与 `backend_id`/registry kind 不同）；查不到、已禁用或无可用凭据时静默退回
-//! primary（不阻塞主聊天）。有效且与 primary 不同供应商时，追加 `fallback = Some(primary)`。
+//! primary（不阻塞主聊天）。有效且与 primary 目标不完全相同时，追加
+//! `fallback = Some(primary)`（含同 Provider 不同 model）。
 
 use memory::{AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute};
 
@@ -31,8 +32,8 @@ impl ResolvedTarget {
     }
 }
 
-/// 某辅助任务的解析结果：`preferred` 必有；`fallback` 仅在显式路由生效且与
-/// primary 不同供应商时出现（值恒为 primary，供调用失败时兜底重试）。
+/// 某辅助任务的解析结果：`preferred` 必有；`fallback` 在显式路由与 primary
+/// 不完全相同时出现（值恒为 primary，供调用失败时兜底重试）。
 #[derive(Debug, Clone)]
 pub struct AuxiliaryTargets {
     pub preferred: ResolvedTarget,
@@ -106,7 +107,10 @@ where
     let explicit_id = p.id.clone();
     let explicit_resolved = resolved_from_ui_provider(p, model, api_key);
 
-    let fallback = if explicit_id == primary_resolved.provider.id {
+    // 同 Provider 但不同 model 时也挂 primary 作一次重试；完全相同则无需 fallback。
+    let same_target = explicit_id == primary_resolved.provider.id
+        && explicit_resolved.model == primary_resolved.model;
+    let fallback = if same_target {
         None
     } else {
         Some(primary_resolved)
@@ -152,6 +156,76 @@ fn to_common_task(kind: AuxiliaryKind) -> common::AuxiliaryTask {
         AuxiliaryKind::Dreaming => common::AuxiliaryTask::Dreaming,
         AuxiliaryKind::BackgroundReview => common::AuxiliaryTask::BackgroundReview,
     }
+}
+
+/// 解析会话侧辅助任务用的 primary：优先匹配会话账单里的 backend/endpoint/model，
+/// 否则回退到 UI 当前激活提供商。
+pub fn primary_chat_target_for_session(session_id: &str) -> Result<common::ChatTarget, String> {
+    let root = home::default_memory_dir();
+    memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
+    let store = session::SessionStore::open_sessions_dir(&root.join("sessions"))
+        .map_err(|e| e.to_string())?;
+    let billing = store
+        .get_session_billing(session_id)
+        .map_err(|e| e.to_string())?;
+    let session_model = billing
+        .as_ref()
+        .and_then(|b| b.model.as_ref())
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
+    let billing_provider = billing
+        .as_ref()
+        .and_then(|b| b.billing_provider.as_ref())
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
+    let billing_base_url = billing
+        .as_ref()
+        .and_then(|b| b.billing_base_url.as_ref())
+        .map(|m| m.trim().trim_end_matches('/').to_string())
+        .filter(|m| !m.is_empty());
+
+    let state = providers_commands::get_providers_state()?;
+    let matched_id = billing_provider.as_ref().and_then(|bp| {
+        let candidates: Vec<&providers_commands::ProviderConfigDto> = state
+            .providers
+            .iter()
+            .filter(|p| p.enabled && p.backend_id == *bp)
+            .collect();
+        if let Some(url) = billing_base_url.as_ref() {
+            if let Some(p) = candidates
+                .iter()
+                .find(|p| p.endpoint.trim().trim_end_matches('/') == url.as_str())
+            {
+                return Some(p.id.clone());
+            }
+        }
+        candidates.first().map(|p| p.id.clone())
+    });
+
+    let provider_id = matched_id
+        .or_else(|| state.active_provider_id.clone())
+        .or_else(|| {
+            state
+                .providers
+                .iter()
+                .find(|p| p.enabled)
+                .map(|p| p.id.clone())
+        })
+        .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
+
+    let ui = providers_commands::find_provider(&provider_id)?;
+    let model = session_model.unwrap_or_else(|| ui.model.clone());
+    if model.trim().is_empty() {
+        return Err("会话/提供商未配置模型".into());
+    }
+    let (_has, _src, _env, key) = resolve_api_key(&ui);
+    Ok(common::ChatTarget {
+        provider_id: ui.id,
+        backend_id: ui.kind.backend_id().to_string(),
+        model,
+        api_key: key.unwrap_or_default(),
+        base_url: ui.endpoint,
+    })
 }
 
 /// 为全部五类辅助任务解析目标并转换为 proto 透传结构，供 `start_chat` 下发。
@@ -278,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_route_to_same_provider_has_no_fallback() {
+    fn explicit_route_to_same_provider_different_model_falls_back() {
         let mut aux = AuxiliaryConfig::default();
         aux.smart_approval =
             AuxiliaryRoute { provider: "prov-primary".into(), model: "gpt-mini".into() };
@@ -300,6 +374,32 @@ mod tests {
 
         assert_eq!(result.preferred.provider.id, "prov-primary");
         assert_eq!(result.preferred.model, "gpt-mini");
+        let fallback = result.fallback.expect("same provider different model needs fallback");
+        assert_eq!(fallback.model, "gpt-5.6");
+    }
+
+    #[test]
+    fn explicit_route_identical_to_primary_has_no_fallback() {
+        let mut aux = AuxiliaryConfig::default();
+        aux.smart_approval =
+            AuxiliaryRoute { provider: "prov-primary".into(), model: "gpt-5.6".into() };
+        let primary_ui = ui_provider(
+            "prov-primary",
+            providers_commands::ProviderKind::Openai,
+            "gpt-5.6",
+            true,
+        );
+        let primary = primary_target();
+        let result = resolve_with(
+            AuxiliaryKind::SmartApproval,
+            &aux,
+            &primary,
+            lookup(vec![primary_ui]),
+            always_has_key("primary-key"),
+        )
+        .unwrap();
+
+        assert_eq!(result.preferred.model, "gpt-5.6");
         assert!(result.fallback.is_none());
     }
 

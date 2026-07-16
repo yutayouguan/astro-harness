@@ -26,6 +26,8 @@ type Props = {
   onNewSession: () => void;
   /** 新建 Agent 引导 */
   onNewAgent: () => void;
+  /** 删除当前会话前取消流 */
+  onPrepareDeleteCurrentSession?: () => void | Promise<void>;
   /** 删除当前会话后清理本地状态 */
   onClearDeletedCurrentSession?: () => void | Promise<void>;
 };
@@ -43,6 +45,7 @@ export default function ChatSessionList({
   onOpenSession,
   onNewSession,
   onNewAgent,
+  onPrepareDeleteCurrentSession,
   onClearDeletedCurrentSession,
 }: Props) {
   const { t } = useI18n();
@@ -239,6 +242,9 @@ export default function ChatSessionList({
         return;
       }
       void runSessionAction(item.sessionId, async () => {
+        if (item.sessionId === activeSessionId) {
+          await onPrepareDeleteCurrentSession?.();
+        }
         await deleteManagedSession(
           item.sessionId,
           activeSessionId,
@@ -255,6 +261,7 @@ export default function ChatSessionList({
     },
     [
       activeSessionId,
+      onPrepareDeleteCurrentSession,
       onClearDeletedCurrentSession,
       runSessionAction,
       t,

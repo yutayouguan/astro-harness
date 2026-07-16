@@ -1331,8 +1331,9 @@ pub async fn regenerate_session_title(
     use providers::registry::ProviderRegistry;
     use providers::trait_::{ChatMessage, ProviderConfig};
 
-    use crate::auxiliary_resolver::{resolve_auxiliary_targets, ResolvedTarget};
-    use crate::providers_commands::{self, resolve_api_key};
+    use crate::auxiliary_resolver::{
+        primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
+    };
     use crate::session_events::{
         emit_session_event, now_ts_ms, SessionEventDto, SessionMetadataChangedDto,
     };
@@ -1350,25 +1351,7 @@ pub async fn regenerate_session_title(
             .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
     };
 
-    let primary = {
-        let state = providers_commands::get_providers_state()?;
-        let id = state
-            .active_provider_id
-            .or_else(|| state.providers.first().map(|p| p.id.clone()))
-            .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
-        let ui = providers_commands::find_provider(&id)?;
-        if ui.model.trim().is_empty() {
-            return Err("激活提供商未配置模型".into());
-        }
-        let (_has, _src, _env, key) = resolve_api_key(&ui);
-        common::ChatTarget {
-            provider_id: ui.id,
-            backend_id: ui.kind.backend_id().to_string(),
-            model: ui.model,
-            api_key: key.unwrap_or_default(),
-            base_url: ui.endpoint,
-        }
-    };
+    let primary = primary_chat_target_for_session(&sid)?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::TitleGeneration, &primary)?;
     let chain: Vec<&ResolvedTarget> = std::iter::once(&targets.preferred)
         .chain(targets.fallback.as_ref())
@@ -1483,10 +1466,19 @@ pub async fn unarchive_session(session_id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// 先释放运行时会话，再永久删除数据库记录。
+/// 先尽量释放运行时会话，再永久删除数据库记录。
+///
+/// `release_session` 失败（backend 未启动等）不阻断删库；release 幂等，
+/// 若删库失败可重试（再次 best-effort release + 删库）。
 #[tauri::command]
 pub async fn delete_session_permanently(session_id: String) -> Result<(), String> {
-    chat_control(session_id.clone(), "release_session".into()).await?;
+    if let Err(e) = chat_control(session_id.clone(), "release_session".into()).await {
+        tracing::warn!(
+            session = %session_id,
+            error = %e,
+            "release_session before delete failed; deleting DB anyway"
+        );
+    }
     open_sessions()?
         .delete_session_permanently(&session_id)
         .map_err(|e| e.to_string())

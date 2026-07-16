@@ -105,6 +105,10 @@ pub fn event_matches(filter: &SubscribeFilter, ev: &SessionEventMsg) -> bool {
             return false;
         }
     }
+    // 侧栏需要任意会话的标题更新，即使当前订阅正过滤到另一会话。
+    if ev.session_metadata_changed.is_some() {
+        return true;
+    }
     match filter.session_id.as_deref().filter(|s| !s.is_empty()) {
         None => ev.pending_changed.is_some() && ev.session_id.is_none(),
         Some(sid) => {
@@ -213,5 +217,23 @@ mod tests {
             pending_changed: None,
             session_metadata_changed: None,
         });
+    }
+
+    #[test]
+    fn metadata_changed_matches_even_when_subscribed_to_other_session() {
+        let filter = SubscribeFilter {
+            session_id: Some("s-active".into()),
+            agent_id: None,
+        };
+        let ev = SessionEventMsg {
+            session_id: Some("s-other".into()),
+            agent_id: "workspace".into(),
+            memory_updated: None,
+            pending_changed: None,
+            session_metadata_changed: Some(SessionMetadataChangedPayload {
+                title: "新标题".into(),
+            }),
+        };
+        assert!(event_matches(&filter, &ev));
     }
 }

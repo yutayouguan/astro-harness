@@ -41,6 +41,8 @@ type Props = {
   onNewSession: () => void;
   /** 新建 Agent 引导 */
   onNewAgent: () => void;
+  /** 删除当前会话前取消流 */
+  onPrepareDeleteCurrentSession?: () => void | Promise<void>;
   /** 当前会话被删除后清理本地状态 */
   onClearDeletedCurrentSession?: () => void | Promise<void>;
   onOpenMemory: () => void;
@@ -71,6 +73,7 @@ export default function ChatRightPanel({
   onOpenSession,
   onNewSession,
   onNewAgent,
+  onPrepareDeleteCurrentSession,
   onClearDeletedCurrentSession,
   onOpenMemory,
   onOpenSkills,
@@ -136,6 +139,7 @@ export default function ChatRightPanel({
                 onOpenSession={onOpenSession}
                 onNewSession={onNewSession}
                 onNewAgent={onNewAgent}
+                onPrepareDeleteCurrentSession={onPrepareDeleteCurrentSession}
                 onClearDeletedCurrentSession={onClearDeletedCurrentSession}
               />
             )}

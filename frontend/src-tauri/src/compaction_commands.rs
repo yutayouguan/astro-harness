@@ -8,8 +8,9 @@ use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 use session::StoredMessage;
 
-use crate::auxiliary_resolver::{resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget};
-use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
+use crate::auxiliary_resolver::{
+    primary_chat_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
+};
 
 const KEEP_TAIL_DEFAULT: usize = 3;
 const SUMMARY_PREFIX: &str = "[CONTEXT COMPACTION]";
@@ -28,31 +29,6 @@ pub struct CompactChatResultDto {
     pub new_session_id: String,
     pub summary_preview: String,
     pub degraded: bool,
-}
-
-/// 取 UI 当前激活（或列表首个）供应商配置。
-fn active_ui_provider() -> Result<UiProvider, String> {
-    let state = providers_commands::get_providers_state()?;
-    let id = state
-        .active_provider_id
-        .or_else(|| state.providers.first().map(|p| p.id.clone()))
-        .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
-    providers_commands::find_provider(&id)
-}
-
-fn active_chat_target() -> Result<common::ChatTarget, String> {
-    let ui = active_ui_provider()?;
-    if ui.model.trim().is_empty() {
-        return Err("激活提供商未配置模型".into());
-    }
-    let (_has, _src, _env, key) = resolve_api_key(&ui);
-    Ok(common::ChatTarget {
-        provider_id: ui.id,
-        backend_id: ui.kind.backend_id().to_string(),
-        model: ui.model,
-        api_key: key.unwrap_or_default(),
-        base_url: ui.endpoint,
-    })
 }
 
 /// 无模型时的启发式摘要（最近若干条 user/assistant 截断拼接）。
@@ -163,9 +139,9 @@ async fn summarize_with_targets(
     Err("auxiliary compaction returned no summary".into())
 }
 
-/// 用辅助模型路由生成压实交接摘要。
-async fn summarize_with_llm(transcript: &str) -> Result<String, String> {
-    let primary = active_chat_target()?;
+/// 用辅助模型路由生成压实交接摘要（primary 取自会话账单/模型）。
+async fn summarize_with_llm(session_id: &str, transcript: &str) -> Result<String, String> {
+    let primary = primary_chat_target_for_session(session_id)?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::Compaction, &primary)?;
     summarize_with_targets(targets, transcript).await
 }
@@ -226,7 +202,7 @@ pub async fn compact_chat_session(
         (messages, transcript)
     };
 
-    let (summary, degraded) = match summarize_with_llm(&transcript).await {
+    let (summary, degraded) = match summarize_with_llm(sid, &transcript).await {
         Ok(s) => (s, false),
         Err(err) => {
             tracing::warn!(error = %err, "压实 LLM 摘要失败，回退启发式");
@@ -253,11 +229,12 @@ pub async fn compact_chat_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers_commands::{ProviderConfig as UiProvider, ProviderKind};
 
     fn ui_provider(id: &str) -> UiProvider {
         UiProvider {
             id: id.into(),
-            kind: providers_commands::ProviderKind::Openai,
+            kind: ProviderKind::Openai,
             display_name: id.into(),
             endpoint: format!("https://{id}.example"),
             model: "gpt-5.6".into(),
