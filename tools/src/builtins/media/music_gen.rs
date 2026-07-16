@@ -36,17 +36,21 @@ pub struct MusicGenArgs {
 
 pub fn validate_music_gen_args(
     args: &MusicGenArgs,
+    configured_music_model: &str,
 ) -> anyhow::Result<(String, MusicAudioFormat)> {
     if args.prompt.trim().is_empty() {
         anyhow::bail!("music_gen 需要 prompt");
     }
-    let alias = args
+    let requested = args
         .model
         .as_deref()
         .map(str::trim)
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty());
+    let configured = configured_music_model.trim();
+    let model_source = requested
+        .or_else(|| (!configured.is_empty()).then_some(configured))
         .unwrap_or("clip");
-    let model_id = resolve_lyria_model_id(alias)?;
+    let model_id = resolve_lyria_model_id(model_source)?;
     let is_pro = model_id.contains("pro");
 
     let fmt_raw = args
@@ -88,11 +92,10 @@ pub fn register(registry: &mut ToolRegistry) {
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: MusicGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("music_gen 参数无效: {e}"))?;
-    let (model_id, format) = validate_music_gen_args(&parsed)?;
-
     let creds = ctx.image_gen_targets.google().ok_or_else(|| {
         anyhow::anyhow!("music_gen 需要 Google API Key（未配置 Google，且不回退 OpenAI）")
     })?;
+    let (model_id, format) = validate_music_gen_args(&parsed, &creds.music_model)?;
 
     let mut images = Vec::new();
     if let Some(refs) = &parsed.reference_images {
@@ -212,7 +215,7 @@ mod tests {
             reference_images: None,
             format: None,
         };
-        assert!(validate_music_gen_args(&args).is_err());
+        assert!(validate_music_gen_args(&args, "").is_err());
     }
 
     #[test]
@@ -223,7 +226,7 @@ mod tests {
             reference_images: None,
             format: Some("wav".into()),
         };
-        let err = validate_music_gen_args(&args).unwrap_err().to_string();
+        let err = validate_music_gen_args(&args, "").unwrap_err().to_string();
         assert!(err.contains("wav") || err.contains("pro"));
     }
 
@@ -235,7 +238,7 @@ mod tests {
             reference_images: None,
             format: Some("wav".into()),
         };
-        let (model_id, fmt) = validate_music_gen_args(&args).unwrap();
+        let (model_id, fmt) = validate_music_gen_args(&args, "").unwrap();
         assert_eq!(model_id, "lyria-3-pro-preview");
         assert_eq!(fmt, MusicAudioFormat::Wav);
     }
@@ -248,6 +251,44 @@ mod tests {
             reference_images: Some((0..11).map(|i| format!("a{i}.jpg")).collect()),
             format: None,
         };
-        assert!(validate_music_gen_args(&args).is_err());
+        assert!(validate_music_gen_args(&args, "").is_err());
+    }
+
+    #[test]
+    fn configured_model_is_used_when_tool_arg_is_missing() {
+        let args = MusicGenArgs {
+            prompt: "piano".into(),
+            model: None,
+            reference_images: None,
+            format: None,
+        };
+        let (model, _) =
+            validate_music_gen_args(&args, "lyria-3-pro-preview").unwrap();
+        assert_eq!(model, "lyria-3-pro-preview");
+    }
+
+    #[test]
+    fn explicit_alias_overrides_configured_model() {
+        let args = MusicGenArgs {
+            prompt: "piano".into(),
+            model: Some("clip".into()),
+            reference_images: None,
+            format: None,
+        };
+        let (model, _) =
+            validate_music_gen_args(&args, "lyria-3-pro-preview").unwrap();
+        assert_eq!(model, "lyria-3-clip-preview");
+    }
+
+    #[test]
+    fn empty_configuration_falls_back_to_clip() {
+        let args = MusicGenArgs {
+            prompt: "piano".into(),
+            model: None,
+            reference_images: None,
+            format: None,
+        };
+        let (model, _) = validate_music_gen_args(&args, "").unwrap();
+        assert_eq!(model, "lyria-3-clip-preview");
     }
 }
