@@ -14,6 +14,7 @@ pub mod defaults;
 pub mod files_http;
 pub mod interactions_chat;
 pub mod interactions_http;
+pub mod native_chat;
 pub mod robotics_http;
 pub mod veo_http;
 

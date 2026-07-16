@@ -2,7 +2,7 @@
 
 use crate::trait_::AuthKind;
 
-/// 底层协议适配器种类（对齐 Hermes 三协议 + Gemini Interactions）。
+/// 底层协议适配器种类（对齐 Hermes 三协议 + Gemini Interactions + Gemini Native）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApiMode {
     /// OpenAI Chat Completions（含兼容网关、Ollama `/v1`）。
@@ -13,6 +13,8 @@ pub enum ApiMode {
     Responses,
     /// Google Gemini Interactions API（`POST /v1beta/interactions`）。
     Interactions,
+    /// Google Gemini 原生 `streamGenerateContent`（支持 function_declarations 工具调用）。
+    GeminiNative,
 }
 
 /// 单个供应商的静态配置。
@@ -192,6 +194,18 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["MIMO_API_KEY"],
         azure_deployment_style: false,
         default_model: "mimo-v2-flash",
+        supports_image_gen: false,
+        supports_embedding: false,
+    },
+    ProviderProfile {
+        id: "gemini-native",
+        api_mode: ApiMode::GeminiNative,
+        // 原生 generateContent / streamGenerateContent（API key 作 query 参数）
+        default_base_url: "https://generativelanguage.googleapis.com",
+        auth: AuthKind::GoogleApiKey,
+        env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
+        azure_deployment_style: false,
+        default_model: "gemini-3.5-flash",
         supports_image_gen: false,
         supports_embedding: false,
     },

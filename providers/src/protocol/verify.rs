@@ -145,6 +145,14 @@ pub async fn probe(
                     Err(e) => return fail(e),
                 }
             }
+            (ApiMode::GeminiNative, _) => {
+                // 原生 generateContent 不提供单独探测端点，复用 OpenAI 兼容路径
+                let endpoint = resolve_endpoint(config, p.default_base_url);
+                match probe_chat_completions(client, &endpoint, &model, &config.api_key).await {
+                    Ok(m) => m,
+                    Err(e) => return fail(e),
+                }
+            }
             (ApiMode::ChatCompletions, false) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
                 match probe_chat_completions(client, &endpoint, &model, &config.api_key).await {

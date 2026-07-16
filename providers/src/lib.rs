@@ -20,7 +20,7 @@ pub mod vendors;
 
 // 保持原有顶层路径，避免破坏下游 crate 的 `providers::trait_` 等引用。
 pub use api::{client, registry, streaming, trait_};
-pub use google::{files_http, interactions_chat, interactions_http, robotics_http};
+pub use google::{files_http, interactions_chat, interactions_http, native_chat, robotics_http};
 pub use openai::{image_http, responses};
 pub use protocol::{extractor, http_stream, image_gen, media_http, tool_format, verify, vision};
 pub use vendors::{
@@ -38,4 +38,4 @@ pub use trait_::{
     GeneratedImage, ImageGenProvider, ProviderConfig, ToolCallDeltaChunk, VerifyProvider,
     VerifyResult,
 };
-pub use tool_format::openai_tools_to_anthropic;
+pub use tool_format::{openai_tools_to_anthropic, openai_tools_to_gemini_native};

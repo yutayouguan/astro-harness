@@ -165,6 +165,12 @@ pub async fn chat_stream_for_provider(
             crate::openai::responses::responses_chat_stream(client, id, messages, tools, config)
                 .await
         }
+        ApiMode::GeminiNative => {
+            crate::google::native_chat::gemini_native_chat_stream(
+                client, messages, tools, config,
+            )
+            .await
+        }
     }
 }
 
@@ -363,7 +369,7 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
 }
 
 /// 将 reqwest 字节流解析为 SSE `data:` 行，并用 `extract` 转为 [`ChatChunk`]。
-async fn sse_chat_stream(
+pub(crate) async fn sse_chat_stream(
     response: reqwest::Response,
     extract: Arc<dyn Fn(&str) -> Option<ChatChunk> + Send + Sync>,
 ) -> Result<ChatStream> {
