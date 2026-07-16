@@ -83,15 +83,78 @@ function baseCenterY(index: number): number {
   return PAD_TOP + index * (BASE + GAP) + BASE / 2;
 }
 
-/** 按放大后的视觉高度重新堆叠，产生 Dock 起落位移。 */
-function dockOffsets(scales: number[]): number[] {
+/**
+ * 鱼眼堆叠：绕悬停点上下双向展开（避免只往下顶出聊天框），
+ * 再把整列视觉范围夹紧在轨道高度内。
+ */
+function dockOffsets(
+  scales: number[],
+  hoverY: number,
+  viewHeight: number,
+): number[] {
+  const n = scales.length;
+  if (n === 0) return [];
+
   let y = PAD_TOP;
-  return scales.map((s, i) => {
-    const h = BASE * s;
-    const center = y + h / 2;
+  const centers: number[] = [];
+  const heights: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const h = BASE * scales[i]!;
+    heights.push(h);
+    centers.push(y + h / 2);
     y += h + GAP;
-    return center - baseCenterY(i);
-  });
+  }
+
+  let focus = 0;
+  let best = Infinity;
+  for (let i = 0; i < n; i++) {
+    const d = Math.abs(hoverY - baseCenterY(i));
+    if (d < best) {
+      best = d;
+      focus = i;
+    }
+  }
+  // 最近图标的 idle 中心不动 → 上方上抬、下方下移
+  const anchorShift = baseCenterY(focus) - centers[focus]!;
+  let tys = centers.map((c, i) => c + anchorShift - baseCenterY(i));
+
+  const edge = 4;
+  const limitTop = edge;
+  const limitBottom = Math.max(limitTop + BASE, viewHeight - edge);
+
+  const extent = () => {
+    let minTop = Infinity;
+    let maxBottom = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const vc = baseCenterY(i) + tys[i]!;
+      const half = heights[i]! / 2;
+      minTop = Math.min(minTop, vc - half);
+      maxBottom = Math.max(maxBottom, vc + half);
+    }
+    return { minTop, maxBottom };
+  };
+
+  let { minTop, maxBottom } = extent();
+  const span = maxBottom - minTop;
+  const room = limitBottom - limitTop;
+
+  if (span <= room) {
+    if (minTop < limitTop) {
+      const dy = limitTop - minTop;
+      tys = tys.map((ty) => ty + dy);
+      ({ minTop, maxBottom } = extent());
+    }
+    if (maxBottom > limitBottom) {
+      const dy = limitBottom - maxBottom;
+      tys = tys.map((ty) => ty + dy);
+    }
+  } else {
+    // 塞不下：整列以悬停点为中心，超出部分由 nav overflow 裁切
+    const curCenter = (minTop + maxBottom) / 2;
+    tys = tys.map((ty) => ty + (hoverY - curCenter));
+  }
+
+  return tys;
 }
 
 export default function ChatMessageNav({
@@ -196,6 +259,29 @@ export default function ChatMessageNav({
     tipEl.classList.toggle("is-side-right", visual.side === "right");
   }, []);
 
+  const tipBounds = useCallback(() => {
+    const list = listRef.current;
+    if (list) {
+      const r = list.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        return {
+          left: r.left,
+          top: r.top,
+          right: r.right,
+          bottom: r.bottom,
+        };
+      }
+    }
+    const track = trackRef.current;
+    if (track) return resolveClipBounds(track);
+    return {
+      left: 0,
+      top: 0,
+      right: typeof window !== "undefined" ? window.innerWidth : 0,
+      bottom: typeof window !== "undefined" ? window.innerHeight : 0,
+    };
+  }, [listRef]);
+
   const layoutTips = useCallback(
     (
       ranks: { id: string; index: number; dist: number; scale: number }[],
@@ -209,6 +295,7 @@ export default function ChatMessageNav({
         return;
       }
 
+      const bounds = tipBounds();
       const maxDist = Math.max(ranks[ranks.length - 1]?.dist ?? 0, 1);
       const nextTips: TipModel[] = [];
 
@@ -239,7 +326,7 @@ export default function ChatMessageNav({
         const placed = clampFloatingTip({
           anchorRect: rect,
           tipSize,
-          bounds: resolveClipBounds(btn),
+          bounds,
           prefer: "left",
           gap: 10,
           pad: 8,
@@ -276,6 +363,7 @@ export default function ChatMessageNav({
 
       // 下一帧用真实尺寸精调一次（只写 DOM，不 setState）
       requestAnimationFrame(() => {
+        const b = tipBounds();
         for (let rank = 0; rank < ranks.length; rank++) {
           const item = ranks[rank]!;
           const tipEl = tipElsRef.current.get(item.id);
@@ -287,10 +375,11 @@ export default function ChatMessageNav({
           const maxD = Math.max(ranks[ranks.length - 1]?.dist ?? 0, 1);
           const tt =
             ranks.length === 1 ? 0 : Math.min(1, item.dist / maxD);
+          const grow = (item.scale - 1) / (MAX_SCALE - 1);
           const placed = clampFloatingTip({
             anchorRect: btn.getBoundingClientRect(),
             tipSize: size,
-            bounds: resolveClipBounds(btn),
+            bounds: b,
             prefer: "left",
             gap: 10,
             pad: 8,
@@ -300,12 +389,12 @@ export default function ChatMessageNav({
             left: placed.left,
             side: placed.side,
             opacity: 1 - tt * 0.55,
-            scale: 1 - tt * 0.12,
+            scale: (0.92 + 0.2 * grow) * (1 - tt * 0.1),
           });
         }
       });
     },
-    [paintTip],
+    [paintTip, tipBounds],
   );
 
   /** 每帧直接写 CSS 变量 + 气泡位置，避免 React 重渲染抖动。 */
@@ -319,7 +408,11 @@ export default function ChatMessageNav({
         if (focusId && m.id === focusId) return 1.28;
         return 1;
       });
-      const tys = hoverY != null ? dockOffsets(scales) : scales.map(() => 0);
+      const viewH = trackRef.current?.clientHeight ?? 0;
+      const tys =
+        hoverY != null && viewH > 0
+          ? dockOffsets(scales, hoverY, viewH)
+          : scales.map(() => 0);
 
       list.forEach((m, i) => {
         const slot = slotRefs.current.get(m.id);

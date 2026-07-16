@@ -1449,7 +1449,9 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   justify-content: center;
   gap: 10px;
   width: auto;
-  max-height: min(72vh, calc(100% - 32px));
+  /* 限制在聊天区中部，放大起落不得顶出上/下缘 */
+  max-height: min(56vh, calc(100% - 120px));
+  overflow: hidden;
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -1480,8 +1482,8 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 .chat-msg-nav.is-dock-active .chat-msg-nav-track {
   background: transparent;
   box-shadow: none;
-  /* 放大起落时允许溢出，避免裁切导致「抖一下」 */
-  overflow: visible;
+  /* 仍在 nav 中部盒内；位移由 JS 夹紧，避免顶出聊天框 */
+  overflow: hidden;
 }
 
 .chat-msg-nav-track::-webkit-scrollbar {
