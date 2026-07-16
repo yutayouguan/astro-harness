@@ -8,9 +8,9 @@ import {
   MessageCircle,
   Webhook,
 } from "lucide-react";
-import type { ChatActivityKind } from "../types";
-import McpIcon from "./icons/McpIcon";
-import { IconMemory, IconSkills, IconTools } from "./icons/NavIcons";
+import type { ChatActivityKind } from "../../types";
+import McpIcon from "../icons/McpIcon";
+import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
 
 export type MsgTimelineKind =
   | "reasoning"

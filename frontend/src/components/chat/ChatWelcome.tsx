@@ -1,14 +1,14 @@
 /** 空会话欢迎卡片。 */
 import type { ComponentType, SVGProps } from "react";
-import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
-import { EmptyIllustration } from "../illustrations";
+import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
+import { EmptyIllustration } from "../../illustrations";
 import {
   SolidBolt,
   SolidChat,
   SolidFolder,
   SolidStar,
-} from "./icons/GlassSolidIcons";
+} from "../icons/GlassSolidIcons";
 
 export type WelcomeCardId = "intro" | "skills" | "files" | "data";
 

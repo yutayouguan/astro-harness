@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { AlertCircle, BarChart3, CheckCircle, ChevronDown, Info } from "lucide-react";
-import type { UiSurface } from "../types";
-import { collectComponents, parseOperations } from "../a2ui/validate";
-import A2UIRenderer from "../a2ui/A2UIRenderer";
+import type { UiSurface } from "../../types";
+import { collectComponents, parseOperations } from "../../a2ui/validate";
+import A2UIRenderer from "../../a2ui/A2UIRenderer";
 
 type Props = {
   surface: UiSurface;

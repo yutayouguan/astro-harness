@@ -12,7 +12,7 @@ import { useI18n } from "../i18n/LocaleContext";
 import { useTheme } from "../hooks/useTheme";
 import { filespaceViewerKind } from "../lib/filespace/filespaceViewerKind";
 import { resolveMediaSrc } from "../lib/media/resolveMediaSrc";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatMarkdown } from "./chat/ChatMarkdown";
 import WorkspaceEditor from "./WorkspaceEditor";
 import BrokenMedia from "./media/BrokenMedia";
 import MediaPreview from "./media/MediaPreview";

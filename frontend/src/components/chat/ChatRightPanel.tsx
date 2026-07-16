@@ -8,13 +8,13 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
-import type { ContextUsageSnapshot } from "../lib/chat/contextUsage";
+import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
+import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import ChatSessionList from "./ChatSessionList";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
-import AnimatedSwitch from "./ui/AnimatedSwitch";
+import AnimatedSwitch from "../ui/AnimatedSwitch";
 
 /** 聊天右侧栏 Tab */
 export type ChatRightTab = "sessions" | "context" | "agent";

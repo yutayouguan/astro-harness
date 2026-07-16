@@ -1,9 +1,9 @@
 /** 思考过程折叠块。 */
 import { useEffect, useRef, useState } from "react";
 import { Lightbulb } from "lucide-react";
-import { useI18n } from "../i18n/LocaleContext";
-import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
-import { formatElapsedSec } from "../lib/chat/elapsedSec";
+import { useI18n } from "../../i18n/LocaleContext";
+import { useLiveElapsedSec } from "../../hooks/useLiveElapsedSec";
+import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 
 /** 思考过程折叠块入参 */
 type Props = {

@@ -11,14 +11,14 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, User } from "lucide-react";
-import { useI18n } from "../i18n/LocaleContext";
+import { useI18n } from "../../i18n/LocaleContext";
 import {
   clampFloatingTip,
   measurePopoverSize,
   resolveClipBounds,
   type TipSide,
-} from "../lib/ui/clampPopover";
-import type { ChatMessage } from "../types";
+} from "../../lib/ui/clampPopover";
+import type { ChatMessage } from "../../types";
 
 type Props = {
   messages: ChatMessage[];

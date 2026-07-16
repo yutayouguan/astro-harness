@@ -1,11 +1,11 @@
 /** 当前 Agent 信息条。 */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useI18n } from "../i18n/LocaleContext";
-import { formatDiagnosticContext } from "../lib/chat/diagnosticContext";
-import type { AgentInfo } from "../types/agent";
-import type { InstalledSkill } from "../types";
-import AgentAvatar from "./AgentAvatar";
+import { useI18n } from "../../i18n/LocaleContext";
+import { formatDiagnosticContext } from "../../lib/chat/diagnosticContext";
+import type { AgentInfo } from "../../types/agent";
+import type { InstalledSkill } from "../../types";
+import AgentAvatar from "../AgentAvatar";
 
 /** 当前 Agent 信息条入参 */
 type Props = {

@@ -1,18 +1,18 @@
 /** 单条聊天活动卡：kind 图标 + 可折叠正文（生成媒体预览与 Input/Output）。 */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, ChevronDown, Webhook } from "lucide-react";
-import { useI18n } from "../i18n/LocaleContext";
-import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
+import { useI18n } from "../../i18n/LocaleContext";
+import { useLiveElapsedSec } from "../../hooks/useLiveElapsedSec";
 import {
   activityHasBody,
   resolveActivityIO,
-} from "../lib/chat/resolveActivityIO";
-import { formatElapsedSec } from "../lib/chat/elapsedSec";
-import { parseGeneratedMedia } from "../lib/media/parseGeneratedMedia";
-import type { ChatActivity, ChatActivityKind } from "../types";
-import McpIcon from "./icons/McpIcon";
-import MediaPreview from "./media/MediaPreview";
-import { IconMemory, IconSkills, IconTools } from "./icons/NavIcons";
+} from "../../lib/chat/resolveActivityIO";
+import { formatElapsedSec } from "../../lib/chat/elapsedSec";
+import { parseGeneratedMedia } from "../../lib/media/parseGeneratedMedia";
+import type { ChatActivity, ChatActivityKind } from "../../types";
+import McpIcon from "../icons/McpIcon";
+import MediaPreview from "../media/MediaPreview";
+import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
 
 type Props = {
   activity: ChatActivity;

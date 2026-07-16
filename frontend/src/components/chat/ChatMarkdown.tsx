@@ -9,15 +9,15 @@ import {
 import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useI18n } from "../i18n/LocaleContext";
+import { useI18n } from "../../i18n/LocaleContext";
 import {
   absolutizeMediaPath,
   resolveMediaSrc,
   stripFileUrl,
-} from "../lib/media/resolveMediaSrc";
-import BrokenMedia from "./media/BrokenMedia";
-import HtmlPreview from "./media/HtmlPreview";
-import MediaPreview from "./media/MediaPreview";
+} from "../../lib/media/resolveMediaSrc";
+import BrokenMedia from "../media/BrokenMedia";
+import HtmlPreview from "../media/HtmlPreview";
+import MediaPreview from "../media/MediaPreview";
 
 /** Markdown 渲染入参 */
 type Props = {

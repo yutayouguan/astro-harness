@@ -78,7 +78,7 @@ import { useTransientToast } from "../hooks/useTransientToast";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./ui/AnimatedSwitch";
 import ExpandableSearch from "./ui/ExpandableSearch";
-import MsgStreamLoader from "./MsgStreamLoader";
+import MsgStreamLoader from "./chat/MsgStreamLoader";
 import { IconRefresh } from "./icons/NavIcons";
 import { SelectMenu } from "./ui/SelectMenu";
 import {

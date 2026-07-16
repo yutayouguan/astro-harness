@@ -8,10 +8,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Settings2 } from "lucide-react";
-import { useClampPopover } from "../hooks/useClampPopover";
-import { useMcpTools } from "../hooks/useMcpTools";
-import { useI18n } from "../i18n/LocaleContext";
-import McpIcon from "./icons/McpIcon";
+import { useClampPopover } from "../../hooks/useClampPopover";
+import { useMcpTools } from "../../hooks/useMcpTools";
+import { useI18n } from "../../i18n/LocaleContext";
+import McpIcon from "../icons/McpIcon";
 
 type Props = {
   open: boolean;

@@ -21,7 +21,7 @@ import {
   splitSkillFrontmatter,
   type SkillFrontmatter,
 } from "../lib/skills/skillFrontmatter";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatMarkdown } from "./chat/ChatMarkdown";
 
 const MD_MODE_KEY = "astro.skills.mdPreviewMode";
 export const SKILL_PREVIEW_MAX_BYTES = 512 * 1024;

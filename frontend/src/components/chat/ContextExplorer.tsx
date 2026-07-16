@@ -1,15 +1,15 @@
 /** 右栏上下文用量区：指标、环形图、可展开分项。 */
 import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
+import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
 import {
   formatTokenCount,
   usagePercent,
   visibleSegments,
   SEGMENT_TONE,
   type ContextUsageSnapshot,
-} from "../lib/chat/contextUsage";
+} from "../../lib/chat/contextUsage";
 
 const SEG_LABEL: Record<string, MessageKey> = {
   system: "chat.contextSeg.system",

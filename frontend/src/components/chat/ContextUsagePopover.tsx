@@ -2,16 +2,16 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { useClampPopover } from "../hooks/useClampPopover";
-import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
+import { useClampPopover } from "../../hooks/useClampPopover";
+import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
 import {
   formatTokenCount,
   usagePercent,
   visibleSegments,
   SEGMENT_TONE,
   type ContextUsageSnapshot,
-} from "../lib/chat/contextUsage";
+} from "../../lib/chat/contextUsage";
 import ContextUsageBar from "./ContextUsageBar";
 
 const SEG_LABEL: Record<string, MessageKey> = {

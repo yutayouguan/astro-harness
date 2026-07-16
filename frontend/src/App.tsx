@@ -4,8 +4,8 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import AnimatedSwitch from "./components/ui/AnimatedSwitch";
-import ChatRightPanel, { type ChatRightTab } from "./components/ChatRightPanel";
-import ChatView from "./components/ChatView";
+import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
+import ChatView from "./components/chat/ChatView";
 import CronPanel from "./components/CronPanel";
 import FileSpacePanel from "./components/FileSpacePanel";
 import InsightsPanel from "./components/InsightsPanel";
@@ -21,7 +21,7 @@ import ToolsPanel from "./components/ToolsPanel";
 import { TOAST_ERROR_DURATION_MS } from "./components/ui/Toast";
 import { useTransientToast } from "./hooks/useTransientToast";
 import WorkspacePanel from "./components/WorkspacePanel";
-import { MSG_DISSOLVE_MS } from "./components/MsgDissolveOverlay";
+import { MSG_DISSOLVE_MS } from "./components/chat/MsgDissolveOverlay";
 import {
   IconChat,
   IconCollapse,

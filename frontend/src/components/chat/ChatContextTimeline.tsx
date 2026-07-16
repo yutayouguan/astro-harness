@@ -1,8 +1,8 @@
 /** 上下文时间线条目。 */
 import { useMemo, useState } from "react";
-import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
-import type { ChatActivity, ChatActivityKind, ChatMessage } from "../types";
+import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
+import type { ChatActivity, ChatActivityKind, ChatMessage } from "../../types";
 
 /** 上下文时间线入参 */
 type Props = { messages: ChatMessage[] };

@@ -12,7 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { useClampPopover } from "../hooks/useClampPopover";
+import { useClampPopover } from "../../hooks/useClampPopover";
 import {
   AtSign,
   ChartPie,
@@ -42,20 +42,20 @@ import {
 import {
   isActivityVisible,
   type ChatDisplayPrefs,
-} from "../hooks/useChatDisplayPrefs";
-import { useI18n } from "../i18n/LocaleContext";
+} from "../../hooks/useChatDisplayPrefs";
+import { useI18n } from "../../i18n/LocaleContext";
 import {
   findSlotAt,
   firstSlotValue,
   nextEmptySlot,
   prevEmptySlot,
-} from "../lib/agent/agentCreateTemplate";
+} from "../../lib/agent/agentCreateTemplate";
 import {
   CHAT_MODES,
   type ChatInteractionMode,
-} from "../lib/chat/chatMode";
-import type { ContextUsageSnapshot } from "../lib/chat/contextUsage";
-import { ChatMediaAttachProvider } from "../contexts/ChatMediaAttachContext";
+} from "../../lib/chat/chatMode";
+import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
+import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
 import {
   attachmentsFromOsClipboard,
   filesFromClipboardRead,
@@ -63,8 +63,8 @@ import {
   pathsFromClipboardText,
   pathsFromDataTransfer,
   pathsToAttachments,
-} from "../lib/chat/chatPaste";
-import type { ChatThinkingPrefs, ThinkingLevel } from "../lib/chat/thinkingPrefs";
+} from "../../lib/chat/chatPaste";
+import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import type {
   ChatActivity,
   ChatAttachment,
@@ -74,9 +74,9 @@ import type {
   InstalledSkill,
   MessageTokenUsage,
   PendingInterrupt,
-} from "../types";
-import { AgentCreateGuide } from "./AgentCreateGuide";
-import AgentAvatar from "./AgentAvatar";
+} from "../../types";
+import { AgentCreateGuide } from "../AgentCreateGuide";
+import AgentAvatar from "../AgentAvatar";
 import ChatMessageNav from "./ChatMessageNav";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWelcome } from "./ChatWelcome";
@@ -87,29 +87,29 @@ import {
 } from "./ComposerPalette";
 import ComposerMcpMenu from "./ComposerMcpMenu";
 import ContextUsagePopover from "./ContextUsagePopover";
-import McpIcon from "./icons/McpIcon";
-import { ModelBrandIcon } from "./icons/ProviderIcons";
+import McpIcon from "../icons/McpIcon";
+import { ModelBrandIcon } from "../icons/ProviderIcons";
 import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
 import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
-import { useMcpTools } from "../hooks/useMcpTools";
-import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
-import A2UIRenderer from "../a2ui/A2UIRenderer";
+import { useMcpTools } from "../../hooks/useMcpTools";
+import { useTypingPlaceholder } from "../../hooks/useTypingPlaceholder";
+import A2UIRenderer from "../../a2ui/A2UIRenderer";
 import A2UISurfaceCard from "./A2UISurfaceCard";
-import { formatElapsedSec } from "../lib/chat/elapsedSec";
-import { coalesceReasoningSegments } from "../lib/chat/chatTimeline";
+import { formatElapsedSec } from "../../lib/chat/elapsedSec";
+import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import {
   isAgentIconSrc,
   type AgentIconInfo,
-} from "../lib/agent/agentIcons";
+} from "../../lib/agent/agentIcons";
 import {
   buildMentionCandidates,
   buildSlashPaletteEntries,
   parseSlashInput,
   type SlashAction,
-} from "../lib/chat/composerCommands";
+} from "../../lib/chat/composerCommands";
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {

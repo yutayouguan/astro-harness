@@ -26,7 +26,7 @@ import { buildWorkspaceMenuItems } from "../lib/filespace/workspaceMenuItems";
 import type { AgentInfo } from "../types/agent";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./ui/AnimatedSwitch";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatMarkdown } from "./chat/ChatMarkdown";
 import MediaPreview from "./media/MediaPreview";
 import ExpandableSearch from "./ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";

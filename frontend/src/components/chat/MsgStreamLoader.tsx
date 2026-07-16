@@ -1,5 +1,5 @@
 /** 整轮流式生成期间常驻的点阵加载指示。 */
-import { useI18n } from "../i18n/LocaleContext";
+import { useI18n } from "../../i18n/LocaleContext";
 
 const CELLS = 9;
 
