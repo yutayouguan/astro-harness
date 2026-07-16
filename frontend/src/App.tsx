@@ -4,8 +4,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type ComponentType,
-  type SVGProps,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -26,22 +24,13 @@ import WorkspacePanel from "./components/workspace/WorkspacePanel";
 import {
   IconChat,
   IconCollapse,
-  IconCron,
   IconExpand,
-  IconFileSpace,
-  IconInsights,
-  IconMemory,
   IconNewSession,
   IconPanelClose,
   IconPanelOpen,
-  IconProviders,
   IconRightPanel,
-  IconSettings,
   IconSidebarIcons,
   IconSidebarLabels,
-  IconSkills,
-  IconTools,
-  IconWorkspace,
 } from "./components/icons";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useChatSession } from "./hooks/chat/useChatSession";
@@ -75,48 +64,13 @@ import {
   resolveContextWindow,
   usagePercent,
 } from "./lib/chat/contextUsage";
+import {
+  NAV,
+  PAGE_META,
+  type NavId,
+} from "./lib/ui/navConfig";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import type { ProviderModelsResult } from "./types";
-
-type NavId =
-  | "chat"
-  | "memory"
-  | "workspace"
-  | "filespace"
-  | "skills"
-  | "tools"
-  | "insights"
-  | "cron"
-  | "providers"
-  | "settings";
-type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
-type Tone = "blue" | "green" | "purple" | "cyan" | "orange" | "pink" | "indigo" | "amber" | "teal";
-
-const NAV: { id: NavId; labelKey: MessageKey; Icon: IconComp; tone: Tone }[] = [
-  { id: "chat", labelKey: "nav.chat", Icon: IconChat, tone: "blue" },
-  { id: "memory", labelKey: "nav.memory", Icon: IconMemory, tone: "green" },
-  { id: "workspace", labelKey: "nav.workspace", Icon: IconWorkspace, tone: "purple" },
-  { id: "filespace", labelKey: "nav.filespace", Icon: IconFileSpace, tone: "cyan" },
-  { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
-  { id: "tools", labelKey: "nav.tools", Icon: IconTools, tone: "orange" },
-  { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "teal" },
-  { id: "providers", labelKey: "nav.providers", Icon: IconProviders, tone: "blue" },
-  { id: "insights", labelKey: "nav.insights", Icon: IconInsights, tone: "amber" },
-  { id: "settings", labelKey: "nav.settings", Icon: IconSettings, tone: "pink" },
-];
-
-const PAGE_META: Record<NavId, { titleKey: MessageKey; subKey: MessageKey }> = {
-  chat: { titleKey: "page.chat.title", subKey: "page.chat.sub" },
-  memory: { titleKey: "page.memory.title", subKey: "page.memory.sub" },
-  workspace: { titleKey: "page.workspace.title", subKey: "page.workspace.sub" },
-  filespace: { titleKey: "page.filespace.title", subKey: "page.filespace.sub" },
-  skills: { titleKey: "page.skills.title", subKey: "page.skills.sub" },
-  tools: { titleKey: "page.tools.title", subKey: "page.tools.sub" },
-  insights: { titleKey: "page.insights.title", subKey: "page.insights.sub" },
-  cron: { titleKey: "page.cron.title", subKey: "page.cron.sub" },
-  providers: { titleKey: "page.providers.title", subKey: "page.providers.sub" },
-  settings: { titleKey: "page.settings.title", subKey: "page.settings.sub" },
-};
 
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
