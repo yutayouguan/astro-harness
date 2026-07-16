@@ -144,6 +144,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
 
+    let mime = result.mime_type.clone();
     let mut out = format!(
         "音乐已生成：{rel}\nprovider=google\nmodel={model_id}\ninteraction_id={}",
         result.interaction_id
@@ -152,7 +153,13 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         out.push_str("\nlyrics:\n");
         out.push_str(&lyrics);
     }
-    Ok(out)
+    Ok(super::media_out::with_generated_media(
+        out,
+        common::MediaKind::Audio,
+        &rel,
+        &mime,
+        "音乐已生成",
+    ))
 }
 
 fn load_music_image(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<MusicImagePart> {

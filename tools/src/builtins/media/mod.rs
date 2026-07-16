@@ -2,6 +2,7 @@
 
 pub mod audio_understand;
 pub mod image_gen;
+pub(crate) mod media_out;
 pub mod video_gen;
 pub mod video_understand;
 pub mod tts;

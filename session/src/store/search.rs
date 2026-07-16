@@ -220,9 +220,20 @@ impl SessionStore {
         Ok(rows)
     }
 
-    /// 按 `started_at` 降序列出近期会话；preview 取首条 user content（截断 120 字）。
-    pub fn list_recent_sessions(&self, limit: usize) -> Result<Vec<RecentSession>> {
-        let mut stmt = self.conn.prepare(
+    /// 按 `started_at` 降序列出会话；preview 取首条 user content（截断 120 字）。
+    pub fn list_sessions(
+        &self,
+        filter: super::SessionListFilter,
+        limit: usize,
+    ) -> Result<Vec<RecentSession>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let where_clause = match filter {
+            super::SessionListFilter::Active => "WHERE s.archived_at IS NULL",
+            super::SessionListFilter::Archived => "WHERE s.archived_at IS NOT NULL",
+        };
+        let sql = format!(
             "SELECT s.id, s.title, s.started_at,
                     (SELECT m.content FROM messages m
                      WHERE m.session_id = s.id
@@ -231,11 +242,13 @@ impl SessionStore {
                        AND TRIM(m.content) != ''
                      ORDER BY m.timestamp ASC, m.id ASC
                      LIMIT 1) AS preview,
-                    s.ended_at, s.end_reason
+                    s.ended_at, s.end_reason, s.archived_at
              FROM sessions s
+             {where_clause}
              ORDER BY s.started_at DESC
-             LIMIT ?1",
-        )?;
+             LIMIT ?1"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt
             .query_map(params![limit as i64], |row| {
                 Ok((
@@ -245,21 +258,28 @@ impl SessionStore {
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, Option<f64>>(4)?,
                     row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<f64>>(6)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(rows
             .into_iter()
-            .map(|(id, title, started_at, preview, ended_at, end_reason)| RecentSession {
+            .map(|(id, title, started_at, preview, ended_at, end_reason, archived_at)| RecentSession {
                 id,
                 title,
                 started_at,
                 preview: preview.map(|p| truncate_chars(&p, 120)),
                 ended_at,
                 end_reason,
+                archived_at,
             })
             .collect())
+    }
+
+    /// 兼容旧调用：仅列出未归档会话。
+    pub fn list_recent_sessions(&self, limit: usize) -> Result<Vec<RecentSession>> {
+        self.list_sessions(super::SessionListFilter::Active, limit)
     }
 
     fn collect_session_fts_ids(

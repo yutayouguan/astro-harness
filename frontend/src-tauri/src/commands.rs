@@ -25,6 +25,33 @@ pub struct ContextUsageSegmentDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct MediaAssetDto {
+    pub kind: String,
+    pub mime_type: String,
+    pub ref_kind: String,
+    pub ref_value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}
+
+fn media_asset_dto(m: proto::MediaAsset) -> MediaAssetDto {
+    MediaAssetDto {
+        kind: m.kind,
+        mime_type: m.mime_type,
+        ref_kind: m.ref_kind,
+        ref_value: m.ref_value,
+        label: if m.label.is_empty() {
+            None
+        } else {
+            Some(m.label)
+        },
+        id: if m.id.is_empty() { None } else { Some(m.id) },
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatStreamEvent {
     Token { content: String },
@@ -34,6 +61,8 @@ pub enum ChatStreamEvent {
         name: String,
         arguments_json: String,
         result: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        media: Vec<MediaAssetDto>,
     },
     ToolCallDelta {
         index: u32,
@@ -87,6 +116,7 @@ pub struct RecentSessionDto {
     pub summary: String,
     pub created_at: Option<String>,
     pub end_reason: Option<String>,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -640,6 +670,9 @@ pub async fn start_chat(
         })
         .collect();
     let image_targets = resolve_image_gen_targets().unwrap_or_default();
+    // 五类辅助任务（标题生成/压缩/智能审批/入梦/回合后 review）已解析目标；
+    // 单个任务解析失败时静默跳过，不阻塞主聊天（见 auxiliary_resolver 内部注释）。
+    let auxiliary_targets = crate::auxiliary_resolver::build_auxiliary_model_targets(&primary);
 
     let app2 = app.clone();
     let sid2 = sid.clone();
@@ -660,6 +693,7 @@ pub async fn start_chat(
             &primary.base_url,
             &image_targets,
             &chat_fallbacks,
+            &auxiliary_targets,
             thinking_enabled,
             &reasoning_effort,
             &resume_json,
@@ -690,9 +724,10 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
         "cancel" | "stop" => ChatControlAction::ChatControlCancel,
         "new_chat" | "new-chat" => ChatControlAction::ChatControlNewChat,
         "refresh_memory" | "refresh-memory" => ChatControlAction::ChatControlRefreshMemory,
+        "release_session" | "release-session" => ChatControlAction::ReleaseSession,
         other => {
             return Err(format!(
-                "未知控制动作: {other}（pause|resume|stream_resume|cancel|new_chat|refresh_memory）"
+                "未知控制动作: {other}（pause|resume|stream_resume|cancel|new_chat|refresh_memory|release_session）"
             ))
         }
     };
@@ -784,6 +819,7 @@ async fn run_chat_stream(
     base_url: &str,
     image_targets: &[ImageGenTarget],
     chat_fallbacks: &[proto::ChatFallbackTarget],
+    auxiliary_targets: &[proto::AuxiliaryModelTarget],
     thinking_enabled: bool,
     reasoning_effort: &str,
     resume_json: &str,
@@ -835,6 +871,7 @@ async fn run_chat_stream(
             resume_json: resume_json.to_string(),
             chat_fallbacks: chat_fallbacks.to_vec(),
             images: images.to_vec(),
+            auxiliary_targets: auxiliary_targets.to_vec(),
         })
         .await
         .map_err(|e| e.to_string())?
@@ -864,6 +901,7 @@ async fn run_chat_stream(
                         name: tc.name,
                         arguments_json: tc.arguments_json,
                         result: tc.result,
+                        media: tc.media.into_iter().map(media_asset_dto).collect(),
                     },
                 );
             }
@@ -1277,31 +1315,236 @@ pub async fn remove_chat_bubbles(
         .map_err(|e| e.to_string())
 }
 
-/// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
+fn parse_session_filter(filter: &str) -> Result<session::SessionListFilter, String> {
+    match filter {
+        "active" => Ok(session::SessionListFilter::Active),
+        "archived" => Ok(session::SessionListFilter::Archived),
+        _ => Err("invalid session filter".into()),
+    }
+}
+
+fn validate_session_title(title: &str) -> Result<String, String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("session title cannot be empty".into());
+    }
+    Ok(title.to_string())
+}
+
+fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
+    let summary = s
+        .title
+        .filter(|t| !t.trim().is_empty())
+        .or(s.preview)
+        .unwrap_or_default();
+    let created_at =
+        chrono::DateTime::from_timestamp(s.started_at as i64, 0).map(|dt| dt.to_rfc3339());
+    let archived_at = s
+        .archived_at
+        .and_then(|timestamp| chrono::DateTime::from_timestamp(timestamp as i64, 0))
+        .map(|dt| dt.to_rfc3339());
+    RecentSessionDto {
+        session_id: s.id,
+        summary,
+        created_at,
+        end_reason: s.end_reason,
+        archived_at,
+    }
+}
+
+/// 按 active / archived 筛选会话供侧栏展示。
 #[tauri::command]
-pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
+pub async fn list_sessions(
+    filter: String,
+    limit: Option<i32>,
+) -> Result<Vec<RecentSessionDto>, String> {
+    let filter = parse_session_filter(&filter)?;
     let store = open_sessions()?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
     Ok(store
-        .list_recent_sessions(limit)
+        .list_sessions(filter, limit)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|s| {
-            let summary = s
-                .title
-                .filter(|t| !t.trim().is_empty())
-                .or(s.preview)
-                .unwrap_or_default();
-            let created_at = chrono::DateTime::from_timestamp(s.started_at as i64, 0)
-                .map(|dt| dt.to_rfc3339());
-            RecentSessionDto {
-                session_id: s.id,
-                summary,
-                created_at,
-                end_reason: s.end_reason,
-            }
-        })
+        .map(recent_session_dto)
         .collect())
+}
+
+/// 兼容旧调用：仅列出未归档会话。
+#[tauri::command]
+pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
+    list_sessions("active".into(), limit).await
+}
+
+/// 重命名会话。
+#[tauri::command]
+pub async fn rename_session(session_id: String, title: String) -> Result<(), String> {
+    let title = validate_session_title(&title)?;
+    open_sessions()?
+        .set_session_title(&session_id, &title)
+        .map_err(|e| e.to_string())
+}
+
+/// 强制重新生成会话标题（覆盖现有标题）。
+#[tauri::command]
+pub async fn regenerate_session_title(
+    app: AppHandle,
+    session_id: String,
+) -> Result<String, String> {
+    use futures::StreamExt;
+    use providers::registry::ProviderRegistry;
+    use providers::trait_::{ChatMessage, ProviderConfig};
+
+    use crate::auxiliary_resolver::{
+        primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
+    };
+    use crate::session_events::{
+        emit_session_event, now_ts_ms, SessionEventDto, SessionMetadataChangedDto,
+    };
+
+    let sid = session_id.trim().to_string();
+    if sid.is_empty() {
+        return Err("session_id 不能为空".into());
+    }
+
+    let (user, assistant) = {
+        let store = open_sessions()?;
+        store
+            .first_turn_text(&sid)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
+    };
+
+    let primary = primary_chat_target_for_session(&sid)?;
+    let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::TitleGeneration, &primary)?;
+    let chain: Vec<&ResolvedTarget> = std::iter::once(&targets.preferred)
+        .chain(targets.fallback.as_ref())
+        .collect();
+
+    let prompt = format!(
+        "Generate a short chat session title for the conversation below.\n\
+         Rules:\n\
+         - Reply with ONLY the title text\n\
+         - No quotes, markdown, or explanation\n\
+         - Prefer the same language as the user message\n\
+         - At most 40 characters\n\n\
+         User:\n{user}\n\n\
+         Assistant:\n{assistant}"
+    );
+
+    async fn complete_one(target: &ResolvedTarget, prompt: &str) -> Result<String, String> {
+        let registry = ProviderRegistry::default();
+        let provider = registry.get(&target.backend_id).ok_or_else(|| {
+            format!("不支持的提供商后端: {}", target.backend_id)
+        })?;
+        let config = ProviderConfig {
+            api_key: target.api_key.clone(),
+            base_url: if target.provider.endpoint.trim().is_empty() {
+                None
+            } else {
+                Some(target.provider.endpoint.trim_end_matches('/').to_string())
+            },
+            model: target.model.clone(),
+            temperature: 0.3,
+            max_tokens: 64,
+            thinking_enabled: false,
+            reasoning_effort: "high".to_string(),
+            additional_params: serde_json::Value::Null,
+        };
+        let messages = vec![ChatMessage::text("user", prompt)];
+        let mut stream = provider
+            .chat_stream(messages, vec![], &config)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        while let Some(item) = stream.next().await {
+            let chunk = item.map_err(|e| e.to_string())?;
+            if let Some(token) = chunk.token {
+                out.push_str(&token);
+            }
+        }
+        if out.trim().is_empty() {
+            return Err("模型未返回任何内容".into());
+        }
+        Ok(out)
+    }
+
+    let mut last_err = "title generation failed".to_string();
+    let mut raw = None;
+    for target in chain {
+        match complete_one(target, &prompt).await {
+            Ok(text) => {
+                raw = Some(text);
+                break;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    backend = %target.backend_id,
+                    error = %err,
+                    "regenerate title target failed; trying next"
+                );
+                last_err = err;
+            }
+        }
+    }
+    let raw = raw.ok_or(last_err)?;
+    let title = common::sanitize_title(&raw, 40);
+    if title.is_empty() {
+        return Err("模型未返回可用标题".into());
+    }
+
+    open_sessions()?
+        .set_session_title(&sid, &title)
+        .map_err(|e| e.to_string())?;
+
+    emit_session_event(
+        &app,
+        SessionEventDto {
+            session_id: Some(sid.clone()),
+            agent_id: String::new(),
+            ts_ms: now_ts_ms(),
+            memory_updated: None,
+            pending_changed: None,
+            session_metadata_changed: Some(SessionMetadataChangedDto {
+                title: title.clone(),
+            }),
+        },
+    );
+
+    Ok(title)
+}
+
+/// 归档会话。
+#[tauri::command]
+pub async fn archive_session(session_id: String) -> Result<(), String> {
+    open_sessions()?
+        .archive_session(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 取消归档会话。
+#[tauri::command]
+pub async fn unarchive_session(session_id: String) -> Result<(), String> {
+    open_sessions()?
+        .unarchive_session(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 先尽量释放运行时会话，再永久删除数据库记录。
+///
+/// `release_session` 失败（backend 未启动等）不阻断删库；release 幂等，
+/// 若删库失败可重试（再次 best-effort release + 删库）。
+#[tauri::command]
+pub async fn delete_session_permanently(session_id: String) -> Result<(), String> {
+    if let Err(e) = chat_control(session_id.clone(), "release_session".into()).await {
+        tracing::warn!(
+            session = %session_id,
+            error = %e,
+            "release_session before delete failed; deleting DB anyway"
+        );
+    }
+    open_sessions()?
+        .delete_session_permanently(&session_id)
+        .map_err(|e| e.to_string())
 }
 
 /// 在沙箱内列举工作区 / 文件空间路径。
@@ -2265,5 +2508,44 @@ fn _proto_file_list_request() -> FileListRequest {
     FileListRequest {
         path: String::new(),
         depth: 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_session_filter, validate_session_title};
+    use session::SessionListFilter;
+
+    #[test]
+    fn parses_supported_session_filters() {
+        assert_eq!(
+            parse_session_filter("active").unwrap(),
+            SessionListFilter::Active
+        );
+        assert_eq!(
+            parse_session_filter("archived").unwrap(),
+            SessionListFilter::Archived
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_session_filters() {
+        assert_eq!(
+            parse_session_filter("all").unwrap_err(),
+            "invalid session filter"
+        );
+        assert_eq!(
+            parse_session_filter(" active ").unwrap_err(),
+            "invalid session filter"
+        );
+    }
+
+    #[test]
+    fn validates_and_trims_session_titles() {
+        assert_eq!(validate_session_title("  New title  ").unwrap(), "New title");
+        assert_eq!(
+            validate_session_title(" \n\t ").unwrap_err(),
+            "session title cannot be empty"
+        );
     }
 }

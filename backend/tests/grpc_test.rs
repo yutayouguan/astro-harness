@@ -6,12 +6,10 @@
 use backend::grpc::AstroServiceImpl;
 use proto::astro_service_client::AstroServiceClient;
 use proto::astro_service_server::AstroServiceServer;
-use proto::{ChatControlRequest, ChatRequest, MemoryQuery};
+use proto::{ChatControlAction, ChatControlRequest, ChatRequest, MemoryQuery};
 use tempfile::TempDir;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
-
-const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
 
 async fn spawn_test_server(dir: std::path::PathBuf) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -62,7 +60,7 @@ async fn release_session_runtime_is_idempotent() {
 
     let request = ChatControlRequest {
         session_id: "release-session-runtime-idempotent".into(),
-        action: CHAT_CONTROL_RELEASE_SESSION,
+        action: ChatControlAction::ReleaseSession as i32,
     };
     client
         .chat_control(request.clone())

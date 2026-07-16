@@ -152,10 +152,16 @@ async fn synthesize_google(
         .strip_prefix(&ctx.workspace_dir)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
-    Ok(format!(
-        "语音已生成：{rel}\nprovider=google\nmodel={model}\ninteraction_id={}\nstream={}",
-        result.interaction_id,
-        stream
+    Ok(super::media_out::with_generated_media(
+        format!(
+            "语音已生成：{rel}\nprovider=google\nmodel={model}\ninteraction_id={}\nstream={}",
+            result.interaction_id,
+            stream
+        ),
+        common::MediaKind::Audio,
+        &rel,
+        "audio/wav",
+        "语音已生成",
     ))
 }
 
@@ -235,8 +241,14 @@ async fn synthesize_openai(
         .strip_prefix(&ctx.workspace_dir)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
-    Ok(format!(
-        "语音已生成：{rel}\nprovider=openai\nmodel=gpt-4o-mini-tts"
+    Ok(super::media_out::with_generated_media(
+        format!(
+            "语音已生成：{rel}\nprovider=openai\nmodel=gpt-4o-mini-tts"
+        ),
+        common::MediaKind::Audio,
+        &rel,
+        "audio/mpeg",
+        "语音已生成",
     ))
 }
 

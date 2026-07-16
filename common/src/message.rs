@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::media::MediaAsset;
+
 /// 消息角色。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -34,6 +36,9 @@ pub struct Message {
     /// 工具结果对应的调用 id。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// 结构化媒体附件（工具生成图/音/视频等）；发给 LLM 仍用 `content` 文本。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<MediaAsset>,
 }
 
 /// 消息正文：单段文本，或分段（多模态 text + image_url）。
@@ -95,6 +100,7 @@ impl Message {
             compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
+            media: Vec::new(),
         }
     }
 
@@ -106,6 +112,7 @@ impl Message {
             compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
+            media: Vec::new(),
         }
     }
 
@@ -117,6 +124,7 @@ impl Message {
             compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
+            media: Vec::new(),
         }
     }
 
@@ -128,6 +136,7 @@ impl Message {
             compressed_content: None,
             tool_calls: Some(tool_calls),
             tool_call_id: None,
+            media: Vec::new(),
         }
     }
 
@@ -139,6 +148,7 @@ impl Message {
             compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
+            media: Vec::new(),
         }
     }
 
@@ -150,6 +160,19 @@ impl Message {
             compressed_content: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.to_string()),
+            media: Vec::new(),
+        }
+    }
+
+    /// 构造带结构化媒体的工具结果消息。
+    pub fn tool_with_media(tool_call_id: &str, content: &str, media: Vec<MediaAsset>) -> Self {
+        Message {
+            role: Role::Tool,
+            content: MessageContent::Text(content.to_string()),
+            compressed_content: None,
+            tool_calls: None,
+            tool_call_id: Some(tool_call_id.to_string()),
+            media,
         }
     }
 
@@ -182,6 +205,7 @@ impl Message {
             compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
+            media: Vec::new(),
         }
     }
 
@@ -227,8 +251,33 @@ pub struct ToolResult {
     pub tool_call_id: String,
     /// 工具名。
     pub name: String,
-    /// 结果正文。
+    /// 结果正文（LLM 可读摘要；可含路径文案）。
     pub content: String,
+    /// 结构化媒体附件。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<MediaAsset>,
     /// 是否为错误结果。
     pub is_error: bool,
+}
+
+impl ToolResult {
+    pub fn text(tool_call_id: impl Into<String>, name: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            tool_call_id: tool_call_id.into(),
+            name: name.into(),
+            content: content.into(),
+            media: Vec::new(),
+            is_error: false,
+        }
+    }
+
+    pub fn with_media(mut self, media: Vec<MediaAsset>) -> Self {
+        self.media = media;
+        self
+    }
+
+    pub fn error(mut self) -> Self {
+        self.is_error = true;
+        self
+    }
 }

@@ -11,7 +11,8 @@ impl SessionStore {
         self.conn
             .query_row(
                 "SELECT id, source, title, started_at, ended_at, end_reason,
-                        model, parent_session_id, message_count, tool_call_count
+                        model, parent_session_id, message_count, tool_call_count,
+                        archived_at
                  FROM sessions WHERE id = ?1",
                 params![id],
                 |row| {
@@ -26,6 +27,7 @@ impl SessionStore {
                         parent_session_id: row.get(7)?,
                         message_count: row.get(8)?,
                         tool_call_count: row.get(9)?,
+                        archived_at: row.get(10)?,
                     })
                 },
             )
@@ -118,6 +120,95 @@ impl SessionStore {
             }
             Err(err) => Err(err.into()),
         }
+    }
+
+    /// 标记会话已归档。
+    pub fn archive_session(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET archived_at = ?1 WHERE id = ?2",
+            params![now_epoch_secs()?, id],
+        )?;
+        anyhow::ensure!(changed == 1, "archive_session: session not found");
+        Ok(())
+    }
+
+    /// 取消会话归档。
+    pub fn unarchive_session(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET archived_at = NULL WHERE id = ?1",
+            params![id],
+        )?;
+        anyhow::ensure!(changed == 1, "unarchive_session: session not found");
+        Ok(())
+    }
+
+    /// 仅在标题为空时设置标题。
+    pub fn set_session_title_if_empty(&self, id: &str, title: &str) -> Result<bool> {
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            return Ok(false);
+        }
+        let result = self.conn.execute(
+            "UPDATE sessions
+             SET title = ?1
+             WHERE id = ?2 AND (title IS NULL OR TRIM(title) = '')",
+            params![trimmed, id],
+        );
+        match result {
+            Ok(changed) => Ok(changed == 1),
+            Err(err) if is_unique_constraint(&err) => {
+                let suffix: String = id.chars().take(8).collect();
+                let unique = format!("{} · {}", truncate_chars(trimmed, 60), suffix);
+                let changed = self.conn.execute(
+                    "UPDATE sessions
+                     SET title = ?1
+                     WHERE id = ?2 AND (title IS NULL OR TRIM(title) = '')",
+                    params![unique, id],
+                )?;
+                Ok(changed == 1)
+            }
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// 永久删除会话与其消息。
+    pub fn delete_session_permanently(&self, id: &str) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM messages WHERE session_id = ?1", params![id])?;
+        let changed = tx.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
+        anyhow::ensure!(changed == 1, "delete_session_permanently: session not found");
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// 按消息顺序读取最早可完成的非空 user → assistant 文本配对。
+    pub fn first_turn_text(&self, session_id: &str) -> Result<Option<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT role, content
+             FROM messages
+             WHERE session_id = ?1
+               AND role IN ('user', 'assistant')
+               AND content IS NOT NULL
+               AND TRIM(content) != ''
+             ORDER BY timestamp ASC, id ASC",
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut candidate_user = None;
+        for row in rows {
+            let (role, content) = row?;
+            match role.as_str() {
+                "user" => candidate_user = Some(content),
+                "assistant" => {
+                    if let Some(user) = candidate_user.take() {
+                        return Ok(Some((user, content)));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(None)
     }
 
     /// 累加会话账单列；`cost_status=unknown` 的 delta 不抬高 `estimated_cost_usd`。

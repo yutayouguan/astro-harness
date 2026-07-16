@@ -739,6 +739,7 @@ async fn run_multi_turn_stream_inner(
                 return;
             }
 
+            let (_, tool_media) = common::extract_tool_media(&result);
             if !emit(
                 &tx,
                 MultiTurnStreamItem::ToolResult {
@@ -746,6 +747,7 @@ async fn run_multi_turn_stream_inner(
                     name: call.name.clone(),
                     arguments_json: call.arguments.to_string(),
                     result: result.clone(),
+                    media: tool_media.clone(),
                 },
             )
             .await
@@ -824,6 +826,13 @@ async fn run_multi_turn_stream_inner(
                     Some(&call.name),
                     &result_for_history,
                 );
+                if !tool_media.is_empty() {
+                    if let Some(last) = agent.session_messages.last_mut() {
+                        if last.role == common::message::Role::Tool {
+                            last.media = tool_media;
+                        }
+                    }
+                }
             }
         }
 

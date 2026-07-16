@@ -374,6 +374,14 @@ export function useSend(deps: UseSendDeps) {
           arguments_json?: string;
           arguments?: string;
           result?: string;
+          media?: Array<{
+            kind?: string;
+            mime_type?: string;
+            ref_kind?: string;
+            ref_value?: string;
+            label?: string;
+            id?: string;
+          }>;
           operation?: string;
           detail?: string;
           outcome?: string;
@@ -532,6 +540,25 @@ export function useSend(deps: UseSendDeps) {
                   ? "hook"
                   : "tool";
             const id = payload.id || `act-${Date.now()}`;
+            const structuredMedia = Array.isArray(payload.media)
+              ? payload.media
+                  .map((m) => {
+                    const kind =
+                      m.kind === "image" ||
+                      m.kind === "video" ||
+                      m.kind === "audio" ||
+                      m.kind === "html"
+                        ? m.kind
+                        : null;
+                    const path =
+                      m.ref_kind === "workspace_path" || !m.ref_kind
+                        ? m.ref_value
+                        : m.ref_value;
+                    if (!kind || !path) return null;
+                    return { kind, path };
+                  })
+                  .filter(Boolean) as ChatActivity["media"]
+              : undefined;
             const activity: ChatActivity = {
               id,
               kind,
@@ -541,6 +568,7 @@ export function useSend(deps: UseSendDeps) {
               detail: payload.result || payload.arguments_json || undefined,
               status: payload.result ? "done" : "running",
               at: Date.now(),
+              media: structuredMedia,
             };
             setMessages((prev) =>
               prev.map((m) => {

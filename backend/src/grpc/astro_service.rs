@@ -42,6 +42,37 @@ fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, 
     session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).map_err(|e| e.to_string())
 }
 
+/// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 AgentLoop。
+///
+/// 未知 `task` 字符串静默跳过（旧客户端/脏数据不阻塞主聊）；API key 仅存内存。
+fn parse_auxiliary_targets(
+    items: Vec<proto::AuxiliaryModelTarget>,
+) -> HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>> {
+    let mut grouped: HashMap<common::AuxiliaryTask, Vec<(u32, common::ChatTarget)>> = HashMap::new();
+    for item in items {
+        let Some(task) = common::AuxiliaryTask::from_str(item.task.trim()) else {
+            continue;
+        };
+        grouped.entry(task).or_default().push((
+            item.order,
+            common::ChatTarget {
+                provider_id: item.provider_id,
+                backend_id: item.backend_id,
+                model: item.model,
+                api_key: item.api_key,
+                base_url: item.base_url,
+            },
+        ));
+    }
+    grouped
+        .into_iter()
+        .map(|(task, mut ordered)| {
+            ordered.sort_by_key(|(order, _)| *order);
+            (task, ordered.into_iter().map(|(_, t)| t).collect())
+        })
+        .collect()
+}
+
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Mutex<AgentLoop>>;
 /// Chat RPC 返回的事件流类型别名。
@@ -80,6 +111,7 @@ fn publish_tool_pending_to_hub(
             live_written: false,
         }),
         pending_changed: None,
+        session_metadata_changed: None,
     });
     hub.publish(SessionEventMsg {
         session_id: None,
@@ -89,6 +121,7 @@ fn publish_tool_pending_to_hub(
             pending_count,
             reason: "enqueued".into(),
         }),
+        session_metadata_changed: None,
     });
 }
 
@@ -119,6 +152,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                     live_written,
                 }),
                 pending_changed: None,
+                session_metadata_changed: None,
             });
             if !live_written {
                 let pending_count = memory::list_pending(&memory_dir)
@@ -132,8 +166,34 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                         pending_count,
                         reason: "enqueued".into(),
                     }),
+                    session_metadata_changed: None,
                 });
             }
+        }
+    });
+}
+
+/// 启动首轮标题生成，成功后发布 `session_metadata_changed`。
+async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
+    let hub = hub.clone();
+    let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
+    let agent_id = {
+        let agent = session.lock().await;
+        let id = agent.agent_id().to_string();
+        agent::exec::title_generation::spawn_title_generation_after_turn(&agent, Some(notify_tx));
+        id
+    };
+    tokio::spawn(async move {
+        if let Some(n) = notify_rx.recv().await {
+            hub.publish(SessionEventMsg {
+                session_id: Some(n.session_id),
+                agent_id,
+                memory_updated: None,
+                pending_changed: None,
+                session_metadata_changed: Some(crate::SessionMetadataChangedPayload {
+                    title: n.title,
+                }),
+            });
         }
     });
 }
@@ -244,9 +304,8 @@ impl AstroServiceImpl {
             let mut sessions = self.sessions.write().await;
             sessions.remove(session_id)
         };
-        if let Some(handle) = &removed {
-            let agent = handle.lock().await;
-            agent.cancel_signal().cancel();
+        if let Some(handle) = removed.as_ref() {
+            handle.lock().await.cancel_signal().cancel();
         }
         removed
     }
@@ -332,6 +391,28 @@ fn parse_interrupts_json(raw: &str) -> Vec<proto::Interrupt> {
 }
 
 /// 将 agent 多轮流事件映射为 proto [`ChatEvent`]；无对应项时返回 `None`（当前均有映射）。
+fn media_asset_to_proto(asset: common::MediaAsset) -> proto::MediaAsset {
+    let (ref_kind, ref_value) = match asset.reference {
+        common::MediaRef::WorkspacePath(p) => ("workspace_path", p),
+        common::MediaRef::DataUrl(u) => ("data_url", u),
+        common::MediaRef::RemoteUri(u) => ("remote_uri", u),
+    };
+    let kind = match asset.kind {
+        common::MediaKind::Image => "image",
+        common::MediaKind::Audio => "audio",
+        common::MediaKind::Video => "video",
+        common::MediaKind::File => "file",
+    };
+    proto::MediaAsset {
+        kind: kind.into(),
+        mime_type: asset.mime_type,
+        ref_kind: ref_kind.into(),
+        ref_value,
+        label: asset.label.unwrap_or_default(),
+        id: asset.id.unwrap_or_default(),
+    }
+}
+
 fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
     match item {
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(token)) => Some(ChatEvent {
@@ -364,12 +445,14 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
             name,
             arguments_json,
             result,
+            media,
         } => Some(ChatEvent {
             payload: Some(proto::chat_event::Payload::ToolCall(proto::ToolCallEvent {
                 id,
                 name,
                 arguments_json,
                 result,
+                media: media.into_iter().map(media_asset_to_proto).collect(),
             })),
         }),
         MultiTurnStreamItem::MemoryUpdate { op, content } => Some(ChatEvent {
@@ -475,6 +558,11 @@ impl AstroService for AstroServiceImpl {
 
         let action = ChatControlAction::try_from(req.action).unwrap_or_default();
 
+        if matches!(action, ChatControlAction::ReleaseSession) {
+            self.release_session_runtime(&req.session_id).await;
+            return Ok(Response::new(Empty {}));
+        }
+
         // 新建对话不依赖进行中的流；无内存会话时仍触发 Gateway 事件。
         if matches!(action, ChatControlAction::ChatControlNewChat) {
             self.release_session_for_new_chat(&req.session_id).await;
@@ -520,6 +608,7 @@ impl AstroService for AstroServiceImpl {
             }
             ChatControlAction::ChatControlNewChat
             | ChatControlAction::ChatControlRefreshMemory
+            | ChatControlAction::ReleaseSession
             | ChatControlAction::ChatControlUnspecified => {}
         }
         Ok(Response::new(Empty {}))
@@ -626,6 +715,7 @@ impl AstroService for AstroServiceImpl {
         let api_key = req.api_key;
         let base_url = req.base_url;
         let chat_fallbacks = req.chat_fallbacks;
+        let auxiliary_targets = parse_auxiliary_targets(req.auxiliary_targets);
         let thinking_enabled = req.thinking_enabled;
         let images = req.images;
         let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
@@ -666,6 +756,8 @@ impl AstroService for AstroServiceImpl {
             let mut agent = session.lock().await;
             agent.set_image_gen_targets(image_targets);
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
+            // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 AgentLoop 内回退主模型。
+            agent.set_auxiliary_targets(auxiliary_targets);
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }
@@ -778,6 +870,7 @@ impl AstroService for AstroServiceImpl {
                         }))
                         .await;
                     spawn_review_to_hub(&session, &sid_cleanup, &session_events_hub).await;
+                    spawn_title_to_hub(&session, &session_events_hub).await;
                     cleanup().await;
                     return;
                 }
@@ -939,13 +1032,14 @@ impl AstroService for AstroServiceImpl {
                             }
                         }
                         if is_done {
-                            // 回合成功后 fire-and-forget review → SessionEventHub（不阻塞 Chat 流）
+                            // 回合成功后 fire-and-forget review / 标题 → SessionEventHub（不阻塞 Chat 流）
                             spawn_review_to_hub(
                                 &session_for_review,
                                 &sid_cleanup,
                                 &session_events_hub,
                             )
                             .await;
+                            spawn_title_to_hub(&session_for_review, &session_events_hub).await;
                             break;
                         }
                     }
@@ -1321,6 +1415,8 @@ impl AstroService for AstroServiceImpl {
 mod tests {
     use super::*;
 
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -1329,26 +1425,20 @@ mod tests {
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
         let session_id = "release-session-runtime-idempotent";
 
-        let session = service.get_session(session_id).await.unwrap();
+        service.get_session(session_id).await.unwrap();
         let pause = service.register_pause(session_id).await;
         let gate = HitlGate::new(session_id.to_string());
         service.hitl_registry.insert(gate.clone()).await;
 
-        {
-            let agent = session.lock().await;
-            let bus = agent.hook_bus();
-            let _ = bus;
-        }
-
         let request = Request::new(ChatControlRequest {
             session_id: session_id.to_string(),
-            action: CHAT_CONTROL_RELEASE_SESSION,
+            action: ChatControlAction::ReleaseSession as i32,
         });
         service.chat_control(request).await.expect("first release");
 
         let request = Request::new(ChatControlRequest {
             session_id: session_id.to_string(),
-            action: CHAT_CONTROL_RELEASE_SESSION,
+            action: ChatControlAction::ReleaseSession as i32,
         });
         service.chat_control(request).await.expect("second release");
 
@@ -1357,5 +1447,109 @@ mod tests {
         assert!(service.hitl_registry.get(session_id).await.is_none());
         drop(pause);
         drop(gate);
+    }
+
+    #[tokio::test]
+    async fn new_chat_preserves_hooks_while_release_session_skips_them() {
+        let dir = TempDir::new().unwrap();
+        let hook_dir = dir.path().join("hooks").join("audit");
+        std::fs::create_dir_all(&hook_dir).unwrap();
+        std::fs::write(
+            hook_dir.join("HOOK.yaml"),
+            "name: audit\nevents:\n  - command:new_chat\n",
+        )
+        .unwrap();
+
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let gateway_hits = Arc::new(AtomicUsize::new(0));
+        let gateway_counter = Arc::clone(&gateway_hits);
+        service
+            .hook_runtime
+            .gateway
+            .register_handler("audit", move |event, _| {
+                if event == ::hooks::COMMAND_NEW_CHAT {
+                    gateway_counter.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+
+        let reset_hits = Arc::new(AtomicUsize::new(0));
+        let reset_counter = Arc::clone(&reset_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_RESET, move |_| {
+                reset_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: "release-only".into(),
+                action: ChatControlAction::ReleaseSession as i32,
+            }))
+            .await
+            .expect("release session");
+        assert_eq!(gateway_hits.load(Ordering::SeqCst), 0);
+        assert_eq!(reset_hits.load(Ordering::SeqCst), 0);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 0);
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: "new-chat".into(),
+                action: ChatControlAction::ChatControlNewChat as i32,
+            }))
+            .await
+            .expect("new chat");
+        assert_eq!(gateway_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(reset_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn parse_auxiliary_targets_groups_by_task_and_sorts_by_order() {
+        let map = parse_auxiliary_targets(vec![
+            proto::AuxiliaryModelTarget {
+                task: "compaction".into(),
+                provider_id: "p-fb".into(),
+                backend_id: "openai".into(),
+                model: "gpt-fb".into(),
+                api_key: "k-fb".into(),
+                base_url: "https://fb".into(),
+                order: 1,
+            },
+            proto::AuxiliaryModelTarget {
+                task: "compaction".into(),
+                provider_id: "p-pref".into(),
+                backend_id: "deepseek".into(),
+                model: "gpt-pref".into(),
+                api_key: "k-pref".into(),
+                base_url: "https://pref".into(),
+                order: 0,
+            },
+            proto::AuxiliaryModelTarget {
+                task: "unknown_task".into(),
+                provider_id: "x".into(),
+                backend_id: "x".into(),
+                model: "x".into(),
+                api_key: "x".into(),
+                base_url: "x".into(),
+                order: 0,
+            },
+        ]);
+
+        let chain = map.get(&common::AuxiliaryTask::Compaction).expect("compaction");
+        assert_eq!(chain.len(), 2);
+        assert_eq!(chain[0].provider_id, "p-pref");
+        assert_eq!(chain[1].provider_id, "p-fb");
+        assert!(!map.contains_key(&common::AuxiliaryTask::Dreaming));
     }
 }

@@ -1,15 +1,36 @@
 //! 辅模型 Smart 审批：仅对规则 `Ask` 可选降级为 `Auto`。
 //!
 //! 默认关闭；`ASTRO_SMART_APPROVAL=1` 开启。失败 / 超时一律回退 `Ask`。
+//! 目标链由 ChatRequest 注入的 `AuxiliaryTask::SmartApproval` 提供（preferred + 可选 fallback）。
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
-use providers::trait_::{AiProvider, ChatMessage, ProviderConfig};
+use providers::registry::ProviderRegistry;
+use providers::trait_::{ChatMessage, ProviderConfig};
 use tools::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// 单个智能审批调用目标（最多 preferred + fallback 两项）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApprovalTarget {
+    pub backend_id: String,
+    pub model: String,
+    pub api_key: String,
+    pub base_url: String,
+}
+
+impl From<&common::ChatTarget> for ApprovalTarget {
+    fn from(t: &common::ChatTarget) -> Self {
+        Self {
+            backend_id: t.backend_id.clone(),
+            model: t.model.clone(),
+            api_key: t.api_key.clone(),
+            base_url: t.base_url.clone(),
+        }
+    }
+}
 
 /// 是否启用辅模型审批。
 pub fn smart_approval_enabled() -> bool {
@@ -48,20 +69,66 @@ fn build_prompt(command: &str, description: &str) -> String {
     )
 }
 
+/// 按 preferred→fallback 顺序完成；返回首个可解析 verdict。
+///
+/// 全部失败返回 `Err`，由调用方保留原 `Ask`（不自动 allow）。
+pub async fn evaluate_smart_approval_with_completion<F, Fut>(
+    targets: &[ApprovalTarget],
+    mut complete: F,
+) -> Result<ApprovalAction, String>
+where
+    F: FnMut(&ApprovalTarget) -> Fut,
+    Fut: std::future::Future<Output = Result<String, String>>,
+{
+    let mut last_err = "no approval targets".to_string();
+    for target in targets.iter().take(2) {
+        match complete(target).await {
+            Ok(text) if !text.trim().is_empty() => return Ok(parse_smart_verdict(&text)),
+            Ok(_) => {
+                last_err = format!(
+                    "empty smart-approval response from {}",
+                    target.backend_id
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    backend = %target.backend_id,
+                    model = %target.model,
+                    error = %err,
+                    "smart approval target failed; trying next"
+                );
+                last_err = err;
+            }
+        }
+    }
+    Err(last_err)
+}
+
 /// 对 `Ask` 命令尝试辅模型降级；未开启或失败时返回 `Ask`。
 pub async fn maybe_smart_downgrade_ask(
     command: &str,
     description: &str,
-    provider: Arc<dyn AiProvider>,
-    config: ProviderConfig,
+    providers: &ProviderRegistry,
+    targets: &[ApprovalTarget],
 ) -> ApprovalAction {
     if !smart_approval_enabled() {
         return ApprovalAction::Ask;
     }
-    match tokio::time::timeout(
-        SMART_TIMEOUT,
-        ask_model(provider, config, command, description),
-    )
+    if targets.is_empty() {
+        return ApprovalAction::Ask;
+    }
+
+    let prompt = build_prompt(command, description);
+    let providers = providers.clone();
+    match tokio::time::timeout(SMART_TIMEOUT, async {
+        evaluate_smart_approval_with_completion(targets, |target| {
+            let providers = providers.clone();
+            let prompt = prompt.clone();
+            let target = target.clone();
+            async move { ask_model(&providers, &target, &prompt).await }
+        })
+        .await
+    })
     .await
     {
         Ok(Ok(action)) => action,
@@ -77,34 +144,58 @@ pub async fn maybe_smart_downgrade_ask(
 }
 
 async fn ask_model(
-    provider: Arc<dyn AiProvider>,
-    config: ProviderConfig,
-    command: &str,
-    description: &str,
-) -> anyhow::Result<ApprovalAction> {
-    let prompt = build_prompt(command, description);
+    providers: &ProviderRegistry,
+    target: &ApprovalTarget,
+    prompt: &str,
+) -> Result<String, String> {
+    let provider = providers
+        .get(&target.backend_id)
+        .ok_or_else(|| format!("unknown provider: {}", target.backend_id))?;
+    let config = ProviderConfig {
+        model: if target.model.trim().is_empty() {
+            provider.default_model().to_string()
+        } else {
+            target.model.clone()
+        },
+        api_key: target.api_key.clone(),
+        base_url: if target.base_url.trim().is_empty() {
+            None
+        } else {
+            Some(target.base_url.clone())
+        },
+        ..ProviderConfig::default()
+    };
     let messages = vec![ChatMessage::text("user", prompt)];
     let mut stream = provider
         .chat_stream(messages, vec![], &config)
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| e.to_string())?;
 
     let mut full = String::new();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| anyhow::anyhow!("{e}"))?;
+        let chunk = chunk.map_err(|e| e.to_string())?;
         if let Some(token) = chunk.token {
             full.push_str(&token);
         }
     }
     if full.trim().is_empty() {
-        anyhow::bail!("empty smart-approval response");
+        return Err("empty smart-approval response".into());
     }
-    Ok(parse_smart_verdict(&full))
+    Ok(full)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn target(backend: &str, model: &str) -> ApprovalTarget {
+        ApprovalTarget {
+            backend_id: backend.into(),
+            model: model.into(),
+            api_key: "k".into(),
+            base_url: "https://example".into(),
+        }
+    }
 
     #[test]
     fn parse_auto_and_ask() {
@@ -127,5 +218,52 @@ mod tests {
         std::env::remove_var("ASTRO_SMART_APPROVAL");
         // 无可用 provider 调用路径：直接查 enabled
         assert!(!smart_approval_enabled());
+    }
+
+    #[tokio::test]
+    async fn preferred_error_falls_back_to_second_target_ask() {
+        let targets = vec![
+            target("pref", "mini"),
+            target("fallback", "main"),
+        ];
+        let mut calls = 0usize;
+        let verdict = evaluate_smart_approval_with_completion(&targets, |_t| {
+            calls += 1;
+            async move {
+                if calls == 1 {
+                    Err("provider error".into())
+                } else {
+                    Ok("ASK".into())
+                }
+            }
+        })
+        .await
+        .expect("fallback should succeed");
+        assert_eq!(verdict, ApprovalAction::Ask);
+        assert_eq!(calls, 2);
+    }
+
+    #[tokio::test]
+    async fn both_targets_fail_returns_error_not_auto() {
+        let targets = vec![
+            target("pref", "mini"),
+            target("fallback", "main"),
+        ];
+        let err = evaluate_smart_approval_with_completion(&targets, |_t| async {
+            Err("provider error".into())
+        })
+        .await
+        .expect_err("both failures should surface");
+        assert!(err.contains("provider error"));
+    }
+
+    #[tokio::test]
+    async fn empty_targets_returns_error() {
+        let err = evaluate_smart_approval_with_completion(&[], |_t| async {
+            Ok("AUTO".into())
+        })
+        .await
+        .expect_err("empty targets");
+        assert_eq!(err, "no approval targets");
     }
 }

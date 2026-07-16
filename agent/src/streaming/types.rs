@@ -35,6 +35,8 @@ pub enum MultiTurnStreamItem {
         arguments_json: String,
         /// 工具返回文本（含错误前缀时仍原样传递）。
         result: String,
+        /// 结构化媒体（生成图/音/视频）；空则前端可回落解析 result 文本。
+        media: Vec<common::MediaAsset>,
     },
     /// 记忆工具成功变更，供右侧时间线展示。
     MemoryUpdate {

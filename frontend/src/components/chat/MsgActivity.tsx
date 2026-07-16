@@ -48,11 +48,11 @@ export default function MsgActivity({
   const { t } = useI18n();
   const hasBody = activityHasBody(activity);
   const { input, output } = resolveActivityIO(activity);
-  const mediaItems = useMemo(
-    () =>
-      activity.status === "running" ? [] : parseGeneratedMedia(output),
-    [activity.status, output],
-  );
+  const mediaItems = useMemo(() => {
+    if (activity.status === "running") return [];
+    if (activity.media && activity.media.length > 0) return activity.media;
+    return parseGeneratedMedia(output);
+  }, [activity.status, activity.media, output]);
   const [open, setOpen] = useState(
     () => (defaultOpen && hasBody) || mediaItems.length > 0,
   );

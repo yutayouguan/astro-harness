@@ -281,7 +281,13 @@ async fn generate_one_google(
         "\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）；多轮编辑可传 previous_interaction_id=\"{}\"",
         result.interaction_id
     ));
-    Ok(out)
+    Ok(super::media_out::with_generated_media(
+        out,
+        common::MediaKind::Image,
+        &rel,
+        &result.image.mime_type,
+        "图片已生成",
+    ))
 }
 
 async fn generate_one_openai_compat(
@@ -322,7 +328,13 @@ async fn generate_one_openai_compat(
             "\nnote: OpenAI 路径忽略 Interactions 高级参数（image_size/reference_images/…）",
         );
     }
-    Ok(out)
+    Ok(super::media_out::with_generated_media(
+        out,
+        common::MediaKind::Image,
+        &rel,
+        &img.mime_type,
+        "图片已生成",
+    ))
 }
 
 fn save_generated_image(ctx: &ToolContext<'_>, img: &GeneratedImage) -> anyhow::Result<String> {

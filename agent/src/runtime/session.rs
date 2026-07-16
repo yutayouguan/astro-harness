@@ -33,10 +33,15 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
                 _ => Message::assistant(&content),
             }
         }
-        "tool" => match m.tool_call_id.as_deref() {
-            Some(id) => Message::tool_with_id(id, &content),
-            None => Message::tool(&content),
-        },
+        "tool" => {
+            let mut msg = match m.tool_call_id.as_deref() {
+                Some(id) => Message::tool_with_id(id, &content),
+                None => Message::tool(&content),
+            };
+            let (_, media) = common::extract_tool_media(&content);
+            msg.media = media;
+            msg
+        }
         other => {
             tracing::warn!(role = other, "skip unknown role when hydrating session");
             return Ok(None);

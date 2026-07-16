@@ -1,7 +1,9 @@
 //! Session-scoped memory event fan-out for gRPC subscribers.
 
 use proto::session_event::Payload;
-use proto::{MemoryUpdatedEvent, PendingChangedEvent, SessionEvent};
+use proto::{
+    MemoryUpdatedEvent, PendingChangedEvent, SessionEvent, SessionMetadataChangedEvent,
+};
 use tokio::sync::broadcast;
 
 /// Subscriber filter matching [`SubscribeSessionEventsRequest`] semantics.
@@ -29,13 +31,20 @@ pub struct PendingChangedPayload {
     pub reason: String,
 }
 
-/// Hub message: one memory or pending notification.
+/// Internal session metadata payload (e.g. auto/manual title change).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionMetadataChangedPayload {
+    pub title: String,
+}
+
+/// Hub message: one memory, pending, or metadata notification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionEventMsg {
     pub session_id: Option<String>,
     pub agent_id: String,
     pub memory_updated: Option<MemoryUpdatedPayload>,
     pub pending_changed: Option<PendingChangedPayload>,
+    pub session_metadata_changed: Option<SessionMetadataChangedPayload>,
 }
 
 /// Filtered receiver skipping non-matching broadcast events.
@@ -96,6 +105,10 @@ pub fn event_matches(filter: &SubscribeFilter, ev: &SessionEventMsg) -> bool {
             return false;
         }
     }
+    // 侧栏需要任意会话的标题更新，即使当前订阅正过滤到另一会话。
+    if ev.session_metadata_changed.is_some() {
+        return true;
+    }
     match filter.session_id.as_deref().filter(|s| !s.is_empty()) {
         None => ev.pending_changed.is_some() && ev.session_id.is_none(),
         Some(sid) => {
@@ -120,6 +133,10 @@ pub fn to_proto(msg: &SessionEventMsg) -> SessionEvent {
         Some(Payload::PendingChanged(PendingChangedEvent {
             pending_count: pend.pending_count,
             reason: pend.reason.clone(),
+        }))
+    } else if let Some(ref meta) = msg.session_metadata_changed {
+        Some(Payload::SessionMetadataChanged(SessionMetadataChangedEvent {
+            title: meta.title.clone(),
         }))
     } else {
         None
@@ -154,6 +171,7 @@ mod tests {
                 live_written: true,
             }),
             pending_changed: None,
+            session_metadata_changed: None,
         });
         let ev = tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
             .await
@@ -178,6 +196,7 @@ mod tests {
                 pending_count: 2,
                 reason: "enqueued".into(),
             }),
+            session_metadata_changed: None,
         });
         let ev = rx.recv().await.unwrap();
         assert_eq!(ev.pending_changed.unwrap().pending_count, 2);
@@ -196,6 +215,25 @@ mod tests {
                 live_written: true,
             }),
             pending_changed: None,
+            session_metadata_changed: None,
         });
+    }
+
+    #[test]
+    fn metadata_changed_matches_even_when_subscribed_to_other_session() {
+        let filter = SubscribeFilter {
+            session_id: Some("s-active".into()),
+            agent_id: None,
+        };
+        let ev = SessionEventMsg {
+            session_id: Some("s-other".into()),
+            agent_id: "workspace".into(),
+            memory_updated: None,
+            pending_changed: None,
+            session_metadata_changed: Some(SessionMetadataChangedPayload {
+                title: "新标题".into(),
+            }),
+        };
+        assert!(event_matches(&filter, &ev));
     }
 }

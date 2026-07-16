@@ -53,7 +53,7 @@ function kindFromPath(path: string): GeneratedMediaKind | null {
   return EXT_KIND[extOf(path)] ?? null;
 }
 
-/** 从工具 output 文本提取媒体条目（去重，保序） */
+/** 从工具 output 文本提取媒体条目（去重，保序）；也识别 `astro_media_v1:` sidecar。 */
 export function parseGeneratedMedia(text: string | null | undefined): GeneratedMedia[] {
   if (!text) return [];
   const seen = new Set<string>();
@@ -67,6 +67,37 @@ export function parseGeneratedMedia(text: string | null | undefined): GeneratedM
   };
 
   for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("astro_media_v1:")) {
+      try {
+        const parsed = JSON.parse(trimmed.slice("astro_media_v1:".length)) as Array<{
+          kind?: string;
+          reference?: { WorkspacePath?: string; workspace_path?: string } | string;
+          // serde externally tagged enum serializes as {"workspace_path":"..."}
+        }>;
+        for (const item of parsed) {
+          const kind =
+            item.kind === "image" || item.kind === "video" || item.kind === "audio"
+              ? (item.kind as GeneratedMediaKind)
+              : null;
+          let path = "";
+          const ref = item.reference as Record<string, string> | string | undefined;
+          if (typeof ref === "string") path = ref;
+          else if (ref && typeof ref === "object") {
+            path =
+              ref.workspace_path ||
+              ref.WorkspacePath ||
+              ref.data_url ||
+              ref.remote_uri ||
+              "";
+          }
+          if (kind && path) push(kind, path);
+        }
+      } catch {
+        // ignore malformed sidecar
+      }
+      continue;
+    }
     LABELED.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = LABELED.exec(line)) !== null) {

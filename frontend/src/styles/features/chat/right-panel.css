@@ -165,6 +165,39 @@
   gap: 10px;
 }
 
+.chat-session-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chip-border) 80%, transparent);
+}
+
+.chat-session-tab {
+  flex: 1;
+  border: none;
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.chat-session-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.chat-session-tab.is-active {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--composer-bg, #fff) 88%, transparent);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
 /* [新建会话] [Agent▾] [🔍]；搜索展开时占满整行 */
 .chat-session-toolbar {
   --session-toolbar-glass-fill:
@@ -342,8 +375,16 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
   gap: 6px;
 }
 
+.chat-session-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
 .chat-session-item {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
   border: 1px solid var(--chip-border);
   border-radius: 12px;
@@ -361,9 +402,94 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
+.chat-session-item:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .chat-session-item.is-active {
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 40%, transparent);
   background: color-mix(in srgb, var(--tone-blue, #2563eb) 10%, transparent);
+}
+
+.chat-session-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.chat-session-row:hover .chat-session-menu-wrap,
+.chat-session-menu-wrap.is-open {
+  opacity: 1;
+}
+
+.chat-session-more {
+  width: 32px;
+  height: 100%;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.chat-session-more:hover:not(:disabled),
+.chat-session-menu-wrap.is-open .chat-session-more {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: var(--chip-border);
+}
+
+.chat-session-more:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.chat-session-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 148px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-edge, var(--chip-border));
+  background: color-mix(in srgb, var(--composer-bg, #fff) 96%, #0f172a 4%);
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-session-menu button {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-session-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.chat-session-menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chat-session-menu button.is-danger {
+  color: color-mix(in srgb, #dc2626 82%, var(--ink));
 }
 
 .chat-session-item span {

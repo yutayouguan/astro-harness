@@ -44,6 +44,8 @@ export type ChatActivity = {
   at?: number;
   /** 调用耗时（秒），完成态写入 */
   durationSec?: number;
+  /** 结构化媒体（优先于从 output 文本 regex 解析） */
+  media?: Array<{ kind: "image" | "video" | "audio" | "html"; path: string }>;
 };
 
 /** A2UI surface 生命周期 */
@@ -201,6 +203,30 @@ export type ProviderDto = {
 export type ProvidersStateDto = {
   providers: ProviderDto[];
   active_provider_id: string | null;
+};
+
+/** 辅助模型任务 id（对齐 `memory::AuxiliaryKind` / `common::AuxiliaryTask`） */
+export type AuxiliaryTaskId =
+  | "title_generation"
+  | "compaction"
+  | "smart_approval"
+  | "dreaming"
+  | "background_review";
+
+/** 单个辅助任务在设置面的展示态（Tauri `get_auxiliary_settings`） */
+export type AuxiliaryTaskDto = {
+  id: AuxiliaryTaskId;
+  provider: string;
+  model: string;
+  displayLabel: string;
+  unavailable: boolean;
+};
+
+/** 五类辅助任务 + 当前激活主模型（供「auto」展示参照） */
+export type AuxiliarySettingsDto = {
+  tasks: AuxiliaryTaskDto[];
+  activeProviderId: string | null;
+  activeModel: string;
 };
 
 /** 拉取模型列表结果 */
@@ -423,6 +449,7 @@ export type RecentSessionDto = {
   summary: string;
   createdAt: string | null;
   endReason?: string | null;
+  archivedAt?: string | null;
 };
 
 /** 产物分类筛选 */

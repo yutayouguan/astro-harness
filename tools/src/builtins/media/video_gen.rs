@@ -267,7 +267,17 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     lines.push(format!(
         "next_shot_hint: video_gen(prompt=\"…\", extend_video=\"{rel}\", duration_seconds=8, aspect_ratio=…)"
     ));
-    Ok(lines.join("\n"))
+    Ok(super::media_out::with_generated_media(
+        lines.join("\n"),
+        common::MediaKind::Video,
+        &rel,
+        if video.mime_type.trim().is_empty() {
+            "video/mp4"
+        } else {
+            video.mime_type.as_str()
+        },
+        "视频已生成",
+    ))
 }
 
 fn opt_path(s: Option<&str>) -> Option<&str> {

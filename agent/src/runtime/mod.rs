@@ -114,6 +114,10 @@ pub struct AgentLoop {
     chat_model: String,
     /// 含 primary 的聊天 fallback 链（供工具/委派下传）。
     chat_targets: Vec<common::ChatTarget>,
+    /// 五类辅助任务的已解析目标链（preferred + 可选 fallback）；由 backend 每次
+    /// `Chat` 请求时下传，仅存于内存（含 API key），不落盘。缺失的任务在
+    /// [`Self::auxiliary_targets`] 中回退当前主 `ChatTarget`。
+    auxiliary_targets: std::collections::HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>>,
     /// 进程内插件钩子总线（Block / Modify / Inject）。
     hook_bus: Arc<::hooks::PluginHookBus>,
     /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
@@ -240,6 +244,7 @@ impl AgentLoop {
             chat_provider: String::new(),
             chat_model: String::new(),
             chat_targets: Vec::new(),
+            auxiliary_targets: std::collections::HashMap::new(),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             pending_inject_context: None,
             cancel: CancelSignal::new(),
@@ -410,6 +415,38 @@ impl AgentLoop {
     /// 当前聊天 fallback 链。
     pub fn chat_targets(&self) -> &[common::ChatTarget] {
         &self.chat_targets
+    }
+
+    /// 设置五类辅助任务的已解析目标链（每次 `Chat` 请求由 backend 下传后调用）。
+    ///
+    /// 调用方保证不落盘：本方法只存内存，session 结束或进程重启即丢弃。
+    pub fn set_auxiliary_targets(
+        &mut self,
+        targets: std::collections::HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>>,
+    ) {
+        self.auxiliary_targets = targets;
+    }
+
+    /// 返回指定辅助任务的目标链（preferred + 可选 fallback）。
+    ///
+    /// 未传输该任务目标时回退当前主 `ChatTarget`（`chat_targets` 的首项，缺失时
+    /// 由 `set_chat_credentials` 字段现造一条），保持旧客户端兼容。
+    pub fn auxiliary_targets(&self, task: common::AuxiliaryTask) -> Vec<common::ChatTarget> {
+        if let Some(targets) = self.auxiliary_targets.get(&task) {
+            if !targets.is_empty() {
+                return targets.clone();
+            }
+        }
+        match self.chat_targets.first() {
+            Some(primary) => vec![primary.clone()],
+            None => vec![common::ChatTarget {
+                provider_id: String::new(),
+                backend_id: self.chat_provider.clone(),
+                model: self.chat_model.clone(),
+                api_key: self.chat_api_key.clone(),
+                base_url: self.chat_base_url.clone(),
+            }],
+        }
     }
 
     /// 返回 `(project_memory, user_profile)` 原始 prompt 片段。
@@ -1146,6 +1183,60 @@ mod tests {
                 "raw delegate summary".to_string()
             )]
         );
+    }
+
+    fn t(id: &str, backend: &str, model: &str) -> common::ChatTarget {
+        common::ChatTarget {
+            provider_id: id.into(),
+            backend_id: backend.into(),
+            model: model.into(),
+            api_key: format!("k-{id}"),
+            base_url: format!("https://{id}.example"),
+        }
+    }
+
+    #[test]
+    fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
+        let dir = TempDir::new().unwrap();
+        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        agent.set_chat_credentials("openai", "gpt-5.6", "key-1", "https://api.openai.com/v1");
+
+        let targets = agent.auxiliary_targets(common::AuxiliaryTask::Dreaming);
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].backend_id, "openai");
+        assert_eq!(targets[0].model, "gpt-5.6");
+        assert_eq!(targets[0].api_key, "key-1");
+    }
+
+    #[test]
+    fn auxiliary_targets_falls_back_to_primary_chat_target_when_nothing_set() {
+        let dir = TempDir::new().unwrap();
+        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
+
+        let targets = agent.auxiliary_targets(common::AuxiliaryTask::Compaction);
+        assert_eq!(targets, vec![t("p0", "openai", "gpt-5.6")]);
+    }
+
+    #[test]
+    fn auxiliary_targets_returns_configured_chain_for_matching_task() {
+        let dir = TempDir::new().unwrap();
+        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
+
+        let mut map = std::collections::HashMap::new();
+        map.insert(
+            common::AuxiliaryTask::SmartApproval,
+            vec![t("p1", "claude", "opus"), t("p0", "openai", "gpt-5.6")],
+        );
+        agent.set_auxiliary_targets(map);
+
+        let smart = agent.auxiliary_targets(common::AuxiliaryTask::SmartApproval);
+        assert_eq!(smart, vec![t("p1", "claude", "opus"), t("p0", "openai", "gpt-5.6")]);
+
+        // 未配置的任务仍回退主 ChatTarget，不受其它任务配置影响。
+        let dreaming = agent.auxiliary_targets(common::AuxiliaryTask::Dreaming);
+        assert_eq!(dreaming, vec![t("p0", "openai", "gpt-5.6")]);
     }
 }
 

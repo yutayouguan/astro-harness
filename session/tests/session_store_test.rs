@@ -1,5 +1,11 @@
-use session::store::{BillingDelta, NewMessage, SessionStore, SCHEMA_VERSION};
+use session::store::{BillingDelta, NewMessage, SessionListFilter, SessionStore, SCHEMA_VERSION};
 use tempfile::TempDir;
+
+fn test_store() -> (TempDir, SessionStore) {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    (dir, store)
+}
 
 #[test]
 fn opens_fresh_db_at_current_schema() {
@@ -210,23 +216,76 @@ fn build_chat_history_restores_timeline() {
 }
 
 #[test]
-fn discards_legacy_messages_and_sessions_db() {
+fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
     let dir = TempDir::new().unwrap();
     let sessions_dir = dir.path().join("sessions");
     std::fs::create_dir_all(&sessions_dir).unwrap();
 
-    // 旧 state.db：瘦 messages
+    // 旧 state.db：v13 但无 archived_at
     {
         let conn = rusqlite::Connection::open(sessions_dir.join("state.db")).unwrap();
         conn.execute_batch(
-            "CREATE TABLE messages (
+            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+             CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                user_id TEXT,
+                model TEXT,
+                model_config TEXT,
+                system_prompt TEXT,
+                parent_session_id TEXT,
+                started_at REAL NOT NULL,
+                ended_at REAL,
+                end_reason TEXT,
+                message_count INTEGER DEFAULT 0,
+                tool_call_count INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                cache_read_tokens INTEGER DEFAULT 0,
+                cache_write_tokens INTEGER DEFAULT 0,
+                reasoning_tokens INTEGER DEFAULT 0,
+                billing_provider TEXT,
+                billing_base_url TEXT,
+                billing_mode TEXT,
+                estimated_cost_usd REAL,
+                actual_cost_usd REAL,
+                cost_status TEXT,
+                cost_source TEXT,
+                pricing_version TEXT,
+                title TEXT,
+                api_call_count INTEGER DEFAULT 0
+             );
+             CREATE TABLE messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
                 role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                content TEXT,
+                tool_call_id TEXT,
+                tool_calls TEXT,
+                tool_name TEXT,
+                timestamp REAL NOT NULL,
+                token_count INTEGER,
+                finish_reason TEXT,
+                reasoning TEXT,
+                reasoning_content TEXT,
+                reasoning_details TEXT,
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
              );
-             INSERT INTO messages(session_id, role, content) VALUES ('old','user','hello');",
+             INSERT INTO schema_version (version) VALUES (13);
+             INSERT INTO sessions (
+                id, source, title, model, started_at, message_count, tool_call_count,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                reasoning_tokens, billing_provider, billing_base_url, billing_mode,
+                estimated_cost_usd, actual_cost_usd, cost_status, cost_source,
+                pricing_version, api_call_count
+             ) VALUES (
+                'old', 'test', NULL, 'gpt', 1.0, 1, 0, 7, 3, 0, 0, 0,
+                NULL, NULL, NULL, 0.42, NULL, NULL, NULL, NULL, 1
+             );
+             INSERT INTO messages (
+                session_id, role, content, timestamp
+             ) VALUES ('old', 'user', 'hello', 1.0);",
         )
         .unwrap();
     }
@@ -253,10 +312,13 @@ fn discards_legacy_messages_and_sessions_db() {
         "legacy sessions.db must be deleted, not imported"
     );
     assert!(
-        store.get_messages("old").unwrap().is_empty(),
-        "old chat history must be discarded"
+        !store.get_messages("old").unwrap().is_empty(),
+        "state.db history must be preserved"
     );
-    assert!(store.get_session("old").unwrap().is_none());
+    assert_eq!(
+        store.get_session("old").unwrap().unwrap().archived_at,
+        None
+    );
 
     store.create_session("fresh", "test", None, None, None).unwrap();
     store
@@ -509,19 +571,57 @@ fn update_session_billing_accumulates_and_unknown_skips_cost() {
 }
 
 #[test]
-fn outdated_schema_discards_prior_chat_and_billing() {
+fn v13_schema_migrates_to_v14_without_data_loss() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
+
+    {
+        let store = SessionStore::open(&path).unwrap();
+        store
+            .create_session("legacy", "test", Some("gpt"), None, None)
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "legacy",
+                role: "user",
+                content: Some("old chat migrationftsneedle"),
+                ..NewMessage::empty("legacy", "user")
+            })
+            .unwrap();
+        store
+            .update_session_billing(
+                "legacy",
+                BillingDelta {
+                    input_tokens: 7,
+                    output_tokens: 3,
+                    estimated_cost_usd: 0.42,
+                    api_call_count: 1,
+                    ..BillingDelta::default()
+                },
+            )
+            .unwrap();
+        let before = store.get_session("legacy").unwrap().unwrap();
+        assert!(before.archived_at.is_none());
+    }
+
     {
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.execute_batch(
-            "CREATE TABLE schema_version (version INTEGER NOT NULL);
-             CREATE TABLE state_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            "DROP TABLE IF EXISTS messages;
+             DROP TABLE IF EXISTS sessions;
+             DROP TABLE IF EXISTS schema_version;
+             CREATE TABLE schema_version (version INTEGER NOT NULL);
              CREATE TABLE sessions (
                 id TEXT PRIMARY KEY,
                 source TEXT NOT NULL,
+                user_id TEXT,
                 model TEXT,
+                model_config TEXT,
+                system_prompt TEXT,
+                parent_session_id TEXT,
                 started_at REAL NOT NULL,
+                ended_at REAL,
+                end_reason TEXT,
                 message_count INTEGER DEFAULT 0,
                 tool_call_count INTEGER DEFAULT 0,
                 input_tokens INTEGER DEFAULT 0,
@@ -537,6 +637,7 @@ fn outdated_schema_discards_prior_chat_and_billing() {
                 cost_status TEXT,
                 cost_source TEXT,
                 pricing_version TEXT,
+                title TEXT,
                 api_call_count INTEGER DEFAULT 0
              );
              CREATE TABLE messages (
@@ -544,26 +645,60 @@ fn outdated_schema_discards_prior_chat_and_billing() {
                 session_id TEXT NOT NULL,
                 role TEXT NOT NULL,
                 content TEXT,
-                timestamp REAL NOT NULL
+                tool_call_id TEXT,
+                tool_calls TEXT,
+                tool_name TEXT,
+                timestamp REAL NOT NULL,
+                token_count INTEGER,
+                finish_reason TEXT,
+                reasoning TEXT,
+                reasoning_content TEXT,
+                reasoning_details TEXT,
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
              );
-             INSERT INTO schema_version (version) VALUES (11);
+             INSERT INTO schema_version (version) VALUES (13);
              INSERT INTO sessions (
-                id, source, started_at, input_tokens, output_tokens,
-                estimated_cost_usd, actual_cost_usd, cost_status, api_call_count,
-                billing_provider
+                id, source, title, model, started_at, message_count, tool_call_count,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                reasoning_tokens, billing_provider, billing_base_url, billing_mode,
+                estimated_cost_usd, actual_cost_usd, cost_status, cost_source,
+                pricing_version, api_call_count
              ) VALUES (
-                's1', 'test', 1.0, 500, 200, 9.99, 8.88, 'estimated', 7, 'openai'
+                'legacy', 'test', NULL, 'gpt', 1.0, 1, 0, 7, 3, 0, 0, 0,
+                NULL, NULL, NULL, 0.42, NULL, NULL, NULL, NULL, 1
              );
-             INSERT INTO messages (session_id, role, content, timestamp)
-             VALUES ('s1', 'user', 'old chat', 1.0);",
+             INSERT INTO messages (
+                session_id, role, content, tool_call_id, tool_calls, tool_name, timestamp
+             ) VALUES (
+                'legacy', 'user', 'old chat migrationftsneedle', NULL, NULL, NULL, 1.0
+             );",
         )
         .unwrap();
     }
 
-    let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
-    assert!(store.get_session("s1").unwrap().is_none());
-    assert!(store.get_messages("s1").unwrap().is_empty());
+    let reopened = SessionStore::open(&path).unwrap();
+    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
+    assert_eq!(reopened.get_messages("legacy").unwrap().len(), 1);
+    assert_eq!(
+        reopened
+            .get_session_billing("legacy")
+            .unwrap()
+            .unwrap()
+            .input_tokens,
+        7
+    );
+    assert_eq!(
+        reopened.get_session("legacy").unwrap().unwrap().archived_at,
+        None
+    );
+    let hits = reopened
+        .search_messages("migrationftsneedle", None, None, 10)
+        .unwrap();
+    assert!(
+        hits.iter().any(|hit| hit.session_id == "legacy"),
+        "v13 to v14 migration must preserve searchable FTS data"
+    );
 }
 
 #[test]
@@ -921,4 +1056,173 @@ fn compact_and_split_keep_zero_is_summary_only() {
         .unwrap();
     let msgs = store.get_messages("new").unwrap();
     assert_eq!(msgs.len(), 1);
+}
+
+#[test]
+fn archive_filters_and_restores_session() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store.create_session("s2", "tauri", None, None, None).unwrap();
+
+    store.archive_session("s1").unwrap();
+
+    let active = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].id, "s2");
+
+    let archived = store.list_sessions(SessionListFilter::Archived, 10).unwrap();
+    assert_eq!(archived.len(), 1);
+    assert_eq!(archived[0].id, "s1");
+
+    store.unarchive_session("s1").unwrap();
+    assert_eq!(
+        store.list_sessions(SessionListFilter::Archived, 10).unwrap().len(),
+        0
+    );
+}
+
+#[test]
+fn title_if_empty_never_overwrites_manual_title() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+
+    assert!(store.set_session_title_if_empty("s1", "Auto").unwrap());
+    store.set_session_title("s1", "Manual").unwrap();
+
+    assert!(!store.set_session_title_if_empty("s1", "Late").unwrap());
+    assert_eq!(
+        store.get_session("s1").unwrap().unwrap().title.as_deref(),
+        Some("Manual")
+    );
+}
+
+#[test]
+fn title_if_empty_suffixes_duplicate_generated_title() {
+    let (_dir, store) = test_store();
+    store.create_session("session-alpha", "tauri", None, None, None).unwrap();
+    store.create_session("session-beta", "tauri", None, None, None).unwrap();
+
+    assert!(store
+        .set_session_title_if_empty("session-alpha", "Shared title")
+        .unwrap());
+    assert!(store
+        .set_session_title_if_empty("session-beta", "Shared title")
+        .unwrap());
+
+    assert_eq!(
+        store
+            .get_session("session-alpha")
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Shared title")
+    );
+    assert_eq!(
+        store
+            .get_session("session-beta")
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Shared title · session-")
+    );
+}
+
+#[test]
+fn permanent_delete_removes_messages_and_fts() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("unique-delete-token"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+
+    store.delete_session_permanently("s1").unwrap();
+
+    assert!(store.get_session("s1").unwrap().is_none());
+    assert!(store.search_messages("unique-delete-token", None, None, 10).unwrap().is_empty());
+}
+
+#[test]
+fn first_turn_text_returns_first_non_empty_user_and_assistant() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("   "),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("tool noise"),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("hello"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some(""),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("world"),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+
+    let first = store.first_turn_text("s1").unwrap();
+    assert_eq!(
+        first.as_ref().map(|(user, assistant)| (user.as_str(), assistant.as_str())),
+        Some(("hello", "world"))
+    );
+}
+
+#[test]
+fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    for (role, content) in [
+        ("assistant", "orphan assistant"),
+        ("user", "superseded user"),
+        ("user", "paired user"),
+        ("assistant", "paired assistant"),
+    ] {
+        store
+            .append_message(NewMessage {
+                content: Some(content),
+                ..NewMessage::empty("s1", role)
+            })
+            .unwrap();
+    }
+
+    let first = store.first_turn_text("s1").unwrap();
+    assert_eq!(
+        first.as_ref().map(|(user, assistant)| (user.as_str(), assistant.as_str())),
+        Some(("paired user", "paired assistant"))
+    );
+}
+
+#[test]
+fn first_turn_text_returns_none_without_assistant() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("user only"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+
+    assert!(store.first_turn_text("s1").unwrap().is_none());
 }

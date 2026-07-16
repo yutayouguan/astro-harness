@@ -94,6 +94,12 @@ pub struct AuxiliaryConfig {
     #[serde(default)]
     pub background_review_enabled: bool,
     #[serde(default)]
+    pub title_generation: AuxiliaryRoute,
+    #[serde(default)]
+    pub compaction: AuxiliaryRoute,
+    #[serde(default)]
+    pub smart_approval: AuxiliaryRoute,
+    #[serde(default)]
     pub background_review: AuxiliaryRoute,
     #[serde(default)]
     pub dreaming: AuxiliaryRoute,
@@ -102,10 +108,48 @@ pub struct AuxiliaryConfig {
 /// 辅助路由用途。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuxiliaryKind {
+    /// 生成标题。
+    TitleGeneration,
+    /// 压缩上下文。
+    Compaction,
+    /// 智能审批。
+    SmartApproval,
     /// 回合后自我改进 review。
     BackgroundReview,
     /// 入梦提炼。
     Dreaming,
+}
+
+impl AuxiliaryKind {
+    pub const ALL: [Self; 5] = [
+        Self::TitleGeneration,
+        Self::Compaction,
+        Self::SmartApproval,
+        Self::Dreaming,
+        Self::BackgroundReview,
+    ];
+
+    pub const fn config_key(self) -> &'static str {
+        match self {
+            Self::TitleGeneration => "title_generation",
+            Self::Compaction => "compaction",
+            Self::SmartApproval => "smart_approval",
+            Self::Dreaming => "dreaming",
+            Self::BackgroundReview => "background_review",
+        }
+    }
+}
+
+impl AuxiliaryConfig {
+    pub fn route(&self, kind: AuxiliaryKind) -> &AuxiliaryRoute {
+        match kind {
+            AuxiliaryKind::TitleGeneration => &self.title_generation,
+            AuxiliaryKind::Compaction => &self.compaction,
+            AuxiliaryKind::SmartApproval => &self.smart_approval,
+            AuxiliaryKind::Dreaming => &self.dreaming,
+            AuxiliaryKind::BackgroundReview => &self.background_review,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -218,6 +262,29 @@ fn set_nested_bool(base: &Path, parents: &[&str], key: &str, value: bool) -> any
     save_yaml_root(base, &root)
 }
 
+fn route_to_value(route: &AuxiliaryRoute) -> serde_yaml::Value {
+    let mut map = serde_yaml::Mapping::new();
+    map.insert(
+        serde_yaml::Value::String("provider".to_string()),
+        serde_yaml::Value::String(route.provider.clone()),
+    );
+    map.insert(
+        serde_yaml::Value::String("model".to_string()),
+        serde_yaml::Value::String(route.model.clone()),
+    );
+    serde_yaml::Value::Mapping(map)
+}
+
+fn set_nested_route(base: &Path, parents: &[&str], key: &str, route: &AuxiliaryRoute) -> anyhow::Result<()> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, parents)?;
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        route_to_value(route),
+    );
+    save_yaml_root(base, &root)
+}
+
 /// 设置 `memory.write_approval` 并返回最新配置。
 pub fn set_write_approval(base: &Path, enabled: bool) -> anyhow::Result<MemoryConfig> {
     set_nested_bool(base, &["memory"], "write_approval", enabled)?;
@@ -239,6 +306,31 @@ pub fn set_background_review_enabled(
     Ok(load_auxiliary_config(base))
 }
 
+/// 设置单个辅助路由并返回最新辅助配置。
+pub fn set_auxiliary_route(
+    base: &Path,
+    kind: AuxiliaryKind,
+    route: AuxiliaryRoute,
+) -> anyhow::Result<AuxiliaryConfig> {
+    set_nested_route(base, &["auxiliary"], kind.config_key(), &route)?;
+    Ok(load_auxiliary_config(base))
+}
+
+/// 将所有辅助路由重置为 `auto/auto` 并返回最新辅助配置。
+pub fn reset_all_auxiliary_routes(base: &Path) -> anyhow::Result<AuxiliaryConfig> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, &["auxiliary"])?;
+    let default_route = AuxiliaryRoute::default();
+    for kind in AuxiliaryKind::ALL {
+        map.insert(
+            serde_yaml::Value::String(kind.config_key().to_string()),
+            route_to_value(&default_route),
+        );
+    }
+    save_yaml_root(base, &root)?;
+    Ok(load_auxiliary_config(base))
+}
+
 /// 将辅助路由解析为具体 `(provider, model)`。
 ///
 /// `provider`/`model` 为 `auto`（忽略大小写）或空白时，回退到会话主模型。
@@ -248,10 +340,7 @@ pub fn resolve_auxiliary(
     session_provider: &str,
     session_model: &str,
 ) -> (String, String) {
-    let route = match kind {
-        AuxiliaryKind::BackgroundReview => &aux.background_review,
-        AuxiliaryKind::Dreaming => &aux.dreaming,
-    };
+    let route = aux.route(kind);
     let provider = if route.provider.trim().is_empty()
         || route.provider.eq_ignore_ascii_case("auto")
     {
@@ -385,6 +474,55 @@ auxiliary:
         assert!(aux.background_review_enabled);
         let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
         assert!(text.contains("background_review_enabled: true"));
+    }
+
+    #[test]
+    fn auxiliary_defaults_cover_all_five_tasks() {
+        let cfg = AuxiliaryConfig::default();
+        for kind in AuxiliaryKind::ALL {
+            assert_eq!(cfg.route(kind), &AuxiliaryRoute::default());
+        }
+    }
+
+    #[test]
+    fn set_route_preserves_unrelated_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            "hooks:\n  enabled: true\nmemory:\n  write_approval: true\n",
+        )
+        .unwrap();
+        set_auxiliary_route(
+            dir.path(),
+            AuxiliaryKind::Compaction,
+            AuxiliaryRoute {
+                provider: "provider-1".into(),
+                model: "small".into(),
+            },
+        )
+        .unwrap();
+        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        assert!(text.contains("enabled: true"));
+        assert!(text.contains("write_approval: true"));
+        assert_eq!(load_auxiliary_config(dir.path()).compaction.model, "small");
+    }
+
+    #[test]
+    fn reset_all_routes_keeps_background_review_enabled() {
+        let dir = tempfile::tempdir().unwrap();
+        set_background_review_enabled(dir.path(), true).unwrap();
+        set_auxiliary_route(
+            dir.path(),
+            AuxiliaryKind::Dreaming,
+            AuxiliaryRoute {
+                provider: "p".into(),
+                model: "m".into(),
+            },
+        )
+        .unwrap();
+        let cfg = reset_all_auxiliary_routes(dir.path()).unwrap();
+        assert!(cfg.background_review_enabled);
+        assert_eq!(cfg.dreaming, AuxiliaryRoute::default());
     }
 }
 
