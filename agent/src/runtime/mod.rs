@@ -756,10 +756,21 @@ impl AgentLoop {
         if self.cancel.is_cancelled() {
             anyhow::bail!("prompt cancelled");
         }
-        let result = self.dispatch_named_tool(name, &args_owned).await?;
+        let raw_result = self.dispatch_named_tool(name, &args_owned).await?;
         if tool_writes_disk(name, &args_owned) {
             self.turn_wrote_disk = true;
         }
+        Ok(self
+            .finalize_tool_call_result(name, &args_owned, raw_result)
+            .await)
+    }
+
+    async fn finalize_tool_call_result(
+        &self,
+        name: &str,
+        args_owned: &serde_json::Value,
+        raw_result: String,
+    ) -> String {
         let transformed = self.fire_hook(
             ::hooks::TRANSFORM_TOOL_RESULT,
             ::hooks::HookPayload {
@@ -767,13 +778,13 @@ impl AgentLoop {
                 turn_id: self.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args_owned.clone()),
-                tool_result: Some(result.clone()),
+                tool_result: Some(raw_result.clone()),
                 ..Default::default()
             },
         );
         let result = match transformed {
             ::hooks::HookOutcome::ReplaceText(s) => s,
-            _ => result,
+            _ => raw_result.clone(),
         };
         let _ = self.fire_hook(
             ::hooks::POST_TOOL_CALL,
@@ -790,9 +801,9 @@ impl AgentLoop {
             },
         );
         if name == "delegate" || name == "multi_agent" {
-            self.fire_subagent_stop_from_delegate_result(&result).await;
+            self.fire_subagent_stop_from_delegate_result(&raw_result).await;
         }
-        Ok(result)
+        result
     }
 
     async fn fire_subagent_stop_from_delegate_result(&self, result: &str) {
@@ -983,6 +994,71 @@ impl AgentLoop {
             turn: self.current_turn,
             system_prompt,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use tempfile::TempDir;
+
+    fn test_config(dir: &TempDir) -> AgentConfig {
+        AgentConfig::with_defaults(dir.path().to_path_buf())
+    }
+
+    #[tokio::test]
+    async fn finalize_tool_call_result_keeps_raw_delegate_json_for_internal_control_flow() {
+        let dir = TempDir::new().unwrap();
+        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        agent.set_current_turn_id("turn-1");
+
+        let bus = agent.hook_bus();
+        let post_result: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let post_result2 = Arc::clone(&post_result);
+        let subagent_stop: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+        let subagent_stop2 = Arc::clone(&subagent_stop);
+
+        bus.register(::hooks::TRANSFORM_TOOL_RESULT, |_| {
+            ::hooks::HookOutcome::ReplaceText("REDACTED".into())
+        });
+        bus.register(::hooks::POST_TOOL_CALL, move |payload| {
+            *post_result2.lock().unwrap() = payload.tool_result.clone();
+            ::hooks::HookOutcome::Continue
+        });
+        bus.register(::hooks::SUBAGENT_STOP, move |payload| {
+            subagent_stop2
+                .lock()
+                .unwrap()
+                .push((payload.session_id.clone(), payload.detail.clone()));
+            ::hooks::HookOutcome::Continue
+        });
+
+        let raw_result = serde_json::json!({
+            "delegate": true,
+            "status": "done",
+            "tasks": [
+                {
+                    "session_id": "child-session-1",
+                    "summary": "raw delegate summary"
+                }
+            ]
+        })
+        .to_string();
+        let final_result = agent
+            .finalize_tool_call_result("delegate", &serde_json::json!({"ignored": true}), raw_result)
+            .await;
+
+        assert_eq!(final_result, "REDACTED");
+        assert_eq!(post_result.lock().unwrap().as_deref(), Some("REDACTED"));
+        assert_eq!(
+            subagent_stop.lock().unwrap().as_slice(),
+            [(
+                "child-session-1".to_string(),
+                "raw delegate summary".to_string()
+            )]
+        );
     }
 }
 
