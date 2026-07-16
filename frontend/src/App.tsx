@@ -6,21 +6,21 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import AnimatedSwitch from "./components/ui/AnimatedSwitch";
 import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
 import ChatView from "./components/chat/ChatView";
-import CronPanel from "./components/CronPanel";
-import FileSpacePanel from "./components/FileSpacePanel";
-import InsightsPanel from "./components/InsightsPanel";
-import MemoryPanel from "./components/MemoryPanel";
-import ModelPicker from "./components/ModelPicker";
-import PreferencesPanel from "./components/PreferencesPanel";
-import ProvidersPanel from "./components/ProvidersPanel";
+import CronPanel from "./components/schedule/CronPanel";
+import FileSpacePanel from "./components/filespace/FileSpacePanel";
+import InsightsPanel from "./components/settings/InsightsPanel";
+import MemoryPanel from "./components/settings/MemoryPanel";
+import ModelPicker from "./components/agents/ModelPicker";
+import PreferencesPanel from "./components/settings/PreferencesPanel";
+import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu, {
   type SidebarMenuAction,
-} from "./components/SidebarContextMenu";
-import SkillsPanel from "./components/SkillsPanel";
-import ToolsPanel from "./components/ToolsPanel";
+} from "./components/settings/SidebarContextMenu";
+import SkillsPanel from "./components/settings/SkillsPanel";
+import ToolsPanel from "./components/settings/ToolsPanel";
 import { TOAST_ERROR_DURATION_MS } from "./components/ui/Toast";
 import { useTransientToast } from "./hooks/useTransientToast";
-import WorkspacePanel from "./components/WorkspacePanel";
+import WorkspacePanel from "./components/workspace/WorkspacePanel";
 import { MSG_DISSOLVE_MS } from "./components/chat/MsgDissolveOverlay";
 import {
   IconChat,
