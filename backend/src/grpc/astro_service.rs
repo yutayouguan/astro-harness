@@ -42,6 +42,37 @@ fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, 
     session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).map_err(|e| e.to_string())
 }
 
+/// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 AgentLoop。
+///
+/// 未知 `task` 字符串静默跳过（旧客户端/脏数据不阻塞主聊）；API key 仅存内存。
+fn parse_auxiliary_targets(
+    items: Vec<proto::AuxiliaryModelTarget>,
+) -> HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>> {
+    let mut grouped: HashMap<common::AuxiliaryTask, Vec<(u32, common::ChatTarget)>> = HashMap::new();
+    for item in items {
+        let Some(task) = common::AuxiliaryTask::from_str(item.task.trim()) else {
+            continue;
+        };
+        grouped.entry(task).or_default().push((
+            item.order,
+            common::ChatTarget {
+                provider_id: item.provider_id,
+                backend_id: item.backend_id,
+                model: item.model,
+                api_key: item.api_key,
+                base_url: item.base_url,
+            },
+        ));
+    }
+    grouped
+        .into_iter()
+        .map(|(task, mut ordered)| {
+            ordered.sort_by_key(|(order, _)| *order);
+            (task, ordered.into_iter().map(|(_, t)| t).collect())
+        })
+        .collect()
+}
+
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Mutex<AgentLoop>>;
 /// Chat RPC 返回的事件流类型别名。
@@ -623,6 +654,7 @@ impl AstroService for AstroServiceImpl {
         let api_key = req.api_key;
         let base_url = req.base_url;
         let chat_fallbacks = req.chat_fallbacks;
+        let auxiliary_targets = parse_auxiliary_targets(req.auxiliary_targets);
         let thinking_enabled = req.thinking_enabled;
         let images = req.images;
         let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
@@ -662,6 +694,8 @@ impl AstroService for AstroServiceImpl {
             let mut agent = session.lock().await;
             agent.set_image_gen_targets(image_targets);
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
+            // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 AgentLoop 内回退主模型。
+            agent.set_auxiliary_targets(auxiliary_targets);
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }
@@ -1414,6 +1448,45 @@ mod tests {
         assert_eq!(gateway_hits.load(Ordering::SeqCst), 1);
         assert_eq!(reset_hits.load(Ordering::SeqCst), 1);
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn parse_auxiliary_targets_groups_by_task_and_sorts_by_order() {
+        let map = parse_auxiliary_targets(vec![
+            proto::AuxiliaryModelTarget {
+                task: "compaction".into(),
+                provider_id: "p-fb".into(),
+                backend_id: "openai".into(),
+                model: "gpt-fb".into(),
+                api_key: "k-fb".into(),
+                base_url: "https://fb".into(),
+                order: 1,
+            },
+            proto::AuxiliaryModelTarget {
+                task: "compaction".into(),
+                provider_id: "p-pref".into(),
+                backend_id: "deepseek".into(),
+                model: "gpt-pref".into(),
+                api_key: "k-pref".into(),
+                base_url: "https://pref".into(),
+                order: 0,
+            },
+            proto::AuxiliaryModelTarget {
+                task: "unknown_task".into(),
+                provider_id: "x".into(),
+                backend_id: "x".into(),
+                model: "x".into(),
+                api_key: "x".into(),
+                base_url: "x".into(),
+                order: 0,
+            },
+        ]);
+
+        let chain = map.get(&common::AuxiliaryTask::Compaction).expect("compaction");
+        assert_eq!(chain.len(), 2);
+        assert_eq!(chain[0].provider_id, "p-pref");
+        assert_eq!(chain[1].provider_id, "p-fb");
+        assert!(!map.contains_key(&common::AuxiliaryTask::Dreaming));
     }
 }
 

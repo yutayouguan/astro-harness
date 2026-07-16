@@ -39,6 +39,19 @@ message ChatFallbackTarget {
   string provider_id = 5; // providers.json 条目 id，可空
 }
 
+// 单条辅助模型已解析目标（title_generation / compaction / smart_approval /
+// dreaming / background_review 之一），随 ChatRequest 透传给 backend 更新
+// AgentLoop 的 auxiliary_targets；仅存于内存，不落盘。
+message AuxiliaryModelTarget {
+  string task = 1;        // 对齐 common::AuxiliaryTask::as_str()
+  string provider_id = 2;  // providers.json 条目 id，可空（回退主模型时为空）
+  string backend_id = 3;   // registry backend id
+  string model = 4;
+  string api_key = 5;
+  string base_url = 6;
+  uint32 order = 7;        // 0 = preferred，1 = fallback
+}
+
 // 发起一轮聊天所需的会话、模型与工具/图片凭证。
 message ChatRequest {
   string session_id = 1;   // 空则服务端生成新 UUID
@@ -75,6 +88,8 @@ message ChatRequest {
   string image_gen_fallback_vision_model = 25;
   // 本轮用户图片附件（mime + raw base64；由 Tauri 内联，不经 extra_body）
   repeated ChatImageAttachment images = 26;
+  // 五类辅助任务已解析目标（每类最多 preferred + fallback 两项）；由 Tauri 端解析后下传
+  repeated AuxiliaryModelTarget auxiliary_targets = 27;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

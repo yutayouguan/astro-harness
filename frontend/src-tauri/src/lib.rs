@@ -3,6 +3,8 @@
 #![allow(unexpected_cfgs)] // 旧版 objc 的 msg_send!/sel! 使用 cfg(feature = "cargo-clippy")
 
 mod artifacts_commands;
+mod auxiliary_commands;
+mod auxiliary_resolver;
 mod clipboard_files;
 mod commands;
 mod compaction_commands;
@@ -355,6 +357,10 @@ pub fn run() {
             dreaming_commands::run_dreaming,
             compaction_commands::compact_chat_session,
             ip_location::infer_ip_location,
+            auxiliary_commands::get_auxiliary_settings,
+            auxiliary_commands::set_auxiliary_route,
+            auxiliary_commands::reset_auxiliary_route,
+            auxiliary_commands::reset_all_auxiliary_routes,
         ])
         .setup(|app| {
             if let Err(err) = memory::ensure_default_workspace() {

@@ -199,6 +199,30 @@ export type ProvidersStateDto = {
   active_provider_id: string | null;
 };
 
+/** 辅助模型任务 id（对齐 `memory::AuxiliaryKind` / `common::AuxiliaryTask`） */
+export type AuxiliaryTaskId =
+  | "title_generation"
+  | "compaction"
+  | "smart_approval"
+  | "dreaming"
+  | "background_review";
+
+/** 单个辅助任务在设置面的展示态（Tauri `get_auxiliary_settings`） */
+export type AuxiliaryTaskDto = {
+  id: AuxiliaryTaskId;
+  provider: string;
+  model: string;
+  displayLabel: string;
+  unavailable: boolean;
+};
+
+/** 五类辅助任务 + 当前激活主模型（供「auto」展示参照） */
+export type AuxiliarySettingsDto = {
+  tasks: AuxiliaryTaskDto[];
+  activeProviderId: string | null;
+  activeModel: string;
+};
+
 /** 拉取模型列表结果 */
 export type ProviderModelsResult = {
   models: ModelInfo[];
