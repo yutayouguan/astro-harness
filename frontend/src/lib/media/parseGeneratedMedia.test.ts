@@ -44,3 +44,13 @@ test("empty / non-media returns []", () => {
   assert.deepEqual(parseGeneratedMedia("ok done"), []);
   assert.deepEqual(parseGeneratedMedia(null), []);
 });
+
+test("parses astro_media_v1 sidecar", () => {
+  const text = [
+    "图片已生成：generated/images/a.png",
+    'astro_media_v1:[{"kind":"image","mime_type":"image/png","reference":{"workspace_path":"generated/images/a.png"},"label":"图片已生成"}]',
+  ].join("\n");
+  assert.deepEqual(parseGeneratedMedia(text), [
+    { kind: "image", path: "generated/images/a.png" },
+  ]);
+});

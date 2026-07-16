@@ -26,7 +26,13 @@
 2. **结构化 `ToolResult`（可带媒体）**：工具不仅返回文本，也能返回图片/音频等，直接进上下文。
 3. 保持「原生 SDK per vendor」而非强行 OpenAI 化——Astro 的 Google Interactions 迁移已印证这个方向正确。
 
----
+### 已落地（本轮）
+- `common::media::{MediaAsset, MediaKind, MediaRef}`：对齐 Agno Image/Audio/Video/File 的统一引用
+- `Message.media` + `ToolResult.media`：结构化附件；发给 LLM 仍用文本摘要
+- 生成工具（`image_gen` / `tts` / `video_gen` / `music_gen`）附加 `astro_media_v1:` sidecar
+- 流事件 `MultiTurnStreamItem::ToolResult.media` → proto `ToolCallEvent.media` → Tauri/UI
+- 前端 `MsgActivity` 优先用结构化 `activity.media`，回落 `parseGeneratedMedia`（含 sidecar）
+- **未做**：改写 `ChatContentPart` 支持 audio/video 进 LLM；用户附图 DB 持久化
 
 ## 二、统一工具调用与 Agent 生命周期
 
@@ -295,7 +301,7 @@ P1  ContextSource trait + budget（协议化现有 Static/Dynamic/FTS）
 P2  DecisionLog + Propose 写入（挂审批，扩展入梦/review）
 P3  Knowledge Content DB + FTS（可选再 embedding）
 P4  EntityMemory（有真实「记公司/项目」需求再上）
-—   MediaAsset + 结构化 ToolResult（贯穿多模态链路）
+—   MediaAsset + 结构化 ToolResult（§一已落地竖切；ChatContentPart 多模态入模 / 用户附图持久化后续）
 —   MCP / 多后端 DB：观望或小改即可
 ```
 
