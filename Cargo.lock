@@ -814,6 +814,7 @@ dependencies = [
  "chrono",
  "common",
  "home",
+ "hooks",
  "serde",
  "serde_json",
  "tempfile",

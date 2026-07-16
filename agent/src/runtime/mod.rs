@@ -767,7 +767,8 @@ impl AgentLoop {
             .await)
     }
 
-    async fn finalize_tool_call_result(
+    /// `pub(crate)`：供 `exec::delegate` 的 `subagent_start`/`subagent_stop` 顺序测试复用。
+    pub(crate) async fn finalize_tool_call_result(
         &self,
         name: &str,
         args_owned: &serde_json::Value,

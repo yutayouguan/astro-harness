@@ -342,6 +342,7 @@ mod tests {
             caller_depth: 0,
             max_spawn_depth: 1,
             project_root: None,
+            hook_bus: None,
         };
         let id = start_delegate_async(req, &spawner).unwrap();
         let listed = list_persisted_running();

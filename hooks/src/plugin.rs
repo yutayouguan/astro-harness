@@ -16,6 +16,15 @@ pub struct PluginHookBus {
     hooks: Arc<std::sync::Mutex<HashMap<String, Vec<HookFn>>>>,
 }
 
+impl std::fmt::Debug for PluginHookBus {
+    /// 回调本身不可打印；仅展示已注册的钩子名，供上层 `Debug` 派生（如 `DelegateRunRequest`）复用。
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginHookBus")
+            .field("hook_names", &self.registered_names())
+            .finish()
+    }
+}
+
 impl PluginHookBus {
     pub fn new() -> Self {
         Self::default()
