@@ -1133,8 +1133,21 @@ fn validate_http_endpoint(endpoint: &str) -> Result<(), String> {
 }
 
 /// 规范化 OpenAI 兼容 API 基址。
+///
+/// 裸 Google host / 仅 `/v1beta` 映射为 `…/v1beta/openai`，避免误拼 `…/v1`。
 fn openai_compatible_base(endpoint: &str) -> String {
     let base = trim_slash(endpoint);
+    if base.contains("generativelanguage.googleapis.com") {
+        if base.contains("/v1beta/openai") || base.ends_with("/openai") {
+            return base;
+        }
+        let native = base
+            .trim_end_matches('/')
+            .trim_end_matches("/v1")
+            .trim_end_matches("/v1beta")
+            .trim_end_matches('/');
+        return format!("{native}/v1beta/openai");
+    }
     if base.ends_with("/v1")
         || base.ends_with("/v3")
         || base.ends_with("/v4")
