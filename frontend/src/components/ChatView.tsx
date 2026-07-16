@@ -1164,50 +1164,37 @@ export default function ChatView({
     const pathList = pathsFromClipboardText(text);
     if (pathList.length) {
       e.preventDefault();
-      const created: ChatAttachment[] = [];
-      for (const p of pathList) {
-        try {
-          created.push(await pathToAttachment(p));
-        } catch {
-          // skip
-        }
+      const created = await pathsToAttachments(pathList);
+      if (created.length) {
+        addAttachments(created);
+        return;
       }
-      addAttachments(created);
-      return;
     }
 
-    // 系统文件剪贴板 / 纯图片像素：WebView 的 paste 事件常不带 files
-    const types = Array.from(e.clipboardData?.types ?? []);
-    const maybeBinary =
-      !text.trim() ||
-      types.some(
-        (t) =>
-          t === "Files" ||
-          t.startsWith("image/") ||
-          t === "public.file-url" ||
-          t.includes("file"),
-      );
-    if (!maybeBinary && text.trim()) return;
-
+    // 系统文件剪贴板（复制媒体后）在 WKWebView 里常不进 clipboardData.files
+    // 先拦截，再读 OS 剪贴板 / 图片像素；都没有则回填普通文本
     e.preventDefault();
-    const fromRead = await filesFromClipboardRead();
-    if (fromRead.length) {
-      await addFiles(fromRead);
-      return;
-    }
     const fromOs = await attachmentsFromOsClipboard();
     if (fromOs.length) {
       addAttachments(fromOs);
       return;
     }
-    // 误判且已 preventDefault：若仍有普通文本则补回（极少见）
-    if (text && !pathList.length) {
+    const fromRead = await filesFromClipboardRead();
+    if (fromRead.length) {
+      await addFiles(fromRead);
+      return;
+    }
+    if (text) {
       const el = textareaRef.current;
       if (el) {
         const start = el.selectionStart ?? el.value.length;
         const end = el.selectionEnd ?? start;
         const next = el.value.slice(0, start) + text + el.value.slice(end);
         onInputChange(next);
+        const caret = start + text.length;
+        window.requestAnimationFrame(() => {
+          el.setSelectionRange(caret, caret);
+        });
       }
     }
   };

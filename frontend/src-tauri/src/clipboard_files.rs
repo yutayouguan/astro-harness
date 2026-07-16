@@ -47,31 +47,88 @@ pub fn read_paths() -> Result<Vec<PathBuf>, String> {
 }
 
 #[cfg(target_os = "macos")]
-/// macOS：将文件路径写入剪贴板。
+/// macOS：将文件路径写入系统剪贴板（NSPasteboard file URL）。
+///
+/// 旧实现用 `set the clipboard to {POSIX file ...}`，在现代 macOS 上不会变成
+/// 可读的 `«class furl»`，导致「复制 → 粘贴到输入框」失败。
 fn write_macos(paths: &[PathBuf]) -> Result<(), String> {
-    let list = paths
-        .iter()
-        .map(|p| format!("POSIX file \"{}\"", p.to_string_lossy().replace('"', "\\\"")))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let script = format!("set the clipboard to {{{list}}}");
-    let status = std::process::Command::new("osascript")
-        .args(["-e", &script])
-        .status()
-        .map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err("复制到剪贴板失败".into());
+    use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
+    use std::ffi::CString;
+
+    if paths.is_empty() {
+        return Err("没有可复制的文件".into());
+    }
+
+    unsafe {
+        let ns_pasteboard_cls =
+            Class::get("NSPasteboard").ok_or_else(|| "NSPasteboard 不可用".to_string())?;
+        let ns_string_cls =
+            Class::get("NSString").ok_or_else(|| "NSString 不可用".to_string())?;
+        let ns_url_cls = Class::get("NSURL").ok_or_else(|| "NSURL 不可用".to_string())?;
+        let ns_array_cls =
+            Class::get("NSMutableArray").ok_or_else(|| "NSMutableArray 不可用".to_string())?;
+
+        let pb: *mut Object = msg_send![ns_pasteboard_cls, generalPasteboard];
+        if pb.is_null() {
+            return Err("无法获取系统剪贴板".into());
+        }
+        let _: u64 = msg_send![pb, clearContents];
+
+        let arr: *mut Object = msg_send![ns_array_cls, array];
+        if arr.is_null() {
+            return Err("无法创建剪贴板对象数组".into());
+        }
+
+        for path in paths {
+            let raw = path.to_string_lossy();
+            let c_path = CString::new(raw.as_ref()).map_err(|e| e.to_string())?;
+            let ns_path: *mut Object =
+                msg_send![ns_string_cls, stringWithUTF8String: c_path.as_ptr()];
+            if ns_path.is_null() {
+                return Err("路径编码失败".into());
+            }
+            let ns_url: *mut Object = msg_send![ns_url_cls, fileURLWithPath: ns_path];
+            if ns_url.is_null() {
+                return Err(format!("无效文件路径: {}", path.display()));
+            }
+            let _: () = msg_send![arr, addObject: ns_url];
+        }
+
+        let ok: bool = msg_send![pb, writeObjects: arr];
+        if !ok {
+            return Err("复制到剪贴板失败".into());
+        }
     }
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
-/// macOS：从剪贴板读取文件路径。
+/// macOS：从剪贴板读取文件路径（支持单/多文件 furl，以及绝对路径纯文本）。
 fn read_macos() -> Result<Vec<PathBuf>, String> {
     let output = std::process::Command::new("osascript")
         .args([
             "-e",
-            "try\nset theItems to the clipboard as «class furl»\non error\nreturn \"\"\nend try\nset out to \"\"\nrepeat with i in theItems\nset out to out & POSIX path of i & linefeed\nend repeat\nreturn out",
+            r#"try
+  set t to the clipboard as «class furl»
+  set out to ""
+  try
+    if class of t is list then
+      repeat with i in t
+        set out to out & (POSIX path of i) & linefeed
+      end repeat
+    else
+      set out to (POSIX path of t) & linefeed
+    end if
+  end try
+  return out
+on error
+  try
+    return the clipboard as text
+  on error
+    return ""
+  end try
+end try"#,
         ])
         .output()
         .map_err(|e| e.to_string())?;
@@ -83,7 +140,11 @@ fn read_macos() -> Result<Vec<PathBuf>, String> {
         .lines()
         .map(|l| l.trim())
         .filter(|l| !l.is_empty())
-        .map(PathBuf::from)
+        .map(|l| {
+            let s = l.strip_prefix("file://").unwrap_or(l);
+            PathBuf::from(s)
+        })
+        .filter(|p| p.is_absolute() && p.exists())
         .collect();
     if paths.is_empty() {
         return Err("剪贴板中没有文件".into());
@@ -263,4 +324,31 @@ fn read_linux() -> Result<Vec<PathBuf>, String> {
         return Err("剪贴板中没有文件".into());
     }
     Ok(paths)
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn write_and_read_single_file_roundtrip() {
+        let dir = std::env::temp_dir().join(format!(
+            "astro-clip-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("sample.png");
+        fs::write(&file, b"PNG").unwrap();
+
+        write_paths(&[file.clone()]).expect("write clipboard");
+        let got = read_paths().expect("read clipboard");
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].canonicalize().unwrap(), file.canonicalize().unwrap());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
