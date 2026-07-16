@@ -92,6 +92,22 @@ export function IconAudioUnderstand(props: IconProps) {
   );
 }
 
+export function IconRobotics(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 21h6" />
+      <path d="M7 21v-4" />
+      <circle cx="7" cy="15" r="1.5" />
+      <path d="M7 15 11 10" />
+      <circle cx="11" cy="10" r="1.5" />
+      <path d="M11 10 18 6" />
+      <circle cx="18" cy="6" r="1.5" />
+      <path d="M18 6 21 3" />
+      <path d="M18 6 21 9" />
+    </IconBase>
+  );
+}
+
 export function IconImageGen(props: IconProps) {
   return (
     <IconBase {...props}>

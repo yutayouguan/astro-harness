@@ -8,3 +8,4 @@ pub mod tts;
 pub mod music;
 pub mod music_gen;
 pub mod vision;
+pub mod robotics;

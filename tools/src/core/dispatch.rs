@@ -57,6 +57,7 @@ pub async fn dispatch_tool(
         "web_search" => crate::web_search::dispatch(ctx, args).await,
         "code_exec" => crate::code_exec::dispatch(ctx, args).await,
         "vision" => crate::vision::dispatch(ctx, args).await,
+        "robotics" => crate::robotics::dispatch(ctx, args).await,
         "tts" => crate::tts::dispatch(ctx, args).await,
         "music" => crate::music::dispatch(ctx, args).await,
         "audio_understand" => crate::audio_understand::dispatch(ctx, args).await,

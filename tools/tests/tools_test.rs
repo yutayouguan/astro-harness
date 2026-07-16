@@ -26,6 +26,7 @@ async fn register_all_includes_panel_tools() {
         "browser",
         "code_exec",
         "vision",
+        "robotics",
         "tts",
         "skills",
         "clarify",
