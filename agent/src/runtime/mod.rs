@@ -678,6 +678,7 @@ impl AgentLoop {
         let delegate_runner = Some(self.delegate_runner());
         let async_spawner = Some(self.async_spawner());
         let orchestration_spawner = Some(self.orchestration_spawner());
+        let hook_bus = Some(self.hook_bus());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
             sessions,
@@ -696,6 +697,7 @@ impl AgentLoop {
             delegate_runner,
             async_spawner,
             orchestration_spawner,
+            hook_bus,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args).await
     }

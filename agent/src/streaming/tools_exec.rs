@@ -221,6 +221,7 @@ pub(crate) async fn execute_tools_concurrent(
             delegate_runner: agent.delegate_runner(),
             async_spawner: agent.async_spawner(),
             orchestration_spawner: agent.orchestration_spawner(),
+            hook_bus: Some(agent.hook_bus()),
         }
     };
 
@@ -286,6 +287,7 @@ struct ToolExecSnapshot {
     delegate_runner: delegate::DelegateRunner,
     async_spawner: delegate::DelegateAsyncSpawner,
     orchestration_spawner: orchestration::OrchestrationSpawner,
+    hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
 fn run_tool_on_snapshot(
@@ -332,6 +334,7 @@ fn run_tool_on_snapshot(
             delegate_runner: Some(snap.delegate_runner.clone()),
             async_spawner: Some(snap.async_spawner.clone()),
             orchestration_spawner: Some(snap.orchestration_spawner.clone()),
+            hook_bus: snap.hook_bus.clone(),
         };
         tools::dispatch_tool(|_| true, &mut ctx, name, args)
             .await

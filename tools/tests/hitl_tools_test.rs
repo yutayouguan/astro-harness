@@ -43,6 +43,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
         delegate_runner: None,
         async_spawner: None,
         orchestration_spawner: None,
+        hook_bus: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -86,6 +87,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         delegate_runner: None,
         async_spawner: None,
         orchestration_spawner: None,
+        hook_bus: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -129,6 +131,7 @@ async fn request_user_location_emits_valid_a2ui_hitl() {
         delegate_runner: None,
         async_spawner: None,
         orchestration_spawner: None,
+        hook_bus: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -171,6 +174,7 @@ async fn present_ui_emits_valid_astro_ui() {
         delegate_runner: None,
         async_spawner: None,
         orchestration_spawner: None,
+        hook_bus: None,
     };
 
     let raw = tools::dispatch_tool(

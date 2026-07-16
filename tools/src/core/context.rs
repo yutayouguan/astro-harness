@@ -163,6 +163,8 @@ pub struct ToolContext<'a> {
     pub async_spawner: Option<delegate::DelegateAsyncSpawner>,
     /// 编排 spawner（由 AgentLoop 注入；工具层测试可为 None）。
     pub orchestration_spawner: Option<orchestration::OrchestrationSpawner>,
+    /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
+    pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
 impl<'a> ToolContext<'a> {
