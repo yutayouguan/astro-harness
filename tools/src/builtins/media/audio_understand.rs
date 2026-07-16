@@ -593,6 +593,7 @@ mod path_escape_tests {
 
     fn build_ctx<'a>(
         memory: &'a mut MemoryManager,
+        sessions: &'a session::SessionStore,
         memory_dir: std::path::PathBuf,
         workspace_dir: std::path::PathBuf,
         targets: &'a ImageGenTargets,
@@ -600,6 +601,7 @@ mod path_escape_tests {
     ) -> ToolContext<'a> {
         ToolContext {
             memory,
+            sessions,
             memory_dir,
             workspace_dir,
             project_root: None,
@@ -629,9 +631,11 @@ mod path_escape_tests {
         std::fs::write(outside.join("secret.mp3"), b"top-secret-bytes").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
 
         let err = load_audio_bytes(&ctx, "../outside/secret.mp3")
             .await
@@ -651,9 +655,11 @@ mod path_escape_tests {
         std::fs::write(ws.join("ok.wav"), b"ok-bytes").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
 
         let (bytes, mime, filename) = load_audio_bytes(&ctx, "ok.wav").await.unwrap();
         assert_eq!(bytes, b"ok-bytes");
@@ -672,9 +678,11 @@ mod path_escape_tests {
         std::fs::write(outside.join("secret.mp3"), b"top-secret-bytes").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
 
         let err = resolve_google_media(&ctx, "../outside/secret.mp3", false)
             .await
@@ -696,9 +704,11 @@ mod path_escape_tests {
         std::fs::write(ws.join("clip.wav"), b"pcm-bytes").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
 
         let media = resolve_google_media(&ctx, "clip.wav", false).await.unwrap();
         match media {
@@ -728,9 +738,11 @@ mod path_escape_tests {
         std::fs::create_dir_all(&ws).unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
 
         let media = resolve_google_media(&ctx, "https://youtu.be/abc", true)
             .await
