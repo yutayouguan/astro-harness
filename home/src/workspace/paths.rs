@@ -1,4 +1,4 @@
-//! Agent 工作区路径解析与规范化。
+//! Agent 工作区路径解析与规范化（跨平台：macOS / Windows / Linux）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,15 +9,84 @@ pub const DEFAULT_AGENT_ID: &str = "workspace";
 /// 当前激活 Agent 的持久化文件名（位于数据根目录）
 pub(crate) const ACTIVE_AGENT_FILE: &str = "active-agent.json";
 
+/// 用户主目录（跨平台统一入口）。
+///
+/// - Windows：优先 `USERPROFILE`，再 `HOME`（Git Bash 等）
+/// - macOS / Linux：优先 `HOME`，再 `USERPROFILE`
+pub fn user_home_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .map(PathBuf::from)
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+    }
+}
+
+/// 用户「下载」目录（跨平台行为一致）。
+///
+/// 优先级：
+/// 1. `XDG_DOWNLOAD_DIR`（Linux / 部分桌面）
+/// 2. `{home}/Downloads` 或 `{home}/下载`（已存在则用之）
+/// 3. 创建 `{home}/Downloads`
+pub fn user_downloads_dir() -> PathBuf {
+    if let Ok(xdg) = std::env::var("XDG_DOWNLOAD_DIR") {
+        let p = PathBuf::from(xdg.trim());
+        if !p.as_os_str().is_empty() {
+            let _ = fs::create_dir_all(&p);
+            return p;
+        }
+    }
+    let home = user_home_dir().unwrap_or_else(|| PathBuf::from("."));
+    for name in ["Downloads", "下载"] {
+        let p = home.join(name);
+        if p.is_dir() {
+            return p;
+        }
+    }
+    let p = home.join("Downloads");
+    let _ = fs::create_dir_all(&p);
+    p
+}
+
+/// 将路径格式化为跨平台一致的展示文案（主目录用 `~`，分隔符统一 `/`）。
+///
+/// 仅用于 Toast / UI 文案；真实 IO 仍使用绝对路径。
+pub fn display_user_path(path: &Path) -> String {
+    let fwd = |p: &Path| p.to_string_lossy().replace('\\', "/");
+    let Some(home) = user_home_dir() else {
+        return fwd(path);
+    };
+    let path_forms = [path.canonicalize().ok(), Some(path.to_path_buf())];
+    let home_forms = [home.canonicalize().ok(), Some(home)];
+    for p in path_forms.iter().flatten() {
+        for h in home_forms.iter().flatten() {
+            if let Ok(rest) = p.strip_prefix(h) {
+                let rest = fwd(rest);
+                return if rest.is_empty() {
+                    "~".to_string()
+                } else {
+                    format!("~/{rest}")
+                };
+            }
+        }
+    }
+    fwd(path)
+}
+
 /// 默认记忆/工作空间根目录：`$ASTRO_MEMORY_DIR` 或 `~/.astro`
 pub fn default_memory_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("ASTRO_MEMORY_DIR") {
         return PathBuf::from(dir);
     }
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map(|home| PathBuf::from(home).join(".astro"))
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
+    user_home_dir()
+        .map(|home| home.join(".astro"))
+        .unwrap_or_else(|| PathBuf::from(".astro"))
 }
 
 /// 解析 Agent 工作区路径。
@@ -156,4 +225,40 @@ pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
 /// 确保默认工作区基础目录存在（不初始化 SQLite）。
 pub fn ensure_default_workspace_dirs() -> anyhow::Result<()> {
     ensure_workspace_dirs(&default_memory_dir())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_user_path_uses_tilde_and_forward_slash() {
+        let home = user_home_dir().expect("home");
+        let sample = home.join("Downloads").join("a b.png");
+        let shown = display_user_path(&sample);
+        assert!(
+            shown.starts_with("~/"),
+            "expected tilde prefix, got {shown}"
+        );
+        assert!(
+            !shown.contains('\\'),
+            "display path must use forward slashes: {shown}"
+        );
+        assert!(shown.ends_with("Downloads/a b.png") || shown.contains("Downloads/a b.png"));
+    }
+
+    #[test]
+    fn user_downloads_dir_is_under_home() {
+        let home = user_home_dir().expect("home");
+        let dl = user_downloads_dir();
+        let home_abs = home.canonicalize().unwrap_or(home);
+        let dl_abs = dl.canonicalize().unwrap_or(dl.clone());
+        assert!(
+            dl_abs.starts_with(&home_abs)
+                || std::env::var("XDG_DOWNLOAD_DIR").is_ok(),
+            "downloads {:?} should be under home {:?}",
+            dl_abs,
+            home_abs
+        );
+    }
 }

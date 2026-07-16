@@ -1534,34 +1534,7 @@ pub async fn read_user_file_base64(path: String) -> Result<FileBase64Dto, String
     })
 }
 
-/// 解析用户「下载」目录（macOS / Windows / Linux 通用）。
-fn user_downloads_dir() -> Result<std::path::PathBuf, String> {
-    if let Ok(xdg) = std::env::var("XDG_DOWNLOAD_DIR") {
-        let p = std::path::PathBuf::from(xdg.trim());
-        if !p.as_os_str().is_empty() {
-            if !p.is_dir() {
-                std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
-            }
-            return Ok(p);
-        }
-    }
-    // Windows：优先 USERPROFILE；也兼容 HOME
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(std::path::PathBuf::from)
-        .ok_or_else(|| "无法解析用户主目录".to_string())?;
-    for name in ["Downloads", "下载"] {
-        let p = home.join(name);
-        if p.is_dir() {
-            return Ok(p);
-        }
-    }
-    let p = home.join("Downloads");
-    std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
-    Ok(p)
-}
-
-/// 将记忆沙箱内文件复制到系统下载目录；返回保存后的绝对路径。
+/// 将记忆沙箱内文件复制到系统下载目录；返回跨平台展示路径（`~/Downloads/...`）。
 #[tauri::command]
 pub async fn download_file_to_downloads(path: String) -> Result<String, String> {
     let src = resolve_memory_path(&path)?;
@@ -1572,13 +1545,13 @@ pub async fn download_file_to_downloads(path: String) -> Result<String, String> 
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| "无效文件名".to_string())?;
-    let dest_dir = user_downloads_dir()?;
+    let dest_dir = home::user_downloads_dir();
     let dest = crate::fs_ops::unique_dest_name(&dest_dir, name);
     std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
-    Ok(dest.to_string_lossy().to_string())
+    Ok(home::display_user_path(&dest))
 }
 
-/// 将 Base64 内容写入系统下载目录；返回保存后的绝对路径。
+/// 将 Base64 内容写入系统下载目录；返回跨平台展示路径（`~/Downloads/...`）。
 #[tauri::command]
 pub async fn download_bytes_to_downloads(
     filename: String,
@@ -1592,10 +1565,10 @@ pub async fn download_bytes_to_downloads(
     if bytes.len() > 32 * 1024 * 1024 {
         return Err("文件过大（>32MB）".into());
     }
-    let dest_dir = user_downloads_dir()?;
+    let dest_dir = home::user_downloads_dir();
     let dest = crate::fs_ops::unique_dest_name(&dest_dir, &name);
     std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
-    Ok(dest.to_string_lossy().to_string())
+    Ok(home::display_user_path(&dest))
 }
 
 /// 复制选中路径到剪贴板。

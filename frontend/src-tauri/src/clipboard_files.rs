@@ -4,8 +4,11 @@
 //! - Windows：PowerShell FileDropList（Win10+）
 //! - Linux：`text/uri-list`（wl-clipboard / xclip / xsel），失败时回退绝对路径纯文本
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
+
+#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"))))]
+use std::io::Write;
+#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"))))]
 use std::process::{Command, Stdio};
 
 /// 将本地文件路径写入系统剪贴板。
@@ -111,6 +114,7 @@ fn percent_decode(input: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn path_to_file_uri(path: &Path) -> String {
     let s = path.to_string_lossy();
     // Windows: C:\a → file:///C:/a
@@ -143,6 +147,7 @@ fn path_to_file_uri(path: &Path) -> String {
     }
 }
 
+#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"))))]
 fn paths_as_plain_text(paths: &[PathBuf]) -> String {
     paths
         .iter()

@@ -10,6 +10,7 @@ import {
 import { useChatMediaAttach } from "../../contexts/ChatMediaAttachContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTransientToast } from "../../hooks/useTransientToast";
+import { displayUserPath } from "../../lib/displayPath";
 import {
   copyMedia,
   downloadMedia,
@@ -84,10 +85,13 @@ export default function MediaToolbar({
       setBusy("download");
       try {
         const saved = await downloadMedia(path);
-        showToast(t("media.downloadSuccess", { path: saved }), {
-          tone: "success",
-          durationMs: 8000,
-        });
+        showToast(
+          t("media.downloadSuccess", { path: displayUserPath(saved) }),
+          {
+            tone: "success",
+            durationMs: 8000,
+          },
+        );
       } catch (err) {
         showToast(
           `${t("media.actionFailed")}${err ? `：${String(err)}` : ""}`,
