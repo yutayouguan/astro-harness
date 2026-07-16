@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n/LocaleContext";
 import { renderCatalogTree } from "./CatalogAdapter";
+import { mergeInitialFieldValues } from "./initialFieldValues";
 import { collectComponents, parseOperations } from "./validate";
 
 type Props = {
   operations: unknown[];
   disabled?: boolean;
+  initialFieldValues?: Record<string, unknown>;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
 
@@ -28,6 +30,7 @@ function surfaceKey(operations: unknown[]): string {
 export default function A2UIRenderer({
   operations,
   disabled = false,
+  initialFieldValues,
   onAction,
 }: Props) {
   const { t } = useI18n();
@@ -39,6 +42,13 @@ export default function A2UIRenderer({
   useEffect(() => {
     setFieldValues({});
   }, [key]);
+
+  useEffect(() => {
+    if (!initialFieldValues || Object.keys(initialFieldValues).length === 0) return;
+    setFieldValues((current) =>
+      mergeInitialFieldValues(current, initialFieldValues),
+    );
+  }, [initialFieldValues]);
 
   if (!components.length) return null;
 
