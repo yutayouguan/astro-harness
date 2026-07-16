@@ -26,7 +26,7 @@ import {
   IconTerminal,
   IconTts,
   IconWebSearch,
-} from "../components/ToolIcons";
+} from "../components/icons/ToolIcons";
 import type { MessageKey } from "../i18n/messages";
 
 const IS_TAURI =
