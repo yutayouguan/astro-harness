@@ -87,6 +87,7 @@ pub struct RecentSessionDto {
     pub summary: String,
     pub created_at: Option<String>,
     pub end_reason: Option<String>,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -660,9 +661,10 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
         "cancel" | "stop" => ChatControlAction::ChatControlCancel,
         "new_chat" | "new-chat" => ChatControlAction::ChatControlNewChat,
         "refresh_memory" | "refresh-memory" => ChatControlAction::ChatControlRefreshMemory,
+        "release_session" | "release-session" => ChatControlAction::ReleaseSession,
         other => {
             return Err(format!(
-                "未知控制动作: {other}（pause|resume|stream_resume|cancel|new_chat|refresh_memory）"
+                "未知控制动作: {other}（pause|resume|stream_resume|cancel|new_chat|refresh_memory|release_session）"
             ))
         }
     };
@@ -1244,31 +1246,98 @@ pub async fn remove_chat_bubbles(
         .map_err(|e| e.to_string())
 }
 
-/// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
+fn parse_session_filter(filter: &str) -> Result<session::SessionListFilter, String> {
+    match filter {
+        "active" => Ok(session::SessionListFilter::Active),
+        "archived" => Ok(session::SessionListFilter::Archived),
+        _ => Err("invalid session filter".into()),
+    }
+}
+
+fn validate_session_title(title: &str) -> Result<String, String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("session title cannot be empty".into());
+    }
+    Ok(title.to_string())
+}
+
+fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
+    let summary = s
+        .title
+        .filter(|t| !t.trim().is_empty())
+        .or(s.preview)
+        .unwrap_or_default();
+    let created_at =
+        chrono::DateTime::from_timestamp(s.started_at as i64, 0).map(|dt| dt.to_rfc3339());
+    let archived_at = s
+        .archived_at
+        .and_then(|timestamp| chrono::DateTime::from_timestamp(timestamp as i64, 0))
+        .map(|dt| dt.to_rfc3339());
+    RecentSessionDto {
+        session_id: s.id,
+        summary,
+        created_at,
+        end_reason: s.end_reason,
+        archived_at,
+    }
+}
+
+/// 按 active / archived 筛选会话供侧栏展示。
 #[tauri::command]
-pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
+pub async fn list_sessions(
+    filter: String,
+    limit: Option<i32>,
+) -> Result<Vec<RecentSessionDto>, String> {
+    let filter = parse_session_filter(&filter)?;
     let store = open_sessions()?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
     Ok(store
-        .list_recent_sessions(limit)
+        .list_sessions(filter, limit)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|s| {
-            let summary = s
-                .title
-                .filter(|t| !t.trim().is_empty())
-                .or(s.preview)
-                .unwrap_or_default();
-            let created_at = chrono::DateTime::from_timestamp(s.started_at as i64, 0)
-                .map(|dt| dt.to_rfc3339());
-            RecentSessionDto {
-                session_id: s.id,
-                summary,
-                created_at,
-                end_reason: s.end_reason,
-            }
-        })
+        .map(recent_session_dto)
         .collect())
+}
+
+/// 兼容旧调用：仅列出未归档会话。
+#[tauri::command]
+pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
+    list_sessions("active".into(), limit).await
+}
+
+/// 重命名会话。
+#[tauri::command]
+pub async fn rename_session(session_id: String, title: String) -> Result<(), String> {
+    let title = validate_session_title(&title)?;
+    open_sessions()?
+        .set_session_title(&session_id, &title)
+        .map_err(|e| e.to_string())
+}
+
+/// 归档会话。
+#[tauri::command]
+pub async fn archive_session(session_id: String) -> Result<(), String> {
+    open_sessions()?
+        .archive_session(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 取消归档会话。
+#[tauri::command]
+pub async fn unarchive_session(session_id: String) -> Result<(), String> {
+    open_sessions()?
+        .unarchive_session(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 先释放运行时会话，再永久删除数据库记录。
+#[tauri::command]
+pub async fn delete_session_permanently(session_id: String) -> Result<(), String> {
+    chat_control(session_id.clone(), "release_session".into()).await?;
+    open_sessions()?
+        .delete_session_permanently(&session_id)
+        .map_err(|e| e.to_string())
 }
 
 /// 在沙箱内列举工作区 / 文件空间路径。
@@ -2232,5 +2301,44 @@ fn _proto_file_list_request() -> FileListRequest {
     FileListRequest {
         path: String::new(),
         depth: 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_session_filter, validate_session_title};
+    use session::SessionListFilter;
+
+    #[test]
+    fn parses_supported_session_filters() {
+        assert_eq!(
+            parse_session_filter("active").unwrap(),
+            SessionListFilter::Active
+        );
+        assert_eq!(
+            parse_session_filter("archived").unwrap(),
+            SessionListFilter::Archived
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_session_filters() {
+        assert_eq!(
+            parse_session_filter("all").unwrap_err(),
+            "invalid session filter"
+        );
+        assert_eq!(
+            parse_session_filter(" active ").unwrap_err(),
+            "invalid session filter"
+        );
+    }
+
+    #[test]
+    fn validates_and_trims_session_titles() {
+        assert_eq!(validate_session_title("  New title  ").unwrap(), "New title");
+        assert_eq!(
+            validate_session_title(" \n\t ").unwrap_err(),
+            "session title cannot be empty"
+        );
     }
 }

@@ -418,6 +418,7 @@ export type RecentSessionDto = {
   summary: string;
   createdAt: string | null;
   endReason?: string | null;
+  archivedAt?: string | null;
 };
 
 /** 产物分类筛选 */
