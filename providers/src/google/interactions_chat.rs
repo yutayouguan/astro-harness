@@ -215,16 +215,27 @@ pub fn messages_to_interactions_input(messages: &[ChatMessage]) -> (Option<Strin
     (system, input)
 }
 
-fn thinking_level(config: &ProviderConfig) -> Option<&'static str> {
+/// Gemini 3.x 默认会思考；未显式传 `thinking_level` 时，短 `max_output_tokens`
+///（如标题生成的 64）会被 thought 吃光，返回 `incomplete` 且无可见文本。
+/// 因此关闭思考时仍下发 `minimal`，而不是省略该字段。
+fn thinking_level(config: &ProviderConfig) -> &'static str {
     if !config.thinking_enabled {
-        return None;
+        return "minimal";
     }
-    Some(match config.reasoning_effort.trim() {
+    match config.reasoning_effort.trim() {
         "max" | "xhigh" | "high" => "high",
         "minimal" | "min" => "minimal",
         "low" => "low",
         _ => "medium",
-    })
+    }
+}
+
+/// ListModels 返回的 id 常带 `models/` 前缀；Interactions 接受两者，但统一去掉更稳妥。
+fn normalize_google_model(model: &str) -> &str {
+    model
+        .trim()
+        .strip_prefix("models/")
+        .unwrap_or(model.trim())
 }
 
 /// 拼装 Interactions 聊天请求体（默认 store=true + `stream=true`）。
@@ -257,7 +268,7 @@ pub fn build_interactions_chat_body(
     };
 
     let mut body = json!({
-        "model": config.model,
+        "model": normalize_google_model(&config.model),
         "input": input,
         "stream": true,
     });
@@ -279,9 +290,7 @@ pub fn build_interactions_chat_body(
     if config.max_tokens > 0 {
         gen.insert("max_output_tokens".into(), json!(config.max_tokens));
     }
-    if let Some(level) = thinking_level(config) {
-        gen.insert("thinking_level".into(), json!(level));
-    }
+    gen.insert("thinking_level".into(), json!(thinking_level(config)));
     if !gen.is_empty() {
         body["generation_config"] = Value::Object(gen);
     }
@@ -872,14 +881,27 @@ mod tests {
     fn build_body_sets_thinking_and_defaults_store() {
         let messages = vec![ChatMessage::text("user", "hi")];
         let mut config = ProviderConfig::default();
-        config.model = "gemini-3.5-flash".into();
+        config.model = "models/gemini-3.5-flash".into();
         config.thinking_enabled = true;
         config.reasoning_effort = "high".into();
         let body = build_interactions_chat_body(&messages, &[], &config);
         assert_eq!(body["stream"], true);
+        assert_eq!(body["model"], "gemini-3.5-flash");
         assert!(body.get("store").is_none() || body["store"] == true);
         assert!(body.get("previous_interaction_id").is_none());
         assert_eq!(body["generation_config"]["thinking_level"], "high");
+    }
+
+    #[test]
+    fn build_body_disables_thinking_with_minimal_level() {
+        let messages = vec![ChatMessage::text("user", "hi")];
+        let mut config = ProviderConfig::default();
+        config.model = "gemini-3.5-flash".into();
+        config.thinking_enabled = false;
+        config.max_tokens = 64;
+        let body = build_interactions_chat_body(&messages, &[], &config);
+        assert_eq!(body["generation_config"]["thinking_level"], "minimal");
+        assert_eq!(body["generation_config"]["max_output_tokens"], 64);
     }
 
     #[test]
