@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use common::message::Message;
+use common::message::{Message, Role};
 use memory::MemoryManager;
 use ::session::{
     build_conversation_context, format_recalled_context, NewMessage, SessionStore,
@@ -29,6 +29,7 @@ use crate::prompt::context::{DynamicContext, StaticContext};
 use crate::prompt::hooks::CancelSignal;
 use crate::prompt::prompt_builder::PromptBuilder;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
+use crate::compression::ToolCompressionManager;
 
 pub mod budget;
 mod session;
@@ -547,6 +548,60 @@ impl AgentLoop {
     /// 当前阈值：占用超过 50% 时返回 `true`。
     pub fn needs_compression(&self, context_ratio: f32) -> bool {
         context_ratio > 0.5
+    }
+
+    /// 压缩本 run 中尚未压缩的 tool 结果，并写回 DB 的 `compressed_content`。
+    ///
+    /// 原始 tool content 始终保留；provider 发送视图由 `prompt::messages` 决定。
+    pub fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
+        let manager = ToolCompressionManager::default();
+        if !manager.should_compress(&self.session_messages) {
+            return Ok(0);
+        }
+
+        let stored = self.sessions.get_messages(&self.session_id)?;
+        let candidates: Vec<_> = stored
+            .iter()
+            .filter(|m| {
+                m.role == "tool"
+                    && m.compressed_content.is_none()
+                    && m.content
+                        .as_deref()
+                        .map(|s| !s.trim().is_empty())
+                        .unwrap_or(false)
+            })
+            .collect();
+        if candidates.len() < manager.tool_results_limit {
+            return Ok(0);
+        }
+
+        let mut compressed = 0usize;
+        for stored_msg in candidates {
+            let Some(content) = stored_msg.content.as_deref() else {
+                continue;
+            };
+            let Some(new_content) =
+                manager.compress_content(stored_msg.tool_name.as_deref(), content)
+            else {
+                continue;
+            };
+            self.sessions
+                .update_message_compressed_content(stored_msg.id, Some(&new_content))?;
+            if let Some(runtime_msg) = self.session_messages.iter_mut().find(|m| {
+                m.role == Role::Tool
+                    && m.compressed_content.is_none()
+                    && match (&m.tool_call_id, &stored_msg.tool_call_id) {
+                        (Some(a), Some(b)) => a == b,
+                        (None, None) => m.content_str() == content,
+                        _ => false,
+                    }
+            }) {
+                runtime_msg.compressed_content = Some(new_content);
+            }
+            compressed += 1;
+        }
+
+        Ok(compressed)
     }
 
     /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。

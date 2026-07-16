@@ -59,7 +59,19 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
             None
         };
         let (content, parts) = match &message.content {
-            MessageContent::Text(s) => (s.clone(), None),
+            MessageContent::Text(s) => {
+                let content = if message.role == Role::Tool {
+                    message
+                        .compressed_content
+                        .as_ref()
+                        .filter(|s| !s.trim().is_empty())
+                        .cloned()
+                        .unwrap_or_else(|| s.clone())
+                } else {
+                    s.clone()
+                };
+                (content, None)
+            }
             MessageContent::Parts(ps) => {
                 let text = message.content_text();
                 let parts: Vec<ChatContentPart> = ps
@@ -139,5 +151,23 @@ mod tests {
         let tools: Vec<_> = msgs.iter().filter(|m| m.role == "tool").collect();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].tool_call_id.as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn tool_message_uses_compressed_content_for_provider() {
+        let assistant = Message::assistant_with_tools(
+            "",
+            vec![ToolCall {
+                id: "c1".into(),
+                name: "search".into(),
+                arguments: json!({}),
+            }],
+        );
+        let mut tool = Message::tool_with_id("c1", "original long result");
+        tool.compressed_content = Some("compressed result".into());
+
+        let msgs = to_provider_messages("sys", &[assistant, tool]);
+        let tool_msg = msgs.iter().find(|m| m.role == "tool").expect("tool");
+        assert_eq!(tool_msg.content, "compressed result");
     }
 }

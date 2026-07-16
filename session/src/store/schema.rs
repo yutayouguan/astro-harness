@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 13;
+pub const SCHEMA_VERSION: i32 = 14;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS messages (
     session_id TEXT NOT NULL REFERENCES sessions(id),
     role TEXT NOT NULL,
     content TEXT,
+    compressed_content TEXT,
     tool_call_id TEXT,
     tool_calls TEXT,
     tool_name TEXT,
@@ -119,8 +120,25 @@ impl SessionStore {
         if !self.table_exists("messages")? {
             self.conn.execute_batch(SCHEMA_V11_DDL)?;
             self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
+        } else {
+            self.ensure_messages_compressed_content_column()?;
         }
         self.stamp_schema_version()?;
+        Ok(())
+    }
+
+    pub(crate) fn ensure_messages_compressed_content_column(&self) -> Result<()> {
+        let exists: bool = self.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('messages') WHERE name = 'compressed_content'",
+            [],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            self.conn.execute(
+                "ALTER TABLE messages ADD COLUMN compressed_content TEXT",
+                [],
+            )?;
+        }
         Ok(())
     }
 

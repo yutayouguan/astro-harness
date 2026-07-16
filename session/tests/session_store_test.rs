@@ -1,12 +1,12 @@
-use session::store::{BillingDelta, NewMessage, SessionStore};
+use session::store::{BillingDelta, NewMessage, SessionStore, SCHEMA_VERSION};
 use tempfile::TempDir;
 
 #[test]
-fn opens_fresh_db_at_schema_v11() {
+fn opens_fresh_db_at_current_schema() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 13);
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
     store
         .create_session("s1", "test", None, None, None)
         .unwrap();
@@ -247,7 +247,7 @@ fn discards_legacy_messages_and_sessions_db() {
     }
 
     let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 13);
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
     assert!(
         !legacy_path.exists(),
         "legacy sessions.db must be deleted, not imported"
@@ -561,9 +561,66 @@ fn outdated_schema_discards_prior_chat_and_billing() {
     }
 
     let store = SessionStore::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 13);
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
     assert!(store.get_session("s1").unwrap().is_none());
     assert!(store.get_messages("s1").unwrap().is_empty());
+}
+
+#[test]
+fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+             CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                started_at REAL NOT NULL,
+                message_count INTEGER DEFAULT 0,
+                tool_call_count INTEGER DEFAULT 0
+             );
+             CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT,
+                tool_call_id TEXT,
+                tool_calls TEXT,
+                tool_name TEXT,
+                timestamp REAL NOT NULL,
+                token_count INTEGER,
+                finish_reason TEXT,
+                reasoning TEXT,
+                reasoning_content TEXT,
+                reasoning_details TEXT,
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
+             );
+             INSERT INTO schema_version (version) VALUES (13);
+             INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
+             VALUES ('s1', 'test', 1.0, 1, 1);
+             INSERT INTO messages (
+                session_id, role, content, tool_call_id, tool_name, timestamp
+             ) VALUES ('s1', 'tool', 'original tool output', 'c1', 'search', 1.0);",
+        )
+        .unwrap();
+    }
+
+    let store = SessionStore::open(&path).unwrap();
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+    let msgs = store.get_messages("s1").unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0].content.as_deref(), Some("original tool output"));
+    assert!(msgs[0].compressed_content.is_none());
+
+    store
+        .update_message_compressed_content(msgs[0].id, Some("compressed view"))
+        .unwrap();
+    let msgs = store.get_messages("s1").unwrap();
+    assert_eq!(msgs[0].content.as_deref(), Some("original tool output"));
+    assert_eq!(msgs[0].compressed_content.as_deref(), Some("compressed view"));
 }
 
 

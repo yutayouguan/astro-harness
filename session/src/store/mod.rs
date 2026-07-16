@@ -97,6 +97,7 @@ pub struct StoredMessage {
     pub session_id: String,
     pub role: String,
     pub content: Option<String>,
+    pub compressed_content: Option<String>,
     pub tool_call_id: Option<String>,
     pub tool_calls: Option<Value>,
     pub tool_name: Option<String>,
@@ -211,7 +212,9 @@ impl SessionStore {
         }
         if path.exists() {
             let version = peek_schema_version(path).unwrap_or(0);
-            if version < SCHEMA_VERSION {
+            // v13→v14 仅新增 messages.compressed_content，可就地 ALTER，不必丢历史。
+            let additive_only = version == 13 && SCHEMA_VERSION == 14;
+            if version < SCHEMA_VERSION && !additive_only {
                 tracing::warn!(
                     version,
                     target = SCHEMA_VERSION,

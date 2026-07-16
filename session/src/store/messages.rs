@@ -70,7 +70,7 @@ impl SessionStore {
     /// 按时间顺序读取会话内全部消息行。
     pub fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, session_id, role, content, tool_call_id, tool_calls, tool_name,
+            "SELECT id, session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
                     codex_reasoning_items, codex_message_items
@@ -87,14 +87,15 @@ impl SessionStore {
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<String>>(6)?,
-                row.get::<_, f64>(7)?,
-                row.get::<_, Option<i64>>(8)?,
-                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, f64>(8)?,
+                row.get::<_, Option<i64>>(9)?,
                 row.get::<_, Option<String>>(10)?,
                 row.get::<_, Option<String>>(11)?,
                 row.get::<_, Option<String>>(12)?,
                 row.get::<_, Option<String>>(13)?,
                 row.get::<_, Option<String>>(14)?,
+                row.get::<_, Option<String>>(15)?,
             ))
         })?;
 
@@ -105,6 +106,7 @@ impl SessionStore {
                 session_id,
                 role,
                 content,
+                compressed_content,
                 tool_call_id,
                 tool_calls_raw,
                 tool_name,
@@ -122,6 +124,7 @@ impl SessionStore {
                 session_id,
                 role,
                 content,
+                compressed_content,
                 tool_call_id,
                 tool_calls: json_from_db(tool_calls_raw)?,
                 tool_name,
@@ -136,6 +139,19 @@ impl SessionStore {
             });
         }
         Ok(out)
+    }
+
+    /// 为指定消息写入工具结果压缩视图；原始 `content` 不变，FTS 也继续索引原文。
+    pub fn update_message_compressed_content(
+        &self,
+        message_id: i64,
+        compressed_content: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE messages SET compressed_content = ?1 WHERE id = ?2",
+            params![compressed_content, message_id],
+        )?;
+        Ok(())
     }
 
     /// 将源会话消息复制到新会话（含 tool 行），截止到第 `keep_chat_bubbles` 个 user/assistant 气泡。
@@ -183,20 +199,21 @@ impl SessionStore {
             let codex_message_items = json_to_db(&m.codex_message_items)?;
             tx.execute(
                 "INSERT INTO messages (
-                    session_id, role, content, tool_call_id, tool_calls, tool_name,
+                    session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
                     codex_reasoning_items, codex_message_items
                  ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6,
-                    ?7, ?8, ?9,
-                    ?10, ?11, ?12,
-                    ?13, ?14
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                    ?8, ?9, ?10,
+                    ?11, ?12, ?13,
+                    ?14, ?15
                  )",
                 params![
                     new_id,
                     m.role,
                     m.content,
+                    m.compressed_content,
                     m.tool_call_id,
                     tool_calls,
                     m.tool_name,
@@ -402,20 +419,21 @@ impl SessionStore {
                     let timestamp = summary_ts + (i + 1) as f64 * 0.001;
                     tx.execute(
                         "INSERT INTO messages (
-                            session_id, role, content, tool_call_id, tool_calls, tool_name,
+                            session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
                             reasoning, reasoning_content, reasoning_details,
                             codex_reasoning_items, codex_message_items
                          ) VALUES (
-                            ?1, ?2, ?3, ?4, ?5, ?6,
-                            ?7, ?8, ?9,
-                            ?10, ?11, ?12,
-                            ?13, ?14
+                            ?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                            ?8, ?9, ?10,
+                            ?11, ?12, ?13,
+                            ?14, ?15
                          )",
                         params![
                             new_id,
                             m.role,
                             m.content,
+                            m.compressed_content,
                             m.tool_call_id,
                             tool_calls,
                             m.tool_name,

@@ -827,6 +827,15 @@ async fn run_multi_turn_stream_inner(
             }
         }
 
+        {
+            let mut agent = session.lock().await;
+            if let Ok(count) = agent.compress_tool_results_if_needed() {
+                if count > 0 {
+                    tracing::info!(count, "compressed tool results for next model round");
+                }
+            }
+        }
+
         // 对齐 Hermes：本轮工具仅 code_exec 时退还本次迭代
         let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
         if crate::runtime::budget::should_refund_tool_round(&names) {

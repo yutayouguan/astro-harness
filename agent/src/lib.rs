@@ -7,6 +7,8 @@
 
 /// 声明式 Agent 构建与规格导出。
 pub mod builder;
+/// 工具结果压缩：保留原始 tool content，给 provider 发送压缩视图。
+pub mod compression;
 /// 控制型运行时能力（HITL / interrupt / schema 校验）。
 pub mod control;
 /// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。

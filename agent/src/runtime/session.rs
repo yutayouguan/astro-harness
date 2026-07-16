@@ -20,7 +20,7 @@ pub fn hydrate_session_messages(
 
 fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Option<Message>> {
     let content = m.content.unwrap_or_default();
-    let msg = match m.role.as_str() {
+    let mut msg = match m.role.as_str() {
         "user" => Message::user(&content),
         "system" => Message::system(&content),
         "assistant" => {
@@ -42,6 +42,7 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
             return Ok(None);
         }
     };
+    msg.compressed_content = m.compressed_content;
     Ok(Some(msg))
 }
 

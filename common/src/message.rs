@@ -25,6 +25,9 @@ pub struct Message {
     pub role: Role,
     /// 正文（纯文本或多段）。
     pub content: MessageContent,
+    /// 工具结果压缩后的发送视图；原文仍保留在 `content` 中。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compressed_content: Option<String>,
     /// 助手发起的工具调用列表。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
@@ -89,6 +92,7 @@ impl Message {
         Message {
             role: Role::User,
             content: MessageContent::Text(content.to_string()),
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -99,6 +103,7 @@ impl Message {
         Message {
             role: Role::System,
             content: MessageContent::Text(content.to_string()),
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -109,6 +114,7 @@ impl Message {
         Message {
             role: Role::Assistant,
             content: MessageContent::Text(content.to_string()),
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -119,6 +125,7 @@ impl Message {
         Message {
             role: Role::Assistant,
             content: MessageContent::Text(content.to_string()),
+            compressed_content: None,
             tool_calls: Some(tool_calls),
             tool_call_id: None,
         }
@@ -129,6 +136,7 @@ impl Message {
         Message {
             role: Role::Tool,
             content: MessageContent::Text(content.to_string()),
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -139,6 +147,7 @@ impl Message {
         Message {
             role: Role::Tool,
             content: MessageContent::Text(content.to_string()),
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.to_string()),
         }
@@ -170,6 +179,7 @@ impl Message {
         Message {
             role: Role::User,
             content: MessageContent::Parts(parts),
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
