@@ -466,10 +466,13 @@ mod path_tests {
         std::fs::write(outside.join("secret.mp4"), b"x").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
+            sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
