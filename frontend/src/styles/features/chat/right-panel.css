@@ -39,9 +39,9 @@
 
 .chat-right-panel {
   position: absolute;
-  top: 10px;
+  top: 0;
   right: 10px;
-  bottom: 10px;
+  bottom: 0;
   z-index: 21;
   width: min(360px, calc(100% - 20px));
   display: flex;
