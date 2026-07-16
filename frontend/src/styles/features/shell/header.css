@@ -13,9 +13,11 @@
 
 /* 操作组：与状态芯片 / 模型选择器共用 --header-chip-* */
 .chat-header-tools {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  height: 40px;
   padding: 3px;
   border-radius: 14px;
   background: var(--header-chip-bg);
@@ -90,9 +92,11 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-trigger {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 0;
+  height: 40px;
   max-width: 100%;
   min-width: 140px;
   padding: 0;
@@ -789,9 +793,11 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .status-chip {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: 40px;
   padding: 7px 12px;
   border-radius: 999px;
   background: var(--header-chip-bg);
