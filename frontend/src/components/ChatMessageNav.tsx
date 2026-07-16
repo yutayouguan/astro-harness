@@ -26,15 +26,15 @@ type Props = {
   bottomRef: RefObject<HTMLElement | null>;
 };
 
-const BASE = 22;
+const BASE = 18;
 /** 与 CSS `.chat-msg-nav-track` gap 一致；放大后仍要留缝 */
-const GAP = 14;
+const GAP = 12;
 /** 与 CSS `.chat-msg-nav-track` padding-top 一致 */
-const PAD_TOP = 12;
+const PAD_TOP = 10;
 /** 峰值放大：略收敛，避免挤成一团 */
-const MAX_SCALE = 1.48;
-/** 影响半径：配合更大间距做更柔和的鱼眼 */
-const RANGE = 96;
+const MAX_SCALE = 1.52;
+/** 影响半径：配合间距做更柔和的鱼眼 */
+const RANGE = 88;
 /** 同时展示的预览气泡（主 + 邻近） */
 const LABEL_MAX = 2;
 
@@ -467,7 +467,7 @@ export default function ChatMessageNav({
                 onClick={() => scrollToMessage(m.id)}
               >
                 {isUser ? (
-                  <User size={11} strokeWidth={2.25} aria-hidden />
+                  <User size={9} strokeWidth={2.35} aria-hidden />
                 ) : (
                   <span className="chat-msg-nav-glyph" aria-hidden>
                     iC
@@ -485,7 +485,7 @@ export default function ChatMessageNav({
         aria-label={t("chat.navScrollBottom")}
         onClick={scrollToBottom}
       >
-        <ChevronDown size={12} strokeWidth={2.4} aria-hidden />
+        <ChevronDown size={10} strokeWidth={2.5} aria-hidden />
       </button>
 
       {tips.length > 0
