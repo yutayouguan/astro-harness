@@ -307,6 +307,32 @@
   flex-shrink: 0;
 }
 
+html[data-theme="dark"] .chat-session-toolbar {
+  --session-toolbar-glass-fill:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(8, 6, 18, 0.55));
+  --session-toolbar-glass-fill-hover:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 42%, rgba(8, 6, 18, 0.52));
+  --session-toolbar-glass-edge:
+    color-mix(in srgb, var(--tone, #94a3b8) 22%, rgba(255, 255, 255, 0.08));
+  --session-toolbar-glass-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  --session-toolbar-glass-shadow-hover:
+    0 12px 28px color-mix(in srgb, var(--tone, #64748b) 18%, rgba(0, 0, 0, 0.4)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+html[data-theme="dark"] .chat-session-toolbar .expandable-search-btn:hover,
+html[data-theme="dark"] .chat-session-toolbar .chat-session-new:hover,
+html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip:hover:not(:disabled),
+html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
+  border-color: color-mix(in srgb, var(--tone, #94a3b8) 40%, rgba(255, 255, 255, 0.16));
+}
+
 .chat-session-list ul {
   list-style: none;
   margin: 0;
