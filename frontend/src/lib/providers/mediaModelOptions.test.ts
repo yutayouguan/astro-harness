@@ -4,6 +4,7 @@ import type { ModelInfo } from "../../types.ts";
 import {
   buildMediaModelOptions,
   filterModelsByCapability,
+  MEDIA_CAPABILITY_BY_FIELD,
   sanitizeMediaModelValue,
 } from "./mediaModelOptions.ts";
 
@@ -54,4 +55,14 @@ test("clears saved values absent from the filtered options", () => {
   assert.equal(sanitizeMediaModelValue("unknown-a", options), "");
   assert.equal(sanitizeMediaModelValue("music-a", options), "music-a");
   assert.equal(sanitizeMediaModelValue("", options), "");
+});
+
+test("maps every media field to its independent capability", () => {
+  assert.deepEqual(MEDIA_CAPABILITY_BY_FIELD, {
+    image_model: "image_gen",
+    video_model: "video_gen",
+    tts_model: "audio_gen",
+    music_model: "music_gen",
+    vision_model: "vision",
+  });
 });
