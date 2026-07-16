@@ -128,6 +128,9 @@ pub struct AgentLoop {
     async_spawner: delegate::DelegateAsyncSpawner,
     /// 编排 spawner（由 from_memory 构造）。
     orchestration_spawner: orchestration::OrchestrationSpawner,
+    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）；
+    /// `begin_user_turn` 时清零，供 `pre_verify` 等下游钩子（Task 7）判断是否需要校验。
+    turn_wrote_disk: bool,
 }
 
 impl AgentLoop {
@@ -244,6 +247,7 @@ impl AgentLoop {
             delegate_runner,
             async_spawner,
             orchestration_spawner,
+            turn_wrote_disk: false,
         })
     }
 
@@ -336,9 +340,15 @@ impl AgentLoop {
         self.tool_rounds >= self.config.multi_turn
     }
 
-    /// 开始新的用户消息处理：重置 `tool_rounds` 为 0。
+    /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     pub fn begin_user_turn(&mut self) {
         self.tool_rounds = 0;
+        self.turn_wrote_disk = false;
+    }
+
+    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
+    pub fn turn_wrote_disk(&self) -> bool {
+        self.turn_wrote_disk
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
@@ -747,6 +757,24 @@ impl AgentLoop {
             anyhow::bail!("prompt cancelled");
         }
         let result = self.dispatch_named_tool(name, &args_owned).await?;
+        if tool_writes_disk(name, &args_owned) {
+            self.turn_wrote_disk = true;
+        }
+        let transformed = self.fire_hook(
+            ::hooks::TRANSFORM_TOOL_RESULT,
+            ::hooks::HookPayload {
+                session_id: self.session_id.clone(),
+                turn_id: self.current_turn_id.clone(),
+                tool_name: Some(name.into()),
+                tool_args: Some(args_owned.clone()),
+                tool_result: Some(result.clone()),
+                ..Default::default()
+            },
+        );
+        let result = match transformed {
+            ::hooks::HookOutcome::ReplaceText(s) => s,
+            _ => result,
+        };
         let _ = self.fire_hook(
             ::hooks::POST_TOOL_CALL,
             ::hooks::HookPayload {
@@ -955,6 +983,24 @@ impl AgentLoop {
             turn: self.current_turn,
             system_prompt,
         })
+    }
+}
+
+/// 判断一次工具调用是否可能写入磁盘（供 `turn_wrote_disk` 标记使用）。
+///
+/// `terminal` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
+/// `operation`（`write`/`append`/`delete`/`mkdir`）时视为写盘，`read`/`list` 不算。
+fn tool_writes_disk(name: &str, args: &Value) -> bool {
+    match name {
+        "terminal" => true,
+        "file_ops" => matches!(
+            args.get("operation")
+                .and_then(|v| v.as_str())
+                .map(str::to_lowercase)
+                .as_deref(),
+            Some("write") | Some("append") | Some("delete") | Some("mkdir")
+        ),
+        _ => false,
     }
 }
 
