@@ -264,6 +264,8 @@ pub fn run() {
             commands::reveal_in_folder,
             commands::trash_paths,
             commands::read_file_base64,
+            commands::download_file_to_downloads,
+            commands::download_bytes_to_downloads,
             commands::copy_paths_to_clipboard,
             commands::paste_paths_from_clipboard,
             commands::write_file,

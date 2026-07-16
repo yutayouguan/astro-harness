@@ -1,7 +1,8 @@
-/** 媒体悬停工具条：下载 / 复制 */
+/** 媒体悬停工具条：下载 / 复制；下载成功以 Toast 提示保存路径 */
 import { useCallback, useState, type MouseEvent } from "react";
 import { Check, Copy, Download } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
+import { useTransientToast } from "../../hooks/useTransientToast";
 import {
   copyMedia,
   downloadMedia,
@@ -23,14 +24,9 @@ export default function MediaToolbar({
   className,
 }: Props) {
   const { t } = useI18n();
+  const { showToast, toastHost } = useTransientToast();
   const [busy, setBusy] = useState<"download" | "copy" | null>(null);
   const [copied, setCopied] = useState(false);
-  const [err, setErr] = useState(false);
-
-  const flashErr = useCallback(() => {
-    setErr(true);
-    window.setTimeout(() => setErr(false), 1600);
-  }, []);
 
   const onDownload = useCallback(
     async (e: MouseEvent) => {
@@ -39,14 +35,21 @@ export default function MediaToolbar({
       if (busy) return;
       setBusy("download");
       try {
-        await downloadMedia(path);
-      } catch {
-        flashErr();
+        const saved = await downloadMedia(path);
+        showToast(t("media.downloadSuccess", { path: saved }), {
+          tone: "success",
+          durationMs: 8000,
+        });
+      } catch (err) {
+        showToast(
+          `${t("media.actionFailed")}${err ? `：${String(err)}` : ""}`,
+          { error: true },
+        );
       } finally {
         setBusy(null);
       }
     },
-    [busy, path, flashErr],
+    [busy, path, showToast, t],
   );
 
   const onCopy = useCallback(
@@ -58,53 +61,56 @@ export default function MediaToolbar({
       try {
         await copyMedia(path, kind);
         setCopied(true);
+        showToast(t("media.copied"), { tone: "success" });
         window.setTimeout(() => setCopied(false), 1600);
-      } catch {
-        flashErr();
+      } catch (err) {
+        showToast(
+          `${t("media.actionFailed")}${err ? `：${String(err)}` : ""}`,
+          { error: true },
+        );
       } finally {
         setBusy(null);
       }
     },
-    [busy, path, kind, flashErr],
+    [busy, path, kind, showToast, t],
   );
 
-  const copyLabel = copied
-    ? t("media.copied")
-    : err
-      ? t("media.actionFailed")
-      : t("media.copy");
-  const dlLabel = err ? t("media.actionFailed") : t("media.download");
+  const copyLabel = copied ? t("media.copied") : t("media.copy");
+  const dlLabel = t("media.download");
 
   return (
-    <div
-      className={`media-toolbar ${compact ? "is-compact" : ""} ${className ?? ""}`.trim()}
-      role="toolbar"
-      aria-label={t("media.actions")}
-    >
-      <button
-        type="button"
-        className="media-toolbar-btn"
-        onClick={(e) => void onDownload(e)}
-        disabled={busy !== null}
-        title={dlLabel}
-        aria-label={dlLabel}
+    <>
+      <div
+        className={`media-toolbar ${compact ? "is-compact" : ""} ${className ?? ""}`.trim()}
+        role="toolbar"
+        aria-label={t("media.actions")}
       >
-        <Download size={compact ? 14 : 15} strokeWidth={2.1} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className={`media-toolbar-btn ${copied ? "is-copied" : ""}`}
-        onClick={(e) => void onCopy(e)}
-        disabled={busy !== null}
-        title={copyLabel}
-        aria-label={copyLabel}
-      >
-        {copied ? (
-          <Check size={compact ? 14 : 15} strokeWidth={2.4} aria-hidden />
-        ) : (
-          <Copy size={compact ? 14 : 15} strokeWidth={2.1} aria-hidden />
-        )}
-      </button>
-    </div>
+        <button
+          type="button"
+          className="media-toolbar-btn"
+          onClick={(e) => void onDownload(e)}
+          disabled={busy !== null}
+          title={dlLabel}
+          aria-label={dlLabel}
+        >
+          <Download size={compact ? 14 : 15} strokeWidth={2.1} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className={`media-toolbar-btn ${copied ? "is-copied" : ""}`}
+          onClick={(e) => void onCopy(e)}
+          disabled={busy !== null}
+          title={copyLabel}
+          aria-label={copyLabel}
+        >
+          {copied ? (
+            <Check size={compact ? 14 : 15} strokeWidth={2.4} aria-hidden />
+          ) : (
+            <Copy size={compact ? 14 : 15} strokeWidth={2.1} aria-hidden />
+          )}
+        </button>
+      </div>
+      {toastHost}
+    </>
   );
 }

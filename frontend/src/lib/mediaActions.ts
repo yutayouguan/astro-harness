@@ -1,5 +1,5 @@
 /**
- * 媒体预览：下载到本机、复制到剪贴板（图片像素 / 文件 / 路径）。
+ * 媒体预览：下载到系统「下载」目录、复制到剪贴板（图片像素 / 文件 / 路径）。
  */
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -36,16 +36,13 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-function triggerBlobDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename || "download";
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
 }
 
 function filenameFromUrl(url: string): string {
@@ -59,24 +56,26 @@ function filenameFromUrl(url: string): string {
   return "download";
 }
 
-/** 触发浏览器「另存为」式下载（本地经 read_file_base64；远程 fetch） */
-export async function downloadMedia(path: string): Promise<void> {
+/**
+ * 下载到系统「下载」目录，返回保存后的绝对路径。
+ * 本地文件经 Tauri 复制；远程 http(s) 先 fetch 再写入下载目录。
+ */
+export async function downloadMedia(path: string): Promise<string> {
   const local = mediaLocalPath(path);
   if (local) {
-    const dto = await invoke<FileBase64Dto>("read_file_base64", { path: local });
-    const bytes = base64ToBytes(dto.base64);
-    const blob = new Blob([bytes.buffer as ArrayBuffer], {
-      type: dto.mime || "application/octet-stream",
-    });
-    triggerBlobDownload(blob, dto.name);
-    return;
+    return invoke<string>("download_file_to_downloads", { path: local });
   }
   if (/^https?:/i.test(path.trim())) {
     const res = await fetch(path.trim());
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    triggerBlobDownload(blob, filenameFromUrl(path.trim()));
-    return;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > 32 * 1024 * 1024) {
+      throw new Error("文件过大（>32MB）");
+    }
+    return invoke<string>("download_bytes_to_downloads", {
+      filename: filenameFromUrl(path.trim()),
+      base64Data: bytesToBase64(buf),
+    });
   }
   throw new Error("无法下载此媒体");
 }
