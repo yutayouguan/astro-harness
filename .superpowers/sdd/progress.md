@@ -15,3 +15,4 @@ Session Task 7: complete (commits fda4f03..b4d0df6, regression pass; session sco
 Aux Task 1: complete (commits b4d0df6..0c9fe19, review clean)
 Aux Task 2: complete (settings API + resolver + ChatRequest/AgentLoop wiring; see aux-task-2-report.md)
 Aux Task 3: complete (auxiliary settings panel + navigation; see aux-task-3-report.md)
+Aux Task 4: complete (compaction auxiliary route + primary fallback; see aux-task-4-report.md)

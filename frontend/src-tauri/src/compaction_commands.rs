@@ -4,10 +4,11 @@ use futures::StreamExt;
 use serde::Serialize;
 use uuid::Uuid;
 
-use session::StoredMessage;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
+use session::StoredMessage;
 
+use crate::auxiliary_resolver::{resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget};
 use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
 
 const KEEP_TAIL_DEFAULT: usize = 3;
@@ -39,6 +40,21 @@ fn active_ui_provider() -> Result<UiProvider, String> {
     providers_commands::find_provider(&id)
 }
 
+fn active_chat_target() -> Result<common::ChatTarget, String> {
+    let ui = active_ui_provider()?;
+    if ui.model.trim().is_empty() {
+        return Err("激活提供商未配置模型".into());
+    }
+    let (_has, _src, _env, key) = resolve_api_key(&ui);
+    Ok(common::ChatTarget {
+        provider_id: ui.id,
+        backend_id: ui.kind.backend_id().to_string(),
+        model: ui.model,
+        api_key: key.unwrap_or_default(),
+        base_url: ui.endpoint,
+    })
+}
+
 /// 无模型时的启发式摘要（最近若干条 user/assistant 截断拼接）。
 fn heuristic_summary(messages: &[StoredMessage], max_chars: usize) -> String {
     let mut parts = Vec::new();
@@ -65,35 +81,36 @@ fn heuristic_summary(messages: &[StoredMessage], max_chars: usize) -> String {
     format!("{FALLBACK_PREFIX}\n{clipped}")
 }
 
-/// 用当前激活提供商生成压实交接摘要。
-async fn summarize_with_llm(transcript: &str) -> Result<String, String> {
-    let ui = active_ui_provider()?;
-    let (has, _src, _env, key) = resolve_api_key(&ui);
-    if ui.kind.requires_api_key() && !has {
-        return Err(format!(
-            "未配置 API Key。请在「模型提供商」中为 {} 保存密钥。",
-            ui.display_name
-        ));
+fn next_compaction_target(
+    targets: &AuxiliaryTargets,
+    failed_index: Option<usize>,
+) -> Option<(usize, &ResolvedTarget)> {
+    match failed_index {
+        None => Some((0, &targets.preferred)),
+        Some(0) => targets.fallback.as_ref().map(|target| (1, target)),
+        Some(_) => None,
     }
-    if ui.model.trim().is_empty() {
-        return Err("激活提供商未配置模型".into());
-    }
-    let api_key = key.unwrap_or_default();
-    let backend_id = ui.kind.backend_id();
-    let base_url = ui.endpoint.clone();
+}
 
+async fn summarize_with_target(
+    target: &ResolvedTarget,
+    transcript: &str,
+) -> Result<String, String> {
     let registry = ProviderRegistry::default();
-    let provider = registry.get(backend_id).ok_or_else(|| {
-        format!("不支持的提供商后端: {backend_id}（请换用 OpenAI / DeepSeek / Google / Claude 等）")
+    let provider = registry.get(&target.backend_id).ok_or_else(|| {
+        format!(
+            "不支持的提供商后端: {}（请换用 OpenAI / DeepSeek / Google / Claude 等）",
+            target.backend_id
+        )
     })?;
     let config = ProviderConfig {
-        api_key,
-        base_url: if base_url.trim().is_empty() {
+        api_key: target.api_key.clone(),
+        base_url: if target.provider.endpoint.trim().is_empty() {
             None
         } else {
-            Some(base_url.trim_end_matches('/').to_string())
+            Some(target.provider.endpoint.trim_end_matches('/').to_string())
         },
-        model: ui.model.clone(),
+        model: target.model.clone(),
         temperature: 0.2,
         max_tokens: 2048,
         thinking_enabled: false,
@@ -124,6 +141,33 @@ Reply in the same language as the transcript. No preamble.";
         return Err("模型未返回任何内容".into());
     }
     Ok(format!("{SUMMARY_PREFIX}\n{trimmed}"))
+}
+
+async fn summarize_with_targets(
+    targets: AuxiliaryTargets,
+    transcript: &str,
+) -> Result<String, String> {
+    let mut failed_index = None;
+    while let Some((idx, target)) = next_compaction_target(&targets, failed_index) {
+        match summarize_with_target(target, transcript).await {
+            Ok(text) if !text.trim().is_empty() => return Ok(text),
+            Ok(_) => {
+                tracing::warn!(target = %target.model, "压实辅助模型返回空摘要，尝试下一个目标");
+            }
+            Err(err) => {
+                tracing::warn!(target = %target.model, error = %err, "压实辅助模型失败，尝试下一个目标");
+            }
+        }
+        failed_index = Some(idx);
+    }
+    Err("auxiliary compaction returned no summary".into())
+}
+
+/// 用辅助模型路由生成压实交接摘要。
+async fn summarize_with_llm(transcript: &str) -> Result<String, String> {
+    let primary = active_chat_target()?;
+    let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::Compaction, &primary)?;
+    summarize_with_targets(targets, transcript).await
 }
 
 /// Tauri 命令：压实当前会话（摘要 + 拆出新会话）。
@@ -204,4 +248,63 @@ pub async fn compact_chat_session(
         summary_preview: preview,
         degraded,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ui_provider(id: &str) -> UiProvider {
+        UiProvider {
+            id: id.into(),
+            kind: providers_commands::ProviderKind::Openai,
+            display_name: id.into(),
+            endpoint: format!("https://{id}.example"),
+            model: "gpt-5.6".into(),
+            enabled: true,
+            fallback: Vec::new(),
+            image_model: String::new(),
+            video_model: String::new(),
+            tts_model: String::new(),
+            vision_model: String::new(),
+        }
+    }
+
+    fn resolved(id: &str, model: &str) -> ResolvedTarget {
+        ResolvedTarget {
+            provider: ui_provider(id),
+            backend_id: "openai".into(),
+            model: model.into(),
+            api_key: format!("{id}-key"),
+        }
+    }
+
+    #[test]
+    fn next_compaction_target_walks_preferred_then_fallback() {
+        let targets = AuxiliaryTargets {
+            preferred: resolved("preferred", "gpt-mini"),
+            fallback: Some(resolved("fallback", "gpt-main")),
+        };
+
+        let (idx, first) = next_compaction_target(&targets, None).expect("preferred");
+        assert_eq!(idx, 0);
+        assert_eq!(first.provider.id, "preferred");
+
+        let (idx, second) = next_compaction_target(&targets, Some(0)).expect("fallback");
+        assert_eq!(idx, 1);
+        assert_eq!(second.provider.id, "fallback");
+
+        assert!(next_compaction_target(&targets, Some(1)).is_none());
+    }
+
+    #[test]
+    fn next_compaction_target_stops_without_fallback() {
+        let targets = AuxiliaryTargets {
+            preferred: resolved("preferred", "gpt-mini"),
+            fallback: None,
+        };
+
+        assert!(next_compaction_target(&targets, None).is_some());
+        assert!(next_compaction_target(&targets, Some(0)).is_none());
+    }
 }
