@@ -22,3 +22,6 @@ Aux Task 7: complete (async titles + metadata events; see aux-task-7-report.md)
 
 ## Aux Task 8
 - docs + regression PASS; manual smoke pending user
+
+## Aux Task 8
+- docs + regression PASS; manual smoke pending user
