@@ -97,9 +97,11 @@ import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimelin
 import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import A2UIRenderer from "../../a2ui/A2UIRenderer";
+import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
+import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
 import {
   isAgentIconSrc,
   type AgentIconInfo,
@@ -1363,8 +1365,15 @@ export default function ChatView({
                             key: `surf-${surface.messageId}`,
                             kind: "surface",
                             active: surface.status === "active",
-                            node:
-                              surface.interrupts && surface.interrupts.length > 0 ? (
+                            node: isLocationRequiredSurface(surface) ? (
+                              <LocationA2UISurface
+                                operations={surface.operations}
+                                disabled={surface.status !== "active"}
+                                onAction={(name, context) =>
+                                  onUiAction?.(m.id, name, context)
+                                }
+                              />
+                            ) : surface.interrupts && surface.interrupts.length > 0 ? (
                                 <A2UIRenderer
                                   operations={surface.operations}
                                   disabled={surface.status !== "active"}

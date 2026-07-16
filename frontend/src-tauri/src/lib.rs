@@ -11,6 +11,7 @@ mod dreaming_commands;
 mod env_hydrate;
 mod fs_ops;
 mod grpc;
+mod ip_location;
 mod keystore;
 mod litellm_meta;
 mod memory_commands;
@@ -348,6 +349,7 @@ pub fn run() {
             dreaming_commands::set_dreaming_enabled_cmd,
             dreaming_commands::run_dreaming,
             compaction_commands::compact_chat_session,
+            ip_location::infer_ip_location,
         ])
         .setup(|app| {
             if let Err(err) = memory::ensure_default_workspace() {
