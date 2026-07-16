@@ -136,6 +136,47 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   background: color-mix(in srgb, var(--toast-tone) 15%, transparent);
 }
 
+/* success：圆 → 勾描边；与 toast 入场重叠启动 */
+.astro-toast-success-icon {
+  display: block;
+  overflow: visible;
+  transform-origin: center;
+  animation: astro-toast-success-pop 360ms ease-out;
+}
+
+.astro-toast-success-circle,
+.astro-toast-success-check {
+  fill: none;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.astro-toast-success-circle {
+  animation: astro-toast-draw-stroke 180ms ease-out forwards;
+}
+
+.astro-toast-success-check {
+  animation: astro-toast-draw-stroke 180ms ease-out 160ms forwards;
+}
+
+@keyframes astro-toast-draw-stroke {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes astro-toast-success-pop {
+  0% {
+    transform: scale(0.86);
+  }
+  55% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 .astro-toast-msg {
   margin: 0;
   flex: 1;
@@ -195,5 +236,15 @@ html[data-theme="dark"] .astro-toast.tone-warning {
     animation: none;
     stroke-dashoffset: 0;
     opacity: 0.55;
+  }
+
+  .astro-toast-success-icon {
+    animation: none;
+  }
+
+  .astro-toast-success-circle,
+  .astro-toast-success-check {
+    animation: none;
+    stroke-dashoffset: 0;
   }
 }

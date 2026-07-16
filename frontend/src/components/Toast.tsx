@@ -1,7 +1,7 @@
 /** 轻量 Toast：倒计时环绕进度条后自动消失，可手动点 ×；按 tone 显示图标与配色。 */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
+import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 
 export const TOAST_DURATION_MS = 6000;
@@ -18,11 +18,42 @@ type Props = {
   onDismiss: () => void;
 };
 
+/** success：圆圈描完再画勾（约 360ms）；其余 tone 仍用 Lucide 静态图标。 */
+function AnimatedSuccessIcon() {
+  return (
+    <svg
+      className="astro-toast-success-icon"
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.25}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle
+        className="astro-toast-success-circle"
+        cx={12}
+        cy={12}
+        r={10}
+        pathLength={1}
+      />
+      <path
+        className="astro-toast-success-check"
+        d="M9 12l2 2 4-4"
+        pathLength={1}
+      />
+    </svg>
+  );
+}
+
 function ToneIcon({ tone }: { tone: ToastTone }) {
   const props = { size: 16, strokeWidth: 2.25, "aria-hidden": true as const };
   switch (tone) {
     case "success":
-      return <CircleCheck {...props} />;
+      return <AnimatedSuccessIcon />;
     case "error":
       return <CircleAlert {...props} />;
     case "warning":
