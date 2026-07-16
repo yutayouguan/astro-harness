@@ -403,6 +403,173 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pre_verify_never_fires_without_disk_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let mut agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into()).unwrap();
+    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+    ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    agent
+        .session_messages
+        .push(common::message::Message::user("just say hi, no tools"));
+    let session = Arc::new(Mutex::new(agent));
+
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![vec![ChatChunk {
+            token: Some("hi there".into()),
+            finish_reason: Some("stop".into()),
+            ..Default::default()
+        }]]),
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    let cfg = ProviderConfig {
+        model: "test".into(),
+        ..Default::default()
+    };
+
+    tokio::spawn(async move {
+        run_multi_turn_stream_from_provider(
+            session,
+            provider,
+            cfg,
+            "You are a test agent".into(),
+            pause,
+            None,
+            tx,
+        )
+        .await;
+    });
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+
+    let events = log.lock().unwrap().clone();
+    assert!(
+        !events.iter().any(|e| e == "pre_verify"),
+        "pre_verify must not fire when no disk write happened this turn, events={events:?}"
+    );
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+    )));
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pre_verify_keep_going_retries_capped_at_two() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let mut agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).unwrap();
+    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+    ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    agent.hook_bus().register(::hooks::PRE_VERIFY, |_| {
+        ::hooks::HookOutcome::KeepGoing("请再检查一下你的改动".into())
+    });
+    agent
+        .session_messages
+        .push(common::message::Message::user("write a file then confirm"));
+    let session = Arc::new(Mutex::new(agent));
+
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![
+            // round 1: 写盘工具调用，置位 turn_wrote_disk
+            vec![ChatChunk {
+                tool_call_deltas: vec![ToolCallDeltaChunk {
+                    index: 0,
+                    id: Some("call_write".into()),
+                    name: Some("file_ops".into()),
+                    arguments: Some(
+                        r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
+                    ),
+                }],
+                finish_reason: Some("tool_calls".into()),
+                ..Default::default()
+            }],
+            // round 2: 无工具终态草稿一 -> pre_verify attempt 1 -> KeepGoing
+            vec![ChatChunk {
+                token: Some("draft one".into()),
+                finish_reason: Some("stop".into()),
+                ..Default::default()
+            }],
+            // round 3: 无工具终态草稿二 -> pre_verify attempt 2 -> KeepGoing
+            vec![ChatChunk {
+                token: Some("draft two".into()),
+                finish_reason: Some("stop".into()),
+                ..Default::default()
+            }],
+            // round 4: 尝试次数已达上限，直接收尾
+            vec![ChatChunk {
+                token: Some("final answer".into()),
+                finish_reason: Some("stop".into()),
+                ..Default::default()
+            }],
+        ]),
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    let cfg = ProviderConfig {
+        model: "test".into(),
+        ..Default::default()
+    };
+
+    tokio::spawn(async move {
+        run_multi_turn_stream_from_provider(
+            session,
+            provider,
+            cfg,
+            "You are a test agent".into(),
+            pause,
+            None,
+            tx,
+        )
+        .await;
+    });
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+
+    let events = log.lock().unwrap().clone();
+    let verify_count = events.iter().filter(|e| e.as_str() == "pre_verify").count();
+    assert_eq!(
+        verify_count, 2,
+        "pre_verify attempts must be capped at MAX_VERIFY_ATTEMPTS=2, events={events:?}"
+    );
+    let api_request_count = events
+        .iter()
+        .filter(|e| e.as_str() == "pre_api_request")
+        .count();
+    assert_eq!(
+        api_request_count, 4,
+        "expect one pre_api_request round per LLM call (1 tool round + 2 keep-going + 1 final), events={events:?}"
+    );
+    let post_llm_count = events
+        .iter()
+        .filter(|e| e.starts_with("post_llm_call"))
+        .count();
+    assert_eq!(
+        post_llm_count, 2,
+        "post_llm_call must be skipped while pre_verify keeps going; only the tool round and the final round should fire it, events={events:?}"
+    );
+
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "final answer"
+    )));
+    assert!(items.iter().any(|i| matches!(
+        i,
+        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+    )));
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+}
+
 #[tokio::test]
 async fn pause_control_blocks_then_cancels() {
     let pause = PauseControl::new();

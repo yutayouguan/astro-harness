@@ -310,6 +310,15 @@ impl AgentLoop {
         self.pending_inject_context.take()
     }
 
+    /// 排队下一轮注入上下文（复用 `pre_llm_call` 的注入机制）。
+    ///
+    /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：不回写
+    /// `session_messages`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
+    /// 形式追加一条 user 消息。
+    pub fn queue_inject_context(&mut self, ctx: impl Into<String>) {
+        self.pending_inject_context = Some(ctx.into());
+    }
+
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub fn session_turn(&self) -> usize {
         self.current_turn
