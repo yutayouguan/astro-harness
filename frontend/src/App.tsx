@@ -147,6 +147,7 @@ export default function App() {
     setMemoryPendingCount,
     setInput,
     setFocusMessageId,
+    clearDeletedCurrentSession,
   } = chat;
 
   // ── Model context window ──────────────────────────────────────────────────
@@ -723,6 +724,7 @@ export default function App() {
                       onOpenSession={(id) => void openSessionFromFilespace(id)}
                       onNewSession={startNewChat}
                       onNewAgent={startNewAgent}
+                      onClearDeletedCurrentSession={clearDeletedCurrentSession}
                       onOpenMemory={() => setNav("memory")}
                       onOpenSkills={() => setNav("skills")}
                     />
