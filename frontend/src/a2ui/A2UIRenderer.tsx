@@ -48,7 +48,7 @@ export default function A2UIRenderer({
     setFieldValues((current) =>
       mergeInitialFieldValues(current, initialFieldValues),
     );
-  }, [initialFieldValues]);
+  }, [initialFieldValues, key]);
 
   if (!components.length) return null;
 

@@ -19,6 +19,7 @@ export function useIpCitySuggestion(enabled: boolean): IpCitySuggestionState {
 
   useEffect(() => {
     if (!enabled) {
+      // Defensive for future callers that may toggle suggestion fetching off.
       setState({ status: "failed", city: null });
       return;
     }
