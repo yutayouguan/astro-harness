@@ -1,4 +1,4 @@
-//! 单库会话存储（schema v13）：sessions、富 messages、FTS5；旧库直接重建不迁数据。
+//! 单库会话存储（schema v14）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
 mod schema;
 mod sessions;
@@ -123,6 +123,7 @@ pub struct StoredSession {
     pub parent_session_id: Option<String>,
     pub message_count: i64,
     pub tool_call_count: i64,
+    pub archived_at: Option<f64>,
 }
 
 /// FTS 搜索命中。
@@ -161,6 +162,7 @@ pub struct RecentSession {
     pub preview: Option<String>,
     pub ended_at: Option<f64>,
     pub end_reason: Option<String>,
+    pub archived_at: Option<f64>,
 }
 
 /// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。
@@ -203,7 +205,7 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
-    /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时直接删库重建（不迁移旧聊天）。
+    /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时进行增量迁移。
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
@@ -211,14 +213,7 @@ impl SessionStore {
         }
         if path.exists() {
             let version = peek_schema_version(path).unwrap_or(0);
-            if version < SCHEMA_VERSION {
-                tracing::warn!(
-                    version,
-                    target = SCHEMA_VERSION,
-                    "session state.db outdated; discarding prior chat history"
-                );
-                delete_sqlite_files(path);
-            }
+            tracing::debug!(version, target = SCHEMA_VERSION, "session state.db opened");
         }
         let conn = Connection::open(path)
             .with_context(|| format!("open session store at {}", path.display()))?;

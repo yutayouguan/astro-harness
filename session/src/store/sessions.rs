@@ -11,7 +11,8 @@ impl SessionStore {
         self.conn
             .query_row(
                 "SELECT id, source, title, started_at, ended_at, end_reason,
-                        model, parent_session_id, message_count, tool_call_count
+                        model, parent_session_id, message_count, tool_call_count,
+                        archived_at
                  FROM sessions WHERE id = ?1",
                 params![id],
                 |row| {
@@ -26,6 +27,7 @@ impl SessionStore {
                         parent_session_id: row.get(7)?,
                         message_count: row.get(8)?,
                         tool_call_count: row.get(9)?,
+                        archived_at: row.get(10)?,
                     })
                 },
             )

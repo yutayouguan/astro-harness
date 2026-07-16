@@ -1,11 +1,11 @@
-//! Schema 版本、DDL 与 FTS 自愈（不做旧数据迁移）。
+//! Schema 版本、DDL、增量迁移与 FTS 自愈。
 
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 13;
+pub const SCHEMA_VERSION: i32 = 14;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     cost_source TEXT,
     pricing_version TEXT,
     title TEXT,
+    archived_at REAL,
     api_call_count INTEGER DEFAULT 0,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
@@ -110,7 +111,7 @@ END;
 "#;
 
 impl SessionStore {
-    /// 空库建表并 stamp；旧库由 [`SessionStore::open`] 删文件重建，此处不做数据迁移。
+    /// 空库建表并 stamp；旧库由 [`SessionStore::open`] 调用增量迁移。
     pub(crate) fn migrate_schema(&self) -> Result<()> {
         let current = self.read_schema_version_or_zero()?;
         if current >= SCHEMA_VERSION {
@@ -119,6 +120,10 @@ impl SessionStore {
         if !self.table_exists("messages")? {
             self.conn.execute_batch(SCHEMA_V11_DDL)?;
             self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
+        }
+        if self.table_exists("sessions")? && !self.column_exists("sessions", "archived_at")? {
+            self.conn
+                .execute("ALTER TABLE sessions ADD COLUMN archived_at REAL", [])?;
         }
         self.stamp_schema_version()?;
         Ok(())
@@ -140,6 +145,15 @@ impl SessionStore {
             |row| row.get(0),
         )?;
         Ok(exists)
+    }
+
+    pub(crate) fn column_exists(&self, table: &str, column: &str) -> Result<bool> {
+        let sql = format!("PRAGMA table_info({table})");
+        let mut stmt = self.conn.prepare(&sql)?;
+        let names = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(names.iter().any(|name| name == column))
     }
 
     pub(crate) fn drop_messages_fts_objects(&self) -> Result<()> {
