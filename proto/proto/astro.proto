@@ -95,6 +95,8 @@ enum ChatControlAction {
   CHAT_CONTROL_NEW_CHAT = 5;
   // 从磁盘重载活会话 AgentLoop 的 MEMORY/USER frozen snapshot
   CHAT_CONTROL_REFRESH_MEMORY = 6;
+  // 仅释放后端会话运行时；不触发 new_chat hooks，冷会话与重复调用均成功
+  RELEASE_SESSION = 7;
 }
 
 message ChatControlRequest {

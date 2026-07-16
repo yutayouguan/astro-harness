@@ -50,9 +50,6 @@ type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> 
 type SessionEventsStream =
     Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
 
-/// `ChatControlAction` 之外的后端保留动作码：仅释放会话运行时，不触发 new_chat hooks。
-const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
-
 /// 工具 / review 返回文本是否表示写入只入了 pending（未改 live）。
 fn indicates_pending_enqueue(content: &str) -> bool {
     content.contains("待审批") || content.contains("pending") || content.contains("入队")
@@ -467,12 +464,12 @@ impl AstroService for AstroServiceImpl {
         if req.session_id.is_empty() {
             return Err(Status::invalid_argument("session_id 不能为空"));
         }
-        if req.action == CHAT_CONTROL_RELEASE_SESSION {
+        let action = ChatControlAction::try_from(req.action).unwrap_or_default();
+
+        if matches!(action, ChatControlAction::ReleaseSession) {
             self.release_session_runtime(&req.session_id).await;
             return Ok(Response::new(Empty {}));
         }
-
-        let action = ChatControlAction::try_from(req.action).unwrap_or_default();
 
         // 新建对话不依赖进行中的流；无内存会话时仍触发 Gateway 事件。
         if matches!(action, ChatControlAction::ChatControlNewChat) {
@@ -519,6 +516,7 @@ impl AstroService for AstroServiceImpl {
             }
             ChatControlAction::ChatControlNewChat
             | ChatControlAction::ChatControlRefreshMemory
+            | ChatControlAction::ReleaseSession
             | ChatControlAction::ChatControlUnspecified => {}
         }
         Ok(Response::new(Empty {}))
@@ -1319,6 +1317,8 @@ impl AstroService for AstroServiceImpl {
 mod tests {
     use super::*;
 
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -1327,26 +1327,20 @@ mod tests {
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
         let session_id = "release-session-runtime-idempotent";
 
-        let session = service.get_session(session_id).await.unwrap();
+        service.get_session(session_id).await.unwrap();
         let pause = service.register_pause(session_id).await;
         let gate = HitlGate::new(session_id.to_string());
         service.hitl_registry.insert(gate.clone()).await;
 
-        {
-            let agent = session.lock().await;
-            let bus = agent.hook_bus();
-            let _ = bus;
-        }
-
         let request = Request::new(ChatControlRequest {
             session_id: session_id.to_string(),
-            action: CHAT_CONTROL_RELEASE_SESSION,
+            action: ChatControlAction::ReleaseSession as i32,
         });
         service.chat_control(request).await.expect("first release");
 
         let request = Request::new(ChatControlRequest {
             session_id: session_id.to_string(),
-            action: CHAT_CONTROL_RELEASE_SESSION,
+            action: ChatControlAction::ReleaseSession as i32,
         });
         service.chat_control(request).await.expect("second release");
 
@@ -1355,6 +1349,71 @@ mod tests {
         assert!(service.hitl_registry.get(session_id).await.is_none());
         drop(pause);
         drop(gate);
+    }
+
+    #[tokio::test]
+    async fn new_chat_preserves_hooks_while_release_session_skips_them() {
+        let dir = TempDir::new().unwrap();
+        let hook_dir = dir.path().join("hooks").join("audit");
+        std::fs::create_dir_all(&hook_dir).unwrap();
+        std::fs::write(
+            hook_dir.join("HOOK.yaml"),
+            "name: audit\nevents:\n  - command:new_chat\n",
+        )
+        .unwrap();
+
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let gateway_hits = Arc::new(AtomicUsize::new(0));
+        let gateway_counter = Arc::clone(&gateway_hits);
+        service
+            .hook_runtime
+            .gateway
+            .register_handler("audit", move |event, _| {
+                if event == ::hooks::COMMAND_NEW_CHAT {
+                    gateway_counter.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+
+        let reset_hits = Arc::new(AtomicUsize::new(0));
+        let reset_counter = Arc::clone(&reset_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_RESET, move |_| {
+                reset_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: "release-only".into(),
+                action: ChatControlAction::ReleaseSession as i32,
+            }))
+            .await
+            .expect("release session");
+        assert_eq!(gateway_hits.load(Ordering::SeqCst), 0);
+        assert_eq!(reset_hits.load(Ordering::SeqCst), 0);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 0);
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: "new-chat".into(),
+                action: ChatControlAction::ChatControlNewChat as i32,
+            }))
+            .await
+            .expect("new chat");
+        assert_eq!(gateway_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(reset_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
     }
 }
 
