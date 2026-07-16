@@ -30,7 +30,7 @@ const BASE = 22;
 /** 与 CSS `.chat-msg-nav-track` gap 一致；放大后仍要留缝 */
 const GAP = 14;
 /** 与 CSS `.chat-msg-nav-track` padding-top 一致 */
-const PAD_TOP = 10;
+const PAD_TOP = 12;
 /** 峰值放大：略收敛，避免挤成一团 */
 const MAX_SCALE = 1.48;
 /** 影响半径：配合更大间距做更柔和的鱼眼 */
