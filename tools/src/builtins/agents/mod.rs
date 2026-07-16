@@ -4,3 +4,4 @@ pub mod delegate;
 pub mod multi_agent;
 pub mod orchestration;
 pub mod create_agent;
+pub mod team;

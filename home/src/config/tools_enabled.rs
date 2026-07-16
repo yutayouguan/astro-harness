@@ -213,9 +213,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "present_ui" => "present_ui",
         "delegate" | "delegate_async" | "delegate_status" | "delegate_collect"
         | "delegate_cancel" => "delegate",
-        "multi_agent" | "create_agent" | "orchestration_run" | "orchestration_status" => {
-            "multi_agent"
-        }
+        "multi_agent" | "create_agent" | "orchestration_run" | "orchestration_status"
+        | "team_list" | "team_create" | "team_run" => "multi_agent",
         "task_plan" => "task_plan",
         other => other,
     }

@@ -20,7 +20,7 @@ pub(crate) use builtins::{
     audio_understand, browser, clarify, code_exec, confirm, create_agent, delegate, file_ops,
     image_gen, memory_tools, multi_agent, music, music_gen, orchestration, present_callout,
     present_metrics, present_result, present_ui, request_user_location, robotics, scheduled,
-    skills_tool, task_plan, terminal, tts, video_gen, video_understand, vision, web_search,
+    skills_tool, task_plan, team, terminal, tts, video_gen, video_understand, vision, web_search,
 };
 
 pub use catalog::{
@@ -80,4 +80,5 @@ pub fn register_all(registry: &mut ToolRegistry) {
     multi_agent::register(registry);
     orchestration::register(registry);
     create_agent::register(registry);
+    team::register(registry);
 }

@@ -7,6 +7,7 @@
 pub mod collab_insights;
 pub mod db;
 pub mod spawn;
+pub mod team;
 
 pub use collab_insights::{
     query_collaboration_insights, CollaborationEdge, CollaborationGraph, CollaborationInsights,
@@ -18,3 +19,7 @@ pub use db::{
     OrchestrationRow, OrchestrationStatus, StepRow, StepStatus,
 };
 pub use spawn::{OrchestrationSpawnRequest, OrchestrationSpawner};
+pub use team::{
+    ensure_teams_dir, list_teams, load_team, save_team, team_path, teams_dir, TeamDefinition,
+    TeamMember, TeamMode,
+};

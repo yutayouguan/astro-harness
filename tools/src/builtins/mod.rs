@@ -20,4 +20,4 @@ pub use hitl::{clarify, confirm, request_user_location};
 pub use present::{
     present_callout, present_metrics, present_result, present_shared, present_ui,
 };
-pub use agents::{create_agent, delegate, multi_agent, orchestration};
+pub use agents::{create_agent, delegate, multi_agent, orchestration, team};
