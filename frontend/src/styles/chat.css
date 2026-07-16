@@ -4644,25 +4644,11 @@ html[data-theme="dark"] .chat-agent-icon-plus {
   z-index: var(--z-drawer);
   display: flex;
   justify-content: flex-end;
-  background:
-    radial-gradient(
-      ellipse 55% 70% at 88% 30%,
-      color-mix(in srgb, var(--tone) 14%, transparent),
-      transparent 68%
-    ),
-    color-mix(in srgb, var(--bg-base, #0f172a) 28%, transparent);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-}
-
-html[data-theme="light"] .agent-icon-drawer-backdrop {
-  background:
-    radial-gradient(
-      ellipse 55% 70% at 88% 30%,
-      color-mix(in srgb, var(--tone) 16%, transparent),
-      transparent 68%
-    ),
-    color-mix(in srgb, #64748b 14%, transparent);
+  /* 左侧不遮罩：透明可点关闭，视觉完全透出 */
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
 }
 
 .agent-icon-drawer {
@@ -4673,6 +4659,7 @@ html[data-theme="light"] .agent-icon-drawer-backdrop {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  pointer-events: auto;
   border-left: 1px solid color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
   background:
     linear-gradient(
