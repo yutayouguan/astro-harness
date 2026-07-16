@@ -1534,7 +1534,7 @@ pub async fn read_user_file_base64(path: String) -> Result<FileBase64Dto, String
     })
 }
 
-/// 解析用户「下载」目录（优先 `XDG_DOWNLOAD_DIR` / `Downloads` / `下载`）。
+/// 解析用户「下载」目录（macOS / Windows / Linux 通用）。
 fn user_downloads_dir() -> Result<std::path::PathBuf, String> {
     if let Ok(xdg) = std::env::var("XDG_DOWNLOAD_DIR") {
         let p = std::path::PathBuf::from(xdg.trim());
@@ -1545,8 +1545,9 @@ fn user_downloads_dir() -> Result<std::path::PathBuf, String> {
             return Ok(p);
         }
     }
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
+    // Windows：优先 USERPROFILE；也兼容 HOME
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
         .map(std::path::PathBuf::from)
         .ok_or_else(|| "无法解析用户主目录".to_string())?;
     for name in ["Downloads", "下载"] {
