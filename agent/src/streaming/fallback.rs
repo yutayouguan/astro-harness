@@ -167,10 +167,10 @@ pub async fn try_stream_completion_with_fallback(
             }
             Err(e) if is_failover_eligible(&e) && i + 1 < targets.len() => {
                 on_failover(target, &targets[i + 1], &e);
-                errors.push(format!("{}: {e}", target.backend_id));
+                errors.push(format!("{}: {e:#}", target.backend_id));
             }
             Err(e) => {
-                errors.push(format!("{}: {e}", target.backend_id));
+                errors.push(format!("{}: {e:#}", target.backend_id));
                 break;
             }
         }

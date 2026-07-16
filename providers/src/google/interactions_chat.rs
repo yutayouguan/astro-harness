@@ -9,8 +9,9 @@
 
 use anyhow::{anyhow, Context, Result};
 use futures::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, Response};
 use serde_json::{json, Value};
+use std::time::Duration;
 
 use crate::http_stream::merge_additional_params;
 use super::interactions_http::interactions_url;
@@ -20,6 +21,39 @@ use crate::trait_::{
 };
 
 const API_REVISION: &str = "2026-05-20";
+const MAX_CONNECT_ATTEMPTS: usize = 3;
+
+async fn send_interactions_chat_request(
+    client: &Client,
+    url: &str,
+    api_key: &str,
+    body: &Value,
+) -> Result<Response> {
+    let mut last_error = None;
+    for attempt in 1..=MAX_CONNECT_ATTEMPTS {
+        match client
+            .post(url)
+            .header("content-type", "application/json")
+            .header("x-goog-api-key", api_key)
+            .header("Api-Revision", API_REVISION)
+            .json(body)
+            .send()
+            .await
+        {
+            Ok(response) => return Ok(response),
+            Err(error)
+                if attempt < MAX_CONNECT_ATTEMPTS
+                    && (error.is_connect() || error.is_timeout()) =>
+            {
+                last_error = Some(error);
+                tokio::time::sleep(Duration::from_millis(250 * attempt as u64)).await;
+            }
+            Err(error) => return Err(error).context("发送 Google Interactions 请求失败"),
+        }
+    }
+    Err(last_error.expect("retry loop must retain the final connection error"))
+        .context("发送 Google Interactions 请求失败")
+}
 
 /// OpenAI tools 数组 → Interactions `tools`（扁平 `{type,name,description,parameters}`）。
 pub fn openai_tools_to_interactions(tools: &[Value]) -> Vec<Value> {
@@ -536,13 +570,7 @@ pub async fn interactions_chat_stream(
     let url = interactions_url(config);
     let body = build_interactions_chat_body(&messages, &tools, config);
 
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .header("x-goog-api-key", config.api_key.trim())
-        .header("Api-Revision", API_REVISION)
-        .json(&body)
-        .send()
+    let response = send_interactions_chat_request(client, &url, config.api_key.trim(), &body)
         .await
         .with_context(|| format!("连接 Google Interactions 失败: {url}"))?;
 
