@@ -165,7 +165,7 @@
   gap: 10px;
 }
 
-/* [🔍] [新建会话] [Agent▾]；搜索展开时占满整行 */
+/* [新建会话] [Agent▾] [🔍]；搜索展开时占满整行 */
 .chat-session-toolbar {
   --session-toolbar-glass-fill:
     linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
@@ -196,17 +196,20 @@
 
 .chat-session-toolbar .chat-session-search {
   flex-shrink: 0;
+  order: 3;
 }
 
 .chat-session-toolbar .chat-session-new {
   flex: 1 1 auto;
   min-width: 0;
+  order: 1;
 }
 
 .chat-session-toolbar .chat-session-agent-picker {
   flex: 0 1 7.5rem;
   max-width: 8.5rem;
   min-width: 0;
+  order: 2;
 }
 
 .chat-session-toolbar:has(.expandable-search.is-open) .chat-session-new,
