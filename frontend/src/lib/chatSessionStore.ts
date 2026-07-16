@@ -110,3 +110,19 @@ export function saveChatSession(
 export function clearChatSession(): void {
   markChatCleared();
 }
+
+/**
+ * 编辑消息截断后立刻同步本地持久化。
+ * keep 为空时标记 cleared，避免空列表触发 restore 时把旧历史从 localStorage/DB 拉回。
+ */
+export function persistAfterEditTruncate(
+  sessionId: string | null,
+  keptMessages: ChatMessage[],
+  pendingInterrupts: PendingInterrupt[] = [],
+): void {
+  if (isWelcomeOnly(keptMessages)) {
+    markChatCleared();
+    return;
+  }
+  saveChatSession(sessionId, keptMessages, pendingInterrupts);
+}

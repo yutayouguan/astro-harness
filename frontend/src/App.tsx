@@ -99,6 +99,7 @@ import {
   isChatCleared,
   isWelcomeOnly,
   loadChatSession,
+  persistAfterEditTruncate,
   saveChatSession,
 } from "./lib/chatSessionStore";
 import type {
@@ -714,6 +715,13 @@ export default function App() {
   const restoreChatHistory = useCallback(async () => {
     if (streaming || restoringRef.current) return;
     if (!isWelcomeOnly(messages)) return;
+    // 编辑截断进行中 / 待重发：勿用未对齐的本地或 DB 历史盖回
+    if (
+      pendingKeepChatBubblesRef.current != null ||
+      dissolvingIdsRef.current.length > 0
+    ) {
+      return;
+    }
     // 用户主动「新会话」后，不要立刻从 DB 拉回旧记录
     if (isChatCleared()) return;
 
@@ -1987,52 +1995,96 @@ export default function App() {
       if (idx < 0 || messages[idx]?.role !== "user") return;
       const userMsg = messages[idx];
       const victimIds = messages.slice(idx).map((m) => m.id);
-      pendingKeepChatBubblesRef.current = countChatBubbles(
-        messages.slice(0, idx),
-      );
-      setInput(userMsg.content);
-      setAttachments(
-        (userMsg.attachments ?? []).map((a) => ({
-          ...a,
-        })),
-      );
-      setSessionPendingInterrupts([]);
+      const kept = messages.slice(0, idx);
+      const bubbleStart = countChatBubbles(kept);
+      const bubbleEnd = countChatBubbles(messages);
+      // 先占位，阻止消散/截断过程中 restoreChatHistory 拉回旧历史
+      pendingKeepChatBubblesRef.current = bubbleStart;
 
-      const reduced =
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const beginCut = () => {
+        // DB 已对齐（或无需对齐）后再写本地，避免失败时本地已截断
+        persistAfterEditTruncate(sessionId, kept);
+        setInput(userMsg.content);
+        setAttachments(
+          (userMsg.attachments ?? []).map((a) => ({
+            ...a,
+          })),
+        );
+        setSessionPendingInterrupts([]);
 
-      const finishCut = () => {
-        setMessages((prev) => {
-          const cut = prev.findIndex((m) => m.id === messageId);
-          return cut < 0 ? prev : prev.slice(0, cut);
+        const reduced =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        const finishCut = () => {
+          setMessages((prev) => {
+            const cut = prev.findIndex((m) => m.id === messageId);
+            return cut < 0 ? prev : prev.slice(0, cut);
+          });
+          setDissolvingIds([]);
+          dissolveTimerRef.current = null;
+          if (bubbleStart === 0) {
+            queueMicrotask(() => setEmptyMode("chat"));
+          }
+        };
+
+        if (reduced) {
+          finishCut();
+        } else {
+          setDissolvingIds(victimIds);
+          if (dissolveTimerRef.current != null) {
+            window.clearTimeout(dissolveTimerRef.current);
+          }
+          dissolveTimerRef.current = window.setTimeout(
+            finishCut,
+            MSG_DISSOLVE_MS,
+          );
+        }
+
+        queueMicrotask(() => {
+          const el = document.querySelector<HTMLTextAreaElement>(
+            ".composer-shell textarea",
+          );
+          el?.focus();
+          if (el) {
+            const len = el.value.length;
+            el.setSelectionRange(len, len);
+          }
         });
-        setDissolvingIds([]);
-        dissolveTimerRef.current = null;
       };
 
-      if (reduced) {
-        finishCut();
-      } else {
-        setDissolvingIds(victimIds);
-        if (dissolveTimerRef.current != null) {
-          window.clearTimeout(dissolveTimerRef.current);
-        }
-        dissolveTimerRef.current = window.setTimeout(finishCut, MSG_DISSOLVE_MS);
+      if (
+        sessionId &&
+        bubbleStart < bubbleEnd &&
+        typeof window !== "undefined" &&
+        "__TAURI_INTERNALS__" in window
+      ) {
+        void invoke("remove_chat_bubbles", {
+          sessionId,
+          start: bubbleStart,
+          end: bubbleEnd,
+        })
+          .then(beginCut)
+          .catch((e) => {
+            pendingKeepChatBubblesRef.current = null;
+            showTransientToast(
+              t("chat.deleteFailed", {
+                error: e instanceof Error ? e.message : String(e ?? "error"),
+              }),
+            );
+          });
+        return;
       }
-
-      queueMicrotask(() => {
-        const el = document.querySelector<HTMLTextAreaElement>(
-          ".composer-shell textarea",
-        );
-        el?.focus();
-        if (el) {
-          const len = el.value.length;
-          el.setSelectionRange(len, len);
-        }
-      });
+      beginCut();
     },
-    [messages, streaming, dissolvingIds.length],
+    [
+      messages,
+      streaming,
+      dissolvingIds.length,
+      sessionId,
+      showTransientToast,
+      t,
+    ],
   );
 
   const deleteMessage = useCallback(
@@ -2054,7 +2106,11 @@ export default function App() {
       const applyLocal = () => {
         setMessages(next);
         if (next.length === 0 || next.every((m) => m.id === "welcome")) {
+          // 与编辑截断到空一致：标记 cleared，避免 restore 拉回
+          clearChatSession();
           queueMicrotask(() => setEmptyMode("chat"));
+        } else {
+          saveChatSession(sessionId, next, []);
         }
         setSessionPendingInterrupts([]);
       };
