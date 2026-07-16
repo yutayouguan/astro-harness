@@ -26,6 +26,8 @@ pub struct ImageGenCreds {
     pub base_url: String,
     /// 生视频模型（主要为 Google）；空则用 `default_video_model`。
     pub video_model: String,
+    /// 音乐生成模型（Google Lyria）；空则使用 clip 默认。
+    pub music_model: String,
     /// 生音频 / TTS 模型；空则用供应商默认。
     pub tts_model: String,
     /// 视觉（图片理解）模型；空则用 `default_vision_model`。
@@ -57,6 +59,7 @@ impl ImageGenTargets {
         fb_api_key: &str,
         fb_base_url: &str,
         video_model: &str,
+        music_model: &str,
         tts_model: &str,
         fb_tts_model: &str,
         vision_model: &str,
@@ -73,6 +76,7 @@ impl ImageGenTargets {
                 api_key: api_key.to_string(),
                 base_url: base_url.to_string(),
                 video_model: video_model.trim().to_string(),
+                music_model: music_model.trim().to_string(),
                 tts_model: tts_model.trim().to_string(),
                 vision_model: vision_model.trim().to_string(),
             })
@@ -90,6 +94,7 @@ impl ImageGenTargets {
                 api_key: fb_api_key.to_string(),
                 base_url: fb_base_url.to_string(),
                 video_model: String::new(),
+                music_model: String::new(),
                 tts_model: fb_tts_model.trim().to_string(),
                 vision_model: fb_vision_model.trim().to_string(),
             })
