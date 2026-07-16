@@ -4,6 +4,7 @@ import {
   absolutizeMediaPath,
   looksLikeLocalPath,
   looksLikeRelativeLocalPath,
+  resolveMediaPreviewPath,
   resolveMediaSrc,
   stripFileUrl,
 } from "./resolveMediaSrc.ts";
@@ -75,5 +76,19 @@ test("absolutizeMediaPath joins relative under workspace baseDir", () => {
   assert.equal(
     absolutizeMediaPath("generated/../etc/passwd", "/Users/a/.astro/workspace"),
     null,
+  );
+});
+
+test("resolveMediaPreviewPath makes generated media absolute for preview and actions", () => {
+  assert.equal(
+    resolveMediaPreviewPath(
+      "generated/images/img-20260716-110609-5fb9089c.jpg",
+      "/Users/a/.astro/workspace",
+    ),
+    "/Users/a/.astro/workspace/generated/images/img-20260716-110609-5fb9089c.jpg",
+  );
+  assert.equal(
+    resolveMediaPreviewPath("https://ex.com/a.png", "/Users/a/.astro/workspace"),
+    "https://ex.com/a.png",
   );
 });

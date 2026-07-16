@@ -1354,6 +1354,7 @@ export default function ChatView({
                                 activity={act}
                                 defaultOpen={false}
                                 showTimestamp={displayPrefs.showTimestamps}
+                                mediaBaseDir={mediaBaseDir}
                               />
                             ),
                           });

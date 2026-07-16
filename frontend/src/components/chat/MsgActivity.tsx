@@ -9,6 +9,7 @@ import {
 } from "../../lib/chat/resolveActivityIO";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { parseGeneratedMedia } from "../../lib/media/parseGeneratedMedia";
+import { resolveMediaPreviewPath } from "../../lib/media/resolveMediaSrc";
 import type { ChatActivity, ChatActivityKind } from "../../types";
 import McpIcon from "../icons/McpIcon";
 import MediaPreview from "../media/MediaPreview";
@@ -18,6 +19,7 @@ type Props = {
   activity: ChatActivity;
   defaultOpen: boolean;
   showTimestamp: boolean;
+  mediaBaseDir?: string | null;
 };
 
 function KindIcon({ kind }: { kind: ChatActivityKind }) {
@@ -41,6 +43,7 @@ export default function MsgActivity({
   activity,
   defaultOpen,
   showTimestamp,
+  mediaBaseDir,
 }: Props) {
   const { t } = useI18n();
   const hasBody = activityHasBody(activity);
@@ -126,7 +129,7 @@ export default function MsgActivity({
                   <MediaPreview
                     key={`${m.kind}:${m.path}`}
                     kind={m.kind}
-                    path={m.path}
+                    path={resolveMediaPreviewPath(m.path, mediaBaseDir)}
                     compact
                   />
                 ))}

@@ -76,6 +76,14 @@ export function absolutizeMediaPath(
   return `${baseClean}${sep}${segments.join(sep)}`;
 }
 
+/** 生成媒体预览使用绝对本地路径，远程 URL 等则保持原值。 */
+export function resolveMediaPreviewPath(
+  src: string,
+  baseDir?: string | null,
+): string {
+  return absolutizeMediaPath(src, baseDir) ?? src.trim();
+}
+
 /**
  * 解析为可加载 src；本地路径失败时返回 null（调用方显示 Broken）。
  * 非路径、非已知协议时原样返回（交给浏览器尝试）。
