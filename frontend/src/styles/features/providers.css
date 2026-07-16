@@ -383,6 +383,10 @@
 }
 
 .providers-detail-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: none;
   background: transparent;
   padding: 10px 14px;

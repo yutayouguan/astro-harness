@@ -14,11 +14,13 @@ import {
   EyeOff,
   Globe,
   GripVertical,
+  Image,
   KeyRound,
   Layers,
   Lightbulb,
   Link2,
   LoaderCircle,
+  MessageCircle,
   Plus,
   Power,
   RefreshCw,
@@ -1381,6 +1383,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     className={`providers-detail-tab ${detailTab === "chat" ? "is-active" : ""}`}
                     onClick={() => setDetailTab("chat")}
                   >
+                    <MessageCircle size={14} strokeWidth={2} aria-hidden />
                     {t("providers.tabChat")}
                   </button>
                   <button
@@ -1390,6 +1393,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     className={`providers-detail-tab ${detailTab === "media" ? "is-active" : ""}`}
                     onClick={() => setDetailTab("media")}
                   >
+                    <Image size={14} strokeWidth={2} aria-hidden />
                     {t("providers.tabMedia")}
                   </button>
                 </div>
