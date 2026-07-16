@@ -98,25 +98,24 @@
 }
 
 html[data-theme="dark"] .media-toolbar {
-  border-color: color-mix(in srgb, var(--tone, #a78bfa) 28%, rgba(255, 255, 255, 0.18));
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 22%, rgba(255, 255, 255, 0.08));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%),
-    rgba(10, 8, 22, 0.78);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(167, 139, 250, 0.16)) 28%, rgba(6, 4, 14, 0.88));
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 1px 0 rgba(255, 255, 255, 0.12) inset;
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 
 html[data-theme="dark"] .media-toolbar-btn {
-  color: color-mix(in srgb, #fff 42%, var(--ink, #ece8f8));
+  color: var(--ink-soft, rgba(236, 232, 248, 0.78));
 }
 
 html[data-theme="dark"] .media-toolbar-btn:hover:not(:disabled) {
-  color: #fff;
-  background: color-mix(in srgb, #fff 14%, transparent);
+  color: var(--ink, #ece8f8);
+  background: color-mix(in srgb, var(--tone-soft, rgba(167, 139, 250, 0.16)) 55%, transparent);
 }
 
 html[data-theme="dark"] .media-toolbar-btn.is-copied {
@@ -124,8 +123,8 @@ html[data-theme="dark"] .media-toolbar-btn.is-copied {
 }
 
 html[data-theme="dark"] .html-preview-bar .media-toolbar {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: color-mix(in srgb, #fff 8%, transparent);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, #fff 4%, transparent);
 }
 
 html[data-theme="dark"] .html-preview-bar .media-toolbar-btn {
@@ -134,17 +133,17 @@ html[data-theme="dark"] .html-preview-bar .media-toolbar-btn {
 
 html[data-theme="dark"] .html-preview-bar .media-toolbar-btn:hover:not(:disabled) {
   color: var(--ink);
-  background: color-mix(in srgb, #fff 10%, transparent);
+  background: color-mix(in srgb, #fff 6%, transparent);
 }
 
 html[data-theme="dark"] .media-preview {
-  background: color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.62)) 80%, transparent);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, rgba(8, 6, 18, 0.72) 85%, transparent);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 html[data-theme="dark"] .media-preview-image,
 html[data-theme="dark"] .media-preview-video {
-  background: color-mix(in srgb, #000 35%, transparent);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .html-preview-bar .media-toolbar {
@@ -276,41 +275,39 @@ html[data-theme="dark"] .media-preview-video {
 
 html[data-theme="dark"] .media-lightbox {
   background:
-    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(124, 58, 237, 0.14), transparent 65%),
-    linear-gradient(165deg, rgba(14, 10, 26, 0.88) 0%, rgba(6, 4, 14, 0.92) 100%);
-  backdrop-filter: blur(28px) saturate(1.35);
-  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(124, 58, 237, 0.1), transparent 65%),
+    linear-gradient(165deg, rgba(10, 8, 20, 0.92) 0%, rgba(4, 3, 10, 0.95) 100%);
+  backdrop-filter: blur(26px) saturate(1.15);
+  -webkit-backdrop-filter: blur(26px) saturate(1.15);
 }
 
 html[data-theme="dark"] .media-lightbox-image {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 32px 80px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  background: rgba(8, 6, 18, 0.45);
+    0 32px 80px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: rgba(4, 3, 10, 0.55);
 }
 
 html[data-theme="dark"] .media-lightbox-close {
-  border-color: color-mix(in srgb, var(--tone, #a78bfa) 32%, rgba(255, 255, 255, 0.18));
-  color: color-mix(in srgb, #fff 55%, var(--ink, #ece8f8));
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 24%, rgba(255, 255, 255, 0.08));
+  color: var(--ink-soft, rgba(236, 232, 248, 0.78));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%),
-    rgba(10, 8, 22, 0.82);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(167, 139, 250, 0.16)) 28%, rgba(6, 4, 14, 0.9));
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 1px 0 rgba(255, 255, 255, 0.12) inset;
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 
 html[data-theme="dark"] .media-lightbox-close:hover {
-  color: #fff;
-  border-color: color-mix(in srgb, var(--tone, #a78bfa) 45%, rgba(255, 255, 255, 0.22));
+  color: var(--ink, #ece8f8);
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 36%, rgba(255, 255, 255, 0.12));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 100%),
-    rgba(14, 12, 28, 0.88);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(167, 139, 250, 0.16)) 45%, rgba(8, 6, 18, 0.92));
 }
 
 @keyframes media-lightbox-in {
