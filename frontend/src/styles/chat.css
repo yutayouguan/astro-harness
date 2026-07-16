@@ -4637,7 +4637,7 @@ html[data-theme="dark"] .chat-agent-icon-plus {
   }
 }
 
-/* ── Agent icon side drawers（毛玻璃共享壳） ── */
+/* ── Agent icon side drawers（毛玻璃共享壳，跟随 html[data-tone] / tab 主题） ── */
 .agent-icon-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -4647,24 +4647,22 @@ html[data-theme="dark"] .chat-agent-icon-plus {
   background:
     radial-gradient(
       ellipse 55% 70% at 88% 30%,
-      color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent),
+      color-mix(in srgb, var(--tone) 14%, transparent),
       transparent 68%
     ),
-    color-mix(in srgb, var(--bg-base, #0f172a) 22%, transparent);
-  backdrop-filter: blur(18px) saturate(1.35);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+    color-mix(in srgb, var(--bg-base, #0f172a) 28%, transparent);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 
 html[data-theme="light"] .agent-icon-drawer-backdrop {
   background:
     radial-gradient(
       ellipse 55% 70% at 88% 30%,
-      color-mix(in srgb, var(--tone, var(--tone-blue)) 14%, transparent),
+      color-mix(in srgb, var(--tone) 16%, transparent),
       transparent 68%
     ),
-    color-mix(in srgb, #64748b 12%, transparent);
-  backdrop-filter: blur(16px) saturate(1.3);
-  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    color-mix(in srgb, #64748b 14%, transparent);
 }
 
 .agent-icon-drawer {
@@ -4675,21 +4673,20 @@ html[data-theme="light"] .agent-icon-drawer-backdrop {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 18%, var(--glass-edge));
+  border-left: 1px solid color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, #fff 62%, transparent) 0%,
-      color-mix(in srgb, #fff 22%, transparent) 100%
+      color-mix(in srgb, #fff 58%, transparent) 0%,
+      color-mix(in srgb, #fff 18%, transparent) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, var(--tone-blue-soft)) 28%, var(--glass-panel, rgba(255, 255, 255, 0.42)));
+    color-mix(in srgb, var(--tone-soft) 22%, var(--glass-panel, rgba(255, 255, 255, 0.4)));
   box-shadow:
-    -18px 0 52px color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, rgba(15, 23, 42, 0.08)),
+    -18px 0 52px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.08)),
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     var(--glass-rim);
-  /* 强毛玻璃：背后内容透出 */
-  backdrop-filter: blur(32px) saturate(1.55);
-  -webkit-backdrop-filter: blur(32px) saturate(1.55);
+  backdrop-filter: blur(34px) saturate(1.55);
+  -webkit-backdrop-filter: blur(34px) saturate(1.55);
   animation: agent-icon-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -4700,10 +4697,10 @@ html[data-theme="light"] .agent-icon-drawer-backdrop {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, transparent), transparent 50%),
-    radial-gradient(ellipse at 90% 100%, color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent), transparent 44%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, transparent 28%);
-  opacity: 0.85;
+    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone) 18%, transparent), transparent 50%),
+    radial-gradient(ellipse at 90% 100%, color-mix(in srgb, var(--tone) 10%, transparent), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, transparent 28%);
+  opacity: 0.8;
 }
 
 @keyframes agent-icon-drawer-in {
@@ -4726,7 +4723,7 @@ html[data-theme="light"] .agent-icon-drawer-backdrop {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 16px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, var(--glass-edge));
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
   background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 35%, transparent);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
@@ -4769,39 +4766,39 @@ html[data-theme="light"] .agent-icon-drawer-backdrop {
 }
 
 html[data-theme="dark"] .agent-icon-drawer {
-  border-left-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 22%, rgba(255, 255, 255, 0.1));
+  border-left-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
   background:
     linear-gradient(
       155deg,
-      rgba(255, 255, 255, 0.08) 0%,
-      rgba(255, 255, 255, 0.02) 48%,
+      color-mix(in srgb, var(--tone-soft) 35%, rgba(255, 255, 255, 0.06)) 0%,
+      rgba(255, 255, 255, 0.02) 42%,
       transparent 100%
     ),
-    color-mix(in srgb, var(--tone-soft, var(--tone-blue-soft)) 18%, rgba(8, 6, 18, 0.42));
+    color-mix(in srgb, var(--tone-soft) 16%, rgba(8, 10, 20, 0.48));
   box-shadow:
-    -18px 0 56px rgba(0, 0, 0, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    -18px 0 56px color-mix(in srgb, var(--tone) 8%, rgba(0, 0, 0, 0.4)),
+    inset 0 1px 0 color-mix(in srgb, var(--tone) 12%, rgba(255, 255, 255, 0.08)),
     inset 0 -1px 0 rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(36px) saturate(1.6);
-  -webkit-backdrop-filter: blur(36px) saturate(1.6);
+  backdrop-filter: blur(36px) saturate(1.55);
+  -webkit-backdrop-filter: blur(36px) saturate(1.55);
 }
 
 html[data-theme="dark"] .agent-icon-drawer::before {
   background:
-    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone, var(--tone-blue)) 14%, transparent), transparent 52%),
-    radial-gradient(ellipse at 88% 96%, color-mix(in srgb, var(--tone, var(--tone-blue)) 8%, transparent), transparent 46%),
+    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone) 16%, transparent), transparent 52%),
+    radial-gradient(ellipse at 88% 96%, color-mix(in srgb, var(--tone) 9%, transparent), transparent 46%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 32%);
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 html[data-theme="dark"] .agent-icon-drawer-head {
-  border-bottom-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, rgba(255, 255, 255, 0.06));
-  background: color-mix(in srgb, rgba(8, 6, 18, 0.28) 70%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.06));
+  background: color-mix(in srgb, var(--tone-soft) 12%, rgba(8, 10, 20, 0.28));
 }
 
 html[data-theme="dark"] .agent-icon-drawer-foot {
-  border-top-color: rgba(255, 255, 255, 0.08);
-  background: color-mix(in srgb, rgba(8, 6, 18, 0.32) 72%, transparent);
+  border-top-color: color-mix(in srgb, var(--tone) 10%, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--tone-soft) 10%, rgba(8, 10, 20, 0.32));
 }
 
 /* ── Lucide emoji picker ── */
@@ -5101,7 +5098,22 @@ html[data-theme="dark"] .lucide-picker-search {
 }
 
 html[data-theme="dark"] .lucide-picker-item {
-  background: rgba(148, 163, 184, 0.08);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    color-mix(in srgb, rgba(8, 6, 18, 0.28) 65%, transparent);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .lucide-picker-item:hover {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
+}
+
+html[data-theme="dark"] .lucide-picker-item.is-active {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 18%, transparent);
 }
 
 

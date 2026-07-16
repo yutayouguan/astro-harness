@@ -1,5 +1,6 @@
 /** Lucide 图标选择器。 */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import {
@@ -131,7 +132,7 @@ export default function LucideIconPicker({
     angle: 135,
   };
 
-  return (
+  return createPortal(
     <div
       className="agent-icon-drawer-backdrop"
       role="presentation"
@@ -141,10 +142,6 @@ export default function LucideIconPicker({
     >
       <div
         className="agent-icon-drawer lucide-picker-drawer"
-        style={{
-          ["--tone" as string]: "var(--tone-blue)",
-          ["--tone-soft" as string]: "var(--tone-blue-soft)",
-        }}
         role="dialog"
         aria-modal="true"
         aria-label={t("chat.lucidePickerTitle")}
@@ -355,6 +352,7 @@ export default function LucideIconPicker({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

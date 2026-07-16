@@ -374,6 +374,53 @@ html[data-theme="light"] .app-shell[data-tone="teal"] {
   --shell-tone-soft: var(--tone-teal-soft);
 }
 
+/* portal 到 body 的浮层（头像/图标抽屉等）同样跟随 html[data-tone] */
+html[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+  --tone-glow: var(--tone-blue-glow);
+}
+html[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+  --tone-glow: var(--tone-green-glow);
+}
+html[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+  --tone-glow: var(--tone-purple-glow);
+}
+html[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+  --tone-glow: var(--tone-orange-glow);
+}
+html[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-soft: var(--tone-pink-soft);
+  --tone-glow: var(--tone-pink-glow);
+}
+html[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+  --tone-glow: var(--tone-cyan-glow);
+}
+html[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+  --tone-glow: var(--tone-indigo-glow);
+}
+html[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+  --tone-glow: var(--tone-amber-glow);
+}
+html[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+  --tone-glow: var(--tone-teal-glow);
+}
+
 .sidebar>* {
   position: relative;
   z-index: 1;

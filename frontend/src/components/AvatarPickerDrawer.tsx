@@ -1,5 +1,6 @@
 /** Agent 头像选择：右侧抽屉（预设插画 + 上传）。 */
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import { CoverPicker, type CoverId } from "../illustrations";
@@ -35,7 +36,7 @@ export default function AvatarPickerDrawer({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="agent-icon-drawer-backdrop"
       role="presentation"
@@ -45,7 +46,6 @@ export default function AvatarPickerDrawer({
     >
       <div
         className="agent-icon-drawer"
-        style={{ ["--tone" as string]: "var(--tone-purple)", ["--tone-soft" as string]: "var(--tone-purple-soft)" }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="agent-avatar-drawer-title"
@@ -97,6 +97,7 @@ export default function AvatarPickerDrawer({
           />
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
