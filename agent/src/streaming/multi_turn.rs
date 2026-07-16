@@ -536,6 +536,20 @@ async fn run_multi_turn_stream_inner(
             let agent = session.lock().await;
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().map(str::to_string);
+            let transformed = agent.fire_hook(
+                ::hooks::TRANSFORM_LLM_OUTPUT,
+                ::hooks::HookPayload {
+                    session_id: sid.clone(),
+                    turn_id: turn_id.clone(),
+                    message: Some(full_response.clone()),
+                    assistant_chars: Some(full_response.len()),
+                    detail: format!("assistant_chars={}", full_response.len()),
+                    ..Default::default()
+                },
+            );
+            if let ::hooks::HookOutcome::ReplaceText(s) = transformed {
+                full_response = s;
+            }
             let _ = agent.fire_hook(
                 ::hooks::POST_LLM_CALL,
                 ::hooks::HookPayload {

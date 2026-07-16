@@ -334,6 +334,75 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transform_llm_output_replaces_before_post_llm_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let mut agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).unwrap();
+    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+    ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    agent.hook_bus().register(::hooks::TRANSFORM_LLM_OUTPUT, |_| {
+        ::hooks::HookOutcome::ReplaceText("REPLACED".into())
+    });
+    agent
+        .session_messages
+        .push(common::message::Message::user("say hi"));
+    let session = Arc::new(Mutex::new(agent));
+    let session_for_check = Arc::clone(&session);
+
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![vec![ChatChunk {
+            token: Some("hello world".into()),
+            finish_reason: Some("stop".into()),
+            usage: Some(Usage::from_parts(3, 2)),
+            ..Default::default()
+        }]]),
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    let cfg = ProviderConfig {
+        model: "test".into(),
+        ..Default::default()
+    };
+
+    tokio::spawn(async move {
+        run_multi_turn_stream_from_provider(
+            session,
+            provider,
+            cfg,
+            "You are a test agent".into(),
+            pause,
+            None,
+            tx,
+        )
+        .await;
+    });
+
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+
+    let events = log.lock().unwrap().clone();
+    // 原始 "hello world" 11 字符触发 transform_llm_output；替换为 "REPLACED"（8 字符）后 post_llm_call 应观察到新长度。
+    let transform_idx = events.iter().position(|e| e == "transform_llm_output:11");
+    let post_idx = events.iter().position(|e| e == "post_llm_call:8");
+    assert!(
+        transform_idx.is_some() && post_idx.is_some() && transform_idx < post_idx,
+        "expected transform_llm_output before post_llm_call with replaced length, events={events:?}"
+    );
+
+    let agent = session_for_check.lock().await;
+    assert_eq!(
+        agent
+            .session_messages
+            .last()
+            .map(|m| m.content_str().to_string()),
+        Some("REPLACED".to_string()),
+        "final assistant message should reflect transform_llm_output replacement"
+    );
+}
+
 #[tokio::test]
 async fn pause_control_blocks_then_cancels() {
     let pause = PauseControl::new();
