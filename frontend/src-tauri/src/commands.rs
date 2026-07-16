@@ -1449,6 +1449,7 @@ pub async fn regenerate_session_title(
             thinking_enabled: false,
             reasoning_effort: "high".to_string(),
             additional_params: serde_json::Value::Null,
+            previous_interaction_id: None,
         };
         let messages = vec![ChatMessage::text("user", prompt)];
         let mut stream = provider
