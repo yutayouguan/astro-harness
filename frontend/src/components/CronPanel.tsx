@@ -31,13 +31,13 @@ import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
-import AnimatedSwitch from "./AnimatedSwitch";
-import ExpandableSearch from "./ExpandableSearch";
+import AnimatedSwitch from "./ui/AnimatedSwitch";
+import ExpandableSearch from "./ui/ExpandableSearch";
 import {
   CreateCronDialog,
   type ProviderOpt,
 } from "./CreateCronDialog";
-import { SelectMenu } from "./SelectMenu";
+import { SelectMenu } from "./ui/SelectMenu";
 import { EmptyIllustration } from "../illustrations";
 
 /** 定时任务 DTO（与 Rust cron 序列化对齐） */

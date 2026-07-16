@@ -17,7 +17,7 @@ import type { ChatDisplayPrefs, ChatVerbosity } from "../hooks/useChatDisplayPre
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "./icons/NavIcons";
-import { SelectMenu } from "./SelectMenu";
+import { SelectMenu } from "./ui/SelectMenu";
 
 /** 查询返回的单行日志 */
 type AgentLogLine = { raw: string; source: string };

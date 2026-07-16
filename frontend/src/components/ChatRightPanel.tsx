@@ -14,7 +14,7 @@ import type { ContextUsageSnapshot } from "../lib/chat/contextUsage";
 import ChatSessionList from "./ChatSessionList";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
-import AnimatedSwitch from "./AnimatedSwitch";
+import AnimatedSwitch from "./ui/AnimatedSwitch";
 
 /** 聊天右侧栏 Tab */
 export type ChatRightTab = "sessions" | "context" | "agent";

@@ -25,10 +25,10 @@ import {
 import { buildWorkspaceMenuItems } from "../lib/filespace/workspaceMenuItems";
 import type { AgentInfo } from "../types/agent";
 import AgentPicker from "./AgentPicker";
-import AnimatedSwitch from "./AnimatedSwitch";
+import AnimatedSwitch from "./ui/AnimatedSwitch";
 import { ChatMarkdown } from "./ChatMarkdown";
 import MediaPreview from "./media/MediaPreview";
-import ExpandableSearch from "./ExpandableSearch";
+import ExpandableSearch from "./ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceConfirm from "./FileSpaceConfirm";
 import WorkspaceBatchBar from "./WorkspaceBatchBar";

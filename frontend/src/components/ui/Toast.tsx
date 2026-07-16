@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
-import { useI18n } from "../i18n/LocaleContext";
+import { useI18n } from "../../i18n/LocaleContext";
 
 export const TOAST_DURATION_MS = 6000;
 export const TOAST_ERROR_DURATION_MS = 8000;

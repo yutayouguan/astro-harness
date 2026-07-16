@@ -40,11 +40,11 @@ import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import McpIcon from "./icons/McpIcon";
 import AgentPicker from "./AgentPicker";
-import AnimatedSwitch from "./AnimatedSwitch";
-import ExpandableSearch from "./ExpandableSearch";
+import AnimatedSwitch from "./ui/AnimatedSwitch";
+import ExpandableSearch from "./ui/ExpandableSearch";
 import LucideByName from "./icons/LucideByName";
 import { IconRefresh } from "./icons/NavIcons";
-import { SelectMenu } from "./SelectMenu";
+import { SelectMenu } from "./ui/SelectMenu";
 
 /** 工具面板 Tab：内置 / MCP */
 type ToolTab = "builtin" | "mcp";

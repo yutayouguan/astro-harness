@@ -34,8 +34,8 @@ import {
 } from "./WorkspaceIcons";
 import { resolveFileType } from "../lib/filespace/fileTypeIcon";
 import AgentPicker from "./AgentPicker";
-import AnimatedSwitch from "./AnimatedSwitch";
-import ExpandableSearch from "./ExpandableSearch";
+import AnimatedSwitch from "./ui/AnimatedSwitch";
+import ExpandableSearch from "./ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceBatchBar from "./FileSpaceBatchBar";
 import FileSpaceConfirm from "./FileSpaceConfirm";

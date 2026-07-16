@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ScheduleEditor } from "./ScheduleEditor";
-import { SelectMenu } from "./SelectMenu";
+import { SelectMenu } from "./ui/SelectMenu";
 import { ModelBrandIcon, ProviderBrandIcon } from "./icons/ProviderIcons";
 import {
   decodeSchedule,

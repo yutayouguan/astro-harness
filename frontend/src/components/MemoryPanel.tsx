@@ -22,7 +22,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
 import { useAgentsChanged } from "../lib/agent/agentsChanged";
-import AnimatedSwitch from "./AnimatedSwitch";
+import AnimatedSwitch from "./ui/AnimatedSwitch";
 import AgentAvatar from "./AgentAvatar";
 import { EmptyIllustration } from "../illustrations";
 import type { AgentInfo } from "../types/agent";

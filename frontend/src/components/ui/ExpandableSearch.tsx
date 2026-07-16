@@ -1,8 +1,8 @@
 /** 可展开搜索框。 */
 import { useEffect, useRef, useState } from "react";
-import { useI18n } from "../i18n/LocaleContext";
-import type { MessageKey } from "../i18n/messages";
-import { IconSearch } from "./icons/NavIcons";
+import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
+import { IconSearch } from "../icons/NavIcons";
 
 /** 可展开搜索框入参 */
 type Props = {

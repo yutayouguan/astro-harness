@@ -8,7 +8,7 @@ import type { RecentSessionDto } from "../types";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
-import ExpandableSearch from "./ExpandableSearch";
+import ExpandableSearch from "./ui/ExpandableSearch";
 
 /** 近期会话列表入参 */
 type Props = {

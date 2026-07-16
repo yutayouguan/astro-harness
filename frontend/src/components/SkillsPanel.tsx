@@ -76,11 +76,11 @@ import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import { useTransientToast } from "../hooks/useTransientToast";
 import AgentPicker from "./AgentPicker";
-import AnimatedSwitch from "./AnimatedSwitch";
-import ExpandableSearch from "./ExpandableSearch";
+import AnimatedSwitch from "./ui/AnimatedSwitch";
+import ExpandableSearch from "./ui/ExpandableSearch";
 import MsgStreamLoader from "./MsgStreamLoader";
 import { IconRefresh } from "./icons/NavIcons";
-import { SelectMenu } from "./SelectMenu";
+import { SelectMenu } from "./ui/SelectMenu";
 import {
   SkillFileViewer,
   SKILL_PREVIEW_MAX_BYTES,
