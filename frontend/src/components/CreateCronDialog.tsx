@@ -19,7 +19,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { SelectMenu } from "./SelectMenu";
-import { ModelBrandIcon, ProviderBrandIcon } from "./ProviderIcons";
+import { ModelBrandIcon, ProviderBrandIcon } from "./icons/ProviderIcons";
 import {
   decodeSchedule,
   encodeSchedule,

@@ -12,7 +12,7 @@ import {
   type LucidePaint,
   type LucideRenderStyle,
 } from "../lib/agent/lucideAgentIcons";
-import { IconSparkles, IconSkills, IconWorkspace } from "./NavIcons";
+import { IconSparkles, IconSkills, IconWorkspace } from "./icons/NavIcons";
 import LucideIconPicker from "./LucideIconPicker";
 import AvatarPickerDrawer from "./AvatarPickerDrawer";
 import { coverIllustrationToSvgBase64, type CoverId } from "../illustrations";

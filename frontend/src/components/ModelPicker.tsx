@@ -32,7 +32,7 @@ import type {
   ProviderModelsResult,
 } from "../types";
 import ModelCapabilityIcons from "./ModelCapabilityIcons";
-import { ModelBrandIcon } from "./ProviderIcons";
+import { ModelBrandIcon } from "./icons/ProviderIcons";
 
 /** 模型选择器入参 */
 type Props = {

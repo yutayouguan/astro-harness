@@ -38,12 +38,12 @@ import type { MessageKey } from "../i18n/messages";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import { useAgentsChanged } from "../lib/agent/agentsChanged";
-import McpIcon from "./McpIcon";
+import McpIcon from "./icons/McpIcon";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
-import LucideByName from "./LucideByName";
-import { IconRefresh } from "./NavIcons";
+import LucideByName from "./icons/LucideByName";
+import { IconRefresh } from "./icons/NavIcons";
 import { SelectMenu } from "./SelectMenu";
 
 /** 工具面板 Tab：内置 / MCP */

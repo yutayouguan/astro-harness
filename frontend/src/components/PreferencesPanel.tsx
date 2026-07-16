@@ -16,7 +16,7 @@ import type { ThemeMode } from "../hooks/useTheme";
 import type { ChatDisplayPrefs, ChatVerbosity } from "../hooks/useChatDisplayPrefs";
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
-import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "./NavIcons";
+import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "./icons/NavIcons";
 import { SelectMenu } from "./SelectMenu";
 
 /** 查询返回的单行日志 */

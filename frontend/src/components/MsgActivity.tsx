@@ -10,9 +10,9 @@ import {
 import { formatElapsedSec } from "../lib/chat/elapsedSec";
 import { parseGeneratedMedia } from "../lib/media/parseGeneratedMedia";
 import type { ChatActivity, ChatActivityKind } from "../types";
-import McpIcon from "./McpIcon";
+import McpIcon from "./icons/McpIcon";
 import MediaPreview from "./media/MediaPreview";
-import { IconMemory, IconSkills, IconTools } from "./NavIcons";
+import { IconMemory, IconSkills, IconTools } from "./icons/NavIcons";
 
 type Props = {
   activity: ChatActivity;

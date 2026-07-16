@@ -87,8 +87,8 @@ import {
 } from "./ComposerPalette";
 import ComposerMcpMenu from "./ComposerMcpMenu";
 import ContextUsagePopover from "./ContextUsagePopover";
-import McpIcon from "./McpIcon";
-import { ModelBrandIcon } from "./ProviderIcons";
+import McpIcon from "./icons/McpIcon";
+import { ModelBrandIcon } from "./icons/ProviderIcons";
 import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";

@@ -79,7 +79,7 @@ import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
 import MsgStreamLoader from "./MsgStreamLoader";
-import { IconRefresh } from "./NavIcons";
+import { IconRefresh } from "./icons/NavIcons";
 import { SelectMenu } from "./SelectMenu";
 import {
   SkillFileViewer,

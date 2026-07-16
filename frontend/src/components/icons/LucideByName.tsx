@@ -1,7 +1,7 @@
 /** 按 id 渲染 Lucide 图标。 */
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
-import { resolveLucideIconById } from "../lib/agent/lucideAgentIcons";
+import { resolveLucideIconById } from "../../lib/agent/lucideAgentIcons";
 
 type Props = LucideProps & {
   /** Lucide kebab-case id，如 calendar-check */

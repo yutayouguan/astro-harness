@@ -41,7 +41,7 @@ import {
   IconSkills,
   IconTools,
   IconWorkspace,
-} from "./components/NavIcons";
+} from "./components/icons";
 import { useChatDisplayPrefs } from "./hooks/useChatDisplayPrefs";
 import { useChatThinkingPrefs } from "./hooks/useChatThinkingPrefs";
 import { useBeautifyTips } from "./hooks/useBeautifyTips";

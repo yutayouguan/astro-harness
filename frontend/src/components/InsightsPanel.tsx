@@ -35,7 +35,7 @@ import { groupEventsByTurn, shortTurnId } from "../lib/chat/traceTurnGroups";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";
-import McpIcon from "./McpIcon";
+import McpIcon from "./icons/McpIcon";
 
 type Period = "month" | "quarter" | "year";
 type Metric = "calls" | "tokens" | "cost";

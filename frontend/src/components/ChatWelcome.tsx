@@ -8,7 +8,7 @@ import {
   SolidChat,
   SolidFolder,
   SolidStar,
-} from "./GlassSolidIcons";
+} from "./icons/GlassSolidIcons";
 
 export type WelcomeCardId = "intro" | "skills" | "files" | "data";
 

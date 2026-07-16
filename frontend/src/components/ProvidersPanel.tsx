@@ -34,7 +34,7 @@ import {
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import { ModelBrandIcon, ProviderBrandIcon } from "./ProviderIcons";
+import { ModelBrandIcon, ProviderBrandIcon } from "./icons/ProviderIcons";
 import { SelectMenu } from "./SelectMenu";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
