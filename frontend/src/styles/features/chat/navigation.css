@@ -30,8 +30,8 @@
   justify-content: flex-start;
   /* 与 ChatMessageNav GAP 一致 */
   gap: 12px;
-  /* 左侧加宽命中区，鼠标在放大图标旁滑动仍能连续驱动鱼眼 */
-  padding: 10px 4px 10px 28px;
+  /* 左侧加宽命中区；右侧归零，使消息锚点与底部按钮共用同一轴线 */
+  padding: 10px 0 10px 28px;
   border-radius: 0;
   background: transparent;
   border: none;
