@@ -1762,7 +1762,7 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 }
 
 .msg-md li::marker {
-  color: color-mix(in srgb, var(--accent, #818cf8) 70%, var(--ink-mute));
+  color: color-mix(in srgb, var(--tone, var(--accent)) 70%, var(--ink-mute));
 }
 
 .msg-md strong {
@@ -1776,13 +1776,13 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 }
 
 .msg-md a {
-  color: var(--accent-2, #60a5fa);
+  color: var(--tone, var(--accent-2, #60a5fa));
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .msg-md a:hover {
-  color: var(--accent, #c084fc);
+  color: color-mix(in srgb, var(--tone, var(--accent)) 82%, #fff);
 }
 
 .msg-md hr {
@@ -1800,9 +1800,9 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 .msg-md blockquote {
   margin: 0.65em 0;
   padding: 0.45em 0.8em;
-  border-left: 3px solid color-mix(in srgb, var(--accent, #818cf8) 55%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--tone, var(--accent)) 55%, transparent);
   border-radius: 0 10px 10px 0;
-  background: color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.08)) 40%, transparent);
+  background: color-mix(in srgb, var(--tone-soft, var(--glass-inner, rgba(255, 255, 255, 0.08))) 45%, transparent);
   color: var(--ink-soft);
 }
 

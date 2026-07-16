@@ -290,7 +290,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-option.is-editing {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent);
 }
 
 /* 绝对定位编辑按钮：不参与文档流，杜绝 layout shift */
@@ -331,8 +331,8 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 
 .model-picker-edit-btn:hover,
 .model-picker-edit-btn.is-active {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--tone, var(--accent));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent);
 }
 
 .model-picker-option-badge {
@@ -343,7 +343,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-option.is-selected .model-picker-option-badge {
-  color: color-mix(in srgb, var(--accent) 72%, var(--ink-mute));
+  color: color-mix(in srgb, var(--tone, var(--accent)) 72%, var(--ink-mute));
 }
 
 .mp-toggle {
@@ -470,11 +470,11 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .mp-edit-choice:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
 }
 
 .mp-edit-choice.is-selected {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
 }
 
 .mp-edit-choice:disabled {
@@ -531,11 +531,11 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-option:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
 }
 
 .model-picker-option.is-selected {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
   color: var(--ink);
 }
 
@@ -554,8 +554,8 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-option.is-selected .model-picker-option-icon {
-  background: color-mix(in srgb, #fff 88%, var(--accent));
-  border-color: color-mix(in srgb, var(--accent) 18%, rgba(255, 255, 255, 0.9));
+  background: color-mix(in srgb, #fff 88%, var(--tone, var(--accent)));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 18%, rgba(255, 255, 255, 0.9));
 }
 
 .model-picker-option-icon svg,

@@ -88,15 +88,15 @@ html[data-theme="dark"] {
       0 0 0 1px rgba(255, 255, 255, 0.06) inset,
       0 1px 0 rgba(255, 255, 255, 0.09) inset;
     --backdrop-glass: blur(var(--blur-glass, 22px)) saturate(1.15);
-    /* 浮层下拉：略提亮的深紫磨砂，避免近黑发脏 */
+    /* 浮层下拉：中性深底 + Tab tone-soft，避免写死紫色 */
     --menu-glass-bg:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%),
-      rgba(36, 30, 58, 0.86);
-    --menu-glass-border: rgba(255, 255, 255, 0.18);
+      linear-gradient(165deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+      color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 42%, rgba(14, 16, 28, 0.9));
+    --menu-glass-border: color-mix(in srgb, var(--tone, transparent) 14%, rgba(255, 255, 255, 0.16));
     --menu-glass-shadow:
       0 16px 40px rgba(0, 0, 0, 0.42),
       0 2px 8px rgba(0, 0, 0, 0.22),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
     --menu-glass-blur: blur(28px) saturate(1.4);
     /* 顶栏状态 / 模型 / 工具组共用表面 */
     --header-chip-bg:
@@ -412,17 +412,71 @@ html[data-theme="dark"][data-tone="teal"] {
   --window-underlay: #071412;
 }
 
-/* 全局 --tone 映射：使弹窗/浮层/Portal 等元素自动跟随当前 Tab 主题色。
-   各 Panel 内部的局部 --tone 定义（更近的祖先）仍优先，不受影响。     */
-html[data-tone="blue"]   { --tone: var(--tone-blue);   --tone-soft: var(--tone-blue-soft);   }
-html[data-tone="green"]  { --tone: var(--tone-green);  --tone-soft: var(--tone-green-soft);  }
-html[data-tone="purple"] { --tone: var(--tone-purple); --tone-soft: var(--tone-purple-soft); }
-html[data-tone="orange"] { --tone: var(--tone-orange); --tone-soft: var(--tone-orange-soft); }
-html[data-tone="pink"]   { --tone: var(--tone-pink);   --tone-soft: var(--tone-pink-soft);   }
-html[data-tone="cyan"]   { --tone: var(--tone-cyan);   --tone-soft: var(--tone-cyan-soft);   }
-html[data-tone="indigo"] { --tone: var(--tone-indigo); --tone-soft: var(--tone-indigo-soft); }
-html[data-tone="amber"]  { --tone: var(--tone-amber);  --tone-soft: var(--tone-amber-soft);  }
-html[data-tone="teal"]   { --tone: var(--tone-teal);   --tone-soft: var(--tone-teal-soft);   }
+/* 全局 --tone / --accent 映射：Portal 浮层与 Markdown 跟随当前 Tab 主题色。
+   各 Panel 内部的局部 --tone 定义（更近的祖先）仍优先，不受影响。 */
+html[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+  --tone-glow: var(--tone-blue-glow);
+  --accent: var(--tone-blue);
+  --accent-2: var(--tone-blue);
+}
+html[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+  --tone-glow: var(--tone-green-glow);
+  --accent: var(--tone-green);
+  --accent-2: var(--tone-green);
+}
+html[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+  --tone-glow: var(--tone-purple-glow);
+  --accent: var(--tone-purple);
+  --accent-2: var(--tone-purple);
+}
+html[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+  --tone-glow: var(--tone-orange-glow);
+  --accent: var(--tone-orange);
+  --accent-2: var(--tone-orange);
+}
+html[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-soft: var(--tone-pink-soft);
+  --tone-glow: var(--tone-pink-glow);
+  --accent: var(--tone-pink);
+  --accent-2: var(--tone-pink);
+}
+html[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+  --tone-glow: var(--tone-cyan-glow);
+  --accent: var(--tone-cyan);
+  --accent-2: var(--tone-cyan);
+}
+html[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+  --tone-glow: var(--tone-indigo-glow);
+  --accent: var(--tone-indigo);
+  --accent-2: var(--tone-indigo);
+}
+html[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+  --tone-glow: var(--tone-amber-glow);
+  --accent: var(--tone-amber);
+  --accent-2: var(--tone-amber);
+}
+html[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+  --tone-glow: var(--tone-teal-glow);
+  --accent: var(--tone-teal);
+  --accent-2: var(--tone-teal);
+}
 
 button,
 input,
