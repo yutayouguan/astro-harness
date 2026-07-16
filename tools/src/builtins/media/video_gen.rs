@@ -1,4 +1,4 @@
-//! 视频生成：Google OpenAI 兼容 `…/videos`（Veo），写入工作区 `generated/videos/`。
+//! 视频生成：Google 原生 Veo `predictLongRunning`，失败时回退 OpenAI 兼容 `…/videos`。
 
 use std::path::{Path, PathBuf};
 
@@ -6,7 +6,8 @@ use home::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::media_http::{
-    default_video_model, google_openai_generate_video, VideoGenExtras, VideoImagePart,
+    default_video_model, google_native_generate_video, google_openai_generate_video,
+    VideoGenExtras, VideoImagePart,
 };
 use providers::trait_::ProviderConfig;
 
@@ -22,28 +23,37 @@ pub struct VideoGenArgs {
     /// 宽高比，如 `16:9` / `9:16`（可选）。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// 时长秒数（可选；参考图/首尾帧/续拍时强制为 8）。
+    /// 时长秒数（可选；参考图/首尾帧/续拍/1080p/4K 时强制为 8）。
     #[serde(default)]
     pub duration_seconds: Option<u32>,
     /// 输出分辨率（可选）：`720p` / `1080p` / `4K`。
     #[serde(default)]
     pub resolution: Option<String>,
-    /// 负面提示：希望排除的内容（可选）。
+    /// 负面提示：希望排除的内容（可选；原生 Veo 忽略）。
     #[serde(default)]
     pub negative_prompt: Option<String>,
-    /// 视觉风格（可选）：`cinematic` / `creative`。
+    /// 视觉风格（可选）：`cinematic` / `creative`（原生 Veo 忽略）。
     #[serde(default)]
     pub style: Option<String>,
+    /// 续拍：工作区内已有视频路径（优先于 extend_video_uri / extend_video_id）。
+    #[serde(default)]
+    pub extend_video: Option<String>,
+    /// 续拍：远端视频 URI（可选）。
+    #[serde(default)]
+    pub extend_video_uri: Option<String>,
     /// 续拍：已有视频的 operation id（可选）。
     #[serde(default)]
     pub extend_video_id: Option<String>,
-    /// 角色/风格参考图（工作区相对或绝对路径，可选；不可与 image/last_frame 同用）。
+    /// 角色/风格参考图路径列表（最多 3 张；不可与 image/last_frame 同用）。
+    #[serde(default)]
+    pub reference_images: Option<Vec<String>>,
+    /// 单张参考图路径（会合并进 reference_images）。
     #[serde(default)]
     pub reference_image: Option<String>,
     /// 首帧图路径（建议先 image_gen；图生视频 / 插值）。
     #[serde(default)]
     pub image: Option<String>,
-    /// 尾帧图路径（插值；必须同时提供 `image`；不可与 reference_image 同用）。
+    /// 尾帧图路径（插值；必须同时提供 `image`）。
     #[serde(default)]
     pub last_frame: Option<String>,
     /// 人物生成策略（可选）：`allow_adult` / `allow_all` / `dont_allow`。
@@ -59,7 +69,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video via Google Veo. Prefer image_gen for first/last frames, then pass image/last_frame. Result includes operation_id — use it as extend_video_id for the next shot. reference_image cannot combine with image/last_frame. Advanced modes force duration_seconds=8. Writes to generated/videos/."
+        description: "Generate a short video via Google native Veo (predictLongRunning), with OpenAI-compatible /videos fallback. Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,
@@ -76,23 +86,53 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         anyhow::bail!("video_gen 需要 prompt");
     }
 
-    let last_frame_path = opt_path(parsed.last_frame.as_deref());
+    let mut refs: Vec<String> = parsed
+        .reference_images
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|s| {
+            let t = s.trim().to_string();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t)
+            }
+        })
+        .collect();
+    if let Some(one) = opt_path(parsed.reference_image.as_deref()) {
+        refs.push(one.to_string());
+    }
+    if refs.len() > 3 {
+        anyhow::bail!("video_gen: reference_images 最多 3 张");
+    }
+
     let image_path = opt_path(parsed.image.as_deref());
-    let reference_path = opt_path(parsed.reference_image.as_deref());
+    let last_frame_path = opt_path(parsed.last_frame.as_deref());
+    let extend_path = opt_path(parsed.extend_video.as_deref());
+    let extend_uri = opt_path(parsed.extend_video_uri.as_deref());
     let extend_id = opt_path(parsed.extend_video_id.as_deref());
 
     if last_frame_path.is_some() && image_path.is_none() {
-        anyhow::bail!("video_gen: last_frame 需要同时提供 image（首帧）。建议先用 image_gen 生成首尾帧。");
-    }
-    if reference_path.is_some() && (image_path.is_some() || last_frame_path.is_some()) {
         anyhow::bail!(
-            "video_gen: reference_image 不能与 image/last_frame 同时使用；请二选一（参考图 或 首尾帧插值）。"
+            "video_gen: last_frame 需要同时提供 image（首帧）。建议先用 image_gen 生成首尾帧。"
         );
     }
+    if !refs.is_empty() && (image_path.is_some() || last_frame_path.is_some()) {
+        anyhow::bail!("video_gen: reference_images 不能与 image/last_frame 同时使用");
+    }
+    let has_extend = extend_path.is_some() || extend_uri.is_some() || extend_id.is_some();
+    if has_extend && (image_path.is_some() || last_frame_path.is_some() || !refs.is_empty()) {
+        anyhow::bail!("video_gen: 续拍不能与 image/last_frame/reference_images 同时使用");
+    }
 
-    let needs_eight = last_frame_path.is_some()
-        || reference_path.is_some()
-        || extend_id.is_some();
+    let res_lower = parsed
+        .resolution
+        .as_deref()
+        .map(|s| s.trim().to_ascii_lowercase());
+    let needs_eight = has_extend
+        || !refs.is_empty()
+        || last_frame_path.is_some()
+        || matches!(res_lower.as_deref(), Some("1080p") | Some("4k"));
     let mut duration = parsed.duration_seconds.filter(|s| *s > 0);
     let mut duration_note = String::new();
     if needs_eight {
@@ -127,13 +167,32 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         ..ProviderConfig::default()
     };
 
+    let mut reference_parts = Vec::with_capacity(refs.len());
+    for r in &refs {
+        reference_parts.push(load_image_part(ctx, r)?);
+    }
+
+    let extend_video = extend_path
+        .map(|p| load_video_part(ctx, p))
+        .transpose()?;
+    let (extend_video, extend_video_uri, extend_video_id) = if extend_video.is_some() {
+        (extend_video, None, None)
+    } else if extend_uri.is_some() {
+        (None, extend_uri.map(|s| s.to_string()), None)
+    } else {
+        (None, None, extend_id.map(|s| s.to_string()))
+    };
+    let extend_native_only = extend_video.is_some() || extend_video_uri.is_some();
+
     let extras = VideoGenExtras {
         aspect_ratio: opt_owned(parsed.aspect_ratio.as_deref()),
         duration_seconds: duration,
         resolution: opt_owned(parsed.resolution.as_deref()),
         negative_prompt: opt_owned(parsed.negative_prompt.as_deref()),
         style: opt_owned(parsed.style.as_deref()),
-        extend_video_id: extend_id.map(|s| s.to_string()),
+        extend_video_id,
+        extend_video_uri,
+        extend_video,
         person_generation: opt_owned(parsed.person_generation.as_deref()),
         seed: parsed.seed,
         image: image_path
@@ -142,10 +201,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         last_frame: last_frame_path
             .map(|p| load_image_part(ctx, p))
             .transpose()?,
-        reference_image: reference_path
-            .map(|p| load_image_part(ctx, p))
-            .transpose()?,
+        reference_images: reference_parts,
     };
+
+    let has_native_ignored = parsed.negative_prompt.as_deref().is_some_and(|s| !s.trim().is_empty())
+        || parsed.style.as_deref().is_some_and(|s| !s.trim().is_empty());
 
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Videos);
     std::fs::create_dir_all(&dir)?;
@@ -163,9 +223,46 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         let _ = std::fs::write(&progress_path, &body);
     };
 
-    let video =
-        google_openai_generate_video(&client, prompt, &config, &extras, Some(&mut on_progress))
-            .await?;
+    let (video, api_path) = match google_native_generate_video(
+        &client,
+        prompt,
+        &config,
+        &extras,
+        Some(&mut on_progress),
+    )
+    .await
+    {
+        Ok(v) => {
+            on_progress("api_path=native");
+            (v, "native")
+        }
+        Err(native_err) => {
+            if extend_native_only {
+                anyhow::bail!(
+                    "Google 原生视频失败: {native_err}；兼容回退需要 extend_video_id（本地/URI 续拍仅原生支持）"
+                );
+            }
+            on_progress(&format!(
+                "fallback=openai_compat reason={}",
+                native_err.to_string().replace('\n', " ")
+            ));
+            let v = google_openai_generate_video(
+                &client,
+                prompt,
+                &config,
+                &extras,
+                Some(&mut on_progress),
+            )
+            .await
+            .map_err(|compat_err| {
+                anyhow::anyhow!(
+                    "Google 原生视频失败: {native_err}; 兼容回退失败: {compat_err}"
+                )
+            })?;
+            on_progress("api_path=compat");
+            (v, "compat")
+        }
+    };
 
     let filename = format!(
         "vid-{}-{}.mp4",
@@ -180,18 +277,32 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         format!("status=saved path={rel}\n{}", progress_lines.join("\n")),
     );
 
-    Ok(format!(
-        "视频已生成：{rel}\n\
-         provider=google\n\
-         model={model}\n\
-         operation_id={}\n\
-         {duration_note}\
-         progress:\n{}\n\
-         next_shot_hint: video_gen(prompt=\"…\", extend_video_id=\"{}\", duration_seconds=8, aspect_ratio=…)",
-        video.operation_id,
-        progress_lines.join("\n"),
-        video.operation_id,
-    ))
+    let op_label = if api_path == "native" {
+        "operation_name"
+    } else {
+        "operation_id"
+    };
+    let mut lines = vec![
+        format!("视频已生成：{rel}"),
+        "provider=google".to_string(),
+        format!("model={model}"),
+        format!("api_path={api_path}"),
+        format!("{op_label}={}", video.operation_id),
+    ];
+    if let Some(uri) = &video.video_uri {
+        lines.push(format!("video_uri={uri}"));
+    }
+    if api_path == "native" && has_native_ignored {
+        lines.push("native_ignored=negative_prompt,style".to_string());
+    }
+    if !duration_note.is_empty() {
+        lines.push(duration_note.trim_end().to_string());
+    }
+    lines.push(format!("progress:\n{}", progress_lines.join("\n")));
+    lines.push(format!(
+        "next_shot_hint: video_gen(prompt=\"…\", extend_video=\"{rel}\", duration_seconds=8, aspect_ratio=…)"
+    ));
+    Ok(lines.join("\n"))
 }
 
 fn opt_path(s: Option<&str>) -> Option<&str> {
@@ -208,7 +319,7 @@ fn rel_workspace(ctx: &ToolContext<'_>, path: &Path) -> String {
         .unwrap_or_else(|_| path.display().to_string())
 }
 
-fn resolve_workspace_file(ctx: &ToolContext<'_>, input: &str) -> anyhow::Result<PathBuf> {
+fn resolve_workspace_file(ctx: &ToolContext<'_>, input: &str, kind: &str) -> anyhow::Result<PathBuf> {
     let p = PathBuf::from(input);
     let path = if p.is_absolute() {
         p
@@ -221,18 +332,18 @@ fn resolve_workspace_file(ctx: &ToolContext<'_>, input: &str) -> anyhow::Result<
         .unwrap_or_else(|_| ctx.workspace_dir.clone());
     let canon = path
         .canonicalize()
-        .map_err(|_| anyhow::anyhow!("视频图片不存在: {}", path.display()))?;
+        .map_err(|_| anyhow::anyhow!("{kind}不存在: {}", path.display()))?;
     if !canon.starts_with(&canon_ws) {
-        anyhow::bail!("视频图片必须位于工作区内: {}", path.display());
+        anyhow::bail!("{kind}必须位于工作区内: {}", path.display());
     }
     if !canon.is_file() {
-        anyhow::bail!("视频图片不存在: {}", path.display());
+        anyhow::bail!("{kind}不存在: {}", path.display());
     }
     Ok(canon)
 }
 
 fn load_image_part(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<VideoImagePart> {
-    let path = resolve_workspace_file(ctx, relative)?;
+    let path = resolve_workspace_file(ctx, relative, "视频图片")?;
     let bytes = std::fs::read(&path)
         .map_err(|e| anyhow::anyhow!("读取图片失败 {}: {e}", path.display()))?;
     let filename = path
@@ -241,6 +352,23 @@ fn load_image_part(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<Vide
         .unwrap_or("image.jpg")
         .to_string();
     let mime = mime_from_name(&filename);
+    Ok(VideoImagePart {
+        bytes,
+        filename,
+        mime: mime.to_string(),
+    })
+}
+
+fn load_video_part(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<VideoImagePart> {
+    let path = resolve_workspace_file(ctx, relative, "续拍视频")?;
+    let bytes = std::fs::read(&path)
+        .map_err(|e| anyhow::anyhow!("读取视频失败 {}: {e}", path.display()))?;
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("extend.mp4")
+        .to_string();
+    let mime = mime_from_video_name(&filename);
     Ok(VideoImagePart {
         bytes,
         filename,
@@ -258,5 +386,16 @@ fn mime_from_name(name: &str) -> &'static str {
         "image/gif"
     } else {
         "image/jpeg"
+    }
+}
+
+fn mime_from_video_name(name: &str) -> &'static str {
+    let lower = name.to_ascii_lowercase();
+    if lower.ends_with(".webm") {
+        "video/webm"
+    } else if lower.ends_with(".mov") {
+        "video/quicktime"
+    } else {
+        "video/mp4"
     }
 }

@@ -5,9 +5,11 @@
 
 pub mod message_db;
 pub mod store;
+pub mod tools;
 
 pub use message_db::{build_conversation_context, ScrolledMessage};
 pub use store::{
     BillingDelta, ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit,
     SessionBillingRow, SessionStore, StoredMessage, StoredSession, SCHEMA_VERSION,
 };
+pub use tools::dispatch_session_tool;

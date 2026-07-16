@@ -99,6 +99,7 @@ mod tests {
     fn test_ctx<'a>(
         dir: &'a tempfile::TempDir,
         memory: &'a mut memory::MemoryManager,
+        sessions: &'a session::SessionStore,
         providers: &'a providers::registry::ProviderRegistry,
         targets: &'a ImageGenTargets,
     ) -> ToolContext<'a> {
@@ -106,6 +107,7 @@ mod tests {
         std::fs::create_dir_all(&ws).unwrap();
         ToolContext {
             memory,
+            sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
@@ -128,9 +130,10 @@ mod tests {
     async fn rejects_unknown_language() {
         let dir = tempfile::tempdir().unwrap();
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
         let err = dispatch(
             &ctx,
             &serde_json::json!({"code": "1", "language": "ruby"}),
@@ -145,9 +148,10 @@ mod tests {
     async fn large_stdout_is_truncated() {
         let dir = tempfile::tempdir().unwrap();
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
         let n = common::MAX_TOOL_RESULT_BYTES + 4096;
         let out = dispatch(
             &ctx,

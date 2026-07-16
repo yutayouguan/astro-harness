@@ -1,7 +1,7 @@
 # Memory 分步拆分计划
 
-> **Goal:** 把臃肿的 `memory` crate 按域拆开；每步可编译、可测、`memory` 继续作 facade。  
-> **Architecture:** `home`（无 SQLite）为叶子；有库域逐步独立；调用方短期仍 `use memory::…`。  
+> **Goal:** 把臃肿的 `memory` crate 按域拆开；每步可编译、可测。  
+> **Architecture:** `home`（无 SQLite）为叶子；有库域独立；`memory` 仅保留精炼记忆真域 + `ensure_workspace` 编排。  
 > **Tech Stack:** Rust workspace、rusqlite、现有集成测试不动语义。
 
 ---
@@ -19,6 +19,7 @@
 | **7 ✅** | stub 清理 + 调用方 | 删 memory→home 空壳；backend/tauri 改用 home/cron | facade 仍保留根级 `memory::*` |
 | **8 ✅** | tools/agent 直连 | orchestration/delegate/cron/usage/session/home 直依赖 | MemoryManager、ensure_workspace、review/dreaming 仍经 memory |
 | **9 ✅** | 收窄 facade | 删根级域 re-export；去 usage/cron/… 依赖；迁 backend 残留 | memory 仅真域 API |
+| **10 ✅** | workspace 瘦身 | `memory::workspace` 只留 ensure_* 编排；路径 API 直连 `home` | — |
 
 ---
 

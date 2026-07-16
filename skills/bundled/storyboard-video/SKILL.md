@@ -1,7 +1,7 @@
 ---
 name: storyboard-video
 description: Turn a short scene idea into a shot list and generate clips with video_gen (Veo). Use when the user wants 分镜、短剧片段、连续镜头、角色一致视频。
-astro_bundled_rev: 2
+astro_bundled_rev: 3
 ---
 
 # 分镜短视频（storyboard-video）
@@ -20,8 +20,8 @@ astro_bundled_rev: 2
 3. **先出图再出视频（默认）**：
    - 用 `image_gen` 生成首帧（及可选尾帧）→ 得到相对路径如 `generated/images/img-….png`
    - 再 `video_gen`：`image=…`，转场加 `last_frame=…`
-   - **不要**把 `reference_image` 与 `image`/`last_frame` 并用
-4. **续拍**：读上一段结果里的 `operation_id`，下一镜传 `extend_video_id=<该 id>`（仍要新的 `prompt`）。
+   - **不要**把 `reference_images` 与 `image`/`last_frame` 并用
+4. **续拍**：优先把上一段 `generated/videos/…` 相对路径作 `extend_video=`（仍要新的 `prompt`）；也可传 `extend_video_uri=`（原生会先下载再内联）。仅兼容回退时用上一镜返回的 `operation_id` 作 `extend_video_id=`。
 5. **汇总**：列出 `generated/videos/…` 路径与每个 `operation_id`；结果里的 `next_shot_hint` 可直接改 prompt 续用。
 
 可用 `generated/videos/progress-latest.txt` 查看当前生成进度（轮询状态）。
@@ -32,9 +32,11 @@ astro_bundled_rev: 2
 |------|------|
 | `prompt` | 画面与运镜（必填） |
 | `image` / `last_frame` | 首尾帧（尾帧必须有首帧）；路径来自 `image_gen` |
-| `extend_video_id` | 上一镜返回的 `operation_id` |
-| `reference_image` | 单张参考（与首尾帧互斥） |
-| `style` / `aspect_ratio` / `resolution` / `negative_prompt` | 风格与画质 |
+| `extend_video` | 上一镜本地 mp4 相对路径（续拍首选） |
+| `extend_video_uri` | 上一镜 `video_uri`（原生会先下载再内联） |
+| `extend_video_id` | 上一镜 `operation_id`（仅 OpenAI 兼容回退） |
+| `reference_images` | 最多 3 张参考图（与首尾帧互斥）；旧字段 `reference_image` 会并入 |
+| `style` / `aspect_ratio` / `resolution` / `negative_prompt` | 风格与画质（`negative_prompt`/`style` 仅兼容路径） |
 | `person_generation` | `allow_adult` / `allow_all` / `dont_allow` |
 | `seed` | 可选整数种子 |
 | `duration_seconds` | 高级模式强制 8 |

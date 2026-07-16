@@ -140,7 +140,8 @@ fn append_daily_not_gated_by_write_approval() {
 #[test]
 fn dreaming_finalize_enqueues_when_write_approval() {
     use memory::dreaming::{finalize_dream_job, DreamDiary, DreamJob, DreamingState};
-    use memory::workspace::{create_agent, ensure_workspace, agent_workspace_dir};
+    use home::{agent_workspace_dir, create_agent};
+    use memory::workspace::ensure_workspace;
 
     let dir = TempDir::new().unwrap();
     ensure_workspace(dir.path()).unwrap();

@@ -24,12 +24,12 @@ const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 /// `image_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageGenArgs {
-    /// 图片的详细文字描述（不可为空）。
+    /// 画面内容描述（不可为空）。宽高比与分辨率请用 `aspect_ratio` / `image_size` 字段，勿只写进本 prompt。
     pub prompt: String,
-    /// 宽高比（可选，主要 Google）：如 `1:1` / `16:9` / `9:16`。
+    /// 宽高比（用户要 16:9 / 9:16 / 1:1 等时必须传此字段，勿只写进 prompt）。常用：`1:1` / `16:9` / `9:16` / `4:3` / `3:4`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// 输出分辨率（Google Interactions）：`0.5K` / `1K` / `2K` / `4K`（K 须大写）。
+    /// 输出分辨率档位（用户要 2K / 4K 等时必须传此字段，勿只写进 prompt）。仅：`0.5K` / `1K` / `2K` / `4K`（K 大写）。
     #[serde(default)]
     pub image_size: Option<String>,
     /// 参考图工作区相对路径（最多 14 张）。
@@ -97,6 +97,25 @@ fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 仅规范化显式传入的 `image_size` 大小写（如 `2k` → `2K`）；缺省字段保持不填。
+fn normalize_image_gen_args(args: &mut ImageGenArgs) {
+    if let Some(sz) = args.image_size.as_deref() {
+        if let Some(norm) = normalize_image_size_token(sz) {
+            args.image_size = Some(norm);
+        }
+    }
+}
+
+fn normalize_image_size_token(s: &str) -> Option<String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "0.5k" => Some("0.5K".into()),
+        "1k" => Some("1K".into()),
+        "2k" => Some("2K".into()),
+        "4k" => Some("4K".into()),
+        _ => None,
+    }
+}
+
 fn has_advanced_interactions_args(args: &ImageGenArgs) -> bool {
     args.image_size
         .as_deref()
@@ -135,7 +154,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate or edit images via Gemini Interactions (Nano Banana): text-to-image, up to 14 reference_images, previous_interaction_id for multi-turn, optional google_search/image_search, thinking_level, video_uri/video. Params: aspect_ratio, image_size (0.5K|1K|2K|4K). Falls back to OpenAI gpt-image-2 for prompt-only. Writes generated/images/."
+        description: "Generate or edit images via Gemini Interactions (Nano Banana). REQUIRED: if the user asks for aspect ratio (e.g. 16:9) or resolution (e.g. 2K), you MUST set aspect_ratio and/or image_size fields — do NOT only put them in prompt text. image_size values: 0.5K|1K|2K|4K. Also supports reference_images (≤14), previous_interaction_id, google_search/image_search, thinking_level, video_uri/video. OpenAI fallback is prompt-only. Writes generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
@@ -148,8 +167,9 @@ pub fn register(registry: &mut ToolRegistry) {
 /// # 错误
 /// 无可用 Provider、全部尝试失败，或缺少 `prompt`。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: ImageGenArgs = serde_json::from_value(args.clone())
+    let mut parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
+    normalize_image_gen_args(&mut parsed);
     validate_image_gen_args(&parsed)?;
 
     if ctx.image_gen_targets.is_empty() {
@@ -258,7 +278,7 @@ async fn generate_one_google(
         out.push_str(&format!("\nsearch_suggestions: {sug}"));
     }
     out.push_str(&format!(
-        "\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）；多轮编辑可传 previous_interaction_id=\"{}\"",
+        "\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）；多轮编辑可传 previous_interaction_id=\"{}\"",
         result.interaction_id
     ));
     Ok(out)
@@ -294,7 +314,7 @@ async fn generate_one_openai_compat(
 
     let rel = save_generated_image(ctx, &img)?;
     let mut out = format!(
-        "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_image（工作区相对路径）",
+        "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）",
         creds.provider, creds.model
     );
     if has_advanced_interactions_args(args) {
@@ -500,6 +520,25 @@ mod arg_tests {
         assert!(validate_image_gen_args(&a).is_ok());
     }
 
+    #[test]
+    fn normalize_lowercase_image_size() {
+        let mut a = ImageGenArgs {
+            prompt: "cat".into(),
+            aspect_ratio: None,
+            image_size: Some("2k".into()),
+            reference_images: None,
+            previous_interaction_id: None,
+            google_search: false,
+            image_search: false,
+            thinking_level: None,
+            video_uri: None,
+            video: None,
+        };
+        normalize_image_gen_args(&mut a);
+        assert_eq!(a.image_size.as_deref(), Some("2K"));
+        assert!(validate_image_gen_args(&a).is_ok());
+    }
+
     fn base_args() -> ImageGenArgs {
         ImageGenArgs {
             prompt: "x".into(),
@@ -614,10 +653,12 @@ mod path_tests {
         std::fs::write(outside.join("secret.txt"), b"x").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
+            sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
@@ -650,10 +691,12 @@ mod path_tests {
         std::fs::write(ws.join("ok.txt"), b"ok").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
+            sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws.clone(),
             project_root: None,

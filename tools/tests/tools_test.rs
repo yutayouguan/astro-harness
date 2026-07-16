@@ -19,6 +19,7 @@ async fn register_all_includes_panel_tools() {
         "cron_add",
         "image_gen",
         "video_gen",
+        "video_understand",
         "file_ops",
         "terminal",
         "web_search",
@@ -48,10 +49,12 @@ async fn file_ops_write_and_read() {
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = ToolContext {
         memory: &mut memory,
+        sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace.clone(),
         project_root: None,
