@@ -1,0 +1,606 @@
+
+.message-list-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.message-list {
+  flex: 1;
+  overflow: auto;
+  /* 右侧给锚点 Dock 留空，放大时不贴气泡 */
+  padding: 20px 56px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.message-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.message-list::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+}
+
+.message-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 全局滚动条：更浅、更细（各 Tab 通用） */
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scroll-thumb) 100%, rgba(15, 23, 42, 0.06));
+}
+
+.msg-row {
+  display: flex;
+  gap: 12px;
+  width: min(100%, 860px);
+  animation: rise 0.3s ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.msg-row.user {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.msg-row.assistant {
+  justify-content: flex-start;
+}
+
+/* 编辑截断：气泡与文字粒子消散 */
+.msg-row.is-dissolving {
+  position: relative;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.msg-row.is-dissolving .avatar,
+.msg-row.is-dissolving .msg-stack {
+  animation: msg-dissolve-fade 0.85s ease-out forwards;
+}
+
+.msg-row.is-dissolving .msg-actions {
+  opacity: 0 !important;
+}
+
+.msg-dissolve-layer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.msg-dissolve-particle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  animation: msg-dissolve-fly 0.88s cubic-bezier(0.2, 0.7, 0.25, 1) forwards;
+  will-change: transform, opacity, filter;
+}
+
+.msg-dissolve-particle.is-char {
+  font-weight: 600;
+  line-height: 1;
+  color: color-mix(in srgb, var(--tone, #60a5fa) 35%, var(--ink));
+  text-shadow: 0 0 8px color-mix(in srgb, var(--tone, #60a5fa) 25%, transparent);
+  user-select: none;
+}
+
+.msg-dissolve-particle.is-dust {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone, #60a5fa) 55%, #fff);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tone, #60a5fa) 40%, transparent);
+}
+
+@keyframes msg-dissolve-fade {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+  35% {
+    opacity: 0.55;
+    filter: blur(0.6px);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.96) translateY(-6px);
+  }
+}
+
+@keyframes msg-dissolve-fly {
+  0% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+        calc(-50% + var(--dx, 0px)),
+        calc(-50% + var(--dy, 0px))
+      )
+      scale(0.25)
+      rotate(var(--rot, 0deg));
+    filter: blur(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-row.is-dissolving .avatar,
+  .msg-row.is-dissolving .msg-stack,
+  .msg-dissolve-particle {
+    animation: none !important;
+  }
+
+  .msg-row.is-dissolving .avatar,
+  .msg-row.is-dissolving .msg-stack {
+    opacity: 0;
+  }
+
+  .msg-dissolve-layer {
+    display: none;
+  }
+}
+
+.msg-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  /* 占满 msg-row 可用宽度，避免短回复把气泡缩成细条 */
+  width: 100%;
+  max-width: min(92%, 680px);
+  flex: 1;
+}
+
+.msg-row.user .msg-stack {
+  align-items: flex-end;
+  margin-left: auto;
+  width: fit-content;
+  max-width: min(78%, 620px);
+}
+
+.msg-stack .bubble {
+  max-width: 100%;
+}
+
+.bubble.assistant {
+  display: flex;
+  flex-direction: column;
+  /* 助手气泡铺满 stack，活动卡 / A2UI / 正文同一列宽 */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 助手气泡右下角 Tokens / 速度角标：常显，不与下方悬停操作条抢位 */
+.msg-token-stats {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--ink-mute);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  user-select: none;
+  pointer-events: none;
+}
+
+.msg-token-stats-usage,
+.msg-token-stats-speed,
+.msg-token-stats-duration {
+  white-space: nowrap;
+}
+
+.msg-token-stats-speed,
+.msg-token-stats-duration + .msg-token-stats-usage {
+  opacity: 0.9;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+html[data-theme="dark"] .msg-token-stats {
+  color: color-mix(in srgb, var(--ink-mute) 92%, #fff);
+  border-color: rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
+    rgba(18, 16, 32, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+}
+
+html[data-theme="light"] .msg-token-stats {
+  color: color-mix(in srgb, var(--ink-mute) 88%, #64748b);
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 16%, rgba(148, 163, 184, 0.28));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 45%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px) saturate(1.25);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+}
+
+/* AI 消息悬停操作条：玻璃液态小按钮，贴在气泡下方，不挡选中文字 */
+.msg-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.2) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 40%, transparent);
+  box-shadow: var(--glass-rim), 0 6px 16px color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06));
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+}
+
+.msg-row.assistant:hover .msg-actions,
+.msg-row.assistant:focus-within .msg-actions,
+.msg-row.user:hover .msg-actions,
+.msg-row.user:focus-within .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.msg-action-btn {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.msg-action-btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.msg-action-btn.is-copied {
+  color: var(--tone-green, #16a34a);
+}
+
+.msg-action-btn--danger:hover:not(:disabled) {
+  color: var(--danger, #e11d48);
+  background: color-mix(in srgb, var(--danger, #e11d48) 12%, transparent);
+}
+
+.msg-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+html[data-theme="dark"] .msg-actions {
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 20%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 40%, rgba(18, 16, 32, 0.5));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="light"] .msg-actions {
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 16%, rgba(148, 163, 184, 0.28));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 45%, transparent);
+  box-shadow:
+    var(--glass-rim),
+    0 6px 14px color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.msg-row.is-focus-flash .bubble {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--tone-cyan, #06b6d4) 55%, transparent),
+    0 8px 24px color-mix(in srgb, var(--tone-cyan, #06b6d4) 18%, transparent);
+  transition: box-shadow 0.35s ease;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06)),
+    color-mix(in srgb, var(--tone-soft, transparent) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 22%, var(--glass-edge));
+  color: var(--tone, var(--ink));
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.avatar.is-model {
+  color: var(--tone, var(--ink));
+}
+
+.avatar.is-model .model-brand-icon,
+.avatar.is-model .model-brand-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.avatar .agent-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+html[data-theme="dark"] .avatar {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft, transparent) 55%, rgba(8, 6, 18, 0.55));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 28%, rgba(255, 255, 255, 0.1));
+}
+
+.avatar.error {
+  background: rgba(251, 113, 133, 0.25);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 35%, transparent);
+}
+
+.bubble {
+  max-width: min(92%, 680px);
+  padding: 13px 16px;
+  border-radius: 18px;
+  line-height: 1.62;
+  font-size: 14.5px;
+  word-break: break-word;
+  border: 1px solid transparent;
+}
+
+.bubble.user {
+  /* 跟随 tab tone 的浅蓝/主题色玻璃，避免实心色块 */
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, #fff 52%, transparent) 0%,
+      color-mix(in srgb, #fff 16%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 80%, transparent);
+  color: color-mix(in srgb, var(--ink) 86%, var(--tone, #2563eb));
+  border: 1px solid color-mix(in srgb, var(--tone, #2563eb) 26%, var(--glass-edge));
+  border-bottom-right-radius: 8px;
+  box-shadow:
+    var(--glass-rim),
+    0 8px 22px color-mix(in srgb, var(--tone, #2563eb) 14%, transparent);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  white-space: pre-wrap;
+  width: fit-content;
+  max-width: 100%;
+}
+
+html[data-theme="light"] .bubble.user {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.58) 0%,
+      rgba(255, 255, 255, 0.22) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 75%, transparent);
+  color: color-mix(in srgb, #0f172a 78%, var(--tone, #2563eb));
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 22%, rgba(255, 255, 255, 0.72));
+  box-shadow:
+    var(--glass-rim),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 8px 20px color-mix(in srgb, var(--tone, #2563eb) 12%, transparent);
+}
+
+html[data-theme="dark"] .bubble.user {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.03) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 70%, transparent);
+  color: color-mix(in srgb, var(--ink) 90%, #fff);
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 28%, rgba(255, 255, 255, 0.12));
+  box-shadow:
+    var(--glass-rim),
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 10px 26px color-mix(in srgb, var(--tone, #60a5fa) 16%, transparent);
+}
+
+.bubble.user .msg-timestamp {
+  color: color-mix(in srgb, currentColor 52%, transparent);
+}
+
+/* 用户气泡走 Markdown 时取消 pre-wrap，颜色跟气泡主题 */
+.bubble.user .msg-md {
+  white-space: normal;
+  color: inherit;
+}
+
+.bubble.user .msg-md h1,
+.bubble.user .msg-md h2,
+.bubble.user .msg-md h3,
+.bubble.user .msg-md h4,
+.bubble.user .msg-md strong {
+  color: inherit;
+}
+
+.bubble.user .msg-md em {
+  color: color-mix(in srgb, currentColor 78%, transparent);
+}
+
+.bubble.user .msg-md a {
+  color: color-mix(in srgb, var(--tone, #2563eb) 72%, currentColor);
+}
+
+.bubble.assistant {
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, #fff 18%, transparent) 0%,
+      color-mix(in srgb, #fff 4%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 28%, var(--assist-fill));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 10%, var(--glass-edge));
+  border-bottom-left-radius: 8px;
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  color: var(--ink);
+}
+
+.bubble.error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(251, 113, 133, 0.28);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+.bubble.typing {
+  color: var(--ink-mute);
+  min-width: 48px;
+}
+
+.msg-stream-loader {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 5px);
+  gap: 3px;
+  margin-top: 10px;
+  padding: 2px 0;
+  align-self: flex-start;
+}
+
+.msg-stream-loader.is-alone {
+  margin-top: 0;
+  align-self: center;
+}
+
+.msg-stream-loader span {
+  width: 5px;
+  height: 5px;
+  border-radius: 1.5px;
+  background: color-mix(in srgb, var(--tone, #60a5fa) 55%, var(--ink-mute));
+  opacity: 0.28;
+  animation: msg-matrix-pulse 1.05s ease-in-out infinite;
+}
+
+@keyframes msg-matrix-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.08);
+    background: color-mix(in srgb, var(--tone, #60a5fa) 70%, #fff);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--tone, #60a5fa) 35%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-stream-loader span {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
+/* 兼容旧类名（若别处仍引用） */
+.typing-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.typing-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-mute);
+  animation: bounce 1s infinite ease-in-out;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.bubble.is-streaming .msg-content {
+  word-break: break-word;
+}
+
+.msg-activities {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+}

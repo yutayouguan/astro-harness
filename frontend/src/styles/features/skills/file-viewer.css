@@ -1,0 +1,405 @@
+/* —— 技能文件查看器 —— */
+.skills-preview-root-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.skills-preview-root-row .skills-preview-root {
+  flex: 1;
+}
+
+.skills-preview-root-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.55));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.22)),
+    color-mix(in srgb, var(--tone-soft) 40%, transparent);
+  color: var(--tone);
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+}
+
+.skills-preview-root-btn:hover {
+  background: var(--tone-soft);
+  border-color: color-mix(in srgb, var(--tone) 34%, transparent);
+}
+
+.skills-preview-root-btn:active {
+  transform: scale(0.96);
+}
+
+html[data-theme="dark"] .skills-preview-root-btn {
+  background: color-mix(in srgb, var(--tone-soft) 45%, rgba(8, 6, 18, 0.4));
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
+  color: color-mix(in srgb, #fff 18%, var(--tone));
+}
+
+.skills-preview-filechip {
+  gap: 6px;
+}
+
+.skills-preview-filechip svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+  color: var(--tone);
+}
+
+.skills-preview-filechip[data-kind="md"] svg { color: #4f46e5; }
+.skills-preview-filechip[data-kind="code-shell"] svg,
+.skills-preview-filechip[data-kind="code-js"] svg,
+.skills-preview-filechip[data-kind="code-ts"] svg,
+.skills-preview-filechip[data-kind="code-py"] svg,
+.skills-preview-filechip[data-kind="code"] svg { color: #0d9488; }
+.skills-preview-filechip[data-kind="code-web"] svg { color: #ea580c; }
+.skills-preview-filechip[data-kind="json"] svg,
+.skills-preview-filechip[data-kind="config"] svg { color: #d97706; }
+
+html[data-theme="dark"] .skills-preview-filechip[data-kind="md"] svg { color: #a5b4fc; }
+html[data-theme="dark"] .skills-preview-filechip[data-kind^="code"] svg { color: #5eead4; }
+
+.skills-preview-filepath {
+  gap: 8px;
+}
+
+.skills-preview-filepath-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-preview-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.skills-file-viewer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.skills-file-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.skills-file-viewer-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(42%, 220px);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.skills-file-viewer-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-file-viewer-size {
+  flex-shrink: 0;
+  font-weight: 550;
+  opacity: 0.8;
+}
+
+.skills-file-viewer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.skills-file-viewer-modes {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  background: color-mix(in srgb, var(--chip-bg) 70%, transparent);
+}
+
+.skills-file-viewer-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-mute);
+  background: transparent;
+  cursor: pointer;
+}
+
+.skills-file-viewer-mode.is-active {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4)),
+    var(--tone-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+html[data-theme="dark"] .skills-file-viewer-mode.is-active {
+  background: color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+  color: color-mix(in srgb, #fff 18%, var(--tone));
+}
+
+.skills-file-viewer-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-file-viewer-reveal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--tone-soft) 35%, transparent);
+  color: var(--tone);
+  cursor: pointer;
+}
+
+.skills-file-viewer-reveal:hover {
+  background: var(--tone-soft);
+  border-color: color-mix(in srgb, var(--tone) 32%, transparent);
+}
+
+html[data-theme="dark"] .skills-file-viewer-reveal {
+  background: color-mix(in srgb, var(--tone-soft) 50%, rgba(8, 6, 18, 0.4));
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
+  color: color-mix(in srgb, #fff 18%, var(--tone));
+}
+
+.skills-file-viewer-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--tone-soft) 35%, transparent);
+  color: var(--tone);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.skills-file-viewer-copy:hover,
+.skills-file-viewer-copy.is-copied {
+  background: var(--tone-soft);
+  border-color: color-mix(in srgb, var(--tone) 32%, transparent);
+}
+
+html[data-theme="dark"] .skills-file-viewer-copy {
+  background: color-mix(in srgb, var(--tone-soft) 50%, rgba(8, 6, 18, 0.4));
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
+  color: color-mix(in srgb, #fff 18%, var(--tone));
+}
+
+.skills-file-viewer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.55)),
+    var(--glass-inner, rgba(255, 255, 255, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+html[data-theme="dark"] .skills-file-viewer-body {
+  background: rgba(0, 0, 0, 0.28);
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.skills-file-viewer-md {
+  height: 100%;
+  overflow: auto;
+  padding: 14px 16px;
+}
+
+.skills-frontmatter {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.55));
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--tone-soft) 42%, transparent);
+}
+
+html[data-theme="dark"] .skills-frontmatter {
+  background: color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.45));
+  border-color: color-mix(in srgb, var(--tone) 26%, rgba(255, 255, 255, 0.08));
+}
+
+.skills-frontmatter-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--tone);
+  text-transform: none;
+}
+
+.skills-frontmatter-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.skills-frontmatter-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: start;
+  margin: 0;
+}
+
+.skills-frontmatter-row dt {
+  margin: 0;
+  padding-top: 2px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink-mute);
+}
+
+.skills-frontmatter-row dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.skills-frontmatter-name {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  overflow-wrap: anywhere;
+}
+
+.skills-frontmatter-desc {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.skills-frontmatter-desc.is-open {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.skills-frontmatter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--tone);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.skills-frontmatter-extras {
+  margin-top: 2px;
+}
+
+.skills-frontmatter-extra-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: var(--tone);
+}
+
+.skills-frontmatter-extra-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.skills-file-codemirror,
+.skills-file-codemirror .cm-editor {
+  height: 100%;
+}
+
+.skills-file-codemirror .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.skills-file-codemirror .cm-content {
+  padding: 10px 0;
+}

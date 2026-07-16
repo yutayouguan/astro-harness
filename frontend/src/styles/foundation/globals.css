@@ -1,0 +1,41 @@
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-mute);
+  opacity: 1;
+}
+
+/* 暗色：避免系统自动填充把字色刷回近黑色 */
+html[data-theme="dark"] input:-webkit-autofill,
+html[data-theme="dark"] textarea:-webkit-autofill,
+html[data-theme="dark"] select:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--ink);
+  transition: background-color 99999s ease-out;
+}
+
+
+
+/* 窗口缩放动画期间关掉过渡，减轻透明窗闪白 */
+html.zooming,
+html.zooming * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Overlay 标题栏：红绿灯约占 12–38px 高、左侧约 78px 宽 */
+:root {
+  --titlebar-h: 52px;
+  --titlebar-traffic-w: 78px;
+  /* 浮层叠放：抽屉 < 菜单（含 portal 下拉） < tip */
+  --z-drawer: 1300;
+  --z-menu: 1400;
+  --z-tip: 10001;
+}

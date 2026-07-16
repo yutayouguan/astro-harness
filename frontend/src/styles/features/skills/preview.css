@@ -1,0 +1,489 @@
+/* 技能内容：右侧玻璃抽屉（indigo tone + 亮暗色拟态） */
+.skills-preview-backdrop {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+  --tone-glow: var(--tone-indigo-glow);
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-drawer);
+  display: flex;
+  justify-content: flex-end;
+  background:
+    radial-gradient(
+      ellipse 55% 70% at 88% 30%,
+      color-mix(in srgb, var(--tone) 18%, transparent),
+      transparent 65%
+    ),
+    color-mix(in srgb, var(--bg-base, #0f172a) 32%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+}
+
+html[data-theme="light"] .skills-preview-backdrop {
+  background:
+    radial-gradient(
+      ellipse 55% 70% at 88% 30%,
+      color-mix(in srgb, var(--tone) 22%, transparent),
+      transparent 65%
+    ),
+    color-mix(in srgb, #64748b 18%, transparent);
+}
+
+.skills-preview {
+  position: relative;
+  isolation: isolate;
+  width: min(520px, 92vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.32)),
+    color-mix(in srgb, var(--tone-soft) 55%, var(--glass-panel, rgba(255, 255, 255, 0.5)));
+  box-shadow:
+    -16px 0 48px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.1)),
+    var(--glass-rim);
+  backdrop-filter: blur(22px) saturate(1.3);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  animation: skills-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.skills-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--tone) 22%, transparent), transparent 48%),
+    radial-gradient(ellipse at 90% 100%, color-mix(in srgb, var(--tone) 12%, transparent), transparent 42%);
+  opacity: 0.9;
+}
+
+html[data-theme="dark"] .skills-preview {
+  border-left-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.08));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 100%),
+    color-mix(in srgb, var(--tone-soft) 40%, rgba(8, 6, 18, 0.82));
+  box-shadow:
+    -16px 0 48px rgba(0, 0, 0, 0.45),
+    0 0 0 1px color-mix(in srgb, var(--tone) 16%, transparent) inset,
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+html[data-theme="dark"] .skills-preview::before {
+  background:
+    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone) 28%, transparent), transparent 50%),
+    radial-gradient(ellipse at 88% 96%, color-mix(in srgb, var(--tone) 14%, transparent), transparent 44%);
+  opacity: 0.85;
+}
+
+@keyframes skills-drawer-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.skills-preview-head,
+.skills-preview-body {
+  position: relative;
+  z-index: 1;
+}
+
+.skills-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
+  flex-shrink: 0;
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.5)),
+      color-mix(in srgb, var(--tone-soft) 8%, transparent) 72%
+    );
+}
+
+html[data-theme="dark"] .skills-preview-head {
+  border-bottom-color: color-mix(in srgb, var(--tone) 12%, transparent);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.04)),
+      transparent 78%
+    );
+}
+
+.skills-preview-head-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skills-preview-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.skills-preview-mark {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: var(--tone);
+  border: 1px solid color-mix(in srgb, var(--tone) 24%, rgba(255, 255, 255, 0.65));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.28)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 8px 20px color-mix(in srgb, var(--tone) 16%, transparent);
+  overflow: hidden;
+}
+
+.skills-preview-mark-lens {
+  position: absolute;
+  inset: -20% -10% auto auto;
+  width: 70%;
+  height: 55%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.75),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+html[data-theme="dark"] .skills-preview-mark {
+  border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 70%, rgba(8, 6, 18, 0.55));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 22px rgba(0, 0, 0, 0.28);
+  color: color-mix(in srgb, #fff 22%, var(--tone));
+}
+
+.skills-preview-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.skills-preview-kicker {
+  margin: 0 0 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tone) 72%, var(--ink-mute));
+}
+
+.skills-preview-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.skills-preview-head .skills-preview-desc {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-mute);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.skills-preview-head .skills-preview-root {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  background: color-mix(in srgb, var(--chip-bg) 78%, transparent);
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 550;
+  color: var(--ink-mute);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.skills-preview-root svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+  color: var(--tone);
+}
+
+.skills-preview-root span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-preview-tabs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin: 0 12px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tone) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
+  /* 底部留白：overflow-x 会裁切纵向溢出 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.skills-preview-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-mute);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.skills-preview-tab svg {
+  flex-shrink: 0;
+  opacity: 0.88;
+}
+
+.skills-preview-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+}
+
+.skills-preview-tab.is-active {
+  color: var(--tone);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tone-soft) 70%, rgba(255, 255, 255, 0.55));
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .skills-preview-tab.is-active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.04));
+  box-shadow: none;
+  color: color-mix(in srgb, #fff 18%, var(--tone));
+}
+
+.skills-preview-tab-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  color: color-mix(in srgb, var(--tone) 75%, var(--ink-mute));
+}
+
+.skills-preview-tab.is-active .skills-preview-tab-count {
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+  color: var(--tone);
+}
+
+.skills-preview-filelist {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 14px 0;
+}
+
+.skills-preview-filechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  background: color-mix(in srgb, var(--chip-bg) 80%, transparent);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.skills-preview-filechip small {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-mute);
+}
+
+.skills-preview-filechip.is-active {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 30%, transparent);
+  background: var(--tone-soft);
+}
+
+.skills-preview-filepath {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 18px 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.skills-preview-filepath span {
+  font-weight: 550;
+  opacity: 0.8;
+}
+
+.skills-preview-empty,
+.skills-preview-binary {
+  margin: 0;
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-mute);
+}
+
+.skills-preview-binary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.skills-preview-binary .skills-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skills-preview-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.55));
+  color: var(--tone);
+  cursor: pointer;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 100%),
+    color-mix(in srgb, var(--tone-soft) 40%, rgba(255, 255, 255, 0.2));
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--tone) 10%, rgba(15, 23, 42, 0.05)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.skills-preview-close:hover {
+  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.45));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.35)),
+    var(--tone-soft);
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--tone) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme="dark"] .skills-preview-close {
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: color-mix(in srgb, #fff 18%, var(--tone));
+}
+
+html[data-theme="dark"] .skills-preview-close:hover {
+  border-color: color-mix(in srgb, var(--tone) 42%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.06));
+  color: var(--tone);
+}
+
+.skills-preview-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.skills-preview-meta {
+  flex: 1;
+  min-height: 0;
+  display: block;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border-radius: 16px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-soft);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.55)),
+    var(--glass-inner, rgba(255, 255, 255, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+html[data-theme="dark"] .skills-preview-meta {
+  color: var(--ink-mute);
+  background: rgba(0, 0, 0, 0.28);
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@media (max-width: 640px) {
+  .skills-preview {
+    width: min(100vw, 100%);
+  }
+}

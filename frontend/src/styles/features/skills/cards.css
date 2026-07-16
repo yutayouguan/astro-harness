@@ -1,0 +1,89 @@
+/* ── Skill card icon + per-card tone ── */
+.tool-icon {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.tool-icon-lens {
+  grid-area: 1 / 1;
+  z-index: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: var(--lens-bg);
+  border: 1.5px solid var(--lens-border);
+  box-shadow: var(--lens-shadow);
+}
+
+.tool-icon-glyph {
+  grid-area: 1 / 1;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: var(--tone, var(--accent));
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.55))
+    drop-shadow(0 2px 3px rgba(15, 23, 42, 0.18));
+}
+
+.tool-card.skill-card[data-tone="blue"],
+.skills-detail-item[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+  --tone-glow: var(--tone-blue-glow);
+}
+.tool-card.skill-card[data-tone="green"],
+.skills-detail-item[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+  --tone-glow: var(--tone-green-glow);
+}
+.tool-card.skill-card[data-tone="purple"],
+.skills-detail-item[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+  --tone-glow: var(--tone-purple-glow);
+}
+.tool-card.skill-card[data-tone="orange"],
+.skills-detail-item[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+  --tone-glow: var(--tone-orange-glow);
+}
+.tool-card.skill-card[data-tone="cyan"],
+.skills-detail-item[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+  --tone-glow: var(--tone-cyan-glow);
+}
+.tool-card.skill-card[data-tone="indigo"],
+.skills-detail-item[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+  --tone-glow: var(--tone-indigo-glow);
+}
+.tool-card.skill-card[data-tone="amber"],
+.skills-detail-item[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+  --tone-glow: var(--tone-amber-glow);
+}
+.tool-card.skill-card[data-tone="teal"],
+.skills-detail-item[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+  --tone-glow: var(--tone-teal-glow);
+}
+
+.tool-card {
+  display: flex;
+  flex-direction: column;
+}

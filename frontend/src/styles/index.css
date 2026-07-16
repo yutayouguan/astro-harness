@@ -1,23 +1,46 @@
-@import "./base.css";
-@import "./shell.css";
-@import "./layout.css";
-@import "./header.css";
-@import "./tooltip.css";
-@import "./chat.css";
-@import "./chat-right-panel.css";
-@import "./cards.css";
-@import "./memory.css";
-@import "./workspace.css";
-@import "./filespace.css";
-@import "./media.css";
-@import "./agent-picker.css";
-@import "./preferences.css";
-@import "./tools.css";
-@import "./skills.css";
-@import "./toast.css";
-@import "./providers.css";
-@import "./select-menu.css";
-@import "./cron.css";
-@import "./insights.css";
-@import "./transitions.css";
-@import "./illustrations.css";
+/* Foundation */
+@import "./foundation/themes.css";
+@import "./foundation/reset.css";
+@import "./foundation/tones.css";
+@import "./foundation/globals.css";
+
+/* Application shell */
+@import "./features/shell/shell.css";
+@import "./features/shell/layout.css";
+@import "./features/shell/header.css";
+
+/* Shared components and chat */
+@import "./components/tooltip.css";
+@import "./features/chat/core.css";
+@import "./features/chat/activity.css";
+@import "./features/chat/navigation.css";
+@import "./features/chat/markdown.css";
+@import "./features/chat/drawers.css";
+@import "./features/chat/emoji-picker.css";
+@import "./features/chat/right-panel.css";
+@import "./components/cards.css";
+
+/* Feature styles */
+@import "./features/memory.css";
+@import "./features/workspace.css";
+@import "./features/filespace.css";
+@import "./components/media.css";
+@import "./components/agent-picker.css";
+@import "./features/preferences.css";
+@import "./features/tools.css";
+@import "./features/skills/core.css";
+@import "./features/skills/gallery.css";
+@import "./features/skills/detail.css";
+@import "./features/skills/cards.css";
+@import "./features/skills/preview.css";
+@import "./features/skills/file-viewer.css";
+@import "./features/skills/dialogs.css";
+@import "./components/toast.css";
+
+/* Shared overlays and utilities */
+@import "./features/providers.css";
+@import "./components/select-menu.css";
+@import "./features/cron.css";
+@import "./features/insights.css";
+@import "./foundation/transitions.css";
+@import "./components/illustrations.css";

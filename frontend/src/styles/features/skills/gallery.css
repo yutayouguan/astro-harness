@@ -1,0 +1,164 @@
+/* View toggle — 与搜索/刷新同高 36 */
+.skills-view-toggle {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  height: 36px;
+  padding: 3px;
+  border-radius: 12px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--glass-fill) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+
+.skills-view-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-mute);
+    display: grid;
+    place-items: center;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.skills-view-btn:hover {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.skills-view-btn.is-active {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    color-mix(in srgb, var(--tone-soft) 80%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+html[data-theme="dark"] .skills-view-toggle {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(8, 6, 18, 0.42);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .skills-view-btn.is-active {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    color-mix(in srgb, var(--tone-soft) 60%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+  color: color-mix(in srgb, #fff 18%, var(--tone));
+}
+
+/* List view */
+.skills-gallery.is-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skills-gallery.is-list .tool-card.skill-card {
+  flex-shrink: 0;
+  min-height: 56px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+}
+
+.skills-gallery.is-list .tool-card.skill-card:hover {
+  transform: translateY(-1px);
+}
+
+.skills-gallery.is-list .skill-card-top {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.skills-gallery.is-list .skill-card-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.skills-gallery.is-list .skill-card-icon .tool-icon-lens {
+  width: 34px;
+  height: 34px;
+}
+
+.skills-gallery.is-list .skill-card-icon .tool-icon-glyph svg {
+  width: 18px;
+  height: 18px;
+}
+
+.skills-gallery.is-list .skill-card-badge {
+  font-size: 9px;
+}
+
+.skills-gallery.is-list .skill-card-title {
+  font-size: 0.92rem;
+  -webkit-line-clamp: 1;
+}
+
+.skills-gallery.is-list .skill-card-desc {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+
+.skills-gallery.is-list .skill-card-desc p {
+  -webkit-line-clamp: 1;
+  white-space: nowrap;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skills-gallery.is-list .skill-card-tag {
+  display: none;
+}
+
+.skills-gallery.is-list .skill-card-actions,
+.skills-gallery.is-list .skill-card-actions.is-store {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.skills-gallery.is-list .skill-card-primary {
+  flex: 0 1 auto;
+  padding: 7px 10px;
+}
+
+.skills-gallery.is-list .skill-card-action-icons {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.skills-gallery.is-list .skill-card-actions .skills-action-btn.is-icon {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+}
