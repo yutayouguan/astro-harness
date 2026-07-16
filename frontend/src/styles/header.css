@@ -971,9 +971,9 @@ html[data-theme="dark"] .chat-pane {
   background:
     linear-gradient(
       165deg,
-      rgba(255, 255, 255, 0.06) 0%,
-      rgba(255, 255, 255, 0.02) 100%
+      rgba(255, 255, 255, 0.11) 0%,
+      rgba(255, 255, 255, 0.045) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, transparent) 22%, var(--glass-layer));
+    color-mix(in srgb, var(--tone-soft, transparent) 18%, var(--glass-layer));
   border-color: color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
 }

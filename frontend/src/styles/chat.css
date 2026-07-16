@@ -1003,19 +1003,19 @@ html[data-theme="light"] .a2ui-surface {
 html[data-theme="dark"] .msg-activity {
   border-color: color-mix(
     in srgb,
-    var(--tl-tone, var(--tone, #a78bfa)) 28%,
-    rgba(255, 255, 255, 0.1)
+    var(--tl-tone, var(--tone, #a78bfa)) 24%,
+    rgba(255, 255, 255, 0.14)
   );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%),
     color-mix(
       in srgb,
-      var(--tl-tone, var(--tone, #a78bfa)) 12%,
-      rgba(8, 6, 18, 0.52)
+      var(--tl-tone, var(--tone, #a78bfa)) 10%,
+      rgba(28, 24, 42, 0.42)
     );
   box-shadow:
     var(--glass-rim),
-    0 8px 22px rgba(0, 0, 0, 0.32);
+    0 8px 22px rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(18px) saturate(1.4);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
 }
