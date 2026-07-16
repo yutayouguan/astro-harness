@@ -1,6 +1,21 @@
 /** 右栏上下文用量区：指标、环形图、可展开分项。 */
 import { useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  ChevronDown,
+  Coins,
+  Database,
+  Layers3,
+  MessageSquare,
+  MessagesSquare,
+  Plug,
+  Search,
+  Shield,
+  Sparkles,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import {
@@ -31,6 +46,17 @@ const SEG_HINT: Record<string, MessageKey> = {
   recall: "chat.contextExplorer.hint.recall",
   subagent: "chat.contextExplorer.hint.subagent",
   conversation: "chat.contextExplorer.hint.conversation",
+};
+
+const SEG_ICON: Record<string, LucideIcon> = {
+  system: Shield,
+  tools: Wrench,
+  mcp: Plug,
+  memory: Brain,
+  skills: Sparkles,
+  recall: Search,
+  subagent: Bot,
+  conversation: MessagesSquare,
 };
 
 const DONUT_SIZE = 148;
@@ -100,16 +126,25 @@ export default function ContextExplorer({
     <section className="ctx-explorer" aria-label={t("chat.contextUsage")}>
       <div className="ctx-explorer-metrics">
         <div className="ctx-explorer-metric">
+          <span className="ctx-explorer-metric-icon" aria-hidden>
+            <MessageSquare size={16} strokeWidth={2} />
+          </span>
           <span className="ctx-explorer-metric-label">{t("chat.rightPanel.context")}</span>
           <span className="ctx-explorer-metric-value ctx-explorer-session" title={sessionLabel}>
             {sessionLabel}
           </span>
         </div>
         <div className="ctx-explorer-metric">
+          <span className="ctx-explorer-metric-icon" aria-hidden>
+            <Database size={16} strokeWidth={2} />
+          </span>
           <span className="ctx-explorer-metric-label">{t("chat.contextExplorer.contextSize")}</span>
           <span className="ctx-explorer-metric-value">{formatTokenCount(win)}</span>
         </div>
         <div className="ctx-explorer-metric">
+          <span className="ctx-explorer-metric-icon" aria-hidden>
+            <Coins size={16} strokeWidth={2} />
+          </span>
           <span className="ctx-explorer-metric-label">{t("chat.contextExplorer.tokensUsed")}</span>
           <span className="ctx-explorer-metric-value">~{formatTokenCount(used)}</span>
         </div>
@@ -164,11 +199,17 @@ export default function ContextExplorer({
         </svg>
         <div className="ctx-donut-center" aria-hidden>
           <span className="ctx-donut-pct">{pct}%</span>
+          <span className="ctx-donut-caption">{t("chat.contextExplorer.tokensUsed")}</span>
         </div>
       </div>
 
       <div className="ctx-explorer-list-head">
-        <h3 className="ctx-explorer-list-title">{t("chat.contextExplorer.breakdown")}</h3>
+        <h3 className="ctx-explorer-list-title">
+          <span className="ctx-explorer-title-icon" aria-hidden>
+            <Layers3 size={16} strokeWidth={2} />
+          </span>
+          {t("chat.contextExplorer.breakdown")}
+        </h3>
         {segs.length > 0 && (
           <button
             type="button"
@@ -183,7 +224,12 @@ export default function ContextExplorer({
       </div>
 
       {!snapshot || segs.length === 0 ? (
-        <p className="ctx-explorer-empty">{t("chat.contextUsageEmpty")}</p>
+        <div className="ctx-explorer-empty">
+          <span className="ctx-explorer-empty-icon" aria-hidden>
+            <Layers3 size={20} strokeWidth={2} />
+          </span>
+          <p>{t("chat.contextUsageEmpty")}</p>
+        </div>
       ) : (
         <ul className="ctx-explorer-list">
           {segs.map((s) => {
@@ -193,6 +239,7 @@ export default function ContextExplorer({
             const hint = hintKey ? t(hintKey) : null;
             const toneVar = SEGMENT_TONE[s.id] ?? "--accent";
             const open = isOpen(s.id);
+            const SegmentIcon = SEG_ICON[s.id] ?? Layers3;
             return (
               <li key={s.id} className={`ctx-explorer-row ${open ? "is-open" : ""}`}>
                 <button
@@ -212,6 +259,9 @@ export default function ContextExplorer({
                     style={{ background: `var(${toneVar})` }}
                     aria-hidden
                   />
+                  <span className="ctx-explorer-row-icon" aria-hidden>
+                    <SegmentIcon size={14} strokeWidth={2} />
+                  </span>
                   <span className="ctx-explorer-row-label">
                     {label}
                     {s.count != null && s.count > 0 ? (
