@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
 use common::message::Message;
-use memory::MemoryManager;
+use ::session::SessionStore;
 
 /// 从 `SessionStore` 冷启动重建 `session_messages`（权威以 DB 为准）。
 pub fn hydrate_session_messages(
-    memory: &MemoryManager,
+    sessions: &SessionStore,
     session_id: &str,
 ) -> anyhow::Result<Vec<Message>> {
-    let stored = memory.session_store.get_messages(session_id)?;
+    let stored = sessions.get_messages(session_id)?;
     let mut out = Vec::with_capacity(stored.len());
     for m in stored {
         if let Some(msg) = stored_message_to_runtime(m)? {
