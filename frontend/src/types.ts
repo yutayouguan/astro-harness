@@ -189,6 +189,8 @@ export type ProviderDto = {
   video_model?: string;
   /** 生音频 / TTS 模型（空=内置默认） */
   tts_model?: string;
+  /** 音乐生成模型（空=内置默认；Google only） */
+  music_model?: string;
   /** 视觉（图片理解）模型（空=内置默认） */
   vision_model?: string;
 };
@@ -240,6 +242,7 @@ export type ModelCapabilities = {
   image_gen: boolean;
   video_gen: boolean;
   audio_gen: boolean;
+  music_gen: boolean;
 };
 
 /** 模型元信息（列表 / 选择器） */

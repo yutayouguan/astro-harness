@@ -20,7 +20,8 @@ test("listActiveModelCaps keeps fixed order", () => {
       image_gen: true,
       video_gen: false,
       audio_gen: true,
+      music_gen: true,
     }),
-    ["tools", "reasoning", "web", "image_gen", "audio_gen"],
+    ["tools", "reasoning", "web", "image_gen", "audio_gen", "music_gen"],
   );
 });

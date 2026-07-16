@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 模型能力位（视觉 / 联网 / 推理 / 工具 / 生图 / 生视频 / 生音频）。
+/// 模型能力位（视觉 / 联网 / 推理 / 工具 / 生图 / 生视频 / 生音频 / 生音乐）。
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct ModelCapabilities {
     #[serde(default)]
@@ -19,6 +19,8 @@ pub struct ModelCapabilities {
     pub video_gen: bool,
     #[serde(default)]
     pub audio_gen: bool,
+    #[serde(default)]
+    pub music_gen: bool,
 }
 
 /// 前端展示用的模型元信息。
@@ -176,11 +178,19 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             .to_lowercase();
         let mode_image = mode.contains("image");
         let mode_video = mode.contains("video");
-        let mode_audio = mode.contains("audio");
+        let mode_music = mode.contains("music") || mode == "audio_generation";
+        let audio_only_chat = mode == "chat"
+            && entry.supports_audio_output
+            && !entry.supports_function_calling
+            && entry.supported_output_modalities.len() == 1
+            && entry.supported_output_modalities[0].eq_ignore_ascii_case("audio");
+        let is_music = mode_music || audio_only_chat;
+        let mode_audio = mode.contains("audio") && !is_music;
         let non_chat = mode.contains("embed")
             || mode_image
             || mode_audio
             || mode_video
+            || is_music
             || mode.contains("moderation");
 
         if non_chat {
@@ -190,7 +200,10 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             info.capabilities.tools = false;
             info.capabilities.image_gen |= mode_image || entry.supports_image_generation;
             info.capabilities.video_gen |= mode_video || entry.supports_video_generation;
-            info.capabilities.audio_gen |= mode_audio || entry.supports_audio_output;
+            info.capabilities.music_gen |= is_music;
+            if !is_music {
+                info.capabilities.audio_gen |= mode_audio || entry.supports_audio_output;
+            }
         } else {
             info.capabilities.vision |= entry.supports_vision;
             info.capabilities.web |= entry.supports_web_search;
@@ -198,7 +211,10 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             info.capabilities.tools |= entry.supports_function_calling;
             info.capabilities.image_gen |= entry.supports_image_generation;
             info.capabilities.video_gen |= entry.supports_video_generation;
-            info.capabilities.audio_gen |= entry.supports_audio_output;
+            info.capabilities.music_gen |= is_music;
+            if !is_music {
+                info.capabilities.audio_gen |= entry.supports_audio_output;
+            }
         }
         sources.push("litellm");
     }
@@ -390,6 +406,43 @@ mod tests {
                 let info = enrich_from_id("sora-2", "openai", None);
                 assert!(info.capabilities.video_gen);
                 assert!(!info.capabilities.tools);
+            },
+        );
+    }
+
+    #[test]
+    fn litellm_music_mode_sets_music_gen_only() {
+        crate::litellm_meta::with_fixture(
+            r#"{"lyria-test":{"mode":"music_generation","litellm_provider":"gemini"}}"#,
+            || {
+                let info = enrich_from_id("lyria-test", "google", None);
+                assert!(info.capabilities.music_gen);
+                assert!(!info.capabilities.audio_gen);
+                assert!(!info.capabilities.tools);
+            },
+        );
+    }
+
+    #[test]
+    fn litellm_audio_only_chat_sets_music_gen() {
+        crate::litellm_meta::with_fixture(
+            r#"{"gemini/lyria-test":{"mode":"chat","supports_audio_output":true,"supports_function_calling":false,"supported_output_modalities":["audio"],"litellm_provider":"gemini"}}"#,
+            || {
+                let info = enrich_from_id("lyria-test", "google", None);
+                assert!(info.capabilities.music_gen);
+                assert!(!info.capabilities.audio_gen);
+            },
+        );
+    }
+
+    #[test]
+    fn litellm_tts_mode_does_not_set_music_gen() {
+        crate::litellm_meta::with_fixture(
+            r#"{"tts-test":{"mode":"audio_speech","supports_audio_output":true,"litellm_provider":"gemini"}}"#,
+            || {
+                let info = enrich_from_id("tts-test", "google", None);
+                assert!(info.capabilities.audio_gen);
+                assert!(!info.capabilities.music_gen);
             },
         );
     }

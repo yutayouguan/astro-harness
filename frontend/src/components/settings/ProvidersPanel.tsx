@@ -42,6 +42,13 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
 import { formatContextWindow } from "../../lib/model/modelCaps";
+import {
+  buildMediaModelOptions,
+  evaluateMediaModelsResult,
+  isMediaModelsRequestLoading,
+  sanitizeMediaModelValue,
+  type MediaCapabilityKey,
+} from "../../lib/providers/mediaModelOptions";
 import type {
   ModelInfo,
   ProviderDto,
@@ -118,6 +125,7 @@ type Draft = {
   image_model: string;
   video_model: string;
   tts_model: string;
+  music_model: string;
   vision_model: string;
 };
 
@@ -125,18 +133,20 @@ type DetailTab = "chat" | "media";
 
 const MEDIA_MODEL_DEFAULTS: Record<
   string,
-  { image: string; video: string; tts: string; vision: string }
+  { image: string; video: string; tts: string; music: string; vision: string }
 > = {
   google: {
     image: "gemini-3.1-flash-image",
     video: "veo-3.1-generate-preview",
     tts: "gemini-3.1-flash-tts-preview",
+    music: "lyria-3-clip-preview",
     vision: "gemini-3.5-flash",
   },
   openai: {
     image: "gpt-image-2",
     video: "",
     tts: "gpt-4o-mini-tts",
+    music: "",
     vision: "gpt-4o",
   },
 };
@@ -155,6 +165,7 @@ function draftFromProvider(p: ProviderDto): Draft {
     image_model: p.image_model?.trim() ?? "",
     video_model: p.video_model?.trim() ?? "",
     tts_model: p.tts_model?.trim() ?? "",
+    music_model: p.music_model?.trim() ?? "",
     vision_model: p.vision_model?.trim() ?? "",
   };
 }
@@ -175,6 +186,7 @@ function providerSaveInput(
     image_model: draft.image_model.trim(),
     video_model: draft.video_model.trim(),
     tts_model: draft.tts_model.trim(),
+    music_model: draft.music_model.trim(),
     vision_model: draft.vision_model.trim(),
   };
 }
@@ -313,10 +325,16 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingAll, setTestingAll] = useState(false);
-  const [listingModels, setListingModels] = useState(false);
+  const [listingModelsRequest, setListingModelsRequest] = useState<{
+    providerId: string;
+    requestId: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addKind, setAddKind] = useState<ProviderKindId>("openai");
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [sanitizeModelsProviderId, setSanitizeModelsProviderId] = useState<
+    string | null
+  >(null);
   const [modelsLatency, setModelsLatency] = useState<number | null>(null);
   const [modelLatencies, setModelLatencies] = useState<
     Record<string, ModelLatency>
@@ -345,10 +363,13 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     Record<string, ModelInfo[]>
   >({});
   const autoFetchIdRef = useRef<string | null>(null);
+  const selectedIdRef = useRef(selectedId);
+  const modelsRequestRef = useRef(0);
   const healthRunRef = useRef(0);
   const listRef = useRef<HTMLUListElement | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
+  selectedIdRef.current = selectedId;
 
   const applyState = useCallback(
     (next: ProvidersStateDto) => {
@@ -443,10 +464,18 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
 
   const selected =
     state?.providers.find((p) => p.id === selectedId) ?? null;
+  const listingModels = isMediaModelsRequestLoading(
+    selected?.id ?? null,
+    modelsRequestRef.current,
+    listingModelsRequest,
+  );
 
   useEffect(() => {
     if (!selected) {
       setDraft(null);
+      setSanitizeModelsProviderId(null);
+      modelsRequestRef.current += 1;
+      setListingModelsRequest(null);
       setStoredApiKey(null);
       setApiKeyInput("");
       setShowApiKey(false);
@@ -455,6 +484,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       return;
     }
     setDraft(draftFromProvider(selected));
+    setSanitizeModelsProviderId(null);
+    modelsRequestRef.current += 1;
+    setListingModelsRequest(null);
     setDetailTab("chat");
     setApiKeyInput("");
     setStoredApiKey(null);
@@ -497,8 +529,61 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     selected?.image_model,
     selected?.video_model,
     selected?.tts_model,
+    selected?.music_model,
     selected?.vision_model,
   ]);
+
+  const mediaOptions = useCallback(
+    (capability: MediaCapabilityKey, defaultModelId: string) =>
+      buildMediaModelOptions(models, capability, defaultModelId).map((option) => ({
+        value: option.value,
+        label:
+          option.value === ""
+            ? t("providers.mediaDefaultOption", { model: option.modelId })
+            : option.modelId,
+        icon: option.value ? <ModelBrandIcon modelId={option.modelId} /> : undefined,
+      })),
+    [models, t],
+  );
+
+  useEffect(() => {
+    if (sanitizeModelsProviderId !== selected?.id || !selected || !draft) return;
+    const defaults = MEDIA_MODEL_DEFAULTS[selected.kind];
+    if (!defaults) return;
+    setDraft((current) => {
+      if (!current) return current;
+      const next = {
+        ...current,
+        image_model: sanitizeMediaModelValue(
+          current.image_model,
+          buildMediaModelOptions(models, "image_gen", defaults.image),
+        ),
+        tts_model: sanitizeMediaModelValue(
+          current.tts_model,
+          buildMediaModelOptions(models, "audio_gen", defaults.tts),
+        ),
+        vision_model: sanitizeMediaModelValue(
+          current.vision_model,
+          buildMediaModelOptions(models, "vision", defaults.vision),
+        ),
+        video_model:
+          selected.kind === "google"
+            ? sanitizeMediaModelValue(
+                current.video_model,
+                buildMediaModelOptions(models, "video_gen", defaults.video),
+              )
+            : "",
+        music_model:
+          selected.kind === "google"
+            ? sanitizeMediaModelValue(
+                current.music_model,
+                buildMediaModelOptions(models, "music_gen", defaults.music),
+              )
+            : "",
+      };
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    });
+  }, [models, sanitizeModelsProviderId, selected?.id, selected?.kind]);
 
   const saveDraft = async () => {
     if (!selected || !draft || !isTauri()) return;
@@ -811,37 +896,67 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     }
   };
 
-  const listModels = async (opts?: { silent?: boolean; skipSave?: boolean }) => {
-    if (!selected || !isTauri()) return;
+  const listModels = async (opts?: {
+    silent?: boolean;
+    skipSave?: boolean;
+    provider?: ProviderDto;
+    requestId?: number;
+  }) => {
+    const provider = opts?.provider ?? selected;
+    if (!provider || !isTauri()) return;
+    const requestId = opts?.requestId ?? ++modelsRequestRef.current;
+    const isCurrentRequest = () =>
+      evaluateMediaModelsResult(
+        selectedIdRef.current,
+        modelsRequestRef.current,
+        provider.id,
+        requestId,
+        "online-failure",
+      ).accept;
+    if (!isCurrentRequest()) return;
     const silent = opts?.silent ?? false;
-    setListingModels(true);
+    setListingModelsRequest({ providerId: provider.id, requestId });
     if (!silent) setError(null);
     try {
       // 手动拉取时先落盘草稿；自动拉取跳过，避免切提供商时用到旧草稿
       if (draft && !opts?.skipSave) {
         await invoke<ProvidersStateDto>("save_provider", {
-          provider: providerSaveInput(selected, draft),
+          provider: providerSaveInput(provider, draft),
         }).then(applyState);
       }
       const result = await invoke<ProviderModelsResult>("list_provider_models", {
-        id: selected.id,
+        id: provider.id,
       });
+      const decision = evaluateMediaModelsResult(
+        selectedIdRef.current,
+        modelsRequestRef.current,
+        provider.id,
+        requestId,
+        "online-success",
+      );
+      if (!decision.accept) return;
       setModels(result.models);
+      if (decision.sanitize) setSanitizeModelsProviderId(provider.id);
       setModelsLatency(result.latency_ms);
       setModelLatencies({});
-      if (selected.enabled) {
-        setHealthById((prev) => ({ ...prev, [selected.id]: "ok" }));
+      if (provider.enabled) {
+        setHealthById((prev) => ({ ...prev, [provider.id]: "ok" }));
       }
     } catch (err) {
+      if (!isCurrentRequest()) return;
       if (!silent) setError(String(err));
-      setModels([]);
-      setModelsLatency(null);
-      setModelLatencies({});
-      if (selected.enabled) {
-        setHealthById((prev) => ({ ...prev, [selected.id]: "fail" }));
+      if (provider.enabled) {
+        setHealthById((prev) => ({ ...prev, [provider.id]: "fail" }));
       }
     } finally {
-      setListingModels(false);
+      if (isCurrentRequest()) {
+        setListingModelsRequest((current) =>
+          current?.providerId === provider.id &&
+          current.requestId === requestId
+            ? null
+            : current,
+        );
+      }
     }
   };
 
@@ -855,20 +970,34 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     }
     if (autoFetchIdRef.current === selected.id) return;
     autoFetchIdRef.current = selected.id;
+    const provider = selected;
+    const requestId = ++modelsRequestRef.current;
     void (async () => {
       try {
         const cached = await invoke<ProviderModelsResult | null>(
           "get_cached_provider_models",
-          { id: selected.id },
+          { id: provider.id },
         );
-        if (cached && cached.models.length > 0) {
+        const decision = evaluateMediaModelsResult(
+          selectedIdRef.current,
+          modelsRequestRef.current,
+          provider.id,
+          requestId,
+          "cache",
+        );
+        if (decision.showModels && cached && cached.models.length > 0) {
           setModels(cached.models);
           setModelsLatency(cached.latency_ms);
         }
       } catch {
         // ignore cache miss
       }
-      await listModels({ silent: true, skipSave: true });
+      await listModels({
+        silent: true,
+        skipSave: true,
+        provider,
+        requestId,
+      });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在切换提供商 / 密钥就绪时自动拉取
   }, [active, selected?.id, selected?.has_api_key, selected?.kind]);
@@ -978,6 +1107,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 image_gen: false,
                 video_gen: false,
                 audio_gen: false,
+                music_gen: false,
               },
               meta_source: "manual",
             },
@@ -1951,17 +2081,19 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         <IconBox />
                         {t("providers.imageModel")}
                       </span>
-                      <input
-                        type="text"
+                      <SelectMenu
+                        className="providers-media-model-select"
                         value={draft.image_model}
-                        placeholder={
-                          MEDIA_MODEL_DEFAULTS[selected.kind]?.image ?? ""
-                        }
-                        onChange={(e) =>
-                          setDraft((d) =>
-                            d ? { ...d, image_model: e.target.value } : d,
+                        aria-label={t("providers.imageModel")}
+                        onChange={(value) =>
+                          setDraft((current) =>
+                            current ? { ...current, image_model: value } : current,
                           )
                         }
+                        options={mediaOptions(
+                          "image_gen",
+                          MEDIA_MODEL_DEFAULTS[selected.kind]?.image ?? "",
+                        )}
                       />
                     </label>
                     {selected.kind === "google" ? (
@@ -1970,17 +2102,19 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                           <IconBox />
                           {t("providers.videoModel")}
                         </span>
-                        <input
-                          type="text"
+                        <SelectMenu
+                          className="providers-media-model-select"
                           value={draft.video_model}
-                          placeholder={
-                            MEDIA_MODEL_DEFAULTS.google?.video ?? ""
-                          }
-                          onChange={(e) =>
-                            setDraft((d) =>
-                              d ? { ...d, video_model: e.target.value } : d,
+                          aria-label={t("providers.videoModel")}
+                          onChange={(value) =>
+                            setDraft((current) =>
+                              current ? { ...current, video_model: value } : current,
                             )
                           }
+                          options={mediaOptions(
+                            "video_gen",
+                            MEDIA_MODEL_DEFAULTS.google.video,
+                          )}
                         />
                       </label>
                     ) : null}
@@ -1989,35 +2123,61 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         <IconBox />
                         {t("providers.ttsModel")}
                       </span>
-                      <input
-                        type="text"
+                      <SelectMenu
+                        className="providers-media-model-select"
                         value={draft.tts_model}
-                        placeholder={
-                          MEDIA_MODEL_DEFAULTS[selected.kind]?.tts ?? ""
-                        }
-                        onChange={(e) =>
-                          setDraft((d) =>
-                            d ? { ...d, tts_model: e.target.value } : d,
+                        aria-label={t("providers.ttsModel")}
+                        onChange={(value) =>
+                          setDraft((current) =>
+                            current ? { ...current, tts_model: value } : current,
                           )
                         }
+                        options={mediaOptions(
+                          "audio_gen",
+                          MEDIA_MODEL_DEFAULTS[selected.kind]?.tts ?? "",
+                        )}
                       />
                     </label>
+                    {selected.kind === "google" ? (
+                      <label className="providers-field providers-field-span">
+                        <span className="providers-field-label">
+                          <IconBox />
+                          {t("providers.musicModel")}
+                        </span>
+                        <SelectMenu
+                          className="providers-media-model-select"
+                          value={draft.music_model}
+                          aria-label={t("providers.musicModel")}
+                          onChange={(value) =>
+                            setDraft((current) =>
+                              current ? { ...current, music_model: value } : current,
+                            )
+                          }
+                          options={mediaOptions(
+                            "music_gen",
+                            MEDIA_MODEL_DEFAULTS.google.music,
+                          )}
+                        />
+                      </label>
+                    ) : null}
                     <label className="providers-field providers-field-span">
                       <span className="providers-field-label">
                         <IconBox />
                         {t("providers.visionModel")}
                       </span>
-                      <input
-                        type="text"
+                      <SelectMenu
+                        className="providers-media-model-select"
                         value={draft.vision_model}
-                        placeholder={
-                          MEDIA_MODEL_DEFAULTS[selected.kind]?.vision ?? ""
-                        }
-                        onChange={(e) =>
-                          setDraft((d) =>
-                            d ? { ...d, vision_model: e.target.value } : d,
+                        aria-label={t("providers.visionModel")}
+                        onChange={(value) =>
+                          setDraft((current) =>
+                            current ? { ...current, vision_model: value } : current,
                           )
                         }
+                        options={mediaOptions(
+                          "vision",
+                          MEDIA_MODEL_DEFAULTS[selected.kind]?.vision ?? "",
+                        )}
                       />
                     </label>
                   </div>

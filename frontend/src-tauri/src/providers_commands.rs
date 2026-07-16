@@ -248,6 +248,9 @@ pub struct ProviderConfig {
     /// 视觉（图片理解）模型（空=内置默认）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub vision_model: String,
+    /// 音乐生成模型（空=内置默认；主要 Google）。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub music_model: String,
 }
 
 impl ProviderConfig {
@@ -265,6 +268,7 @@ impl ProviderConfig {
             video_model: String::new(),
             tts_model: String::new(),
             vision_model: String::new(),
+            music_model: String::new(),
         }
     }
 
@@ -412,6 +416,7 @@ pub struct ProviderConfigDto {
     pub video_model: String,
     pub tts_model: String,
     pub vision_model: String,
+    pub music_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -438,6 +443,8 @@ pub struct ProviderConfigInput {
     pub tts_model: String,
     #[serde(default)]
     pub vision_model: String,
+    #[serde(default)]
+    pub music_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -625,6 +632,7 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         video_model: p.video_model.clone(),
         tts_model: p.tts_model.clone(),
         vision_model: p.vision_model.clone(),
+        music_model: p.music_model.clone(),
     }
 }
 
@@ -739,6 +747,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             video_model: provider.video_model.trim().to_string(),
             tts_model: provider.tts_model.trim().to_string(),
             vision_model: provider.vision_model.trim().to_string(),
+            music_model: provider.music_model.trim().to_string(),
         };
         Ok(to_state_dto(s))
     })
@@ -982,6 +991,7 @@ pub struct ImageGenTarget {
     pub video_model: String,
     pub tts_model: String,
     pub vision_model: String,
+    pub music_model: String,
 }
 
 const IMAGE_GEN_NO_PROVIDER_MSG: &str =
@@ -999,6 +1009,13 @@ fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
 fn default_video_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Google => "veo-3.1-generate-preview",
+        _ => "",
+    }
+}
+
+fn default_music_model_for_kind(kind: &ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::Google => "lyria-3-clip-preview",
         _ => "",
     }
 }
@@ -1062,6 +1079,10 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
                 vision_model: resolve_media_model(
                     &p.vision_model,
                     default_vision_model_for_kind(&p.kind),
+                ),
+                music_model: resolve_media_model(
+                    &p.music_model,
+                    default_music_model_for_kind(&p.kind),
                 ),
             };
             match p.kind {
@@ -1641,6 +1662,26 @@ mod tests {
     }
 
     #[test]
+    fn provider_without_music_model_deserializes_to_empty() {
+        let json = r#"{
+          "id":"google-1","kind":"google","display_name":"Google",
+          "endpoint":"https://generativelanguage.googleapis.com/v1beta/openai",
+          "model":"gemini-3.5-flash","enabled":true
+        }"#;
+        let provider: ProviderConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(provider.music_model, "");
+    }
+
+    #[test]
+    fn google_music_model_defaults_to_lyria_clip() {
+        assert_eq!(
+            default_music_model_for_kind(&ProviderKind::Google),
+            "lyria-3-clip-preview"
+        );
+        assert_eq!(default_music_model_for_kind(&ProviderKind::Openai), "");
+    }
+
+    #[test]
     fn validate_http_endpoint_rejects_non_http() {
         assert!(validate_http_endpoint("https://ok.example/v1").is_ok());
         assert!(validate_http_endpoint("http://localhost:11434").is_ok());
@@ -1666,6 +1707,7 @@ mod tests {
                     video_model: String::new(),
                     tts_model: String::new(),
                     vision_model: String::new(),
+                    music_model: String::new(),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -1679,6 +1721,7 @@ mod tests {
                     video_model: String::new(),
                     tts_model: String::new(),
                     vision_model: String::new(),
+                    music_model: String::new(),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -1692,6 +1735,7 @@ mod tests {
                     video_model: String::new(),
                     tts_model: String::new(),
                     vision_model: String::new(),
+                    music_model: String::new(),
                 },
             ],
         };

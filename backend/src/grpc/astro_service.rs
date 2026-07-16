@@ -643,6 +643,7 @@ impl AstroService for AstroServiceImpl {
             &req.image_gen_fallback_api_key,
             &req.image_gen_fallback_base_url,
             &req.image_gen_video_model,
+            &req.image_gen_music_model,
             &req.image_gen_tts_model,
             &req.image_gen_fallback_tts_model,
             &req.image_gen_vision_model,

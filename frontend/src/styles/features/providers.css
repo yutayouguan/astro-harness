@@ -415,6 +415,17 @@
   grid-column: unset;
 }
 
+.providers-media-model-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.providers-media-model-select .select-menu-trigger {
+  width: 100%;
+  min-height: 42px;
+  justify-content: space-between;
+}
+
 .providers-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

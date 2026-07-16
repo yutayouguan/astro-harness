@@ -9,7 +9,8 @@ export type ModelCapKey =
   | "web"
   | "image_gen"
   | "video_gen"
-  | "audio_gen";
+  | "audio_gen"
+  | "music_gen";
 
 export const MODEL_CAP_ORDER: ModelCapKey[] = [
   "tools",
@@ -19,6 +20,7 @@ export const MODEL_CAP_ORDER: ModelCapKey[] = [
   "image_gen",
   "video_gen",
   "audio_gen",
+  "music_gen",
 ];
 
 export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
@@ -29,6 +31,7 @@ export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
   image_gen: false,
   video_gen: false,
   audio_gen: false,
+  music_gen: false,
 };
 
 /** 返回为 true 的能力键（固定顺序）。 */
@@ -93,5 +96,6 @@ export function inferModelCapabilities(
     image_gen: false,
     video_gen: false,
     audio_gen: false,
+    music_gen: false,
   };
 }

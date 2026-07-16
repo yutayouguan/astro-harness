@@ -75,6 +75,8 @@ message ChatRequest {
   string image_gen_fallback_vision_model = 25;
   // 本轮用户图片附件（mime + raw base64；由 Tauri 内联，不经 extra_body）
   repeated ChatImageAttachment images = 26;
+  // Google 音乐生成模型覆盖（空=lyria-3-clip-preview）
+  string image_gen_music_model = 27;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。
