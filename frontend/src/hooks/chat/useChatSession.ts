@@ -23,7 +23,6 @@ import {
   persistAfterEditTruncate,
   saveChatSession,
 } from "../../lib/chat/chatSessionStore";
-import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
 import { MSG_DISSOLVE_MS } from "../../components/chat/MsgDissolveOverlay";
 import type {
   ArtifactDto,
@@ -38,7 +37,6 @@ import type {
   MessageTokenUsage,
   PendingInterrupt,
   ProviderDto,
-  RecentSessionDto,
 } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
@@ -550,33 +548,6 @@ export function useChatSession({
     setEmptyMode("chat");
     setNav("chat");
   }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
-    let cancelled = false;
-    const syncCurrentSession = async () => {
-      if (!sessionId) return;
-      try {
-        const rows = await invoke<RecentSessionDto[]>("list_recent_sessions", {
-          limit: 50,
-        });
-        if (cancelled) return;
-        const stillExists = rows?.some((row) => row.sessionId === sessionId) ?? false;
-        if (!stillExists) {
-          clearLocalChatSurface();
-        }
-      } catch {
-        // ignore list refresh failures during session changes
-      }
-    };
-    const unlisten = subscribeSessionsChanged(() => {
-      void syncCurrentSession();
-    });
-    return () => {
-      cancelled = true;
-      unlisten();
-    };
-  }, [clearLocalChatSurface, sessionId]);
 
   useEffect(() => {
     if (nav !== "chat") return;
