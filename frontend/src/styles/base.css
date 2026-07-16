@@ -88,16 +88,24 @@ html[data-theme="dark"] {
       0 0 0 1px rgba(255, 255, 255, 0.06) inset,
       0 1px 0 rgba(255, 255, 255, 0.09) inset;
     --backdrop-glass: blur(var(--blur-glass, 22px)) saturate(1.15);
-    /* 浮层下拉：实色磨砂，避免半透明透字 */
+    /* 浮层下拉：略提亮的深紫磨砂，避免近黑发脏 */
     --menu-glass-bg:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
-      rgba(14, 12, 28, 0.9);
-    --menu-glass-border: rgba(255, 255, 255, 0.16);
+      linear-gradient(165deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%),
+      rgba(36, 30, 58, 0.86);
+    --menu-glass-border: rgba(255, 255, 255, 0.18);
     --menu-glass-shadow:
-      0 16px 40px rgba(0, 0, 0, 0.5),
-      0 2px 8px rgba(0, 0, 0, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    --menu-glass-blur: blur(28px) saturate(1.45);
+      0 16px 40px rgba(0, 0, 0, 0.42),
+      0 2px 8px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --menu-glass-blur: blur(28px) saturate(1.4);
+    /* 顶栏状态 / 模型 / 工具组共用表面 */
+    --header-chip-bg:
+      linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 100%),
+      color-mix(in srgb, var(--tone-soft, rgba(167, 139, 250, 0.16)) 34%, rgba(14, 12, 28, 0.58));
+    --header-chip-border: color-mix(in srgb, var(--tone, transparent) 16%, rgba(255, 255, 255, 0.12));
+    --header-chip-shadow:
+      0 6px 16px rgba(0, 0, 0, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --lens-bg:
       radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%),
       rgba(255, 255, 255, 0.04);
@@ -209,6 +217,13 @@ html[data-theme="light"] {
       0 2px 8px rgba(15, 23, 42, 0.05),
       inset 0 1px 0 rgba(255, 255, 255, 0.85);
     --menu-glass-blur: blur(24px) saturate(1.35);
+    --header-chip-bg:
+      linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 42%, var(--chip-bg, rgba(255, 255, 255, 0.42)));
+    --header-chip-border: color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
+    --header-chip-shadow:
+      0 4px 14px color-mix(in srgb, var(--tone, var(--accent)) 8%, rgba(15, 23, 42, 0.04)),
+      inset 0 1px 0 rgba(255, 255, 255, 0.82);
     --lens-bg:
       radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.28) 48%, transparent 78%),
       linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.22)),
