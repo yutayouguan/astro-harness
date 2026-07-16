@@ -59,6 +59,10 @@
   padding-top: 10px;
 }
 
+.msg-timeline-step.kind-reply .msg-timeline-rail {
+  padding-top: 1px;
+}
+
 .msg-timeline-dot {
   width: 22px;
   height: 22px;
