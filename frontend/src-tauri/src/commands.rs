@@ -1443,19 +1443,35 @@ fn guess_mime(name: &str) -> String {
         "gif" => "image/gif",
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
         "md" | "markdown" => "text/markdown",
         "txt" => "text/plain",
         "json" => "application/json",
         "csv" => "text/csv",
-        "html" => "text/html",
+        "html" | "htm" => "text/html",
         "css" => "text/css",
         "js" => "text/javascript",
         "ts" | "tsx" => "text/typescript",
         "rs" => "text/x-rust",
         "py" => "text/x-python",
         "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
         "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "m4a" => "audio/mp4",
         "pdf" => "application/pdf",
+        "doc" => "application/msword",
+        "docx" => {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        }
+        "xls" => "application/vnd.ms-excel",
+        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "ppt" => "application/vnd.ms-powerpoint",
+        "pptx" => {
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        }
+        "zip" => "application/zip",
         _ => "application/octet-stream",
     }
     .into()
@@ -1466,6 +1482,38 @@ fn guess_mime(name: &str) -> String {
 pub async fn read_file_base64(path: String) -> Result<FileBase64Dto, String> {
     use base64::Engine;
     let p = resolve_memory_path(&path)?;
+    if !p.is_file() {
+        return Err("不是文件".into());
+    }
+    let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
+    if bytes.len() > 32 * 1024 * 1024 {
+        return Err("文件过大（>32MB）".into());
+    }
+    let name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file")
+        .to_string();
+    Ok(FileBase64Dto {
+        mime: guess_mime(&name),
+        size: bytes.len() as u64,
+        base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+        name,
+    })
+}
+
+/// 读取用户主动提供的本地文件（拖放 / 系统剪贴板路径），不限记忆沙箱；上限 32MB。
+#[tauri::command]
+pub async fn read_user_file_base64(path: String) -> Result<FileBase64Dto, String> {
+    use base64::Engine;
+    let raw = path.trim();
+    if raw.is_empty() {
+        return Err("路径为空".into());
+    }
+    let p = std::path::PathBuf::from(raw);
+    if !p.is_absolute() {
+        return Err("需要绝对路径".into());
+    }
     if !p.is_file() {
         return Err("不是文件".into());
     }

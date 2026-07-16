@@ -60,6 +60,8 @@ import {
   filesFromClipboardRead,
   pathToAttachment,
   pathsFromClipboardText,
+  pathsFromDataTransfer,
+  pathsToAttachments,
 } from "../lib/chatPaste";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../lib/thinkingPrefs";
 import type {
@@ -1011,6 +1013,61 @@ export default function ChatView({
     [attachments, onAttachmentsChange],
   );
 
+  const addPaths = useCallback(
+    async (paths: string[]) => {
+      if (!paths.length || streaming) return;
+      const created = await pathsToAttachments(paths);
+      addAttachments(created);
+    },
+    [addAttachments, streaming],
+  );
+
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const dragDepthRef = useRef(0);
+  const tauriDropAtRef = useRef(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/webview")
+      .then(({ getCurrentWebview }) =>
+        getCurrentWebview().onDragDropEvent((event) => {
+          if (streaming) return;
+          const kind = event.payload.type;
+          if (kind === "enter" || kind === "over") {
+            setFileDragOver(true);
+            return;
+          }
+          if (kind === "leave") {
+            setFileDragOver(false);
+            return;
+          }
+          if (kind === "drop") {
+            setFileDragOver(false);
+            tauriDropAtRef.current = Date.now();
+            void addPaths(event.payload.paths);
+          }
+        }),
+      )
+      .then((fn) => {
+        if (cancelled) {
+          fn();
+          return;
+        }
+        unlisten = fn;
+      })
+      .catch(() => {
+        // non-Tauri / older runtime
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [addPaths, streaming]);
+
   const removeAttachment = (id: string) => {
     const target = attachments.find((a) => a.id === id);
     if (target) revokePreview(target);
@@ -1022,11 +1079,37 @@ export default function ChatView({
     e.target.value = "";
   };
 
-  const onDrop = async (e: DragEvent) => {
+  const onDragEnter = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (streaming) return;
-    if (e.dataTransfer.files?.length) await addFiles(e.dataTransfer.files);
+    dragDepthRef.current += 1;
+    if (e.dataTransfer?.types?.includes("Files")) {
+      setFileDragOver(true);
+    }
+  };
+
+  const onDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setFileDragOver(false);
+  };
+
+  const onDrop = async (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = 0;
+    setFileDragOver(false);
+    if (streaming) return;
+    // Tauri 原生 drop 已处理时跳过，避免重复添加
+    if (Date.now() - tauriDropAtRef.current < 500) return;
+    if (e.dataTransfer.files?.length) {
+      await addFiles(e.dataTransfer.files);
+      return;
+    }
+    const paths = pathsFromDataTransfer(e.dataTransfer);
+    if (paths.length) await addPaths(paths);
   };
 
   const onPaste = async (e: {
@@ -1130,7 +1213,9 @@ export default function ChatView({
 
   return (
     <section
-      className="chat-pane"
+      className={`chat-pane ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1486,7 +1571,9 @@ export default function ChatView({
           />
         ) : null}
 
-        <div className="composer composer--stacked">
+        <div
+          className={`composer composer--stacked ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -1496,6 +1583,11 @@ export default function ChatView({
             onChange={(e) => void onFileChange(e)}
             disabled={streaming || attachments.length >= MAX_ATTACHMENTS}
           />
+          {fileDragOver ? (
+            <div className="composer-drop-hint" aria-live="polite">
+              {t("chat.dropFilesHint")}
+            </div>
+          ) : null}
           <div className="composer-input-wrap">
             <div
               className="composer-typed-hint"

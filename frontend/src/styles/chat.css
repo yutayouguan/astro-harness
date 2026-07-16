@@ -2083,8 +2083,36 @@ html[data-theme="dark"] .msg-md-codeblock {
 .composer--stacked {
   flex-direction: column;
   align-items: stretch;
+  position: relative;
   gap: 6px;
   padding: 12px 12px 10px;
+}
+
+.composer.is-file-dragover {
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 55%, var(--glass-edge));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent),
+    0 10px 28px color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.composer-drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border-radius: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tone, var(--accent));
+  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 35%, rgba(255, 255, 255, 0.72));
+}
+
+.chat-pane.is-file-dragover .composer-drop-hint {
+  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 42%, rgba(255, 255, 255, 0.78));
 }
 
 .composer-input-wrap {

@@ -1,5 +1,5 @@
 /**
- * 聊天输入粘贴：从路径 / 剪贴板文件 / 图片像素构建附件。
+ * 聊天输入粘贴 / 拖放：从路径或剪贴板构建附件。
  */
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { ChatAttachment, ChatAttachmentKind } from "../types";
@@ -31,9 +31,7 @@ function newAttId(): string {
   return `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** 将记忆沙箱内本地路径读成聊天附件 */
-export async function pathToAttachment(path: string): Promise<ChatAttachment> {
-  const dto = await invoke<FileBase64Dto>("read_file_base64", { path });
+function dtoToAttachment(path: string, dto: FileBase64Dto): ChatAttachment {
   const kind = kindFromMime(dto.mime, dto.name);
   const shouldInline =
     (kind === "image" && dto.size <= MAX_INLINE_BYTES) ||
@@ -62,19 +60,39 @@ export async function pathToAttachment(path: string): Promise<ChatAttachment> {
   };
 }
 
+/** 将本地绝对路径读成聊天附件（记忆沙箱优先，否则读用户文件） */
+export async function pathToAttachment(path: string): Promise<ChatAttachment> {
+  try {
+    const dto = await invoke<FileBase64Dto>("read_file_base64", { path });
+    return dtoToAttachment(path, dto);
+  } catch {
+    const dto = await invoke<FileBase64Dto>("read_user_file_base64", { path });
+    return dtoToAttachment(path, dto);
+  }
+}
+
+/** 批量路径 → 附件（跳过失败项） */
+export async function pathsToAttachments(
+  paths: string[],
+): Promise<ChatAttachment[]> {
+  const out: ChatAttachment[] = [];
+  for (const p of paths) {
+    const trimmed = p.trim();
+    if (!trimmed) continue;
+    try {
+      out.push(await pathToAttachment(trimmed));
+    } catch {
+      // skip unreadable / directories
+    }
+  }
+  return out;
+}
+
 /** 从系统文件剪贴板读取路径并转附件 */
 export async function attachmentsFromOsClipboard(): Promise<ChatAttachment[]> {
   try {
     const paths = await invoke<string[]>("list_clipboard_file_paths");
-    const out: ChatAttachment[] = [];
-    for (const p of paths) {
-      try {
-        out.push(await pathToAttachment(p));
-      } catch {
-        // skip unreadable
-      }
-    }
-    return out;
+    return pathsToAttachments(paths);
   } catch {
     return [];
   }
@@ -107,4 +125,21 @@ export async function filesFromClipboardRead(): Promise<File[]> {
 /** 纯文本是否应整段当作本地路径附件处理 */
 export function pathsFromClipboardText(text: string): string[] {
   return parseClipboardLocalPaths(text);
+}
+
+/** 从 HTML5 DataTransfer 解析 file:// / 本地路径列表 */
+export function pathsFromDataTransfer(dt: DataTransfer | null): string[] {
+  if (!dt) return [];
+  const uriList = dt.getData("text/uri-list");
+  if (uriList.trim()) {
+    return parseClipboardLocalPaths(
+      uriList
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"))
+        .join("\n"),
+    );
+  }
+  const text = dt.getData("text/plain");
+  return pathsFromClipboardText(text);
 }
