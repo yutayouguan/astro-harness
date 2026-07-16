@@ -81,21 +81,35 @@ fn ref_name(r: &str) -> Option<&str> {
 }
 
 /// 递归移除 `$schema`、`title`、`examples`、`$id` 等元数据字段；保留 `description`。
+///
+/// `properties` 下的键是实际参数名，不是 schema 元数据。例如工具参数可以合法地
+/// 叫作 `title`；不能把 `properties.title` 删除后仍在 `required` 中保留它。
 fn strip_meta(value: &mut Value) {
+    strip_meta_inner(value, false);
+}
+
+fn strip_meta_inner(value: &mut Value, is_properties_map: bool) {
     match value {
         Value::Object(obj) => {
-            obj.remove("$schema");
-            obj.remove("title");
-            // 保留 description；去掉 examples 等噪声
-            obj.remove("examples");
-            obj.remove("$id");
-            for v in obj.values_mut() {
-                strip_meta(v);
+            if !is_properties_map {
+                obj.remove("$schema");
+                obj.remove("title");
+                // 保留 description；去掉 examples 等噪声
+                obj.remove("examples");
+                obj.remove("$id");
+            }
+            for (key, child) in obj.iter_mut() {
+                if is_properties_map {
+                    // 子节点是各参数的 schema，不是 properties map 本身
+                    strip_meta_inner(child, false);
+                } else {
+                    strip_meta_inner(child, key == "properties");
+                }
             }
         }
         Value::Array(arr) => {
             for v in arr {
-                strip_meta(v);
+                strip_meta_inner(v, false);
             }
         }
         _ => {}
@@ -286,6 +300,31 @@ mod tests {
             s.pointer("/properties/q/type").and_then(|t| t.as_str()),
             Some("string")
         );
+    }
+
+    #[test]
+    fn sanitize_preserves_property_named_title() {
+        let raw = json!({
+            "title": "ConfirmArgs",
+            "type": "object",
+            "properties": {
+                "title": {
+                    "title": "Title",
+                    "type": "string"
+                },
+                "examples": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                }
+            },
+            "required": ["title", "examples"]
+        });
+        let s = sanitize_tool_schema(raw);
+        assert!(s.get("title").is_none());
+        assert!(s.pointer("/properties/title").is_some(), "{s}");
+        assert!(s.pointer("/properties/title/title").is_none(), "{s}");
+        assert!(s.pointer("/properties/examples").is_some(), "{s}");
+        assert_eq!(s["required"], json!(["title", "examples"]));
     }
 }
 
