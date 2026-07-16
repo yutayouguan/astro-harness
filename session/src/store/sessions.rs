@@ -122,6 +122,89 @@ impl SessionStore {
         }
     }
 
+    /// 标记会话已归档。
+    pub fn archive_session(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET archived_at = ?1 WHERE id = ?2",
+            params![now_epoch_secs()?, id],
+        )?;
+        anyhow::ensure!(changed == 1, "archive_session: session not found");
+        Ok(())
+    }
+
+    /// 取消会话归档。
+    pub fn unarchive_session(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET archived_at = NULL WHERE id = ?1",
+            params![id],
+        )?;
+        anyhow::ensure!(changed == 1, "unarchive_session: session not found");
+        Ok(())
+    }
+
+    /// 仅在标题为空时设置标题。
+    pub fn set_session_title_if_empty(&self, id: &str, title: &str) -> Result<bool> {
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            return Ok(false);
+        }
+        let changed = self.conn.execute(
+            "UPDATE sessions
+             SET title = ?1
+             WHERE id = ?2 AND (title IS NULL OR TRIM(title) = '')",
+            params![trimmed, id],
+        )?;
+        Ok(changed == 1)
+    }
+
+    /// 永久删除会话与其消息。
+    pub fn delete_session_permanently(&self, id: &str) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM messages WHERE session_id = ?1", params![id])?;
+        let changed = tx.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
+        anyhow::ensure!(changed == 1, "delete_session_permanently: session not found");
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// 读取首个非空 user 与 assistant 文本；任一缺失则返回 `None`。
+    pub fn first_turn_text(&self, session_id: &str) -> Result<Option<(String, String)>> {
+        let user_text: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT content
+                 FROM messages
+                 WHERE session_id = ?1
+                   AND role = 'user'
+                   AND content IS NOT NULL
+                   AND TRIM(content) != ''
+                 ORDER BY timestamp ASC, id ASC
+                 LIMIT 1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let assistant_text: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT content
+                 FROM messages
+                 WHERE session_id = ?1
+                   AND role = 'assistant'
+                   AND content IS NOT NULL
+                   AND TRIM(content) != ''
+                 ORDER BY timestamp ASC, id ASC
+                 LIMIT 1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match (user_text, assistant_text) {
+            (Some(user), Some(assistant)) => Ok(Some((user, assistant))),
+            _ => Ok(None),
+        }
+    }
+
     /// 累加会话账单列；`cost_status=unknown` 的 delta 不抬高 `estimated_cost_usd`。
     pub fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
         let skip_cost = d.cost_status.as_deref() == Some("unknown");

@@ -1,5 +1,11 @@
-use session::store::{BillingDelta, NewMessage, SessionStore};
+use session::store::{BillingDelta, NewMessage, SessionListFilter, SessionStore};
 use tempfile::TempDir;
+
+fn test_store() -> (TempDir, SessionStore) {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    (dir, store)
+}
 
 #[test]
 fn opens_fresh_db_at_schema_v11() {
@@ -993,4 +999,101 @@ fn compact_and_split_keep_zero_is_summary_only() {
         .unwrap();
     let msgs = store.get_messages("new").unwrap();
     assert_eq!(msgs.len(), 1);
+}
+
+#[test]
+fn archive_filters_and_restores_session() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store.create_session("s2", "tauri", None, None, None).unwrap();
+
+    store.archive_session("s1").unwrap();
+
+    let active = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].id, "s2");
+
+    let archived = store.list_sessions(SessionListFilter::Archived, 10).unwrap();
+    assert_eq!(archived.len(), 1);
+    assert_eq!(archived[0].id, "s1");
+
+    store.unarchive_session("s1").unwrap();
+    assert_eq!(
+        store.list_sessions(SessionListFilter::Archived, 10).unwrap().len(),
+        0
+    );
+}
+
+#[test]
+fn title_if_empty_never_overwrites_manual_title() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+
+    assert!(store.set_session_title_if_empty("s1", "Auto").unwrap());
+    store.set_session_title("s1", "Manual").unwrap();
+
+    assert!(!store.set_session_title_if_empty("s1", "Late").unwrap());
+    assert_eq!(
+        store.get_session("s1").unwrap().unwrap().title.as_deref(),
+        Some("Manual")
+    );
+}
+
+#[test]
+fn permanent_delete_removes_messages_and_fts() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("unique-delete-token"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+
+    store.delete_session_permanently("s1").unwrap();
+
+    assert!(store.get_session("s1").unwrap().is_none());
+    assert!(store.search_messages("unique-delete-token", None, None, 10).unwrap().is_empty());
+}
+
+#[test]
+fn first_turn_text_returns_first_non_empty_user_and_assistant() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("   "),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("tool noise"),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("hello"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some(""),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("world"),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+
+    let first = store.first_turn_text("s1").unwrap();
+    assert_eq!(
+        first.as_ref().map(|(user, assistant)| (user.as_str(), assistant.as_str())),
+        Some(("hello", "world"))
+    );
 }

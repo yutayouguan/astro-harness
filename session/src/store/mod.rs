@@ -165,6 +165,13 @@ pub struct RecentSession {
     pub archived_at: Option<f64>,
 }
 
+/// 会话列表筛选条件。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionListFilter {
+    Active,
+    Archived,
+}
+
 /// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。
 #[derive(Debug, Clone)]
 pub struct ChatActivityStored {
