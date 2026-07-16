@@ -2,7 +2,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -43,18 +42,21 @@ const RANGE = 58;
 /** Soft falloff (higher = sharper peak). */
 const FALLOFF = 1.35;
 /** 悬停时最多同时展示的邻近锚点预览数。 */
-const LABEL_MAX = 10;
+const LABEL_MAX = 8;
 
-type LabelPlacement = {
+type TipModel = {
   id: string;
   text: string;
+  primary: boolean;
+  z: number;
+};
+
+type TipVisual = {
   top: number;
   left: number;
   side: TipSide;
   opacity: number;
   scale: number;
-  z: number;
-  primary: boolean;
 };
 
 function previewText(content: string, fallback: string): string {
@@ -76,9 +78,20 @@ function dockScale(distance: number): number {
   return 1 + (MAX_SCALE - 1) * t ** FALLOFF;
 }
 
-/** Idle-slot center Y for index i, independent of current scales (avoids jitter). */
+/** Idle-slot center Y for index i（放大用固定基准，避免反馈抖动）。 */
 function baseCenterY(index: number): number {
   return PAD_TOP + index * (BASE + GAP) + BASE / 2;
+}
+
+/** 按放大后的视觉高度重新堆叠，产生 Dock 起落位移。 */
+function dockOffsets(scales: number[]): number[] {
+  let y = PAD_TOP;
+  return scales.map((s, i) => {
+    const h = BASE * s;
+    const center = y + h / 2;
+    y += h + GAP;
+    return center - baseCenterY(i);
+  });
 }
 
 export default function ChatMessageNav({
@@ -88,13 +101,23 @@ export default function ChatMessageNav({
 }: Props) {
   const { t } = useI18n();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [hoverY, setHoverY] = useState<number | null>(null);
+  const [dockActive, setDockActive] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [labelPlacements, setLabelPlacements] = useState<LabelPlacement[]>([]);
+  const [tips, setTips] = useState<TipModel[]>([]);
   const ratiosRef = useRef<Map<string, number>>(new Map());
   const trackRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const labelRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const slotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const tipElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const tipMetaRef = useRef<TipModel[]>([]);
+  const hoverYRef = useRef<number | null>(null);
+  const hoverRafRef = useRef<number | null>(null);
+  const pendingHoverYRef = useRef<number | null>(null);
+  const tipSizeCache = useRef<Map<string, { width: number; height: number }>>(
+    new Map(),
+  );
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const previews = useMemo(() => {
     const map = new Map<string, string>();
@@ -105,6 +128,8 @@ export default function ChatMessageNav({
     }
     return map;
   }, [messages, t]);
+  const previewsRef = useRef(previews);
+  previewsRef.current = previews;
 
   useEffect(() => {
     const root = listRef.current;
@@ -163,20 +188,199 @@ export default function ChatMessageNav({
     }
   }, [bottomRef, messages]);
 
-  const hoverRafRef = useRef<number | null>(null);
-  const pendingHoverYRef = useRef<number | null>(null);
-
-  const onTrackMove = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const rect = track.getBoundingClientRect();
-    pendingHoverYRef.current = e.clientY - rect.top + track.scrollTop;
-    if (hoverRafRef.current != null) return;
-    hoverRafRef.current = requestAnimationFrame(() => {
-      hoverRafRef.current = null;
-      setHoverY(pendingHoverYRef.current);
-    });
+  const paintTip = useCallback((id: string, visual: TipVisual) => {
+    const tipEl = tipElsRef.current.get(id);
+    if (!tipEl) return;
+    tipEl.style.transform = `translate3d(${visual.left}px, ${visual.top}px, 0) scale(${visual.scale})`;
+    tipEl.style.opacity = String(visual.opacity);
+    tipEl.classList.toggle("is-side-right", visual.side === "right");
   }, []);
+
+  const layoutTips = useCallback(
+    (
+      ranks: { id: string; index: number; dist: number; scale: number }[],
+    ) => {
+      if (ranks.length === 0) {
+        tipSizeCache.current.clear();
+        if (tipMetaRef.current.length > 0) {
+          tipMetaRef.current = [];
+          setTips([]);
+        }
+        return;
+      }
+
+      const maxDist = Math.max(ranks[ranks.length - 1]?.dist ?? 0, 1);
+      const nextTips: TipModel[] = [];
+
+      for (let rank = 0; rank < ranks.length; rank++) {
+        const item = ranks[rank]!;
+        const btn = buttonRefs.current.get(item.id);
+        if (!btn) continue;
+        const text = previewsRef.current.get(item.id) ?? "";
+        if (!text) continue;
+
+        const t = ranks.length === 1 ? 0 : Math.min(1, item.dist / maxDist);
+        const opacity = 1 - t * 0.55;
+        // 文字随图标鱼眼一起放大，远处略缩小
+        const grow = (item.scale - 1) / (MAX_SCALE - 1);
+        const labelScale = (0.92 + 0.2 * grow) * (1 - t * 0.1);
+        const cached = tipSizeCache.current.get(item.id);
+        const tipSize = cached ?? {
+          width: Math.min(
+            16 * 16,
+            window.innerWidth * 0.46,
+            Math.max(48, text.length * 7.5 + 22),
+          ),
+          height: rank === 0 ? 30 : 26,
+        };
+
+        // 跟图标视觉框（含 scale/translate）对齐，丝滑起落
+        const rect = btn.getBoundingClientRect();
+        const placed = clampFloatingTip({
+          anchorRect: rect,
+          tipSize,
+          bounds: resolveClipBounds(btn),
+          prefer: "left",
+          gap: 10,
+          pad: 8,
+        });
+
+        nextTips.push({
+          id: item.id,
+          text,
+          primary: rank === 0,
+          z: ranks.length - rank,
+        });
+        paintTip(item.id, {
+          top: placed.top,
+          left: placed.left,
+          side: placed.side,
+          opacity,
+          scale: labelScale,
+        });
+      }
+
+      const prev = tipMetaRef.current;
+      const same =
+        prev.length === nextTips.length &&
+        prev.every(
+          (p, i) =>
+            p.id === nextTips[i]!.id &&
+            p.primary === nextTips[i]!.primary &&
+            p.text === nextTips[i]!.text,
+        );
+      if (!same) {
+        tipMetaRef.current = nextTips;
+        setTips(nextTips);
+      }
+
+      // 下一帧用真实尺寸精调一次（只写 DOM，不 setState）
+      requestAnimationFrame(() => {
+        for (let rank = 0; rank < ranks.length; rank++) {
+          const item = ranks[rank]!;
+          const tipEl = tipElsRef.current.get(item.id);
+          const btn = buttonRefs.current.get(item.id);
+          if (!tipEl || !btn) continue;
+          const size = measurePopoverSize(tipEl);
+          if (size.width < 2 || size.height < 2) continue;
+          tipSizeCache.current.set(item.id, size);
+          const maxD = Math.max(ranks[ranks.length - 1]?.dist ?? 0, 1);
+          const tt =
+            ranks.length === 1 ? 0 : Math.min(1, item.dist / maxD);
+          const placed = clampFloatingTip({
+            anchorRect: btn.getBoundingClientRect(),
+            tipSize: size,
+            bounds: resolveClipBounds(btn),
+            prefer: "left",
+            gap: 10,
+            pad: 8,
+          });
+          paintTip(item.id, {
+            top: placed.top,
+            left: placed.left,
+            side: placed.side,
+            opacity: 1 - tt * 0.55,
+            scale: 1 - tt * 0.12,
+          });
+        }
+      });
+    },
+    [paintTip],
+  );
+
+  /** 每帧直接写 CSS 变量 + 气泡位置，避免 React 重渲染抖动。 */
+  const applyDock = useCallback(
+    (hoverY: number | null, focusId: string | null) => {
+      const list = messagesRef.current;
+      const scales: number[] = list.map((m, i) => {
+        if (hoverY != null) {
+          return dockScale(Math.abs(hoverY - baseCenterY(i)));
+        }
+        if (focusId && m.id === focusId) return 1.28;
+        return 1;
+      });
+      const tys = hoverY != null ? dockOffsets(scales) : scales.map(() => 0);
+
+      list.forEach((m, i) => {
+        const slot = slotRefs.current.get(m.id);
+        if (!slot) return;
+        const s = scales[i] ?? 1;
+        slot.style.setProperty("--dock-scale", String(s));
+        slot.style.setProperty("--dock-ty", `${tys[i] ?? 0}px`);
+        slot.style.setProperty("--dock-z", String(Math.round(s * 100)));
+      });
+
+      let ranks: { id: string; index: number; dist: number; scale: number }[] =
+        [];
+      if (hoverY != null) {
+        ranks = list
+          .map((m, i) => ({
+            id: m.id,
+            index: i,
+            dist: Math.abs(hoverY - baseCenterY(i)),
+            scale: scales[i] ?? 1,
+          }))
+          .sort((a, b) => a.dist - b.dist || a.index - b.index)
+          .slice(0, Math.min(LABEL_MAX, list.length));
+      } else if (focusId) {
+        const index = list.findIndex((m) => m.id === focusId);
+        if (index >= 0) {
+          ranks = [
+            {
+              id: focusId,
+              index,
+              dist: 0,
+              scale: scales[index] ?? 1,
+            },
+          ];
+        }
+      }
+
+      layoutTips(ranks);
+    },
+    [layoutTips],
+  );
+
+  const flushHover = useCallback(() => {
+    hoverRafRef.current = null;
+    const y = pendingHoverYRef.current;
+    hoverYRef.current = y;
+    const active = y != null;
+    setDockActive((prev) => (prev === active ? prev : active));
+    applyDock(y, y != null ? null : hoveredId);
+  }, [applyDock, hoveredId]);
+
+  const onTrackMove = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      const track = trackRef.current;
+      if (!track) return;
+      const rect = track.getBoundingClientRect();
+      pendingHoverYRef.current = e.clientY - rect.top + track.scrollTop;
+      if (hoverRafRef.current != null) return;
+      hoverRafRef.current = requestAnimationFrame(flushHover);
+    },
+    [flushHover],
+  );
 
   const onTrackLeave = useCallback(() => {
     if (hoverRafRef.current != null) {
@@ -184,143 +388,25 @@ export default function ChatMessageNav({
       hoverRafRef.current = null;
     }
     pendingHoverYRef.current = null;
-    setHoverY(null);
+    hoverYRef.current = null;
+    setDockActive(false);
     setHoveredId(null);
-    setLabelPlacements([]);
-  }, []);
+    applyDock(null, null);
+  }, [applyDock]);
 
-  const scales = useMemo(() => {
-    const result = new Map<string, number>();
-    if (hoverY == null) {
-      for (const m of messages) result.set(m.id, 1);
-      return result;
-    }
-    messages.forEach((m, i) => {
-      result.set(m.id, dockScale(Math.abs(hoverY - baseCenterY(i))));
-    });
-    return result;
-  }, [hoverY, messages]);
+  // 键盘聚焦：无鼠标坐标时单独放大当前项
+  useEffect(() => {
+    if (hoverYRef.current != null) return;
+    applyDock(null, hoveredId);
+  }, [hoveredId, applyDock]);
 
-  /** 按与悬停点距离排序的邻近锚点（最多 LABEL_MAX）；键盘聚焦时只显示一项。 */
-  const nearbyRanks = useMemo(() => {
-    if (hoverY != null) {
-      return messages
-        .map((m, i) => ({
-          id: m.id,
-          index: i,
-          dist: Math.abs(hoverY - baseCenterY(i)),
-        }))
-        .sort((a, b) => a.dist - b.dist || a.index - b.index)
-        .slice(0, Math.min(LABEL_MAX, messages.length));
-    }
-    if (hoveredId) {
-      const index = messages.findIndex((m) => m.id === hoveredId);
-      if (index < 0) return [];
-      return [{ id: hoveredId, index, dist: 0 }];
-    }
-    return [];
-  }, [hoverY, hoveredId, messages]);
-
-  // Portal 标签：锚定未缩放的槽位中心，避免 Dock 放大带动文字跟着跳。
-  useLayoutEffect(() => {
-    if (nearbyRanks.length === 0) {
-      setLabelPlacements([]);
-      return;
-    }
-
-    const maxDist = Math.max(nearbyRanks[nearbyRanks.length - 1]?.dist ?? 0, 1);
-    const estimated: LabelPlacement[] = [];
-
-    for (let rank = 0; rank < nearbyRanks.length; rank++) {
-      const item = nearbyRanks[rank]!;
-      const el = itemRefs.current.get(item.id);
-      const slot = el?.parentElement;
-      if (!el || !slot) continue;
-      const text = previews.get(item.id) ?? "";
-      if (!text) continue;
-
-      // 用外层 item（不带 scale）定位，预览气泡不随 Dock 放大位移
-      const rect = slot.getBoundingClientRect();
-      const t =
-        nearbyRanks.length === 1 ? 0 : Math.min(1, item.dist / maxDist);
-      const opacity = 1 - t * 0.58;
-      const scale = 1 - t * 0.14;
-      const approxW = Math.min(
-        16 * 16,
-        window.innerWidth * 0.46,
-        Math.max(48, text.length * 7.5 + 22),
-      );
-      const approxH = rank === 0 ? 30 : 26;
-      const placed = clampFloatingTip({
-        anchorRect: rect,
-        tipSize: { width: approxW, height: approxH },
-        bounds: resolveClipBounds(el),
-        prefer: "left",
-        gap: 12,
-        pad: 8,
-      });
-
-      estimated.push({
-        id: item.id,
-        text,
-        top: placed.top,
-        left: placed.left,
-        side: placed.side,
-        opacity,
-        scale,
-        z: nearbyRanks.length - rank,
-        primary: rank === 0,
-      });
-    }
-
-    setLabelPlacements(estimated);
-
-    const raf = requestAnimationFrame(() => {
-      const refined: LabelPlacement[] = [];
-      let dirty = false;
-      for (const p of estimated) {
-        const tipEl = labelRefs.current.get(p.id);
-        const anchor = itemRefs.current.get(p.id);
-        const slot = anchor?.parentElement;
-        if (!tipEl || !anchor || !slot) {
-          refined.push(p);
-          continue;
-        }
-        const size = measurePopoverSize(tipEl);
-        if (size.width < 2 || size.height < 2) {
-          refined.push(p);
-          continue;
-        }
-        const placed = clampFloatingTip({
-          anchorRect: slot.getBoundingClientRect(),
-          tipSize: size,
-          bounds: resolveClipBounds(anchor),
-          prefer: "left",
-          gap: 12,
-          pad: 8,
-        });
-        if (
-          Math.abs(placed.left - p.left) > 0.5 ||
-          Math.abs(placed.top - p.top) > 0.5 ||
-          placed.side !== p.side
-        ) {
-          dirty = true;
-        }
-        refined.push({
-          ...p,
-          left: placed.left,
-          top: placed.top,
-          side: placed.side,
-        });
-      }
-      if (dirty) setLabelPlacements(refined);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [nearbyRanks, previews]);
+  // tips 挂载后立刻按当前 Dock 状态刷一次位置
+  useEffect(() => {
+    if (tips.length === 0) return;
+    applyDock(hoverYRef.current, hoverYRef.current != null ? null : hoveredId);
+  }, [tips, applyDock, hoveredId]);
 
   if (messages.length === 0) return null;
-
-  const dockActive = hoverY != null;
 
   return (
     <nav
@@ -336,24 +422,22 @@ export default function ChatMessageNav({
         {messages.map((m) => {
           const isActive = activeId === m.id;
           const isUser = m.role === "user";
-          const scale = scales.get(m.id) ?? 1;
           const label = previews.get(m.id) ?? "";
-          const style = {
-            "--dock-scale": String(scale),
-            "--dock-z": String(Math.round(scale * 100)),
-          } as CSSProperties;
 
           return (
             <div
               key={m.id}
+              ref={(el) => {
+                if (el) slotRefs.current.set(m.id, el);
+                else slotRefs.current.delete(m.id);
+              }}
               className="chat-msg-nav-item"
-              style={style}
             >
               <button
                 type="button"
                 ref={(el) => {
-                  if (el) itemRefs.current.set(m.id, el);
-                  else itemRefs.current.delete(m.id);
+                  if (el) buttonRefs.current.set(m.id, el);
+                  else buttonRefs.current.delete(m.id);
                 }}
                 className={`chat-msg-nav-dot ${isUser ? "is-user" : "is-assistant"} ${
                   isActive ? "is-active" : ""
@@ -390,26 +474,20 @@ export default function ChatMessageNav({
         <ChevronDown size={12} strokeWidth={2.4} aria-hidden />
       </button>
 
-      {labelPlacements.length > 0
+      {tips.length > 0
         ? createPortal(
             <>
-              {labelPlacements.map((p) => (
+              {tips.map((p) => (
                 <div
                   key={p.id}
                   ref={(el) => {
-                    if (el) labelRefs.current.set(p.id, el);
-                    else labelRefs.current.delete(p.id);
+                    if (el) tipElsRef.current.set(p.id, el);
+                    else tipElsRef.current.delete(p.id);
                   }}
-                  className={`chat-msg-nav-label ${p.primary ? "is-primary" : "is-near"}${
-                    p.side === "right" ? " is-side-right" : ""
-                  }`}
+                  className={`chat-msg-nav-label ${p.primary ? "is-primary" : "is-near"}`}
                   style={
                     {
-                      top: p.top,
-                      left: p.left,
                       zIndex: `calc(var(--z-tip) + ${p.z})`,
-                      "--label-opacity": String(p.opacity),
-                      "--label-scale": String(p.scale),
                     } as CSSProperties
                   }
                   role="tooltip"

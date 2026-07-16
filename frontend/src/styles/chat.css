@@ -1480,6 +1480,8 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 .chat-msg-nav.is-dock-active .chat-msg-nav-track {
   background: transparent;
   box-shadow: none;
+  /* 放大起落时允许溢出，避免裁切导致「抖一下」 */
+  overflow: visible;
 }
 
 .chat-msg-nav-track::-webkit-scrollbar {
@@ -1489,6 +1491,7 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 
 .chat-msg-nav-item {
   --dock-scale: 1;
+  --dock-ty: 0px;
   --dock-z: 1;
   position: relative;
   display: flex;
@@ -1501,41 +1504,36 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   pointer-events: none;
 }
 
-/* 导航气泡：主体与尖角同色一体（drop-shadow 描边跟外形，无接缝） */
+/* 导航气泡：fixed + translate3d，由 JS 每帧直接写 transform 跟随 Dock */
 .chat-msg-nav-label {
   --nav-label-bg: #16181d;
   --nav-label-fg: #f4f6fb;
   --nav-label-border: rgba(255, 255, 255, 0.2);
   --arrow-size: 7px;
-  --label-opacity: 1;
-  --label-scale: 1;
   position: fixed;
+  top: 0;
+  left: 0;
   z-index: var(--z-tip);
   display: inline-flex;
   align-items: center;
   max-width: min(16rem, 46vw);
   padding: 6px 11px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid var(--nav-label-border);
   background: var(--nav-label-bg);
   color: var(--nav-label-fg);
   font-size: 12px;
   font-weight: 550;
   line-height: 1.35;
   letter-spacing: 0.01em;
-  opacity: var(--label-opacity);
-  transform: scale(var(--label-scale));
+  opacity: 0;
+  transform: translate3d(-9999px, -9999px, 0) scale(1);
   transform-origin: right center;
-  /* 描边/阴影跟随主体+尖角的合成外形，避免双边框三角接缝与异色 */
-  filter:
-    drop-shadow(0 0 0.55px var(--nav-label-border))
-    drop-shadow(0 0 0.55px var(--nav-label-border))
-    drop-shadow(0 8px 22px rgba(0, 0, 0, 0.36));
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36);
   pointer-events: none;
-  /* 不过渡 top/left：连续跟随鼠标时 transition 会和定位打架导致抖 */
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease;
+  will-change: transform, opacity;
+  /* 跟随鼠标时不做 transition，离开由 JS 卸掉节点 */
+  transition: none;
 }
 
 /* 最近项保留尖角；邻近项去掉尾巴，减轻重叠 */
@@ -1554,10 +1552,6 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   pointer-events: none;
 }
 
-.chat-msg-nav-label.is-side-right {
-  transform-origin: left center;
-}
-
 .chat-msg-nav-label.is-side-right.is-primary::after {
   left: calc(-1 * var(--arrow-size) + 1px);
   right: auto;
@@ -1570,9 +1564,11 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   padding: 4px 9px;
   font-size: 11px;
   font-weight: 500;
-  filter:
-    drop-shadow(0 0 0.45px var(--nav-label-border))
-    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.22));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
+.chat-msg-nav-label.is-side-right {
+  transform-origin: left center;
 }
 
 .chat-msg-nav-label::before {
@@ -1620,11 +1616,16 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 .chat-msg-nav-item .chat-msg-nav-dot {
   width: 100%;
   height: 100%;
-  /* 槽位固定，仅视觉放大，避免改宽高带动布局/预览文字抖动 */
-  transform: scale(var(--dock-scale, 1));
+  /* 槽位固定：scale + translate 做鱼眼起落，不改布局宽高 */
+  transform: translate3d(0, var(--dock-ty, 0px), 0) scale(var(--dock-scale, 1));
   transform-origin: right center;
   will-change: transform;
-  transition: transform 0.06s linear;
+  transition: none;
+}
+
+/* 鼠标离开后回落丝滑一点 */
+.chat-msg-nav:not(.is-dock-active) .chat-msg-nav-item .chat-msg-nav-dot {
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .chat-msg-nav-bottom {
@@ -1971,10 +1972,7 @@ html[data-theme="light"] .chat-msg-nav-label {
   --nav-label-bg: #ffffff;
   --nav-label-fg: #1e293b;
   --nav-label-border: rgba(15, 23, 42, 0.14);
-  filter:
-    drop-shadow(0 0 0.55px var(--nav-label-border))
-    drop-shadow(0 0 0.55px var(--nav-label-border))
-    drop-shadow(0 8px 22px rgba(15, 23, 42, 0.12));
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
 }
 
 html[data-theme="light"] .chat-msg-nav-dot,
