@@ -4,7 +4,7 @@ import {
   clampFloatingTip,
   resolveClipBounds,
   type TipSide,
-} from "../lib/clampPopover";
+} from "../lib/ui/clampPopover";
 
 const GAP = 10;
 const HOST_ID = "astro-ui-tip-host";

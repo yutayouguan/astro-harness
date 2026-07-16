@@ -23,8 +23,8 @@ import {
   type ModelEffort,
   type ModelPickerGlobals,
   type ModelRuntimePrefs,
-} from "../lib/modelPrefs";
-import { EMPTY_MODEL_CAPABILITIES } from "../lib/modelCaps";
+} from "../lib/model/modelPrefs";
+import { EMPTY_MODEL_CAPABILITIES } from "../lib/model/modelCaps";
 import type {
   ModelCapabilities,
   ModelInfo,

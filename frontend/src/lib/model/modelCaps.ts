@@ -1,5 +1,5 @@
 /** 模型能力展示辅助。 */
-import type { ModelCapabilities } from "../types";
+import type { ModelCapabilities } from "../../types";
 
 /** 能力位展示顺序（与 ModelPicker 图标一致）。 */
 export type ModelCapKey =

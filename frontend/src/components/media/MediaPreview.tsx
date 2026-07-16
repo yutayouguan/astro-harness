@@ -1,8 +1,8 @@
 /** 图 / 视频 / 音频内嵌预览（本地路径经 resolveMediaSrc）；悬停提供引用 / 放大 / 下载 / 复制 */
 import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { GeneratedMediaKind } from "../../lib/parseGeneratedMedia";
-import { resolveMediaSrc } from "../../lib/resolveMediaSrc";
+import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
+import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import BrokenMedia from "./BrokenMedia";
 import HtmlPreview from "./HtmlPreview";
 import MediaLightbox from "./MediaLightbox";

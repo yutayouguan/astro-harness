@@ -19,7 +19,7 @@ import {
   type LucideIconComponent,
   type LucidePaint,
   type LucideRenderStyle,
-} from "../lib/lucideAgentIcons";
+} from "../lib/agent/lucideAgentIcons";
 
 /** Lucide 图标选择器入参 */
 type Props = {

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
-import { agentNameInitial } from "../lib/agentIcons";
+import { agentNameInitial } from "../lib/agent/agentIcons";
 import {
   lucideIconToSvgBase64Async,
   solidPaint,
@@ -11,7 +11,7 @@ import {
   type LucideAgentIcon,
   type LucidePaint,
   type LucideRenderStyle,
-} from "../lib/lucideAgentIcons";
+} from "../lib/agent/lucideAgentIcons";
 import { IconSparkles, IconSkills, IconWorkspace } from "./NavIcons";
 import LucideIconPicker from "./LucideIconPicker";
 import AvatarPickerDrawer from "./AvatarPickerDrawer";

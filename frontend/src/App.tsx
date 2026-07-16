@@ -48,15 +48,15 @@ import { useBeautifyTips } from "./hooks/useBeautifyTips";
 import { useTheme } from "./hooks/useTheme";
 import { useI18n } from "./i18n/LocaleContext";
 import type { MessageKey } from "./i18n/messages";
-import { templateForLocale } from "./lib/agentCreateTemplate";
+import { templateForLocale } from "./lib/agent/agentCreateTemplate";
 import {
   applyActivityUpsert,
   applyReasoningDelta,
   applySurfaceUpsert,
   sealOpenReasoning,
-} from "./lib/chatTimeline";
-import { elapsedSecSince } from "./lib/elapsedSec";
-import { type ThinkingLevel } from "./lib/thinkingPrefs";
+} from "./lib/chat/chatTimeline";
+import { elapsedSecSince } from "./lib/chat/elapsedSec";
+import { type ThinkingLevel } from "./lib/chat/thinkingPrefs";
 import {
   loadModelPrefs,
   loadPickerGlobals,
@@ -67,33 +67,33 @@ import {
   upsertModelPrefs,
   type ModelPickerGlobals,
   type ModelRuntimePrefs,
-} from "./lib/modelPrefs";
+} from "./lib/model/modelPrefs";
 import {
   loadModelCandidates,
   selectAutoModel,
-} from "./lib/autoModelSelect";
-import { shouldShowThinkingControls } from "./lib/shouldShowThinkingControls";
+} from "./lib/model/autoModelSelect";
+import { shouldShowThinkingControls } from "./lib/chat/shouldShowThinkingControls";
 import {
   CHAT_MODES,
   chatModeHint,
   loadChatMode,
   saveChatMode,
   type ChatInteractionMode,
-} from "./lib/chatMode";
-import type { SlashAction } from "./lib/composerCommands";
-import { resolveComposerTurn } from "./lib/composerResolve";
+} from "./lib/chat/chatMode";
+import type { SlashAction } from "./lib/chat/composerCommands";
+import { resolveComposerTurn } from "./lib/chat/composerResolve";
 import {
   normalizeContextUsageEvent,
   resolveContextWindow,
   usagePercent,
   type ContextUsageSnapshot,
-} from "./lib/contextUsage";
+} from "./lib/chat/contextUsage";
 import {
   zoomOrRestore,
   prefetchZoomState,
   installMacMaximizeRedirect,
-} from "./lib/windowZoom";
-import { syncWindowUnderlay } from "./lib/windowUnderlay";
+} from "./lib/ui/windowZoom";
+import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import {
   clearChatSession,
   isChatCleared,
@@ -101,7 +101,7 @@ import {
   loadChatSession,
   persistAfterEditTruncate,
   saveChatSession,
-} from "./lib/chatSessionStore";
+} from "./lib/chat/chatSessionStore";
 import type {
   ArtifactDto,
   ChatActivity,

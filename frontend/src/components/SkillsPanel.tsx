@@ -48,8 +48,8 @@ import {
   storeCardDescription,
   storeInstallCommand,
   storeSkillDetailUrl,
-} from "../lib/skillInstallCommand";
-import { resolveFileType } from "../lib/fileTypeIcon";
+} from "../lib/skills/skillInstallCommand";
+import { resolveFileType } from "../lib/filespace/fileTypeIcon";
 import {
   createLazyLoadGate,
   decideLazyLoad,
@@ -58,22 +58,22 @@ import {
   pageHasMore,
   storeCacheKey,
   type LazyLoadGate,
-} from "../lib/skillsLazyLoad";
+} from "../lib/skills/skillsLazyLoad";
 import {
   collectInstalledSkillKeys,
   inferFolderFromInstallRef,
   isStoreSkillInstalled as matchStoreSkillInstalled,
-} from "../lib/skillInstalledMatch";
+} from "../lib/skills/skillInstalledMatch";
 import {
   applyCheckResults,
   canUpdateSkillFromOrigin,
   filterUpdateRows,
   mergeUpdateRows,
   originMatchesSkill,
-} from "../lib/skillUpdateRows";
+} from "../lib/skills/skillUpdateRows";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import { useTransientToast } from "../hooks/useTransientToast";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";

@@ -1,4 +1,4 @@
-import type { ChatActivity } from "../types";
+import type { ChatActivity } from "../../types";
 
 /** 解析活动卡 Input/Output（仅用显式 `input` / `output`；`detail` 仅作 output 兜底）。 */
 export function resolveActivityIO(activity: ChatActivity): {

@@ -16,11 +16,11 @@ import { useTheme } from "../hooks/useTheme";
 import {
   codeMirrorTheme,
   languageForFilename,
-} from "../lib/codeMirrorLanguage";
+} from "../lib/filespace/codeMirrorLanguage";
 import {
   splitSkillFrontmatter,
   type SkillFrontmatter,
-} from "../lib/skillFrontmatter";
+} from "../lib/skills/skillFrontmatter";
 import { ChatMarkdown } from "./ChatMarkdown";
 
 const MD_MODE_KEY = "astro.skills.mdPreviewMode";

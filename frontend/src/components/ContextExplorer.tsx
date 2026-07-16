@@ -9,7 +9,7 @@ import {
   visibleSegments,
   SEGMENT_TONE,
   type ContextUsageSnapshot,
-} from "../lib/contextUsage";
+} from "../lib/chat/contextUsage";
 
 const SEG_LABEL: Record<string, MessageKey> = {
   system: "chat.contextSeg.system",

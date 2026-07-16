@@ -37,7 +37,7 @@ import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import McpIcon from "./McpIcon";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";

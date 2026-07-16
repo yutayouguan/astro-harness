@@ -3,7 +3,7 @@
  * 内置命令 + 动态技能/Agent/MCP；发送时拦截执行，不全量照搬 Hermes 网关命令。
  */
 
-import type { MessageKey } from "../i18n/messages";
+import type { MessageKey } from "../../i18n/messages";
 
 /** 斜杠命令执行动作（由 App / ChatView 接线） */
 export type SlashAction =

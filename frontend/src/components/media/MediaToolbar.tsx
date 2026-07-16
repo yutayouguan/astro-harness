@@ -10,13 +10,13 @@ import {
 import { useChatMediaAttach } from "../../contexts/ChatMediaAttachContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTransientToast } from "../../hooks/useTransientToast";
-import { displayUserPath } from "../../lib/displayPath";
+import { displayUserPath } from "../../lib/filespace/displayPath";
 import {
   copyMedia,
   downloadMedia,
   type MediaActionKind,
-} from "../../lib/mediaActions";
-import { resolveMediaSrc } from "../../lib/resolveMediaSrc";
+} from "../../lib/media/mediaActions";
+import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import MediaLightbox from "./MediaLightbox";
 
 type Props = {

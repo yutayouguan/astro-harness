@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
-import type { ContextUsageSnapshot } from "../lib/contextUsage";
+import type { ContextUsageSnapshot } from "../lib/chat/contextUsage";
 import ChatSessionList from "./ChatSessionList";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";

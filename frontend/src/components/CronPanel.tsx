@@ -26,8 +26,8 @@ import {
 } from "lucide-react";
 import { useAnchoredMenu } from "../hooks/useAnchoredMenu";
 import { useI18n } from "../i18n/LocaleContext";
-import { formatScheduleLabel } from "../lib/cronSchedule";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { formatScheduleLabel } from "../lib/cron/cronSchedule";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";

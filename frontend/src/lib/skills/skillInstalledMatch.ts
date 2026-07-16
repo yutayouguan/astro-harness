@@ -1,5 +1,5 @@
 /** 商店 Skill 与本机已安装列表的匹配（名称 / 目录 / slug 可能不一致）。 */
-import type { InstalledSkill, StoreSkill } from "../types";
+import type { InstalledSkill, StoreSkill } from "../../types";
 
 function addKey(keys: Set<string>, value: string | undefined | null) {
   const v = value?.trim().toLowerCase();

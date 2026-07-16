@@ -5,7 +5,7 @@ import type { ResolvedTheme } from "../hooks/useTheme";
 import {
   codeMirrorTheme,
   languageForFilename,
-} from "../lib/codeMirrorLanguage";
+} from "../lib/filespace/codeMirrorLanguage";
 
 /** 工作区代码编辑器入参 */
 type Props = {

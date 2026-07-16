@@ -17,7 +17,7 @@ import {
   measurePopoverSize,
   resolveClipBounds,
   type TipSide,
-} from "../lib/clampPopover";
+} from "../lib/ui/clampPopover";
 import type { ChatMessage } from "../types";
 
 type Props = {

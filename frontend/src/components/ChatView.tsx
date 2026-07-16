@@ -49,12 +49,12 @@ import {
   firstSlotValue,
   nextEmptySlot,
   prevEmptySlot,
-} from "../lib/agentCreateTemplate";
+} from "../lib/agent/agentCreateTemplate";
 import {
   CHAT_MODES,
   type ChatInteractionMode,
-} from "../lib/chatMode";
-import type { ContextUsageSnapshot } from "../lib/contextUsage";
+} from "../lib/chat/chatMode";
+import type { ContextUsageSnapshot } from "../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../contexts/ChatMediaAttachContext";
 import {
   attachmentsFromOsClipboard,
@@ -63,8 +63,8 @@ import {
   pathsFromClipboardText,
   pathsFromDataTransfer,
   pathsToAttachments,
-} from "../lib/chatPaste";
-import type { ChatThinkingPrefs, ThinkingLevel } from "../lib/thinkingPrefs";
+} from "../lib/chat/chatPaste";
+import type { ChatThinkingPrefs, ThinkingLevel } from "../lib/chat/thinkingPrefs";
 import type {
   ChatActivity,
   ChatAttachment,
@@ -98,18 +98,18 @@ import { useMcpTools } from "../hooks/useMcpTools";
 import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
 import A2UIRenderer from "../a2ui/A2UIRenderer";
 import A2UISurfaceCard from "./A2UISurfaceCard";
-import { formatElapsedSec } from "../lib/elapsedSec";
-import { coalesceReasoningSegments } from "../lib/chatTimeline";
+import { formatElapsedSec } from "../lib/chat/elapsedSec";
+import { coalesceReasoningSegments } from "../lib/chat/chatTimeline";
 import {
   isAgentIconSrc,
   type AgentIconInfo,
-} from "../lib/agentIcons";
+} from "../lib/agent/agentIcons";
 import {
   buildMentionCandidates,
   buildSlashPaletteEntries,
   parseSlashInput,
   type SlashAction,
-} from "../lib/composerCommands";
+} from "../lib/chat/composerCommands";
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {

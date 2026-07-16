@@ -2,7 +2,7 @@
  * 思考强度偏好：与发送请求中的 thinking_enabled / reasoning_effort 映射。
  */
 
-import type { ReasoningEffort } from "../types";
+import type { ReasoningEffort } from "../../types";
 
 /** UI 四档思考级别 */
 export type ThinkingLevel = "off" | "low" | "high" | "max";

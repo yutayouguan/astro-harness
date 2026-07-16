@@ -2,7 +2,7 @@
  * 聊天会话本地持久化：消息列表写入 localStorage，附件重字段剥离以免撑爆配额。
  */
 
-import type { ChatMessage, PendingInterrupt } from "../types";
+import type { ChatMessage, PendingInterrupt } from "../../types";
 
 const STORAGE_KEY = "astro.chat.session";
 const CLEARED_KEY = "astro.chat.cleared";

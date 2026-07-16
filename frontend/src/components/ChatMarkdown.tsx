@@ -14,7 +14,7 @@ import {
   absolutizeMediaPath,
   resolveMediaSrc,
   stripFileUrl,
-} from "../lib/resolveMediaSrc";
+} from "../lib/media/resolveMediaSrc";
 import BrokenMedia from "./media/BrokenMedia";
 import HtmlPreview from "./media/HtmlPreview";
 import MediaPreview from "./media/MediaPreview";

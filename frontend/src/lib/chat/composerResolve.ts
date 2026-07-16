@@ -8,7 +8,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import type { SkillContent } from "../types";
+import type { SkillContent } from "../../types";
 import { parseSlashInput, resolveBuiltinSlash } from "./composerCommands.ts";
 
 const MAX_LEADING_SKILLS = 5;

@@ -3,7 +3,7 @@ import {
   SEGMENT_TONE,
   visibleSegments,
   type ContextUsageSnapshot,
-} from "../lib/contextUsage";
+} from "../lib/chat/contextUsage";
 
 type Props = {
   snapshot: ContextUsageSnapshot;

@@ -10,7 +10,7 @@ import {
   measurePopoverSize,
   resolveClipBounds,
   type ClampPopoverInput,
-} from "../lib/clampPopover";
+} from "../lib/ui/clampPopover";
 
 type ClampOpts = Pick<
   ClampPopoverInput,

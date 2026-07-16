@@ -7,7 +7,7 @@ import {
   type ChatThinkingPrefs,
   type ThinkingLevel,
   thinkingPrefsEnabled,
-} from "../lib/thinkingPrefs";
+} from "../lib/chat/thinkingPrefs";
 
 const STORAGE_KEY = "astro.chat.thinking.v2";
 

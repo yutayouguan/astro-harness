@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import AnimatedSwitch from "./AnimatedSwitch";
 import AgentAvatar from "./AgentAvatar";
 import { EmptyIllustration } from "../illustrations";

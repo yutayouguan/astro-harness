@@ -4,7 +4,7 @@ import {
   agentNameInitial,
   resolveAgentIconSrc,
   type AgentIconInfo,
-} from "../lib/agentIcons";
+} from "../lib/agent/agentIcons";
 
 /** Agent 头像入参 */
 type Props = {

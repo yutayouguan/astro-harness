@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, before, test } from "node:test";
-import type { ChatMessage } from "../types.ts";
+import type { ChatMessage } from "../../types.ts";
 import {
   isChatCleared,
   loadChatSession,

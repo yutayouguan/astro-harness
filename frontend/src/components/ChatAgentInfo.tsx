@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n/LocaleContext";
-import { formatDiagnosticContext } from "../lib/diagnosticContext";
+import { formatDiagnosticContext } from "../lib/chat/diagnosticContext";
 import type { AgentInfo } from "../types/agent";
 import type { InstalledSkill } from "../types";
 import AgentAvatar from "./AgentAvatar";

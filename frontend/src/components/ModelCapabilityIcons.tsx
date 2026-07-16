@@ -13,7 +13,7 @@ import type { MessageKey } from "../i18n/messages";
 import {
   listActiveModelCaps,
   type ModelCapKey,
-} from "../lib/modelCaps";
+} from "../lib/model/modelCaps";
 import type { ModelCapabilities } from "../types";
 
 const CAP_META: Record<

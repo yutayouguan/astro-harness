@@ -25,7 +25,7 @@ import {
   measurePopoverSize,
   pointAnchor,
   resolveClipBoundsAt,
-} from "../lib/clampPopover";
+} from "../lib/ui/clampPopover";
 
 export type FileMenuAction =
   | "open"

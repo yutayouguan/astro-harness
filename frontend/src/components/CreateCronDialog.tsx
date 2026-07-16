@@ -24,7 +24,7 @@ import {
   decodeSchedule,
   encodeSchedule,
   type ScheduleDraft,
-} from "../lib/cronSchedule";
+} from "../lib/cron/cronSchedule";
 import { useI18n } from "../i18n/LocaleContext";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";

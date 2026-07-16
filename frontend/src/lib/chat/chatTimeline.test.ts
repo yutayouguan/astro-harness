@@ -8,7 +8,7 @@ import {
   sealOpenReasoning,
   sumReasoningDurations,
 } from "./chatTimeline.ts";
-import type { ChatMessage, ChatTimelineSegment } from "../types.ts";
+import type { ChatMessage, ChatTimelineSegment } from "../../types.ts";
 
 function emptyAssistant(id = "a1"): ChatMessage {
   return { id, role: "assistant", content: "" };

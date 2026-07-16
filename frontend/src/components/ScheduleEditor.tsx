@@ -19,8 +19,8 @@ import {
   Timer,
   type LucideProps,
 } from "lucide-react";
-import type { ScheduleDraft, ScheduleMode, Weekday } from "../lib/cronSchedule";
-import { UI_WEEKDAYS } from "../lib/cronSchedule";
+import type { ScheduleDraft, ScheduleMode, Weekday } from "../lib/cron/cronSchedule";
+import { UI_WEEKDAYS } from "../lib/cron/cronSchedule";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
 import { useAnchoredMenu } from "../hooks/useAnchoredMenu";

@@ -5,7 +5,7 @@ import type {
   SkillUpdateCheckResult,
   SkillUpdateFilter,
   SkillUpdateRow,
-} from "../types";
+} from "../../types";
 
 /** 从路径 id 取文件夹名（与 `skillInstalledMatch` 一致） */
 function folderFromId(id: string): string | undefined {

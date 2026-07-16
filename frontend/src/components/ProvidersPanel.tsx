@@ -39,7 +39,7 @@ import { SelectMenu } from "./SelectMenu";
 import { useI18n } from "../i18n/LocaleContext";
 import type { MessageKey } from "../i18n/messages";
 import { EmptyIllustration } from "../illustrations";
-import { formatContextWindow } from "../lib/modelCaps";
+import { formatContextWindow } from "../lib/model/modelCaps";
 import type {
   ModelInfo,
   ProviderDto,

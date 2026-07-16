@@ -1,5 +1,5 @@
 /** Skill 安装命令拼装。 */
-import type { StoreSkill } from "../types";
+import type { StoreSkill } from "../../types";
 
 const SKILLHUB_INSTALL_DOC = "https://skillhub.cn/install/skillhub.md";
 

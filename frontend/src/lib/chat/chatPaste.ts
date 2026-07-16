@@ -2,8 +2,8 @@
  * 聊天输入粘贴 / 拖放：从路径或剪贴板构建附件。
  */
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import type { ChatAttachment, ChatAttachmentKind } from "../types";
-import { parseClipboardLocalPaths } from "./clipboardLocalPaths";
+import type { ChatAttachment, ChatAttachmentKind } from "../../types";
+import { parseClipboardLocalPaths } from "../media/clipboardLocalPaths";
 
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 

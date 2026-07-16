@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Plus } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import type { RecentSessionDto } from "../types";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";

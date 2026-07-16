@@ -10,7 +10,7 @@ import {
   emptySelection,
   ensureMenuTarget,
   type SelectionState,
-} from "../lib/fileSelection";
+} from "../lib/filespace/fileSelection";
 
 /**
  * @param visibleIds 当前可见行的稳定 id 列表（Shift 范围依赖顺序）

@@ -32,7 +32,7 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "./WorkspaceIcons";
-import { resolveFileType } from "../lib/fileTypeIcon";
+import { resolveFileType } from "../lib/filespace/fileTypeIcon";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
 import ExpandableSearch from "./ExpandableSearch";
@@ -42,7 +42,7 @@ import FileSpaceConfirm from "./FileSpaceConfirm";
 import FileSpaceViewer from "./FileSpaceViewer";
 import { EmptyIllustration } from "../illustrations";
 import { useFileSelection } from "../hooks/useFileSelection";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import type { AgentInfo } from "../types/agent";
 
 /** 附件到聊天：新会话或当前会话 */

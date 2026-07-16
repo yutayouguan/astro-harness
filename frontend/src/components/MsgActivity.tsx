@@ -6,9 +6,9 @@ import { useLiveElapsedSec } from "../hooks/useLiveElapsedSec";
 import {
   activityHasBody,
   resolveActivityIO,
-} from "../lib/resolveActivityIO";
-import { formatElapsedSec } from "../lib/elapsedSec";
-import { parseGeneratedMedia } from "../lib/parseGeneratedMedia";
+} from "../lib/chat/resolveActivityIO";
+import { formatElapsedSec } from "../lib/chat/elapsedSec";
+import { parseGeneratedMedia } from "../lib/media/parseGeneratedMedia";
 import type { ChatActivity, ChatActivityKind } from "../types";
 import McpIcon from "./McpIcon";
 import MediaPreview from "./media/MediaPreview";

@@ -1,6 +1,6 @@
 /** 模型选择器全局与会话偏好。 */
-import type { ReasoningEffort } from "../types";
-import type { ThinkingLevel } from "./thinkingPrefs";
+import type { ReasoningEffort } from "../../types";
+import type { ThinkingLevel } from "../chat/thinkingPrefs";
 
 export type ModelContextSize = "default" | "300k" | "1m";
 /** 与后端 ReasoningEffort / DeepSeek 请求一致 */

@@ -2,14 +2,14 @@
  * Auto 智能选模：按任务启发式在已配置可用模型中路由（本地策略，非 Cursor API）。
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { ChatInteractionMode } from "./chatMode.ts";
+import type { ChatInteractionMode } from "../chat/chatMode.ts";
 import { inferModelCapabilities } from "./modelCaps.ts";
 import type {
   ModelCapabilities,
   ModelInfo,
   ProviderDto,
   ProviderModelsResult,
-} from "../types.ts";
+} from "../../types.ts";
 
 /** 模型能力档位（由 id 启发式推断） */
 export type ModelTier = "lite" | "flash" | "standard" | "pro" | "reasoning";

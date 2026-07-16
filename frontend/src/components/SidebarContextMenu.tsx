@@ -9,7 +9,7 @@ import {
   measurePopoverSize,
   pointAnchor,
   resolveClipBoundsAt,
-} from "../lib/clampPopover";
+} from "../lib/ui/clampPopover";
 
 export type SidebarMenuAction = "toggleLabels" | "togglePin";
 

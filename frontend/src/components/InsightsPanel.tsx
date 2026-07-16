@@ -23,15 +23,15 @@ import {
 } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../i18n/messages";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import {
   DEFAULT_INSIGHTS_VIEW,
   INSIGHTS_VIEW_ORDER,
   needsUsageInsights,
   providerSpendTop,
   type InsightsViewMode,
-} from "../lib/insightsView";
-import { groupEventsByTurn, shortTurnId } from "../lib/traceTurnGroups";
+} from "../lib/insights/insightsView";
+import { groupEventsByTurn, shortTurnId } from "../lib/chat/traceTurnGroups";
 import type { AgentInfo } from "../types/agent";
 import { normalizeAgentId } from "../types/agent";
 import AgentPicker from "./AgentPicker";

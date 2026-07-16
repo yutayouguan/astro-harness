@@ -14,7 +14,7 @@ import { xml } from "@codemirror/lang-xml";
 import { yaml } from "@codemirror/lang-yaml";
 import { languages } from "@codemirror/language-data";
 import type { Extension } from "@codemirror/state";
-import type { ResolvedTheme } from "../hooks/useTheme";
+import type { ResolvedTheme } from "../../hooks/useTheme";
 
 const mono =
   'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';

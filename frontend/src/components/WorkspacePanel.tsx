@@ -15,14 +15,14 @@ import { useTransientToast } from "../hooks/useTransientToast";
 import { useFileSelection } from "../hooks/useFileSelection";
 import { useI18n } from "../i18n/LocaleContext";
 import type { FileEntryDto } from "../types";
-import { useAgentsChanged } from "../lib/agentsChanged";
+import { useAgentsChanged } from "../lib/agent/agentsChanged";
 import {
   isMarkdownFilename,
   readWorkspaceMdMode,
   writeWorkspaceMdMode,
   type MdMode,
-} from "../lib/workspaceMdMode";
-import { buildWorkspaceMenuItems } from "../lib/workspaceMenuItems";
+} from "../lib/filespace/workspaceMdMode";
+import { buildWorkspaceMenuItems } from "../lib/filespace/workspaceMenuItems";
 import type { AgentInfo } from "../types/agent";
 import AgentPicker from "./AgentPicker";
 import AnimatedSwitch from "./AnimatedSwitch";
@@ -50,7 +50,7 @@ import {
   mediaKindOf as mediaKindOfByType,
   resolveFileType,
   type FileGlyphKind,
-} from "../lib/fileTypeIcon";
+} from "../lib/filespace/fileTypeIcon";
 
 /** 工作区面板入参 */
 type Props = {
