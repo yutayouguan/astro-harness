@@ -970,10 +970,18 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 html[data-theme="dark"] .chat-pane {
   background:
     linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.04) 0%,
-      rgba(255, 255, 255, 0.01) 100%
+      155deg,
+      rgba(255, 255, 255, 0.09) 0%,
+      rgba(255, 255, 255, 0.02) 46%,
+      rgba(255, 255, 255, 0.015) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, transparent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
+    color-mix(in srgb, var(--tone-soft, transparent) 8%, rgba(255, 255, 255, 0.02));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 12%, rgba(255, 255, 255, 0.14));
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(32px) saturate(1.7);
+  -webkit-backdrop-filter: blur(32px) saturate(1.7);
 }
