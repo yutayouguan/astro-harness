@@ -974,12 +974,19 @@ html[data-theme="dark"] .fs-viewer-error {
 }
 
 .fs-preview-pdf-wrap {
+  position: relative;
   flex: 1;
   min-height: 0;
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--chip-border);
   background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.fs-preview-pdf-wrap:hover .media-toolbar,
+.fs-preview-pdf-wrap:focus-within .media-toolbar {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .fs-preview-pdf {

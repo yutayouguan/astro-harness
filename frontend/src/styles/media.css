@@ -1,12 +1,105 @@
 /* 共享媒体 / HTML 预览 */
 
 .media-preview {
+  position: relative;
   margin: 8px 0;
   max-width: min(100%, 520px);
   border-radius: 12px;
   overflow: hidden;
   background: color-mix(in srgb, var(--glass, rgba(255, 255, 255, 0.4)) 70%, transparent);
   border: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.08));
+}
+
+.media-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink, #0f172a) 72%, transparent);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.media-preview:hover .media-toolbar,
+.media-preview:focus-within .media-toolbar,
+.html-preview-bar .media-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .media-toolbar {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.media-toolbar.is-compact {
+  top: 6px;
+  right: 6px;
+  padding: 2px;
+  border-radius: 8px;
+}
+
+.media-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #f8fafc;
+  cursor: pointer;
+  padding: 0;
+}
+
+.media-toolbar.is-compact .media-toolbar-btn {
+  width: 26px;
+  height: 26px;
+}
+
+.media-toolbar-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, #fff 18%, transparent);
+}
+
+.media-toolbar-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.media-toolbar-btn.is-copied {
+  color: #86efac;
+}
+
+.html-preview-bar .media-toolbar {
+  position: static;
+  background: color-mix(in srgb, var(--ink, #0f172a) 8%, transparent);
+  backdrop-filter: none;
+}
+
+.html-preview-bar .media-toolbar-btn {
+  color: var(--ink-soft, #64748b);
+}
+
+.html-preview-bar .media-toolbar-btn:hover:not(:disabled) {
+  background: var(--glass, rgba(0, 0, 0, 0.04));
+  color: var(--ink, #0f172a);
+}
+
+.html-preview-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .media-preview.is-compact {
@@ -89,6 +182,10 @@
   color: var(--ink-soft, #64748b);
   background: color-mix(in srgb, var(--glass, #f8fafc) 80%, transparent);
   border-bottom: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.06));
+}
+
+.html-preview-bar .html-preview-label {
+  flex-shrink: 0;
 }
 
 .html-preview-open {

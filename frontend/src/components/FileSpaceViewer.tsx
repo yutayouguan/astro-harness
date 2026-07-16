@@ -16,6 +16,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import WorkspaceEditor from "./WorkspaceEditor";
 import BrokenMedia from "./media/BrokenMedia";
 import MediaPreview from "./media/MediaPreview";
+import MediaToolbar from "./media/MediaToolbar";
 
 const AUTOSAVE_MS = 600;
 
@@ -252,13 +253,14 @@ export default function FileSpaceViewer({
       );
     }
     return (
-      <div className="fs-preview-pdf-wrap">
+      <div className="fs-preview-pdf-wrap" data-kind="document">
         <iframe
           className="fs-preview-pdf"
           title={name}
           src={src}
           onError={() => setPdfBroken(true)}
         />
+        <MediaToolbar path={path} kind="document" />
       </div>
     );
   }

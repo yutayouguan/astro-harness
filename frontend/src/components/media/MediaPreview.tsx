@@ -1,10 +1,11 @@
-/** 图 / 视频 / 音频内嵌预览（本地路径经 resolveMediaSrc） */
+/** 图 / 视频 / 音频内嵌预览（本地路径经 resolveMediaSrc）；悬停提供下载 / 复制 */
 import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GeneratedMediaKind } from "../../lib/parseGeneratedMedia";
 import { resolveMediaSrc } from "../../lib/resolveMediaSrc";
 import BrokenMedia from "./BrokenMedia";
 import HtmlPreview from "./HtmlPreview";
+import MediaToolbar from "./MediaToolbar";
 
 export type MediaPreviewProps = {
   kind: GeneratedMediaKind;
@@ -66,6 +67,7 @@ export default function MediaPreview({
           preload="metadata"
           onError={() => setBroken(true)}
         />
+        <MediaToolbar path={path} kind="video" compact={compact} />
       </div>
     );
   }
@@ -80,6 +82,7 @@ export default function MediaPreview({
           preload="metadata"
           onError={() => setBroken(true)}
         />
+        <MediaToolbar path={path} kind="audio" compact={compact} />
       </div>
     );
   }
@@ -92,6 +95,7 @@ export default function MediaPreview({
         alt={alt ?? ""}
         onError={() => setBroken(true)}
       />
+      <MediaToolbar path={path} kind="image" compact={compact} />
     </div>
   );
 }

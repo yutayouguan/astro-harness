@@ -4,6 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n/LocaleContext";
 import BrokenMedia from "./BrokenMedia";
+import MediaToolbar from "./MediaToolbar";
 
 type Props = {
   /** 本地文件路径（可选：用于系统打开 / 读内容） */
@@ -75,16 +76,21 @@ export default function HtmlPreview({
     >
       <div className="html-preview-bar">
         <span className="html-preview-label">{t("media.htmlPreview")}</span>
-        {path ? (
-          <button
-            type="button"
-            className="html-preview-open"
-            onClick={openExternally}
-          >
-            <ExternalLink size={13} strokeWidth={2.1} aria-hidden />
-            {t("workspace.openExternally")}
-          </button>
-        ) : null}
+        <div className="html-preview-bar-actions">
+          {path ? (
+            <>
+              <MediaToolbar path={path} kind="html" compact />
+              <button
+                type="button"
+                className="html-preview-open"
+                onClick={openExternally}
+              >
+                <ExternalLink size={13} strokeWidth={2.1} aria-hidden />
+                {t("workspace.openExternally")}
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
       <iframe
         className="html-preview-frame"

@@ -1,7 +1,6 @@
 /** 聊天消息 Markdown 渲染（用户 / 助手共用）；本地媒体路径与 HTML 代码块可预览。 */
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type ReactElement,
@@ -11,9 +10,14 @@ import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "../i18n/LocaleContext";
-import { resolveMediaSrc, stripFileUrl } from "../lib/resolveMediaSrc";
+import {
+  absolutizeMediaPath,
+  resolveMediaSrc,
+  stripFileUrl,
+} from "../lib/resolveMediaSrc";
 import BrokenMedia from "./media/BrokenMedia";
 import HtmlPreview from "./media/HtmlPreview";
+import MediaPreview from "./media/MediaPreview";
 
 /** Markdown 渲染入参 */
 type Props = {
@@ -53,25 +57,29 @@ function MarkdownImage({
   alt?: string;
   baseDir?: string | null;
 }) {
+  const pathForActions = useMemo(() => {
+    const abs = absolutizeMediaPath(src, baseDir);
+    if (abs) return abs;
+    return src?.trim() ?? "";
+  }, [src, baseDir]);
+
   const resolved = useMemo(
     () => resolveMediaSrc(src, baseDir),
     [src, baseDir],
   );
-  const [broken, setBroken] = useState(false);
 
-  // baseDir 异步到达后需重新尝试加载
-  useEffect(() => {
-    setBroken(false);
-  }, [resolved]);
-
-  if (broken || !resolved) {
+  if (!resolved || !pathForActions) {
     return <BrokenMedia path={src} />;
   }
 
   return (
-    <span className="msg-md-img-wrap">
-      <img src={resolved} alt={alt ?? ""} onError={() => setBroken(true)} />
-    </span>
+    <MediaPreview
+      kind="image"
+      path={pathForActions}
+      alt={alt}
+      compact
+      className="msg-md-media"
+    />
   );
 }
 
