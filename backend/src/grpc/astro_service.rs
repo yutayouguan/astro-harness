@@ -50,6 +50,9 @@ type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> 
 type SessionEventsStream =
     Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
 
+/// `ChatControlAction` 之外的后端保留动作码：仅释放会话运行时，不触发 new_chat hooks。
+const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
+
 /// 工具 / review 返回文本是否表示写入只入了 pending（未改 live）。
 fn indicates_pending_enqueue(content: &str) -> bool {
     content.contains("待审批") || content.contains("pending") || content.contains("入队")
@@ -224,6 +227,30 @@ impl AstroServiceImpl {
         pause
     }
 
+    /// 释放会话运行时：取消暂停/HITL/中断文件，并从内存移除 AgentLoop。
+    ///
+    /// 返回被移除的会话句柄，供 `new_chat` 在卸载后继续派发 session hooks。
+    async fn release_session_runtime(&self, session_id: &str) -> Option<SessionHandle> {
+        {
+            let mut map = self.pause_controls.write().await;
+            if let Some(pause) = map.remove(session_id) {
+                pause.cancel();
+            }
+        }
+        self.hitl_registry.cancel_and_remove(session_id).await;
+        clear_interrupt_file(&self.memory_dir, session_id);
+
+        let removed = {
+            let mut sessions = self.sessions.write().await;
+            sessions.remove(session_id)
+        };
+        if let Some(handle) = removed {
+            let agent = handle.lock().await;
+            agent.cancel_signal().cancel();
+        }
+        removed
+    }
+
     /// UI「新建对话」：Gateway `command:new_chat` + Plugin reset/finalize，并卸内存会话。
     async fn release_session_for_new_chat(&self, session_id: &str) {
         let payload = ::hooks::HookPayload {
@@ -241,22 +268,8 @@ impl AstroServiceImpl {
             .hook_runtime
             .fire_plugin(::hooks::ON_SESSION_FINALIZE, &payload);
 
-        {
-            let mut map = self.pause_controls.write().await;
-            if let Some(pause) = map.remove(session_id) {
-                pause.cancel();
-            }
-        }
-        self.hitl_registry.cancel_and_remove(session_id).await;
-        clear_interrupt_file(&self.memory_dir, session_id);
-
-        let removed = {
-            let mut sessions = self.sessions.write().await;
-            sessions.remove(session_id)
-        };
-        if let Some(handle) = removed {
+        if let Some(handle) = self.release_session_runtime(session_id).await {
             let agent = handle.lock().await;
-            agent.cancel_signal().cancel();
             let bus = agent.hook_bus();
             let turn_id = agent.current_turn_id().map(str::to_string);
             let payload = ::hooks::HookPayload {
@@ -455,6 +468,11 @@ impl AstroService for AstroServiceImpl {
         if req.session_id.is_empty() {
             return Err(Status::invalid_argument("session_id 不能为空"));
         }
+        if req.action == CHAT_CONTROL_RELEASE_SESSION {
+            self.release_session_runtime(&req.session_id).await;
+            return Ok(Response::new(Empty {}));
+        }
+
         let action = ChatControlAction::try_from(req.action).unwrap_or_default();
 
         // 新建对话不依赖进行中的流；无内存会话时仍触发 Gateway 事件。
@@ -1295,5 +1313,48 @@ impl AstroService for AstroServiceImpl {
             }
         });
         Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn release_session_runtime_is_idempotent() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "release-session-runtime-idempotent";
+
+        let session = service.get_session(session_id).await.unwrap();
+        let pause = service.register_pause(session_id).await;
+        let gate = HitlGate::new(session_id.to_string());
+        service.hitl_registry.insert(gate.clone()).await;
+
+        {
+            let agent = session.lock().await;
+            let bus = agent.hook_bus();
+            let _ = bus;
+        }
+
+        let request = Request::new(ChatControlRequest {
+            session_id: session_id.to_string(),
+            action: CHAT_CONTROL_RELEASE_SESSION,
+        });
+        service.chat_control(request).await.expect("first release");
+
+        let request = Request::new(ChatControlRequest {
+            session_id: session_id.to_string(),
+            action: CHAT_CONTROL_RELEASE_SESSION,
+        });
+        service.chat_control(request).await.expect("second release");
+
+        assert!(service.sessions.read().await.get(session_id).is_none());
+        assert!(service.pause_controls.read().await.get(session_id).is_none());
+        assert!(service.hitl_registry.get(session_id).await.is_none());
+        drop(pause);
+        drop(gate);
     }
 }

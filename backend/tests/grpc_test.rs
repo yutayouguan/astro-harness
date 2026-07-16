@@ -6,10 +6,12 @@
 use backend::grpc::AstroServiceImpl;
 use proto::astro_service_client::AstroServiceClient;
 use proto::astro_service_server::AstroServiceServer;
-use proto::{ChatRequest, MemoryQuery};
+use proto::{ChatControlRequest, ChatRequest, MemoryQuery};
 use tempfile::TempDir;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
+
+const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
 
 async fn spawn_test_server(dir: std::path::PathBuf) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -46,6 +48,30 @@ async fn test_grpc_connect_and_query_memory() {
         .into_inner();
     // 空库也可：只要 RPC 成功
     let _ = memory.sessions;
+}
+
+/// release_session 对冷会话与重复调用都应返回成功。
+#[tokio::test]
+async fn release_session_runtime_is_idempotent() {
+    let dir = TempDir::new().unwrap();
+    let endpoint = spawn_test_server(dir.path().to_path_buf()).await;
+
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .expect("connect grpc");
+
+    let request = ChatControlRequest {
+        session_id: "release-session-runtime-idempotent".into(),
+        action: CHAT_CONTROL_RELEASE_SESSION,
+    };
+    client
+        .chat_control(request.clone())
+        .await
+        .expect("first release");
+    client
+        .chat_control(request)
+        .await
+        .expect("second release");
 }
 
 /// Live：依赖本机 Ollama。未设置 `ASTRO_LIVE_OLLAMA=1` 时直接 return（默认套件仍绿）。
