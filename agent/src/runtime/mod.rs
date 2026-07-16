@@ -896,6 +896,21 @@ impl AgentLoop {
         Ok(())
     }
 
+    /// 将 user 角色消息写入记忆与会话镜像。
+    ///
+    /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：与 `pending_inject_context`
+    /// 的临时注入不同，本方法直接落盘并写入 `session_messages`，确保下一轮 API 历史与
+    /// `SessionStore` 保持一致（角色交替），避免连续 assistant 触发 Provider 400。
+    pub fn record_user_message(&mut self, content: &str) -> anyhow::Result<()> {
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(content),
+            ..NewMessage::empty(&self.session_id, "user")
+        })?;
+        self.session_messages.push(Message::user(content));
+        Ok(())
+    }
+
     /// 将 tool 角色结果写入记忆与会话镜像（无 tool_call_id / tool_name）。
     pub fn record_tool_result(&mut self, content: &str) -> anyhow::Result<()> {
         self.record_tool_result_with_id(None, None, content)

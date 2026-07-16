@@ -583,7 +583,23 @@ async fn run_multi_turn_stream_inner(
                     .await;
                     return;
                 }
-                agent.queue_inject_context(prompt);
+                // 直接持久化桥接 user 消息到 session_messages / SessionStore（而非仅
+                // `queue_inject_context` 排队临时注入）：否则第二次 KeepGoing 时
+                // `session_messages` 会出现连续 assistant，导致下一轮历史触发
+                // Anthropic/Gemini 400。与 inject 保持同一文本形态，且不再排队注入，
+                // 避免下一轮 history 重复出现该 user 消息（连续 user）。
+                if let Err(err) = agent.record_user_message(&format!("[astro:hook-context]\n{prompt}")) {
+                    drop(agent);
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        err.to_string(),
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
+                    return;
+                }
                 drop(agent);
                 continue;
             }

@@ -474,6 +474,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         .session_messages
         .push(common::message::Message::user("write a file then confirm"));
     let session = Arc::new(Mutex::new(agent));
+    let session_for_check = Arc::clone(&session);
 
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
@@ -568,6 +569,62 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+
+    // 回归：KeepGoing 桥接 user 消息必须持久化到 session_messages（而非只走
+    // `pending_inject_context` 的临时注入），否则第二次 KeepGoing 时相邻两条都是
+    // assistant，下一轮 API 历史会出现连续同角色，触发 Anthropic/Gemini 400。
+    let agent = session_for_check.lock().await;
+    assert!(
+        agent::runtime::validate_message_order(&agent.session_messages),
+        "session_messages must alternate roles (no consecutive same role) after capped KeepGoing retries, messages={:?}",
+        agent
+            .session_messages
+            .iter()
+            .map(|m| (m.role.clone(), m.content_str().to_string()))
+            .collect::<Vec<_>>()
+    );
+
+    let bridge_users: Vec<&common::message::Message> = agent
+        .session_messages
+        .iter()
+        .filter(|m| {
+            m.role == common::message::Role::User && m.content_str().starts_with("[astro:hook-context]")
+        })
+        .collect();
+    assert_eq!(
+        bridge_users.len(),
+        2,
+        "expect one persisted bridging user message per KeepGoing attempt (capped at 2), messages={:?}",
+        agent
+            .session_messages
+            .iter()
+            .map(|m| (m.role.clone(), m.content_str().to_string()))
+            .collect::<Vec<_>>()
+    );
+    for m in &bridge_users {
+        assert_eq!(
+            m.content_str(),
+            "[astro:hook-context]\n请再检查一下你的改动",
+            "persisted bridging message text must match the inject format used at multi_turn.rs"
+        );
+    }
+
+    // hydrate/reload 场景：转换为 Provider 消息后，相邻 user/assistant 仍不得连续同角色
+    // （逐条相邻比较，与 `validate_message_order` 的约束一致，而非过滤后再比较）。
+    let provider_messages =
+        agent::prompt::messages::to_provider_messages("sys", &agent.session_messages);
+    for window in provider_messages.windows(2) {
+        let (a, b) = (window[0].role.as_str(), window[1].role.as_str());
+        assert!(
+            !(a == "assistant" && b == "assistant"),
+            "to_provider_messages must not contain consecutive assistant entries"
+        );
+        assert!(
+            !(a == "user" && b == "user"),
+            "to_provider_messages must not contain consecutive user entries"
+        );
+    }
+    drop(agent);
 }
 
 #[tokio::test]
