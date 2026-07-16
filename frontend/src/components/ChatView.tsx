@@ -55,6 +55,7 @@ import {
   type ChatInteractionMode,
 } from "../lib/chatMode";
 import type { ContextUsageSnapshot } from "../lib/contextUsage";
+import { ChatMediaAttachProvider } from "../contexts/ChatMediaAttachContext";
 import {
   attachmentsFromOsClipboard,
   filesFromClipboardRead,
@@ -1022,6 +1023,25 @@ export default function ChatView({
     [addAttachments, streaming],
   );
 
+  const attachMediaPath = useCallback(
+    async (path: string) => {
+      const att = await pathToAttachment(path);
+      addAttachments([att]);
+      if (!input.trim()) {
+        onInputChange(t("media.quotePrompt"));
+      }
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    },
+    [addAttachments, input, onInputChange, t],
+  );
+
+  const mediaAttachApi = useMemo(
+    () => ({ attachMediaPath }),
+    [attachMediaPath],
+  );
+
   const [fileDragOver, setFileDragOver] = useState(false);
   const dragDepthRef = useRef(0);
   const tauriDropAtRef = useRef(0);
@@ -1212,6 +1232,7 @@ export default function ChatView({
             : t("chat.placeholder");
 
   return (
+    <ChatMediaAttachProvider value={mediaAttachApi}>
     <section
       className={`chat-pane ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
       onDragEnter={onDragEnter}
@@ -1909,5 +1930,6 @@ export default function ChatView({
         </div>
       </form>
     </section>
+    </ChatMediaAttachProvider>
   );
 }

@@ -107,6 +107,17 @@
   margin: 6px 0;
 }
 
+.media-preview-image-btn {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+  text-align: inherit;
+}
+
 .media-preview-image,
 .media-preview-video {
   display: block;
@@ -114,6 +125,76 @@
   max-height: 420px;
   object-fit: contain;
   background: color-mix(in srgb, var(--ink, #0f172a) 4%, transparent);
+}
+
+.media-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: 28px 20px;
+  background: rgba(8, 12, 20, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: zoom-out;
+  animation: media-lightbox-in 160ms ease-out;
+}
+
+.media-lightbox-image {
+  max-width: min(96vw, 1200px);
+  max-height: min(90vh, 900px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  cursor: default;
+  background: color-mix(in srgb, #fff 6%, transparent);
+}
+
+.media-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  color: #f8fafc;
+  background: color-mix(in srgb, #0f172a 55%, transparent);
+  cursor: pointer;
+}
+
+.media-lightbox-close:hover {
+  background: color-mix(in srgb, #0f172a 75%, transparent);
+}
+
+@keyframes media-lightbox-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .media-preview-audio {

@@ -1,10 +1,11 @@
-/** 图 / 视频 / 音频内嵌预览（本地路径经 resolveMediaSrc）；悬停提供下载 / 复制 */
+/** 图 / 视频 / 音频内嵌预览（本地路径经 resolveMediaSrc）；悬停提供引用 / 放大 / 下载 / 复制 */
 import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GeneratedMediaKind } from "../../lib/parseGeneratedMedia";
 import { resolveMediaSrc } from "../../lib/resolveMediaSrc";
 import BrokenMedia from "./BrokenMedia";
 import HtmlPreview from "./HtmlPreview";
+import MediaLightbox from "./MediaLightbox";
 import MediaToolbar from "./MediaToolbar";
 
 export type MediaPreviewProps = {
@@ -28,6 +29,7 @@ export default function MediaPreview({
 }: MediaPreviewProps) {
   const src = useMemo(() => resolveMediaSrc(path), [path]);
   const [broken, setBroken] = useState(!src && kind !== "html");
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const openExternally = () => {
     void invoke("open_path_externally", { path }).catch(() => {});
@@ -89,13 +91,27 @@ export default function MediaPreview({
 
   return (
     <div className={wrap} data-kind="image">
-      <img
-        className="media-preview-image"
-        src={src}
-        alt={alt ?? ""}
-        onError={() => setBroken(true)}
-      />
-      <MediaToolbar path={path} kind="image" compact={compact} />
+      <button
+        type="button"
+        className="media-preview-image-btn"
+        onClick={() => setLightboxOpen(true)}
+        aria-label={alt?.trim() || undefined}
+      >
+        <img
+          className="media-preview-image"
+          src={src}
+          alt={alt ?? ""}
+          onError={() => setBroken(true)}
+        />
+      </button>
+      <MediaToolbar path={path} kind="image" compact={compact} alt={alt} />
+      {lightboxOpen ? (
+        <MediaLightbox
+          src={src}
+          alt={alt}
+          onClose={() => setLightboxOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

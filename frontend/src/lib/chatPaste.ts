@@ -60,14 +60,59 @@ function dtoToAttachment(path: string, dto: FileBase64Dto): ChatAttachment {
   };
 }
 
-/** 将本地绝对路径读成聊天附件（记忆沙箱优先，否则读用户文件） */
-export async function pathToAttachment(path: string): Promise<ChatAttachment> {
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+async function remoteUrlToAttachment(url: string): Promise<ChatAttachment> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.byteLength > 32 * 1024 * 1024) {
+    throw new Error("文件过大（>32MB）");
+  }
+  const mime =
+    res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
+  let name = "image.png";
   try {
-    const dto = await invoke<FileBase64Dto>("read_file_base64", { path });
-    return dtoToAttachment(path, dto);
+    const last = new URL(url).pathname.split("/").filter(Boolean).pop();
+    if (last) name = decodeURIComponent(last);
   } catch {
-    const dto = await invoke<FileBase64Dto>("read_user_file_base64", { path });
-    return dtoToAttachment(path, dto);
+    // keep default
+  }
+  const kind = kindFromMime(mime, name);
+  const previewUrl = kind === "image" || kind === "video" ? url : undefined;
+  const shouldInline = kind === "image" && buf.byteLength <= MAX_INLINE_BYTES;
+  return {
+    id: newAttId(),
+    name,
+    mime: mime.startsWith("image/") ? mime : "image/png",
+    kind: kind === "image" ? "image" : kind,
+    size: buf.byteLength,
+    previewUrl,
+    dataBase64: shouldInline ? bytesToBase64(buf) : undefined,
+  };
+}
+
+/** 将本地绝对路径或 http(s) 媒体读成聊天附件 */
+export async function pathToAttachment(path: string): Promise<ChatAttachment> {
+  const raw = path.trim();
+  if (/^https?:/i.test(raw)) {
+    return remoteUrlToAttachment(raw);
+  }
+  try {
+    const dto = await invoke<FileBase64Dto>("read_file_base64", { path: raw });
+    return dtoToAttachment(raw, dto);
+  } catch {
+    const dto = await invoke<FileBase64Dto>("read_user_file_base64", {
+      path: raw,
+    });
+    return dtoToAttachment(raw, dto);
   }
 }
 
