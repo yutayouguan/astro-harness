@@ -5,6 +5,7 @@ import {
   buildMediaModelOptions,
   evaluateMediaModelsResult,
   filterModelsByCapability,
+  isMediaModelsRequestLoading,
   MEDIA_CAPABILITY_BY_FIELD,
   sanitizeMediaModelValue,
 } from "./mediaModelOptions.ts";
@@ -100,5 +101,35 @@ test("sanitizes only after the current online refresh succeeds", () => {
   assert.deepEqual(
     evaluateMediaModelsResult("provider-a", 1, "provider-a", 1, "online-success"),
     { accept: true, showModels: true, sanitize: true },
+  );
+});
+
+test("stops showing an invalidated provider request as loading", () => {
+  assert.equal(
+    isMediaModelsRequestLoading("provider-b", 2, {
+      providerId: "provider-a",
+      requestId: 1,
+    }),
+    false,
+  );
+});
+
+test("does not let an older request own loading for a newer request", () => {
+  assert.equal(
+    isMediaModelsRequestLoading("provider-a", 2, {
+      providerId: "provider-a",
+      requestId: 1,
+    }),
+    false,
+  );
+});
+
+test("shows loading only for the current provider request", () => {
+  assert.equal(
+    isMediaModelsRequestLoading("provider-a", 2, {
+      providerId: "provider-a",
+      requestId: 2,
+    }),
+    true,
   );
 });

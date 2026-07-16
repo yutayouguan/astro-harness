@@ -30,6 +30,22 @@ export type MediaModelsResultDecision = {
   sanitize: boolean;
 };
 
+export type MediaModelsLoadingRequest = {
+  providerId: string;
+  requestId: number;
+};
+
+export function isMediaModelsRequestLoading(
+  activeProviderId: string | null,
+  activeRequestId: number,
+  loadingRequest: MediaModelsLoadingRequest | null,
+): boolean {
+  return (
+    loadingRequest?.providerId === activeProviderId &&
+    loadingRequest.requestId === activeRequestId
+  );
+}
+
 export function evaluateMediaModelsResult(
   activeProviderId: string | null,
   activeRequestId: number,

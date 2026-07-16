@@ -45,6 +45,7 @@ import { formatContextWindow } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
   evaluateMediaModelsResult,
+  isMediaModelsRequestLoading,
   sanitizeMediaModelValue,
   type MediaCapabilityKey,
 } from "../../lib/providers/mediaModelOptions";
@@ -324,7 +325,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingAll, setTestingAll] = useState(false);
-  const [listingModels, setListingModels] = useState(false);
+  const [listingModelsRequest, setListingModelsRequest] = useState<{
+    providerId: string;
+    requestId: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addKind, setAddKind] = useState<ProviderKindId>("openai");
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -460,12 +464,18 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
 
   const selected =
     state?.providers.find((p) => p.id === selectedId) ?? null;
+  const listingModels = isMediaModelsRequestLoading(
+    selected?.id ?? null,
+    modelsRequestRef.current,
+    listingModelsRequest,
+  );
 
   useEffect(() => {
     if (!selected) {
       setDraft(null);
       setSanitizeModelsProviderId(null);
       modelsRequestRef.current += 1;
+      setListingModelsRequest(null);
       setStoredApiKey(null);
       setApiKeyInput("");
       setShowApiKey(false);
@@ -476,6 +486,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     setDraft(draftFromProvider(selected));
     setSanitizeModelsProviderId(null);
     modelsRequestRef.current += 1;
+    setListingModelsRequest(null);
     setDetailTab("chat");
     setApiKeyInput("");
     setStoredApiKey(null);
@@ -904,7 +915,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       ).accept;
     if (!isCurrentRequest()) return;
     const silent = opts?.silent ?? false;
-    setListingModels(true);
+    setListingModelsRequest({ providerId: provider.id, requestId });
     if (!silent) setError(null);
     try {
       // 手动拉取时先落盘草稿；自动拉取跳过，避免切提供商时用到旧草稿
@@ -938,7 +949,14 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
         setHealthById((prev) => ({ ...prev, [provider.id]: "fail" }));
       }
     } finally {
-      if (isCurrentRequest()) setListingModels(false);
+      if (isCurrentRequest()) {
+        setListingModelsRequest((current) =>
+          current?.providerId === provider.id &&
+          current.requestId === requestId
+            ? null
+            : current,
+        );
+      }
     }
   };
 
