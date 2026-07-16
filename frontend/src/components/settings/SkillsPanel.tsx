@@ -74,7 +74,7 @@ import {
 import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
-import { useTransientToast } from "../../hooks/useTransientToast";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";

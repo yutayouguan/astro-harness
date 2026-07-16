@@ -2,7 +2,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { useClampPopover } from "../../hooks/useClampPopover";
+import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import {

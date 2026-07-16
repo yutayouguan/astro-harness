@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useAnchoredMenu } from "../../hooks/useAnchoredMenu";
+import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 
 /** 下拉选项 */
 export type SelectOption = {

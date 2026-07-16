@@ -10,9 +10,9 @@ import {
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { Eye, FileCode2 } from "lucide-react";
-import { useTheme } from "../../hooks/useTheme";
-import { useTransientToast } from "../../hooks/useTransientToast";
-import { useFileSelection } from "../../hooks/useFileSelection";
+import { useTheme } from "../../hooks/app/useTheme";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useFileSelection } from "../../hooks/ui/useFileSelection";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { FileEntryDto } from "../../types";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";

@@ -24,7 +24,7 @@ import {
   TerminalSquare,
   X,
 } from "lucide-react";
-import { useAnchoredMenu } from "../../hooks/useAnchoredMenu";
+import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useI18n } from "../../i18n/LocaleContext";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useChatMediaAttach } from "../../contexts/ChatMediaAttachContext";
 import { useI18n } from "../../i18n/LocaleContext";
-import { useTransientToast } from "../../hooks/useTransientToast";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { displayUserPath } from "../../lib/filespace/displayPath";
 import {
   copyMedia,

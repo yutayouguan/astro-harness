@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, ChevronDown, Webhook } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import { useLiveElapsedSec } from "../../hooks/useLiveElapsedSec";
+import { useLiveElapsedSec } from "../../hooks/chat/useLiveElapsedSec";
 import {
   activityHasBody,
   resolveActivityIO,

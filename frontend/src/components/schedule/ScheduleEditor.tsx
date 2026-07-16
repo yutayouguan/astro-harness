@@ -23,7 +23,7 @@ import type { ScheduleDraft, ScheduleMode, Weekday } from "../../lib/cron/cronSc
 import { UI_WEEKDAYS } from "../../lib/cron/cronSchedule";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import { useAnchoredMenu } from "../../hooks/useAnchoredMenu";
+import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { SelectMenu } from "../ui/SelectMenu";
 
 /** 调度表达式编辑器入参 */

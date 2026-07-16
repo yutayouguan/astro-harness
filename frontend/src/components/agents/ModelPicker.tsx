@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useClampPopover } from "../../hooks/useClampPopover";
+import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   DEFAULT_MODEL_PREFS,

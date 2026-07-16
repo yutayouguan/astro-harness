@@ -1,7 +1,7 @@
 /** 工作区文件内容编辑器。 */
 import { useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import type { ResolvedTheme } from "../../hooks/useTheme";
+import type { ResolvedTheme } from "../../hooks/app/useTheme";
 import {
   codeMirrorTheme,
   languageForFilename,

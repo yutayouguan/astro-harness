@@ -26,8 +26,8 @@ import {
   IconTerminal,
   IconTts,
   IconWebSearch,
-} from "../components/icons/ToolIcons";
-import type { MessageKey } from "../i18n/messages";
+} from "../../components/icons/ToolIcons";
+import type { MessageKey } from "../../i18n/messages";
 
 const IS_TAURI =
   typeof window !== "undefined" &&

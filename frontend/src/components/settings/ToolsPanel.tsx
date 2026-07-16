@@ -26,13 +26,13 @@ import {
   X,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAgentTools } from "../../hooks/useAgentTools";
+import { useAgentTools } from "../../hooks/providers/useAgentTools";
 import {
   parseMcpJson,
   useMcpTools,
   type McpServer,
   type McpTransportType,
-} from "../../hooks/useMcpTools";
+} from "../../hooks/providers/useMcpTools";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type { AgentInfo } from "../../types/agent";

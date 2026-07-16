@@ -11,7 +11,7 @@ import {
   TOAST_DURATION_MS,
   TOAST_ERROR_DURATION_MS,
   type ToastTone,
-} from "../components/ui/Toast";
+} from "../../components/ui/Toast";
 
 export type ShowToastOptions = {
   sticky?: boolean;

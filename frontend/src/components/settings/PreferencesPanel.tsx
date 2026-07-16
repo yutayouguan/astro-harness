@@ -12,8 +12,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ThemeMode } from "../../hooks/useTheme";
-import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/useChatDisplayPrefs";
+import type { ThemeMode } from "../../hooks/app/useTheme";
+import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "../icons/NavIcons";

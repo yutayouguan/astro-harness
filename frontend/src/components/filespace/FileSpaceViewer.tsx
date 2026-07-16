@@ -9,7 +9,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { Eye, FileCode2, Save } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import { useTheme } from "../../hooks/useTheme";
+import { useTheme } from "../../hooks/app/useTheme";
 import { filespaceViewerKind } from "../../lib/filespace/filespaceViewerKind";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { ChatMarkdown } from "../chat/ChatMarkdown";

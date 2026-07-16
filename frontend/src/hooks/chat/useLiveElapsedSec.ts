@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { elapsedSecSince } from "../lib/chat/elapsedSec";
+import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 
 /**
  * 流式进行中按 ~100ms 刷新已过秒数；非 active 时返回 null。

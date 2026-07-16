@@ -7,12 +7,12 @@ import {
 import {
   layoutAnchoredMenu,
   type AnchoredMenuLayout,
-} from "../lib/ui/anchoredMenuLayout";
+} from "../../lib/ui/anchoredMenuLayout";
 import {
   measurePopoverSize,
   resolveClipBounds,
   type ClampPopoverInput,
-} from "../lib/ui/clampPopover";
+} from "../../lib/ui/clampPopover";
 
 export type AnchoredMenuPos = AnchoredMenuLayout;
 

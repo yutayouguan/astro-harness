@@ -12,7 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { useClampPopover } from "../../hooks/useClampPopover";
+import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
   AtSign,
   ChartPie,
@@ -42,7 +42,7 @@ import {
 import {
   isActivityVisible,
   type ChatDisplayPrefs,
-} from "../../hooks/useChatDisplayPrefs";
+} from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   findSlotAt,
@@ -94,8 +94,8 @@ import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
 import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
-import { useMcpTools } from "../../hooks/useMcpTools";
-import { useTypingPlaceholder } from "../../hooks/useTypingPlaceholder";
+import { useMcpTools } from "../../hooks/providers/useMcpTools";
+import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import A2UIRenderer from "../../a2ui/A2UIRenderer";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";

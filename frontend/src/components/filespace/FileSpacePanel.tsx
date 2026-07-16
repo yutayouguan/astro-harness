@@ -11,7 +11,7 @@ import {
   Palette,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import { useTransientToast } from "../../hooks/useTransientToast";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
 import type {
   ArtifactCategory,
@@ -41,7 +41,7 @@ import FileSpaceBatchBar from "./FileSpaceBatchBar";
 import FileSpaceConfirm from "./FileSpaceConfirm";
 import FileSpaceViewer from "./FileSpaceViewer";
 import { EmptyIllustration } from "../../illustrations";
-import { useFileSelection } from "../../hooks/useFileSelection";
+import { useFileSelection } from "../../hooks/ui/useFileSelection";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import type { AgentInfo } from "../../types/agent";
 

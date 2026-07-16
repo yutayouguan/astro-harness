@@ -12,7 +12,7 @@ import {
   Tags,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import { useTheme } from "../../hooks/useTheme";
+import { useTheme } from "../../hooks/app/useTheme";
 import {
   codeMirrorTheme,
   languageForFilename,
