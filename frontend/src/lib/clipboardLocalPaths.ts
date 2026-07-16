@@ -5,7 +5,7 @@ import {
   absolutizeMediaPath,
   looksLikeLocalPath,
   stripFileUrl,
-} from "./resolveMediaSrc";
+} from "./resolveMediaSrc.ts";
 
 /**
  * 若文本整段都是本地路径（可多行），返回规范化路径列表；否则空数组。
