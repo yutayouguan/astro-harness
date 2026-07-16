@@ -125,8 +125,7 @@ function MessageTokenStats({
     usage &&
       (usage.totalTokens || usage.promptTokens || usage.completionTokens),
   );
-  const hasDuration =
-    generationDurationSec != null && generationDurationSec > 0;
+  const hasDuration = generationDurationSec != null;
   if (!hasUsage && !hasDuration) return null;
 
   const speed =

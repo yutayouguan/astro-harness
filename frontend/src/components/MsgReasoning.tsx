@@ -45,11 +45,11 @@ export default function MsgReasoning({
   const liveSec = useLiveElapsedSec(active, liveStart);
 
   const label =
-    active && (durationSec == null || durationSec <= 0)
+    active && durationSec == null
       ? liveSec != null
         ? t("chat.thinkingWithTime", { s: formatElapsedSec(liveSec) })
         : t("chat.thinking")
-      : durationSec != null && durationSec > 0
+      : durationSec != null
         ? t("chat.thinkingDoneWithTime", { s: formatElapsedSec(durationSec) })
         : t("chat.thinkingDone");
 

@@ -75,7 +75,7 @@ export default function MsgActivity({
     ? liveSec != null
       ? t("chat.activityDuration", { s: formatElapsedSec(liveSec) })
       : t("chat.activity.status.running")
-    : activity.durationSec != null && activity.durationSec > 0
+    : activity.durationSec != null
       ? t("chat.activityDuration", {
           s: formatElapsedSec(activity.durationSec),
         })

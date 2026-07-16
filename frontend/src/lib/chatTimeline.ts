@@ -8,13 +8,10 @@ import type {
   ChatTimelineSegment,
   UiSurface,
 } from "../types";
+import { elapsedSecSince } from "./elapsedSec";
 
 function ensureSegments(m: ChatMessage): ChatTimelineSegment[] {
   return [...(m.segments ?? [])];
-}
-
-function elapsedSec(startedAtMs: number, endedAtMs = Date.now()): number {
-  return Math.max(0.1, Math.round(((endedAtMs - startedAtMs) / 1000) * 10) / 10);
 }
 
 /** 各 reasoning 段 durationSec 求和（无则 undefined） */
@@ -104,7 +101,7 @@ export function sealOpenReasoning(
   const dur =
     durationSec != null && durationSec > 0
       ? durationSec
-      : elapsedSec(last.at, endedAt);
+      : elapsedSecSince(last.at, endedAt);
   segments[target] = { ...last, durationSec: dur };
   return {
     ...m,
@@ -170,7 +167,7 @@ export function applyActivityUpsert(
       (durationSec == null || durationSec <= 0) &&
       preservedAt != null
     ) {
-      durationSec = elapsedSec(preservedAt, Date.now());
+      durationSec = elapsedSecSince(preservedAt, Date.now());
     }
     activities[existing] = {
       ...prev,
@@ -184,7 +181,7 @@ export function applyActivityUpsert(
       (activity.status === "done" || activity.status === "error") &&
       (durationSec == null || durationSec <= 0)
     ) {
-      durationSec = elapsedSec(at, Date.now());
+      durationSec = elapsedSecSince(at, Date.now());
     }
     activities.push({ ...activity, at, durationSec });
     segments.push({ type: "activity", id: activity.id, at });
