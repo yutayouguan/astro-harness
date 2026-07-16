@@ -233,6 +233,62 @@ export function IllustEmptyProviders(props: IllustProps) {
   );
 }
 
+/** 技能空 */
+export function IllustEmptySkills(props: IllustProps) {
+  return frame(
+    props,
+    <>
+      {ground()}
+      <g transform="rotate(-7 62 62)">
+        <rect
+          x="34"
+          y="34"
+          width="58"
+          height="58"
+          rx="13"
+          fill="currentColor"
+          opacity="0.08"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+        <path
+          d="M48 50h30M48 60h22M48 70h26"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          opacity="0.32"
+        />
+      </g>
+      <g transform="rotate(7 96 58)">
+        <rect
+          x="70"
+          y="27"
+          width="58"
+          height="58"
+          rx="13"
+          fill="currentColor"
+          opacity="0.14"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+        <path
+          d="M99 39l3.5 8 8.5 1-6.5 5.5 2 8.5-7.5-4.5-7.5 4.5 2-8.5L87 48l8.5-1 3.5-8Z"
+          fill="currentColor"
+          opacity="0.42"
+        />
+      </g>
+      <circle cx="128" cy="76" r="12" fill="currentColor" opacity="0.12" />
+      <path
+        d="M128 70v12M122 76h12"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
+    </>,
+  );
+}
+
 /** Agent 封面：通用助手 */
 export function IllustCoverAssistant(props: IllustProps) {
   return frame(

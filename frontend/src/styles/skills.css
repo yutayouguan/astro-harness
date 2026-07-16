@@ -2348,6 +2348,18 @@ html[data-theme="dark"] .skills-end-hint {
   color: var(--ink-mute);
 }
 
+.skills-empty.astro-empty {
+  --tone: var(--tone-indigo);
+  flex: 1;
+  min-height: min(340px, 52vh);
+  padding: 36px 16px 48px;
+}
+
+.skills-empty.astro-empty .astro-empty-title {
+  max-width: 38ch;
+  line-height: 1.5;
+}
+
 .skills-success {
   margin: 0 0 8px;
   padding: 10px 14px;

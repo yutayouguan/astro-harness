@@ -1,5 +1,5 @@
 /** 空状态插画壳：场景图 + 可选标题副文案。 */
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { EMPTY_SCENE_ART, type EmptyScene } from "./registry";
 
 type Props = {
@@ -9,6 +9,7 @@ type Props = {
   children?: ReactNode;
   className?: string;
   size?: "sm" | "md" | "lg";
+  role?: HTMLAttributes<HTMLDivElement>["role"];
 };
 
 export default function EmptyIllustration({
@@ -18,10 +19,15 @@ export default function EmptyIllustration({
   children,
   className = "",
   size = "md",
+  role,
 }: Props) {
   const Art = EMPTY_SCENE_ART[scene];
   return (
-    <div className={`astro-empty astro-empty--${size} ${className}`.trim()} data-scene={scene}>
+    <div
+      className={`astro-empty astro-empty--${size} ${className}`.trim()}
+      data-scene={scene}
+      role={role}
+    >
       <div className="astro-empty-art" aria-hidden>
         <Art />
       </div>

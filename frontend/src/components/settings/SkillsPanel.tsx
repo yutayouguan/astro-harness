@@ -81,6 +81,7 @@ import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgStreamLoader from "../chat/MsgStreamLoader";
 import { IconRefresh } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
+import EmptyIllustration from "../../illustrations/EmptyIllustration";
 import {
   SkillFileViewer,
   SKILL_PREVIEW_MAX_BYTES,
@@ -2815,27 +2816,40 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
           {viewMode === "detail" ? (
             filteredInstalled.length === 0 && !loadingInstalled ? (
-              <p className="skills-empty">
-                {installed.length === 0
-                  ? t("skills.installedEmpty")
-                  : t("skills.installedSearchEmpty")}
-              </p>
+              <EmptyIllustration
+                scene="skills"
+                size="lg"
+                className="skills-empty"
+                title={
+                  installed.length === 0
+                    ? t("skills.installedEmpty")
+                    : t("skills.installedSearchEmpty")
+                }
+              />
             ) : (
               renderInstalledDetail()
             )
           ) : (
             <div className={`skills-gallery is-${viewMode}`} role="list">
               {installed.length === 0 && !loadingInstalled && (
-                <p className="skills-empty" role="listitem">
-                  {t("skills.installedEmpty")}
-                </p>
+                <EmptyIllustration
+                  scene="skills"
+                  size="lg"
+                  className="skills-empty"
+                  title={t("skills.installedEmpty")}
+                  role="listitem"
+                />
               )}
               {installed.length > 0 &&
                 filteredInstalled.length === 0 &&
                 !loadingInstalled && (
-                  <p className="skills-empty" role="listitem">
-                    {t("skills.installedSearchEmpty")}
-                  </p>
+                  <EmptyIllustration
+                    scene="skills"
+                    size="lg"
+                    className="skills-empty"
+                    title={t("skills.installedSearchEmpty")}
+                    role="listitem"
+                  />
                 )}
               {filteredInstalled.map(renderInstalledCard)}
             </div>
@@ -2907,27 +2921,40 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
           {viewMode === "detail" ? (
             filteredMachine.length === 0 && !loadingMachine ? (
-              <p className="skills-empty">
-                {machineSkills.length === 0
-                  ? t("skills.machineEmpty")
-                  : t("skills.machineSearchEmpty")}
-              </p>
+              <EmptyIllustration
+                scene="skills"
+                size="lg"
+                className="skills-empty"
+                title={
+                  machineSkills.length === 0
+                    ? t("skills.machineEmpty")
+                    : t("skills.machineSearchEmpty")
+                }
+              />
             ) : (
               renderMachineDetail()
             )
           ) : (
             <div className={`skills-gallery is-${viewMode}`} role="list">
               {machineSkills.length === 0 && !loadingMachine && (
-                <p className="skills-empty" role="listitem">
-                  {t("skills.machineEmpty")}
-                </p>
+                <EmptyIllustration
+                  scene="skills"
+                  size="lg"
+                  className="skills-empty"
+                  title={t("skills.machineEmpty")}
+                  role="listitem"
+                />
               )}
               {machineSkills.length > 0 &&
                 filteredMachine.length === 0 &&
                 !loadingMachine && (
-                  <p className="skills-empty" role="listitem">
-                    {t("skills.machineSearchEmpty")}
-                  </p>
+                  <EmptyIllustration
+                    scene="skills"
+                    size="lg"
+                    className="skills-empty"
+                    title={t("skills.machineSearchEmpty")}
+                    role="listitem"
+                  />
                 )}
               {filteredMachine.map(renderMachineCard)}
             </div>
@@ -3056,24 +3083,34 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               !loadingInstalled &&
               !loadingMachine &&
               !loadingOrigins && (
-                <p className="skills-empty" role="listitem">
-                  {t("skills.installedEmpty")}
-                </p>
+                <EmptyIllustration
+                  scene="skills"
+                  size="lg"
+                  className="skills-empty"
+                  title={t("skills.installedEmpty")}
+                  role="listitem"
+                />
               )}
             {updateRows.length > 0 &&
               filteredUpdateRows.length === 0 &&
               !loadingInstalled &&
               !loadingMachine &&
               !loadingOrigins && (
-                <p className="skills-empty" role="listitem">
-                  {updateFilter === "updatable"
-                    ? checkingUpdates
-                      ? t("skills.checkingUpdates")
-                      : lastCheckResults.length === 0
-                        ? t("skills.updatesNeedCheck")
-                        : t("skills.upToDate")
-                    : t("skills.installedSearchEmpty")}
-                </p>
+                <EmptyIllustration
+                  scene="skills"
+                  size="lg"
+                  className="skills-empty"
+                  title={
+                    updateFilter === "updatable"
+                      ? checkingUpdates
+                        ? t("skills.checkingUpdates")
+                        : lastCheckResults.length === 0
+                          ? t("skills.updatesNeedCheck")
+                          : t("skills.upToDate")
+                      : t("skills.installedSearchEmpty")
+                  }
+                  role="listitem"
+                />
               )}
             {filteredUpdateRows.map(renderUpdateCard)}
           </div>
@@ -3227,7 +3264,12 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
             </div>
           ) : viewMode === "detail" ? (
             storeResults.length === 0 ? (
-              <p className="skills-empty">{t("skills.storeEmpty")}</p>
+              <EmptyIllustration
+                scene="skills"
+                size="lg"
+                className="skills-empty"
+                title={t("skills.storeEmpty")}
+              />
             ) : (
               <>
                 {renderStoreDetail()}
@@ -3241,9 +3283,13 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               role="list"
             >
               {storeResults.length === 0 ? (
-                <p className="skills-empty" role="listitem">
-                  {t("skills.storeEmpty")}
-                </p>
+                <EmptyIllustration
+                  scene="skills"
+                  size="lg"
+                  className="skills-empty"
+                  title={t("skills.storeEmpty")}
+                  role="listitem"
+                />
               ) : (
                 sortedStoreResults.map(renderStoreCard)
               )}

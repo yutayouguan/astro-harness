@@ -21,6 +21,7 @@ import {
   IllustEmptyFiles,
   IllustEmptyMemory,
   IllustEmptyProviders,
+  IllustEmptySkills,
   IllustEmptyWorkspace,
   type IllustProps,
 } from "./art";
@@ -31,7 +32,8 @@ export type EmptyScene =
   | "memory"
   | "cron"
   | "files"
-  | "providers";
+  | "providers"
+  | "skills";
 
 export type CoverId =
   | "assistant"
@@ -73,6 +75,7 @@ export const EMPTY_SCENE_ART: Record<EmptyScene, ComponentType<IllustProps>> = {
   cron: IllustEmptyCron,
   files: IllustEmptyFiles,
   providers: IllustEmptyProviders,
+  skills: IllustEmptySkills,
 };
 
 export const AGENT_COVERS: CoverMeta[] = [
