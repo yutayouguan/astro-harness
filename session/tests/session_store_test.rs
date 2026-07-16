@@ -578,7 +578,7 @@ fn v13_schema_migrates_to_v14_without_data_loss() {
             .append_message(NewMessage {
                 session_id: "legacy",
                 role: "user",
-                content: Some("old chat"),
+                content: Some("old chat migrationftsneedle"),
                 ..NewMessage::empty("legacy", "user")
             })
             .unwrap();
@@ -664,7 +664,9 @@ fn v13_schema_migrates_to_v14_without_data_loss() {
              );
              INSERT INTO messages (
                 session_id, role, content, tool_call_id, tool_calls, tool_name, timestamp
-             ) VALUES ('legacy', 'user', 'old chat', NULL, NULL, NULL, 1.0);",
+             ) VALUES (
+                'legacy', 'user', 'old chat migrationftsneedle', NULL, NULL, NULL, 1.0
+             );",
         )
         .unwrap();
     }
@@ -683,6 +685,13 @@ fn v13_schema_migrates_to_v14_without_data_loss() {
     assert_eq!(
         reopened.get_session("legacy").unwrap().unwrap().archived_at,
         None
+    );
+    let hits = reopened
+        .search_messages("migrationftsneedle", None, None, 10)
+        .unwrap();
+    assert!(
+        hits.iter().any(|hit| hit.session_id == "legacy"),
+        "v13 to v14 migration must preserve searchable FTS data"
     );
 }
 
