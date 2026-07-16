@@ -10,7 +10,8 @@
 .message-list {
   flex: 1;
   overflow: auto;
-  padding: 20px 44px 12px 20px;
+  /* 右侧给锚点 Dock 留空，放大时不贴气泡 */
+  padding: 20px 56px 12px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;

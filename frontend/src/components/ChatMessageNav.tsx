@@ -27,15 +27,16 @@ type Props = {
 };
 
 const BASE = 22;
-const GAP = 6;
+/** 与 CSS `.chat-msg-nav-track` gap 一致；放大后仍要留缝 */
+const GAP = 14;
 /** 与 CSS `.chat-msg-nav-track` padding-top 一致 */
 const PAD_TOP = 10;
-/** 峰值放大 */
-const MAX_SCALE = 1.85;
-/** 影响半径：越大波浪越宽、越像 Dock */
-const RANGE = 72;
+/** 峰值放大：略收敛，避免挤成一团 */
+const MAX_SCALE = 1.48;
+/** 影响半径：配合更大间距做更柔和的鱼眼 */
+const RANGE = 96;
 /** 同时展示的预览气泡（主 + 邻近） */
-const LABEL_MAX = 3;
+const LABEL_MAX = 2;
 
 type TipModel = {
   id: string;
