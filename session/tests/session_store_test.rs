@@ -758,6 +758,57 @@ fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
     assert_eq!(msgs[0].compressed_content.as_deref(), Some("compressed view"));
 }
 
+/// 半迁移库：schema_version 已是 14，但 messages 缺 compressed_content（合并分支 stamp 竞态）。
+#[test]
+fn stamped_v14_without_compressed_content_self_heals() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+             CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                started_at REAL NOT NULL,
+                message_count INTEGER DEFAULT 0,
+                tool_call_count INTEGER DEFAULT 0,
+                archived_at REAL
+             );
+             CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT,
+                tool_call_id TEXT,
+                tool_calls TEXT,
+                tool_name TEXT,
+                timestamp REAL NOT NULL,
+                token_count INTEGER,
+                finish_reason TEXT,
+                reasoning TEXT,
+                reasoning_content TEXT,
+                reasoning_details TEXT,
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
+             );
+             INSERT INTO schema_version (version) VALUES (14);
+             INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
+             VALUES ('s1', 'test', 1.0, 1, 0);
+             INSERT INTO messages (session_id, role, content, timestamp)
+             VALUES ('s1', 'user', 'hello half-migrated', 1.0);",
+        )
+        .unwrap();
+    }
+
+    let store = SessionStore::open(&path).unwrap();
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+    let msgs = store.get_messages("s1").unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0].content.as_deref(), Some("hello half-migrated"));
+    assert!(msgs[0].compressed_content.is_none());
+}
+
 
 
 #[test]

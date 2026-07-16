@@ -113,22 +113,26 @@ END;
 
 impl SessionStore {
     /// 空库建表并 stamp；旧库由 [`SessionStore::open`] 调用增量迁移。
+    ///
+    /// 即便 `schema_version` 已到目标，仍幂等补齐缺列：合并分支可能先 stamp
+    /// 了 v14（如 `archived_at`）却未加 `compressed_content`。
     pub(crate) fn migrate_schema(&self) -> Result<()> {
         let current = self.read_schema_version_or_zero()?;
-        if current >= SCHEMA_VERSION {
-            return Ok(());
+        if current < SCHEMA_VERSION {
+            if !self.table_exists("messages")? {
+                self.conn.execute_batch(SCHEMA_V11_DDL)?;
+                self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
+            }
+            self.stamp_schema_version()?;
         }
-        if !self.table_exists("messages")? {
-            self.conn.execute_batch(SCHEMA_V11_DDL)?;
-            self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
-        } else {
+        // 版本已到也要自愈缺列，避免「stamp=14 但列缺失」的半迁移库。
+        if self.table_exists("messages")? {
             self.ensure_messages_compressed_content_column()?;
         }
         if self.table_exists("sessions")? && !self.column_exists("sessions", "archived_at")? {
             self.conn
                 .execute("ALTER TABLE sessions ADD COLUMN archived_at REAL", [])?;
         }
-        self.stamp_schema_version()?;
         Ok(())
     }
 
