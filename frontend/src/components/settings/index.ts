@@ -1,3 +1,4 @@
+export { default as AuxiliaryModelsPanel } from './AuxiliaryModelsPanel';
 export { default as InsightsPanel } from './InsightsPanel';
 export { default as MemoryPanel } from './MemoryPanel';
 export { default as PreferencesPanel } from './PreferencesPanel';

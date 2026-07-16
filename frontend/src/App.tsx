@@ -13,6 +13,7 @@ import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ChatView from "./components/chat/ChatView";
 import CronPanel from "./components/schedule/CronPanel";
 import FileSpacePanel from "./components/filespace/FileSpacePanel";
+import AuxiliaryModelsPanel from "./components/settings/AuxiliaryModelsPanel";
 import InsightsPanel from "./components/settings/InsightsPanel";
 import MemoryPanel from "./components/settings/MemoryPanel";
 import ModelPicker from "./components/agents/ModelPicker";
@@ -792,6 +793,9 @@ export default function App() {
                   active={nav === "providers"}
                   onStateChange={syncProvidersFromState}
                 />
+              )}
+              {nav === "auxiliary" && (
+                <AuxiliaryModelsPanel active={nav === "auxiliary"} />
               )}
             </AnimatedSwitch>
           </div>
