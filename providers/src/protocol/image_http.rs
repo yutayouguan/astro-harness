@@ -1,4 +1,4 @@
-//! Google / OpenAI 图片生成 HTTP
+//! OpenAI 图片生成 HTTP
 
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
@@ -7,29 +7,6 @@ use serde_json::{json, Value};
 
 use crate::http_stream::openai_compatible_base;
 use crate::trait_::{GeneratedImage, ProviderConfig};
-
-/// 去掉 endpoint 末尾斜杠。
-fn trim_slash(endpoint: &str) -> String {
-    endpoint.trim_end_matches('/').to_string()
-}
-
-/// 解析 Google 原生 API 基址（配置优先；自动去掉 OpenAI 兼容 `/v1beta/openai` 后缀）。
-fn google_base(config: &ProviderConfig) -> String {
-    let raw = config
-        .base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("https://generativelanguage.googleapis.com");
-    let base = trim_slash(raw);
-    if base.ends_with("/openai") {
-        return base
-            .trim_end_matches("/openai")
-            .trim_end_matches("/v1beta")
-            .to_string();
-    }
-    base
-}
 
 /// 解析 OpenAI 兼容 API 基址。
 fn openai_base(config: &ProviderConfig) -> String {
@@ -40,96 +17,6 @@ fn openai_base(config: &ProviderConfig) -> String {
         .filter(|s| !s.is_empty())
         .unwrap_or("https://api.openai.com/v1");
     openai_compatible_base(raw)
-}
-
-/// Google Gemini 原生出图（generateContent + responseModalities IMAGE）
-pub async fn google_generate_image(
-    client: &Client,
-    prompt: &str,
-    config: &ProviderConfig,
-) -> Result<Vec<GeneratedImage>> {
-    if config.api_key.trim().is_empty() {
-        anyhow::bail!("Google API Key 为空");
-    }
-    let model = if config.model.trim().is_empty() {
-        "gemini-3.1-flash-image"
-    } else {
-        config.model.trim()
-    };
-    let base = trim_slash(&google_base(config));
-    let url = if base.contains("/v1beta") {
-        format!("{base}/models/{model}:generateContent?key={}", config.api_key)
-    } else {
-        format!(
-            "{base}/v1beta/models/{model}:generateContent?key={}",
-            config.api_key
-        )
-    };
-
-    let body = json!({
-        "contents": [{
-            "role": "user",
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"]
-        }
-    });
-
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("连接 Google 图片 API 失败: {url}"))?;
-
-    let status = response.status();
-    let v: Value = response
-        .json()
-        .await
-        .context("解析 Google 图片响应 JSON 失败")?;
-
-    if !status.is_success() {
-        let msg = v
-            .pointer("/error/message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("Google 图片生成失败");
-        anyhow::bail!("Google HTTP {status}: {msg}");
-    }
-
-    let mut images = Vec::new();
-    let parts = v
-        .pointer("/candidates/0/content/parts")
-        .and_then(|p| p.as_array())
-        .ok_or_else(|| anyhow!("Google 响应中无图片 parts"))?;
-
-    for part in parts {
-        let inline = part.get("inlineData").or_else(|| part.get("inline_data"));
-        let Some(inline) = inline else { continue };
-        let b64 = inline
-            .get("data")
-            .and_then(|d| d.as_str())
-            .ok_or_else(|| anyhow!("inlineData 缺少 data"))?;
-        let mime = inline
-            .get("mimeType")
-            .or_else(|| inline.get("mime_type"))
-            .and_then(|m| m.as_str())
-            .unwrap_or("image/png")
-            .to_string();
-        let data = base64::engine::general_purpose::STANDARD
-            .decode(b64)
-            .context("解码 Google 图片 base64 失败")?;
-        images.push(GeneratedImage {
-            data,
-            mime_type: mime,
-        });
-    }
-
-    if images.is_empty() {
-        anyhow::bail!("Google 未返回图片数据");
-    }
-    Ok(images)
 }
 
 /// OpenAI Images API（gpt-image-2 等）

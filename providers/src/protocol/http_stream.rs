@@ -165,6 +165,10 @@ pub async fn chat_stream_for_provider(
         ApiMode::AnthropicMessages => {
             anthropic_chat_stream(client, messages, tools, config).await
         }
+        ApiMode::Interactions => {
+            crate::interactions_chat::interactions_chat_stream(client, messages, tools, config)
+                .await
+        }
         ApiMode::Responses => {
             crate::responses::responses_chat_stream(client, id, messages, tools, config).await
         }
@@ -467,7 +471,6 @@ fn supports_stream_include_usage(provider: &str) -> bool {
             | "moonshot"
             | "mimo"
             | "ollama"
-            | "google"
     )
 }
 
@@ -509,20 +512,6 @@ pub async fn openai_compatible_chat_stream(
             };
             body["reasoning_effort"] = json!(effort);
         }
-    }
-    // Gemini OpenAI 兼容：thinking 走 extra_body.google.thinking_config（附件仍用 messages content）
-    if provider == "google" && config.thinking_enabled {
-        let level = match config.reasoning_effort.trim() {
-            "max" | "xhigh" => "HIGH",
-            _ => "MEDIUM",
-        };
-        body["extra_body"] = json!({
-            "google": {
-                "thinking_config": {
-                    "thinking_level": level
-                }
-            }
-        });
     }
 
     merge_additional_params(&mut body, &config.additional_params);
@@ -898,7 +887,7 @@ mod tests {
         assert!(supports_stream_include_usage("openai"));
         assert!(supports_stream_include_usage("deepseek"));
         assert!(supports_stream_include_usage("azure"));
-        assert!(supports_stream_include_usage("google"));
+        assert!(!supports_stream_include_usage("google"));
         assert!(!supports_stream_include_usage("zhipu"));
         assert!(!supports_stream_include_usage("bailian"));
         assert!(!supports_stream_include_usage("volcengine"));

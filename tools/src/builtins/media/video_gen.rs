@@ -1,4 +1,4 @@
-//! 视频生成：Google 原生 Veo `predictLongRunning`，失败时回退 OpenAI 兼容 `…/videos`。
+//! 视频生成：Google 原生 Veo `predictLongRunning`。
 
 use std::path::{Path, PathBuf};
 
@@ -6,8 +6,7 @@ use home::{generated_dir, GeneratedKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use providers::media_http::{
-    default_video_model, google_native_generate_video, google_openai_generate_video,
-    VideoGenExtras, VideoImagePart,
+    default_video_model, google_native_generate_video, VideoGenExtras, VideoImagePart,
 };
 use providers::trait_::ProviderConfig;
 
@@ -69,7 +68,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video via Google native Veo (predictLongRunning), with OpenAI-compatible /videos fallback. Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
+        description: "Generate a short video via Google native Veo (predictLongRunning). Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,
@@ -182,7 +181,6 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     } else {
         (None, None, extend_id.map(|s| s.to_string()))
     };
-    let extend_native_only = extend_video.is_some() || extend_video_uri.is_some();
 
     let extras = VideoGenExtras {
         aspect_ratio: opt_owned(parsed.aspect_ratio.as_deref()),
@@ -223,7 +221,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         let _ = std::fs::write(&progress_path, &body);
     };
 
-    let (video, api_path) = match google_native_generate_video(
+    let video = google_native_generate_video(
         &client,
         prompt,
         &config,
@@ -231,38 +229,9 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         Some(&mut on_progress),
     )
     .await
-    {
-        Ok(v) => {
-            on_progress("api_path=native");
-            (v, "native")
-        }
-        Err(native_err) => {
-            if extend_native_only {
-                anyhow::bail!(
-                    "Google 原生视频失败: {native_err}；兼容回退需要 extend_video_id（本地/URI 续拍仅原生支持）"
-                );
-            }
-            on_progress(&format!(
-                "fallback=openai_compat reason={}",
-                native_err.to_string().replace('\n', " ")
-            ));
-            let v = google_openai_generate_video(
-                &client,
-                prompt,
-                &config,
-                &extras,
-                Some(&mut on_progress),
-            )
-            .await
-            .map_err(|compat_err| {
-                anyhow::anyhow!(
-                    "Google 原生视频失败: {native_err}; 兼容回退失败: {compat_err}"
-                )
-            })?;
-            on_progress("api_path=compat");
-            (v, "compat")
-        }
-    };
+    .map_err(|e| anyhow::anyhow!("Google Veo 视频失败: {e}"))?;
+    on_progress("api_path=native");
+    let api_path = "native";
 
     let filename = format!(
         "vid-{}-{}.mp4",
@@ -277,11 +246,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         format!("status=saved path={rel}\n{}", progress_lines.join("\n")),
     );
 
-    let op_label = if api_path == "native" {
-        "operation_name"
-    } else {
-        "operation_id"
-    };
+    let op_label = "operation_name";
     let mut lines = vec![
         format!("视频已生成：{rel}"),
         "provider=google".to_string(),
@@ -292,7 +257,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     if let Some(uri) = &video.video_uri {
         lines.push(format!("video_uri={uri}"));
     }
-    if api_path == "native" && has_native_ignored {
+    if has_native_ignored {
         lines.push("native_ignored=negative_prompt,style".to_string());
     }
     if !duration_note.is_empty() {

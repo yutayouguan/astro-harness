@@ -137,6 +137,12 @@ pub async fn probe(
             (ApiMode::Responses, _) => {
                 return fail("ApiMode::Responses 探测尚未接线".into());
             }
+            (ApiMode::Interactions, _) => {
+                match crate::interactions_chat::probe_interactions(client, &model, config).await {
+                    Ok(m) => m,
+                    Err(e) => return fail(e),
+                }
+            }
             (ApiMode::ChatCompletions, false) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
                 match probe_chat_completions(client, &endpoint, &model, &config.api_key).await {

@@ -119,7 +119,7 @@ impl ProviderKind {
             Self::Anthropic => "https://api.anthropic.com",
             Self::Deepseek => "https://api.deepseek.com/v1",
             Self::Ollama => "http://localhost:11434/v1",
-            Self::Google => "https://generativelanguage.googleapis.com/v1beta/openai",
+            Self::Google => "https://generativelanguage.googleapis.com",
             Self::Azure => "https://YOUR_RESOURCE.openai.azure.com",
             Self::Zhipu => "https://open.bigmodel.cn/api/paas/v4",
             Self::Openrouter => "https://openrouter.ai/api/v1",
@@ -1132,22 +1132,9 @@ fn validate_http_endpoint(endpoint: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// 规范化 OpenAI 兼容 API 基址。
-///
-/// 裸 Google host / 仅 `/v1beta` 映射为 `…/v1beta/openai`，避免误拼 `…/v1`。
+/// 规范化 OpenAI 兼容 API 基址（非 Google；Google 已迁 Interactions）。
 fn openai_compatible_base(endpoint: &str) -> String {
     let base = trim_slash(endpoint);
-    if base.contains("generativelanguage.googleapis.com") {
-        if base.contains("/v1beta/openai") || base.ends_with("/openai") {
-            return base;
-        }
-        let native = base
-            .trim_end_matches('/')
-            .trim_end_matches("/v1")
-            .trim_end_matches("/v1beta")
-            .trim_end_matches('/');
-        return format!("{native}/v1beta/openai");
-    }
     if base.ends_with("/v1")
         || base.ends_with("/v3")
         || base.ends_with("/v4")
@@ -1159,6 +1146,18 @@ fn openai_compatible_base(endpoint: &str) -> String {
     } else {
         format!("{base}/v1")
     }
+}
+
+/// 规范化 Google 原生基址：剥离旧配置中的 `/v1beta/openai` 后缀。
+fn google_native_endpoint(endpoint: &str) -> String {
+    let base = trim_slash(endpoint);
+    if base.ends_with("/openai") {
+        return base
+            .trim_end_matches("/openai")
+            .trim_end_matches("/v1beta")
+            .to_string();
+    }
+    base
 }
 
 const AZURE_API_VERSION: &str = "2024-06-01";
@@ -1271,84 +1270,49 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             (models, "anthropic:/v1/models".to_string())
         }
         ProviderKind::Google => {
-            // Gemini OpenAI 兼容基址：走 /models + Bearer；否则回退原生 ?key= 列表
-            let base = trim_slash(&provider.endpoint);
-            let (models, source) = if base.contains("/openai") || base.ends_with("/v1") {
-                let url = format!("{}/models", openai_compatible_base(&provider.endpoint));
-                let mut req = client.get(&url);
-                if !api_key.is_empty() {
-                    req = req.bearer_auth(&api_key);
-                }
-                let resp = req
-                    .send()
-                    .await
-                    .map_err(|e| format!("连接 Google 失败: {e}"))?;
-                let status = resp.status();
-                let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-                if !status.is_success() {
-                    let msg = body["error"]["message"]
-                        .as_str()
-                        .unwrap_or("未知错误");
-                    return Err(format!("Google 列表失败 ({status}): {msg}"));
-                }
-                let models = body["data"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|m| {
-                        let id = m["id"].as_str()?.to_string();
-                        let hints = crate::model_meta::ApiModelHints {
-                            display_name: m["display_name"].as_str().map(str::to_string),
-                            ..Default::default()
-                        };
-                        Some(crate::model_meta::enrich_from_id(&id, kind, Some(hints)))
-                    })
-                    .collect::<Vec<_>>();
-                (models, "google:openai/models".to_string())
+            // Interactions 原生基址：`/v1beta/models?key=`（自动剥离旧 /v1beta/openai）
+            let base = google_native_endpoint(&provider.endpoint);
+            let url = if base.contains("/v1beta") {
+                format!("{base}/models?key={api_key}")
             } else {
-                let url = if base.contains("/v1beta") {
-                    format!("{base}/models?key={api_key}")
-                } else {
-                    format!("{base}/v1beta/models?key={api_key}")
-                };
-                let resp = client
-                    .get(&url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("连接 Google 失败: {e}"))?;
-                let status = resp.status();
-                let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-                if !status.is_success() {
-                    let msg = body["error"]["message"]
-                        .as_str()
-                        .unwrap_or("未知错误");
-                    return Err(format!("Google 列表失败 ({status}): {msg}"));
-                }
-                let models = body["models"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|m| {
-                        let name = m["name"].as_str()?;
-                        let id = name.strip_prefix("models/").unwrap_or(name).to_string();
-                        let methods = m["supportedGenerationMethods"]
-                            .as_array()
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|v| v.as_str().map(str::to_string))
-                            .collect::<Vec<_>>();
-                        let hints = crate::model_meta::ApiModelHints {
-                            display_name: m["displayName"].as_str().map(str::to_string),
-                            context_window: m["inputTokenLimit"].as_u64(),
-                            max_output_tokens: m["outputTokenLimit"].as_u64(),
-                            supported_methods: methods,
-                        };
-                        Some(crate::model_meta::enrich_from_id(&id, kind, Some(hints)))
-                    })
-                    .collect::<Vec<_>>();
-                (models, "google:/v1beta/models".to_string())
+                format!("{base}/v1beta/models?key={api_key}")
             };
-            (models, source)
+            let resp = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| format!("连接 Google 失败: {e}"))?;
+            let status = resp.status();
+            let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            if !status.is_success() {
+                let msg = body["error"]["message"]
+                    .as_str()
+                    .unwrap_or("未知错误");
+                return Err(format!("Google 列表失败 ({status}): {msg}"));
+            }
+            let models = body["models"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|m| {
+                    let name = m["name"].as_str()?;
+                    let id = name.strip_prefix("models/").unwrap_or(name).to_string();
+                    let methods = m["supportedGenerationMethods"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect::<Vec<_>>();
+                    let hints = crate::model_meta::ApiModelHints {
+                        display_name: m["displayName"].as_str().map(str::to_string),
+                        context_window: m["inputTokenLimit"].as_u64(),
+                        max_output_tokens: m["outputTokenLimit"].as_u64(),
+                        supported_methods: methods,
+                    };
+                    Some(crate::model_meta::enrich_from_id(&id, kind, Some(hints)))
+                })
+                .collect::<Vec<_>>();
+            (models, "google:/v1beta/models".to_string())
         }
         ProviderKind::Openai
         | ProviderKind::Deepseek
@@ -1678,7 +1642,7 @@ mod tests {
     fn provider_without_music_model_deserializes_to_empty() {
         let json = r#"{
           "id":"google-1","kind":"google","display_name":"Google",
-          "endpoint":"https://generativelanguage.googleapis.com/v1beta/openai",
+          "endpoint":"https://generativelanguage.googleapis.com",
           "model":"gemini-3.5-flash","enabled":true
         }"#;
         let provider: ProviderConfig = serde_json::from_str(json).unwrap();

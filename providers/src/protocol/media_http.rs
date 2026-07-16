@@ -1,6 +1,6 @@
-//! Google OpenAI 兼容出图/视频/视觉等 HTTP 辅助。
+//! Google 原生 Veo 与 OpenAI 媒体 HTTP 辅助。
 //!
-//! TTS 请用 [`crate::interactions_http::google_interactions_tts`]。
+//! Google 出图/TTS/视觉请用 [`crate::interactions_http`]。
 
 use std::time::Duration;
 
@@ -12,7 +12,7 @@ use tokio::time::sleep;
 
 use crate::http_stream::openai_compatible_base;
 use crate::interactions_http::VisionMode;
-use crate::trait_::{GeneratedImage, ProviderConfig};
+use crate::trait_::ProviderConfig;
 
 /// 去掉 endpoint 末尾斜杠。
 fn trim_slash(endpoint: &str) -> String {
@@ -37,26 +37,6 @@ pub fn google_native_base(config: &ProviderConfig) -> String {
     base
 }
 
-/// Google OpenAI 兼容基址（`…/v1beta/openai`）。
-pub fn google_openai_base(config: &ProviderConfig) -> String {
-    let raw = config
-        .base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("https://generativelanguage.googleapis.com/v1beta/openai");
-    let base = trim_slash(raw);
-    if base.contains("/v1beta/openai") || base.ends_with("/openai") {
-        return openai_compatible_base(&base);
-    }
-    let native = google_native_base(config);
-    if native.contains("/v1beta") {
-        format!("{native}/openai")
-    } else {
-        format!("{native}/v1beta/openai")
-    }
-}
-
 /// 默认视频模型。
 pub fn default_video_model() -> &'static str {
     "veo-3.1-generate-preview"
@@ -76,7 +56,6 @@ pub fn default_vision_model(provider: &str) -> &'static str {
     }
 }
 
-/// 拼装 OpenAI 兼容视觉 `chat/completions` 请求体。
 /// 默认 Whisper 转写模型。
 pub fn default_whisper_model() -> &'static str {
     "whisper-1"
@@ -275,8 +254,9 @@ pub async fn openai_audio_transcriptions(
 
 /// OpenAI 兼容视觉：`POST …/chat/completions`，content 含 text + image_url。
 ///
+/// 仅 OpenAI 兼容 base（默认 `https://api.openai.com/v1`）；Google 请用
+/// [`crate::interactions_http::google_interactions_vision`]。
 /// `image_url` 可为 `data:image/...;base64,...` 或 `http(s)://`。
-/// `provider` 为 `"google"` 时走 [`google_openai_base`]，否则走 OpenAI 兼容 base。
 
 pub(crate) fn build_openai_vision_body(
     model: &str,
@@ -375,89 +355,6 @@ pub async fn openai_vision_completions(
         }
     }
     anyhow::bail!("视觉响应 content 格式无法解析")
-}
-
-/// 默认 Google 图片兼容模型。
-pub fn default_google_compat_image_model() -> &'static str {
-    "gemini-3.1-flash-image"
-}
-
-/// Google OpenAI 兼容出图：`POST …/images/generations`。
-pub async fn google_openai_generate_image(
-    client: &Client,
-    prompt: &str,
-    config: &ProviderConfig,
-) -> Result<Vec<GeneratedImage>> {
-    if config.api_key.trim().is_empty() {
-        anyhow::bail!("Google API Key 为空");
-    }
-    let model = if config.model.trim().is_empty() {
-        default_google_compat_image_model()
-    } else {
-        config.model.trim()
-    };
-    let base = google_openai_base(config);
-    let url = format!("{base}/images/generations");
-    let mut body = json!({
-        "model": model,
-        "prompt": prompt,
-        "response_format": "b64_json",
-        "n": 1,
-    });
-    // Gemini 专有：宽高比（工具可经 additional_params.aspect_ratio 注入）
-    if let Some(ar) = config
-        .additional_params
-        .get("aspect_ratio")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        body["aspect_ratio"] = json!(ar);
-    }
-
-    let response = client
-        .post(&url)
-        .bearer_auth(&config.api_key)
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("连接 Google 兼容出图 API 失败: {url}"))?;
-
-    let status = response.status();
-    let v: Value = response
-        .json()
-        .await
-        .context("解析 Google 兼容出图响应失败")?;
-    if !status.is_success() {
-        let msg = v
-            .pointer("/error/message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("Google 兼容出图失败");
-        anyhow::bail!("Google images HTTP {status}: {msg}");
-    }
-
-    let data_arr = v
-        .get("data")
-        .and_then(|d| d.as_array())
-        .ok_or_else(|| anyhow!("Google 兼容出图响应无 data"))?;
-    let mut images = Vec::new();
-    for item in data_arr {
-        let Some(b64) = item.get("b64_json").and_then(|b| b.as_str()) else {
-            continue;
-        };
-        let data = base64::engine::general_purpose::STANDARD
-            .decode(b64)
-            .context("解码 Google 兼容出图 base64 失败")?;
-        images.push(GeneratedImage {
-            data,
-            mime_type: "image/png".to_string(),
-        });
-    }
-    if images.is_empty() {
-        anyhow::bail!("Google 兼容出图未返回图片");
-    }
-    Ok(images)
 }
 
 /// 视频生成结果。
@@ -637,14 +534,6 @@ pub fn extract_veo_video_uri(status_body: &Value) -> Result<String> {
         .ok_or_else(|| anyhow!("Veo 完成但缺少 video.uri"))
 }
 
-fn multipart_image(field: &str, img: VideoImagePart) -> Result<(String, reqwest::multipart::Part)> {
-    let part = reqwest::multipart::Part::bytes(img.bytes)
-        .file_name(img.filename)
-        .mime_str(&img.mime)
-        .map_err(|e| anyhow!("视频图片字段 {field} mime 无效: {e}"))?;
-    Ok((field.to_string(), part))
-}
-
 async fn google_api_get_bytes(client: &Client, url: &str, api_key: &str) -> Result<Vec<u8>> {
     let response = client
         .get(url)
@@ -791,202 +680,6 @@ pub async fn google_native_generate_video(
     })
 }
 
-/// 创建并轮询 Google OpenAI 兼容视频，完成后下载字节。
-///
-/// `on_progress` 在创建成功与每次轮询时回调（如 `status=processing`）。
-pub async fn google_openai_generate_video(
-    client: &Client,
-    prompt: &str,
-    config: &ProviderConfig,
-    extras: &VideoGenExtras,
-    mut on_progress: Option<&mut dyn FnMut(&str)>,
-) -> Result<GeneratedVideo> {
-    if config.api_key.trim().is_empty() {
-        anyhow::bail!("Google API Key 为空");
-    }
-    let model = if config.model.trim().is_empty() {
-        default_video_model()
-    } else {
-        config.model.trim()
-    };
-    let base = google_openai_base(config);
-    let create_url = format!("{base}/videos");
-
-    let mut form = reqwest::multipart::Form::new()
-        .text("model", model.to_string())
-        .text("prompt", prompt.to_string());
-    if let Some(ar) = extras
-        .aspect_ratio
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        form = form.text("aspect_ratio", ar.to_string());
-    }
-    if let Some(sec) = extras.duration_seconds.filter(|s| *s > 0) {
-        form = form.text("duration_seconds", sec.to_string());
-    }
-    if let Some(res) = extras
-        .resolution
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        form = form.text("resolution", res.to_string());
-    }
-    if let Some(neg) = extras
-        .negative_prompt
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        form = form.text("negative_prompt", neg.to_string());
-    }
-    if let Some(style) = extras
-        .style
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        form = form.text("style", style.to_string());
-    }
-    if let Some(id) = extras
-        .extend_video_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        form = form.text("extend_video_id", id.to_string());
-    }
-    if let Some(pg) = extras
-        .person_generation
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        form = form.text("person_generation", pg.to_string());
-    }
-    if let Some(seed) = extras.seed {
-        form = form.text("seed", seed.to_string());
-    }
-    if let Some(img) = extras.image.clone() {
-        let (name, part) = multipart_image("image", img)?;
-        form = form.part(name, part);
-    }
-    if let Some(img) = extras.last_frame.clone() {
-        let (name, part) = multipart_image("last_frame", img)?;
-        form = form.part(name, part);
-    }
-    for img in extras.reference_images.clone() {
-        let (name, part) = multipart_image("reference_images", img)?;
-        form = form.part(name, part);
-    }
-
-    let emit = |cb: &mut Option<&mut dyn FnMut(&str)>, msg: &str| {
-        if let Some(f) = cb.as_mut() {
-            f(msg);
-        }
-    };
-
-    emit(&mut on_progress, "status=creating");
-    let create_resp = client
-        .post(&create_url)
-        .bearer_auth(&config.api_key)
-        .multipart(form)
-        .send()
-        .await
-        .with_context(|| format!("创建 Google 视频失败: {create_url}"))?;
-    let create_status = create_resp.status();
-    let create_body: Value = create_resp
-        .json()
-        .await
-        .context("解析 Google 视频创建响应失败")?;
-    if !create_status.is_success() {
-        let msg = create_body
-            .pointer("/error/message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("创建视频失败");
-        anyhow::bail!("Google videos HTTP {create_status}: {msg}");
-    }
-
-    let op_id = create_body
-        .get("id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow!("视频响应缺少 id"))?
-        .to_string();
-    emit(
-        &mut on_progress,
-        &format!("status=queued operation_id={op_id}"),
-    );
-
-    let poll_url = format!("{base}/videos/{op_id}");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10 * 60);
-    loop {
-        if tokio::time::Instant::now() > deadline {
-            anyhow::bail!("视频生成超时（operation id={op_id}）");
-        }
-        let poll = client
-            .get(&poll_url)
-            .bearer_auth(&config.api_key)
-            .send()
-            .await
-            .with_context(|| format!("轮询 Google 视频失败: {poll_url}"))?;
-        let status = poll.status();
-        let body: Value = poll.json().await.context("解析视频轮询响应失败")?;
-        if !status.is_success() {
-            let msg = body
-                .pointer("/error/message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("轮询视频失败");
-            anyhow::bail!("Google videos poll HTTP {status}: {msg}");
-        }
-        let state = body
-            .get("status")
-            .and_then(|s| s.as_str())
-            .unwrap_or("processing");
-        emit(
-            &mut on_progress,
-            &format!("status={state} operation_id={op_id}"),
-        );
-        match state {
-            "completed" => {
-                let url = body
-                    .get("url")
-                    .and_then(|u| u.as_str())
-                    .ok_or_else(|| anyhow!("视频已完成但缺少 url（id={op_id}）"))?;
-                emit(&mut on_progress, "status=downloading");
-                let bytes = client
-                    .get(url)
-                    .bearer_auth(&config.api_key)
-                    .send()
-                    .await
-                    .context("下载生成视频失败")?
-                    .error_for_status()
-                    .context("下载视频 HTTP 失败")?
-                    .bytes()
-                    .await
-                    .context("读取视频字节失败")?;
-                emit(&mut on_progress, "status=completed");
-                return Ok(GeneratedVideo {
-                    data: bytes.to_vec(),
-                    mime_type: "video/mp4".to_string(),
-                    operation_id: op_id,
-                    video_uri: Some(url.to_string()),
-                });
-            }
-            "failed" => {
-                let err = body
-                    .pointer("/error/message")
-                    .and_then(|m| m.as_str())
-                    .or_else(|| body.get("error").and_then(|e| e.as_str()))
-                    .unwrap_or("unknown");
-                anyhow::bail!("视频生成失败（id={op_id}）: {err}");
-            }
-            _ => sleep(Duration::from_secs(10)).await,
-        }
-    }
-}
-
 /// 将 PCM s16le 封装为 WAV。
 pub fn pcm_to_wav(pcm: &[u8], sample_rate: u32, channels: u16, bits_per_sample: u16) -> Vec<u8> {
     let byte_rate = sample_rate * u32::from(channels) * u32::from(bits_per_sample) / 8;
@@ -1013,22 +706,6 @@ pub fn pcm_to_wav(pcm: &[u8], sample_rate: u32, channels: u16, bits_per_sample: 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn google_openai_base_from_compat_endpoint() {
-        let cfg = ProviderConfig {
-            api_key: "k".into(),
-            base_url: Some(
-                "https://generativelanguage.googleapis.com/v1beta/openai".into(),
-            ),
-            model: String::new(),
-            ..ProviderConfig::default()
-        };
-        assert_eq!(
-            google_openai_base(&cfg),
-            "https://generativelanguage.googleapis.com/v1beta/openai"
-        );
-    }
 
     #[test]
     fn pcm_wav_header_size() {

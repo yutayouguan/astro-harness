@@ -152,8 +152,8 @@ pub enum AuthKind {
     Bearer,
     /// Anthropic `x-api-key`
     AnthropicKey,
-    /// Google 原生 `?key=`（出图等仍可能使用；chat 已改 Bearer）
-    GoogleQuery,
+    /// Google `x-goog-api-key` header（Interactions / 原生 API）
+    GoogleApiKey,
     /// Azure `api-key` header
     AzureHeader,
     /// 本地 Ollama 等无需密钥

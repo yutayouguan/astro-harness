@@ -2,15 +2,17 @@
 
 use crate::trait_::AuthKind;
 
-/// 底层协议适配器种类（对齐 Hermes 三协议）。
+/// 底层协议适配器种类（对齐 Hermes 三协议 + Gemini Interactions）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApiMode {
-    /// OpenAI Chat Completions（含兼容网关、Gemini OpenAI compat、Ollama `/v1`）。
+    /// OpenAI Chat Completions（含兼容网关、Ollama `/v1`）。
     ChatCompletions,
     /// Anthropic Messages API。
     AnthropicMessages,
     /// OpenAI Responses API（骨架；默认表暂无绑定）。
     Responses,
+    /// Google Gemini Interactions API（`POST /v1beta/interactions`）。
+    Interactions,
 }
 
 /// 单个供应商的静态配置。
@@ -73,10 +75,10 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "google",
-        api_mode: ApiMode::ChatCompletions,
-        // Gemini OpenAI 兼容：https://ai.google.dev/gemini-api/docs/openai
-        default_base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
-        auth: AuthKind::Bearer,
+        api_mode: ApiMode::Interactions,
+        // Gemini Interactions：https://ai.google.dev/gemini-api/docs/interactions
+        default_base_url: "https://generativelanguage.googleapis.com",
+        auth: AuthKind::GoogleApiKey,
         env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
         azure_deployment_style: false,
         default_model: "gemini-3.5-flash",
@@ -247,11 +249,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn google_uses_openai_compat_chat() {
+    fn google_uses_interactions_api() {
         let p = resolve("google").expect("google");
-        assert_eq!(p.api_mode, ApiMode::ChatCompletions);
-        assert!(p.default_base_url.contains("/v1beta/openai"));
-        assert_eq!(p.auth, AuthKind::Bearer);
+        assert_eq!(p.api_mode, ApiMode::Interactions);
+        assert_eq!(
+            p.default_base_url,
+            "https://generativelanguage.googleapis.com"
+        );
+        assert!(!p.default_base_url.contains("/v1beta/openai"));
+        assert_eq!(p.auth, AuthKind::GoogleApiKey);
         assert!(!p.azure_deployment_style);
     }
 
