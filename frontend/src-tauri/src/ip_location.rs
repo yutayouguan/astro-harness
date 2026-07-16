@@ -78,8 +78,8 @@ mod tests {
 
     #[test]
     fn rejects_failed_response() {
-        let err = parse_ipwho_response(r#"{"success":false,"message":"rate limited"}"#)
-            .unwrap_err();
+        let err =
+            parse_ipwho_response(r#"{"success":false,"message":"rate limited"}"#).unwrap_err();
         assert_eq!(err, "IP location service rejected the request");
     }
 
