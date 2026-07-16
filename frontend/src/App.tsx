@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type CSSProperties,
   type SVGProps,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -104,6 +105,8 @@ const NAV: { id: NavId; labelKey: MessageKey; Icon: IconComp; tone: Tone }[] = [
   { id: "insights", labelKey: "nav.insights", Icon: IconInsights, tone: "amber" },
   { id: "settings", labelKey: "nav.settings", Icon: IconSettings, tone: "pink" },
 ];
+
+const NAV_ROW_PITCH_PX = 44;
 
 const PAGE_META: Record<NavId, { titleKey: MessageKey; subKey: MessageKey }> = {
   chat: { titleKey: "page.chat.title", subKey: "page.chat.sub" },
@@ -502,6 +505,10 @@ export default function App() {
   const meta = PAGE_META[nav];
   const activeToneData = activeTone;
   const ActiveIcon = NAV.find((n) => n.id === nav)?.Icon ?? IconChat;
+  const activeNavIndex = NAV.findIndex((item) => item.id === nav);
+  const sidebarNavStyle = {
+    "--nav-indicator-y": `${Math.max(activeNavIndex, 0) * NAV_ROW_PITCH_PX}px`,
+  } as CSSProperties;
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -574,33 +581,36 @@ export default function App() {
               </button>
             </div>
           </div>
-          {NAV.map((item) => {
-            const label = t(item.labelKey);
-            const pendingBadge =
-              item.id === "memory" && chat.memoryPendingCount > 0
-                ? chat.memoryPendingCount > 99
-                  ? "99+"
-                  : String(chat.memoryPendingCount)
-                : null;
-            return (
-              <button
-                key={item.id}
-                className={`nav-item ${nav === item.id ? "active" : ""}`}
-                data-tone={item.tone}
-                onClick={() => setNav(item.id)}
-                {...(sidebar.showSidebarLabels
-                  ? {}
-                  : { "data-tip": label, "data-tip-pos": "right" as const })}
-                aria-label={pendingBadge ? `${label} (${pendingBadge})` : label}
-              >
-                <span className="nav-icon" aria-hidden>
-                  <item.Icon />
-                  {pendingBadge ? <span className="nav-badge">{pendingBadge}</span> : null}
-                </span>
-                <span className="nav-label">{label}</span>
-              </button>
-            );
-          })}
+          <div className="sidebar-nav" style={sidebarNavStyle}>
+            <span className="sidebar-nav-indicator" aria-hidden />
+            {NAV.map((item) => {
+              const label = t(item.labelKey);
+              const pendingBadge =
+                item.id === "memory" && chat.memoryPendingCount > 0
+                  ? chat.memoryPendingCount > 99
+                    ? "99+"
+                    : String(chat.memoryPendingCount)
+                  : null;
+              return (
+                <button
+                  key={item.id}
+                  className={`nav-item ${nav === item.id ? "active" : ""}`}
+                  data-tone={item.tone}
+                  onClick={() => setNav(item.id)}
+                  {...(sidebar.showSidebarLabels
+                    ? {}
+                    : { "data-tip": label, "data-tip-pos": "right" as const })}
+                  aria-label={pendingBadge ? `${label} (${pendingBadge})` : label}
+                >
+                  <span className="nav-icon" aria-hidden>
+                    <item.Icon />
+                    {pendingBadge ? <span className="nav-badge">{pendingBadge}</span> : null}
+                  </span>
+                  <span className="nav-label">{label}</span>
+                </button>
+              );
+            })}
+          </div>
         </aside>
         {sidebar.sidebarCtx ? (
           <SidebarContextMenu
