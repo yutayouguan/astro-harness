@@ -168,6 +168,25 @@
 
 /* [🔍] [新建会话] [Agent▾]；搜索展开时占满整行 */
 .chat-session-toolbar {
+  --session-toolbar-glass-fill:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.18));
+  --session-toolbar-glass-fill-hover:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 58%, rgba(255, 255, 255, 0.22));
+  --session-toolbar-glass-edge:
+    color-mix(in srgb, var(--tone, #64748b) 16%, rgba(255, 255, 255, 0.5));
+  --session-toolbar-glass-shadow:
+    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
+    0 1px 3px rgba(15, 23, 42, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28);
+  --session-toolbar-glass-shadow-hover:
+    0 10px 24px color-mix(in srgb, var(--tone, #64748b) 14%, transparent),
+    0 2px 6px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+
   display: flex;
   align-items: center;
   gap: 8px;
@@ -207,22 +226,38 @@
 }
 
 .chat-session-toolbar .expandable-search-btn,
-.chat-session-toolbar .expandable-search-field {
-  width: 36px;
+.chat-session-toolbar .expandable-search-field,
+.chat-session-toolbar .chat-session-new,
+.chat-session-toolbar .agent-picker-chip {
+  box-sizing: border-box;
   height: 36px;
+  border: 1px solid var(--session-toolbar-glass-edge);
   border-radius: 12px;
-  color: var(--tone-blue, #2563eb);
-  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 16%, rgba(255, 255, 255, 0.5));
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--tone-blue, #2563eb) 8%, rgba(255, 255, 255, 0.18));
+  background: var(--session-toolbar-glass-fill);
+  box-shadow: var(--session-toolbar-glass-shadow);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
-.chat-session-toolbar .expandable-search-btn:hover {
-  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 32%, rgba(255, 255, 255, 0.75));
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-    color-mix(in srgb, var(--tone-blue, #2563eb) 14%, rgba(255, 255, 255, 0.22));
+.chat-session-toolbar .expandable-search-btn,
+.chat-session-toolbar .expandable-search-field {
+  width: 36px;
+}
+
+.chat-session-toolbar .expandable-search-btn,
+.chat-session-toolbar .expandable-search-field,
+.chat-session-toolbar .chat-session-new {
+  color: var(--tone-blue, #2563eb);
+}
+
+.chat-session-toolbar .expandable-search-btn:hover,
+.chat-session-toolbar .chat-session-new:hover,
+.chat-session-toolbar .agent-picker-chip:hover:not(:disabled),
+.chat-session-toolbar .agent-picker-chip.is-open {
+  background: var(--session-toolbar-glass-fill-hover);
+  border-color:
+    color-mix(in srgb, var(--tone, #64748b) 32%, rgba(255, 255, 255, 0.75));
+  box-shadow: var(--session-toolbar-glass-shadow-hover);
 }
 
 .chat-session-agent-picker .agent-picker-chip {
@@ -253,19 +288,12 @@
   height: 36px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 28%, var(--chip-border));
-  background: color-mix(in srgb, var(--tone-blue, #2563eb) 10%, transparent);
   color: var(--tone-blue, #2563eb);
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
   white-space: nowrap;
-}
-
-.chat-session-new:hover {
-  background: color-mix(in srgb, var(--tone-blue, #2563eb) 16%, transparent);
-  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 42%, var(--chip-border));
 }
 
 .chat-session-new:active {
