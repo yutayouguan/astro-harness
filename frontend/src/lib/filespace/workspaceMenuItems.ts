@@ -1,5 +1,5 @@
 /** 工作区右键菜单项生成。 */
-import type { FileMenuAction } from "../../components/FileContextMenu";
+import type { FileMenuAction } from "../../components/filespace/FileContextMenu";
 import type { MessageKey } from "../../i18n/messages";
 
 export type WorkspaceMenuItem = {
