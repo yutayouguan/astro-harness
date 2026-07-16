@@ -43,7 +43,14 @@
 - `mapHistoryMessages`：过滤非 user/assistant；activity kind/status 归一；uiSurfaces status 归一
 - `countChatBubbles`：排除 welcome
 
-测试文件放对应 `*.test.ts`（与现有 `lib/chat/*.test.ts` 一致）。用项目既有 vitest/测试方式；若前端目前仅靠 `tsc` 跑部分测试，则沿用仓库现有 chat lib 测试命令。
+测试文件放对应 `*.test.ts`（与现有 `lib/chat/*.test.ts` 一致）。运行方式与仓库一致：
+
+```bash
+cd frontend && node --experimental-strip-types --test \
+  src/lib/chat/attachments.test.ts \
+  src/lib/chat/historyMap.test.ts \
+  src/lib/chat/tokensPerSec.test.ts
+```
 
 ### 验收
 
