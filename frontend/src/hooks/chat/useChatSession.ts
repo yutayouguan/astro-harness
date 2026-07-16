@@ -23,6 +23,7 @@ import {
   persistAfterEditTruncate,
   saveChatSession,
 } from "../../lib/chat/chatSessionStore";
+import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
 import { MSG_DISSOLVE_MS } from "../../components/chat/MsgDissolveOverlay";
 import type {
   ArtifactDto,
@@ -37,6 +38,7 @@ import type {
   MessageTokenUsage,
   PendingInterrupt,
   ProviderDto,
+  RecentSessionDto,
 } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
@@ -515,6 +517,66 @@ export function useChatSession({
       // keep welcome page if backend unavailable
     }
   }, [applyRestoredHistory, messages, sessionId, streaming]);
+
+  const clearLocalChatSurface = useCallback(() => {
+    unlistenRef.current?.();
+    unlistenRef.current = null;
+    clearStreamBuffers();
+    clearChatSession();
+    pendingKeepChatBubblesRef.current = null;
+    setSessionId(null);
+    setAttachments((prev) => {
+      for (const a of prev) {
+        if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      }
+      return [];
+    });
+    setStreaming(false);
+    setStreamPaused(false);
+    setTokenUsage(null);
+    setContextUsage(null);
+    activeAssistantIdRef.current = null;
+    setStatus("ready");
+    setStatusPhase("ready");
+    setStatusDetail(null);
+    setFocusMessageId(null);
+    setMessages([]);
+    setSessionPendingInterrupts([]);
+    setSessionReadOnly(false);
+    setSessionEndReason(null);
+    currentRunIdRef.current = null;
+    setCurrentTurnId(null);
+    setInput("");
+    setEmptyMode("chat");
+    setNav("chat");
+  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let cancelled = false;
+    const syncCurrentSession = async () => {
+      if (!sessionId) return;
+      try {
+        const rows = await invoke<RecentSessionDto[]>("list_recent_sessions", {
+          limit: 50,
+        });
+        if (cancelled) return;
+        const stillExists = rows?.some((row) => row.sessionId === sessionId) ?? false;
+        if (!stillExists) {
+          clearLocalChatSurface();
+        }
+      } catch {
+        // ignore list refresh failures during session changes
+      }
+    };
+    const unlisten = subscribeSessionsChanged(() => {
+      void syncCurrentSession();
+    });
+    return () => {
+      cancelled = true;
+      unlisten();
+    };
+  }, [clearLocalChatSurface, sessionId]);
 
   useEffect(() => {
     if (nav !== "chat") return;
@@ -1095,35 +1157,8 @@ export function useChatSession({
         (e) => console.warn("chat_control new_chat failed", e),
       );
     }
-    unlistenRef.current?.();
-    unlistenRef.current = null;
-    clearStreamBuffers();
-    clearChatSession();
-    pendingKeepChatBubblesRef.current = null;
-    setSessionId(null);
-    setAttachments((prev) => {
-      for (const a of prev) {
-        if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
-      }
-      return [];
-    });
-    setStreaming(false);
-    setStreamPaused(false);
-    setTokenUsage(null);
-    setContextUsage(null);
-    activeAssistantIdRef.current = null;
-    setStatus("ready");
-    setStatusPhase("ready");
-    setStatusDetail(null);
-    setFocusMessageId(null);
-    setMessages([]);
-    setSessionPendingInterrupts([]);
-    setSessionReadOnly(false);
-    setSessionEndReason(null);
-    currentRunIdRef.current = null;
-    setCurrentTurnId(null);
-    setNav("chat");
-  }, [sessionId, clearStreamBuffers, activeAssistantIdRef, currentRunIdRef, setNav]);
+    clearLocalChatSurface();
+  }, [sessionId, clearLocalChatSurface]);
 
   const confirmIfStreaming = useCallback(() => {
     if (!streaming) return true;
@@ -1336,5 +1371,6 @@ export function useChatSession({
     attachArtifactsToChat,
     applyRestoredHistory,
     confirmIfStreaming,
+    clearDeletedCurrentSession: clearLocalChatSurface,
   };
 }

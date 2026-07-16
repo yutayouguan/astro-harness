@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Plus } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
+import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
 import type { RecentSessionDto } from "../../types";
 import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
@@ -19,6 +20,8 @@ type Props = {
   onNewSession: () => void;
   /** 新建 Agent 引导 */
   onNewAgent: () => void;
+  /** 列表外部触发当前会话清理时使用 */
+  onClearDeletedCurrentSession?: () => void | Promise<void>;
 };
 
 export default function ChatSessionList({
@@ -64,6 +67,13 @@ export default function ChatSessionList({
     void loadSessions();
     void loadAgents();
   }, [loadSessions, loadAgents]);
+
+  useEffect(() => {
+    const unlisten = subscribeSessionsChanged(() => {
+      void loadSessions();
+    });
+    return () => unlisten();
+  }, [loadSessions]);
 
   useAgentsChanged((payload) => {
     setActiveAgentId(normalizeAgentId(payload.active_agent_id));
