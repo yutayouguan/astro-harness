@@ -35,6 +35,10 @@ pub enum HookOutcome {
     Skip(String),
     /// `pre_gateway_dispatch`：改写用户消息。
     Rewrite(String),
+    /// transform 类钩子：替换文本。
+    ReplaceText(String),
+    /// `pre_verify`：继续本轮并注入提示。
+    KeepGoing(String),
 }
 
 impl Default for HookOutcome {
