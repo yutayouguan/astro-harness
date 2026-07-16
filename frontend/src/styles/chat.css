@@ -367,16 +367,45 @@ html[data-theme="light"] .msg-actions {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: linear-gradient(145deg, rgba(192, 132, 252, 0.5), rgba(99, 102, 241, 0.35));
-  border: 1px solid var(--glass-edge);
-  color: white;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06)),
+    color-mix(in srgb, var(--tone-soft, transparent) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 22%, var(--glass-edge));
+  color: var(--tone, var(--ink));
   font-size: 11px;
   font-weight: 700;
+  overflow: hidden;
+}
+
+.avatar.is-model {
+  color: var(--tone, var(--ink));
+}
+
+.avatar.is-model .model-brand-icon,
+.avatar.is-model .model-brand-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.avatar .agent-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+html[data-theme="dark"] .avatar {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft, transparent) 55%, rgba(8, 6, 18, 0.55));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 28%, rgba(255, 255, 255, 0.1));
 }
 
 .avatar.error {
   background: rgba(251, 113, 133, 0.25);
   color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 35%, transparent);
 }
 
 .bubble {
@@ -3358,10 +3387,10 @@ html[data-theme="light"] .send-btn--round {
   translate: -50% -50%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.8), transparent 42%),
-    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 42%, transparent), transparent 68%);
-  filter: blur(10px);
-  opacity: 0.85;
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.42), transparent 42%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 32%, transparent), transparent 68%);
+  filter: blur(12px);
+  opacity: 0.55;
   animation: welcome-orb-breathe 6.5s ease-in-out infinite;
 }
 
@@ -3370,9 +3399,9 @@ html[data-theme="light"] .send-btn--round {
   height: 110px;
   top: 68%;
   background:
-    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 30%, transparent), transparent 70%);
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 24%, transparent), transparent 70%);
   filter: blur(18px);
-  opacity: 0.45;
+  opacity: 0.32;
   animation-delay: -2.2s;
 }
 
@@ -3383,22 +3412,70 @@ html[data-theme="light"] .send-btn--round {
   left: 50%;
   translate: -50% -50%;
   background:
-    radial-gradient(circle, color-mix(in srgb, var(--tone-cyan) 35%, transparent), transparent 70%);
+    radial-gradient(circle, color-mix(in srgb, var(--tone-cyan) 26%, transparent), transparent 70%);
   filter: blur(12px);
-  opacity: 0.5;
+  opacity: 0.34;
   animation-delay: -4s;
 }
 
+/* 只做呼吸缩放，不改 opacity，避免暗色主题被动画顶成过亮 */
 @keyframes welcome-orb-breathe {
   0%,
   100% {
     transform: scale(1);
-    opacity: 0.8;
   }
   50% {
-    transform: scale(1.06);
-    opacity: 1;
+    transform: scale(1.05);
   }
+}
+
+html[data-theme="dark"] .chat-welcome-orb {
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.12), transparent 46%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 18%, transparent), transparent 70%);
+  opacity: 0.38;
+  filter: blur(14px);
+}
+
+html[data-theme="dark"] .chat-welcome-orb--soft {
+  background:
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 14%, transparent), transparent 72%);
+  opacity: 0.22;
+}
+
+html[data-theme="dark"] .chat-welcome-orb--spark {
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--tone-cyan) 14%, transparent), transparent 72%);
+  opacity: 0.2;
+}
+
+html[data-theme="dark"] .chat-welcome-mark-glow {
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      color-mix(in srgb, var(--tone-blue) 12%, transparent),
+      transparent 72%
+    );
+  opacity: 0.4;
+  filter: blur(12px);
+}
+
+html[data-theme="dark"] .chat-welcome-illust {
+  opacity: 0.82;
+}
+
+html[data-theme="dark"] .chat-welcome-illust svg {
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--tone-blue) 10%, transparent));
+}
+
+html[data-theme="dark"] .chat-welcome-wordmark-astro {
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--tone-blue) 78%, var(--ink-soft)) 0%,
+    color-mix(in srgb, var(--tone-cyan) 40%, var(--tone-blue)) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 .chat-welcome-copy {
@@ -3541,16 +3618,16 @@ html[data-theme="light"] .send-btn--round {
 html[data-theme="dark"] .chat-welcome-title-brand {
   background: linear-gradient(
     120deg,
-    #f8fafc 0%,
-    color-mix(in srgb, var(--tone-blue) 72%, #fff) 52%,
-    color-mix(in srgb, var(--tone-purple) 58%, #fff) 100%
+    var(--ink) 0%,
+    color-mix(in srgb, var(--tone-blue) 48%, var(--ink)) 52%,
+    color-mix(in srgb, var(--tone-purple) 38%, var(--ink)) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
 }
 
 html[data-theme="dark"] .chat-welcome-wordmark-agent {
-  color: color-mix(in srgb, var(--ink-mute) 90%, #fff);
+  color: var(--ink-mute);
 }
 
 .chat-welcome-sub {
@@ -3771,10 +3848,10 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   translate: -50% -50%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.8), transparent 42%),
-    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 36%, transparent), transparent 68%);
-  filter: blur(10px);
-  opacity: 0.8;
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.36), transparent 44%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 28%, transparent), transparent 68%);
+  filter: blur(12px);
+  opacity: 0.5;
   animation: welcome-orb-breathe 6.5s ease-in-out infinite;
 }
 
@@ -3784,10 +3861,24 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   width: 260px;
   height: 160px;
   background:
-    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 30%, transparent), transparent 70%);
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 22%, transparent), transparent 70%);
   filter: blur(20px);
-  opacity: 0.55;
+  opacity: 0.35;
   animation-delay: -2.4s;
+}
+
+html[data-theme="dark"] .chat-agent-guide-orb {
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.1), transparent 48%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 16%, transparent), transparent 70%);
+  opacity: 0.34;
+  filter: blur(16px);
+}
+
+html[data-theme="dark"] .chat-agent-guide-orb--soft {
+  background:
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 12%, transparent), transparent 72%);
+  opacity: 0.2;
 }
 
 .chat-agent-guide-card {
@@ -3829,9 +3920,18 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 
 html[data-theme="dark"] .chat-agent-guide-card {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.08)) 80%, transparent);
-  box-shadow: var(--shadow-card), var(--glass-rim);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.55)) 82%, rgba(8, 6, 18, 0.35));
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] .chat-agent-guide-card::before {
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--tone-blue) 8%, transparent), transparent 44%),
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--tone-purple) 7%, transparent), transparent 40%);
+  opacity: 0.55;
 }
 
 .chat-agent-guide-close {
@@ -3925,6 +4025,24 @@ html[data-theme="dark"] .chat-agent-guide-close:hover {
   mix-blend-mode: soft-light;
 }
 
+html[data-theme="dark"] .chat-agent-guide-monogram-ring {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.16),
+      transparent 42%,
+      transparent 58%,
+      color-mix(in srgb, var(--tone-purple) 18%, transparent)
+    );
+  opacity: 0.55;
+}
+
+html[data-theme="dark"] .chat-agent-guide-monogram {
+  box-shadow:
+    var(--lens-shadow),
+    0 0 0 5px color-mix(in srgb, var(--tone-blue) 5%, transparent);
+}
+
 .chat-agent-guide-monogram img,
 .chat-agent-guide-monogram-text {
   position: relative;
@@ -3955,13 +4073,16 @@ html[data-theme="dark"] .chat-agent-guide-close:hover {
   font-size: 0.72rem;
   font-weight: 650;
   letter-spacing: 0.03em;
-  color: var(--tone-blue);
-  background: var(--tone-blue-soft);
-  border: 1px solid color-mix(in srgb, var(--tone-blue) 22%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: color-mix(in srgb, var(--tone, var(--tone-blue)) 72%, var(--ink-soft));
+  background: color-mix(in srgb, var(--tone-soft, var(--tone-blue-soft)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 18%, var(--glass-edge));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 html[data-theme="dark"] .chat-agent-guide-eyebrow {
+  color: color-mix(in srgb, var(--tone, var(--tone-blue)) 55%, var(--ink-mute));
+  background: color-mix(in srgb, var(--tone-soft, var(--tone-blue-soft)) 38%, rgba(8, 6, 18, 0.35));
+  border-color: color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, rgba(255, 255, 255, 0.08));
   box-shadow: none;
 }
 
@@ -3987,9 +4108,9 @@ html[data-theme="dark"] .chat-agent-guide-eyebrow {
 html[data-theme="dark"] .chat-agent-guide-title {
   background: linear-gradient(
     120deg,
-    #f8fafc 0%,
-    color-mix(in srgb, var(--tone-blue) 70%, #fff) 55%,
-    color-mix(in srgb, var(--tone-purple) 55%, #fff) 100%
+    var(--ink) 0%,
+    color-mix(in srgb, var(--tone-blue) 45%, var(--ink)) 55%,
+    color-mix(in srgb, var(--tone-purple) 36%, var(--ink)) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -4023,9 +4144,9 @@ html[data-theme="dark"] .chat-agent-guide-title {
 
 html[data-theme="dark"] .chat-agent-guide-steps {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.06)) 50%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+    color-mix(in srgb, rgba(8, 6, 18, 0.45) 70%, var(--glass-inner, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .chat-agent-guide-step {
