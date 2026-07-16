@@ -499,16 +499,34 @@ fn load_models_cache() -> ModelsCacheFile {
         .unwrap_or_default()
 }
 
-/// 将模型列表缓存写入磁盘。
+/// 串行化 models.json 的读改写，避免并发 list_provider_models 互相覆盖 / 撞临时文件。
+static MODELS_CACHE_LOCK: Mutex<()> = Mutex::new(());
+
+/// 将模型列表缓存原子写入磁盘（调用方须已持有 `MODELS_CACHE_LOCK`）。
 fn save_models_cache(cache: &ModelsCacheFile) -> Result<(), String> {
     let path = models_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(cache).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+    // 唯一临时名：多线程若共用 models.json.tmp，一方 rename 后另一方会 ENOENT。
+    let tmp = path.with_extension(format!(
+        "json.{}.{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let raw = serde_json::to_string_pretty(cache).map_err(|e| e.to_string())?;
+    if let Err(e) = fs::write(&tmp, raw) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e.to_string());
+    }
+    if let Err(e) = fs::rename(&tmp, &path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e.to_string());
+    }
+    Ok(())
 }
 
 /// 持久化某一 Provider 的模型列表。
@@ -518,6 +536,9 @@ fn persist_provider_models(
     source: &str,
     latency_ms: u64,
 ) -> Result<(), String> {
+    let _guard = MODELS_CACHE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let mut cache = load_models_cache();
     cache.providers.insert(
         provider.id.clone(),
@@ -1679,5 +1700,51 @@ mod tests {
         assert_eq!(s.providers[1].model, "ep-");
         assert_eq!(s.providers[2].endpoint, "https://api.minimax.io/v1");
         assert!(!s.migrate_stale_defaults());
+    }
+
+    #[test]
+    fn persist_provider_models_concurrent_writers_do_not_enoent() {
+        let dir = std::env::temp_dir().join(format!(
+            "astro-models-cache-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(&dir);
+
+        let n = 16usize;
+        let mut handles = Vec::new();
+        for i in 0..n {
+            handles.push(std::thread::spawn(move || {
+                let mut p = ProviderConfig::new(ProviderKind::Openai);
+                p.id = format!("p{i}");
+                p.display_name = format!("P{i}");
+                // 拉开一点窗口，模拟多路 list_provider_models 同时回写
+                std::thread::sleep(std::time::Duration::from_micros(80 * (i as u64 % 4 + 1)));
+                persist_provider_models(&p, &[], "test", 1)
+            }));
+        }
+
+        let mut errs = Vec::new();
+        for h in handles {
+            match h.join().expect("thread") {
+                Ok(()) => {}
+                Err(e) => errs.push(e),
+            }
+        }
+        let cache = load_models_cache();
+        let _ = fs::remove_dir_all(&dir);
+        assert!(
+            errs.is_empty(),
+            "concurrent persist failed (fixed tmp race?): {errs:?}"
+        );
+        assert_eq!(
+            cache.providers.len(),
+            n,
+            "lost providers under concurrent RMW: {:?}",
+            cache.providers.keys().collect::<Vec<_>>()
+        );
     }
 }
