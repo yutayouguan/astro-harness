@@ -240,6 +240,7 @@ export type ModelCapabilities = {
   image_gen: boolean;
   video_gen: boolean;
   audio_gen: boolean;
+  music_gen: boolean;
 };
 
 /** 模型元信息（列表 / 选择器） */

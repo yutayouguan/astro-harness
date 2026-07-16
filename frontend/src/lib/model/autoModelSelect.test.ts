@@ -23,6 +23,7 @@ const candidates: AutoModelCandidate[] = [
       image_gen: false,
       video_gen: false,
       audio_gen: false,
+      music_gen: false,
     },
   },
   {
@@ -39,6 +40,7 @@ const candidates: AutoModelCandidate[] = [
       image_gen: false,
       video_gen: false,
       audio_gen: false,
+      music_gen: false,
     },
   },
   {
@@ -55,6 +57,7 @@ const candidates: AutoModelCandidate[] = [
       image_gen: false,
       video_gen: false,
       audio_gen: false,
+      music_gen: false,
     },
   },
   {

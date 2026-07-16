@@ -26,6 +26,7 @@ pub struct LiteLlmEntry {
     pub supports_image_generation: bool,
     pub supports_video_generation: bool,
     pub supports_audio_output: bool,
+    pub supported_output_modalities: Vec<String>,
     pub mode: Option<String>,
     pub litellm_provider: Option<String>,
     pub input_cost_per_token: Option<f64>,
@@ -58,6 +59,8 @@ struct RawEntry {
     #[serde(default)]
     supports_audio_output: Option<bool>,
     #[serde(default)]
+    supported_output_modalities: Vec<String>,
+    #[serde(default)]
     mode: Option<String>,
     #[serde(default)]
     litellm_provider: Option<String>,
@@ -80,6 +83,7 @@ impl RawEntry {
             supports_image_generation: self.supports_image_generation.unwrap_or(false),
             supports_video_generation: self.supports_video_generation.unwrap_or(false),
             supports_audio_output: self.supports_audio_output.unwrap_or(false),
+            supported_output_modalities: self.supported_output_modalities,
             mode: self.mode,
             litellm_provider: self.litellm_provider,
             input_cost_per_token: self.input_cost_per_token,
@@ -144,6 +148,7 @@ fn parse_map(value: serde_json::Value) -> HashMap<String, LiteLlmEntry> {
                 || e.supports_image_generation
                 || e.supports_video_generation
                 || e.supports_audio_output
+                || !e.supported_output_modalities.is_empty()
                 || has_mode
                 || e.input_cost_per_token.is_some()
                 || e.output_cost_per_token.is_some()

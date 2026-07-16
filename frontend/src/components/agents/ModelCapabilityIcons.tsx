@@ -5,6 +5,7 @@ import {
   Eye,
   Globe,
   Image,
+  Music,
   Video,
   Wrench,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const CAP_META: Record<
   image_gen: { Icon: Image, labelKey: "modelCaps.imageGen" },
   video_gen: { Icon: Video, labelKey: "modelCaps.videoGen" },
   audio_gen: { Icon: AudioLines, labelKey: "modelCaps.audioGen" },
+  music_gen: { Icon: Music, labelKey: "modelCaps.musicGen" },
 };
 
 type Props = {
