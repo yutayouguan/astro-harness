@@ -6,23 +6,26 @@
 //! 模块分层：
 //! - [`api`]：对外契约（trait / client / registry / streaming）
 //! - [`profile`]：Hermes 风格 ProviderProfile / ApiMode 表
-//! - [`protocol`]：协议与传输实现（Chat Completions / Anthropic Messages / Responses）
-//! - [`vendors`]：各供应商薄封装（ProfileBackedProvider）
+//! - [`protocol`]：共享协议（Chat Completions / Anthropic / 探测 / 抽取）
+//! - [`google`]：Gemini Interactions / Veo / Files / Robotics
+//! - [`openai`]：Images / Responses / Whisper·视觉兼容
+//! - [`vendors`]：其余供应商薄封装（ProfileBackedProvider）
 
 pub mod api;
+pub mod google;
+pub mod openai;
 pub mod profile;
 pub mod protocol;
 pub mod vendors;
 
 // 保持原有顶层路径，避免破坏下游 crate 的 `providers::trait_` 等引用。
 pub use api::{client, registry, streaming, trait_};
-pub use protocol::{
-    extractor, files_http, http_stream, image_gen, image_http, interactions_chat, interactions_http,
-    media_http, robotics_http, responses, tool_format, verify,
-};
+pub use google::{files_http, interactions_chat, interactions_http, robotics_http};
+pub use openai::{image_http, responses};
+pub use protocol::{extractor, http_stream, image_gen, media_http, tool_format, verify};
 pub use vendors::{
-    azure, bailian, claude, deepseek, google, mimo, minimax, moonshot, nvidia, ollama, openai,
-    openrouter, profile_backed, volcengine, zhipu,
+    azure, bailian, claude, deepseek, mimo, minimax, moonshot, nvidia, ollama, openrouter,
+    profile_backed, volcengine, zhipu,
 };
 
 pub use client::ProviderClient;

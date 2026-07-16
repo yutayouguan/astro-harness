@@ -1,9 +1,10 @@
-//! 各供应商薄封装；协议细节在 [`crate::protocol`]，配置在 [`crate::profile`]。
+//! 各供应商薄封装；协议细节在 [`crate::protocol`] / [`crate::google`] / [`crate::openai`]，
+//! 配置在 [`crate::profile`]。
+//!
+//! Google / OpenAI 见顶层 [`crate::google`]、[`crate::openai`]。
 
 pub mod profile_backed;
 
-pub mod google;
-pub mod openai;
 pub mod claude;
 pub mod deepseek;
 pub mod minimax;

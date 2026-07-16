@@ -13,7 +13,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use crate::http_stream::merge_additional_params;
-use crate::interactions_http::interactions_url;
+use super::interactions_http::interactions_url;
 use crate::streaming::Usage;
 use crate::trait_::{
     ChatChunk, ChatContentPart, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,

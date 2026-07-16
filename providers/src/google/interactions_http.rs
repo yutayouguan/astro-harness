@@ -10,7 +10,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::media_http::{google_native_base, pcm_to_wav};
+use super::veo_http::{google_native_base, pcm_to_wav};
 use crate::trait_::{GeneratedImage, ProviderConfig};
 
 const API_REVISION: &str = "2026-05-20";
@@ -767,7 +767,7 @@ pub async fn google_interactions_vision(
         anyhow::bail!("vision 至少需要一张图片");
     }
     let model = if config.model.trim().is_empty() {
-        crate::media_http::default_vision_model("google")
+        "gemini-3.5-flash"
     } else {
         config.model.trim()
     };

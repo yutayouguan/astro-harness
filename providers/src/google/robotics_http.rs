@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::media_http::google_native_base;
+use super::veo_http::google_native_base;
 use crate::trait_::ProviderConfig;
 
 fn trim_slash(endpoint: &str) -> String {
