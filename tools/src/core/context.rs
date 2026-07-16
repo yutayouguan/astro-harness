@@ -196,3 +196,32 @@ impl<'a> ToolContext<'a> {
 
 /// 便于测试的轻量 Provider 注册表持有类型（`Arc` 共享）。
 pub type SharedProviders = Arc<ProviderRegistry>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_parts_writes_primary_music_model_and_leaves_fallback_empty() {
+        let targets = ImageGenTargets::from_parts(
+            "google",
+            "image-model",
+            "primary-key",
+            "primary-base",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "  configured-music-model  ",
+            "",
+            "",
+            "",
+            "",
+        );
+
+        let primary = targets.primary.as_ref().expect("primary credentials");
+        assert_eq!(primary.music_model, "configured-music-model");
+        assert!(targets.fallback.is_none());
+    }
+}

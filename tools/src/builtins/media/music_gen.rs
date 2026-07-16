@@ -47,10 +47,13 @@ pub fn validate_music_gen_args(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let configured = configured_music_model.trim();
-    let model_source = requested
-        .or_else(|| (!configured.is_empty()).then_some(configured))
-        .unwrap_or("clip");
-    let model_id = resolve_lyria_model_id(model_source)?;
+    let model_id = if let Some(requested) = requested {
+        resolve_lyria_model_id(requested)?
+    } else if !configured.is_empty() {
+        configured.to_string()
+    } else {
+        resolve_lyria_model_id("clip")?
+    };
     let is_pro = model_id.contains("pro");
 
     let fmt_raw = args
@@ -265,6 +268,30 @@ mod tests {
         let (model, _) =
             validate_music_gen_args(&args, "lyria-3-pro-preview").unwrap();
         assert_eq!(model, "lyria-3-pro-preview");
+    }
+
+    #[test]
+    fn arbitrary_configured_model_is_passed_through() {
+        let args = MusicGenArgs {
+            prompt: "piano".into(),
+            model: None,
+            reference_images: None,
+            format: None,
+        };
+        let (model, _) =
+            validate_music_gen_args(&args, "custom-music-model-v7").unwrap();
+        assert_eq!(model, "custom-music-model-v7");
+    }
+
+    #[test]
+    fn explicit_invalid_model_is_rejected() {
+        let args = MusicGenArgs {
+            prompt: "piano".into(),
+            model: Some("custom-music-model-v7".into()),
+            reference_images: None,
+            format: None,
+        };
+        assert!(validate_music_gen_args(&args, "").is_err());
     }
 
     #[test]
