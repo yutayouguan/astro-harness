@@ -1,4 +1,4 @@
-# 结构化输出
+# 1 结构化输出
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/structured-output?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -19,13 +19,13 @@
 [Pydantic](https://docs.pydantic.dev/latest/) (Python) 和
 [Zod](https://zod.dev/) (JavaScript) 定义架构。
 
-## 结构化输出示例
+## 1.1 结构化输出示例
 
-### 食谱提取器
+### 1.1.1 食谱提取器
 
 此示例演示了如何使用基本 JSON 架构类型（例如 `object`、`array`、`string` 和 `integer`）从文本中提取结构化数据。
 
-### Python
+### 1.1.2 Python
 
 ```python
 from google import genai
@@ -72,7 +72,7 @@ recipe = Recipe.model_validate_json(interaction.output_text)
 print(recipe)
 ```
 
-### JavaScript
+### 1.1.3 JavaScript
 
 ```javascript
 // Note: Ensure zod is installed (npm install zod)
@@ -141,7 +141,7 @@ const recipe = recipeSchema.parse(JSON.parse(interaction.output_text));
 console.log(recipe);
 ```
 
-### REST
+### 1.1.4 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -215,11 +215,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }
 ```
 
-### 内容审核
+### 1.1.5 内容审核
 
 此示例展示了如何使用 `anyOf` 实现条件架构，以及如何使用 `enum` 实现分类，从而使输出结构能够根据内容而变化。
 
-### Python
+### 1.1.6 Python
 
 ```python
 from google import genai
@@ -258,7 +258,7 @@ result = ModerationResult.model_validate_json(interaction.output_text)
 print(result)
 ```
 
-### JavaScript
+### 1.1.7 JavaScript
 
 ```javascript
 // Note: Ensure zod is installed (npm install zod)
@@ -319,7 +319,7 @@ const result = moderationResultSchema.parse(JSON.parse(interaction.output_text))
 console.log(result);
 ```
 
-### REST
+### 1.1.8 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -377,11 +377,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }
 ```
 
-### 递归结构
+### 1.1.9 递归结构
 
 此示例说明了如何定义递归架构，例如组织结构图。
 
-### Python
+### 1.1.10 Python
 
 ```python
 from google import genai
@@ -418,7 +418,7 @@ employee = Employee.model_validate_json(interaction.output_text)
 print(employee)
 ```
 
-### JavaScript
+### 1.1.11 JavaScript
 
 ```javascript
 // Note: Ensure zod is installed (npm install zod)
@@ -464,7 +464,7 @@ const employee = employeeSchema.parse(JSON.parse(interaction.output_text));
 console.log(employee);
 ```
 
-### REST
+### 1.1.12 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -523,11 +523,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }
 ```
 
-## 流式传输结果
+## 1.2 流式传输结果
 
 您可以流式传输结构化输出，以便在生成响应时开始处理响应。流式传输的块是有效的 JSON 部分字符串，可以串联起来形成最终的 JSON 对象。
 
-### Python
+### 1.2.1 Python
 
 ```python
 from google import genai
@@ -557,7 +557,7 @@ for event in stream:
             print(event.delta.text, end="", flush=True)
 ```
 
-### JavaScript
+### 1.2.2 JavaScript
 
 ```javascript
 // Note: Ensure zod is installed (npm install zod)
@@ -597,7 +597,7 @@ for await (const event of stream) {
 }
 ```
 
-### REST
+### 1.2.3 REST
 
 ```bash
 curl -N -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -622,7 +622,7 @@ curl -N -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" 
     }'
 ```
 
-## 使用工具的结构化输出
+## 1.3 使用工具的结构化输出
 
 Gemini 3 可让您将结构化输出与内置工具相结合，包括
 [依托 Google 搜索进行接地](https://ai.google.dev/gemini-api/docs/google-search?hl=zh-cn)、
@@ -631,7 +631,7 @@ Gemini 3 可让您将结构化输出与内置工具相结合，包括
 [文件搜索](https://ai.google.dev/gemini-api/docs/file-search?hl=zh-cn#structured-output)和
 [函数调用](https://ai.google.dev/gemini-api/docs/function-calling?hl=zh-cn)。
 
-### Python
+### 1.3.1 Python
 
 ```python
 from google import genai
@@ -660,7 +660,7 @@ result = MatchResult.model_validate_json(interaction.output_text)
 print(result)
 ```
 
-### JavaScript
+### 1.3.2 JavaScript
 
 ```javascript
 // Note: Ensure zod is installed (npm install zod)
@@ -696,7 +696,7 @@ const match = matchSchema.parse(JSON.parse(interaction.output_text));
 console.log(match);
 ```
 
-### REST
+### 1.3.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -722,7 +722,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## JSON 架构支持
+## 1.4 JSON 架构支持
 
 如需生成 JSON 对象，请使用类型为 `text` 的对象（或包含对象的数组）配置 `response_format`，并将其 `mime_type` 设置为 `application/json`。架构应在 `schema` 字段中提供。
 
@@ -744,7 +744,7 @@ Gemini 的结构化输出模式支持
 - **`title`**：属性的简短说明。
 - **`description`**：属性的更长、更详细的说明。
 
-### 特定于类型的属性
+### 1.4.1 特定于类型的属性
 
 **对于 `object` 值**：
 
@@ -770,14 +770,14 @@ Gemini 的结构化输出模式支持
 - **`minItems`**：数组中的最小项数。
 - **`maxItems`**：数组中的最大项数。
 
-## 结构化输出与函数调用
+## 1.5 结构化输出与函数调用
 
 | 功能 | 主要用途 |
 | --- | --- |
 | **结构化输出** | **设置最终响应的格式。**当您希望模型的 *答案* 采用特定格式时使用。 |
 | **函数调用** | **在对话期间执行操作。**当模型需要 *要求您* 先执行任务，然后再提供最终答案时使用。 |
 
-## 最佳实践
+## 1.6 最佳实践
 
 - **清晰的说明** ：使用 `description` 字段来引导模型。
 - **强类型** ：使用特定类型（`integer`、`string`、`enum`）。
@@ -785,7 +785,7 @@ Gemini 的结构化输出模式支持
 - **验证** ：虽然输出在语法上是正确的 JSON，但请务必在应用中验证值。
 - **错误处理** ：针对符合架构但在语义上不正确的输出实现强大的错误处理机制。
 
-## 限制
+## 1.7 限制
 
 - **架构子集** ：并非所有 JSON 架构功能都受支持。
 - **架构复杂性** ：系统可能会拒绝非常大或深度嵌套的架构。

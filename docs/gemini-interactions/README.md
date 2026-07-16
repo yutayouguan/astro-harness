@@ -1,4 +1,4 @@
-# Gemini Interactions API 教程（本地镜像）
+# 1 Gemini Interactions API 教程（本地镜像）
 
 本目录收录 [Google Gemini Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview?hl=zh-cn) 官方文档的中文镜像，便于在仓库内查阅与迁移参考。
 
@@ -9,7 +9,7 @@
 > - 官方文档会持续更新；若与线上不一致，以官方页面为准。
 > - SDK 要求：Python `google-genai >= 2.3.0`，JavaScript `@google/genai >= 2.3.0`。
 
-## 阅读顺序（推荐）
+## 1.1 阅读顺序（推荐）
 
 | 顺序 | 文档 | 说明 |
 | --- | --- | --- |
@@ -17,7 +17,7 @@
 | 1 | [迁移指南](./01-migrate-to-interactions.md) | 从 `generateContent` 迁到 Interactions API |
 | 2 | [使用入门](./02-get-started.md) | API Key、首个调用、流式、多轮、工具与智能体 |
 
-## 功能指南
+## 1.2 功能指南
 
 | 文档 | 官方原文 |
 | --- | --- |
@@ -33,7 +33,7 @@
 | [灵活推理 (Flex)](./12-flex-inference.md) | [flex-inference](https://ai.google.dev/gemini-api/docs/flex-inference?hl=zh-cn) |
 | [优先推理 (Priority)](./13-priority-inference.md) | [priority-inference](https://ai.google.dev/gemini-api/docs/priority-inference?hl=zh-cn) |
 
-## 与本仓库的关系
+## 1.3 与本仓库的关系
 
 Astro 中 Google / Gemini 相关调用计划统一迁移到 Interactions API（`interactions.create`），以对齐：
 
@@ -45,7 +45,7 @@ Astro 中 Google / Gemini 相关调用计划统一迁移到 Interactions API（`
 
 迁移时优先对照 [01-migrate-to-interactions.md](./01-migrate-to-interactions.md) 与各功能章节中的 Python / JavaScript / REST 示例。
 
-## 关键概念速查
+## 1.4 关键概念速查
 
 ```text
 interactions.create(...)

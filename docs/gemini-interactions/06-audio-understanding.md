@@ -1,4 +1,4 @@
-# 音频理解
+# 1 音频理解
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/audio?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -8,7 +8,7 @@
 
 Gemini 可以分析音频输入内容并生成文本回答。
 
-### Python
+### 1.1.1 Python
 
 ```python
 from google import genai
@@ -32,7 +32,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -58,7 +58,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.1.3 REST
 
 ```
 # First upload the file, then use the URI:
@@ -78,7 +78,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 概览
+## 1.2 概览
 
 Gemini 可以分析和理解音频输入，并生成文本回答，从而实现以下用例：
 
@@ -91,11 +91,11 @@ Gemini 可以分析和理解音频输入，并生成文本回答，从而实现�
 如需进行实时语音和视频互动，请参阅 [Live API](https://ai.google.dev/gemini-api/docs/live?hl=zh-cn)。
 如需使用支持实时转写的专用语音转文字模型，请使用 [Google Cloud Speech-to-Text API](https://cloud.google.com/speech-to-text?hl=zh-cn)。
 
-## 将语音转写为文字
+## 1.3 将语音转写为文字
 
 此示例展示了如何使用[结构化输出](https://ai.google.dev/gemini-api/docs/structured-output?hl=zh-cn)来转写、翻译和总结语音，并添加时间戳、说话人分离和情绪检测功能。
 
-### Python
+### 1.3.1 Python
 
 ```python
 from google import genai
@@ -153,7 +153,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.3.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -211,7 +211,7 @@ const interaction = await client.interactions.create({
 console.log(JSON.parse(interaction.output_text));
 ```
 
-### REST
+### 1.3.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -253,18 +253,18 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 ![一款多语言音频转写 Gemini 应用](https://ai.google.dev/static/gemini-api/docs/images/audio_understanding_demo.gif?hl=zh-cn)
 
-## 输入音频
+## 1.4 输入音频
 
 您可以通过以下方式提供音频数据：
 
 - 请先[上传音频文件](#upload-audio)，然后再提出要求。
 - 通过请求[传递内嵌音频数据](#inline-audio)。
 
-### 上传音频文件
+### 1.4.1 上传音频文件
 
 对于大小超过 20 MB 的文件，请使用 [Files API](https://ai.google.dev/gemini-api/docs/files?hl=zh-cn)。
 
-### Python
+### 1.4.2 Python
 
 ```python
 from google import genai
@@ -287,7 +287,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.4.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -313,7 +313,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.4.4 REST
 
 ```
 # First upload the file using the Files API, then use the URI:
@@ -333,11 +333,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-### 内嵌传递音频数据
+### 1.4.5 内嵌传递音频数据
 
 对于总请求大小不超过 20 MB 的小型音频文件：
 
-### Python
+### 1.4.6 Python
 
 ```python
 from google import genai
@@ -362,7 +362,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.4.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -388,7 +388,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.4.8 REST
 
 ```
 AUDIO_PATH="path/to/sample.mp3"
@@ -419,11 +419,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 * 请求大小上限为 20 MB（包括提示和所有文件）
 * 如需重复使用，请改为[上传文件](#upload-audio)
 
-## 获取转写内容
+## 1.5 获取转写内容
 
 如需获取转写内容，请在提示中提出相应要求：
 
-### Python
+### 1.5.1 Python
 
 ```
 interaction = client.interactions.create(
@@ -440,7 +440,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.5.2 JavaScript
 
 ```javascript
 const interaction = await client.interactions.create({
@@ -457,11 +457,11 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-## 参考时间戳
+## 1.6 参考时间戳
 
 使用 `MM:SS` 格式引用特定部分：
 
-### Python
+### 1.6.1 Python
 
 ```
 interaction = client.interactions.create(
@@ -477,7 +477,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.6.2 JavaScript
 
 ```
 const interaction = await client.interactions.create({
@@ -489,11 +489,11 @@ const interaction = await client.interactions.create({
 });
 ```
 
-## 统计 token 数量
+## 1.7 统计 token 数量
 
 计算音频文件中的 token 数：
 
-### Python
+### 1.7.1 Python
 
 ```
 response = client.models.count_tokens(
@@ -503,7 +503,7 @@ response = client.models.count_tokens(
 print(response)
 ```
 
-### JavaScript
+### 1.7.2 JavaScript
 
 ```javascript
 const response = await client.models.countTokens({
@@ -515,7 +515,7 @@ const response = await client.models.countTokens({
 console.log(response.totalTokens);
 ```
 
-## 支持的音频格式
+## 1.8 支持的音频格式
 
 - WAV - `audio/wav`
 - MP3 - `audio/mp3`
@@ -524,7 +524,7 @@ console.log(response.totalTokens);
 - OGG Vorbis - `audio/ogg`
 - FLAC - `audio/flac`
 
-## 有关音频技术方面的详细信息
+## 1.9 有关音频技术方面的详细信息
 
 - **token 数**：每秒音频 32 个 token（1 分钟 = 1,920 个 token）
 - **非语音**：Gemini 可以理解非语音声音（鸟鸣、警报声等）
@@ -532,7 +532,7 @@ console.log(response.totalTokens);
 - **分辨率**：下采样到 16 Kbps
 - **声道**：多声道音频合并为单声道
 
-## 后续步骤
+## 1.10 后续步骤
 
 - [Files API](https://ai.google.dev/gemini-api/docs/files?hl=zh-cn)：上传和管理音频文件
 - [系统指令](https://ai.google.dev/gemini-api/docs/text-generation?hl=zh-cn#system-instructions)：自定义模型行为

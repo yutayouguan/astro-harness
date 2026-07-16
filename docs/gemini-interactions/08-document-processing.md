@@ -1,4 +1,4 @@
-# 文件 / 文档处理
+# 1 文件 / 文档处理
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/document-processing?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -15,7 +15,7 @@ Gemini 模型可以使用原生视觉功能处理 PDF 格式的文档，以了�
 
 您还可以通过相同的方式传递非 PDF 文档，但 Gemini 会将其视为普通文本，这样会消除图表或格式等上下文。
 
-## 以内嵌方式传递 PDF 数据
+## 1.1 以内嵌方式传递 PDF 数据
 
 您可以在请求中以内嵌方式传递 PDF 数据。这最适合较小的文档或临时处理，因为您无需在后续请求中引用该文件。对于需要在多轮互动中引用的较大文档，我们建议您使用
 [Files API](https://ai.google.dev/gemini-api/docs/document-processing?hl=zh-cn#large-pdfs)
@@ -24,7 +24,7 @@ Gemini 模型可以使用原生视觉功能处理 PDF 格式的文档，以了�
 
 以下示例展示了如何以内嵌方式传递 PDF 数据：
 
-### Python
+### 1.1.1 Python
 
 ```python
 from google import genai
@@ -50,7 +50,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -80,7 +80,7 @@ async function main() {
 main();
 ```
 
-### REST
+### 1.1.3 REST
 
 ```
 PDF_PATH="path/to/document.pdf"
@@ -109,7 +109,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 您还可以上传本地 PDF 文件进行处理：
 
-### Python
+### 1.1.4 Python
 
 ```python
 from google import genai
@@ -128,7 +128,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.5 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -158,7 +158,7 @@ async function main() {
 main();
 ```
 
-### REST
+### 1.1.6 REST
 
 ```
 PDF_PATH="file.pdf"
@@ -209,15 +209,15 @@ echo
 jq -r ".steps[-1].content[0].text" response.json
 ```
 
-## 使用 Files API 上传 PDF
+## 1.2 使用 Files API 上传 PDF
 
 对于较大的文件或打算在多个请求中重复使用文档的情况，我们建议您使用 Files API。这样可以将文件上传与模型请求分离，从而缩短请求延迟时间并减少带宽使用量。
 
-### 来自网址的大型 PDF
+### 1.2.1 来自网址的大型 PDF
 
 使用 File API 可简化从网址上传和处理大型 PDF 文件的过程：
 
-### Python
+### 1.2.2 Python
 
 ```python
 from google import genai
@@ -248,7 +248,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.2.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -298,7 +298,7 @@ async function main() {
 main();
 ```
 
-### REST
+### 1.2.4 REST
 
 ```
 PDF_PATH="https://arxiv.org/pdf/2312.11805"
@@ -368,9 +368,9 @@ rm "${DISPLAY_NAME}.pdf"
 rm payload.json
 ```
 
-### 本地存储的大型 PDF
+### 1.2.5 本地存储的大型 PDF
 
-### Python
+### 1.2.6 Python
 
 ```python
 from google import genai
@@ -393,7 +393,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.2.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -437,7 +437,7 @@ async function main() {
 main();
 ```
 
-### REST
+### 1.2.8 REST
 
 ```
 PDF_PATH="large_file.pdf"
@@ -491,7 +491,7 @@ jq -r ".steps[-1].content[0].text" response.json
 您可以通过调用 [`files.get`](https://ai.google.dev/api/rest/v1beta/files/get?hl=zh-cn) 来验证 API 是否已成功存储上传的文件并获取其
 元数据。只有 `name`（以及扩展名 `uri`）是唯一的。
 
-### Python
+### 1.2.9 Python
 
 ```python
 from google import genai
@@ -508,7 +508,7 @@ file_info = client.files.get(name=file.name)
 print(file_info.model_dump_json(indent=4))
 ```
 
-### JavaScript
+### 1.2.10 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -531,7 +531,7 @@ async function main() {
 main();
 ```
 
-### REST
+### 1.2.11 REST
 
 ```
 name=$(jq -r ".file.name" file_info.json)
@@ -544,11 +544,11 @@ file_uri=$(jq -r ".uri" file_info.json)
 echo file_uri=$file_uri
 ```
 
-## 传递多个 PDF
+## 1.3 传递多个 PDF
 
 Gemini API 能够在单个请求中处理多个 PDF 文档（最多 1000 页），前提是文档和文本提示的总大小不超过模型的上下文窗口。
 
-### Python
+### 1.3.1 Python
 
 ```python
 from google import genai
@@ -586,7 +586,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.3.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -642,7 +642,7 @@ async function main() {
 main();
 ```
 
-### REST
+### 1.3.3 REST
 
 ```
 DOC_URL_1="https://arxiv.org/pdf/2312.11805"
@@ -737,7 +737,7 @@ rm "file_info_${DISPLAY_NAME_1}.json"
 rm "file_info_${DISPLAY_NAME_2}.json"
 ```
 
-## 技术详情
+## 1.4 技术详情
 
 Gemini 支持最大 50MB 或 1000 页的 PDF 文件。此限制适用于内嵌数据和 Files API 上传。每个文档页面相当于 258 个 token。
 
@@ -746,7 +746,7 @@ Gemini 支持最大 50MB 或 1000 页的 PDF 文件。此限制适用于内嵌�
 缩小到最大分辨率 3072 x 3072，同时保留其原始
 宽高比，而较小的页面则会被放大到 768 x 768 像素。对于尺寸较小的页面，除了带宽之外，没有成本降低；对于分辨率较高的页面，也没有性能提升。
 
-### Gemini 3 模型
+### 1.4.1 Gemini 3 模型
 
 Gemini 3 引入了使用 `media_resolution` 参数对多模态视觉处理进行精细控制的功能。您现在可以为每个媒体部分设置低、中或高分辨率。添加此功能后，PDF 文档的处理方式已更新：
 
@@ -758,14 +758,14 @@ Gemini 3 引入了使用 `media_resolution` 参数对多模态视觉处理进行
 如需详细了解媒体分辨率参数，请参阅
 [媒体分辨率](https://ai.google.dev/gemini-api/docs/interactions/media-resolution?hl=zh-cn)指南。
 
-### 文档类型
+### 1.4.2 文档类型
 
 从技术上讲，您可以传递其他 MIME 类型以进行文档理解，例如 TXT、Markdown、HTML、XML 等。不过，文档视觉功能**仅能有意义地理解 PDF** 。 其他类型将作为纯文本提取，模型将无法解读我们在这些文件的呈现中看到的内容。任何特定于文件类型的内容（例如图表、HTML 标记、Markdown 格式等）都将丢失。
 
 如需了解其他文件输入方法，请参阅
 [文件输入方法](https://ai.google.dev/gemini-api/docs/file-input-methods?hl=zh-cn)指南。
 
-### 最佳做法
+### 1.4.3 最佳做法
 
 为了达到最佳效果，请注意以下事项：
 
@@ -773,7 +773,7 @@ Gemini 3 引入了使用 `media_resolution` 参数对多模态视觉处理进行
 - 避免模糊的页面。
 - 如果使用单页，请将文本提示放在页面之后。
 
-## 后续步骤
+## 1.5 后续步骤
 
 如需了解详情，请参阅以下资源：
 

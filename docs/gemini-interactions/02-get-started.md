@@ -1,4 +1,4 @@
-# Interactions API 使用入门
+# 1 Interactions API 使用入门
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/get-started?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -17,7 +17,7 @@
 
 您可以通过 [Python](https://github.com/googleapis/python-genai) 和 [JavaScript](https://github.com/googleapis/js-genai) SDK 以及 REST 来使用 Interactions API。
 
-## 1. 获取 API 密钥
+## 1.1 获取 API 密钥
 
 如需使用 Gemini API，您需要拥有一个 API 密钥，以便对请求进行身份验证、强制执行安全限制，以及跟踪您账号的使用情况。
 
@@ -33,7 +33,7 @@
 export GEMINI_API_KEY="YOUR_API_KEY"
 ```
 
-### 升级到付费层级
+### 1.1.1 升级到付费层级
 
 升级到付费层级可提高速率限制，但需要设置 Cloud Billing。
 
@@ -43,11 +43,11 @@ export GEMINI_API_KEY="YOUR_API_KEY"
 
 如需了解详情，请参阅[“结算”页面](https://ai.google.dev/gemini-api/docs/billing?hl=zh-cn)。
 
-## 2. 安装 SDK 并进行首次调用
+## 1.2 安装 SDK 并进行首次调用
 
 安装 SDK 并通过单个 API 调用生成文本。
 
-### Python
+### 1.2.1 Python
 
 安装 SDK：
 
@@ -69,7 +69,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.2.2 JavaScript
 
 安装 SDK：
 
@@ -91,7 +91,7 @@ const interaction = await ai.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.2.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -139,11 +139,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 虽然 SDK 会公开完整响应，但它们还提供 `interaction.output_text` 和 `interaction.output_image` 等便捷属性，以便直接访问最终输出。如需详细了解响应结构，请参阅[互动概览](https://ai.google.dev/gemini-api/docs/interactions-overview?hl=zh-cn)；如需详细了解系统说明和生成配置，请参阅[文本生成指南](https://ai.google.dev/gemini-api/docs/text-generation?hl=zh-cn)。
 
-## 3. 以流式传输回答
+## 1.3 以流式传输回答
 
 为了实现更流畅的互动，请在生成响应时对其进行流式传输。每个 `step.delta` 事件都会传递一个可立即显示的文本块。
 
-### Python
+### 1.3.1 Python
 
 ```python
 from google import genai
@@ -159,7 +159,7 @@ for event in stream:
     print(event)
 ```
 
-### JavaScript
+### 1.3.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -177,7 +177,7 @@ for await (const event of stream) {
 }
 ```
 
-### REST
+### 1.3.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions?alt=sse" \
@@ -226,18 +226,18 @@ data: {"interaction":{"id":"v1_Chd...","status":"completed","usage":{"total_toke
 
 如需详细了解如何处理流式传输事件和增量类型，请参阅[流式传输交互指南](https://ai.google.dev/gemini-api/docs/streaming?hl=zh-cn)。
 
-## 4. 多轮对话
+## 1.4 多轮对话
 
 Interactions API 支持多轮对话，并提供两种方法：
 
 - **有状态（推荐）**：使用 `previous_interaction_id` 继续在服务器上进行对话。非常适合大多数聊天和智能体工作流，在这些工作流中，您希望服务器管理历史记录并优化缓存。
 - **无状态**：通过在每个请求中传递所有先前的对话轮次（包括中间模型思考和工具步骤），在客户端上管理对话历史记录。
 
-### 有状态（推荐）
+### 1.4.1 有状态（推荐）
 
 通过传递 `previous_interaction_id` 来链接互动。服务器会为您管理完整的对话记录。
 
-### Python
+### 1.4.2 Python
 
 ```python
 from google import genai
@@ -259,7 +259,7 @@ interaction2 = client.interactions.create(
 print("Response 2:", interaction2.output_text)
 ```
 
-### JavaScript
+### 1.4.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -281,7 +281,7 @@ const interaction2 = await ai.interactions.create({
 console.log("Response 2:", interaction2.output_text);
 ```
 
-### REST
+### 1.4.4 REST
 
 ```bash
 RESPONSE1=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -305,11 +305,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-### 无状态
+### 1.4.5 无状态
 
 在客户端设置 `store=false` 并管理对话记录。您必须完全按原样保留并重新发送所有模型生成的步骤（包括 `thought` 和 `function_call` 步骤）。
 
-### Python
+### 1.4.6 Python
 
 ```python
 from google import genai
@@ -346,7 +346,7 @@ interaction2 = client.interactions.create(
 print("Response 2:", interaction2.steps[-1].content[0].text)
 ```
 
-### JavaScript
+### 1.4.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -382,7 +382,7 @@ const interaction2 = await ai.interactions.create({
 console.log("Response 2:", interaction2.steps.at(-1).content[0].text);
 ```
 
-### REST
+### 1.4.8 REST
 
 ```
 # Turn 1: Send with store: false
@@ -448,11 +448,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 第二次互动返回一个完整的响应对象，其中仅包含新步骤，但以上一轮的上下文为基础。如需详细了解如何在多轮对话中保持状态，请参阅[多轮对话指南](https://ai.google.dev/gemini-api/docs/text-generation?hl=zh-cn#multi-turn-conversations)，或探索用于客户端历史记录管理的[无状态模式](https://ai.google.dev/gemini-api/docs/text-generation?hl=zh-cn#stateless-conversations)。
 
-## 5. 多模态理解能力
+## 1.5 多模态理解能力
 
 Gemini 模型可采用原生方式理解图片、音频、视频和文档。在单个请求中同时传递媒体和文本。
 
-### Python
+### 1.5.1 Python
 
 ```python
 import base64
@@ -484,7 +484,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.5.2 JavaScript
 
 ```javascript
 import fs from "fs";
@@ -515,7 +515,7 @@ const interaction = await ai.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.5.3 REST
 
 ```
 # Base64-encode local image
@@ -581,11 +581,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions"   -
 
 从 PDF 和其他文档格式中提取信息。
 
-## 6. 多模态生成
+## 1.6 多模态生成
 
 Gemini 可以使用 [Nano Banana](https://ai.google.dev/gemini-api/docs/image-generation?hl=zh-cn) 图片模型原生生成图片。
 
-### Python
+### 1.6.1 Python
 
 ```python
 import base64
@@ -602,7 +602,7 @@ with open("generated_image.png", "wb") as f:
     f.write(base64.b64decode(interaction.output_image.data))
 ```
 
-### JavaScript
+### 1.6.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -622,7 +622,7 @@ if (generatedImage) {
 }
 ```
 
-### REST
+### 1.6.3 REST
 
 ```bash
 curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -669,11 +669,11 @@ curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" 
 
 使用 Lyria 3 创作片段和完整歌曲。
 
-## 7. 使用结构化输出
+## 1.7 使用结构化输出
 
 配置模型以返回符合您定义的架构的 JSON。结构化输出适用于 [Pydantic](https://docs.pydantic.dev/latest/) (Python) 和 [Zod](https://zod.dev/) (JavaScript)。
 
-### Python
+### 1.7.1 Python
 
 ```python
 from google import genai
@@ -701,7 +701,7 @@ recipe = Recipe.model_validate_json(interaction.output_text)
 print(recipe)
 ```
 
-### JavaScript
+### 1.7.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -742,7 +742,7 @@ const recipe = recipeSchema.parse(JSON.parse(interaction.output_text));
 console.log(recipe);
 ```
 
-### REST
+### 1.7.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -798,11 +798,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 输出文本块包含一个有效的 JSON 字符串，该字符串完全符合所请求的架构。如需了解如何定义更复杂的结构和递归架构，请参阅[结构化输出指南](https://ai.google.dev/gemini-api/docs/structured-output?hl=zh-cn)。
 
-## 8. 使用工具
+## 1.8 使用工具
 
 依托 Google 搜索中的实时信息对模型的回答进行接地。该 API 会自动搜索、处理结果并返回引用。
 
-### Python
+### 1.8.1 Python
 
 ```python
 from google import genai
@@ -828,7 +828,7 @@ for step in interaction.steps:
                         print(f"  [{annotation.title}]({annotation.url})")
 ```
 
-### JavaScript
+### 1.8.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -860,7 +860,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.8.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -947,13 +947,13 @@ Google 地图
 
 浏览器自动化和屏幕互动。
 
-## 9. 调用您自己的函数
+## 1.9 调用您自己的函数
 
 通过函数调用，您可以将模型连接到代码。您声明函数的名称和形参，模型决定何时调用该函数并返回结构化实参，然后您在本地执行该函数并将结果发送回去。
 
-### 有状态（推荐）
+### 1.9.1 有状态（推荐）
 
-### Python
+### 1.9.2 Python
 
 ```python
 import json
@@ -1015,7 +1015,7 @@ while True:
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.9.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -1079,7 +1079,7 @@ while (true) {
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.9.4 REST
 
 ```
 # Turn 1: Send prompt with function declaration
@@ -1136,7 +1136,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-### 无状态
+### 1.9.5 无状态
 
 您还可以在无状态模式下使用函数调用，方法是在客户端管理对话记录并设置 `store=false`。在无状态模式下，您必须在每个后续请求的 `input` 字段中传递完整的对话历史记录。此记录必须包含：
 
@@ -1144,7 +1144,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 2. 第 1 轮中返回的所有模型生成的步骤（包括 `thought` 和 `function_call` 步骤），与接收到的完全一致。
 3. 包含已执行函数的输出的 `function_result` 步骤。
 
-### Python
+### 1.9.6 Python
 
 ```python
 import json
@@ -1210,7 +1210,7 @@ while True:
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.9.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -1279,7 +1279,7 @@ while (true) {
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.9.8 REST
 
 ```
 # Turn 1: Send request with tools and store: false
@@ -1405,11 +1405,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 如需了解并行函数调用或函数选择模式等高级功能，请参阅[函数调用指南](https://ai.google.dev/gemini-api/docs/function-calling?hl=zh-cn)。
 
-## 10. 运行受管代理
+## 1.10 运行受管代理
 
 受管理的智能体在远程沙盒中运行，可以访问代码执行和文件管理等工具。传递 `agent` 而不是 `model`，并设置 `environment="remote"`。
 
-### Python
+### 1.10.1 Python
 
 ```python
 from google import genai
@@ -1425,7 +1425,7 @@ print(f"Environment: {interaction.environment_id}")
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.10.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -1441,7 +1441,7 @@ console.log(`Environment: ${interaction.environment_id}`);
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.10.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -1468,11 +1468,11 @@ AI Studio 中的智能体
 
 用于开发代理原型（无需编写代码）的直观园地。
 
-## 11. 在后台运行任务
+## 1.11 在后台运行任务
 
 将 `background=True` 设置为异步运行长时间任务。使用 `interactions.get()` 轮询结果。如需了解详情，请参阅[后台执行指南](https://ai.google.dev/gemini-api/docs/background-execution?hl=zh-cn)。
 
-### Python
+### 1.11.1 Python
 
 ```python
 import time
@@ -1501,7 +1501,7 @@ while True:
     time.sleep(5)
 ```
 
-### JavaScript
+### 1.11.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -1531,7 +1531,7 @@ while (true) {
 }
 ```
 
-### REST
+### 1.11.3 REST
 
 ```
 # Start a background task
@@ -1602,7 +1602,7 @@ done
 
 如需了解如何在[后台执行指南](https://ai.google.dev/gemini-api/docs/background-execution?hl=zh-cn)中异步运行模型和代理，请参阅相关内容。
 
-## 后续步骤
+## 1.12 后续步骤
 
 - [后台执行](https://ai.google.dev/gemini-api/docs/background-execution?hl=zh-cn)：异步运行长时间运行的任务并管理状态。
 - [文本生成](https://ai.google.dev/gemini-api/docs/text-generation?hl=zh-cn)：系统指令、生成配置和高级文本模式。

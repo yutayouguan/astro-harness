@@ -1,4 +1,4 @@
-# 迁移指南：从 generateContent 到 Interactions API
+# 1 迁移指南：从 generateContent 到 Interactions API
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/migrate-to-interactions?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -19,7 +19,7 @@ Interactions API 是使用 Gemini 模型和智能体进行构建的最简单、�
 >
 > 技能应用了本指南中描述的 API 更改。
 
-### 为什么迁移？
+### 1.1.1 为什么迁移？
 
 Interactions API 是我们使用 Gemini 模型和智能体进行构建的最简单、最有效的方式：
 
@@ -28,15 +28,15 @@ Interactions API 是我们使用 Gemini 模型和智能体进行构建的最简�
 - **工具使用和智能体工作流**：通过类型化执行步骤，原生支持多步骤工具使用、编排和复杂的推理流程。
 - **长时间运行的任务和后台任务**：支持使用 `background=true` 将耗时的操作（例如深度思考和深度研究）分流到后台进程。
 
-## 基本输入/输出
+## 1.2 基本输入/输出
 
 本部分展示了如何迁移简单的文本生成请求。
 
-### 之前 (`generateContent`)
+### 1.2.1 之前 (`generateContent`)
 
 `generateContent` API 是无状态的，可直接返回响应。响应结构将输出封装在 `candidates` 列表中，每个 `candidates` 都包含一个 `content`，其中包含要解析的 `parts` 列表。
 
-### Python
+### 1.2.2 Python
 
 ```python
 from google import genai
@@ -49,7 +49,7 @@ response = client.models.generate_content(
 print(response.text)
 ```
 
-### JavaScript
+### 1.2.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -63,7 +63,7 @@ const response = await ai.models.generateContent({
 console.log(response.text);
 ```
 
-### REST
+### 1.2.4 REST
 
 ```
 # Request
@@ -110,7 +110,7 @@ Interactions API 会返回具有 `steps` 时间轴的已存储互动资源。虽
 > `.output_image`
 > `.output_audio`
 
-### Python
+### 1.2.5 Python
 
 ```python
 from google import genai
@@ -124,7 +124,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.2.6 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -139,7 +139,7 @@ let interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.2.7 REST
 
 ```bash
 # Request
@@ -180,15 +180,15 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 }
 ```
 
-## 多轮对话
+## 1.3 多轮对话
 
 默认情况下，Interactions API 会存储互动，从而实现多轮对话的服务器端状态管理。
 
-### 之前 (`generateContent`)
+### 1.3.1 之前 (`generateContent`)
 
 在 `generateContent` 中，您必须使用 `contents` 数组或客户端聊天辅助程序手动管理对话历史记录。
 
-### Python
+### 1.3.2 Python
 
 **使用聊天帮助程序（推荐）**
 
@@ -231,7 +231,7 @@ response = client.models.generate_content(
 print(response.text)
 ```
 
-### JavaScript
+### 1.3.3 JavaScript
 
 **使用聊天帮助程序（推荐）**
 
@@ -266,7 +266,7 @@ const response = await client.models.generateContent({
 console.log(response.text);
 ```
 
-### REST
+### 1.3.4 REST
 
 ```
 # Request (the second turn requires sending the entire history)
@@ -300,11 +300,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5
 }
 ```
 
-### 之后（Interactions API）
+### 1.3.5 之后（Interactions API）
 
 Interactions API 在服务器上管理状态。您可以通过引用 `previous_interaction_id` 来继续对话。
 
-### Python
+### 1.3.6 Python
 
 ```python
 from google import genai
@@ -324,7 +324,7 @@ interaction2 = client.interactions.create(
 print("Response 2:", interaction2.output_text)
 ```
 
-### JavaScript
+### 1.3.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -345,7 +345,7 @@ interaction = await client.interactions.create({
 console.log("Response 2:", interaction.output_text);
 ```
 
-### REST
+### 1.3.8 REST
 
 ```bash
 # First Request
@@ -395,15 +395,15 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 }
 ```
 
-## 多模态输入
+## 1.4 多模态输入
 
 这两个 API 都支持多模态输入（文本、图片、视频等）。
 
-### 之前 (`generateContent`)
+### 1.4.1 之前 (`generateContent`)
 
 在 `generateContent` 中，您可以在 `contents` 数组中传递 `parts` 的列表。响应会在第一个候选对象的 `parts` 中返回输出。
 
-### Python
+### 1.4.2 Python
 
 ```python
 from google import genai
@@ -424,7 +424,7 @@ response = client.models.generate_content(
 print(response.text)
 ```
 
-### JavaScript
+### 1.4.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -449,7 +449,7 @@ const response = await client.models.generateContent({
 console.log(response.text);
 ```
 
-### REST
+### 1.4.4 REST
 
 ```
 # Request
@@ -489,11 +489,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5
 }
 ```
 
-### 之后（Interactions API）
+### 1.4.5 之后（Interactions API）
 
 在 Interactions API 中，您需要将数组传递给 `input` 字段。您可以在时间轴中找到 `model_output` 步骤，以检索输出内容。
 
-### Python
+### 1.4.6 Python
 
 ```python
 import base64
@@ -519,7 +519,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.4.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -546,7 +546,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.4.8 REST
 
 ```bash
 # Request
@@ -601,15 +601,15 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 }
 ```
 
-## 结构化输出
+## 1.5 结构化输出
 
 如需让模型返回符合特定架构的 JSON，请配置回答格式。
 
-### 之前 (`generateContent`)
+### 1.5.1 之前 (`generateContent`)
 
 在 `generateContent` 中，您可以使用嵌套在 `config`（或 `generationConfig`）对象内的 `response_mime_type` 和 `response_schema` 字段来配置输出格式。
 
-### Python
+### 1.5.2 Python
 
 ```python
 from google import genai
@@ -633,7 +633,7 @@ response = client.models.generate_content(
 print(response.text)
 ```
 
-### JavaScript
+### 1.5.3 JavaScript
 
 ```javascript
 import { GoogleGenAI, Type } from '@google/genai';
@@ -661,7 +661,7 @@ const response = await ai.models.generateContent({
 console.log(response.text);
 ```
 
-### REST
+### 1.5.4 REST
 
 ```
 # Request
@@ -707,11 +707,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5
 }
 ```
 
-### 之后（Interactions API）
+### 1.5.5 之后（Interactions API）
 
 在 Interactions API 中，输出格式控制移至顶级 `response_format` 数组。
 
-### Python
+### 1.5.6 Python
 
 ```python
 from google import genai
@@ -738,7 +738,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.5.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -769,7 +769,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.5.8 REST
 
 ```bash
 # Request
@@ -821,11 +821,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 }
 ```
 
-## 多模态生成
+## 1.6 多模态生成
 
 当生成文本以外的模态内容（例如图片或音频）时，主要区别在于回答如何构建生成的媒体。
 
-### 之前 (`generateContent`)
+### 1.6.1 之前 (`generateContent`)
 
 在 `generateContent` 中，响应直接在候选的 `parts` 中返回生成的媒体，通常以 `inlineData` 中的 base64 数据形式返回。
 
@@ -852,7 +852,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 }
 ```
 
-### 之后（Interactions API）
+### 1.6.2 之后（Interactions API）
 
 在 Interactions API 中，生成的媒体会显示为时间轴中 `model_output` 步骤的 `content` 数组中的不同项，从而保持互动的按时间顺序排列的流程。
 
@@ -882,15 +882,15 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 
 这样可确保响应解析与输入和文本输出的处理方式保持一致，即所有内容都是时间轴中的一个步骤。
 
-## 服务器端工具
+## 1.7 服务器端工具
 
 Gemini 支持内置的服务器端工具，例如 Google 搜索接地。主要区别在于响应如何表示工具执行。
 
-### 之前 (`generateContent`)
+### 1.7.1 之前 (`generateContent`)
 
 在 `generateContent` 中，服务器端工具在很大程度上是不透明的。您启用该工具，并获得包含单独 `groundingMetadata` 对象的最终回答。至关重要的是，引用不是内嵌的；`groundingSupports` 使用字符索引将文本段映射回 `groundingChunks` 中的网页来源。
 
-### Python
+### 1.7.2 Python
 
 ```python
 from google import genai
@@ -914,7 +914,7 @@ for support in metadata.grounding_supports:
     print(f"Citation: {support.segment.text}")
 ```
 
-### JavaScript
+### 1.7.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -938,7 +938,7 @@ for (const support of metadata.groundingSupports) {
 }
 ```
 
-### REST
+### 1.7.4 REST
 
 ```
 # Request
@@ -996,13 +996,13 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5
 }
 ```
 
-### 之后（Interactions API）
+### 1.7.5 之后（Interactions API）
 
 在 Interactions API 中，服务器端工具可提供完全的时间轴透明度。该 API 会将调用和结果记录为不同的执行 `steps`（`google_search_call` 和 `google_search_result`），从而准确显示模型检索到的数据。
 
 此外，该 API 还会**内嵌**返回引用。`model_output` 步骤中的文本项包含自己的 `annotations` 数组，可直接链接到来源，而无需从单独的元数据对象映射索引。
 
-### Python
+### 1.7.6 Python
 
 ```python
 from google import genai
@@ -1025,7 +1025,7 @@ for step in interaction.steps:
                 print(f"Citation: {anno.title} ({anno.uri})")
 ```
 
-### JavaScript
+### 1.7.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1052,7 +1052,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.7.8 REST
 
 ```bash
 # Request
@@ -1111,11 +1111,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 }
 ```
 
-## 函数调用
+## 1.8 函数调用
 
 函数调用和结果的结构也已更改，以适应步骤架构。
 
-### 之前 (`generateContent`)
+### 1.8.1 之前 (`generateContent`)
 
 在 `generateContent` 中，响应会返回候选对象中的函数调用。* {Python}
 
@@ -1163,7 +1163,7 @@ print(response.text)
 ```
 ```
 
-### JavaScript
+### 1.8.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1201,7 +1201,7 @@ response = await client.models.generateContent({
 console.log(response.text);
 ```
 
-### REST
+### 1.8.3 REST
 
 ```
 # Request
@@ -1251,11 +1251,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5
 }
 ```
 
-### 之后（Interactions API）
+### 1.8.4 之后（Interactions API）
 
 工具调用和结果现在是时间轴中的不同步骤。
 
-### Python
+### 1.8.5 Python
 
 ```python
 from google import genai
@@ -1301,7 +1301,7 @@ for step in interaction.steps:
         print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.8.6 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1351,7 +1351,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.8.7 REST
 
 ```bash
 # Initial Request
@@ -1438,17 +1438,17 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 }
 ```
 
-## 流式
+## 1.9 流式
 
 流式传输的一个主要区别在于，Interactions API 使用的端点与 `generateContent` API 相同，但前者在请求正文中包含 `"stream": true`，而后者需要调用专用端点 (`:streamGenerateContent`)。
 
 此外，流式事件现在使用专用类型来监控互动生命周期，并沿时间轴跟踪执行步骤。
 
-### 之前 (`generateContentStream`)
+### 1.9.1 之前 (`generateContentStream`)
 
 借助 `generateContent`，您可以接收响应块的流。
 
-### Python
+### 1.9.2 Python
 
 ```python
 from google import genai
@@ -1462,7 +1462,7 @@ for chunk in response:
     print(chunk.text, end="")
 ```
 
-### JavaScript
+### 1.9.3 JavaScript
 
 ```
 const responseStream = await client.models.generateContentStream({
@@ -1474,7 +1474,7 @@ for await (const chunk of responseStream) {
 }
 ```
 
-### REST
+### 1.9.4 REST
 
 ```
 # Request
@@ -1504,11 +1504,11 @@ event: content.stop
 data: {"event_type": "content.stop", "index": 1}
 ```
 
-### 之后（Interactions API）
+### 1.9.5 之后（Interactions API）
 
 在 Interactions API 中，流式传输使用服务器发送的事件 (SSE) 和专门的增量类型来表示执行步骤。
 
-### Python
+### 1.9.6 Python
 
 ```python
 from google import genai
@@ -1529,7 +1529,7 @@ for event in stream:
         print(f"\n\n--- Stream Finished ---")
 ```
 
-### JavaScript
+### 1.9.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1553,7 +1553,7 @@ for await (const event of stream) {
 }
 ```
 
-### REST
+### 1.9.8 REST
 
 # SSE 流输出示例
 **event: interaction.created
@@ -1576,15 +1576,15 @@ event: interaction.completed
 data: {"type": "interaction.completed", "interaction": {"id": "int_xyz", "status": "completed", "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}}**
 ```
 
-### 流式工具和函数调用
+### 1.9.9 流式工具和函数调用
 
 信息流中工具的行为方式已从 `generateContent` 发生显著变化，可提供更精细的控制和可见性。
 
-#### 之前 (`generateContent`)
+#### 1.9.9.1 之前 (`generateContent`)
 
 使用 `generateContent` 时，流式函数调用会以单个块的形式完整到达。您无法实时看到正在生成的实参，因此处理程序只是检查是否存在完整的 `functionCall` 对象。
 
-### Python
+### 1.9.10 Python
 
 ```python
 from google import genai
@@ -1607,7 +1607,7 @@ for chunk in stream:
         print(chunk.text, end="")
 ```
 
-### JavaScript
+### 1.9.11 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1630,7 +1630,7 @@ for await (const chunk of stream) {
 }
 ```
 
-### REST
+### 1.9.12 REST
 
 ```
 # Request
@@ -1646,11 +1646,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5
 {"candidates": [{"content": {"parts": [{"functionCall": {"name": "get_weather", "args": {"location": "Boston, MA"}}}]}}]}
 ```
 
-#### 之后（Interactions API）
+#### 1.9.12.1 之后（Interactions API）
 
 Interactions API 会以字符为单位将函数调用实参作为 `arguments` 事件进行流式传输。整个工具生命周期（思考、调用、结果和输出）以一系列不同的步骤呈现。
 
-### Python
+### 1.9.13 Python
 
 ```python
 from google import genai
@@ -1677,7 +1677,7 @@ for event in stream:
         print("\n--- Done ---")
 ```
 
-### JavaScript
+### 1.9.14 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1708,7 +1708,7 @@ for await (const event of stream) {
 }
 ```
 
-### REST
+### 1.9.15 REST
 
 ```bash
 # Request

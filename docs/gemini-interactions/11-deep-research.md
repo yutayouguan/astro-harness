@@ -1,4 +1,4 @@
-# Deep Research 智能体
+# 1 Deep Research 智能体
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/deep-research?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -15,7 +15,7 @@ Gemini Deep Research 智能体可自主规划、执行和汇总多步骤研究�
 `generate_content`
 以下示例展示了如何在后台启动研究任务并轮询结果。
 
-### Python
+### 1.1.1 Python
 
 ```python
 import time
@@ -42,7 +42,7 @@ while True:
     time.sleep(10)
 ```
 
-### JavaScript
+### 1.1.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -70,7 +70,7 @@ while (true) {
 }
 ```
 
-### REST
+### 1.1.3 REST
 
 ```
 # 1. Start the research task
@@ -88,22 +88,22 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 # -H "x-goog-api-key: $GEMINI_API_KEY"
 ```
 
-## 支持的版本
+## 1.2 支持的版本
 
 Deep Research 智能体有两个版本：
 
 - **Deep Research** (`deep-research-preview-04-2026`)：专为速度和效率而设计，非常适合流式传输回客户端界面。
 - **Deep Research Max** (`deep-research-max-preview-04-2026`)：可自动收集和汇总上下文，实现最大程度的全面性。
 
-## 协同规划
+## 1.3 协同规划
 
 借助协同规划，您可以在智能体开始工作之前控制研究方向，方法是在执行之前查看和完善研究计划。启用后，智能体会返回建议的研究计划，而不是立即执行。然后，您可以通过多轮互动查看、修改或批准该计划。
 
-### 第 1 步：请求计划
+### 1.3.1 第 1 步：请求计划
 
 在第一次互动中设置 `collaborative_planning=True`。智能体会返回研究计划，而不是完整报告。
 
-### Python
+### 1.3.2 Python
 
 ```python
 from google import genai
@@ -128,7 +128,7 @@ while (result := client.interactions.get(id=plan_interaction.id)).status != "com
 print(result.steps[-1].content[0].text)
 ```
 
-### JavaScript
+### 1.3.3 JavaScript
 
 ```javascript
 const planInteraction = await client.interactions.create({
@@ -149,7 +149,7 @@ while ((result = await client.interactions.get(planInteraction.id)).status !== '
 console.log(result.steps.at(-1).content[0].text);
 ```
 
-### REST
+### 1.3.4 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -167,11 +167,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-### 第 2 步：完善计划（可选）
+### 1.3.5 第 2 步：完善计划（可选）
 
 使用 `previous_interaction_id` 继续对话并迭代计划。保持 `collaborative_planning=True` 以保持规划模式。
 
-### Python
+### 1.3.6 Python
 
 ```
 # Second interaction: refine the plan
@@ -192,7 +192,7 @@ while (result := client.interactions.get(id=refined_plan.id)).status != "complet
 print(result.steps[-1].content[0].text)
 ```
 
-### JavaScript
+### 1.3.7 JavaScript
 
 ```javascript
 const refinedPlan = await client.interactions.create({
@@ -214,7 +214,7 @@ while ((result = await client.interactions.get(refinedPlan.id)).status !== 'comp
 console.log(result.steps.at(-1).content[0].text);
 ```
 
-### REST
+### 1.3.8 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -233,11 +233,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-### 第 3 步：批准并执行
+### 1.3.9 第 3 步：批准并执行
 
 设置 `collaborative_planning=False`（或省略）以批准计划并开始研究。
 
-### Python
+### 1.3.10 Python
 
 ```
 # Third interaction: approve the plan and kick off research
@@ -258,7 +258,7 @@ while (result := client.interactions.get(id=final_report.id)).status != "complet
 print(result.steps[-1].content[0].text)
 ```
 
-### JavaScript
+### 1.3.11 JavaScript
 
 ```javascript
 const finalReport = await client.interactions.create({
@@ -280,7 +280,7 @@ while ((result = await client.interactions.get(finalReport.id)).status !== 'comp
 console.log(result.steps.at(-1).content[0].text);
 ```
 
-### REST
+### 1.3.12 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -299,7 +299,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## 可视化
+## 1.4 可视化
 
 当 `visualization` 设置为 `"auto"` 时，智能体可以生成图表、
 图形和其他视觉元素来支持其研究结果。
@@ -307,7 +307,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 `"auto"` 可启用该功能，但智能体仅
 在提示要求提供视觉内容时才会生成视觉内容。
 
-### Python
+### 1.4.1 Python
 
 ```python
 import base64
@@ -342,7 +342,7 @@ for step in result.steps:
                 print(f"Received image: {len(image_bytes)} bytes")
 ```
 
-### JavaScript
+### 1.4.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -379,7 +379,7 @@ for (const step of result.steps) {
 }
 ```
 
-### REST
+### 1.4.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -396,7 +396,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## 支持的工具
+## 1.5 支持的工具
 
 Deep Research 支持多种内置工具和外部工具。默认情况下（未提供 `tools` 参数时），智能体可以访问 Google 搜索、网址上下文和代码执行。您可以明确指定工具来限制或扩展智能体的功能。
 
@@ -408,11 +408,11 @@ Deep Research 支持多种内置工具和外部工具。默认情况下（未提
 | MCP 服务器 | `mcp_server` | 连接到远程 MCP 服务器以访问外部工具。 |
 | 文件搜索 | `file_search` | 搜索您上传的文档语料库。 |
 
-### Google 搜索
+### 1.5.1 Google 搜索
 
 明确启用 Google 搜索作为唯一工具：
 
-### Python
+### 1.5.2 Python
 
 ```
 interaction = client.interactions.create(
@@ -423,7 +423,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.5.3 JavaScript
 
 ```
 const interaction = await client.interactions.create({
@@ -434,7 +434,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.5.4 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -448,11 +448,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-### 网址上下文
+### 1.5.5 网址上下文
 
 让智能体能够读取和总结特定网页：
 
-### Python
+### 1.5.6 Python
 
 ```
 interaction = client.interactions.create(
@@ -463,7 +463,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.5.7 JavaScript
 
 ```
 const interaction = await client.interactions.create({
@@ -474,7 +474,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.5.8 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -488,11 +488,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-### 代码执行
+### 1.5.9 代码执行
 
 允许智能体执行代码以进行计算和数据分析：
 
-### Python
+### 1.5.10 Python
 
 ```
 interaction = client.interactions.create(
@@ -503,7 +503,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.5.11 JavaScript
 
 ```
 const interaction = await client.interactions.create({
@@ -514,7 +514,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.5.12 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -528,7 +528,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-### MCP 服务器
+### 1.5.13 MCP 服务器
 
 连接到远程 MCP 服务器，让智能体能够访问外部工具和服务。
 
@@ -542,9 +542,9 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 | `headers` | `object` | 否 | 作为 HTTP 标头随每个请求发送到服务器的键值对（例如身份验证令牌）。 |
 | `allowed_tools` | `array` | 否 | 限制智能体可以从服务器调用的工具。 |
 
-#### 基本用法
+#### 1.5.13.1 基本用法
 
-### Python
+### 1.5.14 Python
 
 ```
 interaction = client.interactions.create(
@@ -562,7 +562,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.5.15 JavaScript
 
 ```
 const interaction = await client.interactions.create({
@@ -580,7 +580,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.5.16 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -601,11 +601,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-### 文件搜索
+### 1.5.17 文件搜索
 
 使用[文件搜索](https://ai.google.dev/gemini-api/docs/file-search?hl=zh-cn)工具让智能体能够访问您自己的数据。
 
-### Python
+### 1.5.18 Python
 
 ```python
 import time
@@ -626,7 +626,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.5.19 JavaScript
 
 ```
 const interaction = await client.interactions.create({
@@ -639,7 +639,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.5.20 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -655,7 +655,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## 可控性和格式设置
+## 1.6 可控性和格式设置
 
 您可以在提示中提供具体的格式设置说明，以控制智能体的输出。这样，您就可以将报告划分为特定的部分和
 子部分，添加数据表，或针对不同的受众群体调整语气（例如
@@ -663,7 +663,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 在输入文本中明确定义所需的输出格式。
 
-### Python
+### 1.6.1 Python
 
 ```
 prompt = """
@@ -682,7 +682,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.6.2 JavaScript
 
 ```
 const prompt = `
@@ -701,7 +701,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.6.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -714,11 +714,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## 多模态输入
+## 1.7 多模态输入
 
 Deep Research 支持多模态输入，包括图片和文档 (PDF)，让智能体能够分析视觉内容，并根据提供的输入进行基于网络的上下文研究。
 
-### Python
+### 1.7.1 Python
 
 ```python
 import time
@@ -759,7 +759,7 @@ while True:
     time.sleep(10)
 ```
 
-### JavaScript
+### 1.7.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -801,7 +801,7 @@ while (true) {
 }
 ```
 
-### REST
+### 1.7.3 REST
 
 ```
 # 1. Start the research task with image input
@@ -822,12 +822,12 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 # -H "x-goog-api-key: $GEMINI_API_KEY"
 ```
 
-### 文档理解
+### 1.7.4 文档理解
 
 借助文档理解，您可以直接将文档作为多模态输入传递。
 智能体会分析提供的文档，并根据其内容进行研究。
 
-### Python
+### 1.7.5 Python
 
 ```python
 from google import genai
@@ -848,7 +848,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.7.6 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -869,7 +869,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.7.7 REST
 
 ```
 # 1. Start the research task with document input
@@ -886,13 +886,13 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## 处理长时间运行的任务
+## 1.8 处理长时间运行的任务
 
 Deep Research 是一个多步骤流程，涉及规划、搜索、阅读和撰写。此周期通常会超出同步 API 调用的标准超时限制。
 
 智能体必须使用 `background=True`。API 会立即返回部分 `Interaction` 对象。您可以使用 `id` 属性检索互动以进行轮询。互动状态将从 `in_progress` 转换为 `completed` 或 `failed`。如需查看有关管理后台任务的全面指南，请参阅[后台执行](https://ai.google.dev/gemini-api/docs/background-execution?hl=zh-cn)。
 
-### 流式传输
+### 1.8.1 流式传输
 
 Deep Research 支持流式传输，以接收有关研究进度的实时更新，包括思路摘要、文本输出和生成的图片。
 您必须设置 `stream=True` 和 `background=True`。
@@ -901,7 +901,7 @@ Deep Research 支持流式传输，以接收有关研究进度的实时更新，
 您必须通过在 `agent_config` 中将 `thinking_summaries` 设置为
 `"auto"` 来启用 **思路摘要**。否则，流可能只会提供最终结果。
 
-#### 流事件类型
+#### 1.8.1.1 流事件类型
 
 | 事件类型 | 增量类型 | 说明 |
 | --- | --- | --- |
@@ -911,7 +911,7 @@ Deep Research 支持流式传输，以接收有关研究进度的实时更新，
 
 以下示例启动了研究任务，并通过自动重新连接处理流。它会跟踪 `interaction_id` 和 `last_event_id`，以便在连接断开（例如在 600 秒超时后）时，可以从中断的位置继续。
 
-### Python
+### 1.8.2 Python
 
 ```python
 from google import genai
@@ -957,7 +957,7 @@ while not is_complete and interaction_id:
     process_stream(stream)
 ```
 
-### JavaScript
+### 1.8.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1006,7 +1006,7 @@ while (!isComplete && interactionId) {
 }
 ```
 
-### REST
+### 1.8.4 REST
 
 ```
 # 1. Start the stream (save the INTERACTION_ID from the interaction.start event
@@ -1030,11 +1030,11 @@ curl -X GET "https://generativelanguage.googleapis.com/v1beta/interactions/INTER
 -H "x-goog-api-key: $GEMINI_API_KEY"
 ```
 
-## 后续问题和互动
+## 1.9 后续问题和互动
 
 在智能体返回最终报告后，您可以使用 `previous_interaction_id` 继续对话。这样，您就可以请求对研究的特定部分进行澄清、总结或详细说明，而无需重新开始整个任务。
 
-### Python
+### 1.9.1 Python
 
 ```python
 import time
@@ -1051,7 +1051,7 @@ interaction = client.interactions.create(
 print(interaction.steps[-1].content[0].text)
 ```
 
-### JavaScript
+### 1.9.2 JavaScript
 
 ```javascript
 const interaction = await client.interactions.create({
@@ -1062,7 +1062,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.steps.at(-1).content[0].text);
 ```
 
-### REST
+### 1.9.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -1075,7 +1075,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## Gemini Deep Research 智能体的适用场景
+## 1.10 Gemini Deep Research 智能体的适用场景
 
 Deep Research 是一种**智能体** ，而不仅仅是一种模型。它最适合需要“分析师即服务”方法而不是低延迟聊天的场景。
 
@@ -1086,7 +1086,7 @@ Deep Research 是一种**智能体** ，而不仅仅是一种模型。它最适�
 | **输出** | 对话文本、代码、简短摘要 | 详细报告、长篇分析、比较表格 |
 | **最适合** | 聊天机器人、提取、创意写作 | 市场分析、尽职调查、文献综述、竞争格局 |
 
-## 智能体配置
+## 1.11 智能体配置
 
 Deep Research 使用 `agent_config` 参数来控制行为。
 将其作为包含以下字段的字典传递：
@@ -1098,7 +1098,7 @@ Deep Research 使用 `agent_config` 参数来控制行为。
 | `visualization` | `string` | `"auto"` | 设置为 `"auto"` 可启用智能体生成的图表和图片。设置为 `"off"` 可停用。 |
 | `collaborative_planning` | `boolean` | `false` | 设置为 `true` 可在研究开始之前启用多轮计划审核。 |
 
-### Python
+### 1.11.1 Python
 
 ```
 agent_config = {
@@ -1116,7 +1116,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.11.2 JavaScript
 
 ```
 const interaction = await client.interactions.create({
@@ -1132,7 +1132,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.11.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -1151,13 +1151,13 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## 适用范围和定价
+## 1.12 适用范围和定价
 
 您可以在 Google AI Studio 和 Gemini API 中使用 Interactions API 访问 Gemini Deep Research 智能体。
 
 定价遵循[随用随付模式](https://ai.google.dev/gemini-api/docs/pricing?hl=zh-cn#pricing-for-agents)，具体取决于底层 Gemini 模型和智能体使用的特定工具。与标准聊天请求（一个请求产生一个输出）不同，Deep Research 任务是一种智能体工作流。单个请求会触发规划、搜索、阅读和推理的自主循环。
 
-### 估算费用
+### 1.12.1 估算费用
 
 费用因所需的研究深度而异。智能体会自主确定回答提示需要多少阅读和搜索。
 
@@ -1166,7 +1166,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 - **Deep Research Max** (`deep-research-max-preview-04-2026`)：对于深入的竞争格局分析或广泛的尽职调查，智能体可能会使用多达约 160 个搜索查询、约 90 万个输入 token（约 50-70% 缓存）和约 8 万个输出 token。
  - **估计总价**： 每个任务约 3.00 美元 - 7.00 美元
 
-## 存在安全隐患
+## 1.13 存在安全隐患
 
 让智能体能够访问网络和您的私有文件需要仔细考虑安全风险。
 
@@ -1174,7 +1174,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 - **网络内容风险**： 智能体会搜索公开网络。虽然我们实施了强大的安全过滤条件，但智能体仍有可能遇到并处理恶意网页。我们建议您查看响应中提供的 `citations` 以验证来源。
 - **数据泄露**： 如果您还允许智能体浏览网络，请谨慎要求智能体总结敏感的内部数据。
 
-## 最佳做法
+## 1.14 最佳做法
 
 - **提示未知内容**： 指示智能体如何处理缺失的数据。
 *例如，在提示中添加“如果 2025 年的具体数据不可用，请明确说明这些数据是预测值或不可用，而不是估算值”。*
@@ -1183,7 +1183,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 - **多模态输入**： Deep Research 智能体支持多模态输入。
 请谨慎使用，因为这会增加费用并增加上下文窗口溢出的风险。
 
-## 限制
+## 1.15 限制
 
 - **自定义工具**： 您目前无法提供自定义函数调用工具，但可以将远程 MCP（模型上下文协议）服务器与 Deep Research 智能体搭配使用。
 - **结构化输出**： Deep Research 智能体目前不支持结构化输出。
@@ -1194,7 +1194,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 限制](https://ai.google.dev/gemini-api/terms?hl=zh-cn#use-restrictions2)
 。
 
-## 后续步骤
+## 1.16 后续步骤
 
 - 详细了解 [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview?hl=zh-cn)。
 - 了解如何使用[文件搜索](https://ai.google.dev/gemini-api/docs/file-search?hl=zh-cn)

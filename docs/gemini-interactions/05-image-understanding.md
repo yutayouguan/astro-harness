@@ -1,4 +1,4 @@
-# 图片理解 / 图片推理
+# 1 图片理解 / 图片推理
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/image-understanding?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -10,7 +10,7 @@ Gemini 模型从一开始就具有多模态特性，可用于执行各种图像�
 
 除了具备一般多模态功能之外，Gemini 模型还通过额外训练，针对特定用例（例如[对象检测](#object-detection)和[细分](#segmentation)）提供**更高的准确度**。
 
-## 将图片传递给 Gemini
+## 1.1 将图片传递给 Gemini
 
 您可以使用多种方法将图片作为输入内容提供给 Gemini：
 
@@ -18,11 +18,11 @@ Gemini 模型从一开始就具有多模态特性，可用于执行各种图像�
 - [传递内嵌图片数据](#inline-image)：用于传递 base64 编码的图片数据。
 - [使用 File API 上传图片](#upload-image)：建议用于较大的文件，或在多个请求中重复使用图片。
 
-### 使用网址传递图片
+### 1.1.1 使用网址传递图片
 
 您可以使用 [Files API](https://ai.google.dev/gemini-api/docs/files?hl=zh-cn) 上传图片，并在请求中传递该图片：
 
-### Python
+### 1.1.2 Python
 
 ```python
 from google import genai
@@ -45,7 +45,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -71,7 +71,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.1.4 REST
 
 ```
 # First upload the file using the Files API, then use the URI:
@@ -91,11 +91,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-### 传递内嵌图片数据
+### 1.1.5 传递内嵌图片数据
 
 您可以以 base64 编码的字符串形式提供图片数据：
 
-### Python
+### 1.1.6 Python
 
 ```python
 import base64
@@ -120,7 +120,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -145,7 +145,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.1.8 REST
 
 ```
 IMG_PATH="/path/to/your/image1.jpg"
@@ -172,11 +172,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-### 使用 File API 上传图片
+### 1.1.9 使用 File API 上传图片
 
 对于大型文件，或者为了能够重复使用同一图片文件，请使用 Files API。请参阅 [Files API 指南](https://ai.google.dev/gemini-api/docs/files?hl=zh-cn)。
 
-### Python
+### 1.1.10 Python
 
 ```python
 from google import genai
@@ -199,7 +199,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.11 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -225,7 +225,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.1.12 REST
 
 ```
 # First upload the file (see Files API guide for details)
@@ -247,11 +247,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 使用多张图片进行提示
+## 1.2 使用多张图片进行提示
 
 您可以在单个提示中提供多张图片，只需在 `input` 数组中添加多个图片对象即可：
 
-### Python
+### 1.2.1 Python
 
 ```python
 from google import genai
@@ -277,7 +277,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.2.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -303,7 +303,7 @@ const interaction = await client.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.2.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -327,7 +327,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 对象检测
+## 1.3 对象检测
 
 模型经过训练，可以检测图片中的对象并获取其边界框坐标。相对于图片尺寸的坐标，缩放至 [0, 1000]。您需要根据原始图片大小对这些坐标进行反缩放。
 
@@ -335,7 +335,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 > `zod`
 > `npm install zod`
 
-### Python
+### 1.3.1 Python
 
 ```python
 from google import genai
@@ -375,7 +375,7 @@ bounding_boxes = BoundingBoxes.model_validate_json(interaction.output_text)
 print(bounding_boxes)
 ```
 
-### JavaScript
+### 1.3.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -413,7 +413,7 @@ const result = boundingBoxesSchema.parse(JSON.parse(interaction.output_text));
 console.log(result);
 ```
 
-### REST
+### 1.3.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -456,13 +456,13 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 如需查看更多示例，请访问 [Gemini Cookbook](https://github.com/google-gemini/cookbook)。
 
-## 细分
+## 1.4 细分
 
 Gemini 模型不仅可以检测商品，还可以对商品进行分割并提供其轮廓遮罩。
 
 模型会预测一个 JSON 列表，其中每个项都表示一个分割掩码。每个商品都有一个边界框 (“`box_2d`”)，其格式为 `[ymin, xmin, ymax, xmax]`，包含介于 0 到 1000 之间的归一化坐标；一个用于标识对象的标签 (“`label`”)；最后是边界框内的分割掩码，以归一化为 0-1000 的 `[x, y]` 坐标多边形表示。
 
-### Python
+### 1.4.1 Python
 
 ```python
 from google import genai
@@ -511,7 +511,7 @@ items = BoundingBoxes.model_validate_json(interaction.output_text)
 print("Segmentation results:", items)
 ```
 
-### JavaScript
+### 1.4.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -557,7 +557,7 @@ const result = boundingBoxesSchema.parse(JSON.parse(interaction.output_text));
 console.log(result);
 ```
 
-### REST
+### 1.4.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -603,7 +603,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 ![一张放有纸杯蛋糕的桌子，其中木质和玻璃物体突出显示](https://ai.google.dev/static/gemini-api/docs/images/segmentation.jpg?hl=zh-cn)
 
-## 支持的图片格式
+## 1.5 支持的图片格式
 
 Gemini 支持以下图片格式 MIME 类型：
 
@@ -615,7 +615,7 @@ Gemini 支持以下图片格式 MIME 类型：
 
 如需了解其他文件输入方法，请参阅[文件输入方法](https://ai.google.dev/gemini-api/docs/file-input-methods?hl=zh-cn)指南。
 
-## 功能
+## 1.6 功能
 
 所有 Gemini 模型版本都是多模态模型，可用于各种图像处理和计算机视觉任务，包括但不限于图片说明、视觉问答、图片分类、对象检测和分割。
 
@@ -623,13 +623,13 @@ Gemini 可以减少对专用机器学习模型的需求，具体取决于您的�
 
 除了通用功能外，最新模型版本还经过专门训练，可提高专业任务的准确性，例如增强的[对象检测](#object-detection)和[分割](#segmentation)。
 
-## 限制和关键技术信息
+## 1.7 限制和关键技术信息
 
-### 文件限制
+### 1.7.1 文件限制
 
 Gemini 模型支持每个请求最多上传 3,600 个图片文件。
 
-### token 计算
+### 1.7.2 token 计算
 
 - 如果两个维度均小于或等于 384 像素，则为 258 个 token。
 较大的图片会被分块为 768x768 像素的图块，每个图块需要 258 个 token。
@@ -641,17 +641,17 @@ Gemini 模型支持每个请求最多上传 3,600 个图片文件。
 
 例如，对于尺寸为 960x540 的图片，剪裁单元尺寸为 360。将每个维度除以 360，得到的图块数量为 3 * 2 = 6。
 
-### 媒体分辨率
+### 1.7.3 媒体分辨率
 
 Gemini 3 通过 `media_resolution` 参数引入了对多模态视觉处理的精细控制。`media_resolution` 参数用于确定**为每个输入图片或视频帧分配的 token 数量上限**。分辨率越高，模型读取细小文字或识别细微细节的能力就越强，但 token 用量和延迟时间也会增加。
 
-## 技巧和最佳做法
+## 1.8 技巧和最佳做法
 
 - 验证图片是否已正确旋转。
 - 使用清晰且不模糊的图片。
 - 如果使用包含文本的单张图片，请在 `input` 数组中将文本提示放在图片之前。
 
-## 后续步骤
+## 1.9 后续步骤
 
 本指南将介绍如何上传图片文件并根据图片输入生成文本输出。如需了解详情，请参阅以下资源：
 

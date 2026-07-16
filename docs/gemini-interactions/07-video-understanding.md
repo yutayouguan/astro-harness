@@ -1,4 +1,4 @@
-# 视频理解
+# 1 视频理解
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/video-understanding?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -25,13 +25,13 @@ Gemini 的一些视觉功能包括：描述视频、对视频进行分段和提�
 如需了解其他文件输入方法（例如使用外部网址或存储在 Google Cloud 中的文件），请参阅
 [文件输入方法](https://ai.google.dev/gemini-api/docs/file-input-methods?hl=zh-cn)指南。
 
-### 上传视频文件
+### 1.1.1 上传视频文件
 
 以下代码会下载示例视频，使用 [Files API](https://ai.google.dev/gemini-api/docs/files?hl=zh-cn) 上传该视频，
 等待其处理完毕，然后使用上传的文件引用来
 总结视频。
 
-### Python
+### 1.1.2 Python
 
 ```python
 from google import genai
@@ -58,7 +58,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -98,7 +98,7 @@ async function main() {
 await main();
 ```
 
-### REST
+### 1.1.4 REST
 
 ```
 VIDEO_PATH="path/to/sample.mp4"
@@ -172,13 +172,13 @@ File API 直接接受视频文件格式。
 如需详细了解如何使用媒体文件，请参阅
 [Files API](https://ai.google.dev/gemini-api/docs/files?hl=zh-cn)。
 
-### 以内嵌方式传递视频数据
+### 1.1.5 以内嵌方式传递视频数据
 
 您可以直接在请求中传递较小的视频，而无需使用 File API 上传视频文件。此方法适用于总请求大小不超过 20 MB 的较短视频。
 
 以下是提供内嵌视频数据的示例：
 
-### Python
+### 1.1.6 Python
 
 ```python
 from google import genai
@@ -202,7 +202,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -227,7 +227,7 @@ const interaction = await ai.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.1.8 REST
 
 > [!NOTE]
 > `Argument list too long`
@@ -257,11 +257,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
     }' 2> /dev/null
 ```
 
-### 传递 YouTube 网址
+### 1.1.9 传递 YouTube 网址
 
 您可以将 YouTube 网址直接传递给 Gemini API，作为请求的一部分，如下所示：
 
-### Python
+### 1.1.10 Python
 
 ```python
 from google import genai
@@ -280,7 +280,7 @@ interaction = client.interactions.create(
 print(interaction.output_text)
 ```
 
-### JavaScript
+### 1.1.11 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -300,7 +300,7 @@ const interaction = await ai.interactions.create({
 console.log(interaction.output_text);
 ```
 
-### REST
+### 1.1.12 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -325,53 +325,53 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 - 对于 Gemini 2.5 之前的模型，您每次请求只能上传 1 个视频。对于 Gemini 2.5 及更高版本的模型，您每次请求最多能上传 10 个视频。
 - 您只能上传公开视频（不能上传私享视频或未公开列出的视频）。
 
-## 引用内容中的时间戳
+## 1.2 引用内容中的时间戳
 
 您可以使用 `MM:SS` 格式的时间戳，针对视频中的特定时间点提出问题。
 
-### Python
+### 1.2.1 Python
 
 ```
 prompt = "What are the examples given at 00:05 and 00:10 supposed to show us?"
 ```
 
-### JavaScript
+### 1.2.2 JavaScript
 
 ```
 const prompt = "What are the examples given at 00:05 and 00:10 supposed to show us?";
 ```
 
-### REST
+### 1.2.3 REST
 
 ```
 PROMPT="What are the examples given at 00:05 and 00:10 supposed to show us?"
 ```
 
-## 从视频中提取详细分析洞见
+## 1.3 从视频中提取详细分析洞见
 
 Gemini 模型通过处理**音频和视觉** 信息流中的信息，提供强大的视频内容理解功能。这让您可以提取丰富多样的详细信息，包括生成视频中发生情况的描述，以及回答有关视频内容的问题。
 
 对于视觉描述，模型以 **1 帧/秒** (FPS) 的速率对视频进行采样。此默认采样率适用于大多数内容，但请注意，它可能会遗漏快速移动或场景快速变化的视频中的细节。
 
-### Python
+### 1.3.1 Python
 
 ```
 prompt = "Describe the key events in this video, providing both audio and visual details. Include timestamps for salient moments."
 ```
 
-### JavaScript
+### 1.3.2 JavaScript
 
 ```
 const prompt = "Describe the key events in this video, providing both audio and visual details. Include timestamps for salient moments.";
 ```
 
-### REST
+### 1.3.3 REST
 
 ```
 PROMPT="Describe the key events in this video, providing both audio and visual details. Include timestamps for salient moments."
 ```
 
-## 支持的视频格式
+## 1.4 支持的视频格式
 
 Gemini 支持以下视频格式 MIME 类型：
 
@@ -385,7 +385,7 @@ Gemini 支持以下视频格式 MIME 类型：
 - `video/wmv`
 - `video/3gpp`
 
-## 有关视频技术方面的详细信息
+## 1.5 有关视频技术方面的详细信息
 
 - **支持的模型和上下文** ：所有 Gemini 模型都可以处理视频数据。
  - 上下文窗口为 100 万个 token 的模型可以处理时长不超过 1 小时（默认媒体分辨率）或 3 小时（低媒体分辨率）的视频。
@@ -408,7 +408,7 @@ Gemini 支持以下视频格式 MIME 类型：
  - 如果将文本与单个视频相结合，请在 `input` 数组中将文本提示放在视频部分之后 。
  - 请注意，如果选段率为 1 FPS，快速动作序列可能会丢失细节。如有必要，可以考虑放慢此类片段的播放速度。
 
-## 后续步骤
+## 1.6 后续步骤
 
 本指南介绍了如何上传视频文件以及如何从视频输入生成文本输出。如需了解详情，请参阅以下资源：
 

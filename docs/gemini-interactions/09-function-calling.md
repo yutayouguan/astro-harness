@@ -1,4 +1,4 @@
-# 函数调用
+# 1 函数调用
 
 > 来源：[Google AI for Developers](https://ai.google.dev/gemini-api/docs/function-calling?hl=zh-cn)  
 > 抓取说明：官方文档 **Interactions API** 版本（页面默认版本）。  
@@ -15,11 +15,11 @@
 
 您可以浏览以下示例，了解这些使用情形：
 
-### 安排会议
+### 1.1.1 安排会议
 
 此示例展示了如何定义一个函数，用于在特定时间安排与参会者的会议，从而使模型能够解析用户请求并返回结构化实参，以触发外部系统中的操作。
 
-### Python
+### 1.1.2 Python
 
 ```python
 from google import genai
@@ -54,7 +54,7 @@ for step in interaction.steps:
         print(f"Arguments: {step.arguments}")
 ```
 
-### JavaScript
+### 1.1.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -91,7 +91,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.1.4 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -118,11 +118,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-### 获取天气信息
+### 1.1.5 获取天气信息
 
 此示例展示了如何定义一个用于检索某个位置的温度数据的函数，从而使模型能够调用外部 API 来回答需要实时信息或外部信息的查询。
 
-### Python
+### 1.1.6 Python
 
 ```python
 from google import genai
@@ -157,7 +157,7 @@ for step in interaction.steps:
         print(f"Arguments: {step.arguments}")
 ```
 
-### JavaScript
+### 1.1.7 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -194,7 +194,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.1.8 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -218,11 +218,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-### 创建图表
+### 1.1.9 创建图表
 
 此示例展示了如何定义一个可根据结构化数据生成条形图的函数，演示了模型如何使用外部工具执行计算或创建视觉资源：
 
-### Python
+### 1.1.10 Python
 
 ```python
 from google import genai
@@ -256,7 +256,7 @@ for step in interaction.steps:
         print(f"Arguments: {step.arguments}")
 ```
 
-### JavaScript
+### 1.1.11 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -291,7 +291,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.1.12 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -317,7 +317,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 函数调用的工作原理
+## 1.2 函数调用的工作原理
 
 ![函数调用概览](https://ai.google.dev/static/gemini-api/docs/images/function-calling-overview.png?hl=zh-cn)
 
@@ -330,9 +330,9 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 此过程可在多个回合中重复进行。该模型支持在单个对话轮次中调用多个函数（[并行函数调用](#parallel_function_calling)）以及按顺序调用多个函数（[组合式函数调用](#compositional_function_calling)）。
 
-### 第 1 步：定义函数声明
+### 1.2.1 第 1 步：定义函数声明
 
-### Python
+### 1.2.2 Python
 
 ```
 set_light_values_declaration = {
@@ -361,7 +361,7 @@ def set_light_values(brightness: int, color_temp: str) -> dict:
     return {"brightness": brightness, "colorTemperature": color_temp}
 ```
 
-### JavaScript
+### 1.2.3 JavaScript
 
 ```
 const setLightValuesTool = {
@@ -383,9 +383,9 @@ function setLightValues(brightness, color_temp) {
 }
 ```
 
-### 第 2 步：使用函数声明调用模型
+### 1.2.4 第 2 步：使用函数声明调用模型
 
-### Python
+### 1.2.5 Python
 
 ```python
 from google import genai
@@ -402,7 +402,7 @@ fc_step = next(s for s in interaction.steps if s.type == "function_call")
 print(fc_step)
 ```
 
-### JavaScript
+### 1.2.6 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -427,9 +427,9 @@ name='set_light_values'
 arguments={'color_temp': 'warm', 'brightness': 25}
 ```
 
-### 第 3 步：执行函数
+### 1.2.7 第 3 步：执行函数
 
-### Python
+### 1.2.8 Python
 
 ```
 fc_step = next(s for s in interaction.steps if s.type == "function_call")
@@ -439,7 +439,7 @@ if fc_step.name == "set_light_values":
     print(f"Function execution result: {result}")
 ```
 
-### JavaScript
+### 1.2.9 JavaScript
 
 ```javascript
 const fcStep = interaction.steps.find(s => s.type === 'function_call');
@@ -451,9 +451,9 @@ if (fcStep.name === 'set_light_values') {
 }
 ```
 
-### 第 4 步：将结果发送回模型
+### 1.2.10 第 4 步：将结果发送回模型
 
-### Python
+### 1.2.11 Python
 
 ```
 final_interaction = client.interactions.create(
@@ -473,7 +473,7 @@ final_interaction = client.interactions.create(
 print(final_interaction.output_text)
 ```
 
-### JavaScript
+### 1.2.12 JavaScript
 
 ```javascript
 const finalInteraction = await client.interactions.create({
@@ -491,7 +491,7 @@ const finalInteraction = await client.interactions.create({
 console.log(finalInteraction.output_text);
 ```
 
-### 无状态函数调用
+### 1.2.13 无状态函数调用
 
 您还可以在无状态模式下使用函数调用，方法是在客户端管理对话记录并设置 `store=false`。
 
@@ -500,7 +500,7 @@ console.log(finalInteraction.output_text);
 2. 第 1 轮中返回的所有模型生成的步骤（包括 `thought` 和 `function_call` 步骤），与接收到的完全一致。
 3. 包含已执行函数的输出的 `function_result` 步骤。
 
-### Python
+### 1.2.14 Python
 
 ```python
 from google import genai
@@ -546,7 +546,7 @@ final_interaction = client.interactions.create(
 print(final_interaction.output_text)
 ```
 
-### JavaScript
+### 1.2.15 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -596,7 +596,7 @@ async function main() {
 await main();
 ```
 
-### REST
+### 1.2.16 REST
 
 ```
 # Turn 1: Send request with tools and store: false
@@ -670,7 +670,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }"
 ```
 
-## 函数声明
+## 1.3 函数声明
 
 函数声明作为工具传递，包含以下内容：
 
@@ -682,15 +682,15 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
  - `properties`（对象）：包含类型和说明的各个参数。
  - `required`（数组）：必需的参数名称。
 
-## 使用思考模型进行函数调用
+## 1.4 使用思考模型进行函数调用
 
 Gemini 3 系列模型使用内部[“思考”](https://ai.google.dev/gemini-api/docs/thinking?hl=zh-cn)流程来改进函数调用。SDK 会自动为您处理[意念签名](https://ai.google.dev/gemini-api/docs/thought-signatures?hl=zh-cn)。
 
-## 并行函数调用
+## 1.5 并行函数调用
 
 当多个函数相互独立时，可同时调用这些函数：
 
-### Python
+### 1.5.1 Python
 
 ```
 power_disco_ball = {"type": "function", "name": "power_disco_ball", "description": "Powers the disco ball.",
@@ -715,7 +715,7 @@ for step in interaction.steps:
         print(f"{step.name}({args})")
 ```
 
-### JavaScript
+### 1.5.2 JavaScript
 
 ```javascript
 const powerDiscoBall = { type: 'function', name: 'power_disco_ball', description: 'Powers the disco ball.',
@@ -739,7 +739,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.5.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -790,11 +790,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 组合式函数调用
+## 1.6 组合式函数调用
 
 将多个函数调用链接在一起，以处理复杂的请求（例如，先获取位置信息，然后获取该位置的天气）。
 
-### Python
+### 1.6.1 Python
 
 ```
 get_weather_forecast_declaration = {
@@ -847,7 +847,7 @@ for step in interaction.steps:
                  print(part.text)
 ```
 
-### JavaScript
+### 1.6.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -906,7 +906,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.6.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -944,7 +944,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 函数调用模式
+## 1.7 函数调用模式
 
 在 `generation_config` 中使用 `tool_choice` 控制模型使用工具的方式：
 
@@ -953,7 +953,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 - `none`：禁止模型进行函数调用。
 - `validated`（预览版）：模型可确保函数架构合规性。
 
-### Python
+### 1.7.1 Python
 
 ```
 generation_config = {
@@ -966,7 +966,7 @@ generation_config = {
 }
 ```
 
-### JavaScript
+### 1.7.2 JavaScript
 
 ```
 const generation_config = {
@@ -979,7 +979,7 @@ const generation_config = {
 };
 ```
 
-### REST
+### 1.7.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -1011,11 +1011,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 多功能工具使用
+## 1.8 多功能工具使用
 
 您可以启用多个工具，在同一请求中将内置工具与函数调用相结合。Gemini 3 模型可在互动中开箱即用地将内置工具与函数调用相结合。传递 `previous_interaction_id` 会自动循环使用内置工具上下文。
 
-### Python
+### 1.8.1 Python
 
 ```python
 from google import genai
@@ -1069,7 +1069,7 @@ for step in interaction.steps:
         print(interaction_2.output_text)
 ```
 
-### JavaScript
+### 1.8.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1121,7 +1121,7 @@ for (const step of interaction.steps) {
 }
 ```
 
-### REST
+### 1.8.3 REST
 
 ```
 # Turn 1: Send request with built-in google_search tool and custom weather tool
@@ -1181,7 +1181,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 多模态函数响应
+## 1.9 多模态函数响应
 
 对于 Gemini 3 系列模型，您可以在发送给模型的函数响应部分中添加多模态内容。模型可以在下一轮对话中处理此多模态内容，从而生成更明智的回答。
 
@@ -1189,7 +1189,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 以下示例展示了如何在互动中将包含图片数据的功能响应发送回模型：
 
-### Python
+### 1.9.1 Python
 
 ```python
 import base64
@@ -1228,7 +1228,7 @@ final_interaction = client.interactions.create(
 print(final_interaction.output_text)
 ```
 
-### JavaScript
+### 1.9.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from "@google/genai";
@@ -1260,7 +1260,7 @@ const finalInteraction = await client.interactions.create({
 console.log(finalInteraction.output_text);
 ```
 
-### REST
+### 1.9.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -1287,11 +1287,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
   }'
 ```
 
-## 使用结构化输出进行函数调用
+## 1.10 使用结构化输出进行函数调用
 
 对于 Gemini 3 系列模型，将函数调用与[结构化输出](https://ai.google.dev/gemini-api/docs/structured-output?hl=zh-cn)相结合，可获得格式一致的回答。
 
-## 远程 MCP（模型上下文协议）
+## 1.11 远程 MCP（模型上下文协议）
 
 Interactions API 支持连接到远程 MCP 服务器，以便模型访问外部工具和服务。您可以在工具配置中提供服务器 `name` 和 `url`。
 
@@ -1308,9 +1308,9 @@ Interactions API 支持连接到远程 MCP 服务器，以便模型访问外部�
 | `headers` | `object` | 否 | 作为 HTTP 标头随每个请求一起发送到服务器的键值对（例如身份验证令牌）。 |
 | `allowed_tools` | `array` | 否 | 限制智能体可调用的服务器工具。 |
 
-### 示例
+### 1.11.1 示例
 
-### Python
+### 1.11.2 Python
 
 ```python
 from google import genai
@@ -1330,7 +1330,7 @@ interaction = client.interactions.create(
 )
 ```
 
-### JavaScript
+### 1.11.3 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1350,7 +1350,7 @@ const interaction = await client.interactions.create({
 });
 ```
 
-### REST
+### 1.11.4 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
@@ -1369,11 +1369,11 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 }'
 ```
 
-## 流式传输工具调用
+## 1.12 流式传输工具调用
 
 将工具与流式传输搭配使用时，模型会在流中生成一系列 `step.delta` 事件作为函数调用。可以使用 `arguments` 将工具实参作为部分实参进行流式传输。您必须先汇总这些增量，以重建完整的工具调用，然后才能执行它们。
 
-### Python
+### 1.12.1 Python
 
 ```python
 import json
@@ -1443,7 +1443,7 @@ for event in stream:
         print(json.dumps(tool_calls, indent=2))
 ```
 
-### JavaScript
+### 1.12.2 JavaScript
 
 ```javascript
 import { GoogleGenAI } from '@google/genai';
@@ -1511,7 +1511,7 @@ for await (const event of stream) {
 }
 ```
 
-### REST
+### 1.12.3 REST
 
 ```bash
 curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions?alt=sse" \
@@ -1536,7 +1536,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions?alt=
 }'
 ```
 
-## 最佳做法
+## 1.13 最佳做法
 
 - **函数和参数说明**：务必清晰具体。
 - **命名**：使用描述性名称，不得包含空格或特殊字符。
@@ -1547,7 +1547,7 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions?alt=
 - **错误处理**：实现强大的错误处理机制。
 - **安全性**：为外部 API 使用适当的身份验证。
 
-## 注释和限制
+## 1.14 注释和限制
 
 - 仅支持 [OpenAPI 架构的子集](https://ai.google.dev/api/rest/v1beta/cachedContents?hl=zh-cn#FunctionDeclaration)。
 - 对于 `any` 模式，API 可能会拒绝非常大或嵌套很深的架构。
