@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use providers::streaming::PauseControl;
-use providers::trait_::ProviderConfig;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinSet;
 
@@ -133,40 +132,23 @@ async fn execute_tools_serial_inner(
                             );
                             (approval_session_id, approval_turn_id)
                         };
-                        // 可选辅模型降级 Ask → Auto
+                        // 可选辅模型降级 Ask → Auto（读取 ChatRequest 注入的 SmartApproval 目标链）
                         let smart_action = {
                             let agent = session.lock().await;
-                            let pname = agent.chat_provider().to_string();
-                            let model = agent.chat_model().to_string();
-                            let api_key = agent.chat_api_key().to_string();
-                            let base_url = agent.chat_base_url().to_string();
+                            let targets: Vec<_> = agent
+                                .auxiliary_targets(common::AuxiliaryTask::SmartApproval)
+                                .iter()
+                                .map(crate::control::smart_approval::ApprovalTarget::from)
+                                .collect();
                             let providers = agent.providers_arc();
                             drop(agent);
-                            if let Some(provider) = providers.get(&pname) {
-                                let config = ProviderConfig {
-                                    model: if model.trim().is_empty() {
-                                        provider.default_model().to_string()
-                                    } else {
-                                        model
-                                    },
-                                    api_key,
-                                    base_url: if base_url.trim().is_empty() {
-                                        None
-                                    } else {
-                                        Some(base_url)
-                                    },
-                                    ..ProviderConfig::default()
-                                };
-                        crate::control::smart_approval::maybe_smart_downgrade_ask(
-                                    cmd,
-                                    decision.description,
-                                    provider,
-                                    config,
-                                )
-                                .await
-                            } else {
-                                tools::ApprovalAction::Ask
-                            }
+                            crate::control::smart_approval::maybe_smart_downgrade_ask(
+                                cmd,
+                                decision.description,
+                                providers.as_ref(),
+                                &targets,
+                            )
+                            .await
                         };
                         if smart_action == tools::ApprovalAction::Auto {
                             tracing::info!(
