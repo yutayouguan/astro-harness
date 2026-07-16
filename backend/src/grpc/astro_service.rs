@@ -244,7 +244,7 @@ impl AstroServiceImpl {
             let mut sessions = self.sessions.write().await;
             sessions.remove(session_id)
         };
-        if let Some(handle) = removed {
+        if let Some(handle) = &removed {
             let agent = handle.lock().await;
             agent.cancel_signal().cancel();
         }
