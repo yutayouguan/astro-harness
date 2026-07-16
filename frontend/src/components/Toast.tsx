@@ -1,5 +1,6 @@
 /** 轻量 Toast：倒计时环绕进度条后自动消失，可手动点 ×；按 tone 显示图标与配色。 */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 
@@ -114,7 +115,9 @@ export function Toast({
 
   if (!visible || !message) return null;
 
-  return (
+  // Portal 到 body：避免 chat/media 等祖先的 transform/filter
+  // 把 position:fixed 变成相对该祖先定位（表现为「贴在内容区」而非视口右下角）。
+  return createPortal(
     <div
       className={`astro-toast tone-${tone}${sticky ? " is-sticky" : ""}`}
       role={tone === "error" ? "alert" : "status"}
@@ -137,6 +140,7 @@ export function Toast({
           <X size={14} strokeWidth={2.25} aria-hidden />
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
