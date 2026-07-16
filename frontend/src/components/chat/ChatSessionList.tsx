@@ -1,10 +1,15 @@
-/** 近期会话列表。 */
-import { useCallback, useEffect, useMemo, useState } from "react";
+/** 近期会话列表：页签、菜单、归档与永久删除。 */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Plus } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
-import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
+import {
+  deleteManagedSession,
+  dispatchSessionsChanged,
+  subscribeSessionsChanged,
+  type SessionListKind,
+} from "../../lib/chat/sessionManagement";
 import type { RecentSessionDto } from "../../types";
 import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
@@ -20,15 +25,24 @@ type Props = {
   onNewSession: () => void;
   /** 新建 Agent 引导 */
   onNewAgent: () => void;
-  /** 列表外部触发当前会话清理时使用 */
+  /** 删除当前会话后清理本地状态 */
   onClearDeletedCurrentSession?: () => void | Promise<void>;
 };
+
+function sessionTitle(
+  item: RecentSessionDto,
+  untitled: string,
+): string {
+  const summary = (item.summary ?? "").trim();
+  return summary || untitled;
+}
 
 export default function ChatSessionList({
   activeSessionId,
   onOpenSession,
   onNewSession,
   onNewAgent,
+  onClearDeletedCurrentSession,
 }: Props) {
   const { t } = useI18n();
   const [items, setItems] = useState<RecentSessionDto[]>([]);
@@ -36,10 +50,15 @@ export default function ChatSessionList({
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState("workspace");
+  const [listKind, setListKind] = useState<SessionListKind>("active");
+  const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
+  const [busySessionId, setBusySessionId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const loadSessions = useCallback(async () => {
     try {
-      const list = await invoke<RecentSessionDto[]>("list_recent_sessions", {
+      const list = await invoke<RecentSessionDto[]>("list_sessions", {
+        filter: listKind,
         limit: 50,
       });
       setItems(list ?? []);
@@ -48,7 +67,7 @@ export default function ChatSessionList({
       setError(String(e));
       setItems([]);
     }
-  }, []);
+  }, [listKind]);
 
   const loadAgents = useCallback(async () => {
     try {
@@ -75,25 +94,123 @@ export default function ChatSessionList({
     return () => unlisten();
   }, [loadSessions]);
 
+  useEffect(() => {
+    if (!menuSessionId) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenuSessionId(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuSessionId(null);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuSessionId]);
+
   useAgentsChanged((payload) => {
     setActiveAgentId(normalizeAgentId(payload.active_agent_id));
     void loadAgents();
   });
 
-  const handleAgentChange = useCallback(
-    async (id: string) => {
+  const handleAgentChange = useCallback(async (id: string) => {
+    try {
+      const cfg = await invoke<{
+        active_agent_id: string;
+        agents: AgentInfo[];
+      }>("set_active_agent", { agentId: id });
+      setAgents(cfg.agents ?? []);
+      setActiveAgentId(normalizeAgentId(cfg.active_agent_id));
+    } catch (e) {
+      console.warn("set_active_agent failed", e);
+    }
+  }, []);
+
+  const runSessionAction = useCallback(
+    async (sessionId: string, action: () => Promise<void>) => {
+      setBusySessionId(sessionId);
+      setMenuSessionId(null);
+      setError(null);
       try {
-        const cfg = await invoke<{
-          active_agent_id: string;
-          agents: AgentInfo[];
-        }>("set_active_agent", { agentId: id });
-        setAgents(cfg.agents ?? []);
-        setActiveAgentId(normalizeAgentId(cfg.active_agent_id));
+        await action();
+        dispatchSessionsChanged();
       } catch (e) {
-        console.warn("set_active_agent failed", e);
+        setError(
+          t("sessions.actionFailed", {
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      } finally {
+        setBusySessionId(null);
       }
     },
-    [],
+    [t],
+  );
+
+  const handleRename = useCallback(
+    (item: RecentSessionDto) => {
+      const untitled = t("chat.rightPanel.untitledSession");
+      const current = sessionTitle(item, untitled);
+      const next = window.prompt(t("sessions.renamePrompt"), current);
+      if (next === null) return;
+      const title = next.trim();
+      if (!title) return;
+      void runSessionAction(item.sessionId, async () => {
+        await invoke("rename_session", {
+          sessionId: item.sessionId,
+          title,
+        });
+      });
+    },
+    [runSessionAction, t],
+  );
+
+  const handleArchiveToggle = useCallback(
+    (item: RecentSessionDto) => {
+      const command =
+        listKind === "archived" ? "unarchive_session" : "archive_session";
+      void runSessionAction(item.sessionId, async () => {
+        await invoke(command, { sessionId: item.sessionId });
+      });
+    },
+    [listKind, runSessionAction],
+  );
+
+  const handleDelete = useCallback(
+    (item: RecentSessionDto) => {
+      const untitled = t("chat.rightPanel.untitledSession");
+      const title = sessionTitle(item, untitled);
+      const confirmed = window.confirm(
+        t("sessions.deleteConfirm", { title }),
+      );
+      if (!confirmed) {
+        setMenuSessionId(null);
+        return;
+      }
+      void runSessionAction(item.sessionId, async () => {
+        await deleteManagedSession(
+          item.sessionId,
+          activeSessionId,
+          async () => {
+            await invoke("delete_session_permanently", {
+              sessionId: item.sessionId,
+            });
+          },
+          async () => {
+            await onClearDeletedCurrentSession?.();
+          },
+        );
+      });
+    },
+    [
+      activeSessionId,
+      onClearDeletedCurrentSession,
+      runSessionAction,
+      t,
+    ],
   );
 
   const filtered = useMemo(() => {
@@ -106,8 +223,42 @@ export default function ChatSessionList({
     );
   }, [items, query]);
 
+  const emptyLabel =
+    listKind === "archived"
+      ? t("sessions.noArchived")
+      : t("chat.rightPanel.noSessions");
+
   return (
     <div className="chat-session-list">
+      <div className="chat-session-tabs" role="tablist" aria-label={t("sessions.tabs")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={listKind === "active"}
+          className={`chat-session-tab ${listKind === "active" ? "is-active" : ""}`}
+          onClick={() => {
+            setListKind("active");
+            setMenuSessionId(null);
+            setQuery("");
+          }}
+        >
+          {t("sessions.active")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={listKind === "archived"}
+          className={`chat-session-tab ${listKind === "archived" ? "is-active" : ""}`}
+          onClick={() => {
+            setListKind("archived");
+            setMenuSessionId(null);
+            setQuery("");
+          }}
+        >
+          {t("sessions.archived")}
+        </button>
+      </div>
+
       <div className="chat-session-toolbar">
         <ExpandableSearch
           value={query}
@@ -134,31 +285,94 @@ export default function ChatSessionList({
       </div>
       {error && <div className="side-error">{error}</div>}
       {filtered.length === 0 ? (
-        <p className="muted">{t("chat.rightPanel.noSessions")}</p>
+        <p className="muted">{emptyLabel}</p>
       ) : (
         <ul>
-          {filtered.map((s) => (
-            <li key={s.sessionId}>
-              <button
-                type="button"
-                className={`chat-session-item ${
-                  s.sessionId === activeSessionId ? "is-active" : ""
-                }`}
-                onClick={() => onOpenSession(s.sessionId)}
-              >
-                <strong>
-                  {(s.summary ?? "").trim() ||
-                    t("chat.rightPanel.untitledSession")}
-                  {s.endReason === "compacted" ? (
-                    <span className="chat-session-badge">
-                      {t("chat.sessionCompactedBadge")}
-                    </span>
+          {filtered.map((s) => {
+            const title = sessionTitle(s, t("chat.rightPanel.untitledSession"));
+            const busy = busySessionId === s.sessionId;
+            const menuOpen = menuSessionId === s.sessionId;
+            return (
+              <li key={s.sessionId} className="chat-session-row">
+                <button
+                  type="button"
+                  className={`chat-session-item ${
+                    s.sessionId === activeSessionId ? "is-active" : ""
+                  }`}
+                  onClick={() => onOpenSession(s.sessionId)}
+                  disabled={busy}
+                >
+                  <strong>
+                    {title}
+                    {s.endReason === "compacted" ? (
+                      <span className="chat-session-badge">
+                        {t("chat.sessionCompactedBadge")}
+                      </span>
+                    ) : null}
+                  </strong>
+                  <span>{s.sessionId.slice(0, 8)}</span>
+                </button>
+                <div
+                  className={`chat-session-menu-wrap ${menuOpen ? "is-open" : ""}`}
+                  ref={menuOpen ? menuRef : null}
+                >
+                  <button
+                    type="button"
+                    className="chat-session-more"
+                    aria-label={t("sessions.moreActions")}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    disabled={busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuSessionId(menuOpen ? null : s.sessionId);
+                    }}
+                  >
+                    <MoreHorizontal size={16} strokeWidth={2.2} aria-hidden />
+                  </button>
+                  {menuOpen ? (
+                    <div className="chat-session-menu" role="menu">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy}
+                        onClick={() => handleRename(s)}
+                      >
+                        {t("sessions.rename")}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled
+                        title={t("sessions.regenerateTitleSoon")}
+                      >
+                        {t("sessions.regenerateTitle")}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy}
+                        onClick={() => handleArchiveToggle(s)}
+                      >
+                        {listKind === "archived"
+                          ? t("sessions.unarchive")
+                          : t("sessions.archive")}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="is-danger"
+                        disabled={busy}
+                        onClick={() => handleDelete(s)}
+                      >
+                        {t("sessions.deletePermanently")}
+                      </button>
+                    </div>
                   ) : null}
-                </strong>
-                <span>{s.sessionId.slice(0, 8)}</span>
-              </button>
-            </li>
-          ))}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
