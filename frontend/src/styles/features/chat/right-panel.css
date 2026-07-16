@@ -638,8 +638,38 @@
 .ctx-explorer-metric {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
+  padding: 8px 9px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 14%, rgba(255, 255, 255, 0.5));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.12) 100%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 38%, rgba(255, 255, 255, 0.16));
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--tone-blue, #2563eb) 6%, rgba(15, 23, 42, 0.04)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+
+.ctx-explorer-metric-icon {
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: var(--tone-blue, #2563eb);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.65) 0%, transparent 62%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 85%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.ctx-explorer-metric-icon svg {
+  flex-shrink: 0;
 }
 
 .ctx-explorer-metric-label {
@@ -674,9 +704,27 @@
 
 .ctx-donut-wrap {
   position: relative;
-  width: 148px;
-  height: 148px;
-  margin: 4px auto 2px;
+  width: 168px;
+  height: 168px;
+  margin: 6px auto 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    radial-gradient(
+      circle at 50% 36%,
+      color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 70%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.1) 100%),
+    color-mix(in srgb, var(--composer-bg, rgba(255, 255, 255, 0.38)) 72%, transparent);
+  box-shadow:
+    0 8px 24px color-mix(in srgb, var(--tone-blue, #2563eb) 8%, rgba(15, 23, 42, 0.06)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
 
 .ctx-donut {
@@ -691,17 +739,31 @@
 .ctx-donut-center {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   pointer-events: none;
 }
 
 .ctx-donut-pct {
-  font-size: 1.35rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 750;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.ctx-donut-caption {
+  max-width: 76px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--ink-mute);
+  letter-spacing: 0.01em;
 }
 
 .ctx-explorer-list-head {
@@ -713,33 +775,82 @@
 
 .ctx-explorer-list-title {
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 650;
   color: var(--ink);
 }
 
+.ctx-explorer-title-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 7px;
+  color: var(--tone-blue, #2563eb);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55) 0%, transparent 62%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 75%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
 .ctx-explorer-expand-all {
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
   border-radius: 8px;
-  background: transparent;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
   color: var(--ink-mute);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  padding: 4px 6px;
+  padding: 4px 8px;
   cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
 
 .ctx-explorer-expand-all:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 20%, var(--glass-edge));
 }
 
 .ctx-explorer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   margin: 0;
+  padding: 20px 14px;
+  text-align: center;
+  border-radius: 14px;
+  border: 1px dashed color-mix(in srgb, var(--glass-edge) 82%, var(--ink-mute));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 100%),
+    color-mix(in srgb, var(--ink) 2%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   font-size: 12px;
   line-height: 1.45;
   color: var(--ink-mute);
+}
+
+.ctx-explorer-empty p {
+  margin: 0;
+}
+
+.ctx-explorer-empty-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--tone-blue, #2563eb);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55) 0%, transparent 62%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 80%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .ctx-explorer-list {
@@ -748,15 +859,19 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .ctx-explorer-row {
   border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 65%, transparent);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .ctx-explorer-row.is-open {
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 18%, var(--glass-edge));
 }
 
 .ctx-explorer-row-btn {
@@ -773,6 +888,7 @@
   text-align: left;
   font: inherit;
   font-size: 12px;
+  transition: background 0.12s ease;
 }
 
 .ctx-explorer-row-btn:hover {
@@ -800,6 +916,18 @@
   flex-shrink: 0;
 }
 
+.ctx-explorer-row-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
 .ctx-explorer-row-label {
   flex: 1;
   min-width: 0;
@@ -822,10 +950,133 @@
 }
 
 .ctx-explorer-row-hint {
-  margin: 0 8px 8px 36px;
+  margin: 0 8px 8px 52px;
   font-size: 11px;
   line-height: 1.4;
   color: var(--ink-mute);
+}
+
+/* 深色主题：降低白色高光，增强边框 */
+html[data-theme="dark"] .ctx-explorer-metric {
+  border-color: color-mix(in srgb, var(--tone-blue, #60a5fa) 18%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(96, 165, 250, 0.16)) 32%, rgba(8, 6, 18, 0.55));
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .ctx-explorer-metric-icon,
+html[data-theme="dark"] .ctx-explorer-title-icon,
+html[data-theme="dark"] .ctx-explorer-empty-icon {
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.1) 0%, transparent 62%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(96, 165, 250, 0.16)) 65%, rgba(0, 0, 0, 0.22));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="dark"] .ctx-donut-wrap {
+  border-color: color-mix(in srgb, var(--glass-edge) 95%, rgba(255, 255, 255, 0.14));
+  background:
+    radial-gradient(
+      circle at 50% 36%,
+      color-mix(in srgb, var(--tone-blue-soft, rgba(96, 165, 250, 0.16)) 55%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    color-mix(in srgb, var(--composer-bg, rgba(8, 6, 18, 0.62)) 80%, transparent);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .ctx-explorer-empty {
+  border-color: color-mix(in srgb, var(--glass-edge) 88%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.012) 100%),
+    color-mix(in srgb, var(--ink) 4%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+html[data-theme="dark"] .ctx-explorer-row {
+  border-color: color-mix(in srgb, var(--glass-edge) 88%, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+html[data-theme="dark"] .ctx-explorer-row.is-open {
+  border-color: color-mix(in srgb, var(--tone-blue, #60a5fa) 22%, var(--glass-edge));
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+html[data-theme="dark"] .ctx-explorer-row-icon {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .ctx-explorer-expand-all {
+  border-color: color-mix(in srgb, var(--glass-edge) 85%, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+/* 窄侧栏：保持三列，压缩间距与内边距 */
+@media (max-width: 340px) {
+  .ctx-explorer-metrics {
+    gap: 5px;
+  }
+
+  .ctx-explorer-metric {
+    padding: 6px 7px;
+    border-radius: 10px;
+    gap: 3px;
+  }
+
+  .ctx-explorer-metric-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+  }
+
+  .ctx-explorer-metric-label {
+    font-size: 10px;
+  }
+
+  .ctx-explorer-metric-value,
+  .ctx-explorer-session {
+    font-size: 10px;
+  }
+
+  .ctx-donut-wrap {
+    width: 156px;
+    height: 156px;
+  }
+
+  .ctx-donut-pct {
+    font-size: 1.3rem;
+  }
+
+  .ctx-donut-caption {
+    font-size: 9px;
+    max-width: 68px;
+  }
+
+  .ctx-explorer-row-btn {
+    gap: 6px;
+    padding: 7px 5px;
+    font-size: 11px;
+  }
+
+  .ctx-explorer-row-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ctx-explorer-row-hint {
+    margin-left: 46px;
+    font-size: 10px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
