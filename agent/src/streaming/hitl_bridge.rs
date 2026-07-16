@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use crate::control::hitl::{HitlGate, HITL_DEFAULT_TIMEOUT_SECS};
+use crate::control::hitl::{HitlGate, HitlResolution, HITL_DEFAULT_TIMEOUT_SECS};
 use crate::control::interrupt::Interrupt;
 
 use super::multi_turn::emit;
@@ -120,7 +120,14 @@ pub(crate) fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
     })
 }
 
-/// 弹出 confirm 型 HITL surface，等待用户批准/拒绝，返回 `approved`。
+/// `park_confirm` 决议：`approved` 供调用方分支；`status` 对应 [`HitlResolution::status`]
+/// （`resolved` / `cancelled` / `timeout`），供 `post_approval_response` 钩子填充 `choice`。
+pub(crate) struct ConfirmOutcome {
+    pub approved: bool,
+    pub status: String,
+}
+
+/// 弹出 confirm 型 HITL surface，等待用户批准/拒绝。
 pub(crate) async fn park_confirm(
     gate: &Arc<HitlGate>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -128,11 +135,11 @@ pub(crate) async fn park_confirm(
     tool_call_id: &str,
     title: &str,
     body: &str,
-) -> Option<bool> {
+) -> Option<ConfirmOutcome> {
     let surface_id = format!("confirm-{}", uuid::Uuid::new_v4());
     let operations = a2ui::templates::build_confirm_surface(&surface_id, title, body);
     let ops_value = serde_json::Value::Array(operations);
-    let result = park_astro_hitl(
+    let resolution = park_astro_hitl_resolution(
         gate,
         tx,
         run_id,
@@ -149,8 +156,18 @@ pub(crate) async fn park_confirm(
         },
     )
     .await?;
-    let v: serde_json::Value = serde_json::from_str(&result).unwrap_or_default();
-    Some(v.get("approved").and_then(|x| x.as_bool()).unwrap_or(false))
+    let approved = if resolution.status == "resolved" {
+        serde_json::from_str::<serde_json::Value>(&resolution.payload_json)
+            .ok()
+            .and_then(|v| v.get("approved").and_then(|x| x.as_bool()))
+            .unwrap_or(false)
+    } else {
+        false
+    };
+    Some(ConfirmOutcome {
+        approved,
+        status: resolution.status,
+    })
 }
 
 /// 将 HITL payload 以 Activity + RunFinished(hitl_waiting) 形式推给 UI，并阻塞等待 resume。
@@ -161,6 +178,21 @@ pub(crate) async fn park_astro_hitl(
     tool_call_id: &str,
     hitl: AstroHitlPayload,
 ) -> Option<String> {
+    park_astro_hitl_resolution(gate, tx, run_id, tool_call_id, hitl)
+        .await
+        .map(|r| r.to_tool_result())
+}
+
+/// [`park_astro_hitl`] 的内核：返回原始 [`HitlResolution`]（含 `status`），供
+/// `park_confirm` 区分 `resolved`/`cancelled`/`timeout`；`park_astro_hitl` 仍对外只
+/// 暴露转换后的 tool-result 字符串。
+async fn park_astro_hitl_resolution(
+    gate: &Arc<HitlGate>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+    tool_call_id: &str,
+    hitl: AstroHitlPayload,
+) -> Option<HitlResolution> {
     let message_id = format!("a2ui-surface-{tool_call_id}");
     let content_json = serde_json::json!({ "operations": hitl.operations }).to_string();
     if !emit(
@@ -209,7 +241,7 @@ pub(crate) async fn park_astro_hitl(
             Duration::from_secs(HITL_DEFAULT_TIMEOUT_SECS),
         )
         .await;
-    Some(resolution.to_tool_result())
+    Some(resolution)
 }
 
 #[cfg(test)]

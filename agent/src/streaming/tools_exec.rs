@@ -15,6 +15,29 @@ use super::hitl_bridge::{
 };
 use super::types::MultiTurnStreamItem;
 
+/// 触发 `post_approval_response`（观察型，忽略返回值）：`choice` 为
+/// `auto`（辅模型降级）/ `allow`（用户批准）/ `deny`（用户拒绝或 cancelled）/
+/// `timeout`（park 超时）/ `unavailable`（无 HITL gate）。
+async fn fire_post_approval_response(
+    session: &Arc<Mutex<AgentLoop>>,
+    session_id: &str,
+    turn_id: Option<&str>,
+    command: &str,
+    choice: &str,
+) {
+    let agent = session.lock().await;
+    agent.fire_hook(
+        hooks::POST_APPROVAL_RESPONSE,
+        hooks::HookPayload {
+            session_id: session_id.to_string(),
+            turn_id: turn_id.map(str::to_string),
+            message: Some(command.to_string()),
+            detail: format!("surface=terminal choice={choice}"),
+            ..Default::default()
+        },
+    );
+}
+
 pub(crate) fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> bool {
     if name != "terminal" {
         return false;
@@ -90,6 +113,26 @@ async fn execute_tools_serial_inner(
                             .get("command")
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
+                        let (approval_session_id, approval_turn_id) = {
+                            let agent = session.lock().await;
+                            let approval_session_id = agent.session_id().to_string();
+                            let approval_turn_id =
+                                agent.current_turn_id().map(str::to_string);
+                            agent.fire_hook(
+                                hooks::PRE_APPROVAL_REQUEST,
+                                hooks::HookPayload {
+                                    session_id: approval_session_id.clone(),
+                                    turn_id: approval_turn_id.clone(),
+                                    message: Some(cmd.to_string()),
+                                    detail: format!(
+                                        "surface=terminal ask={}",
+                                        decision.description
+                                    ),
+                                    ..Default::default()
+                                },
+                            );
+                            (approval_session_id, approval_turn_id)
+                        };
                         // 可选辅模型降级 Ask → Auto
                         let smart_action = {
                             let agent = session.lock().await;
@@ -131,6 +174,14 @@ async fn execute_tools_serial_inner(
                                 reason = decision.description,
                                 "smart approval auto-approved dangerous command"
                             );
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                cmd,
+                                "auto",
+                            )
+                            .await;
                             // 放行，继续执行
                         } else if let Some(gate) = hitl_gate {
                             let title = "批准危险命令";
@@ -138,15 +189,36 @@ async fn execute_tools_serial_inner(
                                 "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
                                 decision.description
                             );
-                            let approved =
+                            let confirm =
                                 park_confirm(gate, tx, run_id, &call.id, title, &body).await?;
-                            if !approved {
+                            let choice = match confirm.status.as_str() {
+                                "timeout" => "timeout",
+                                _ if confirm.approved => "allow",
+                                _ => "deny",
+                            };
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                cmd,
+                                choice,
+                            )
+                            .await;
+                            if !confirm.approved {
                                 out.push(
                                     "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".to_string(),
                                 );
                                 continue;
                             }
                         } else {
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                cmd,
+                                "unavailable",
+                            )
+                            .await;
                             out.push(format!(
                                 "Command blocked: dangerous ({}) and no HITL gate available.",
                                 decision.description

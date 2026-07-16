@@ -740,6 +740,292 @@ async fn hitl_waiting_parks_then_continues_same_run() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn approval_hooks_fire_pre_then_post_on_allow() {
+    use agent::{HitlGate, ResumeItem};
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "approval-allow-session".into()).unwrap();
+
+    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+    hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+
+    let captured_pre: Arc<std::sync::Mutex<Option<(Option<String>, String)>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let captured_pre2 = Arc::clone(&captured_pre);
+    agent.hook_bus().register(hooks::PRE_APPROVAL_REQUEST, move |payload| {
+        *captured_pre2.lock().unwrap() = Some((payload.message.clone(), payload.detail.clone()));
+        hooks::HookOutcome::Continue
+    });
+    let captured_post: Arc<std::sync::Mutex<Option<(Option<String>, String)>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let captured_post2 = Arc::clone(&captured_post);
+    agent
+        .hook_bus()
+        .register(hooks::POST_APPROVAL_RESPONSE, move |payload| {
+            *captured_post2.lock().unwrap() =
+                Some((payload.message.clone(), payload.detail.clone()));
+            hooks::HookOutcome::Continue
+        });
+
+    let session = Arc::new(Mutex::new(agent));
+    {
+        let mut a = session.lock().await;
+        a.session_messages
+            .push(common::message::Message::user("clean up the temp dir"));
+    }
+
+    let cmd = "rm -rf /tmp/astro-approval-test-allow";
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![
+            vec![ChatChunk {
+                tool_call_deltas: vec![ToolCallDeltaChunk {
+                    index: 0,
+                    id: Some("call_term_allow".into()),
+                    name: Some("terminal".into()),
+                    arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
+                }],
+                finish_reason: Some("tool_calls".into()),
+                ..Default::default()
+            }],
+            vec![ChatChunk {
+                token: Some("done".into()),
+                finish_reason: Some("stop".into()),
+                ..Default::default()
+            }],
+        ]),
+    });
+
+    let gate = HitlGate::new("approval-allow-session");
+    let gate_resolve = gate.clone();
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+
+    tokio::spawn(async move {
+        run_multi_turn_stream_from_provider(
+            session,
+            provider,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            pause,
+            Some(gate),
+            tx,
+        )
+        .await;
+    });
+
+    let mut saw_waiting = false;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
+            Ok(Some(Ok(MultiTurnStreamItem::RunFinished {
+                outcome_type,
+                interrupts_json,
+                ..
+            }))) if outcome_type == "hitl_waiting" => {
+                saw_waiting = true;
+                let interrupts: Vec<serde_json::Value> =
+                    serde_json::from_str(&interrupts_json).unwrap();
+                let id = interrupts[0]["id"].as_str().unwrap().to_string();
+                gate_resolve
+                    .resolve(&[ResumeItem {
+                        interrupt_id: id,
+                        status: "resolved".into(),
+                        payload_json: r#"{"approved":true}"#.into(),
+                    }])
+                    .await
+                    .unwrap();
+                break;
+            }
+            Ok(Some(Ok(_))) => continue,
+            Ok(Some(Err(e))) => panic!("stream err: {e}"),
+            Ok(None) => panic!("stream ended before hitl_waiting"),
+            Err(_) => continue,
+        }
+    }
+    assert!(saw_waiting, "expected hitl_waiting for dangerous command");
+
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+
+    let events = log.lock().unwrap().clone();
+    let pre_idx = events.iter().position(|e| e == "pre_approval_request");
+    let post_idx = events.iter().position(|e| e == "post_approval_response");
+    assert!(
+        pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
+        "expected pre_approval_request before post_approval_response, events={events:?}"
+    );
+    let post_tool_idx = events.iter().position(|e| e == "post_tool_call:terminal");
+    assert!(
+        post_idx < post_tool_idx,
+        "expected post_approval_response before post_tool_call, events={events:?}"
+    );
+
+    let pre = captured_pre
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("pre_approval_request payload captured");
+    assert_eq!(pre.0.as_deref(), Some(cmd), "pre payload.message should be the command");
+    assert!(
+        pre.1.contains("surface=terminal") && pre.1.contains("ask="),
+        "pre detail should include surface/ask: {}",
+        pre.1
+    );
+
+    let post = captured_post
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("post_approval_response payload captured");
+    assert_eq!(post.0.as_deref(), Some(cmd), "post payload.message should be the command");
+    assert!(
+        post.1.contains("surface=terminal") && post.1.contains("choice=allow"),
+        "post detail should include surface/choice=allow: {}",
+        post.1
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn approval_hooks_fire_pre_then_post_on_deny() {
+    use agent::{HitlGate, ResumeItem};
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "approval-deny-session".into()).unwrap();
+
+    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+    hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+
+    let captured_post: Arc<std::sync::Mutex<Option<String>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let captured_post2 = Arc::clone(&captured_post);
+    agent
+        .hook_bus()
+        .register(hooks::POST_APPROVAL_RESPONSE, move |payload| {
+            *captured_post2.lock().unwrap() = Some(payload.detail.clone());
+            hooks::HookOutcome::Continue
+        });
+
+    let session = Arc::new(Mutex::new(agent));
+    {
+        let mut a = session.lock().await;
+        a.session_messages
+            .push(common::message::Message::user("clean up the temp dir"));
+    }
+
+    let cmd = "rm -rf /tmp/astro-approval-test-deny";
+    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
+        rounds: Mutex::new(vec![
+            vec![ChatChunk {
+                tool_call_deltas: vec![ToolCallDeltaChunk {
+                    index: 0,
+                    id: Some("call_term_deny".into()),
+                    name: Some("terminal".into()),
+                    arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
+                }],
+                finish_reason: Some("tool_calls".into()),
+                ..Default::default()
+            }],
+            vec![ChatChunk {
+                token: Some("acknowledged".into()),
+                finish_reason: Some("stop".into()),
+                ..Default::default()
+            }],
+        ]),
+    });
+
+    let gate = HitlGate::new("approval-deny-session");
+    let gate_resolve = gate.clone();
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+
+    tokio::spawn(async move {
+        run_multi_turn_stream_from_provider(
+            session,
+            provider,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            pause,
+            Some(gate),
+            tx,
+        )
+        .await;
+    });
+
+    let mut saw_waiting = false;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
+            Ok(Some(Ok(MultiTurnStreamItem::RunFinished {
+                outcome_type,
+                interrupts_json,
+                ..
+            }))) if outcome_type == "hitl_waiting" => {
+                saw_waiting = true;
+                let interrupts: Vec<serde_json::Value> =
+                    serde_json::from_str(&interrupts_json).unwrap();
+                let id = interrupts[0]["id"].as_str().unwrap().to_string();
+                gate_resolve
+                    .resolve(&[ResumeItem {
+                        interrupt_id: id,
+                        status: "resolved".into(),
+                        payload_json: r#"{"approved":false}"#.into(),
+                    }])
+                    .await
+                    .unwrap();
+                break;
+            }
+            Ok(Some(Ok(_))) => continue,
+            Ok(Some(Err(e))) => panic!("stream err: {e}"),
+            Ok(None) => panic!("stream ended before hitl_waiting"),
+            Err(_) => continue,
+        }
+    }
+    assert!(saw_waiting, "expected hitl_waiting for dangerous command");
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+
+    let events = log.lock().unwrap().clone();
+    let pre_idx = events.iter().position(|e| e == "pre_approval_request");
+    let post_idx = events.iter().position(|e| e == "post_approval_response");
+    assert!(
+        pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
+        "expected pre_approval_request before post_approval_response, events={events:?}"
+    );
+
+    let post_detail = captured_post
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("post_approval_response payload captured");
+    assert!(
+        post_detail.contains("choice=deny"),
+        "post detail should include choice=deny: {post_detail}"
+    );
+
+    assert!(
+        items.iter().any(|i| matches!(
+            i,
+            MultiTurnStreamItem::ToolResult { name, result, .. }
+            if name == "terminal" && result.contains("denied by user")
+        )),
+        "expected denial tool result; got: {:?}",
+        items.iter().map(|i| format!("{i:?}")).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
