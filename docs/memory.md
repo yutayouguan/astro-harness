@@ -35,31 +35,57 @@ P2 辅助模型与回合后 review 见下文「辅助模型 / background review�
 
 ### 辅助模型 / background review
 
+五类后台/低成本任务可单独指定模型。配置写在 `config.yaml` 的 `auxiliary.*`（**不是** `providers.json`）。桌面「辅助模型」设置页读写同一组键。
+
 ```yaml
 auxiliary:
   background_review_enabled: false   # true 时每轮 Chat Done 后异步跑 review
-  background_review:
-    provider: auto    # auto = 跟随当前会话主模型
+  title_generation:
+    provider: auto    # auto/auto = 跟随当前会话主模型
+    model: auto
+  compaction:
+    provider: auto
+    model: auto
+  smart_approval:
+    provider: auto
     model: auto
   dreaming:
     provider: auto
-    model: auto       # 建议填便宜模型，如 gpt-4o-mini / flash
+    model: auto       # 可填便宜模型
+  background_review:
+    provider: auto
+    model: auto
 ```
 
 | 键 | 说明 |
 |----|------|
 | `auxiliary.background_review_enabled` | **开关**：回合成功结束后是否自动 background review（默认 `false`） |
-| `auxiliary.dreaming` | 入梦 Extractor / 回退补全使用的 provider（backend_id）与 model |
-| `auxiliary.background_review` | review 用的 provider / model（`auto` 跟随主会话） |
+| `auxiliary.title_generation` | 首轮异步标题 / 手动重新生成 |
+| `auxiliary.compaction` | 上下文压缩摘要 |
+| `auxiliary.smart_approval` | 危险命令智能审批（仍受 `ASTRO_SMART_APPROVAL` 总开关约束） |
+| `auxiliary.dreaming` | 入梦 Extractor / 回退补全 |
+| `auxiliary.background_review` | 回合后记忆审查 |
 
-**入梦**：`run_dreaming` 会先 `resolve_auxiliary(Dreaming)`，再查找匹配 backend 的提供商密钥。
+**路由语义：**
+
+- `provider` / `model` 必须同为 `auto`，或同为非空显式值（禁止半自动组合）。
+- 显式 `provider` 保存 **UI Provider ID**（`providers.json` 条目 `id`），不是 registry `backend_id`。
+- `auto/auto`：preferred = 当前会话主模型，无 fallback。
+- 显式路由有效且与主模型不同供应商时：preferred = 显式目标，fallback = 主模型；调用失败再试一次主模型。
+- Provider 不存在、禁用或无凭据时：静默退回主模型，不阻塞主聊天。
+- **不**使用辅助模型的能力：网页抓取、技能搜索、MCP 工具调用。
+
+**入梦**：`run_dreaming` 经统一 resolver 展开 preferred + fallback，使用各自 endpoint/key/model，不再按 backend_id 混用主模型密钥。
 
 **background review**（已挂入 backend Chat 流）：
 
-1. Chat 流收到 `Done` → **立即结束流**，同时 fire-and-forget `maybe_run_background_review`（**不再**在 Chat 流上挂起等待 review）
+1. Chat 流收到 `Done` → **立即结束流**，同时 fire-and-forget review（**不**在 Chat 流上等待）
 2. 仅当 `background_review_enabled: true`
-3. `build_review_digest` → 辅助模型 → `parse_review_llm_output` → `apply_review_suggestions`（尊重 `write_approval`）
-4. 完成后经 gRPC **`SubscribeSessionEvents`** 推送 `memory_updated`（桌面端 Toast / 角标 / 可选自动 refresh）
+3. 目标链来自 ChatRequest 注入的 `BackgroundReview` preferred/fallback
+4. `build_review_digest` → 辅助模型 → `parse_review_llm_output` → `apply_review_suggestions`（尊重 `write_approval`）
+5. 完成后经 gRPC **`SubscribeSessionEvents`** 推送 `memory_updated`
+
+**标题生成**：Done 后异步生成；仅当标题为空时 `set_session_title_if_empty` 写入。侧栏「重新生成标题」强制覆盖。
 
 ### SessionEvents（P3）
 
@@ -69,10 +95,11 @@ auxiliary:
 |------|------|
 | `memory_updated` | review / approve / dreaming 写 live，或写入仅入 pending（`live_written=false`） |
 | `pending_changed` | pending 入队 / 批准 / 拒绝后的队列计数 |
+| `session_metadata_changed` | 自动/手动标题更新（含 `title`） |
 
 - 回合内工具 **live** 写入仍走 Chat `memory_update`（时间线活动卡），**不**发 SessionEvent  
 - 工具 **入 pending** 只走 SessionEvents（避免双通道刷屏）  
-- Tauri 订阅 `SubscribeSessionEvents`，并转发为前端 `session_event`；本机 approve/reject/dreaming 亦可直接 emit
+- Tauri 订阅 `SubscribeSessionEvents`，并转发为前端 `session_event`；本机 approve/reject/dreaming/重新生成标题亦可直接 emit
 
 ### Slash `/memory`
 
@@ -214,7 +241,7 @@ auxiliary:
 2. 经 `MemoryStore::replace_all_entries` 整体替换 live
 3. 强制执行字符上限与安全扫描；失败可观测，**禁止**静默截断
 
-P2 将把抽取模型路由到 `auxiliary.dreaming` 便宜模型；P1 仍用现有路由，但写盘路径已对齐 Store 门禁。
+入梦抽取已走 `auxiliary.dreaming` 路由（含主模型 fallback）；写盘路径经 Store 门禁。
 
 ---
 

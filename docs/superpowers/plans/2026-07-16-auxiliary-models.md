@@ -636,11 +636,11 @@ git commit -m "feat(chat): generate session titles after first turn"
 - Modify: `docs/memory.md`
 - Modify: `docs/superpowers/specs/2026-07-16-session-management-auxiliary-models-design.md`
 
-- [ ] **Step 1: 文档化配置**
+- [x] **Step 1: 文档化配置**
 
 在 `docs/memory.md` 写出五类 YAML key、`auto/auto` 语义、显式 Provider ID、主模型重试和 background review 开关。明确网页抓取、技能搜索和 MCP 不使用辅助模型。
 
-- [ ] **Step 2: 运行全量相关验证**
+- [x] **Step 2: 运行全量相关验证**
 
 ```bash
 cargo test -p memory -- --nocapture
@@ -665,7 +665,7 @@ Expected: 全部 PASS。
 6. 新会话首轮后自动标题；手动重命名不会被迟到任务覆盖。
 7. 主动重新生成可以覆盖现有标题。
 
-- [ ] **Step 4: 更新 spec 状态并提交**
+- [x] **Step 4: 更新 spec 状态并提交**
 
 ```bash
 git add docs/memory.md \

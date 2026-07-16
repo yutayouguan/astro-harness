@@ -1,7 +1,7 @@
 # 会话管理与辅助模型设计
 
 **日期：** 2026-07-16  
-**状态：** 会话管理已实现；辅助模型与自动标题待实施  
+**状态：** 已实现（会话管理 + 辅助模型 + 自动/重新生成标题）  
 **实现分支：** `feat/session-auxiliary-models`  
 **范围：** 会话重命名、标题生成、归档、永久删除，以及五类辅助模型的统一配置与降级  
 **计划：** [`../plans/2026-07-16-session-management.md`](../plans/2026-07-16-session-management.md)、[`../plans/2026-07-16-auxiliary-models.md`](../plans/2026-07-16-auxiliary-models.md)
@@ -16,8 +16,9 @@
 | Backend `RELEASE_SESSION` 幂等释放 | 已接线 |
 | Tauri rename / archive / delete / list_sessions | 已接线 |
 | 侧栏页签、菜单、确认与本地清理 | 已接线 |
-| 五类辅助模型路由与设置页 | 待实施（见 auxiliary-models 计划） |
-| 首轮异步标题生成与重新生成 | 待实施（见 auxiliary-models 计划；菜单项暂 disabled） |
+| 五类辅助模型路由、设置页、ChatRequest 透传 | 已接线 |
+| compaction / smart approval / dreaming / review 降级 | 已接线 |
+| 首轮异步标题、`session_metadata_changed`、重新生成 | 已接线 |
 
 ## 目标
 

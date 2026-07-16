@@ -19,3 +19,6 @@ Aux Task 4: complete (compaction auxiliary route + primary fallback; see aux-tas
 Aux Task 5: complete (smart approval preferred/fallback; see aux-task-5-report.md)
 Aux Task 6: complete (dreaming + background review credentials/fallback; see aux-task-6-report.md)
 Aux Task 7: complete (async titles + metadata events; see aux-task-7-report.md)
+
+## Aux Task 8
+- docs + regression PASS; manual smoke pending user
