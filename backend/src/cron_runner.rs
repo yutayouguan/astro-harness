@@ -1,10 +1,10 @@
-//! 后台 cron ticker：认领到期任务并调用 `agent::cron_exec`。
+//! 后台 cron ticker：认领到期任务并调用 `agent::exec::cron`。
 //!
 //! 注意：`rusqlite::Connection` 不可跨 `.await`，故先同步 `claim_due` 再异步执行。
 //!
 //! 凭据解析：读 `providers.json` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
 
-use agent::cron_exec::{self, CronExecCredentials};
+use agent::exec::cron::{self as cron_exec, CronExecCredentials};
 use common::{expand_chat_targets, ChatTarget, FallbackRef};
 use cron::{CronJob, CronStore};
 use home::default_memory_dir;

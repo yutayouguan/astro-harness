@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use home::AgentRuntimeConfig;
 use serde_json::Value;
 
-use crate::context::{DynamicContext, StaticContext};
-use crate::loop_::{AgentConfig, AgentLoop};
+use crate::prompt::context::{DynamicContext, StaticContext};
+use crate::runtime::{AgentConfig, AgentLoop};
 
 /// 构建完成的 Agent 运行时规格，可在不立即创建循环时持有或序列化传递。
 ///
@@ -81,7 +81,7 @@ impl AgentBuilder {
             preamble: None,
             temperature: None,
             max_turns: None,
-            multi_turn: crate::iteration_budget::DEFAULT_MAX_ITERATIONS,
+            multi_turn: crate::runtime::budget::DEFAULT_MAX_ITERATIONS,
             recent_turns: 10,
             additional_params: Value::Null,
             static_context: StaticContext::default(),

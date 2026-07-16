@@ -1900,7 +1900,7 @@ fn run_to_dto(r: cron::run_db::CronRunRow) -> CronRunDto {
 }
 
 /// 为定时任务解析 Provider/模型/密钥。
-fn resolve_creds_for_job(job: &cron::CronJob) -> Result<agent::cron_exec::CronExecCredentials, String> {
+fn resolve_creds_for_job(job: &cron::CronJob) -> Result<agent::exec::cron::CronExecCredentials, String> {
     use crate::providers_commands::{find_provider, find_provider_by_backend, resolve_chat_targets};
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
@@ -1929,7 +1929,7 @@ fn resolve_creds_for_job(job: &cron::CronJob) -> Result<agent::cron_exec::CronEx
         "未能解析聊天目标链，请检查模型提供商配置".to_string()
     })?;
 
-    Ok(agent::cron_exec::CronExecCredentials {
+    Ok(agent::exec::cron::CronExecCredentials {
         provider: primary.backend_id.clone(),
         model: primary.model.clone(),
         api_key: primary.api_key.clone(),
@@ -2088,7 +2088,7 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
         .find(|j| j.id == id || j.id.starts_with(&id))
         .ok_or_else(|| "未找到定时任务".to_string())?;
     let creds = resolve_creds_for_job(&job)?;
-    let row = agent::cron_exec::execute_job(&job, creds, "manual")
+    let row = agent::exec::cron::execute_job(&job, creds, "manual")
         .await
         .map_err(|e| e.to_string())?;
     let _ = store.touch_last_run(&job.id, Some(row.fired_at.clone()));

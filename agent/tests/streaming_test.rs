@@ -11,7 +11,7 @@ use providers::trait_::{
 };
 use tokio::sync::Mutex;
 
-use agent::loop_::{AgentConfig, AgentLoop};
+use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
     run_multi_turn_stream_from_provider, MultiTurnStreamItem, StreamedAssistantContent,
 };

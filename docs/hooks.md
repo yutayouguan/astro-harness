@@ -150,7 +150,7 @@ hooks:
 | Crate / 模块 | 职责 |
 |--------------|------|
 | `hooks` | `PluginHookBus`、`GatewayHookRegistry`、`ShellHookRunner`、`HookRuntime` |
-| `agent::hooks` | `CancelSignal`；生命周期观察/拦截走共享 `PluginHookBus` + `UiTimelineSlot` |
+| `agent::prompt::hooks` | `CancelSignal`；生命周期观察/拦截走共享 `PluginHookBus` + `UiTimelineSlot` |
 | `backend` | 启动扫描、`pre_gateway_dispatch`、Gateway 事件、`new_chat` 卸会话 |
 | `permissions` | 危险命令检测与权限裁决（钩子已迁出） |
 

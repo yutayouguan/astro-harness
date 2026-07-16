@@ -10,7 +10,10 @@ pub mod hitl;
 pub mod present;
 pub mod agents;
 
-pub use media::{image_gen, music, tts, video_gen, vision};
+pub use media::{
+    audio_understand, image_gen, music, music_gen, robotics, tts, video_gen, video_understand,
+    vision,
+};
 pub use system::{browser, code_exec, file_ops, terminal, web_search};
 pub use memory::{memory_tools, scheduled, skills_tool, task_plan};
 pub use hitl::{clarify, confirm, request_user_location};

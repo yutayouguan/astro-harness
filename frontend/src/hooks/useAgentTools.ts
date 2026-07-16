@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  IconAudioUnderstand,
   IconBrowser,
   IconClarify,
   IconCodeExec,
@@ -15,6 +16,7 @@ import {
   IconMemoryTool,
   IconMultiAgent,
   IconMusic,
+  IconRobotics,
   IconVideoGen,
   IconPresentUi,
   IconScheduled,
@@ -38,9 +40,13 @@ export type AgentToolId =
   | "file_ops"
   | "code_exec"
   | "vision"
+  | "robotics"
+  | "audio_understand"
   | "image_gen"
   | "video_gen"
+  | "video_understand"
   | "tts"
+  | "music_gen"
   | "music"
   | "skills"
   | "memory"
@@ -177,6 +183,34 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
+    id: "robotics",
+    titleKey: "agentTools.robotics.title",
+    descKey: "agentTools.robotics.desc",
+    Icon: IconRobotics,
+    tone: "pink",
+    params: [
+      { name: "image_url", type: "string" },
+      { name: "mode", type: "string", optional: true },
+      { name: "prompt", type: "string", optional: true },
+      { name: "queries", type: "string", optional: true },
+      { name: "robot_api", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "audio_understand",
+    titleKey: "agentTools.audioUnderstand.title",
+    descKey: "agentTools.audioUnderstand.desc",
+    Icon: IconAudioUnderstand,
+    tone: "cyan",
+    params: [
+      { name: "audio_url", type: "string" },
+      { name: "prompt", type: "string", optional: true },
+      { name: "mode", type: "string", optional: true },
+      { name: "start", type: "string", optional: true },
+      { name: "end", type: "string", optional: true },
+    ],
+  },
+  {
     id: "image_gen",
     titleKey: "agentTools.imageGen.title",
     descKey: "agentTools.imageGen.desc",
@@ -209,6 +243,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
+    id: "video_understand",
+    titleKey: "agentTools.videoUnderstand.title",
+    descKey: "agentTools.videoUnderstand.desc",
+    Icon: IconVideoGen,
+    tone: "rose",
+    params: [
+      { name: "video_url", type: "string" },
+      { name: "prompt", type: "string", optional: true },
+      { name: "mode", type: "string", optional: true },
+    ],
+  },
+  {
     id: "tts",
     titleKey: "agentTools.tts.title",
     descKey: "agentTools.tts.desc",
@@ -217,6 +263,19 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "text", type: "string" },
       { name: "voice", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "music_gen",
+    titleKey: "agentTools.musicGen.title",
+    descKey: "agentTools.musicGen.desc",
+    Icon: IconMusic,
+    tone: "violet",
+    params: [
+      { name: "prompt", type: "string" },
+      { name: "model", type: "string", optional: true },
+      { name: "reference_images", type: "string", optional: true },
+      { name: "format", type: "string", optional: true },
     ],
   },
   {

@@ -17,14 +17,14 @@ async fn execute_job_fails_without_api_key() {
         next_run_at: None,
         show_in_chat: false,
     };
-    let creds = agent::cron_exec::CronExecCredentials {
+    let creds = agent::exec::cron::CronExecCredentials {
         provider: "openai".into(),
         model: "gpt-4o-mini".into(),
         api_key: String::new(),
         base_url: String::new(),
         targets: vec![],
     };
-    let row = agent::cron_exec::execute_job_with_roots(
+    let row = agent::exec::cron::execute_job_with_roots(
         dir.path(),
         &job,
         creds,

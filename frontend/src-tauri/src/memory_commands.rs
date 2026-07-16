@@ -2,7 +2,7 @@
 //!
 //! ## 架构说明（Frozen Snapshot / `refresh_memory`）
 //!
-//! - **Tauri 进程不持有长驻 [`agent::loop_::AgentLoop`]。** 聊天经 gRPC 交给 `backend`，
+//! - **Tauri 进程不持有长驻 [`agent::runtime::AgentLoop`]。** 聊天经 gRPC 交给 `backend`，
 //!   由后端按 `session_id` 缓存 `AgentLoop`；同会话 system prompt 使用冻结 snapshot。
 //! - Tauri 侧记忆读写多为请求作用域的 [`memory::MemoryManager`]（`new` / `for_agent`）。
 //! - 本命令：对**当前活跃 Agent** 打开 `MemoryManager`，调用

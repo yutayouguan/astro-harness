@@ -1,6 +1,6 @@
 //! 危险命令检测与分级审批（Hermes 风格）。
 //!
-//! 规则层：`Deny` / `Ask` / `Auto`。可选辅模型对 `Ask` 降级见 `agent::smart_approval`。
+//! 规则层：`Deny` / `Ask` / `Auto`。可选辅模型对 `Ask` 降级见 `agent::control::smart_approval`。
 
 use regex::Regex;
 use std::sync::OnceLock;

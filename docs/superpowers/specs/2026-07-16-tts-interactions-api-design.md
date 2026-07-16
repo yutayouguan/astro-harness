@@ -1,12 +1,12 @@
 # TTS 升级至 Gemini Interactions API（全量）
 
 日期：2026-07-16  
-状态：已批准，待实现  
-参考：[文字转语音生成 (TTS)](https://ai.google.dev/gemini-api/docs/speech-generation?hl=zh-cn)
+状态：已实现（见 [实现计划](../plans/2026-07-16-tts-interactions-api.md)）  
+参考：[文字转语音生成 (TTS)](https://ai.google.dev/gemini-api/docs/speech-generation?hl=zh-cn)；对齐 [image-gen Interactions 设计](./2026-07-16-image-gen-interactions-api-design.md)
 
 ## 背景
 
-当前 `tts` 工具：
+升级前 `tts` 工具：
 
 - Google：`POST …/v1beta/models/{tts_model}:generateContent`，`responseModalities: ["AUDIO"]` + `speechConfig.voiceConfig`
 - OpenAI：独立 `POST …/audio/speech`（`gpt-4o-mini-tts`）
@@ -25,7 +25,7 @@
 1. Google TTS 主路径改为 Interactions API，对齐官方全量能力（单/多说话人、style、stream 落盘）。
 2. 扩展 `tts` 工具参数；与 OpenAI `/audio/speech` 完全分路径。
 3. 产物仍写入 `workspace/generated/audio/`；返回 `interaction_id`。
-4. 新建 `providers::interactions_http` 骨架（URL + `x-goog-api-key`），供后续 image/vision 复用。
+4. 新建 / 扩展 `providers::interactions_http` 骨架（URL + `x-goog-api-key`），供后续 image/vision 复用。
 
 ## 非目标
 
@@ -47,12 +47,19 @@
 
 ## 架构
 
-```
-tts (tools)
-  ├─ Google key 可用 → providers::interactions_http::google_interactions_tts
-  │                     POST {google_native_base}/v1beta/interactions
-  │                     Header: x-goog-api-key
-  └─ 无 Google → OpenAI /audio/speech（忽略 speakers/style/stream + note）
+```mermaid
+flowchart TD
+  ttsTool[tts tool]
+  ttsTool -->|Google key 可用| googlePath[interactions_http.google_interactions_tts]
+  ttsTool -->|无 Google| openaiPath[OpenAI /audio/speech]
+  googlePath --> interactionsAPI["POST /v1beta/interactions"]
+  interactionsAPI -->|stream false| outputAudio[output_audio.data]
+  interactionsAPI -->|stream true| stepDelta[step.delta audio chunks]
+  outputAudio --> wav[pcm_to_wav]
+  stepDelta --> accumulate[拼接 PCM]
+  accumulate --> wav
+  wav --> disk["generated/audio/tts-*.wav"]
+  openaiPath --> mp3["generated/audio/tts-*.mp3"]
 ```
 
 旧 `google_tts_generate`（generateContent）保留但标记弃用，工具不再调用。
@@ -76,6 +83,8 @@ tts (tools)
 
 ### Google `input` 拼装
 
+防「风格说明被朗读」与分类器误拒（文档建议）：
+
 ```
 Synthesize speech for the transcript below. Follow the director notes; do not read the notes aloud.
 
@@ -85,6 +94,8 @@ Synthesize speech for the transcript below. Follow the director notes; do not re
 #### TRANSCRIPT
 {text}
 ```
+
+无 `style` 时仍保留短序言 + `TRANSCRIPT` 块。
 
 ### 成功返回（Google）
 
@@ -101,7 +112,7 @@ stream=true|false
 **请求**
 
 - URL：`{google_native_base}/v1beta/interactions`
-- Header：`x-goog-api-key`；流式另加 `Api-Revision: 2026-05-20`
+- Header：`x-goog-api-key`（不用 Bearer / `?key=`）；流式另加 `Api-Revision: 2026-05-20`
 - Body：`model`、`input`、`response_format: { type: "audio" }`、`generation_config.speech_config`、可选 `stream`
 
 **响应**
@@ -113,6 +124,14 @@ stream=true|false
 
 - 非 2xx：`Google interactions HTTP {status}: {message}`
 - 无音频数据：明确报错
+
+## 落地代码
+
+| 路径 | 说明 |
+|------|------|
+| `providers/src/protocol/interactions_http.rs` | TTS body / 解析 / 流式聚合 / `google_interactions_tts` |
+| `tools/src/builtins/media/tts.rs` | Args、校验、Google / OpenAI 分路径 |
+| `providers/src/protocol/media_http.rs` | `google_tts_generate` 标弃用 |
 
 ## 测试
 
@@ -129,11 +148,3 @@ stream=true|false
 | 风格说明被朗读 | 固定序言 + TRANSCRIPT 标记 |
 | 长音频质量下降 | 文档限制；调用方自行拆块 |
 | SSE 事件格式差异 | 单元测试覆盖多种 delta 形态 |
-
-## 实现顺序
-
-1. design（本文）+ 可执行 plan
-2. `interactions_http` TTS + 单测
-3. `tts` 工具接线与 OpenAI note
-4. 弃用 `google_tts_generate`
-5. `cargo test -p providers` / tools 相关用例
