@@ -182,6 +182,72 @@ async fn pre_llm_call_inject_context_via_hook_bus() {
 }
 
 #[tokio::test]
+async fn transform_tool_result_replaces_before_post_tool_call() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let bus = agent.hook_bus();
+    bus.register(hooks::TRANSFORM_TOOL_RESULT, |_| {
+        hooks::HookOutcome::ReplaceText("REDACTED".into())
+    });
+    let captured: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
+    let captured2 = Arc::clone(&captured);
+    bus.register(hooks::POST_TOOL_CALL, move |payload| {
+        *captured2.lock().unwrap() = payload.tool_result.clone();
+        hooks::HookOutcome::Continue
+    });
+
+    let out = agent
+        .handle_tool_call_async(
+            "file_ops",
+            &serde_json::json!({"path": "x.txt", "operation": "write", "content": "hello"}),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(out, "REDACTED");
+    assert_eq!(
+        captured.lock().unwrap().as_deref(),
+        Some("REDACTED"),
+        "post_tool_call must observe the transformed result"
+    );
+}
+
+#[tokio::test]
+async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    assert!(!agent.turn_wrote_disk());
+
+    // 只读操作不应置位
+    let _ = agent
+        .handle_tool_call_async("file_ops", &serde_json::json!({"path": ".", "operation": "list"}))
+        .await
+        .unwrap();
+    assert!(!agent.turn_wrote_disk());
+
+    // 写操作应置位
+    let _ = agent
+        .handle_tool_call_async(
+            "file_ops",
+            &serde_json::json!({"path": "a.txt", "operation": "write", "content": "hi"}),
+        )
+        .await
+        .unwrap();
+    assert!(agent.turn_wrote_disk());
+
+    // 新用户轮次开始应清零
+    agent.begin_user_turn();
+    assert!(!agent.turn_wrote_disk());
+
+    // terminal 工具调用也应置位
+    let _ = agent
+        .handle_tool_call_async("terminal", &serde_json::json!({"command": "true"}))
+        .await
+        .unwrap();
+    assert!(agent.turn_wrote_disk());
+}
+
+#[tokio::test]
 async fn test_agent_loop_memory_injection() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();

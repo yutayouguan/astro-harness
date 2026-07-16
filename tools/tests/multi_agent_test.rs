@@ -29,6 +29,7 @@ async fn multi_agent_queues_orchestration() {
         delegate_runner: None,
         async_spawner: None,
         orchestration_spawner: None,
+        hook_bus: None,
     };
 
     let out = tools::dispatch_tool(
@@ -83,6 +84,7 @@ async fn multi_agent_rejects_empty_agents() {
         delegate_runner: None,
         async_spawner: None,
         orchestration_spawner: None,
+        hook_bus: None,
     };
     let err = tools::dispatch_tool(
         |_| true,

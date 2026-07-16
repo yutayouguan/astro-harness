@@ -75,6 +75,25 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let stderr = String::from_utf8_lossy(&output.stderr);
     let code = output.status.code().unwrap_or(-1);
     let body = format!("exit={code}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+    let body = if let Some(bus) = &ctx.hook_bus {
+        let outcome = bus.fire(
+            hooks::TRANSFORM_TERMINAL_OUTPUT,
+            &hooks::HookPayload {
+                session_id: ctx.session_id.clone(),
+                turn_id: ctx.turn_id.clone(),
+                tool_name: Some("terminal".to_string()),
+                tool_args: Some(args.clone()),
+                tool_result: Some(body.clone()),
+                ..Default::default()
+            },
+        );
+        match outcome {
+            hooks::HookOutcome::ReplaceText(s) => s,
+            _ => body,
+        }
+    } else {
+        body
+    };
     Ok(common::truncate_tool_result(
         &body,
         common::MAX_TOOL_RESULT_BYTES,
@@ -113,6 +132,7 @@ mod tests {
             delegate_runner: None,
             async_spawner: None,
             orchestration_spawner: None,
+            hook_bus: None,
         };
 
         let n = common::MAX_TOOL_RESULT_BYTES + 8 * 1024;
@@ -122,5 +142,49 @@ mod tests {
         let out = dispatch(&ctx, &args).await.unwrap();
         assert!(out.contains("[truncated]"), "{out}");
         assert!(out.len() < n + 200);
+    }
+
+    #[tokio::test]
+    async fn transform_terminal_output_hook_replaces_before_truncation() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let providers = providers::registry::ProviderRegistry::new();
+        let targets = ImageGenTargets::default();
+        let bus = std::sync::Arc::new(hooks::PluginHookBus::new());
+        bus.register(hooks::TRANSFORM_TERMINAL_OUTPUT, |_payload| {
+            hooks::HookOutcome::ReplaceText("[redacted-terminal-output]".to_string())
+        });
+        let ctx = ToolContext {
+            memory: &mut memory,
+            sessions: &sessions,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: ws,
+            project_root: None,
+            image_gen_targets: &targets,
+            providers: &providers,
+            session_id: "test".into(),
+            turn_id: None,
+            chat_api_key: String::new(),
+            chat_base_url: String::new(),
+            chat_provider: String::new(),
+            chat_model: String::new(),
+            chat_targets: vec![],
+            delegate_runner: None,
+            async_spawner: None,
+            orchestration_spawner: None,
+            hook_bus: Some(bus),
+        };
+
+        let n = common::MAX_TOOL_RESULT_BYTES + 8 * 1024;
+        let args = serde_json::json!({
+            "command": format!("awk 'BEGIN{{for(i=0;i<{n};i++)printf \"a\"}}'"),
+        });
+        let out = dispatch(&ctx, &args).await.unwrap();
+        assert_eq!(out, "[redacted-terminal-output]");
+        assert!(!out.contains("[truncated]"), "{out}");
+        assert!(out.len() < n);
     }
 }

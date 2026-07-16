@@ -71,6 +71,7 @@ async fn file_ops_write_and_read() {
         delegate_runner: None,
         async_spawner: None,
         orchestration_spawner: None,
+        hook_bus: None,
     };
 
     let w = tools::dispatch_tool(

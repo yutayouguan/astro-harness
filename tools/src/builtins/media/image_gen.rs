@@ -674,6 +674,7 @@ mod path_tests {
             delegate_runner: None,
             async_spawner: None,
             orchestration_spawner: None,
+            hook_bus: None,
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.txt").unwrap_err();
@@ -712,6 +713,7 @@ mod path_tests {
             delegate_runner: None,
             async_spawner: None,
             orchestration_spawner: None,
+            hook_bus: None,
         };
 
         let path = resolve_workspace_file(&ctx, "ok.txt").unwrap();

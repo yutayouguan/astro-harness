@@ -120,6 +120,7 @@ fn req_clone_creds(req: &DelegateRunRequest) -> DelegateRunRequest {
         caller_depth: req.caller_depth,
         max_spawn_depth: req.max_spawn_depth,
         project_root: req.project_root.clone(),
+        hook_bus: req.hook_bus.clone(),
     }
 }
 
@@ -242,6 +243,8 @@ async fn run_one_child_inner(
     let registry = ProviderRegistry::new();
     let targets = effective_chat_targets(&creds, &registry);
     agent.set_chat_targets(targets);
+
+    fire_subagent_start(&creds, &task, role);
 
     let role_note = match role {
         DelegateRole::Leaf => {
@@ -536,6 +539,29 @@ async fn run_provider_loop(
     Ok((last_response, total_usage))
 }
 
+/// 子 Agent 构造完、真正 `run` 前触发 `subagent_start`（每个 child 一次，观察型）。
+///
+/// Payload 与现有 `subagent_stop`（`runtime::fire_subagent_stop_from_delegate_result`）配对：
+/// `session_id` 用父会话（`subagent_stop` 用子会话，故不可直接复用同一辨识字段），
+/// `detail` 携带子角色与任务摘要，供插件/时间线区分具体 child。
+fn fire_subagent_start(creds: &DelegateRunRequest, task: &DelegateTaskSpec, role: DelegateRole) {
+    let Some(bus) = creds.hook_bus.as_ref() else {
+        return;
+    };
+    let role_str = match role {
+        DelegateRole::Leaf => "leaf",
+        DelegateRole::Orchestrator => "orchestrator",
+    };
+    let _ = bus.fire(
+        ::hooks::SUBAGENT_START,
+        &::hooks::HookPayload {
+            session_id: creds.parent_session_id.clone(),
+            detail: format!("role={role_str} goal={}", truncate_chars(&task.goal, 200)),
+            ..Default::default()
+        },
+    );
+}
+
 fn truncate_chars(s: &str, max_chars: usize) -> String {
     let mut out: String = s.chars().take(max_chars).collect();
     if s.chars().count() > max_chars {
@@ -672,5 +698,113 @@ mod strip_tests {
     fn normalize_aliases() {
         assert_eq!(normalize_toolset_name("file"), "file_ops");
         assert_eq!(normalize_toolset_name("web"), "web_search");
+    }
+}
+
+#[cfg(test)]
+mod subagent_lifecycle_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use tempfile::TempDir;
+
+    /// `subagent_start` 必须在每个 child 真正 run 前触发；与 `finalize_tool_call_result`
+    /// 内既有的 `subagent_stop`（Task 5 之前已落地）配对，顺序须为 start → stop。
+    ///
+    /// provider 故意设为未注册的 backend id，令 `run_provider_loop` 在建连前立即失败
+    /// （`registry.get` 返回 `None`），从而无需真实网络请求即可覆盖“child 已构造、
+    /// 即将 run”这一时机。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn subagent_start_fires_before_subagent_stop_per_child() {
+        let mem_dir = TempDir::new().expect("tempdir");
+        let _env = home::test_env::AstroMemoryDirGuard::set(mem_dir.path());
+        let project_dir = TempDir::new().expect("tempdir"); // 非 git 仓：避免触发真实 worktree
+
+        let bus = Arc::new(::hooks::PluginHookBus::new());
+        let log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
+        let log_start = Arc::clone(&log);
+        bus.register(::hooks::SUBAGENT_START, move |payload| {
+            log_start
+                .lock()
+                .unwrap()
+                .push(format!("start:{}", payload.session_id));
+            ::hooks::HookOutcome::Continue
+        });
+        let log_stop = Arc::clone(&log);
+        bus.register(::hooks::SUBAGENT_STOP, move |payload| {
+            log_stop
+                .lock()
+                .unwrap()
+                .push(format!("stop:{}", payload.session_id));
+            ::hooks::HookOutcome::Continue
+        });
+
+        let req = DelegateRunRequest {
+            parent_agent_id: "test-agent".into(),
+            parent_session_id: "parent-session".into(),
+            provider: "test-nonexistent-provider".into(),
+            model: "dummy-model".into(),
+            api_key: "dummy-key".into(),
+            base_url: String::new(),
+            chat_targets: vec![],
+            tasks: vec![DelegateTaskSpec::new("do the thing", "")],
+            max_concurrent: 1,
+            caller_depth: 0,
+            max_spawn_depth: 1,
+            project_root: Some(project_dir.path().to_path_buf()),
+            hook_bus: Some(Arc::clone(&bus)),
+        };
+
+        let raw_result = run_delegate(req).await.expect("run_delegate should still return a summary JSON on child failure");
+
+        let mut agent =
+            AgentLoop::new(AgentConfig::with_defaults(mem_dir.path().to_path_buf())).unwrap();
+        agent.set_hook_bus(Arc::clone(&bus));
+        let _ = agent
+            .finalize_tool_call_result("delegate", &serde_json::json!({}), raw_result)
+            .await;
+
+        let entries = log.lock().unwrap().clone();
+        assert_eq!(
+            entries.len(),
+            2,
+            "expected exactly one subagent_start and one subagent_stop, got {entries:?}"
+        );
+        assert!(
+            entries[0].starts_with("start:"),
+            "subagent_start must fire before subagent_stop, got {entries:?}"
+        );
+        assert!(
+            entries[1].starts_with("stop:"),
+            "subagent_stop must fire after subagent_start, got {entries:?}"
+        );
+    }
+
+    /// 无 hook bus（`hook_bus: None`）时静默跳过，不 panic、不影响子任务执行结果。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn subagent_start_skips_silently_without_hook_bus() {
+        let mem_dir = TempDir::new().expect("tempdir");
+        let _env = home::test_env::AstroMemoryDirGuard::set(mem_dir.path());
+        let project_dir = TempDir::new().expect("tempdir");
+
+        let req = DelegateRunRequest {
+            parent_agent_id: "test-agent".into(),
+            parent_session_id: "parent-session".into(),
+            provider: "test-nonexistent-provider".into(),
+            model: "dummy-model".into(),
+            api_key: "dummy-key".into(),
+            base_url: String::new(),
+            chat_targets: vec![],
+            tasks: vec![DelegateTaskSpec::new("do the thing", "")],
+            max_concurrent: 1,
+            caller_depth: 0,
+            max_spawn_depth: 1,
+            project_root: Some(project_dir.path().to_path_buf()),
+            hook_bus: None,
+        };
+
+        let raw_result = run_delegate(req).await.expect("run_delegate should not panic without a hook bus");
+        let v: serde_json::Value = serde_json::from_str(&raw_result).unwrap();
+        assert_eq!(v["tasks"].as_array().unwrap().len(), 1);
     }
 }

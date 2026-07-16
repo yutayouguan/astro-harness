@@ -16,6 +16,15 @@ pub struct PluginHookBus {
     hooks: Arc<std::sync::Mutex<HashMap<String, Vec<HookFn>>>>,
 }
 
+impl std::fmt::Debug for PluginHookBus {
+    /// 回调本身不可打印；仅展示已注册的钩子名，供上层 `Debug` 派生（如 `DelegateRunRequest`）复用。
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginHookBus")
+            .field("hook_names", &self.registered_names())
+            .finish()
+    }
+}
+
 impl PluginHookBus {
     pub fn new() -> Self {
         Self::default()
@@ -67,7 +76,7 @@ impl PluginHookBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::names::{PRE_LLM_CALL, PRE_TOOL_CALL};
+    use crate::names::{PRE_LLM_CALL, PRE_TOOL_CALL, PRE_VERIFY, TRANSFORM_TOOL_RESULT};
     use serde_json::json;
 
     #[test]
@@ -115,5 +124,22 @@ mod tests {
         bus.register(PRE_TOOL_CALL, |_| HookOutcome::Modify(json!({"x": 1})));
         let out = bus.fire(PRE_TOOL_CALL, &HookPayload::default());
         assert!(matches!(out, HookOutcome::Modify(ref v) if v["x"] == 1));
+    }
+
+    #[test]
+    fn transform_replace_text_short_circuits() {
+        let bus = PluginHookBus::new();
+        bus.register(TRANSFORM_TOOL_RESULT, |_| HookOutcome::ReplaceText("a".into()));
+        bus.register(TRANSFORM_TOOL_RESULT, |_| HookOutcome::ReplaceText("b".into()));
+        let out = bus.fire(TRANSFORM_TOOL_RESULT, &HookPayload::default());
+        assert!(matches!(out, HookOutcome::ReplaceText(ref s) if s == "a"));
+    }
+
+    #[test]
+    fn keep_going_short_circuits() {
+        let bus = PluginHookBus::new();
+        bus.register(PRE_VERIFY, |_| HookOutcome::KeepGoing("retry".into()));
+        let out = bus.fire(PRE_VERIFY, &HookPayload::default());
+        assert!(matches!(out, HookOutcome::KeepGoing(ref s) if s == "retry"));
     }
 }

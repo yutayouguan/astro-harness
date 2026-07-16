@@ -128,6 +128,9 @@ pub struct AgentLoop {
     async_spawner: delegate::DelegateAsyncSpawner,
     /// 编排 spawner（由 from_memory 构造）。
     orchestration_spawner: orchestration::OrchestrationSpawner,
+    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）；
+    /// `begin_user_turn` 时清零，供 `pre_verify` 等下游钩子（Task 7）判断是否需要校验。
+    turn_wrote_disk: bool,
 }
 
 impl AgentLoop {
@@ -244,6 +247,7 @@ impl AgentLoop {
             delegate_runner,
             async_spawner,
             orchestration_spawner,
+            turn_wrote_disk: false,
         })
     }
 
@@ -306,6 +310,15 @@ impl AgentLoop {
         self.pending_inject_context.take()
     }
 
+    /// 排队下一轮注入上下文（复用 `pre_llm_call` 的注入机制）。
+    ///
+    /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：不回写
+    /// `session_messages`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
+    /// 形式追加一条 user 消息。
+    pub fn queue_inject_context(&mut self, ctx: impl Into<String>) {
+        self.pending_inject_context = Some(ctx.into());
+    }
+
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub fn session_turn(&self) -> usize {
         self.current_turn
@@ -336,9 +349,15 @@ impl AgentLoop {
         self.tool_rounds >= self.config.multi_turn
     }
 
-    /// 开始新的用户消息处理：重置 `tool_rounds` 为 0。
+    /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     pub fn begin_user_turn(&mut self) {
         self.tool_rounds = 0;
+        self.turn_wrote_disk = false;
+    }
+
+    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
+    pub fn turn_wrote_disk(&self) -> bool {
+        self.turn_wrote_disk
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
@@ -673,6 +692,7 @@ impl AgentLoop {
         let delegate_runner = Some(self.delegate_runner());
         let async_spawner = Some(self.async_spawner());
         let orchestration_spawner = Some(self.orchestration_spawner());
+        let hook_bus = Some(self.hook_bus());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
             sessions,
@@ -691,6 +711,7 @@ impl AgentLoop {
             delegate_runner,
             async_spawner,
             orchestration_spawner,
+            hook_bus,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args).await
     }
@@ -751,7 +772,37 @@ impl AgentLoop {
         if self.cancel.is_cancelled() {
             anyhow::bail!("prompt cancelled");
         }
-        let result = self.dispatch_named_tool(name, &args_owned).await?;
+        let raw_result = self.dispatch_named_tool(name, &args_owned).await?;
+        if tool_writes_disk(name, &args_owned) {
+            self.turn_wrote_disk = true;
+        }
+        Ok(self
+            .finalize_tool_call_result(name, &args_owned, raw_result)
+            .await)
+    }
+
+    /// `pub(crate)`：供 `exec::delegate` 的 `subagent_start`/`subagent_stop` 顺序测试复用。
+    pub(crate) async fn finalize_tool_call_result(
+        &self,
+        name: &str,
+        args_owned: &serde_json::Value,
+        raw_result: String,
+    ) -> String {
+        let transformed = self.fire_hook(
+            ::hooks::TRANSFORM_TOOL_RESULT,
+            ::hooks::HookPayload {
+                session_id: self.session_id.clone(),
+                turn_id: self.current_turn_id.clone(),
+                tool_name: Some(name.into()),
+                tool_args: Some(args_owned.clone()),
+                tool_result: Some(raw_result.clone()),
+                ..Default::default()
+            },
+        );
+        let result = match transformed {
+            ::hooks::HookOutcome::ReplaceText(s) => s,
+            _ => raw_result.clone(),
+        };
         let _ = self.fire_hook(
             ::hooks::POST_TOOL_CALL,
             ::hooks::HookPayload {
@@ -767,9 +818,9 @@ impl AgentLoop {
             },
         );
         if name == "delegate" || name == "multi_agent" {
-            self.fire_subagent_stop_from_delegate_result(&result).await;
+            self.fire_subagent_stop_from_delegate_result(&raw_result).await;
         }
-        Ok(result)
+        result
     }
 
     async fn fire_subagent_stop_from_delegate_result(&self, result: &str) {
@@ -847,6 +898,21 @@ impl AgentLoop {
             _ => Message::assistant(content),
         };
         self.session_messages.push(msg);
+        Ok(())
+    }
+
+    /// 将 user 角色消息写入记忆与会话镜像。
+    ///
+    /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：与 `pending_inject_context`
+    /// 的临时注入不同，本方法直接落盘并写入 `session_messages`，确保下一轮 API 历史与
+    /// `SessionStore` 保持一致（角色交替），避免连续 assistant 触发 Provider 400。
+    pub fn record_user_message(&mut self, content: &str) -> anyhow::Result<()> {
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(content),
+            ..NewMessage::empty(&self.session_id, "user")
+        })?;
+        self.session_messages.push(Message::user(content));
         Ok(())
     }
 
@@ -960,6 +1026,89 @@ impl AgentLoop {
             turn: self.current_turn,
             system_prompt,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use tempfile::TempDir;
+
+    fn test_config(dir: &TempDir) -> AgentConfig {
+        AgentConfig::with_defaults(dir.path().to_path_buf())
+    }
+
+    #[tokio::test]
+    async fn finalize_tool_call_result_keeps_raw_delegate_json_for_internal_control_flow() {
+        let dir = TempDir::new().unwrap();
+        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        agent.set_current_turn_id("turn-1");
+
+        let bus = agent.hook_bus();
+        let post_result: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let post_result2 = Arc::clone(&post_result);
+        let subagent_stop: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+        let subagent_stop2 = Arc::clone(&subagent_stop);
+
+        bus.register(::hooks::TRANSFORM_TOOL_RESULT, |_| {
+            ::hooks::HookOutcome::ReplaceText("REDACTED".into())
+        });
+        bus.register(::hooks::POST_TOOL_CALL, move |payload| {
+            *post_result2.lock().unwrap() = payload.tool_result.clone();
+            ::hooks::HookOutcome::Continue
+        });
+        bus.register(::hooks::SUBAGENT_STOP, move |payload| {
+            subagent_stop2
+                .lock()
+                .unwrap()
+                .push((payload.session_id.clone(), payload.detail.clone()));
+            ::hooks::HookOutcome::Continue
+        });
+
+        let raw_result = serde_json::json!({
+            "delegate": true,
+            "status": "done",
+            "tasks": [
+                {
+                    "session_id": "child-session-1",
+                    "summary": "raw delegate summary"
+                }
+            ]
+        })
+        .to_string();
+        let final_result = agent
+            .finalize_tool_call_result("delegate", &serde_json::json!({"ignored": true}), raw_result)
+            .await;
+
+        assert_eq!(final_result, "REDACTED");
+        assert_eq!(post_result.lock().unwrap().as_deref(), Some("REDACTED"));
+        assert_eq!(
+            subagent_stop.lock().unwrap().as_slice(),
+            [(
+                "child-session-1".to_string(),
+                "raw delegate summary".to_string()
+            )]
+        );
+    }
+}
+
+/// 判断一次工具调用是否可能写入磁盘（供 `turn_wrote_disk` 标记使用）。
+///
+/// `terminal` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
+/// `operation`（`write`/`append`/`delete`/`mkdir`）时视为写盘，`read`/`list` 不算。
+fn tool_writes_disk(name: &str, args: &Value) -> bool {
+    match name {
+        "terminal" => true,
+        "file_ops" => matches!(
+            args.get("operation")
+                .and_then(|v| v.as_str())
+                .map(str::to_lowercase)
+                .as_deref(),
+            Some("write") | Some("append") | Some("delete") | Some("mkdir")
+        ),
+        _ => false,
     }
 }
 

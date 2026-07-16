@@ -31,6 +31,11 @@ use super::tools_exec::{execute_tools_concurrent, execute_tools_serial, terminal
 use super::traits::StreamingChat;
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 
+/// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
+///
+/// 对齐设计文档：仅本轮写盘且无工具终态时才计入；超过后不再 fire，直接收尾。
+const MAX_VERIFY_ATTEMPTS: usize = 2;
+
 /// 向 mpsc 发送单个成功事件；接收方关闭时返回 `false`。
 pub(crate) async fn emit(
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -271,6 +276,8 @@ async fn run_multi_turn_stream_inner(
     // 原始迭代计数（不受 refund 影响），防止 code_exec-only 反复 refund 导致净预算永不耗尽。
     // 硬上限 = max_rounds × 2，超过即视为预算耗尽。
     let mut raw_rounds: usize = 0;
+    // `pre_verify` 已消耗的验证尝试次数（每个 run 独立，跨 KeepGoing 轮次累加）。
+    let mut verify_attempt: usize = 0;
 
     // 整次 run 累积时间线，供每轮 assistant 落盘写入 reasoning_details
     let mut timeline = crate::timeline::TimelineBuilder::new();
@@ -533,10 +540,90 @@ async fn run_multi_turn_stream_inner(
             return;
         }
 
+        // `pre_verify`：仅无工具终态（`calls.is_empty()`）且本轮写过盘时才 fire，
+        // 在 `transform_llm_output` / `post_llm_call` 之前判断，`KeepGoing` 则注入
+        // 提示并继续外层 API 循环（不进入本轮收尾）。
+        if calls.is_empty() {
+            let verify_outcome = {
+                let agent = session.lock().await;
+                if agent.turn_wrote_disk() && verify_attempt < MAX_VERIFY_ATTEMPTS {
+                    verify_attempt += 1;
+                    let sid = agent.session_id().to_string();
+                    let turn_id = agent.current_turn_id().map(str::to_string);
+                    Some(agent.fire_hook(
+                        ::hooks::PRE_VERIFY,
+                        ::hooks::HookPayload {
+                            session_id: sid,
+                            turn_id,
+                            message: Some(full_response.clone()),
+                            detail: format!("attempt={verify_attempt}"),
+                            ..Default::default()
+                        },
+                    ))
+                } else {
+                    None
+                }
+            };
+            if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
+                let mut agent = session.lock().await;
+                let details = Some(timeline.reasoning_details_snapshot());
+                if let Err(err) = agent.record_assistant_message_with_tools(
+                    &full_response,
+                    None,
+                    (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                    details,
+                ) {
+                    drop(agent);
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        err.to_string(),
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
+                    return;
+                }
+                // 直接持久化桥接 user 消息到 session_messages / SessionStore（而非仅
+                // `queue_inject_context` 排队临时注入）：否则第二次 KeepGoing 时
+                // `session_messages` 会出现连续 assistant，导致下一轮历史触发
+                // Anthropic/Gemini 400。与 inject 保持同一文本形态，且不再排队注入，
+                // 避免下一轮 history 重复出现该 user 消息（连续 user）。
+                if let Err(err) = agent.record_user_message(&format!("[astro:hook-context]\n{prompt}")) {
+                    drop(agent);
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        err.to_string(),
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
+                    return;
+                }
+                drop(agent);
+                continue;
+            }
+        }
+
         {
             let agent = session.lock().await;
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().map(str::to_string);
+            let transformed = agent.fire_hook(
+                ::hooks::TRANSFORM_LLM_OUTPUT,
+                ::hooks::HookPayload {
+                    session_id: sid.clone(),
+                    turn_id: turn_id.clone(),
+                    message: Some(full_response.clone()),
+                    assistant_chars: Some(full_response.len()),
+                    detail: format!("assistant_chars={}", full_response.len()),
+                    ..Default::default()
+                },
+            );
+            if let ::hooks::HookOutcome::ReplaceText(s) = transformed {
+                full_response = s;
+            }
             let _ = agent.fire_hook(
                 ::hooks::POST_LLM_CALL,
                 ::hooks::HookPayload {

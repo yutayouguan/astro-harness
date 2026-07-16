@@ -214,6 +214,7 @@ fn build_run_request(
         caller_depth: home::current_spawn_depth(),
         max_spawn_depth,
         project_root: ctx.project_root.clone(),
+        hook_bus: ctx.hook_bus.clone(),
     })
 }
 

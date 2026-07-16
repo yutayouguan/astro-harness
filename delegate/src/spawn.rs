@@ -73,6 +73,10 @@ pub struct DelegateRunRequest {
     /// 可选：代码仓根（显式或环境）；缺省由执行器解析。
     #[serde(default)]
     pub project_root: Option<std::path::PathBuf>,
+    /// 父 Agent 插件钩子总线（由 `ToolContext` 注入，供 `subagent_start` 使用）；
+    /// 跨进程持久化（异步委派恢复）时不可序列化，恢复后为 `None`（观察型钩子静默跳过）。
+    #[serde(skip)]
+    pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
 pub type DelegateRunner =

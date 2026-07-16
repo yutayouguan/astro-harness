@@ -617,6 +617,7 @@ mod path_escape_tests {
             delegate_runner: None,
             async_spawner: None,
             orchestration_spawner: None,
+            hook_bus: None,
         }
     }
 

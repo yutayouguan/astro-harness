@@ -24,12 +24,19 @@ Astro 提供与常见 Agent 生命周期对齐的 **三套 Hook**：
 | `pre_api_request` | 每次底层 API 调用前 | 观察 |
 | `post_api_request` | 每次 API 结束后 | 观察 |
 | `pre_tool_call` | 工具执行前 | `Continue` / `Block` / `Modify(args)` |
-| `post_tool_call` | 工具返回后 | 观察 |
-| `post_llm_call` | 该 turn 成功结束后 | 观察 |
+| `pre_approval_request` | 危险 `terminal` 命令即将进入 `Ask`（辅模型降级前） | 观察 |
+| `post_approval_response` | 该次审批决议后（`auto`/`allow`/`deny`/`timeout`/`unavailable`） | 观察 |
+| `transform_terminal_output` | `terminal` 原始 stdout/stderr 后、64KiB 截断前 | `ReplaceText` |
+| `transform_tool_result` | 任意工具返回后、`post_tool_call` 前 | `ReplaceText` |
+| `post_tool_call` | 工具返回后（已应用 `transform_tool_result`） | 观察 |
+| `subagent_start` | `delegate` 子 Agent 构造完、真正 `run` 前（每个 child 一次，父侧） | 观察 |
+| `subagent_stop` | `delegate` 子 Agent 结束后（父侧） | 观察 |
+| `pre_verify` | 无工具调用的最终回复，且本轮执行过写盘工具（`terminal`；`file_ops` 的 `write`/`append`/`delete`/`mkdir`） | `KeepGoing(msg)` |
+| `transform_llm_output` | 最终 assistant 文本定稿、`post_llm_call` 前 | `ReplaceText` |
+| `post_llm_call` | 该 turn 成功结束后（已应用 `transform_llm_output`） | 观察 |
 | `on_session_end` | 单次 stream/run 收尾 | 观察 |
 | `on_session_finalize` | 卸会话 / 进程清理 | 观察 |
 | `on_session_reset` | 新建对话切走旧 session | 观察 |
-| `subagent_stop` | `delegate` 子 Agent 结束后（父侧） | 观察 |
 | `pre_gateway_dispatch` | gRPC/Tauri chat 入站前 | `Allow` / `Skip` / `Rewrite` |
 
 顺序：
@@ -39,10 +46,27 @@ on_session_start（仅首轮）
   → pre_llm_call
   → [工具循环]
       → pre_api_request → API → post_api_request
-      → pre_tool_call → 工具 → post_tool_call
-  → post_llm_call
+      → pre_tool_call
+          → (pre_approval_request → 降级/park → post_approval_response)?  ← 仅危险命令走 Ask
+          → 工具执行 → transform_terminal_output?（仅 terminal，截断前） → transform_tool_result → post_tool_call
+          → (subagent_start … subagent_stop)?                             ← 仅 delegate/multi_agent
+  → pre_verify?（本轮写盘 && attempt < 2 时才 fire；KeepGoing 则注入提示、再进 API 循环）
+  → transform_llm_output → post_llm_call
   → on_session_end
 ```
+
+### `ReplaceText` / `KeepGoing`
+
+`HookOutcome` 除既有的 `Continue` / `Block` / `Modify` / `InjectContext` / `Allow` / `Skip` / `Rewrite` 外，新增两个用于上表新钩子：
+
+| 变体 | 适用钩子 | 语义 |
+|------|----------|------|
+| `ReplaceText(String)` | `transform_tool_result`、`transform_terminal_output`、`transform_llm_output` | 用新字符串整体替换对应文本，再交给下游（截断 / `post_*_call` / 记录会话） |
+| `KeepGoing(String)` | `pre_verify` | 不结束本 turn：把 `String` 作为附加提示注入下一轮，并回到 API 循环重新请求模型 |
+
+短路规则与既有 mutating 钩子一致：**同名钩子按注册顺序触发，首个非 `Continue`/`Allow` 的返回值生效**（其余多回调的返回值被忽略）；`is_mutating_hook` 已把上述新钩子（含三个 `transform_*` 与 `pre_verify`）纳入「可影响流程」名单。
+
+`pre_verify` 的重试上限为 `MAX_VERIFY_ATTEMPTS = 2`（agent 侧常量，含首次结束尝试）：超过后即使仍写过盘也不再 fire，直接进入 `transform_llm_output` → `post_llm_call` 收尾，避免死循环。写盘标记（`turn_wrote_disk`）在每次 `begin_user_turn` 清零，仅 `terminal` 与 `file_ops` 的写类 `operation` 会置位。
 
 ### 注册示例
 
@@ -164,6 +188,17 @@ cargo test -p agent --test streaming_test multi_turn_fires_post_llm_call
 cargo test -p agent --test rig_agent_test test_prompt_hooks_on_run_turn
 cargo test -p agent --test rig_agent_test pre_tool_call_block_via_hook_bus
 cargo test -p agent --test rig_agent_test pre_llm_call_inject_context_via_hook_bus
+
+# Hermes parity（7 个新钩子）
+cargo test -p agent --test rig_agent_test transform_tool_result_replaces_before_post_tool_call
+cargo test -p tools transform_terminal_output_hook_replaces_before_truncation
+cargo test -p agent --test streaming_test transform_llm_output_replaces_before_post_llm_call
+cargo test -p agent --test streaming_test approval_hooks_fire_pre_then_post_on_allow
+cargo test -p agent --test streaming_test approval_hooks_fire_pre_then_post_on_deny
+cargo test -p agent subagent_start_fires_before_subagent_stop_per_child
+cargo test -p agent subagent_start_skips_silently_without_hook_bus
+cargo test -p agent --test streaming_test pre_verify_never_fires_without_disk_write
+cargo test -p agent --test streaming_test pre_verify_keep_going_retries_capped_at_two
 ```
 
 ---
