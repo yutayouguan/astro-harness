@@ -154,7 +154,7 @@ fn validate_payload(interrupt: &Interrupt, payload_json: &str) -> Result<(), Int
                 format!("invalid response_schema_json: {e}"),
             )
         })?;
-        crate::schema_validate::validate_against_schema(&schema, &payload).map_err(|e| {
+        crate::control::schema_validate::validate_against_schema(&schema, &payload).map_err(|e| {
             InterruptError::Payload(interrupt.id.clone(), e)
         })?;
         return Ok(());

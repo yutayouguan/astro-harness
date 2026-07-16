@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
-use agent::context::{DynamicContext, StaticContext};
-use agent::loop_::{AgentConfig, AgentLoop, MaxDepthError};
-use agent::prompt_builder::PromptBuilder;
+use agent::prompt::context::{DynamicContext, StaticContext};
+use agent::runtime::{AgentConfig, AgentLoop, MaxDepthError};
+use agent::prompt::prompt_builder::PromptBuilder;
 use common::message::Message;
 use home::AgentRuntimeConfig;
 use tempfile::TempDir;
@@ -50,7 +50,7 @@ async fn test_multi_turn_max_depth() {
 
 #[tokio::test]
 async fn test_message_alternation_validation() {
-    use agent::loop_::validate_message_order;
+    use agent::runtime::validate_message_order;
     let messages = vec![
         Message::system("You are an assistant"),
         Message::user("Hello"),

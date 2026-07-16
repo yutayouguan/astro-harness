@@ -1,7 +1,7 @@
 //! 多 Agent 串行编排执行器。
 //!
 //! 从 `orchestration.db` 认领任务，按 `seq` 串行执行子步（已有 Agent 或临时角色），
-//! 单步超时 120s；失败则中止后续步骤。对齐 [`crate::cron_exec`] 的 AgentLoop 用法。
+//! 单步超时 120s；失败则中止后续步骤。对齐 [`crate::exec::cron`] 的 AgentLoop 用法。
 //!
 //! **不变量**
 //! - 同一 `orchestration_id` 仅通过 `try_claim_running` 认领一次
@@ -24,9 +24,9 @@ use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
 use uuid::Uuid;
 
-use crate::chat_fallback::try_stream_completion_with_fallback;
-use crate::loop_::{AgentConfig, AgentLoop, TurnResult};
-use crate::messages::to_provider_messages;
+use crate::streaming::fallback::try_stream_completion_with_fallback;
+use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
+use crate::prompt::messages::to_provider_messages;
 
 /// 单步执行超时（秒）
 const STEP_TIMEOUT_SECS: u64 = 120;
@@ -223,7 +223,7 @@ async fn run_step(
     agent.set_project_root(project_root);
     let depth_ctx =
         home::SpawnDepthCtx::from_caller(req.caller_depth, req.max_spawn_depth);
-    crate::delegate_exec::apply_nested_agent_tool_strips_depth_only(
+    crate::exec::delegate::apply_nested_agent_tool_strips_depth_only(
         agent.tool_registry_mut(),
         depth_ctx,
     );
@@ -330,7 +330,7 @@ async fn run_provider_loop(
 
     for _round in 0..PROVIDER_MAX_ROUNDS {
         agent.reload_tools_and_mcp().await;
-        crate::delegate_exec::apply_nested_agent_tool_strips_depth_only(
+        crate::exec::delegate::apply_nested_agent_tool_strips_depth_only(
             agent.tool_registry_mut(),
             depth_ctx,
         );

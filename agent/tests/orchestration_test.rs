@@ -47,7 +47,7 @@ async fn second_claim_is_noop_without_llm() {
         max_spawn_depth: home::DEFAULT_MAX_SPAWN_DEPTH,
         allow_reclaim: false,
     };
-    agent::orchestration::run_orchestration(req).await.unwrap();
+    agent::exec::orchestration::run_orchestration(req).await.unwrap();
 
     let orch = db.get(&id).unwrap().unwrap();
     assert_eq!(orch.status, OrchestrationStatus::Running.as_str());
@@ -97,7 +97,7 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
         max_spawn_depth: home::DEFAULT_MAX_SPAWN_DEPTH,
         allow_reclaim: false,
     };
-    agent::orchestration::run_orchestration(req).await.unwrap();
+    agent::exec::orchestration::run_orchestration(req).await.unwrap();
 
     let orch = db.get(&id).unwrap().unwrap();
     assert_eq!(orch.status, OrchestrationStatus::Failed.as_str());

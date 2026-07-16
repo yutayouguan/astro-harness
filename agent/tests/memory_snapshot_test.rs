@@ -1,6 +1,6 @@
 //! 同会话 MEMORY/USER snapshot 冻结：工具写入不进 system prompt，直至 refresh。
 
-use agent::loop_::{AgentConfig, AgentLoop};
+use agent::runtime::{AgentConfig, AgentLoop};
 use tempfile::TempDir;
 
 #[tokio::test]

@@ -15,7 +15,7 @@ use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 use tracing::{info, warn};
 
-use crate::loop_::AgentLoop;
+use crate::runtime::AgentLoop;
 
 /// 一次 background review 所需的快照凭据与对话。
 #[derive(Debug, Clone)]

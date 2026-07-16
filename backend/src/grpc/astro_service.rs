@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
-use agent::loop_::{AgentLoop, TurnResult};
+use agent::runtime::{AgentLoop, TurnResult};
 use agent::streaming::{
     stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
 };
@@ -95,7 +95,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
         let agent = session.lock().await;
         let id = agent.agent_id().to_string();
         let dir = agent.memory_dir().to_path_buf();
-        agent::spawn_background_review_after_turn(&agent, Some(notify_tx));
+        agent::exec::memory_review::spawn_background_review_after_turn(&agent, Some(notify_tx));
         (id, dir)
     };
     tokio::spawn(async move {
@@ -437,7 +437,7 @@ impl AstroService for AstroServiceImpl {
 
     /// Chat 流控制：暂停 / 继续 / 取消指定 `session_id` 的进行中对话。
     ///
-    /// Cancel 会同时触发 [`PauseControl::cancel`] 与 Agent 的 [`CancelSignal`]。
+    /// Cancel 会同时触发 [`PauseControl::cancel`] 与 Agent 的 `agent::prompt::hooks::CancelSignal`。
     ///
     /// # 错误
     /// - `invalid_argument`：`session_id` 为空
@@ -610,7 +610,7 @@ impl AstroService for AstroServiceImpl {
         } else {
             req.reasoning_effort
         };
-        let image_targets = agent::loop_::ImageGenTargets::from_parts(
+        let image_targets = tools::ImageGenTargets::from_parts(
             &req.image_gen_provider,
             &req.image_gen_model,
             &req.image_gen_api_key,

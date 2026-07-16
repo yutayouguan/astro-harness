@@ -16,19 +16,24 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use common::message::Message;
-use session::NewMessage;
+use ::session::NewMessage;
 use memory::{format_recalled_context, MemoryManager};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use providers::registry::ProviderRegistry;
 use serde_json::Value;
 use tools::{dispatch_tool, register_all, ToolContext, ToolEntry, ToolRegistry};
 
-use crate::context::{DynamicContext, StaticContext};
-use crate::hooks::CancelSignal;
-use crate::prompt_builder::PromptBuilder;
+use crate::prompt::context::{DynamicContext, StaticContext};
+use crate::prompt::hooks::CancelSignal;
+use crate::prompt::prompt_builder::PromptBuilder;
+use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 
-/// 图像生成凭据与输出目标，供 `image_gen` 等工具使用。
-pub use tools::{ImageGenCreds, ImageGenTargets};
+pub mod budget;
+pub mod session;
+pub mod usage;
+pub mod validate;
+
+pub use validate::validate_message_order;
 
 /// Agent 运行时配置，控制轮次预算、记忆召回与提示组装策略。
 pub struct AgentConfig {
@@ -66,7 +71,7 @@ impl AgentConfig {
             .unwrap_or_else(|_| "你是 Astro，一个自我进化的 AI 助手".to_string());
         Self {
             max_turns: 90,
-            multi_turn: crate::iteration_budget::DEFAULT_MAX_ITERATIONS,
+            multi_turn: budget::DEFAULT_MAX_ITERATIONS,
             protect_last_n: 20,
             memory_dir,
             recent_turns: 10,
@@ -97,7 +102,7 @@ pub struct AgentLoop {
     mcp_hub: McpHub,
     /// 最近一次 `run_turn` 召回并格式化后的记忆上下文。
     last_recalled_context: String,
-    image_gen_targets: ImageGenTargets,
+    image_gen_targets: tools::ImageGenTargets,
     providers: ProviderRegistry,
     chat_api_key: String,
     chat_base_url: String,
@@ -164,13 +169,13 @@ impl AgentLoop {
 
         let orchestration_spawner: orchestration::OrchestrationSpawner = Arc::new(|req| {
             tokio::spawn(async move {
-                if let Err(e) = crate::orchestration::run_orchestration(req).await {
+                if let Err(e) = crate::exec::orchestration::run_orchestration(req).await {
                     tracing::warn!(error = %e, "orchestration failed");
                 }
             });
         });
         let delegate_runner: delegate::DelegateRunner = Arc::new(|req| {
-            crate::delegate_exec::run_delegate_blocking(req)
+            crate::exec::delegate::run_delegate_blocking(req)
         });
         let async_spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, req| {
             tokio::spawn(async move {
@@ -178,7 +183,7 @@ impl AgentLoop {
                 if reg.is_cancel_requested(&task_id) {
                     return;
                 }
-                match crate::delegate_exec::run_delegate(req).await {
+                match crate::exec::delegate::run_delegate(req).await {
                     Ok(json) => {
                         if !reg.is_cancel_requested(&task_id) {
                             reg.finish_ok(&task_id, json);
@@ -200,7 +205,7 @@ impl AgentLoop {
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 handle.spawn(async move {
                     if let Err(e) =
-                        crate::orchestration::resume_incomplete_orchestrations(&orch_spawner_resume)
+                        crate::exec::orchestration::resume_incomplete_orchestrations(&orch_spawner_resume)
                             .await
                     {
                         tracing::warn!(error = %e, "orchestration resume failed");
@@ -219,7 +224,7 @@ impl AgentLoop {
             tool_registry,
             mcp_hub,
             last_recalled_context: String::new(),
-            image_gen_targets: ImageGenTargets::default(),
+            image_gen_targets: tools::ImageGenTargets::default(),
             providers: ProviderRegistry::new(),
             chat_api_key: String::new(),
             chat_base_url: String::new(),
@@ -344,7 +349,7 @@ impl AgentLoop {
     }
 
     /// 设置图像生成工具的输出目标路径。
-    pub fn set_image_gen_targets(&mut self, targets: ImageGenTargets) {
+    pub fn set_image_gen_targets(&mut self, targets: tools::ImageGenTargets) {
         self.image_gen_targets = targets;
     }
 
@@ -423,7 +428,7 @@ impl AgentLoop {
         &self.chat_model
     }
 
-    pub fn image_gen_targets(&self) -> &ImageGenTargets {
+    pub fn image_gen_targets(&self) -> &tools::ImageGenTargets {
         &self.image_gen_targets
     }
 
@@ -610,14 +615,14 @@ impl AgentLoop {
             let agent_id = self.memory.agent_id.clone();
             let turn_id = self.current_turn_id.clone();
             let _ = home::record_tool_call(&agent_id, name, args);
-            let _ = usage::record_tool_call(
+            let _ = ::usage::record_tool_call(
                 &agent_id,
                 name,
                 args,
                 Some(self.session_id.as_str()),
                 turn_id.as_deref(),
             );
-            usage::UsageDb::try_record(usage::NewUsageEvent {
+            ::usage::UsageDb::try_record(::usage::NewUsageEvent {
                 ts: chrono::Utc::now().to_rfc3339(),
                 kind: "mcp".into(),
                 name: name.to_string(),
@@ -654,11 +659,14 @@ impl AgentLoop {
         let chat_model = self.chat_model.clone();
         let chat_targets = self.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
+        let sessions = ::session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+            .map_err(|e| anyhow::anyhow!("open sessions: {e}"))?;
         let delegate_runner = Some(self.delegate_runner());
         let async_spawner = Some(self.async_spawner());
         let orchestration_spawner = Some(self.orchestration_spawner());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
+            sessions: &sessions,
             memory_dir,
             workspace_dir,
             project_root: self.project_root.clone(),
@@ -986,75 +994,5 @@ pub enum TurnResult {
     MaxDepth,
     /// 用户或上层触发了取消。
     Interrupted,
-}
-
-/// 校验消息序列是否满足「相邻不同角色」约束。
-///
-/// 连续两条 user 或连续两条 assistant 均视为非法，返回 `false`。
-pub fn validate_message_order(messages: &[Message]) -> bool {
-    use common::message::Role;
-    for window in messages.windows(2) {
-        let (a, b) = (&window[0], &window[1]);
-        if a.role == Role::User && b.role == Role::User {
-            return false;
-        }
-        if a.role == Role::Assistant && b.role == Role::Assistant {
-            return false;
-        }
-    }
-    true
-}
-
-/// 从 `SessionStore` 冷启动重建 `session_messages`（权威以 DB 为准）。
-fn hydrate_session_messages(
-    memory: &MemoryManager,
-    session_id: &str,
-) -> anyhow::Result<Vec<Message>> {
-    let stored = memory.session_store.get_messages(session_id)?;
-    let mut out = Vec::with_capacity(stored.len());
-    for m in stored {
-        if let Some(msg) = stored_message_to_runtime(m)? {
-            out.push(msg);
-        }
-    }
-    Ok(out)
-}
-
-fn stored_message_to_runtime(
-    m: session::StoredMessage,
-) -> anyhow::Result<Option<Message>> {
-    let content = m.content.unwrap_or_default();
-    let msg = match m.role.as_str() {
-        "user" => Message::user(&content),
-        "system" => Message::system(&content),
-        "assistant" => {
-            let tool_calls: Option<Vec<common::message::ToolCall>> = match m.tool_calls {
-                Some(v) => Some(serde_json::from_value(v)?),
-                None => None,
-            };
-            match tool_calls {
-                Some(calls) if !calls.is_empty() => Message::assistant_with_tools(&content, calls),
-                _ => Message::assistant(&content),
-            }
-        }
-        "tool" => match m.tool_call_id.as_deref() {
-            Some(id) => Message::tool_with_id(id, &content),
-            None => Message::tool(&content),
-        },
-        other => {
-            tracing::warn!(role = other, "skip unknown role when hydrating session");
-            return Ok(None);
-        }
-    };
-    Ok(Some(msg))
-}
-
-/// 会话级项目根：`ASTRO_SESSION_WORKTREE=1` 且存在 `ASTRO_PROJECT_ROOT`（或 cwd git root）时启用。
-fn resolve_session_project_root() -> Option<PathBuf> {
-    let flag = std::env::var("ASTRO_SESSION_WORKTREE").unwrap_or_default();
-    if flag != "1" && !flag.eq_ignore_ascii_case("true") {
-        return None;
-    }
-    delegate::resolve_project_root(None).filter(|p| delegate::find_git_root(p).is_some() || p.is_dir())
 }
 
