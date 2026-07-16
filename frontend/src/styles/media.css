@@ -98,17 +98,53 @@
 }
 
 html[data-theme="dark"] .media-toolbar {
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 20%, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 28%, rgba(255, 255, 255, 0.18));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 40%, rgba(18, 16, 32, 0.55));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%),
+    rgba(10, 8, 22, 0.78);
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 10px 28px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 1px 0 rgba(255, 255, 255, 0.12) inset;
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+
+html[data-theme="dark"] .media-toolbar-btn {
+  color: color-mix(in srgb, #fff 42%, var(--ink, #ece8f8));
 }
 
 html[data-theme="dark"] .media-toolbar-btn:hover:not(:disabled) {
+  color: #fff;
+  background: color-mix(in srgb, #fff 14%, transparent);
+}
+
+html[data-theme="dark"] .media-toolbar-btn.is-copied {
+  color: var(--tone-green, #4ade80);
+}
+
+html[data-theme="dark"] .html-preview-bar .media-toolbar {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, #fff 8%, transparent);
+}
+
+html[data-theme="dark"] .html-preview-bar .media-toolbar-btn {
+  color: var(--ink-soft);
+}
+
+html[data-theme="dark"] .html-preview-bar .media-toolbar-btn:hover:not(:disabled) {
+  color: var(--ink);
   background: color-mix(in srgb, #fff 10%, transparent);
+}
+
+html[data-theme="dark"] .media-preview {
+  background: color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.62)) 80%, transparent);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="dark"] .media-preview-image,
+html[data-theme="dark"] .media-preview-video {
+  background: color-mix(in srgb, #000 35%, transparent);
 }
 
 .html-preview-bar .media-toolbar {
@@ -127,10 +163,6 @@ html[data-theme="dark"] .media-toolbar-btn:hover:not(:disabled) {
 .html-preview-bar .media-toolbar-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
-}
-
-html[data-theme="dark"] .html-preview-bar .media-toolbar {
-  background: color-mix(in srgb, #fff 6%, transparent);
 }
 
 .html-preview-bar-actions {
@@ -182,14 +214,6 @@ html[data-theme="dark"] .html-preview-bar .media-toolbar {
   animation: media-lightbox-in 160ms ease-out;
 }
 
-html[data-theme="dark"] .media-lightbox {
-  background:
-    linear-gradient(160deg, rgba(18, 10, 28, 0.72) 0%, rgba(8, 6, 18, 0.78) 100%),
-    color-mix(in srgb, var(--bg0, #120a1c) 70%, transparent);
-  backdrop-filter: blur(22px) saturate(1.2);
-  -webkit-backdrop-filter: blur(22px) saturate(1.2);
-}
-
 .media-lightbox-image {
   max-width: min(96vw, 1200px);
   max-height: min(90vh, 900px);
@@ -204,14 +228,6 @@ html[data-theme="dark"] .media-lightbox {
     var(--glass-rim);
   cursor: default;
   background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.38)) 70%, transparent);
-}
-
-html[data-theme="dark"] .media-lightbox-image {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 28px 72px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  background: color-mix(in srgb, #fff 4%, transparent);
 }
 
 .media-lightbox-close {
@@ -258,23 +274,43 @@ html[data-theme="dark"] .media-lightbox-image {
   outline-offset: 2px;
 }
 
-html[data-theme="dark"] .media-lightbox-close {
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 22%, rgba(255, 255, 255, 0.1));
-  color: color-mix(in srgb, #fff 12%, var(--ink));
+html[data-theme="dark"] .media-lightbox {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 32%, rgba(8, 6, 18, 0.55));
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(124, 58, 237, 0.14), transparent 65%),
+    linear-gradient(165deg, rgba(14, 10, 26, 0.88) 0%, rgba(6, 4, 14, 0.92) 100%);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+}
+
+html[data-theme="dark"] .media-lightbox-image {
+  border-color: rgba(255, 255, 255, 0.14);
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.42),
+    0 32px 80px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: rgba(8, 6, 18, 0.45);
+}
+
+html[data-theme="dark"] .media-lightbox-close {
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 32%, rgba(255, 255, 255, 0.18));
+  color: color-mix(in srgb, #fff 55%, var(--ink, #ece8f8));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%),
+    rgba(10, 8, 22, 0.82);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 1px 0 rgba(255, 255, 255, 0.12) inset;
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 
 html[data-theme="dark"] .media-lightbox-close:hover {
-  color: color-mix(in srgb, #fff 18%, var(--tone, var(--ink)));
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 38%, rgba(255, 255, 255, 0.14));
+  color: #fff;
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 45%, rgba(255, 255, 255, 0.22));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 50%, rgba(8, 6, 18, 0.45));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 100%),
+    rgba(14, 12, 28, 0.88);
 }
 
 @keyframes media-lightbox-in {
