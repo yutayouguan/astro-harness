@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::veo_http::{google_native_base, pcm_to_wav};
+use super::defaults::DEFAULT_MODEL;
 use crate::trait_::{GeneratedImage, ProviderConfig};
 
 const API_REVISION: &str = "2026-05-20";
@@ -588,39 +589,8 @@ pub async fn google_interactions_image(
     parse_interaction_image_response(&v)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VisionMode {
-    Describe,
-    Detect,
-    Segment,
-}
-
-impl VisionMode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Describe => "describe",
-            Self::Detect => "detect",
-            Self::Segment => "segment",
-        }
-    }
-
-    pub fn parse(s: &str) -> Result<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "" | "describe" => Ok(Self::Describe),
-            "detect" => Ok(Self::Detect),
-            "segment" => Ok(Self::Segment),
-            other => anyhow::bail!("无效 mode: {other}（期望 describe|detect|segment）"),
-        }
-    }
-}
-
-impl std::str::FromStr for VisionMode {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
+/// 视觉模式（定义在共享层，此处再导出以保持 `interactions_http::VisionMode` 路径稳定）。
+pub use crate::protocol::vision::VisionMode;
 
 #[derive(Debug, Clone)]
 pub enum VisionImagePart {
@@ -767,7 +737,7 @@ pub async fn google_interactions_vision(
         anyhow::bail!("vision 至少需要一张图片");
     }
     let model = if config.model.trim().is_empty() {
-        "gemini-3.5-flash"
+        DEFAULT_MODEL
     } else {
         config.model.trim()
     };
@@ -1178,7 +1148,7 @@ pub async fn google_interactions_audio(
         anyhow::bail!("Google API Key 为空");
     }
     let model = if config.model.trim().is_empty() {
-        "gemini-3.5-flash".to_string()
+        DEFAULT_MODEL.to_string()
     } else {
         config.model.trim().to_string()
     };

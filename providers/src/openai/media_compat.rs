@@ -1,14 +1,16 @@
 //! OpenAI 兼容媒体：Whisper 转写、Chat 音频描述、视觉 completions。
 //!
-//! Google 视觉请用 [`crate::google::interactions_http`]。
+//! 视觉模式见 [`crate::protocol::vision::VisionMode`]；
+//! Google 原生视觉请用 [`crate::google::interactions_http`]。
 
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::google::interactions_http::VisionMode;
+use super::defaults::{DEFAULT_API_BASE, DEFAULT_VISION_MODEL};
 use crate::protocol::http_stream::openai_compatible_base;
+use crate::protocol::vision::VisionMode;
 use crate::trait_::ProviderConfig;
 
 /// 默认 Whisper 转写模型。
@@ -111,7 +113,7 @@ pub async fn openai_audio_describe(
         anyhow::bail!("音频为空");
     }
     let model = if config.model.trim().is_empty() {
-        "gpt-4o"
+        DEFAULT_VISION_MODEL
     } else {
         config.model.trim()
     };
@@ -120,7 +122,7 @@ pub async fn openai_audio_describe(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("https://api.openai.com/v1");
+        .unwrap_or(DEFAULT_API_BASE);
     let base = openai_compatible_base(raw);
     let url = format!("{base}/chat/completions");
     let b64 = base64::engine::general_purpose::STANDARD.encode(audio_bytes);
@@ -175,7 +177,7 @@ pub async fn openai_audio_transcriptions(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("https://api.openai.com/v1");
+        .unwrap_or(DEFAULT_API_BASE);
     let base = openai_compatible_base(raw);
     let url = format!("{base}/audio/transcriptions");
     let part = reqwest::multipart::Part::bytes(audio_bytes.to_vec())
@@ -255,7 +257,7 @@ pub async fn openai_vision_completions(
         anyhow::bail!("vision 至少需要一张图片");
     }
     let model = if config.model.trim().is_empty() {
-        "gpt-4o"
+        DEFAULT_VISION_MODEL
     } else {
         config.model.trim()
     };
@@ -265,7 +267,7 @@ pub async fn openai_vision_completions(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("https://api.openai.com/v1");
+        .unwrap_or(DEFAULT_API_BASE);
     let base = openai_compatible_base(raw);
     let url = format!("{base}/chat/completions");
     let body = build_openai_vision_body(model, prompt, image_urls, mode);

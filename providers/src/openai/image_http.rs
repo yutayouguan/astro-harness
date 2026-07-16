@@ -5,6 +5,7 @@ use base64::Engine;
 use reqwest::Client;
 use serde_json::{json, Value};
 
+use super::defaults::DEFAULT_API_BASE;
 use crate::http_stream::openai_compatible_base;
 use crate::trait_::{GeneratedImage, ProviderConfig};
 
@@ -15,7 +16,7 @@ fn openai_base(config: &ProviderConfig) -> String {
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("https://api.openai.com/v1");
+        .unwrap_or(DEFAULT_API_BASE);
     openai_compatible_base(raw)
 }
 

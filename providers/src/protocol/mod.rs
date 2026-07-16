@@ -8,3 +8,4 @@ pub mod image_gen;
 pub mod media_http;
 pub mod tool_format;
 pub mod verify;
+pub mod vision;

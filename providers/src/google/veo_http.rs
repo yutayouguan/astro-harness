@@ -10,6 +10,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use tokio::time::sleep;
 
+use super::defaults::DEFAULT_API_HOST;
 use crate::trait_::ProviderConfig;
 
 /// 去掉 endpoint 末尾斜杠。
@@ -24,7 +25,7 @@ pub fn google_native_base(config: &ProviderConfig) -> String {
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("https://generativelanguage.googleapis.com");
+        .unwrap_or(DEFAULT_API_HOST);
     let base = trim_slash(raw);
     if base.ends_with("/openai") {
         return base

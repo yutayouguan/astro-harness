@@ -111,7 +111,7 @@ pub fn openai_compatible_base(endpoint: &str) -> String {
     {
         base
     } else if base.is_empty() {
-        "https://api.openai.com/v1".to_string()
+        crate::openai::DEFAULT_API_BASE.to_string()
     } else {
         format!("{base}/v1")
     }
@@ -156,11 +156,14 @@ pub async fn chat_stream_for_provider(
             anthropic_chat_stream(client, messages, tools, config).await
         }
         ApiMode::Interactions => {
-            crate::interactions_chat::interactions_chat_stream(client, messages, tools, config)
-                .await
+            crate::google::interactions_chat::interactions_chat_stream(
+                client, messages, tools, config,
+            )
+            .await
         }
         ApiMode::Responses => {
-            crate::responses::responses_chat_stream(client, id, messages, tools, config).await
+            crate::openai::responses::responses_chat_stream(client, id, messages, tools, config)
+                .await
         }
     }
 }

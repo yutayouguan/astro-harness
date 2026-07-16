@@ -22,7 +22,7 @@ pub mod vendors;
 pub use api::{client, registry, streaming, trait_};
 pub use google::{files_http, interactions_chat, interactions_http, robotics_http};
 pub use openai::{image_http, responses};
-pub use protocol::{extractor, http_stream, image_gen, media_http, tool_format, verify};
+pub use protocol::{extractor, http_stream, image_gen, media_http, tool_format, verify, vision};
 pub use vendors::{
     azure, bailian, claude, deepseek, mimo, minimax, moonshot, nvidia, ollama, openrouter,
     profile_backed, volcengine, zhipu,

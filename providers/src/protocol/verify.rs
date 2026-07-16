@@ -138,7 +138,9 @@ pub async fn probe(
                 return fail("ApiMode::Responses 探测尚未接线".into());
             }
             (ApiMode::Interactions, _) => {
-                match crate::interactions_chat::probe_interactions(client, &model, config).await {
+                match crate::google::interactions_chat::probe_interactions(client, &model, config)
+                    .await
+                {
                     Ok(m) => m,
                     Err(e) => return fail(e),
                 }
@@ -153,7 +155,7 @@ pub async fn probe(
         }
     } else {
         // custom / 未知 id：OpenAI 兼容
-        let endpoint = resolve_endpoint(config, "https://api.openai.com/v1");
+        let endpoint = resolve_endpoint(config, crate::openai::DEFAULT_API_BASE);
         match probe_chat_completions(client, &endpoint, &model, &config.api_key).await {
             Ok(m) => m,
             Err(e) => return fail(e),
