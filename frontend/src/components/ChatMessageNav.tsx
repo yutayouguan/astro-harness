@@ -63,91 +63,13 @@ function baseCenterY(index: number): number {
 }
 
 /**
- * macOS Dock 余弦衰减：峰值在鼠标处，随距离连续变小。
- * 鼠标一走过，原处立刻回落，峰值跟着走。
+ * macOS Dock 余弦衰减：槽位不动，只按与鼠标距离放大。
+ * 峰值在鼠标处；走过的地方回落——不是整列跟着鼠标平移。
  */
 function dockScale(distance: number): number {
   if (distance >= RANGE) return 1;
   const t = distance / RANGE;
   return 1 + (MAX_SCALE - 1) * 0.5 * (1 + Math.cos(Math.PI * t));
-}
-
-/**
- * 按放大高度重排，并用鼠标 Y 连续锚定（不是吸附到某个图标），
- * 再夹紧到轨道可视高度内。
- */
-function dockOffsets(
-  scales: number[],
-  hoverY: number,
-  viewHeight: number,
-): number[] {
-  const n = scales.length;
-  if (n === 0) return [];
-
-  let y = PAD_TOP;
-  const packed: number[] = [];
-  const heights: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const h = BASE * scales[i]!;
-    heights.push(h);
-    packed.push(y + h / 2);
-    y += h + GAP;
-  }
-
-  const idle0 = baseCenterY(0);
-  const idleLast = baseCenterY(n - 1);
-  const idleSpan = Math.max(idleLast - idle0, 1);
-  // 鼠标在 idle 轴上的连续参数 u∈[0,1]
-  const u = Math.min(1, Math.max(0, (hoverY - idle0) / idleSpan));
-
-  // 同一参数在 packed 轴上的位置（分段线性）
-  const packedAtU = (() => {
-    if (n === 1) return packed[0]!;
-    const f = u * (n - 1);
-    const i = Math.min(n - 2, Math.floor(f));
-    const t = f - i;
-    return packed[i]! + (packed[i + 1]! - packed[i]!) * t;
-  })();
-  const idleAtU = idle0 + u * idleSpan;
-  // 锁定：鼠标参数点放大前后仍落在同一屏幕 Y → 波浪跟着鼠标走
-  let shift = idleAtU - packedAtU;
-  let tys = packed.map((c, i) => c + shift - baseCenterY(i));
-
-  const edge = 4;
-  const limitTop = edge;
-  const limitBottom = Math.max(limitTop + BASE, viewHeight - edge);
-
-  const extent = () => {
-    let minTop = Infinity;
-    let maxBottom = -Infinity;
-    for (let i = 0; i < n; i++) {
-      const vc = baseCenterY(i) + tys[i]!;
-      const half = heights[i]! / 2;
-      minTop = Math.min(minTop, vc - half);
-      maxBottom = Math.max(maxBottom, vc + half);
-    }
-    return { minTop, maxBottom };
-  };
-
-  let { minTop, maxBottom } = extent();
-  const span = maxBottom - minTop;
-  const room = limitBottom - limitTop;
-
-  if (span <= room) {
-    if (minTop < limitTop) {
-      const dy = limitTop - minTop;
-      tys = tys.map((ty) => ty + dy);
-      ({ minTop, maxBottom } = extent());
-    }
-    if (maxBottom > limitBottom) {
-      tys = tys.map((ty) => ty + (limitBottom - maxBottom));
-    }
-  } else {
-    const curCenter = (minTop + maxBottom) / 2;
-    tys = tys.map((ty) => ty + (hoverY - curCenter));
-  }
-
-  return tys;
 }
 
 export default function ChatMessageNav({
@@ -410,18 +332,12 @@ export default function ChatMessageNav({
         return 1;
       });
 
-      const viewH = trackRef.current?.clientHeight ?? 0;
-      const tys =
-        hoverY != null && viewH > 0
-          ? dockOffsets(scales, hoverY, viewH)
-          : scales.map(() => 0);
-
       list.forEach((m, i) => {
         const slot = slotRefs.current.get(m.id);
         if (!slot) return;
         const s = scales[i] ?? 1;
+        // 只改缩放，不平移——避免整列跟着鼠标跑
         slot.style.setProperty("--dock-scale", String(s));
-        slot.style.setProperty("--dock-ty", `${tys[i] ?? 0}px`);
         slot.style.setProperty("--dock-z", String(Math.round(s * 100)));
       });
 
