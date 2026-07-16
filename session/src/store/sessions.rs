@@ -148,13 +148,27 @@ impl SessionStore {
         if trimmed.is_empty() {
             return Ok(false);
         }
-        let changed = self.conn.execute(
+        let result = self.conn.execute(
             "UPDATE sessions
              SET title = ?1
              WHERE id = ?2 AND (title IS NULL OR TRIM(title) = '')",
             params![trimmed, id],
-        )?;
-        Ok(changed == 1)
+        );
+        match result {
+            Ok(changed) => Ok(changed == 1),
+            Err(err) if is_unique_constraint(&err) => {
+                let suffix: String = id.chars().take(8).collect();
+                let unique = format!("{} · {}", truncate_chars(trimmed, 60), suffix);
+                let changed = self.conn.execute(
+                    "UPDATE sessions
+                     SET title = ?1
+                     WHERE id = ?2 AND (title IS NULL OR TRIM(title) = '')",
+                    params![unique, id],
+                )?;
+                Ok(changed == 1)
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// 永久删除会话与其消息。
@@ -167,42 +181,34 @@ impl SessionStore {
         Ok(())
     }
 
-    /// 读取首个非空 user 与 assistant 文本；任一缺失则返回 `None`。
+    /// 按消息顺序读取最早可完成的非空 user → assistant 文本配对。
     pub fn first_turn_text(&self, session_id: &str) -> Result<Option<(String, String)>> {
-        let user_text: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT content
-                 FROM messages
-                 WHERE session_id = ?1
-                   AND role = 'user'
-                   AND content IS NOT NULL
-                   AND TRIM(content) != ''
-                 ORDER BY timestamp ASC, id ASC
-                 LIMIT 1",
-                params![session_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let assistant_text: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT content
-                 FROM messages
-                 WHERE session_id = ?1
-                   AND role = 'assistant'
-                   AND content IS NOT NULL
-                   AND TRIM(content) != ''
-                 ORDER BY timestamp ASC, id ASC
-                 LIMIT 1",
-                params![session_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        match (user_text, assistant_text) {
-            (Some(user), Some(assistant)) => Ok(Some((user, assistant))),
-            _ => Ok(None),
+        let mut stmt = self.conn.prepare(
+            "SELECT role, content
+             FROM messages
+             WHERE session_id = ?1
+               AND role IN ('user', 'assistant')
+               AND content IS NOT NULL
+               AND TRIM(content) != ''
+             ORDER BY timestamp ASC, id ASC",
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut candidate_user = None;
+        for row in rows {
+            let (role, content) = row?;
+            match role.as_str() {
+                "user" => candidate_user = Some(content),
+                "assistant" => {
+                    if let Some(user) = candidate_user.take() {
+                        return Ok(Some((user, content)));
+                    }
+                }
+                _ => {}
+            }
         }
+        Ok(None)
     }
 
     /// 累加会话账单列；`cost_status=unknown` 的 delta 不抬高 `estimated_cost_usd`。

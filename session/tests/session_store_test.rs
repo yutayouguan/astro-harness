@@ -1040,6 +1040,39 @@ fn title_if_empty_never_overwrites_manual_title() {
 }
 
 #[test]
+fn title_if_empty_suffixes_duplicate_generated_title() {
+    let (_dir, store) = test_store();
+    store.create_session("session-alpha", "tauri", None, None, None).unwrap();
+    store.create_session("session-beta", "tauri", None, None, None).unwrap();
+
+    assert!(store
+        .set_session_title_if_empty("session-alpha", "Shared title")
+        .unwrap());
+    assert!(store
+        .set_session_title_if_empty("session-beta", "Shared title")
+        .unwrap());
+
+    assert_eq!(
+        store
+            .get_session("session-alpha")
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Shared title")
+    );
+    assert_eq!(
+        store
+            .get_session("session-beta")
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Shared title · session-")
+    );
+}
+
+#[test]
 fn permanent_delete_removes_messages_and_fts() {
     let (_dir, store) = test_store();
     store.create_session("s1", "tauri", None, None, None).unwrap();
@@ -1096,4 +1129,43 @@ fn first_turn_text_returns_first_non_empty_user_and_assistant() {
         first.as_ref().map(|(user, assistant)| (user.as_str(), assistant.as_str())),
         Some(("hello", "world"))
     );
+}
+
+#[test]
+fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    for (role, content) in [
+        ("assistant", "orphan assistant"),
+        ("user", "superseded user"),
+        ("user", "paired user"),
+        ("assistant", "paired assistant"),
+    ] {
+        store
+            .append_message(NewMessage {
+                content: Some(content),
+                ..NewMessage::empty("s1", role)
+            })
+            .unwrap();
+    }
+
+    let first = store.first_turn_text("s1").unwrap();
+    assert_eq!(
+        first.as_ref().map(|(user, assistant)| (user.as_str(), assistant.as_str())),
+        Some(("paired user", "paired assistant"))
+    );
+}
+
+#[test]
+fn first_turn_text_returns_none_without_assistant() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("user only"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+
+    assert!(store.first_turn_text("s1").unwrap().is_none());
 }
