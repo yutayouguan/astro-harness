@@ -1,4 +1,4 @@
-/** 消息内导航 / 锚点。 */
+/** 消息内导航 / 锚点：macOS Dock 式鱼眼跟随。 */
 import {
   useCallback,
   useEffect,
@@ -20,43 +20,28 @@ import {
 } from "../lib/clampPopover";
 import type { ChatMessage } from "../types";
 
-/** 消息码头导航入参 */
 type Props = {
   messages: ChatMessage[];
-  /** 消息列表滚动容器 */
   listRef: RefObject<HTMLElement | null>;
-  /** 列表底部锚点（用于滚到底） */
   bottomRef: RefObject<HTMLElement | null>;
 };
 
-/** Base icon size (px). */
 const BASE = 22;
-/** Vertical gap between slots when idle. */
 const GAP = 6;
-/** Track padding-top (must match CSS). */
+/** 与 CSS `.chat-msg-nav-track` padding-top 一致 */
 const PAD_TOP = 10;
-/** Max scale at cursor (macOS-like). */
-const MAX_SCALE = 1.72;
-/** Influence radius in px along the dock axis. */
-const RANGE = 58;
-/** Soft falloff (higher = sharper peak). */
-const FALLOFF = 1.35;
-/** 悬停时最多同时展示的邻近锚点预览数。 */
-const LABEL_MAX = 8;
+/** 峰值放大 */
+const MAX_SCALE = 1.85;
+/** 影响半径：越大波浪越宽、越像 Dock */
+const RANGE = 72;
+/** 同时展示的预览气泡（主 + 邻近） */
+const LABEL_MAX = 3;
 
 type TipModel = {
   id: string;
   text: string;
   primary: boolean;
   z: number;
-};
-
-type TipVisual = {
-  top: number;
-  left: number;
-  side: TipSide;
-  opacity: number;
-  scale: number;
 };
 
 function previewText(content: string, fallback: string): string {
@@ -72,20 +57,24 @@ function previewText(content: string, fallback: string): string {
   return plain.length > 32 ? `${plain.slice(0, 32)}…` : plain;
 }
 
-function dockScale(distance: number): number {
-  if (distance >= RANGE) return 1;
-  const t = 1 - distance / RANGE;
-  return 1 + (MAX_SCALE - 1) * t ** FALLOFF;
-}
-
-/** Idle-slot center Y for index i（放大用固定基准，避免反馈抖动）。 */
+/** Idle 槽位中心（放大距离一律相对此基准，避免反馈抖动）。 */
 function baseCenterY(index: number): number {
   return PAD_TOP + index * (BASE + GAP) + BASE / 2;
 }
 
 /**
- * 鱼眼堆叠：绕悬停点上下双向展开（避免只往下顶出聊天框），
- * 再把整列视觉范围夹紧在轨道高度内。
+ * macOS Dock 余弦衰减：峰值在鼠标处，随距离连续变小。
+ * 鼠标一走过，原处立刻回落，峰值跟着走。
+ */
+function dockScale(distance: number): number {
+  if (distance >= RANGE) return 1;
+  const t = distance / RANGE;
+  return 1 + (MAX_SCALE - 1) * 0.5 * (1 + Math.cos(Math.PI * t));
+}
+
+/**
+ * 按放大高度重排，并用鼠标 Y 连续锚定（不是吸附到某个图标），
+ * 再夹紧到轨道可视高度内。
  */
 function dockOffsets(
   scales: number[],
@@ -96,27 +85,33 @@ function dockOffsets(
   if (n === 0) return [];
 
   let y = PAD_TOP;
-  const centers: number[] = [];
+  const packed: number[] = [];
   const heights: number[] = [];
   for (let i = 0; i < n; i++) {
     const h = BASE * scales[i]!;
     heights.push(h);
-    centers.push(y + h / 2);
+    packed.push(y + h / 2);
     y += h + GAP;
   }
 
-  let focus = 0;
-  let best = Infinity;
-  for (let i = 0; i < n; i++) {
-    const d = Math.abs(hoverY - baseCenterY(i));
-    if (d < best) {
-      best = d;
-      focus = i;
-    }
-  }
-  // 最近图标的 idle 中心不动 → 上方上抬、下方下移
-  const anchorShift = baseCenterY(focus) - centers[focus]!;
-  let tys = centers.map((c, i) => c + anchorShift - baseCenterY(i));
+  const idle0 = baseCenterY(0);
+  const idleLast = baseCenterY(n - 1);
+  const idleSpan = Math.max(idleLast - idle0, 1);
+  // 鼠标在 idle 轴上的连续参数 u∈[0,1]
+  const u = Math.min(1, Math.max(0, (hoverY - idle0) / idleSpan));
+
+  // 同一参数在 packed 轴上的位置（分段线性）
+  const packedAtU = (() => {
+    if (n === 1) return packed[0]!;
+    const f = u * (n - 1);
+    const i = Math.min(n - 2, Math.floor(f));
+    const t = f - i;
+    return packed[i]! + (packed[i + 1]! - packed[i]!) * t;
+  })();
+  const idleAtU = idle0 + u * idleSpan;
+  // 锁定：鼠标参数点放大前后仍落在同一屏幕 Y → 波浪跟着鼠标走
+  let shift = idleAtU - packedAtU;
+  let tys = packed.map((c, i) => c + shift - baseCenterY(i));
 
   const edge = 4;
   const limitTop = edge;
@@ -145,11 +140,9 @@ function dockOffsets(
       ({ minTop, maxBottom } = extent());
     }
     if (maxBottom > limitBottom) {
-      const dy = limitBottom - maxBottom;
-      tys = tys.map((ty) => ty + dy);
+      tys = tys.map((ty) => ty + (limitBottom - maxBottom));
     }
   } else {
-    // 塞不下：整列以悬停点为中心，超出部分由 nav overflow 裁切
     const curCenter = (minTop + maxBottom) / 2;
     tys = tys.map((ty) => ty + (hoverY - curCenter));
   }
@@ -165,20 +158,22 @@ export default function ChatMessageNav({
   const { t } = useI18n();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dockActive, setDockActive] = useState(false);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [tips, setTips] = useState<TipModel[]>([]);
+
   const ratiosRef = useRef<Map<string, number>>(new Map());
   const trackRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const tipElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const tipMetaRef = useRef<TipModel[]>([]);
-  const hoverYRef = useRef<number | null>(null);
-  const hoverRafRef = useRef<number | null>(null);
-  const pendingHoverYRef = useRef<number | null>(null);
   const tipSizeCache = useRef<Map<string, { width: number; height: number }>>(
     new Map(),
   );
+
+  const hoverYRef = useRef<number | null>(null);
+  const pendingHoverYRef = useRef<number | null>(null);
+  const hoverRafRef = useRef<number | null>(null);
+  const focusIdRef = useRef<string | null>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -199,7 +194,6 @@ export default function ChatMessageNav({
     if (!root || messages.length === 0) return;
 
     ratiosRef.current.clear();
-
     const pickActive = () => {
       let bestId: string | null = null;
       let bestRatio = 0;
@@ -231,9 +225,9 @@ export default function ChatMessageNav({
       },
     );
 
-    const nodes = root.querySelectorAll<HTMLElement>("[data-msg-id]");
-    nodes.forEach((n) => observer.observe(n));
-
+    root.querySelectorAll<HTMLElement>("[data-msg-id]").forEach((n) => {
+      observer.observe(n);
+    });
     return () => observer.disconnect();
   }, [listRef, messages]);
 
@@ -251,13 +245,25 @@ export default function ChatMessageNav({
     }
   }, [bottomRef, messages]);
 
-  const paintTip = useCallback((id: string, visual: TipVisual) => {
-    const tipEl = tipElsRef.current.get(id);
-    if (!tipEl) return;
-    tipEl.style.transform = `translate3d(${visual.left}px, ${visual.top}px, 0) scale(${visual.scale})`;
-    tipEl.style.opacity = String(visual.opacity);
-    tipEl.classList.toggle("is-side-right", visual.side === "right");
-  }, []);
+  const paintTip = useCallback(
+    (
+      id: string,
+      visual: {
+        top: number;
+        left: number;
+        side: TipSide;
+        opacity: number;
+        scale: number;
+      },
+    ) => {
+      const tipEl = tipElsRef.current.get(id);
+      if (!tipEl) return;
+      tipEl.style.transform = `translate3d(${visual.left}px, ${visual.top}px, 0) scale(${visual.scale})`;
+      tipEl.style.opacity = String(visual.opacity);
+      tipEl.classList.toggle("is-side-right", visual.side === "right");
+    },
+    [],
+  );
 
   const tipBounds = useCallback(() => {
     const list = listRef.current;
@@ -277,8 +283,8 @@ export default function ChatMessageNav({
     return {
       left: 0,
       top: 0,
-      right: typeof window !== "undefined" ? window.innerWidth : 0,
-      bottom: typeof window !== "undefined" ? window.innerHeight : 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight,
     };
   }, [listRef]);
 
@@ -307,10 +313,9 @@ export default function ChatMessageNav({
         if (!text) continue;
 
         const t = ranks.length === 1 ? 0 : Math.min(1, item.dist / maxDist);
-        const opacity = 1 - t * 0.55;
-        // 文字随图标鱼眼一起放大，远处略缩小
+        const opacity = Math.max(0.35, 1 - t * 0.55);
         const grow = (item.scale - 1) / (MAX_SCALE - 1);
-        const labelScale = (0.92 + 0.2 * grow) * (1 - t * 0.1);
+        const labelScale = (0.9 + 0.22 * grow) * (1 - t * 0.08);
         const cached = tipSizeCache.current.get(item.id);
         const tipSize = cached ?? {
           width: Math.min(
@@ -321,10 +326,8 @@ export default function ChatMessageNav({
           height: rank === 0 ? 30 : 26,
         };
 
-        // 跟图标视觉框（含 scale/translate）对齐，丝滑起落
-        const rect = btn.getBoundingClientRect();
         const placed = clampFloatingTip({
-          anchorRect: rect,
+          anchorRect: btn.getBoundingClientRect(),
           tipSize,
           bounds,
           prefer: "left",
@@ -361,7 +364,6 @@ export default function ChatMessageNav({
         setTips(nextTips);
       }
 
-      // 下一帧用真实尺寸精调一次（只写 DOM，不 setState）
       requestAnimationFrame(() => {
         const b = tipBounds();
         for (let rank = 0; rank < ranks.length; rank++) {
@@ -388,8 +390,8 @@ export default function ChatMessageNav({
             top: placed.top,
             left: placed.left,
             side: placed.side,
-            opacity: 1 - tt * 0.55,
-            scale: (0.92 + 0.2 * grow) * (1 - tt * 0.1),
+            opacity: Math.max(0.35, 1 - tt * 0.55),
+            scale: (0.9 + 0.22 * grow) * (1 - tt * 0.08),
           });
         }
       });
@@ -397,17 +399,17 @@ export default function ChatMessageNav({
     [paintTip, tipBounds],
   );
 
-  /** 每帧直接写 CSS 变量 + 气泡位置，避免 React 重渲染抖动。 */
   const applyDock = useCallback(
     (hoverY: number | null, focusId: string | null) => {
       const list = messagesRef.current;
-      const scales: number[] = list.map((m, i) => {
+      const scales = list.map((m, i) => {
         if (hoverY != null) {
           return dockScale(Math.abs(hoverY - baseCenterY(i)));
         }
-        if (focusId && m.id === focusId) return 1.28;
+        if (focusId && m.id === focusId) return 1.35;
         return 1;
       });
+
       const viewH = trackRef.current?.clientHeight ?? 0;
       const tys =
         hoverY != null && viewH > 0
@@ -433,18 +435,14 @@ export default function ChatMessageNav({
             dist: Math.abs(hoverY - baseCenterY(i)),
             scale: scales[i] ?? 1,
           }))
+          .filter((r) => r.dist < RANGE)
           .sort((a, b) => a.dist - b.dist || a.index - b.index)
           .slice(0, Math.min(LABEL_MAX, list.length));
       } else if (focusId) {
         const index = list.findIndex((m) => m.id === focusId);
         if (index >= 0) {
           ranks = [
-            {
-              id: focusId,
-              index,
-              dist: 0,
-              scale: scales[index] ?? 1,
-            },
+            { id: focusId, index, dist: 0, scale: scales[index] ?? 1 },
           ];
         }
       }
@@ -453,6 +451,8 @@ export default function ChatMessageNav({
     },
     [layoutTips],
   );
+  const applyDockRef = useRef(applyDock);
+  applyDockRef.current = applyDock;
 
   const flushHover = useCallback(() => {
     hoverRafRef.current = null;
@@ -460,14 +460,15 @@ export default function ChatMessageNav({
     hoverYRef.current = y;
     const active = y != null;
     setDockActive((prev) => (prev === active ? prev : active));
-    applyDock(y, y != null ? null : hoveredId);
-  }, [applyDock, hoveredId]);
+    applyDockRef.current(y, y != null ? null : focusIdRef.current);
+  }, []);
 
   const onTrackMove = useCallback(
     (e: MouseEvent<HTMLDivElement>) => {
       const track = trackRef.current;
       if (!track) return;
       const rect = track.getBoundingClientRect();
+      // 相对轨道的连续 Y（含 scroll），鱼眼峰值跟这个走
       pendingHoverYRef.current = e.clientY - rect.top + track.scrollTop;
       if (hoverRafRef.current != null) return;
       hoverRafRef.current = requestAnimationFrame(flushHover);
@@ -482,22 +483,19 @@ export default function ChatMessageNav({
     }
     pendingHoverYRef.current = null;
     hoverYRef.current = null;
+    focusIdRef.current = null;
     setDockActive(false);
-    setHoveredId(null);
-    applyDock(null, null);
-  }, [applyDock]);
+    applyDockRef.current(null, null);
+  }, []);
 
-  // 键盘聚焦：无鼠标坐标时单独放大当前项
-  useEffect(() => {
-    if (hoverYRef.current != null) return;
-    applyDock(null, hoveredId);
-  }, [hoveredId, applyDock]);
-
-  // tips 挂载后立刻按当前 Dock 状态刷一次位置
+  // tips 挂载后按当前鼠标位置再刷一次
   useEffect(() => {
     if (tips.length === 0) return;
-    applyDock(hoverYRef.current, hoverYRef.current != null ? null : hoveredId);
-  }, [tips, applyDock, hoveredId]);
+    applyDockRef.current(
+      hoverYRef.current,
+      hoverYRef.current != null ? null : focusIdRef.current,
+    );
+  }, [tips]);
 
   if (messages.length === 0) return null;
 
@@ -537,12 +535,18 @@ export default function ChatMessageNav({
                 }`}
                 aria-label={label}
                 aria-current={isActive ? "true" : undefined}
-                onMouseEnter={() => setHoveredId(m.id)}
-                onMouseLeave={() =>
-                  setHoveredId((cur) => (cur === m.id ? null : cur))
-                }
-                onFocus={() => setHoveredId(m.id)}
-                onBlur={() => setHoveredId(null)}
+                onFocus={() => {
+                  focusIdRef.current = m.id;
+                  if (hoverYRef.current == null) {
+                    applyDockRef.current(null, m.id);
+                  }
+                }}
+                onBlur={() => {
+                  if (focusIdRef.current === m.id) focusIdRef.current = null;
+                  if (hoverYRef.current == null) {
+                    applyDockRef.current(null, null);
+                  }
+                }}
                 onClick={() => scrollToMessage(m.id)}
               >
                 {isUser ? (
