@@ -112,7 +112,7 @@ fn resolve_google_images(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::Resu
                 data_b64: b64.to_string(),
             });
         } else {
-            let path = resolve_local_path(ctx, u);
+            let path = resolve_local_path(ctx, u)?;
             if !path.exists() {
                 anyhow::bail!("本地文件不存在: {}", path.display());
             }
@@ -136,7 +136,7 @@ fn resolve_openai_image_urls(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::
         if u.starts_with("http://") || u.starts_with("https://") || u.starts_with("data:") {
             out.push(u.to_string());
         } else {
-            let path = resolve_local_path(ctx, u);
+            let path = resolve_local_path(ctx, u)?;
             if !path.exists() {
                 anyhow::bail!("本地文件不存在: {}", path.display());
             }
@@ -150,18 +150,18 @@ fn resolve_openai_image_urls(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::
     Ok(out)
 }
 
-fn resolve_local_path(ctx: &ToolContext<'_>, raw: &str) -> std::path::PathBuf {
+/// 将用户/AI 给定的图片路径解析为本地绝对路径。
+/// - 绝对路径：拒绝含 `..` 的路径后直接使用（supports uploads dir outside workspace）。
+/// - 相对路径：经 `path_safe::resolve_safe` 解析到 workspace，防止逃逸与 symlink 攻击。
+fn resolve_local_path(ctx: &ToolContext<'_>, raw: &str) -> anyhow::Result<std::path::PathBuf> {
     let p = std::path::Path::new(raw);
+    if p.components().any(|c| c == std::path::Component::ParentDir) {
+        anyhow::bail!("路径不允许包含 ..");
+    }
     if p.is_absolute() {
-        return p.to_path_buf();
+        return Ok(p.to_path_buf());
     }
-    if let Ok(cwd) = std::env::current_dir() {
-        let candidate = cwd.join(p);
-        if candidate.exists() {
-            return candidate;
-        }
-    }
-    ctx.workspace_dir.join(p)
+    crate::path_safe::resolve_safe(&ctx.workspace_dir, raw)
 }
 
 fn mime_from_url_or_path(s: &str) -> &'static str {

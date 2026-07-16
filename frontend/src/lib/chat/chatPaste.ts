@@ -57,6 +57,7 @@ function dtoToAttachment(path: string, dto: FileBase64Dto): ChatAttachment {
     size: dto.size,
     previewUrl,
     dataBase64: shouldInline ? dto.base64 : undefined,
+    localPath: path,
   };
 }
 

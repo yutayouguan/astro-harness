@@ -22,6 +22,8 @@ export type ChatAttachment = {
   previewUrl?: string;
   /** 发送给后端的 base64（图片/小文本） */
   dataBase64?: string;
+  /** 本地文件绝对路径（拖放/粘贴来源），大图无 base64 时供后端定位文件 */
+  localPath?: string;
 };
 
 /** 聊天活动条类型 */

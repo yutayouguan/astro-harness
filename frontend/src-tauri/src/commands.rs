@@ -152,6 +152,7 @@ pub struct ChatAttachmentDto {
     pub kind: String,
     pub size: u64,
     pub data_base64: Option<String>,
+    pub local_path: Option<String>,
 }
 
 /// 将字节数格式化为可读大小（B/KB/MB…）。
@@ -163,6 +164,17 @@ fn format_size(bytes: u64) -> String {
     } else {
         format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
     }
+}
+
+/// 转义 CommonMark 图片 alt-text 中的特殊字符（`[` `]` `\` 及换行）。
+fn md_escape_alt(s: &str) -> String {
+    s.chars()
+        .filter(|c| *c != '\n' && *c != '\r')
+        .flat_map(|c| match c {
+            '[' | ']' | '\\' => vec!['\\', c],
+            _ => vec![c],
+        })
+        .collect()
 }
 
 /// 用户文本 + 非图附件拼成 content；图片单独走 `images`（多模态 parts）。
@@ -212,7 +224,16 @@ fn build_chat_payload(content: &str, attachments: &[ChatAttachmentDto]) -> Built
                         mime,
                         data_base64: data.clone(),
                     });
-                    out.push_str("   (图片已作为多模态附件发送)\n");
+                    if let Some(p) = att.local_path.as_deref().filter(|s| !s.is_empty()) {
+                        out.push_str(&format!("   ![{}](<{}>)\n", md_escape_alt(&att.name), p));
+                    } else {
+                        out.push_str("   (图片已作为多模态附件发送)\n");
+                    }
+                } else if let Some(p) = att.local_path.as_deref().filter(|s| !s.is_empty()) {
+                    out.push_str(&format!(
+                        "   (图片体积较大，可通过 vision 工具读取)\n   ![{}](<{}>)\n",
+                        md_escape_alt(&att.name), p
+                    ));
                 } else {
                     out.push_str("   (图片已附带，体积较大，仅提供元数据；请结合文件名理解)\n");
                 }
@@ -241,6 +262,15 @@ fn build_chat_payload(content: &str, attachments: &[ChatAttachmentDto]) -> Built
                     "   (已附带二进制数据 {} bytes base64)\n",
                     data.len()
                 ));
+            }
+        } else if att.kind == "image" {
+            if let Some(p) = att.local_path.as_deref().filter(|s| !s.is_empty()) {
+                out.push_str(&format!(
+                    "   (图片体积较大，可通过 vision 工具读取)\n   ![{}](<{}>)\n",
+                    md_escape_alt(&att.name), p
+                ));
+            } else {
+                out.push_str("   (仅元数据：体积较大或类型不支持内联)\n");
             }
         } else {
             out.push_str("   (仅元数据：体积较大或类型不支持内联)\n");

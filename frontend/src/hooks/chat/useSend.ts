@@ -715,19 +715,24 @@ export function useSend(deps: UseSendDeps) {
           }
         });
 
-        for (const a of pending) {
-          if (!a.dataBase64) continue;
-          try {
-            await invoke("save_chat_upload", {
-              sessionId: sid,
-              fileName: a.name,
-              dataBase64: a.dataBase64,
-              messageId: userId,
-            });
-          } catch (e) {
-            console.warn("save_chat_upload failed", e);
-          }
-        }
+        const uploadedPaths = new Map<string, string>();
+        await Promise.all(
+          pending
+            .filter((a) => !!a.dataBase64)
+            .map(async (a) => {
+              try {
+                const saved = await invoke<{ path: string }>("save_chat_upload", {
+                  sessionId: sid,
+                  fileName: a.name,
+                  dataBase64: a.dataBase64,
+                  messageId: userId,
+                });
+                uploadedPaths.set(a.id, saved.path);
+              } catch (e) {
+                console.warn("save_chat_upload failed", e);
+              }
+            }),
+        );
 
         const globals = loadPickerGlobals();
         let chatProvider: ProviderDto = activeProvider;
@@ -782,6 +787,7 @@ export function useSend(deps: UseSendDeps) {
             kind: a.kind,
             size: a.size,
             dataBase64: a.dataBase64 ?? null,
+            localPath: uploadedPaths.get(a.id) ?? a.localPath ?? null,
           })),
         });
         pendingKeepChatBubblesRef.current = null;
