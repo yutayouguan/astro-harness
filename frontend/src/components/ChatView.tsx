@@ -76,6 +76,7 @@ import type {
   PendingInterrupt,
 } from "../types";
 import { AgentCreateGuide } from "./AgentCreateGuide";
+import AgentAvatar from "./AgentAvatar";
 import ChatMessageNav from "./ChatMessageNav";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWelcome } from "./ChatWelcome";
@@ -87,6 +88,7 @@ import {
 import ComposerMcpMenu from "./ComposerMcpMenu";
 import ContextUsagePopover from "./ContextUsagePopover";
 import McpIcon from "./McpIcon";
+import { ModelBrandIcon } from "./ProviderIcons";
 import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgReasoning from "./MsgReasoning";
@@ -98,6 +100,10 @@ import A2UIRenderer from "../a2ui/A2UIRenderer";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import { formatElapsedSec } from "../lib/elapsedSec";
 import { coalesceReasoningSegments } from "../lib/chatTimeline";
+import {
+  isAgentIconSrc,
+  type AgentIconInfo,
+} from "../lib/agentIcons";
 import {
   buildMentionCandidates,
   buildSlashPaletteEntries,
@@ -218,6 +224,8 @@ type Props = {
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   /** MCP 菜单作用域 Agent；缺省走 workspace */
   agentId?: string | null;
+  /** 当前聊天模型 id：助手无自定义头像时用作品牌图标 */
+  modelId?: string | null;
   /** 打开 Tools 面板 MCP tab */
   onOpenMcpSettings?: () => void;
   /** Agent / Plan / Ask / MultiTask */
@@ -518,6 +526,7 @@ export default function ChatView({
   onToggleThinking: _onToggleThinking,
   onThinkingLevelChange,
   agentId = null,
+  modelId = null,
   onOpenMcpSettings,
   chatMode,
   onChatModeChange,
@@ -550,7 +559,8 @@ export default function ChatView({
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [triggerStart, setTriggerStart] = useState(0);
-  const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const [agents, setAgents] = useState<AgentIconInfo[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
   const [mediaBaseDir, setMediaBaseDir] = useState<string | null>(null);
   const { servers: mcpServers } = useMcpTools(agentId);
@@ -561,14 +571,16 @@ export default function ChatView({
       const cfg = await invoke<{
         workspace_dir: string;
         active_agent_id: string;
-        agents: { id: string; name: string; path?: string }[];
+        agents: (AgentIconInfo & { path?: string })[];
       }>("get_config");
       setAgents(cfg.agents ?? []);
+      setActiveAgentId(cfg.active_agent_id ?? null);
       const scopedId = agentId ?? cfg.active_agent_id;
       const scoped = cfg.agents?.find((a) => a.id === scopedId);
       setMediaBaseDir(scoped?.path?.trim() || cfg.workspace_dir || null);
     } catch {
       setAgents([]);
+      setActiveAgentId(null);
       setMediaBaseDir(null);
     }
     try {
@@ -578,6 +590,20 @@ export default function ChatView({
       setSkills([]);
     }
   }, [agentId]);
+
+  const activeAgent = useMemo(() => {
+    if (!agents.length) return null;
+    const id = agentId ?? activeAgentId;
+    if (id) {
+      return agents.find((a) => a.id === id) ?? agents[0] ?? null;
+    }
+    return agents[0] ?? null;
+  }, [agents, agentId, activeAgentId]);
+
+  const assistantHasCustomAvatar = Boolean(
+    activeAgent &&
+      (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
+  );
 
   useEffect(() => {
     void loadMentionSources();
@@ -687,7 +713,11 @@ export default function ChatView({
 
   const mentionItems: PaletteItem[] = useMemo(() => {
     const candidates = buildMentionCandidates({
-      agents,
+      agents: agents
+        .filter((a): a is AgentIconInfo & { id: string; name: string } =>
+          Boolean(a.id && a.name),
+        )
+        .map((a) => ({ id: a.id, name: a.name })),
       skills,
       mcpServers: mcpServers.map((s) => ({
         id: s.id,
@@ -1269,8 +1299,22 @@ export default function ChatView({
                     />
                   ) : null}
                   {m.role === "assistant" && (
-                    <div className={`avatar ${m.error ? "error" : ""}`}>
-                      {m.error ? "!" : "iC"}
+                    <div
+                      className={`avatar ${m.error ? "error" : ""}${
+                        !m.error && !assistantHasCustomAvatar && modelId
+                          ? " is-model"
+                          : ""
+                      }`}
+                    >
+                      {m.error ? (
+                        "!"
+                      ) : assistantHasCustomAvatar && activeAgent ? (
+                        <AgentAvatar agent={activeAgent} size={20} />
+                      ) : modelId ? (
+                        <ModelBrandIcon modelId={modelId} size={16} />
+                      ) : (
+                        "AI"
+                      )}
                     </div>
                   )}
                   <div className="msg-stack">

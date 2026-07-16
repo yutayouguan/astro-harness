@@ -3239,6 +3239,7 @@ export default function App() {
                       onSlashAction={handleSlashAction}
                       contextUsage={contextUsage}
                       contextWindow={contextWindow}
+                      modelId={activeProvider?.model ?? null}
                       contextUsagePercent={
                         contextUsage
                           ? usagePercent(contextUsage.totalTokens, contextWindow)
