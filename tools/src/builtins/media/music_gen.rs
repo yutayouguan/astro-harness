@@ -54,7 +54,7 @@ pub fn validate_music_gen_args(
     } else {
         resolve_lyria_model_id("clip")?
     };
-    let is_pro = model_id.contains("pro");
+    let is_pro = model_id == "lyria-3-pro-preview";
 
     let fmt_raw = args
         .format
@@ -244,6 +244,20 @@ mod tests {
         let (model_id, fmt) = validate_music_gen_args(&args, "").unwrap();
         assert_eq!(model_id, "lyria-3-pro-preview");
         assert_eq!(fmt, MusicAudioFormat::Wav);
+    }
+
+    #[test]
+    fn reject_wav_for_configured_model_that_only_contains_pro() {
+        let args = MusicGenArgs {
+            prompt: "piano".into(),
+            model: None,
+            reference_images: None,
+            format: Some("wav".into()),
+        };
+        let err = validate_music_gen_args(&args, "music-production-v1")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("wav") || err.contains("pro"));
     }
 
     #[test]

@@ -202,16 +202,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn from_parts_writes_primary_music_model_and_leaves_fallback_empty() {
+    fn from_parts_writes_primary_music_model_and_leaves_fallback_music_model_empty() {
         let targets = ImageGenTargets::from_parts(
             "google",
             "image-model",
             "primary-key",
             "primary-base",
-            "",
-            "",
-            "",
-            "",
+            "openai",
+            "fallback-image-model",
+            "fallback-key",
+            "fallback-base",
             "",
             "  configured-music-model  ",
             "",
@@ -222,6 +222,7 @@ mod tests {
 
         let primary = targets.primary.as_ref().expect("primary credentials");
         assert_eq!(primary.music_model, "configured-music-model");
-        assert!(targets.fallback.is_none());
+        let fallback = targets.fallback.as_ref().expect("fallback credentials");
+        assert_eq!(fallback.music_model, "");
     }
 }
