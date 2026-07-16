@@ -1,6 +1,6 @@
 //! Gemini Interactions API（`POST /v1beta/interactions`）。
 //!
-//! 承载 TTS 与出图（Nano Banana）；vision 可复用 URL 与 `x-goog-api-key` 骨架。
+//! 承载 TTS、出图（Nano Banana）、视觉（describe/detect/segment）与视频理解。
 //! 与 OpenAI 兼容端点无关，请勿经 `…/v1beta/openai`。
 
 use anyhow::{anyhow, Context, Result};
@@ -588,6 +588,214 @@ pub async fn google_interactions_image(
     parse_interaction_image_response(&v)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisionMode {
+    Describe,
+    Detect,
+    Segment,
+}
+
+impl VisionMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Describe => "describe",
+            Self::Detect => "detect",
+            Self::Segment => "segment",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "" | "describe" => Ok(Self::Describe),
+            "detect" => Ok(Self::Detect),
+            "segment" => Ok(Self::Segment),
+            other => anyhow::bail!("无效 mode: {other}（期望 describe|detect|segment）"),
+        }
+    }
+}
+
+impl std::str::FromStr for VisionMode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum VisionImagePart {
+    Inline {
+        mime_type: String,
+        data_b64: String,
+    },
+    Uri {
+        mime_type: String,
+        uri: String,
+    },
+}
+
+pub fn default_vision_prompt(mode: VisionMode) -> &'static str {
+    match mode {
+        VisionMode::Describe => "请描述这张图片",
+        VisionMode::Detect => {
+            "Detect all prominent items in the image. The box_2d should be [ymin, xmin, ymax, xmax] normalized to 0-1000. Return JSON with boxes array of {box_2d, label}."
+        }
+        VisionMode::Segment => {
+            "Give segmentation masks for the prominent items. Each entry: box_2d [ymin,xmin,ymax,xmax] 0-1000, mask as [x,y] polygon 0-1000, and label."
+        }
+    }
+}
+
+pub fn vision_boxes_json_schema(include_mask: bool) -> Value {
+    let mut item_props = json!({
+        "box_2d": { "type": "array", "items": { "type": "integer" } },
+        "label": { "type": "string" }
+    });
+    let mut required = vec!["box_2d", "label"];
+    if include_mask {
+        item_props["mask"] = json!({
+            "type": "array",
+            "items": { "type": "array", "items": { "type": "integer" } }
+        });
+        required.push("mask");
+    }
+    json!({
+        "type": "object",
+        "properties": {
+            "boxes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": item_props,
+                    "required": required
+                }
+            }
+        },
+        "required": ["boxes"]
+    })
+}
+
+pub fn build_interaction_vision_body(
+    model: &str,
+    prompt: &str,
+    images: &[VisionImagePart],
+    mode: VisionMode,
+) -> Value {
+    let mut input = vec![json!({"type": "text", "text": prompt})];
+    for img in images {
+        match img {
+            VisionImagePart::Inline { mime_type, data_b64 } => {
+                input.push(json!({
+                    "type": "image",
+                    "data": data_b64,
+                    "mime_type": mime_type
+                }));
+            }
+            VisionImagePart::Uri { mime_type, uri } => {
+                input.push(json!({
+                    "type": "image",
+                    "uri": uri,
+                    "mime_type": mime_type
+                }));
+            }
+        }
+    }
+    let mut body = json!({ "model": model, "input": input });
+    match mode {
+        VisionMode::Describe => {}
+        VisionMode::Detect => {
+            body["response_format"] = json!({
+                "type": "text",
+                "mime_type": "application/json",
+                "schema": vision_boxes_json_schema(false)
+            });
+        }
+        VisionMode::Segment => {
+            body["response_format"] = json!({
+                "type": "text",
+                "mime_type": "application/json",
+                "schema": vision_boxes_json_schema(true)
+            });
+            body["generation_config"] = json!({ "thinking_level": "minimal" });
+        }
+    }
+    body
+}
+
+pub fn parse_interaction_vision_text(v: &Value) -> Result<String> {
+    if let Some(s) = v.get("output_text").and_then(|t| t.as_str()) {
+        let t = s.trim();
+        if !t.is_empty() {
+            return Ok(t.to_string());
+        }
+    }
+    let mut parts = Vec::new();
+    if let Some(steps) = v.get("steps").and_then(|s| s.as_array()) {
+        for step in steps {
+            if step.get("type").and_then(|t| t.as_str()) != Some("model_output") {
+                continue;
+            }
+            if let Some(content) = step.get("content").and_then(|c| c.as_array()) {
+                for item in content {
+                    if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
+                            parts.push(t.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let joined = parts.join("");
+    if joined.trim().is_empty() {
+        anyhow::bail!("Interactions 视觉响应无文本");
+    }
+    Ok(joined)
+}
+
+pub async fn google_interactions_vision(
+    client: &Client,
+    prompt: &str,
+    images: &[VisionImagePart],
+    mode: VisionMode,
+    config: &ProviderConfig,
+) -> Result<String> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("Google API Key 为空");
+    }
+    if images.is_empty() {
+        anyhow::bail!("vision 至少需要一张图片");
+    }
+    let model = if config.model.trim().is_empty() {
+        crate::media_http::default_vision_model("google")
+    } else {
+        config.model.trim()
+    };
+    let url = interactions_url(config);
+    let body = build_interaction_vision_body(model, prompt, images, mode);
+    let response = client
+        .post(&url)
+        .header("x-goog-api-key", &config.api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("连接 Google Interactions 视觉失败: {url}"))?;
+    let status = response.status();
+    let v: Value = response
+        .json()
+        .await
+        .context("解析 Interactions 视觉 JSON 失败")?;
+    if !status.is_success() {
+        let msg = v
+            .pointer("/error/message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Interactions 视觉请求失败");
+        anyhow::bail!("Google Interactions HTTP {status}: {msg}");
+    }
+    parse_interaction_vision_text(&v)
+}
+
 // ── Video understanding ────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -790,6 +998,237 @@ pub async fn google_interactions_video(
         );
     }
     parse_interaction_video_text(&v)
+}
+
+// ── Music (Lyria 3) ──────────────────────────────────────────────────────────
+
+pub fn default_music_model_clip() -> &'static str {
+    "lyria-3-clip-preview"
+}
+
+pub fn default_music_model_pro() -> &'static str {
+    "lyria-3-pro-preview"
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MusicAudioFormat {
+    Mp3,
+    Wav,
+}
+
+#[derive(Debug, Clone)]
+pub struct MusicImagePart {
+    pub mime_type: String,
+    pub data_base64: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct InteractionMusicRequest {
+    pub model: String,
+    pub prompt: String,
+    pub images: Vec<MusicImagePart>,
+    pub format: MusicAudioFormat,
+}
+
+#[derive(Debug, Clone)]
+pub struct InteractionMusicResult {
+    pub audio_bytes: Vec<u8>,
+    pub mime_type: String,
+    pub lyrics_text: Option<String>,
+    pub interaction_id: String,
+}
+
+pub fn resolve_lyria_model_id(alias: &str) -> Result<String> {
+    let a = alias.trim();
+    Ok(match a {
+        "" | "clip" => default_music_model_clip().to_string(),
+        "pro" => default_music_model_pro().to_string(),
+        "lyria-3-clip-preview" | "lyria-3-pro-preview" => a.to_string(),
+        _ => anyhow::bail!("无效 music model: {a}（clip | pro | lyria-3-*-preview）"),
+    })
+}
+
+pub fn music_extension(mime: &str, format: MusicAudioFormat) -> &'static str {
+    let m = mime.to_ascii_lowercase();
+    if m.contains("wav") {
+        return "wav";
+    }
+    if m.contains("mpeg") || m.contains("mp3") {
+        return "mp3";
+    }
+    match format {
+        MusicAudioFormat::Wav => "wav",
+        MusicAudioFormat::Mp3 => "mp3",
+    }
+}
+
+pub fn build_interaction_music_body(req: &InteractionMusicRequest) -> Value {
+    let input = if req.images.is_empty() {
+        json!(req.prompt)
+    } else {
+        let mut parts = vec![json!({ "type": "text", "text": req.prompt })];
+        for img in &req.images {
+            parts.push(json!({
+                "type": "image",
+                "mime_type": img.mime_type,
+                "data": img.data_base64,
+            }));
+        }
+        json!(parts)
+    };
+
+    let mut response_format = json!({ "type": "audio" });
+    if req.format == MusicAudioFormat::Wav {
+        response_format["mime_type"] = json!("audio/wav");
+    }
+
+    json!({
+        "model": req.model,
+        "input": input,
+        "response_format": response_format,
+    })
+}
+
+pub fn parse_interaction_music_response(v: &Value) -> Result<InteractionMusicResult> {
+    let interaction_id = v
+        .get("id")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let mut mime_type = String::new();
+    let mut lyrics_parts: Vec<String> = Vec::new();
+    let mut audio_b64: Option<&str> = None;
+
+    if let Some(oa) = v.get("output_audio").or_else(|| v.get("outputAudio")) {
+        if let Some(d) = oa.get("data").and_then(|x| x.as_str()) {
+            audio_b64 = Some(d);
+        }
+        if let Some(m) = oa
+            .get("mime_type")
+            .or_else(|| oa.get("mimeType"))
+            .and_then(|x| x.as_str())
+        {
+            mime_type = m.to_string();
+        }
+    }
+    if let Some(t) = v
+        .get("output_text")
+        .or_else(|| v.get("outputText"))
+        .and_then(|x| x.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        lyrics_parts.push(t.to_string());
+    }
+
+    if audio_b64.is_none() {
+        if let Some(steps) = v.get("steps").and_then(|s| s.as_array()) {
+            for step in steps {
+                let st = step.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                if st != "model_output" && !st.is_empty() {
+                    continue;
+                }
+                let Some(content) = step.get("content").and_then(|c| c.as_array()) else {
+                    continue;
+                };
+                for block in content {
+                    let bt = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                    match bt {
+                        "audio" => {
+                            if let Some(d) = block.get("data").and_then(|x| x.as_str()) {
+                                audio_b64 = Some(d);
+                            }
+                            if let Some(m) = block
+                                .get("mime_type")
+                                .or_else(|| block.get("mimeType"))
+                                .and_then(|x| x.as_str())
+                            {
+                                mime_type = m.to_string();
+                            }
+                        }
+                        "text" => {
+                            if let Some(t) = block.get("text").and_then(|x| x.as_str()) {
+                                let t = t.trim();
+                                if !t.is_empty() {
+                                    lyrics_parts.push(t.to_string());
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    let b64 = audio_b64.ok_or_else(|| anyhow!("Google interactions music 响应无音频数据"))?;
+    let audio_bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .context("解码 Interactions music 音频失败")?;
+    if audio_bytes.is_empty() {
+        anyhow::bail!("Google interactions music 返回空音频");
+    }
+
+    let lyrics_text = if lyrics_parts.is_empty() {
+        None
+    } else {
+        Some(lyrics_parts.join("\n"))
+    };
+
+    // filtered_prompt：若有则拼进错误旁注不在此处；成功路径可忽略
+    let _ = v.get("filtered_prompt");
+
+    Ok(InteractionMusicResult {
+        audio_bytes,
+        mime_type,
+        lyrics_text,
+        interaction_id,
+    })
+}
+
+pub async fn google_interactions_music(
+    client: &Client,
+    config: &ProviderConfig,
+    req: &InteractionMusicRequest,
+) -> Result<InteractionMusicResult> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("Google API Key 为空");
+    }
+    if req.prompt.trim().is_empty() {
+        anyhow::bail!("music prompt 为空");
+    }
+    if req.images.len() > 10 {
+        anyhow::bail!("music 参考图最多 10 张");
+    }
+
+    let url = interactions_url(config);
+    let body = build_interaction_music_body(req);
+    let response = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .header("x-goog-api-key", config.api_key.trim())
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("连接 Google interactions music 失败: {url}"))?;
+    let status = response.status();
+    let v: Value = response
+        .json()
+        .await
+        .context("解析 Google interactions music 响应失败")?;
+    if !status.is_success() {
+        let mut msg = error_message(&v);
+        if let Some(fp) = v
+            .get("filtered_prompt")
+            .and_then(|x| x.as_str())
+            .or_else(|| v.pointer("/filtered_prompt/text").and_then(|x| x.as_str()))
+        {
+            msg = format!("{msg}; filtered_prompt={fp}");
+        }
+        anyhow::bail!("Google interactions music HTTP {status}: {msg}");
+    }
+    parse_interaction_music_response(&v)
 }
 
 #[cfg(test)]
@@ -998,6 +1437,198 @@ mod tests {
     fn parse_errors_when_no_image() {
         let v = json!({ "id": "ix", "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "x" }] }] });
         assert!(parse_interaction_image_response(&v).is_err());
+    }
+
+    // ── Music tests ──
+
+    #[test]
+    fn build_music_body_text_only() {
+        let req = InteractionMusicRequest {
+            model: "lyria-3-clip-preview".into(),
+            prompt: "minimal techno".into(),
+            images: vec![],
+            format: MusicAudioFormat::Mp3,
+        };
+        let body = build_interaction_music_body(&req);
+        assert_eq!(body["model"], "lyria-3-clip-preview");
+        assert_eq!(body["input"], "minimal techno");
+        assert_eq!(body["response_format"]["type"], "audio");
+        assert!(body.get("generation_config").is_none());
+    }
+
+    #[test]
+    fn build_music_body_with_images_and_wav() {
+        let req = InteractionMusicRequest {
+            model: "lyria-3-pro-preview".into(),
+            prompt: "ambient from image".into(),
+            images: vec![MusicImagePart {
+                mime_type: "image/jpeg".into(),
+                data_base64: "abc".into(),
+            }],
+            format: MusicAudioFormat::Wav,
+        };
+        let body = build_interaction_music_body(&req);
+        let input = body["input"].as_array().expect("input array");
+        assert_eq!(input[0]["type"], "text");
+        assert_eq!(input[0]["text"], "ambient from image");
+        assert_eq!(input[1]["type"], "image");
+        assert_eq!(input[1]["mime_type"], "image/jpeg");
+        assert_eq!(input[1]["data"], "abc");
+        // Pro+Wav：在 response_format 上附 mime_type 提示（官方文档字段若变更，只改此处与本断言）
+        assert_eq!(body["response_format"]["type"], "audio");
+        assert_eq!(body["response_format"]["mime_type"], "audio/wav");
+    }
+
+    #[test]
+    fn parse_music_output_audio_and_text() {
+        let v = serde_json::json!({
+            "id": "ix-music-1",
+            "output_audio": { "data": "Zm9v", "mime_type": "audio/mpeg" },
+            "output_text": "[Verse]\nhello"
+        });
+        let r = parse_interaction_music_response(&v).unwrap();
+        assert_eq!(r.interaction_id, "ix-music-1");
+        assert_eq!(r.audio_bytes, b"foo");
+        assert!(r.mime_type.contains("mpeg"));
+        assert_eq!(r.lyrics_text.as_deref(), Some("[Verse]\nhello"));
+    }
+
+    #[test]
+    fn parse_music_from_steps_fallback() {
+        let v = serde_json::json!({
+            "id": "ix-2",
+            "steps": [{
+                "type": "model_output",
+                "content": [
+                    { "type": "text", "text": "line1" },
+                    { "type": "audio", "data": "YmFy", "mime_type": "audio/wav" }
+                ]
+            }]
+        });
+        let r = parse_interaction_music_response(&v).unwrap();
+        assert_eq!(r.audio_bytes, b"bar");
+        assert!(r.mime_type.contains("wav"));
+        assert_eq!(r.lyrics_text.as_deref(), Some("line1"));
+    }
+
+    #[test]
+    fn parse_music_missing_audio_errors() {
+        let v = serde_json::json!({ "id": "ix", "output_text": "only text" });
+        assert!(parse_interaction_music_response(&v).is_err());
+    }
+
+    #[test]
+    fn resolve_lyria_model_and_extension() {
+        assert_eq!(resolve_lyria_model_id("clip").unwrap(), "lyria-3-clip-preview");
+        assert_eq!(resolve_lyria_model_id("pro").unwrap(), "lyria-3-pro-preview");
+        assert_eq!(
+            resolve_lyria_model_id("lyria-3-pro-preview").unwrap(),
+            "lyria-3-pro-preview"
+        );
+        assert!(resolve_lyria_model_id("nope").is_err());
+        assert_eq!(music_extension("audio/mpeg", MusicAudioFormat::Mp3), "mp3");
+        assert_eq!(music_extension("audio/wav", MusicAudioFormat::Wav), "wav");
+        assert_eq!(music_extension("", MusicAudioFormat::Wav), "wav");
+        assert_eq!(music_extension("", MusicAudioFormat::Mp3), "mp3");
+    }
+}
+
+#[cfg(test)]
+mod vision_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn build_describe_body_inline_and_uri() {
+        let images = vec![
+            VisionImagePart::Inline {
+                mime_type: "image/png".into(),
+                data_b64: "YWJj".into(),
+            },
+            VisionImagePart::Uri {
+                mime_type: "image/jpeg".into(),
+                uri: "https://example.com/a.jpg".into(),
+            },
+        ];
+        let body = build_interaction_vision_body(
+            "gemini-3.5-flash",
+            "compare",
+            &images,
+            VisionMode::Describe,
+        );
+        assert_eq!(body["model"], "gemini-3.5-flash");
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(input[0]["type"], "text");
+        assert_eq!(input[0]["text"], "compare");
+        assert_eq!(input[1]["type"], "image");
+        assert_eq!(input[1]["data"], "YWJj");
+        assert_eq!(input[1]["mime_type"], "image/png");
+        assert_eq!(input[2]["uri"], "https://example.com/a.jpg");
+        assert!(body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn build_detect_body_has_schema_without_mask() {
+        let body = build_interaction_vision_body(
+            "gemini-3.5-flash",
+            "detect",
+            &[VisionImagePart::Uri {
+                mime_type: "image/png".into(),
+                uri: "https://x/y.png".into(),
+            }],
+            VisionMode::Detect,
+        );
+        let schema = &body["response_format"]["schema"];
+        assert_eq!(body["response_format"]["mime_type"], "application/json");
+        let props = &schema["properties"]["boxes"]["items"]["properties"];
+        assert!(props.get("box_2d").is_some());
+        assert!(props.get("label").is_some());
+        assert!(props.get("mask").is_none());
+        assert!(body.get("generation_config").is_none());
+    }
+
+    #[test]
+    fn build_segment_body_has_mask_and_minimal_thinking() {
+        let body = build_interaction_vision_body(
+            "gemini-3.5-flash",
+            "seg",
+            &[VisionImagePart::Uri {
+                mime_type: "image/png".into(),
+                uri: "https://x/y.png".into(),
+            }],
+            VisionMode::Segment,
+        );
+        let props = &body["response_format"]["schema"]["properties"]["boxes"]["items"]["properties"];
+        assert!(props.get("mask").is_some());
+        assert_eq!(body["generation_config"]["thinking_level"], "minimal");
+    }
+
+    #[test]
+    fn parse_prefers_output_text() {
+        let v = json!({ "output_text": "caption", "steps": [] });
+        assert_eq!(parse_interaction_vision_text(&v).unwrap(), "caption");
+    }
+
+    #[test]
+    fn parse_falls_back_to_steps_model_output() {
+        let v = json!({
+            "steps": [
+                {
+                    "type": "model_output",
+                    "content": [
+                        { "type": "text", "text": "hello " },
+                        { "type": "text", "text": "world" }
+                    ]
+                }
+            ]
+        });
+        assert_eq!(parse_interaction_vision_text(&v).unwrap(), "hello world");
+    }
+
+    #[test]
+    fn parse_errors_when_empty() {
+        let v = json!({ "steps": [] });
+        assert!(parse_interaction_vision_text(&v).is_err());
     }
 }
 

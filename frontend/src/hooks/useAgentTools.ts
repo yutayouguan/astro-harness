@@ -42,6 +42,7 @@ export type AgentToolId =
   | "video_gen"
   | "video_understand"
   | "tts"
+  | "music_gen"
   | "music"
   | "skills"
   | "memory"
@@ -230,6 +231,19 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "text", type: "string" },
       { name: "voice", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "music_gen",
+    titleKey: "agentTools.musicGen.title",
+    descKey: "agentTools.musicGen.desc",
+    Icon: IconMusic,
+    tone: "violet",
+    params: [
+      { name: "prompt", type: "string" },
+      { name: "model", type: "string", optional: true },
+      { name: "reference_images", type: "string", optional: true },
+      { name: "format", type: "string", optional: true },
     ],
   },
   {

@@ -92,10 +92,12 @@ mod tests {
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let ctx = ToolContext {
             memory: &mut memory,
+            sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,

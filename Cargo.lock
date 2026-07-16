@@ -5029,6 +5029,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "session",
  "skills",
  "tempfile",
  "tokio",

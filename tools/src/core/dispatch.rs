@@ -42,9 +42,10 @@ pub async fn dispatch_tool(
     );
 
     match name {
-        "memory" | "session_search" | "memory_add" | "memory_replace" | "memory_remove" => {
+        "memory" | "memory_add" | "memory_replace" | "memory_remove" => {
             crate::memory_tools::dispatch(ctx, name, args)
         }
+        "session_search" => crate::memory_tools::dispatch_session_search(ctx, args),
         "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable" | "scheduled" => {
             crate::scheduled::dispatch(name, args)
         }
@@ -58,6 +59,7 @@ pub async fn dispatch_tool(
         "vision" => crate::vision::dispatch(ctx, args).await,
         "tts" => crate::tts::dispatch(ctx, args).await,
         "music" => crate::music::dispatch(ctx, args).await,
+        "music_gen" => crate::music_gen::dispatch(ctx, args).await,
         "skills" => crate::skills_tool::dispatch(ctx, args),
         "clarify" => crate::clarify::dispatch(ctx, args),
         "confirm" => crate::confirm::dispatch(ctx, args),

@@ -18,10 +18,10 @@ use chrono::Utc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::config::load_memory_config;
-use crate::workspace::{
+use home::{
     agent_workspace_dir, daily_memory_path, list_agents, list_daily_memory_dates, AgentInfo,
 };
+use crate::config::load_memory_config;
 use crate::{parse_memory_entries, MemoryStore};
 
 /// 入梦全局状态文件：`{base}/dreaming.json`
@@ -460,7 +460,8 @@ pub fn mark_agent_dream_error(state: &mut DreamingState, agent_id: &str, err: &s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workspace::{create_agent, ensure_workspace};
+    use crate::workspace::ensure_workspace;
+    use home::{agent_workspace_dir, create_agent, daily_memory_path};
     use tempfile::tempdir;
 
     #[test]
