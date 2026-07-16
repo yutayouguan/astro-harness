@@ -172,7 +172,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         },
         model: model.clone(),
         ..ProviderConfig::default()
-    };
+};
     let files_client = build_files_client()?;
     let interactions_client = build_interactions_client()?;
 

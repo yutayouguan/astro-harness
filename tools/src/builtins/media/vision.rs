@@ -112,7 +112,7 @@ fn resolve_google_images(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::Resu
                 data_b64: b64.to_string(),
             });
         } else {
-            let path = ctx.workspace_dir.join(u);
+            let path = resolve_local_path(ctx, u);
             if !path.exists() {
                 anyhow::bail!("本地文件不存在: {}", path.display());
             }
@@ -136,7 +136,7 @@ fn resolve_openai_image_urls(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::
         if u.starts_with("http://") || u.starts_with("https://") || u.starts_with("data:") {
             out.push(u.to_string());
         } else {
-            let path = ctx.workspace_dir.join(u);
+            let path = resolve_local_path(ctx, u);
             if !path.exists() {
                 anyhow::bail!("本地文件不存在: {}", path.display());
             }
@@ -148,6 +148,20 @@ fn resolve_openai_image_urls(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::
         }
     }
     Ok(out)
+}
+
+fn resolve_local_path(ctx: &ToolContext<'_>, raw: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(raw);
+    if p.is_absolute() {
+        return p.to_path_buf();
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let candidate = cwd.join(p);
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+    ctx.workspace_dir.join(p)
 }
 
 fn mime_from_url_or_path(s: &str) -> &'static str {
@@ -201,7 +215,7 @@ async fn call_google_vision(
         },
         model: model.clone(),
         ..ProviderConfig::default()
-    };
+};
     let client = reqwest::Client::new();
     let text = google_interactions_vision(&client, prompt, images, mode, &config).await?;
     Ok(format!(
@@ -233,7 +247,7 @@ async fn call_openai_vision(
             },
             model: model.clone(),
             ..ProviderConfig::default()
-        };
+};
         let text = openai_vision_completions(&client, prompt, image_urls, mode, &config).await?;
         return Ok(format_openai_vision_output(&text, &model, mode));
     }
@@ -254,7 +268,7 @@ async fn call_openai_vision(
             base_url: base,
             model: model.clone(),
             ..ProviderConfig::default()
-        };
+};
         let text = openai_vision_completions(&client, prompt, image_urls, mode, &config).await?;
         return Ok(format_openai_vision_output(&text, &model, mode));
     }
@@ -269,7 +283,7 @@ async fn call_openai_vision(
         base_url: Some("https://api.openai.com/v1".into()),
         model: model.clone(),
         ..ProviderConfig::default()
-    };
+};
     let text = openai_vision_completions(&client, prompt, image_urls, mode, &config).await?;
     Ok(format_openai_vision_output(&text, &model, mode))
 }

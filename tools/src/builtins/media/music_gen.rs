@@ -116,7 +116,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         },
         model: model_id.clone(),
         ..ProviderConfig::default()
-    };
+};
     let req = InteractionMusicRequest {
         model: model_id.clone(),
         prompt: parsed.prompt.trim().to_string(),

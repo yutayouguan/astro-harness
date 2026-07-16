@@ -202,6 +202,7 @@ async fn complete_review_chat(
         thinking_enabled: false,
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
+        previous_interaction_id: None,
     };
     let messages = vec![
         ChatMessage::text("system", system),

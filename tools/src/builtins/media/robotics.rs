@@ -138,7 +138,7 @@ async fn call_google(
         },
         model: model.to_string(),
         ..ProviderConfig::default()
-    };
+};
     let client = reqwest::Client::new();
     google_robotics_generate(&client, model, prompt, images, thinking_budget, &config).await
 }

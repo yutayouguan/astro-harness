@@ -99,6 +99,7 @@ async fn summarize_with_llm(transcript: &str) -> Result<String, String> {
         thinking_enabled: false,
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
+        previous_interaction_id: None,
     };
     let system = "You compress a chat transcript into a compact handoff note. \
 Cover: goals, constraints, done, in-progress, key paths/decisions, next steps. \

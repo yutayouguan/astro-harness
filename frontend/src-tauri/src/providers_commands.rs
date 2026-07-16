@@ -1454,6 +1454,7 @@ async fn probe_one_model(
         thinking_enabled: false,
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
+        previous_interaction_id: None,
     };
     let result = providers::registry::ProviderRegistry::default()
         .verify(probe_id, &model, &config)

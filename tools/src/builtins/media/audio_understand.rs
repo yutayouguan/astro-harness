@@ -214,7 +214,7 @@ async fn call_google(
         },
         model: model.clone(),
         ..ProviderConfig::default()
-    };
+};
     let media = resolve_google_media(ctx, audio_url, is_yt).await?;
     let client = reqwest::Client::new();
     let text = google_interactions_audio(&client, prompt, &media, mode, &config).await?;
@@ -378,7 +378,7 @@ fn resolve_openai_describe_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-            },
+},
             model,
         ));
     }
@@ -399,7 +399,7 @@ fn resolve_openai_describe_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-            },
+},
             model,
         ));
     }
@@ -414,7 +414,7 @@ fn resolve_openai_describe_config(
             base_url: Some("https://api.openai.com/v1".into()),
             model: model.clone(),
             ..ProviderConfig::default()
-        },
+},
         model,
     ))
 }
@@ -435,7 +435,7 @@ fn resolve_openai_whisper_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-            },
+},
             model,
         ));
     }
@@ -451,7 +451,7 @@ fn resolve_openai_whisper_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-            },
+},
             model,
         ));
     }
@@ -465,7 +465,7 @@ fn resolve_openai_whisper_config(
             base_url: Some("https://api.openai.com/v1".into()),
             model: model.clone(),
             ..ProviderConfig::default()
-        },
+},
         model,
     ))
 }

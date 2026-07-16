@@ -97,6 +97,8 @@ pub struct ChatChunk {
     pub tool_call_deltas: Vec<ToolCallDeltaChunk>,
     /// 本轮 token 用量（部分上游在末包或独立包下发）。
     pub usage: Option<crate::streaming::Usage>,
+    /// Google Interactions：本轮 `interaction.id`（供下一轮 `previous_interaction_id`）。
+    pub interaction_id: Option<String>,
 }
 
 /// 生成的图片二进制与 MIME 类型。
@@ -127,6 +129,8 @@ pub struct ProviderConfig {
     pub reasoning_effort: String,
     /// Provider 扩展参数（对齐 Rig additional_params），合并进请求 JSON。
     pub additional_params: serde_json::Value,
+    /// Google Interactions：续写上一轮 interaction（工具多轮保留 thought/signature）。
+    pub previous_interaction_id: Option<String>,
 }
 
 impl Default for ProviderConfig {
@@ -141,6 +145,7 @@ impl Default for ProviderConfig {
             thinking_enabled: false,
             reasoning_effort: "high".to_string(),
             additional_params: serde_json::Value::Null,
+            previous_interaction_id: None,
         }
     }
 }

@@ -79,6 +79,7 @@ impl ProviderClient {
             thinking_enabled: false,
             reasoning_effort: "high".into(),
             additional_params: serde_json::Value::Null,
+            previous_interaction_id: None,
         };
         crate::extractor::ExtractorBuilder::new(self.provider_id.clone(), model, config)
     }

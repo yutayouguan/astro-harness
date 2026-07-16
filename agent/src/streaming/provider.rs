@@ -5,8 +5,9 @@ use std::sync::{Arc, Mutex as StdMutex};
 use async_trait::async_trait;
 use common::message::Message;
 use common::ChatTarget;
+use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::trait_::{AiProvider, ChatMessage as ProviderMessage, ProviderConfig};
+use providers::trait_::{AiProvider, ChatMessage as ProviderMessage, ChatStream, ProviderConfig};
 
 use crate::prompt::messages::to_provider_messages;
 
@@ -24,6 +25,8 @@ pub struct ProviderStreamer {
     pub base_config: ProviderConfig,
     /// 最近一次成功补全命中的目标元数据（供 usage 记录）。
     last_hit: StdMutex<Option<ActiveTargetMeta>>,
+    /// Google Interactions：上一轮 `interaction.id`，供工具多轮 `previous_interaction_id`。
+    previous_interaction_id: Arc<StdMutex<Option<String>>>,
 }
 
 impl ProviderStreamer {
@@ -37,6 +40,7 @@ impl ProviderStreamer {
             targets,
             base_config,
             last_hit: StdMutex::new(None),
+            previous_interaction_id: Arc::new(StdMutex::new(None)),
         }
     }
 
@@ -94,17 +98,27 @@ pub fn targets_and_registry_from_primary(
 #[async_trait]
 impl StreamingCompletion for ProviderStreamer {
     /// 经 [`try_stream_completion_with_fallback`] 再 [`map_provider_stream`] 归一化。
+    ///
+    /// Google Interactions：自动注入/更新 `previous_interaction_id`，使工具多轮
+    /// 保留服务端 thought/signature。
     async fn stream_completion(
         &self,
         messages: Vec<ProviderMessage>,
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
+        let mut config = self.base_config.clone();
+        config.previous_interaction_id = self
+            .previous_interaction_id
+            .lock()
+            .ok()
+            .and_then(|g| g.clone());
+
         let (stream, meta) = try_stream_completion_with_fallback(
             &self.targets,
             self.registry.as_ref(),
             messages,
             tools,
-            &self.base_config,
+            &config,
             |from, to, err| {
                 tracing::warn!(
                     from_backend = %from.backend_id,
@@ -117,10 +131,42 @@ impl StreamingCompletion for ProviderStreamer {
             },
         )
         .await?;
+
+        let is_google = meta.backend_id == "google" || meta.provider_id == "google";
+        if !is_google {
+            if let Ok(mut guard) = self.previous_interaction_id.lock() {
+                *guard = None;
+            }
+        }
+
+        let prev_slot = if is_google {
+            Some(Arc::clone(&self.previous_interaction_id))
+        } else {
+            None
+        };
+        let tracked: ChatStream = Box::pin(futures::stream::unfold(
+            (stream, prev_slot),
+            |(mut stream, prev_slot)| async move {
+                match stream.next().await {
+                    Some(item) => {
+                        if let (Some(ref slot), Ok(ref chunk)) = (&prev_slot, &item) {
+                            if let Some(ref id) = chunk.interaction_id {
+                                if let Ok(mut g) = slot.lock() {
+                                    *g = Some(id.clone());
+                                }
+                            }
+                        }
+                        Some((item, (stream, prev_slot)))
+                    }
+                    None => None,
+                }
+            },
+        ));
+
         if let Ok(mut guard) = self.last_hit.lock() {
             *guard = Some(meta);
         }
-        Ok(map_provider_stream(stream))
+        Ok(map_provider_stream(tracked))
     }
 }
 

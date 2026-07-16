@@ -156,7 +156,7 @@ async fn execute_tools_serial_inner(
                                         Some(base_url)
                                     },
                                     ..ProviderConfig::default()
-                                };
+};
                         crate::control::smart_approval::maybe_smart_downgrade_ask(
                                     cmd,
                                     decision.description,

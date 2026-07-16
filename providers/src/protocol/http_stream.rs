@@ -97,21 +97,11 @@ fn trim_slash(endpoint: &str) -> String {
 /// 规范化 OpenAI 兼容 API 基址（自动补 `/v1` 等后缀）。
 ///
 /// Gemini OpenAI 兼容基址以 `/openai` 结尾，不得再追加 `/v1`。
-/// 裸 `generativelanguage.googleapis.com`（或仅 `/v1beta`）须映射为
-/// `…/v1beta/openai`，否则会误拼成 `…/v1/chat/completions` 导致上游 404。
+/// 规范化 OpenAI 兼容 API 基址。
+///
+/// Google Gemini 聊天已迁 Interactions，勿再经此函数拼 `/v1beta/openai`。
 pub fn openai_compatible_base(endpoint: &str) -> String {
     let base = trim_slash(endpoint);
-    if base.contains("generativelanguage.googleapis.com") {
-        if base.contains("/v1beta/openai") || base.ends_with("/openai") {
-            return base;
-        }
-        let native = base
-            .trim_end_matches('/')
-            .trim_end_matches("/v1")
-            .trim_end_matches("/v1beta")
-            .trim_end_matches('/');
-        return format!("{native}/v1beta/openai");
-    }
     if base.ends_with("/v1")
         || base.ends_with("/v3")
         || base.ends_with("/v4")
@@ -365,7 +355,8 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
         finish_reason: finish,
         tool_call_deltas,
         usage,
-    })
+        interaction_id: None,
+})
 }
 
 /// 将 reqwest 字节流解析为 SSE `data:` 行，并用 `extract` 转为 [`ChatChunk`]。
@@ -954,18 +945,15 @@ mod tests {
     }
 
     #[test]
-    fn gemini_bare_host_normalized_to_openai_compat() {
+    fn gemini_bare_host_no_longer_remapped_to_openai_compat() {
+        // Google chat 已迁 Interactions；openai_compatible_base 不再特判 Gemini host
         assert_eq!(
             openai_compatible_base("https://generativelanguage.googleapis.com"),
-            "https://generativelanguage.googleapis.com/v1beta/openai"
+            "https://generativelanguage.googleapis.com/v1"
         );
         assert_eq!(
             openai_compatible_base("https://generativelanguage.googleapis.com/v1beta"),
-            "https://generativelanguage.googleapis.com/v1beta/openai"
-        );
-        assert_eq!(
-            openai_compatible_base("https://generativelanguage.googleapis.com/v1"),
-            "https://generativelanguage.googleapis.com/v1beta/openai"
+            "https://generativelanguage.googleapis.com/v1beta/v1"
         );
     }
 

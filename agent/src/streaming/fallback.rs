@@ -135,6 +135,7 @@ pub async fn try_stream_completion_with_fallback(
         let provider = registry
             .get(&target.backend_id)
             .ok_or_else(|| anyhow::anyhow!("未知 Provider: {}", target.backend_id))?;
+        let is_google = target.backend_id == "google" || target.provider_id == "google";
         let config = ProviderConfig {
             api_key: target.api_key.clone(),
             base_url: Some(target.base_url.clone()).filter(|s| !s.is_empty()),
@@ -144,6 +145,12 @@ pub async fn try_stream_completion_with_fallback(
             thinking_enabled: base_config.thinking_enabled,
             reasoning_effort: base_config.reasoning_effort.clone(),
             additional_params: base_config.additional_params.clone(),
+            // 仅 Google Interactions 续写；其它后端忽略该字段
+            previous_interaction_id: if is_google {
+                base_config.previous_interaction_id.clone()
+            } else {
+                None
+            },
         };
 
         let attempt = async {

@@ -164,7 +164,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         },
         model: model.clone(),
         ..ProviderConfig::default()
-    };
+};
 
     let mut reference_parts = Vec::with_capacity(refs.len());
     for r in &refs {

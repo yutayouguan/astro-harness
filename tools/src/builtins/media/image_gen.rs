@@ -224,7 +224,7 @@ async fn generate_one_google(
         },
         model: creds.model.clone(),
         ..ProviderConfig::default()
-    };
+};
 
     let reference_images = if let Some(refs) = &args.reference_images {
         refs.iter()
@@ -304,7 +304,7 @@ async fn generate_one_openai_compat(
         },
         model: creds.model.clone(),
         ..ProviderConfig::default()
-    };
+};
 
     let images = provider.generate_image(prompt, &config).await?;
     let img = images

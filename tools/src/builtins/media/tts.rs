@@ -129,7 +129,7 @@ async fn synthesize_google(
         },
         model: model.clone(),
         ..ProviderConfig::default()
-    };
+};
     let req = InteractionTtsRequest {
         model: model.clone(),
         input,
