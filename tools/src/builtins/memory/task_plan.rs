@@ -49,6 +49,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<TaskPlanArgs>(),
         check_fn: None,
         icon: "list-todo",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

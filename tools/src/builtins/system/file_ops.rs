@@ -58,6 +58,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<FileOpsArgs>(),
         check_fn: None,
         icon: "folder-kanban",
+            ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

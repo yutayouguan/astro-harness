@@ -33,6 +33,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,
         icon: "terminal",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

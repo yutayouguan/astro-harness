@@ -171,6 +171,8 @@ pub(crate) async fn park_confirm(
 }
 
 /// 将 HITL payload 以 Activity + RunFinished(hitl_waiting) 形式推给 UI，并阻塞等待 resume。
+///
+/// `outcome_type` 由 [`super::run_state::RunState`] 派生，与 Agno requirements 语义对齐。
 pub(crate) async fn park_astro_hitl(
     gate: &Arc<HitlGate>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -220,11 +222,16 @@ async fn park_astro_hitl_resolution(
     };
     let interrupts_json =
         serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
+    let mut hitl_state = super::run_state::RunState::new();
+    hitl_state.await_hitl(super::run_state::RunRequirements::for_hitl_reason(
+        &hitl.reason,
+        interrupt.id.clone(),
+    ));
     if !emit(
         tx,
         MultiTurnStreamItem::RunFinished {
             run_id: run_id.to_string(),
-            outcome_type: "hitl_waiting".into(),
+            outcome_type: hitl_state.outcome_type().into(),
             interrupts_json,
         },
     )

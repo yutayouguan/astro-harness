@@ -31,6 +31,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<MultiAgentArgs>(),
         check_fn: None,
         icon: "users",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

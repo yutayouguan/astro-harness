@@ -50,6 +50,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<OrchestrationRunArgs>(),
         check_fn: None,
         icon: "git-branch",
+            ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "orchestration_status".to_string(),
@@ -59,6 +60,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<OrchestrationStatusArgs>(),
         check_fn: None,
         icon: "list-checks",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

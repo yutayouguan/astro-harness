@@ -11,11 +11,13 @@ use providers::trait_::{
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
 /// 首条固定为 `system` 角色；tool 消息会从历史中反向查找对应 `tool_call_id` 以填充 `name`。
-/// 缺少 `tool_call_id` 的 tool 消息会被跳过（上游 OpenAI 兼容接口会因此 400）。
+/// 发送前会 [`sanitize_tool_pairs`](super::sanitize::sanitize_tool_pairs)：去掉悬挂
+/// `tool_calls` 与孤儿 tool 消息，避免上游 400。
 pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<ProviderMessage> {
+    let session = super::sanitize::sanitized_tool_pairs(session);
     let mut messages = vec![ProviderMessage::text("system", system_prompt)];
 
-    for message in session {
+    for message in &session {
         if message.role == Role::Tool {
             let ok = message
                 .tool_call_id
@@ -51,7 +53,7 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
                     m.tool_calls
                         .as_ref()?
                         .iter()
-                        .find(|c| &c.id == id)
+                        .find(|c| c.id == *id)
                         .map(|c| c.name.clone())
                 })
             })
@@ -151,6 +153,33 @@ mod tests {
         let tools: Vec<_> = msgs.iter().filter(|m| m.role == "tool").collect();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].tool_call_id.as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn dangling_assistant_tool_calls_are_stripped() {
+        let session = vec![
+            Message::assistant_with_tools(
+                "partial",
+                vec![
+                    ToolCall {
+                        id: "c1".into(),
+                        name: "a".into(),
+                        arguments: json!({}),
+                    },
+                    ToolCall {
+                        id: "c2".into(),
+                        name: "b".into(),
+                        arguments: json!({}),
+                    },
+                ],
+            ),
+            Message::tool_with_id("c1", "ok"),
+        ];
+        let msgs = to_provider_messages("sys", &session);
+        let assistant = msgs.iter().find(|m| m.role == "assistant").unwrap();
+        let calls = assistant.tool_calls.as_ref().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, "c1");
     }
 
     #[test]

@@ -61,6 +61,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<CreateAgentArgs>(),
         check_fn: None,
         icon: "bot",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

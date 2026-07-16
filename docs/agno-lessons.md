@@ -49,6 +49,13 @@
 2. **工具元数据扩展**：`confirmation` / `stop_after` 与现有审批流对齐。
 3. **Session 消息重建规则**：处理悬挂 tool 消息（有 tool_call 无对应结果）的重建/清理规则。
 
+### 已落地（本轮）
+- `ToolEntry.needs_confirmation` / `stop_after_tool_call`：对齐 Agno Function 元数据；HITL 工具默认 `needs_confirmation`
+- `ToolRegistry::any_needs_confirmation` / `any_stop_after`：`multi_turn` 串行门控与「执行后结束 run」
+- `agent::streaming::run_state::{RunPhase, RunRequirements, RunState}`：派生 `RunFinished.outcome_type`（含 HITL）
+- `prompt::sanitize::sanitize_tool_pairs`：发送 Provider / hydrate session 前清理悬挂 tool_calls 与孤儿 tool 消息
+- **未做**：用注册表标志完全替换 `is_interactive_tool` 名称硬编码；工具级 hooks 仍走现有 hooks crate
+
 ---
 
 ## 三、hooks / tracing / session / skills

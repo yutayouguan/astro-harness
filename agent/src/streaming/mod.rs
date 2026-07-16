@@ -20,6 +20,8 @@ pub mod fallback;
 pub(crate) mod hitl_bridge;
 /// 多轮工具循环编排。
 mod multi_turn;
+/// 显式 Run 阶段 / requirements。
+pub mod run_state;
 /// `ProviderStreamer`：Streaming trait 实现 + fallback 接入。
 mod provider;
 /// 迭代预算耗尽后的强制总结轮。
@@ -34,6 +36,7 @@ mod types;
 pub use types::{
     AssistantContentStream, MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent,
 };
+pub use run_state::{RunPhase, RunRequirements, RunState};
 pub use traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
 pub use provider::{
     chat_target_from_provider_config, targets_and_registry_from_primary, ProviderStreamer,

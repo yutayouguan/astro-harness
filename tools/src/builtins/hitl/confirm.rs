@@ -31,6 +31,8 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<ConfirmArgs>(),
         check_fn: None,
         icon: "shield-check",
+        needs_confirmation: true,
+        ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

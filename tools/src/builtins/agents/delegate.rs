@@ -81,6 +81,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",
+            ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "delegate_async".to_string(),
@@ -89,6 +90,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",
+            ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "delegate_status".to_string(),
@@ -97,6 +99,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<DelegateTaskIdArgs>(),
         check_fn: None,
         icon: "list-checks",
+            ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "delegate_collect".to_string(),
@@ -105,6 +108,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<DelegateCollectArgs>(),
         check_fn: None,
         icon: "hourglass",
+            ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "delegate_cancel".to_string(),
@@ -113,6 +117,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<DelegateTaskIdArgs>(),
         check_fn: None,
         icon: "x",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

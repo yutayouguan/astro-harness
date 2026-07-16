@@ -73,6 +73,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,
         icon: "clapperboard",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

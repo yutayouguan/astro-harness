@@ -43,6 +43,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<VisionArgs>(),
         check_fn: None,
         icon: "eye",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

@@ -556,6 +556,7 @@ impl AgentLoop {
                 schema: spec.schema,
                 check_fn: None,
                 icon: "plug",
+                ..ToolEntry::lifecycle_defaults()
             });
         }
     }

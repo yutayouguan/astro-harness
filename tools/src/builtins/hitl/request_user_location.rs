@@ -32,6 +32,8 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<RequestUserLocationArgs>(),
         check_fn: None,
         icon: "map-pin",
+        needs_confirmation: true,
+        ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

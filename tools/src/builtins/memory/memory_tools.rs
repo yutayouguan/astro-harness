@@ -74,6 +74,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<MemoryArgs>(),
         check_fn: None,
         icon: "brain",
+            ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 
     registry.register(crate::registry::ToolEntry {
@@ -84,6 +85,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<SessionSearchArgs>(),
         check_fn: None,
         icon: "file-search",
+            ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

@@ -53,6 +53,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<AudioUnderstandArgs>(),
         check_fn: None,
         icon: "ear",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

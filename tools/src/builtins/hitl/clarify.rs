@@ -32,6 +32,8 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<ClarifyArgs>(),
         check_fn: None,
         icon: "circle-help",
+        needs_confirmation: true,
+        ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

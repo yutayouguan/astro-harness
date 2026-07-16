@@ -30,6 +30,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<PresentMetricsArgs>(),
         check_fn: None,
         icon: "chart-bar",
+            ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

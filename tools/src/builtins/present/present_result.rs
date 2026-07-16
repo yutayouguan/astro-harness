@@ -25,6 +25,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<PresentResultArgs>(),
         check_fn: None,
         icon: "check-circle",
+            ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

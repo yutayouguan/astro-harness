@@ -43,6 +43,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<RoboticsArgs>(),
         check_fn: None,
         icon: "bot",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

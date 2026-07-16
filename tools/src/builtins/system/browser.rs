@@ -31,6 +31,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<BrowserArgs>(),
         check_fn: None,
         icon: "globe-2",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

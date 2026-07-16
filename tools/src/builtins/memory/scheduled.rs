@@ -43,6 +43,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<CronAddArgs>(),
         check_fn: None,
         icon: "calendar-check",
+            ..ToolEntry::lifecycle_defaults()
     });
 
     registry.register(ToolEntry {
@@ -52,6 +53,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<EmptyArgs>(),
         check_fn: None,
         icon: "clipboard-list",
+            ..ToolEntry::lifecycle_defaults()
     });
 
     registry.register(ToolEntry {
@@ -61,6 +63,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<CronIdArgs>(),
         check_fn: None,
         icon: "trash-2",
+            ..ToolEntry::lifecycle_defaults()
     });
 
     registry.register(ToolEntry {
@@ -70,6 +73,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<CronIdArgs>(),
         check_fn: None,
         icon: "check-circle-2",
+            ..ToolEntry::lifecycle_defaults()
     });
 
     registry.register(ToolEntry {
@@ -79,6 +83,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<CronIdArgs>(),
         check_fn: None,
         icon: "pause",
+            ..ToolEntry::lifecycle_defaults()
     });
 
     // 面板 id 别名
@@ -89,6 +94,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<CronAddArgs>(),
         check_fn: None,
         icon: "calendar-check",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

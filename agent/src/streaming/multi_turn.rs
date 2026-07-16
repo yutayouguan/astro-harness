@@ -21,6 +21,7 @@ use tokio::sync::{mpsc, Mutex};
 use crate::control::hitl::{is_exclusive_tool, is_interactive_tool, HitlGate};
 use crate::runtime::AgentLoop;
 use crate::runtime::usage::apply_llm_usage_dual_write;
+use super::run_state::{RunPhase, RunState};
 
 use super::hitl_bridge::{
     parse_astro_hitl, register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx,
@@ -119,11 +120,13 @@ async fn finish_success(
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
 ) {
+    let mut state = RunState::new();
+    state.set_phase(RunPhase::Finished);
     let _ = emit(
         tx,
         MultiTurnStreamItem::RunFinished {
             run_id: run_id.to_string(),
-            outcome_type: "success".into(),
+            outcome_type: state.outcome_type().into(),
             interrupts_json: "[]".into(),
         },
     )
@@ -271,6 +274,7 @@ async fn run_multi_turn_stream_inner(
         }
     };
     let budget = crate::runtime::budget::IterationBudget::new(max_rounds);
+    let mut run_state = RunState::new();
     // 工具循环结束后是否需要无工具强制总结（预算耗尽且尚无自然语言终答）
     let need_summary;
     // 原始迭代计数（不受 refund 影响），防止 code_exec-only 反复 refund 导致净预算永不耗尽。
@@ -694,11 +698,17 @@ async fn run_multi_turn_stream_inner(
             break;
         }
 
-        let force_serial = calls.iter().any(|c| {
-            is_interactive_tool(&c.name)
-                || is_exclusive_tool(&c.name)
-                || terminal_needs_approval(&c.name, &c.arguments)
-        });
+        run_state.set_phase(RunPhase::ExecutingTools);
+        let force_serial = {
+            let agent = session.lock().await;
+            let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+            agent.tool_registry().any_needs_confirmation(&names)
+                || calls.iter().any(|c| {
+                    is_interactive_tool(&c.name)
+                        || is_exclusive_tool(&c.name)
+                        || terminal_needs_approval(&c.name, &c.arguments)
+                })
+        };
 
         let outcomes = if force_serial || hitl_gate.is_none() {
             execute_tools_serial(
@@ -851,10 +861,22 @@ async fn run_multi_turn_stream_inner(
             budget.refund();
         }
 
+        // Agno `stop_after_tool_call`：本轮含标记工具则不再请求下一轮 LLM
+        let stop_after = {
+            let agent = session.lock().await;
+            agent.tool_registry().any_stop_after(&names)
+        };
+        if stop_after {
+            tracing::info!(?names, "stop_after_tool_call: ending run without next LLM round");
+            need_summary = false;
+            break;
+        }
+
         if budget.remaining() == 0 {
             need_summary = true;
             break;
         }
+        run_state.set_phase(RunPhase::StreamingLlm);
     }
 
     if need_summary {

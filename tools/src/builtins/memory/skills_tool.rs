@@ -29,6 +29,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<SkillsArgs>(),
         check_fn: None,
         icon: "puzzle",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

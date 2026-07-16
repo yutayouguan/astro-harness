@@ -30,6 +30,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,
         icon: "code-2",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 

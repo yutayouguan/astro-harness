@@ -24,6 +24,36 @@ pub struct ToolEntry {
     pub check_fn: Option<Box<dyn Fn() -> bool + Send + Sync>>,
     /// Lucide 图标 id（kebab-case，如 `"calendar-check"`），供 UI 目录展示。
     pub icon: &'static str,
+    /// 对齐 Agno `requires_confirmation`：执行路径应串行并允许 HITL park。
+    pub needs_confirmation: bool,
+    /// 对齐 Agno `stop_after_tool_call`：本工具执行完后结束 run，不再发起下一轮 LLM。
+    pub stop_after_tool_call: bool,
+}
+
+impl ToolEntry {
+    /// 仅提供生命周期字段默认值，供 `ToolEntry { …, ..ToolEntry::lifecycle_defaults() }` 使用。
+    pub fn lifecycle_defaults() -> Self {
+        Self {
+            name: String::new(),
+            toolset: String::new(),
+            description: String::new(),
+            schema: serde_json::json!({ "type": "object", "properties": {} }),
+            check_fn: None,
+            icon: "wrench",
+            needs_confirmation: false,
+            stop_after_tool_call: false,
+        }
+    }
+
+    pub fn with_confirmation(mut self) -> Self {
+        self.needs_confirmation = true;
+        self
+    }
+
+    pub fn stop_after(mut self) -> Self {
+        self.stop_after_tool_call = true;
+        self
+    }
 }
 
 /// 工具注册表：以工具名为键的全局索引。
@@ -98,6 +128,25 @@ impl ToolRegistry {
     /// 检查是否已注册指定名称的工具。
     pub fn has_tool(&self, name: &str) -> bool {
         self.tools.contains_key(name)
+    }
+
+    /// 按名称查找工具元数据。
+    pub fn get(&self, name: &str) -> Option<&ToolEntry> {
+        self.tools.get(name)
+    }
+
+    /// 任一工具标记 `needs_confirmation`（未注册时回落 false）。
+    pub fn any_needs_confirmation(&self, names: &[&str]) -> bool {
+        names
+            .iter()
+            .any(|n| self.get(n).map(|e| e.needs_confirmation).unwrap_or(false))
+    }
+
+    /// 任一工具标记 `stop_after_tool_call`。
+    pub fn any_stop_after(&self, names: &[&str]) -> bool {
+        names
+            .iter()
+            .any(|n| self.get(n).map(|e| e.stop_after_tool_call).unwrap_or(false))
     }
 
     /// 返回所有已注册工具条目的引用（不过滤启用状态与 `check_fn`）。
@@ -196,6 +245,7 @@ mod tests {
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
             icon: "brain",
+            ..ToolEntry::lifecycle_defaults()
         });
         reg.register(ToolEntry {
             name: "cron_list".into(),
@@ -204,6 +254,7 @@ mod tests {
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
             icon: "clock",
+            ..ToolEntry::lifecycle_defaults()
         });
         let mut enabled = HashMap::new();
         enabled.insert("memory".into(), false);
@@ -240,6 +291,7 @@ mod tests {
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
             icon: "brain",
+            ..ToolEntry::lifecycle_defaults()
         });
         reg.register(ToolEntry {
             name: "cron_list".into(),
@@ -248,6 +300,7 @@ mod tests {
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
             icon: "clock",
+            ..ToolEntry::lifecycle_defaults()
         });
 
         // 全局仍启用 memory

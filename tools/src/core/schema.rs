@@ -369,6 +369,7 @@ macro_rules! register_tool_schemars {
             schema: $crate::schema::schema_for_args::<$Args>(),
             check_fn: None,
             icon: $icon,
+            ..$crate::registry::ToolEntry::lifecycle_defaults()
         });
     }};
 }

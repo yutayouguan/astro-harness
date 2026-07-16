@@ -15,6 +15,7 @@ pub fn hydrate_session_messages(
             out.push(msg);
         }
     }
+    crate::prompt::sanitize::sanitize_tool_pairs(&mut out);
     Ok(out)
 }
 

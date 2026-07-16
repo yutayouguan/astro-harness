@@ -40,6 +40,7 @@ Examples:\n\
         schema: schema_for_args::<PresentUiArgs>(),
         check_fn: None,
         icon: "layout-panel-top",
+            ..crate::registry::ToolEntry::lifecycle_defaults()
     });
 }
 

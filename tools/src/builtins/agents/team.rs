@@ -61,6 +61,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<TeamIdArgs>(),
         check_fn: None,
         icon: "users",
+            ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "team_create".to_string(),
@@ -70,6 +71,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<TeamCreateArgs>(),
         check_fn: None,
         icon: "users-plus",
+            ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "team_run".to_string(),
@@ -79,6 +81,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<TeamRunArgs>(),
         check_fn: None,
         icon: "network",
+            ..ToolEntry::lifecycle_defaults()
     });
 }
 
