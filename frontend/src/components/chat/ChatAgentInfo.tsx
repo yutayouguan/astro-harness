@@ -5,7 +5,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import { formatDiagnosticContext } from "../../lib/chat/diagnosticContext";
 import type { AgentInfo } from "../../types/agent";
 import type { InstalledSkill } from "../../types";
-import AgentAvatar from "../AgentAvatar";
+import AgentAvatar from "../agents/AgentAvatar";
 
 /** 当前 Agent 信息条入参 */
 type Props = {

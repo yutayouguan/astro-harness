@@ -7,7 +7,7 @@ import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import type { RecentSessionDto } from "../../types";
 import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
-import AgentPicker from "../AgentPicker";
+import AgentPicker from "../agents/AgentPicker";
 import ExpandableSearch from "../ui/ExpandableSearch";
 
 /** 近期会话列表入参 */

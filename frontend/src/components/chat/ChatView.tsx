@@ -75,8 +75,8 @@ import type {
   MessageTokenUsage,
   PendingInterrupt,
 } from "../../types";
-import { AgentCreateGuide } from "../AgentCreateGuide";
-import AgentAvatar from "../AgentAvatar";
+import { AgentCreateGuide } from "../agents/AgentCreateGuide";
+import AgentAvatar from "../agents/AgentAvatar";
 import ChatMessageNav from "./ChatMessageNav";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWelcome } from "./ChatWelcome";
