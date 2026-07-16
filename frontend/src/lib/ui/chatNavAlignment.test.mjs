@@ -16,3 +16,16 @@ test("chat message anchors share the bottom button alignment axis", async () => 
     "the track must not inset message anchors from the bottom button axis",
   );
 });
+
+test("chat anchor labels use a translucent blurred surface", async () => {
+  const css = await readFile(
+    new URL("../../styles/features/chat/navigation.css", import.meta.url),
+    "utf8",
+  );
+  const labelRule = css.match(/\.chat-msg-nav-label\s*\{(?<body>[\s\S]*?)\}/);
+
+  assert.ok(labelRule?.groups?.body, "missing chat message navigation label rule");
+  assert.match(labelRule.groups.body, /background:[\s\S]*var\(--nav-label-bg\)/);
+  assert.match(labelRule.groups.body, /backdrop-filter:\s*blur\(/);
+  assert.match(labelRule.groups.body, /-webkit-backdrop-filter:\s*blur\(/);
+});
