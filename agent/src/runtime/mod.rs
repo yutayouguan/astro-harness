@@ -16,8 +16,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use common::message::Message;
-use ::session::NewMessage;
-use memory::{format_recalled_context, MemoryManager};
+use memory::MemoryManager;
+use ::session::{
+    build_conversation_context, format_recalled_context, NewMessage, SessionStore,
+};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use providers::registry::ProviderRegistry;
 use serde_json::Value;
@@ -98,6 +100,7 @@ pub struct AgentLoop {
     /// 内存中的会话消息镜像，与磁盘记忆同步追加。
     pub session_messages: Vec<Message>,
     memory: MemoryManager,
+    sessions: SessionStore,
     tool_registry: ToolRegistry,
     mcp_hub: McpHub,
     /// 最近一次 `run_turn` 召回并格式化后的记忆上下文。
@@ -160,7 +163,8 @@ impl AgentLoop {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
-        let session_messages = hydrate_session_messages(&memory, &session_id)?;
+        let sessions = SessionStore::open_sessions_dir(&config.memory_dir.join("sessions"))?;
+        let session_messages = hydrate_session_messages(&sessions, &session_id)?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -221,6 +225,7 @@ impl AgentLoop {
             tool_rounds: 0,
             session_messages,
             memory,
+            sessions,
             tool_registry,
             mcp_hub,
             last_recalled_context: String::new(),
@@ -659,14 +664,13 @@ impl AgentLoop {
         let chat_model = self.chat_model.clone();
         let chat_targets = self.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
-        let sessions = ::session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
-            .map_err(|e| anyhow::anyhow!("open sessions: {e}"))?;
+        let sessions = &self.sessions;
         let delegate_runner = Some(self.delegate_runner());
         let async_spawner = Some(self.async_spawner());
         let orchestration_spawner = Some(self.orchestration_spawner());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
-            sessions: &sessions,
+            sessions,
             memory_dir,
             workspace_dir,
             project_root: self.project_root.clone(),
@@ -801,7 +805,7 @@ impl AgentLoop {
 
     /// 确保会话行存在（不存在则按 `source` 创建）。
     pub fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
-        self.memory.ensure_session(&self.session_id, source)
+        self.sessions.ensure_session(&self.session_id, source)
     }
 
     /// 将 assistant 纯文本回复写入记忆与会话镜像。
@@ -812,7 +816,7 @@ impl AgentLoop {
     /// 将 assistant 回复（可含 tool_calls / reasoning / reasoning_details）写入记忆与会话镜像。
     ///
     /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息；
-    /// 落盘通过 [`MemoryManager::record_message_ex`] 写入富字段。
+    /// 落盘通过 `SessionStore::append_message` 写入富字段。
     pub fn record_assistant_message_with_tools(
         &mut self,
         content: &str,
@@ -825,17 +829,14 @@ impl AgentLoop {
             _ => None,
         };
         let reasoning = reasoning.filter(|r| !r.is_empty());
-        self.memory.ensure_session(&self.session_id, "tauri")?;
-        self.memory.record_message_ex(
-            &self.session_id,
-            NewMessage {
-                content: Some(content),
-                tool_calls: tool_calls_json,
-                reasoning,
-                reasoning_details,
-                ..NewMessage::empty(&self.session_id, "assistant")
-            },
-        )?;
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(content),
+            tool_calls: tool_calls_json,
+            reasoning,
+            reasoning_details,
+            ..NewMessage::empty(&self.session_id, "assistant")
+        })?;
         let msg = match tool_calls {
             Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
             _ => Message::assistant(content),
@@ -856,16 +857,13 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
-        self.memory.ensure_session(&self.session_id, "tauri")?;
-        self.memory.record_message_ex(
-            &self.session_id,
-            NewMessage {
-                content: Some(content),
-                tool_call_id,
-                tool_name,
-                ..NewMessage::empty(&self.session_id, "tool")
-            },
-        )?;
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(content),
+            tool_call_id,
+            tool_name,
+            ..NewMessage::empty(&self.session_id, "tool")
+        })?;
         let msg = match tool_call_id {
             Some(id) if !id.is_empty() => Message::tool_with_id(id, content),
             _ => Message::tool(content),
@@ -905,16 +903,19 @@ impl AgentLoop {
         self.begin_user_turn();
         self.reload_tools_and_mcp().await;
 
-        self.memory.ensure_session(&self.session_id, "tauri")?;
-        self.memory
-            .record_message(&self.session_id, "user", user_message)?;
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.sessions.append_message(NewMessage {
+            content: Some(user_message),
+            ..NewMessage::empty(&self.session_id, "user")
+        })?;
 
         let fts_keywords = if self.current_turn >= self.config.recent_turns {
             Some(user_message)
         } else {
             None
         };
-        let recalled = self.memory.build_session_context(
+        let recalled = build_conversation_context(
+            &self.sessions,
             &self.session_id,
             self.config.recent_turns,
             fts_keywords,

@@ -1,8 +1,7 @@
-//! 记忆管理器：聚合 Markdown 记忆与会话存储，供 Agent Prompt 与记忆工具调用。
+//! 记忆管理器：聚合 Markdown 记忆，供 Agent Prompt 与 `memory` 工具调用。
 //!
-//! [`MemoryManager`] 绑定单个 Agent 工作区，统一管理 `MEMORY.md`、`USER.md`、每日记忆、
-//! 以及单库 [`SessionStore`]。对外提供 Prompt 内容读取、消息记录、上下文构建及
-//! `memory` / `session_search` 工具分发。
+//! [`MemoryManager`] 绑定单个 Agent 工作区，统一管理 `MEMORY.md`、`USER.md`、每日记忆。
+//! 会话读写与 `session_search` 由 `session` crate 提供。
 
 use std::path::PathBuf;
 
@@ -10,8 +9,6 @@ use home::{
     active_agent_id, daily_memory_path, ensure_agent_space, ensure_daily_memory, normalize_agent_id,
     today_date_string, DEFAULT_AGENT_ID,
 };
-use session::build_conversation_context;
-use session::{NewMessage, RecentSession, ScrolledMessage, SearchHit, SessionStore};
 use crate::config::{load_memory_config, MemoryConfig};
 use crate::MemoryStore;
 use crate::workspace::ensure_workspace;
@@ -27,8 +24,7 @@ pub enum MemoryTarget {
 
 /// 单 Agent 记忆子系统的聚合入口。
 ///
-/// 构造时会确保工作区与 Agent 空间存在；`session_store` 位于
-/// `{base_dir}/sessions/state.db`，为所有 Agent 共享路径（按 `session_id` 隔离）。
+/// 构造时会确保工作区与 Agent 空间存在；会话库由 [`ensure_workspace`] 初始化。
 pub struct MemoryManager {
     /// Astro 数据根目录（通常为 `~/.astro`）。
     pub base_dir: PathBuf,
@@ -40,8 +36,6 @@ pub struct MemoryManager {
     pub memory: MemoryStore,
     /// 用户档案存储（live + snapshot）。
     pub user: MemoryStore,
-    /// 单库会话存储（`state.db`，含 sessions / messages / FTS）。
-    pub session_store: SessionStore,
     /// 从 `{base_dir}/config.yaml` 加载的记忆配置。
     pub config: MemoryConfig,
 }
@@ -58,7 +52,7 @@ impl MemoryManager {
 
     /// 为指定 `agent_id` 构造管理器；空白 id 回退 [`DEFAULT_AGENT_ID`]。
     ///
-    /// 会创建 Agent 工作区（若不存在）并打开/迁移会话库。
+    /// 会创建 Agent 工作区（若不存在）；会话库由 [`ensure_workspace`] 初始化。
     pub fn for_agent(base_dir: PathBuf, agent_id: &str) -> anyhow::Result<Self> {
         ensure_workspace(&base_dir)?;
         let id = if agent_id.trim().is_empty() {
@@ -67,7 +61,6 @@ impl MemoryManager {
             normalize_agent_id(agent_id)
         };
         let workspace = ensure_agent_space(&base_dir, &id, None)?;
-        let sessions_dir = base_dir.join("sessions");
         let config = load_memory_config(&base_dir);
         let memory = MemoryStore::open(workspace.join("MEMORY.md"), config.memory_char_limit)?;
         let user = MemoryStore::open(workspace.join("USER.md"), config.user_char_limit)?;
@@ -77,7 +70,6 @@ impl MemoryManager {
             workspace_dir: workspace,
             memory,
             user,
-            session_store: SessionStore::open_sessions_dir(&sessions_dir)?,
             config,
         })
     }
@@ -164,58 +156,6 @@ impl MemoryManager {
     /// 从磁盘重读记忆配置（开关变更后、不换 snapshot 时可用）。
     pub fn reload_memory_config(&mut self) {
         self.config = load_memory_config(&self.base_dir);
-    }
-
-    /// 确保会话行存在（不存在则按 `source` 创建）。
-    pub fn ensure_session(&self, session_id: &str, source: &str) -> anyhow::Result<()> {
-        self.session_store.ensure_session(session_id, source)
-    }
-
-    /// 向消息库插入一条会话消息，返回自增 `id`。
-    ///
-    /// 薄封装：自动 `ensure_session(..., "tauri")` 后委托 [`SessionStore::append_message`]。
-    pub fn record_message(
-        &self,
-        session_id: &str,
-        role: &str,
-        content: &str,
-    ) -> anyhow::Result<i64> {
-        self.ensure_session(session_id, "tauri")?;
-        self.session_store.append_message(NewMessage {
-            content: Some(content),
-            ..NewMessage::empty(session_id, role)
-        })
-    }
-
-    /// 写入富消息行（含 tool / reasoning 等字段）；调用方需先 [`ensure_session`]。
-    pub fn record_message_ex(
-        &self,
-        _session_id: &str,
-        msg: NewMessage<'_>,
-    ) -> anyhow::Result<i64> {
-        self.session_store.append_message(msg)
-    }
-
-    /// 构建会话上下文：最近 `recent_turns` 条 + 可选 FTS 关键词召回窗口。
-    ///
-    /// 委托 [`build_conversation_context`]；`fts_keywords` 为 `None` 时仅取最近消息。
-    pub fn build_session_context(
-        &self,
-        session_id: &str,
-        recent_turns: usize,
-        fts_keywords: Option<&str>,
-    ) -> anyhow::Result<Vec<ScrolledMessage>> {
-        build_conversation_context(
-            &self.session_store,
-            session_id,
-            recent_turns,
-            fts_keywords,
-        )
-    }
-
-    /// 按 `started_at` 降序列出近期会话（供侧栏等后续任务使用）。
-    pub fn list_recent_sessions(&self, limit: usize) -> anyhow::Result<Vec<RecentSession>> {
-        self.session_store.list_recent_sessions(limit)
     }
 
     /// 统一处理 `memory` 工具的 action / target。
@@ -379,17 +319,6 @@ impl MemoryManager {
             }
         }
     }
-
-    /// FTS 检索历史消息，格式化为 Markdown 列表；无结果时返回提示文案。
-    ///
-    /// 最多展示 `limit` 条（钳制到 1..=10）；正文取 snippet（或邻接 context）。
-    pub fn handle_session_search(&self, query: &str, limit: usize) -> anyhow::Result<String> {
-        let limit = limit.clamp(1, 10);
-        let hits = self
-            .session_store
-            .search_messages(query, None, None, limit as i64)?;
-        Ok(format_session_search_hits(&hits))
-    }
 }
 
 const SNAPSHOT_NOTE: &str = "已写盘（live）；当前会话 prompt 快照未刷新";
@@ -427,55 +356,6 @@ fn truncate_chars(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
 
-/// 将 [`SearchHit`] 列表格式化为「相关历史消息」Markdown。
-fn format_session_search_hits(hits: &[SearchHit]) -> String {
-    if hits.is_empty() {
-        return "未找到相关历史消息".to_string();
-    }
-
-    let body = hits
-        .iter()
-        .map(|h| {
-            let text = if h.snippet.trim().is_empty() {
-                h.context.as_str()
-            } else {
-                h.snippet.as_str()
-            };
-            let text = if text.len() > 500 {
-                let mut end = 500;
-                while end > 0 && !text.is_char_boundary(end) {
-                    end -= 1;
-                }
-                format!("{}…", &text[..end])
-            } else {
-                text.to_string()
-            };
-            format!("- [{}] {}", h.session_id, text)
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    format!("## 相关历史消息\n{body}")
-}
-
-/// 将召回消息列表格式化为 `[id] role: content [anchor]` 多行文本。
-///
-/// `is_anchor` 为 true 时在行尾附加 ` [anchor]` 标记，供 LLM 识别 FTS 锚点。
-pub fn format_recalled_context(messages: &[ScrolledMessage]) -> String {
-    if messages.is_empty() {
-        return String::new();
-    }
-
-    messages
-        .iter()
-        .map(|m| {
-            let marker = if m.is_anchor { " [anchor]" } else { "" };
-            format!("[{}] {}: {}{}", m.id, m.role, m.content, marker)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// 将工具参数 `target` 字符串解析为 [`MemoryTarget`]。
 ///
 /// - `"user"` → [`MemoryTarget::User`]
@@ -495,7 +375,7 @@ fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
 
 /// 记忆相关 Agent 工具的统一分发入口。
 ///
-/// 支持 `memory`、`session_search`；旧名 `memory_add` / `memory_replace` / `memory_remove`
+/// 支持 `memory`；旧名 `memory_add` / `memory_replace` / `memory_remove`
 /// 返回迁移错误。参数从 `args` JSON 提取，`target` 经 [`parse_memory_target`] 解析。
 pub fn dispatch_memory_tool(
     memory: &mut MemoryManager,
@@ -511,13 +391,6 @@ pub fn dispatch_memory_tool(
             let content = args["content"].as_str();
             let old_text = args["old_text"].as_str();
             memory.handle_memory_op(action, target, content, old_text)
-        }
-        "session_search" => {
-            let query = args["query"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("缺少 query 参数"))?;
-            let limit = args["limit"].as_u64().unwrap_or(5).clamp(1, 10) as usize;
-            memory.handle_session_search(query, limit)
         }
         "memory_add" | "memory_replace" | "memory_remove" => {
             anyhow::bail!("工具已迁移为 memory(action,target)；请使用 action=add|replace|remove")
@@ -617,7 +490,7 @@ memory:
     }
 
     #[test]
-    fn dispatch_memory_add_replace_remove_and_session_search() {
+    fn dispatch_memory_add_replace_remove() {
         let dir = tempfile::tempdir().unwrap();
         let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
 
@@ -661,14 +534,6 @@ memory:
         .unwrap();
         assert!(removed.contains("已删除") || removed.contains("已写盘"));
         assert!(!mgr.memory.live_entries().iter().any(|e| e.contains("浅色主题")));
-
-        let miss = dispatch_memory_tool(
-            &mut mgr,
-            "session_search",
-            &serde_json::json!({ "query": "no-such-term-xyz", "limit": 3 }),
-        )
-        .unwrap();
-        assert!(miss.contains("未找到") || miss.contains("相关历史消息"));
     }
 
     #[test]

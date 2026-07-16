@@ -11,6 +11,12 @@ use crate::providers_commands::{
     resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
 };
 
+fn open_sessions() -> Result<session::SessionStore, String> {
+    let root = home::default_memory_dir();
+    memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
+    session::SessionStore::open_sessions_dir(&root.join("sessions")).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ContextUsageSegmentDto {
     pub id: String,
@@ -559,9 +565,8 @@ pub async fn start_chat(
     // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
     {
         bootstrap_workspace()?;
-        let mgr = memory::MemoryManager::new(home::default_memory_dir())
-            .map_err(|e| e.to_string())?;
-        if let Ok(Some(meta)) = mgr.session_store.get_session(&sid) {
+        let store = open_sessions()?;
+        if let Ok(Some(meta)) = store.get_session(&sid) {
             if meta.ended_at.is_some() {
                 let reason = meta
                     .end_reason
@@ -578,11 +583,11 @@ pub async fn start_chat(
 
     if let Some(keep) = keep_chat_bubbles {
         bootstrap_workspace()?;
-        let mgr = memory::MemoryManager::new(home::default_memory_dir())
+        let store = open_sessions()?;
+        store
+            .ensure_session(&sid, "tauri")
             .map_err(|e| e.to_string())?;
-        mgr.ensure_session(&sid, "tauri")
-            .map_err(|e| e.to_string())?;
-        mgr.session_store
+        store
             .truncate_session_to_bubbles(&sid, keep.max(0) as usize)
             .map_err(|e| e.to_string())?;
     }
@@ -1133,15 +1138,12 @@ pub async fn get_chat_history(
     session_id: Option<String>,
     limit: Option<i32>,
 ) -> Result<ChatHistoryDto, String> {
-    let mgr = memory::MemoryManager::new(home::default_memory_dir())
-        .map_err(|e| e.to_string())?;
+    let store = open_sessions()?;
     let limit = limit.unwrap_or(200).clamp(1, 500) as usize;
 
     let sid = match session_id.filter(|s| !s.is_empty()) {
         Some(s) => s,
-        None => match mgr
-            .session_store
-            .latest_session_id()
+        None => match store.latest_session_id()
             .map_err(|e| e.to_string())?
         {
             Some(s) => s,
@@ -1156,15 +1158,11 @@ pub async fn get_chat_history(
         },
     };
 
-    let meta = mgr
-        .session_store
-        .get_session(&sid)
-        .map_err(|e| e.to_string())?;
+    let meta = store.get_session(&sid).map_err(|e| e.to_string())?;
     let end_reason = meta.as_ref().and_then(|s| s.end_reason.clone());
     let ended_at = meta.as_ref().and_then(|s| s.ended_at);
 
-    let messages = mgr
-        .session_store
+    let messages = store
         .build_chat_history(&sid, limit)
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -1217,9 +1215,8 @@ pub async fn fork_chat_session(
         return Err("新会话 id 不能与源会话相同".into());
     }
 
-    let mgr = memory::MemoryManager::new(home::default_memory_dir())
-        .map_err(|e| e.to_string())?;
-    mgr.session_store
+    let store = open_sessions()?;
+    store
         .fork_session(source, &new_id, keep)
         .map_err(|e| e.to_string())?;
     Ok(new_id)
@@ -1241,9 +1238,8 @@ pub async fn remove_chat_bubbles(
     if start >= end {
         return Ok(());
     }
-    let mgr = memory::MemoryManager::new(home::default_memory_dir())
-        .map_err(|e| e.to_string())?;
-    mgr.session_store
+    let store = open_sessions()?;
+    store
         .remove_chat_bubbles(sid, start, end)
         .map_err(|e| e.to_string())
 }
@@ -1251,10 +1247,9 @@ pub async fn remove_chat_bubbles(
 /// 列出近期会话供侧栏展示（title / preview → `summary` 字段以兼容前端）。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    let mgr = memory::MemoryManager::new(home::default_memory_dir())
-        .map_err(|e| e.to_string())?;
+    let store = open_sessions()?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
-    Ok(mgr
+    Ok(store
         .list_recent_sessions(limit)
         .map_err(|e| e.to_string())?
         .into_iter()

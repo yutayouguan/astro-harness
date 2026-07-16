@@ -1,3 +1,3 @@
-//! 会话：MemoryManager（仍属 memory）+ SessionStore（实现在 `session` crate）。
+//! 记忆管理器模块（[`MemoryManager`]）；会话存储见 `session` crate。
 
 pub mod manager;

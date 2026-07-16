@@ -37,6 +37,11 @@ use crate::{
     SubscribeFilter,
 };
 
+fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
+    memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
+    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).map_err(|e| e.to_string())
+}
+
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Mutex<AgentLoop>>;
 /// Chat RPC 返回的事件流类型别名。
@@ -1200,7 +1205,7 @@ impl AstroService for AstroServiceImpl {
     /// 召回 MEMORY.md / USER.md 文本，并按 `query` 搜索历史消息（`limit` 至少 1）。
     ///
     /// # 错误
-    /// MemoryManager 或 session_store 失败 → `internal`。
+    /// SessionStore 失败 → `internal`。
     async fn query_memory(
         &self,
         request: Request<MemoryQuery>,
@@ -1209,9 +1214,10 @@ impl AstroService for AstroServiceImpl {
         let memory = MemoryManager::new(self.memory_dir.clone())
             .map_err(|e| Status::internal(e.to_string()))?;
         let (memory_content, user_content) = memory.prompt_content();
+        let sessions = open_sessions(&self.memory_dir)
+            .map_err(|e| Status::internal(e.to_string()))?;
 
-        let sessions = memory
-            .session_store
+        let sessions = sessions
             .search_messages(&query.query, None, None, query.limit.max(1) as i64)
             .map_err(|e| Status::internal(e.to_string()))?
             .into_iter()

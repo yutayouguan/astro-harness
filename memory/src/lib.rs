@@ -32,7 +32,5 @@ pub use dreaming::{
     load_dreaming_state, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
     DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
-pub use session::manager::{
-    dispatch_memory_tool, format_recalled_context, MemoryManager, MemoryTarget,
-};
+pub use session::manager::{dispatch_memory_tool, MemoryManager, MemoryTarget};
 pub use workspace::{ensure_default_workspace, ensure_workspace};

@@ -9,6 +9,7 @@ common = { path = "../common" }
 agent = { path = "../agent" }
 providers = { path = "../providers" }
 memory = { path = "../memory" }
+session = { path = "../session" }
 home = { path = "../home" }
 cron = { path = "../cron" }
 skills = { path = "../skills" }

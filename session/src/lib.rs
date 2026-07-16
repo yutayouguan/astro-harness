@@ -3,13 +3,15 @@
 //! 与精炼记忆（`MEMORY.md`）无关；数据路径由调用方传入（通常
 //! `{ASTRO_MEMORY_DIR|~/.astro}/sessions/state.db`）。
 
+pub mod format;
 pub mod message_db;
 pub mod store;
 pub mod tools;
 
+pub use format::format_recalled_context;
 pub use message_db::{build_conversation_context, ScrolledMessage};
 pub use store::{
     BillingDelta, ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit,
     SessionBillingRow, SessionStore, StoredMessage, StoredSession, SCHEMA_VERSION,
 };
-pub use tools::dispatch_session_tool;
+pub use tools::{dispatch_session_tool, record_message};
