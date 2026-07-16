@@ -88,9 +88,7 @@
   padding: 6px 11px;
   border-radius: 10px;
   border: 1px solid var(--nav-label-border);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)),
-    var(--nav-label-bg);
+  background: var(--nav-label-bg);
   backdrop-filter: blur(18px) saturate(1.35);
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
   color: var(--nav-label-fg);

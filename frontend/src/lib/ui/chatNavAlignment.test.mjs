@@ -26,6 +26,11 @@ test("chat anchor labels use a translucent blurred surface", async () => {
 
   assert.ok(labelRule?.groups?.body, "missing chat message navigation label rule");
   assert.match(labelRule.groups.body, /background:[\s\S]*var\(--nav-label-bg\)/);
+  assert.doesNotMatch(
+    labelRule.groups.body,
+    /linear-gradient\(/,
+    "the glass label must not add a gradient overlay",
+  );
   assert.match(labelRule.groups.body, /backdrop-filter:\s*blur\(/);
   assert.match(labelRule.groups.body, /-webkit-backdrop-filter:\s*blur\(/);
 });
