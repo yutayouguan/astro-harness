@@ -10,13 +10,12 @@ use memory::dreaming::{
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
 use home::{default_memory_dir, list_agents};
-use memory::{
-    list_pending, load_auxiliary_config, load_memory_config, resolve_auxiliary, AuxiliaryKind,
-};
+use memory::{list_pending, load_memory_config};
 use providers::client::ProviderClient;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 
+use crate::auxiliary_resolver::{resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget};
 use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
 use crate::session_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
@@ -238,32 +237,64 @@ pub async fn set_dreaming_enabled_cmd(enabled: bool) -> Result<DreamingStatusDto
     Ok(status_from_state(&base, &state))
 }
 
-/// 取入梦用提供商：先按 `auxiliary.dreaming` 解析，再回退到 UI 激活提供商。
-fn resolve_dreaming_provider() -> Result<(UiProvider, String, String), String> {
+/// 取 UI 当前激活（或列表首个）供应商，并展开为 ChatTarget。
+fn active_chat_target() -> Result<common::ChatTarget, String> {
     let ui = active_ui_provider()?;
-    let session_backend = ui.kind.backend_id().to_string();
-    let session_model = ui.model.clone();
-    let base = default_memory_dir();
-    let aux = load_auxiliary_config(&base);
-    let (prov, model) = resolve_auxiliary(
-        AuxiliaryKind::Dreaming,
-        &aux,
-        &session_backend,
-        &session_model,
-    );
-
-    let provider = if prov == session_backend {
-        ui
-    } else {
-        providers_commands::find_provider_by_backend(&prov).unwrap_or(ui)
-    };
-    if model.trim().is_empty() {
-        return Err(
-            "入梦模型未配置（auxiliary.dreaming.model 与激活提供商均无模型）".into(),
-        );
+    if ui.model.trim().is_empty() {
+        return Err("激活提供商未配置模型".into());
     }
-    let backend_id = provider.kind.backend_id().to_string();
-    Ok((provider, backend_id, model))
+    let (_has, _src, _env, key) = resolve_api_key(&ui);
+    Ok(common::ChatTarget {
+        provider_id: ui.id,
+        backend_id: ui.kind.backend_id().to_string(),
+        model: ui.model,
+        api_key: key.unwrap_or_default(),
+        base_url: ui.endpoint,
+    })
+}
+
+/// 解析入梦辅助路由（preferred + 可选 primary fallback）。
+fn resolve_dreaming_targets() -> Result<AuxiliaryTargets, String> {
+    let primary = active_chat_target()?;
+    resolve_auxiliary_targets(memory::AuxiliaryKind::Dreaming, &primary)
+}
+
+fn dreaming_target_chain(targets: &AuxiliaryTargets) -> Vec<&ResolvedTarget> {
+    std::iter::once(&targets.preferred)
+        .chain(targets.fallback.as_ref())
+        .collect()
+}
+
+/// 按 preferred→fallback 顺序抽取；全部失败才返回 Err。
+async fn extract_or_fallback_with_targets(
+    targets: &AuxiliaryTargets,
+    job: &DreamJob,
+) -> Result<DreamMemoryUpdate, String> {
+    let mut last_err = "auxiliary dreaming returned no update".to_string();
+    for target in dreaming_target_chain(targets) {
+        match extract_or_fallback_dream(
+            &target.backend_id,
+            &target.model,
+            &target.api_key,
+            &target.provider.endpoint,
+            job,
+        )
+        .await
+        {
+            Ok(update) => return Ok(update),
+            Err(err) => {
+                tracing::warn!(
+                    agent = %job.agent_id,
+                    backend = %target.backend_id,
+                    model = %target.model,
+                    error = %err,
+                    "入梦辅助模型失败，尝试下一个目标"
+                );
+                last_err = err;
+            }
+        }
+    }
+    Err(last_err)
 }
 
 /// 入梦 finalize 成功后向前端发 `session_event`（live 或入 pending）。
@@ -317,16 +348,21 @@ pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
         return Err("入梦正在进行中，请稍候".into());
     }
 
-    let (ui, backend_id, model) = resolve_dreaming_provider()?;
-    let (has, _src, _env, key) = resolve_api_key(&ui);
-    if ui.kind.requires_api_key() && !has {
-        return Err(format!(
-            "未配置 API Key。请在「模型提供商」中为 {} 保存密钥。",
-            ui.display_name
-        ));
+    let targets = resolve_dreaming_targets()?;
+    let preferred = &targets.preferred;
+    if preferred.provider.kind.requires_api_key() && preferred.api_key.trim().is_empty() {
+        if targets.fallback.as_ref().map_or(true, |fb| {
+            fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
+        }) {
+            return Err(format!(
+                "未配置 API Key。请在「模型提供商」中为 {} 保存密钥。",
+                preferred.provider.display_name
+            ));
+        }
     }
-    let api_key = key.unwrap_or_default();
-    let base_url = ui.endpoint.clone();
+    if preferred.model.trim().is_empty() {
+        return Err("入梦模型未配置（auxiliary.dreaming.model 与激活提供商均无模型）".into());
+    }
 
     if !state.enabled {
         return Err("请先开启做梦功能".into());
@@ -355,9 +391,10 @@ pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
     }
 
     tracing::info!(
-        backend = %backend_id,
-        model = %model,
-        "入梦使用 auxiliary.dreaming 解析后的模型"
+        preferred_backend = %preferred.backend_id,
+        preferred_model = %preferred.model,
+        has_fallback = targets.fallback.is_some(),
+        "入梦使用 auxiliary.dreaming 解析后的目标链"
     );
 
     let mut reports: Vec<DreamAgentReport> = Vec::new();
@@ -365,7 +402,7 @@ pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
     let mut last_error: Option<String> = None;
 
     for job in &jobs {
-        match extract_or_fallback_dream(&backend_id, &model, &api_key, &base_url, job).await {
+        match extract_or_fallback_with_targets(&targets, job).await {
             Ok(update) => match finalize_dream_job_from_update(&mut state, job, &update) {
                 Ok(rep) => {
                     diaries_processed += rep.diaries;

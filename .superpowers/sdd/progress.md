@@ -17,3 +17,4 @@ Aux Task 2: complete (settings API + resolver + ChatRequest/AgentLoop wiring; se
 Aux Task 3: complete (auxiliary settings panel + navigation; see aux-task-3-report.md)
 Aux Task 4: complete (compaction auxiliary route + primary fallback; see aux-task-4-report.md)
 Aux Task 5: complete (smart approval preferred/fallback; see aux-task-5-report.md)
+Aux Task 6: complete (dreaming + background review credentials/fallback; see aux-task-6-report.md)

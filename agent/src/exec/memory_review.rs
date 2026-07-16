@@ -3,13 +3,17 @@
 //! 由 backend 在 Chat 流 `Done` 后 fire-and-forget；完成后可选通过
 //! [`MemoryReviewNotify`] 通知调用方（再由 backend 发布到 SessionEventHub）。
 //! `auxiliary.background_review_enabled` 为 false 时直接跳过。
+//!
+//! 目标链来自 ChatRequest 注入的 `AuxiliaryTask::BackgroundReview`
+//! （preferred + 可选 fallback）；每项携带完整 endpoint/key/model，不再把
+//! session 的 api_key 硬套到显式 backend 上。
 
 use std::path::PathBuf;
 
 use futures::StreamExt;
 use memory::{
     apply_review_suggestions, build_review_digest, load_auxiliary_config, parse_review_llm_output,
-    resolve_auxiliary, AuxiliaryKind, MemoryManager, REVIEW_SYSTEM_PROMPT,
+    MemoryManager, REVIEW_SYSTEM_PROMPT,
 };
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
@@ -24,10 +28,8 @@ pub struct BackgroundReviewJob {
     pub agent_id: String,
     /// `(role, content)` 升序。
     pub messages: Vec<(String, String)>,
-    pub session_provider: String,
-    pub session_model: String,
-    pub api_key: String,
-    pub base_url: String,
+    /// preferred + 可选 fallback；每项是完整 ChatTarget。
+    pub targets: Vec<common::ChatTarget>,
 }
 
 /// review 写盘后的轻量通知（`op` + `content`）。
@@ -62,10 +64,7 @@ pub fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
         memory_dir: agent.memory_dir().to_path_buf(),
         agent_id: agent.agent_id().to_string(),
         messages,
-        session_provider: agent.chat_provider().to_string(),
-        session_model: agent.chat_model().to_string(),
-        api_key: agent.chat_api_key().to_string(),
-        base_url: agent.chat_base_url().to_string(),
+        targets: agent.auxiliary_targets(common::AuxiliaryTask::BackgroundReview),
     }
 }
 
@@ -111,6 +110,39 @@ pub fn spawn_background_review_after_turn(
     });
 }
 
+/// 按 preferred→fallback 完成；返回首个非空响应。全部失败返回 Err。
+pub async fn complete_review_with_targets<F, Fut>(
+    targets: &[common::ChatTarget],
+    mut complete: F,
+) -> Result<String, String>
+where
+    F: FnMut(&common::ChatTarget) -> Fut,
+    Fut: std::future::Future<Output = Result<String, String>>,
+{
+    let mut last_err = "no review targets".to_string();
+    for target in targets.iter().take(2) {
+        match complete(target).await {
+            Ok(text) if !text.trim().is_empty() => return Ok(text),
+            Ok(_) => {
+                last_err = format!(
+                    "empty background-review response from {}",
+                    target.backend_id
+                );
+            }
+            Err(err) => {
+                warn!(
+                    backend = %target.backend_id,
+                    model = %target.model,
+                    error = %err,
+                    "background review target failed; trying next"
+                );
+                last_err = err;
+            }
+        }
+    }
+    Err(last_err)
+}
+
 /// 若配置开启则跑 review；关闭则 Ok(空)。
 ///
 /// 返回值：实际应用的写入摘要行（含 pending 入队提示）。
@@ -119,19 +151,8 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
     if !aux.background_review_enabled {
         return Ok(vec![]);
     }
-    if job.api_key.is_empty() && job.session_provider != "ollama" {
-        warn!("background review skipped: empty api_key");
-        return Ok(vec![]);
-    }
-
-    let (provider, model) = resolve_auxiliary(
-        AuxiliaryKind::BackgroundReview,
-        &aux,
-        &job.session_provider,
-        &job.session_model,
-    );
-    if model.trim().is_empty() {
-        warn!("background review skipped: empty model");
+    if job.targets.is_empty() {
+        warn!("background review skipped: empty targets");
         return Ok(vec![]);
     }
 
@@ -140,22 +161,40 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
         return Ok(vec![]);
     }
 
+    let preferred = &job.targets[0];
     info!(
         agent = %job.agent_id,
-        provider = %provider,
-        model = %model,
+        provider = %preferred.backend_id,
+        model = %preferred.model,
+        targets = job.targets.len(),
         "running memory background review"
     );
 
-    let raw = complete_review_chat(
-        &provider,
-        &model,
-        &job.api_key,
-        &job.base_url,
-        REVIEW_SYSTEM_PROMPT,
-        &digest,
-    )
-    .await?;
+    let raw = match complete_review_with_targets(&job.targets, |target| {
+        let system = REVIEW_SYSTEM_PROMPT.to_string();
+        let digest = digest.clone();
+        let target = target.clone();
+        async move {
+            complete_review_chat(
+                &target.backend_id,
+                &target.model,
+                &target.api_key,
+                &target.base_url,
+                &system,
+                &digest,
+            )
+            .await
+            .map_err(|e| e.to_string())
+        }
+    })
+    .await
+    {
+        Ok(text) => text,
+        Err(err) => {
+            // 两次失败只记日志，不抛到 Done 路径；此处仍以 Result 上抛给 spawn 的 warn。
+            return Err(anyhow::anyhow!(err));
+        }
+    };
 
     let output = parse_review_llm_output(&raw)?;
     if output.suggestions.is_empty()
@@ -225,6 +264,16 @@ async fn complete_review_chat(
 mod tests {
     use super::*;
 
+    fn target(id: &str, backend: &str, model: &str, key: &str) -> common::ChatTarget {
+        common::ChatTarget {
+            provider_id: id.into(),
+            backend_id: backend.into(),
+            model: model.into(),
+            api_key: key.into(),
+            base_url: format!("https://{id}.example"),
+        }
+    }
+
     #[test]
     fn notify_none_when_empty() {
         assert!(review_notify_from_applied(&[]).is_none());
@@ -240,5 +289,69 @@ mod tests {
         assert_eq!(n.op, "background_review");
         assert!(n.content.contains("记忆已更新（2）"));
         assert!(n.content.contains("added memory"));
+    }
+
+    #[tokio::test]
+    async fn explicit_target_uses_its_own_credentials() {
+        let targets = vec![
+            target("cheap", "deepseek", "mini", "cheap-key"),
+            target("main", "openai", "gpt", "main-key"),
+        ];
+        let mut seen = Vec::new();
+        let text = complete_review_with_targets(&targets, |t| {
+            seen.push((t.backend_id.clone(), t.api_key.clone(), t.base_url.clone()));
+            let key = t.api_key.clone();
+            async move {
+                assert_eq!(key, "cheap-key");
+                Ok("{\"suggestions\":[]}".into())
+            }
+        })
+        .await
+        .unwrap();
+        assert!(text.contains("suggestions"));
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].0, "deepseek");
+        assert_eq!(seen[0].1, "cheap-key");
+        assert_eq!(seen[0].2, "https://cheap.example");
+    }
+
+    #[tokio::test]
+    async fn preferred_failure_falls_back_to_session_target() {
+        let targets = vec![
+            target("cheap", "deepseek", "mini", "cheap-key"),
+            target("main", "openai", "gpt", "main-key"),
+        ];
+        let mut calls = 0usize;
+        let text = complete_review_with_targets(&targets, |t| {
+            calls += 1;
+            let key = t.api_key.clone();
+            let n = calls;
+            async move {
+                if n == 1 {
+                    Err("provider error".into())
+                } else {
+                    assert_eq!(key, "main-key");
+                    Ok("ok-from-fallback".into())
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(text, "ok-from-fallback");
+        assert_eq!(calls, 2);
+    }
+
+    #[tokio::test]
+    async fn both_failures_return_error_without_panic() {
+        let targets = vec![
+            target("cheap", "deepseek", "mini", "cheap-key"),
+            target("main", "openai", "gpt", "main-key"),
+        ];
+        let err = complete_review_with_targets(&targets, |_t| async {
+            Err("provider error".into())
+        })
+        .await
+        .expect_err("both failures");
+        assert!(err.contains("provider error"));
     }
 }

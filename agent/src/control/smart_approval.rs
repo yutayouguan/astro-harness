@@ -3,7 +3,6 @@
 //! 默认关闭；`ASTRO_SMART_APPROVAL=1` 开启。失败 / 超时一律回退 `Ask`。
 //! 目标链由 ChatRequest 注入的 `AuxiliaryTask::SmartApproval` 提供（preferred + 可选 fallback）。
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
