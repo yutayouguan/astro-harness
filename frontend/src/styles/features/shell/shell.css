@@ -483,12 +483,11 @@ html[data-tone="teal"] {
   margin-left: 0;
   width: 28px;
   height: 28px;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: var(--tone-soft, var(--chip-bg));
-  border: 1px solid color-mix(in srgb, var(--tone, var(--ink)) 22%, transparent);
+  background: transparent;
   color: var(--tone, var(--ink-soft));
   cursor: pointer;
   flex-shrink: 0;
@@ -543,6 +542,10 @@ html[data-tone="teal"] {
 .sidebar-pin-btn:hover {
   background: color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent);
   color: var(--tone, var(--ink));
+}
+
+.sidebar-pin-btn:active {
+  background: color-mix(in srgb, var(--tone, var(--accent)) 32%, transparent);
 }
 
 .sidebar-logo {
