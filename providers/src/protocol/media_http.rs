@@ -1,6 +1,6 @@
-//! Google OpenAI 兼容出图/视频/视觉，以及旧版 Gemini `generateContent` TTS。
+//! Google OpenAI 兼容出图/视频/视觉等 HTTP 辅助。
 //!
-//! TTS 主路径请用 [`crate::interactions_http::google_interactions_tts`]。
+//! TTS 请用 [`crate::interactions_http::google_interactions_tts`]。
 
 use std::time::Duration;
 
@@ -985,121 +985,6 @@ pub async fn google_openai_generate_video(
             _ => sleep(Duration::from_secs(10)).await,
         }
     }
-}
-
-/// Google 原生 TTS：`generateContent` + AUDIO modality；返回 wav 字节。
-///
-/// **已弃用**：请改用 [`crate::interactions_http::google_interactions_tts`]
-///（Interactions API）。本函数保留供兼容，工具层不再调用。
-#[deprecated(
-    note = "use interactions_http::google_interactions_tts (Gemini Interactions API)"
-)]
-pub async fn google_tts_generate(
-    client: &Client,
-    text: &str,
-    voice: &str,
-    config: &ProviderConfig,
-) -> Result<Vec<u8>> {
-    if config.api_key.trim().is_empty() {
-        anyhow::bail!("Google API Key 为空");
-    }
-    let model = if config.model.trim().is_empty() {
-        default_tts_model()
-    } else {
-        config.model.trim()
-    };
-    let voice_name = if voice.trim().is_empty()
-        || matches!(
-            voice.trim().to_ascii_lowercase().as_str(),
-            "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"
-        ) {
-        "Kore"
-    } else {
-        voice.trim()
-    };
-
-    let base = trim_slash(&google_native_base(config));
-    let url = if base.contains("/v1beta") {
-        format!("{base}/models/{model}:generateContent?key={}", config.api_key)
-    } else {
-        format!(
-            "{base}/v1beta/models/{model}:generateContent?key={}",
-            config.api_key
-        )
-    };
-
-    let body = json!({
-        "contents": [{
-            "role": "user",
-            "parts": [{"text": text}]
-        }],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {
-                        "voiceName": voice_name
-                    }
-                }
-            }
-        }
-    });
-
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("连接 Google TTS 失败: {url}"))?;
-    let status = response.status();
-    let v: Value = response.json().await.context("解析 Google TTS 响应失败")?;
-    if !status.is_success() {
-        let msg = v
-            .pointer("/error/message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("Google TTS 失败");
-        anyhow::bail!("Google TTS HTTP {status}: {msg}");
-    }
-
-    let parts = v
-        .pointer("/candidates/0/content/parts")
-        .and_then(|p| p.as_array())
-        .ok_or_else(|| anyhow!("Google TTS 响应无 parts"))?;
-    for part in parts {
-        let inline = part.get("inlineData").or_else(|| part.get("inline_data"));
-        let Some(inline) = inline else { continue };
-        let b64 = inline
-            .get("data")
-            .and_then(|d| d.as_str())
-            .ok_or_else(|| anyhow!("TTS inlineData 缺少 data"))?;
-        let pcm = base64::engine::general_purpose::STANDARD
-            .decode(b64)
-            .context("解码 Google TTS PCM 失败")?;
-        let rate = mime_sample_rate(
-            inline
-                .get("mimeType")
-                .or_else(|| inline.get("mime_type"))
-                .and_then(|m| m.as_str())
-                .unwrap_or(""),
-        )
-        .unwrap_or(24_000);
-        return Ok(pcm_to_wav(&pcm, rate, 1, 16));
-    }
-    anyhow::bail!("Google TTS 未返回音频数据")
-}
-
-fn mime_sample_rate(mime: &str) -> Option<u32> {
-    // e.g. audio/L16;codec=pcm;rate=24000
-    for part in mime.split(';') {
-        let p = part.trim();
-        if let Some(rest) = p.strip_prefix("rate=") {
-            if let Ok(n) = rest.parse::<u32>() {
-                return Some(n);
-            }
-        }
-    }
-    None
 }
 
 /// 将 PCM s16le 封装为 WAV。

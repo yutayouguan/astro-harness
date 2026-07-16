@@ -179,7 +179,7 @@ async fn execute_tools_serial_inner(
             if let Some(gate) = hitl_gate {
                 result = park_astro_hitl(gate, tx, run_id, &call.id, hitl).await?;
             } else {
-                // 无闸门（测试/legacy）：退回旧行为不可用，改为说明
+                // 无 HitlGate（单测或未注入闸门）：无法 park，返回说明文案
                 result = "HITL gate unavailable; confirmation/clarification could not be shown to the user.".to_string();
             }
         }

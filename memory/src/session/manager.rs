@@ -117,13 +117,6 @@ impl MemoryManager {
         (mem, user)
     }
 
-    /// `(长期记忆, 用户档案, 今日每日记忆)` —— **snapshot** 语义；日记按 `daily_prompt_max_chars` 截断。
-    ///
-    /// 保留兼容旧调用方；新代码优先用 [`prompt_snapshot_with_daily`]。
-    pub fn prompt_content_with_daily(&self) -> (String, String, String) {
-        self.prompt_snapshot_with_daily()
-    }
-
     /// Prompt 注入用：MEMORY / USER 取 **snapshot**；今日日记读盘后截断到配置上限。
     pub fn prompt_snapshot_with_daily(&self) -> (String, String, String) {
         let mem = if self.config.memory_enabled {

@@ -238,6 +238,6 @@ P2 将把抽取模型路由到 `auxiliary.dreaming` 便宜模型；P1 仍用现�
 | 配置 | `memory/src/config.rs` |
 | `MemoryManager` / dispatch | `memory/src/session/manager.rs` |
 | Frozen Snapshot | `agent/src/runtime/mod.rs` |
-| 工具注册 | `tools/src/builtins/memory_tools.rs` |
+| 工具注册 | `tools/src/builtins/memory/memory_tools.rs` |
 | Tauri refresh | `frontend/src-tauri/src/memory_commands.rs` |
 | 入梦写回 | `memory/src/dreaming/mod.rs` |

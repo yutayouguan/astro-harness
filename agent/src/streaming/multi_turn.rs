@@ -57,7 +57,6 @@ async fn record_llm_usage(
     let fallback_base_url = agent.chat_base_url().to_string();
     let fallback_api_key = agent.chat_api_key().to_string();
     let fallback_model = agent.chat_model().to_string();
-    drop(agent);
 
     let (model, provider, base_url, api_key) = if let Some(meta) = streamer.last_hit_meta() {
         let api_key = streamer.api_key_for(&meta);
@@ -75,6 +74,7 @@ async fn record_llm_usage(
         )
     };
 
+    // 持锁写入，确保账单落在与消息相同的 SessionStore（非 default_memory_dir 另开库）。
     apply_llm_usage_dual_write(
         &agent_id,
         Some(&session_id),
@@ -85,6 +85,7 @@ async fn record_llm_usage(
         &base_url,
         &api_key,
         None,
+        Some(agent.sessions()),
     );
 }
 

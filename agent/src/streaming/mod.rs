@@ -17,7 +17,7 @@
 /// 聊天主模型故障切换（首包前 fallback）。
 pub mod fallback;
 /// Astro HITL 桥：`astro_hitl` 解析与父子会话间 park/resume。
-pub mod hitl_bridge;
+pub(crate) mod hitl_bridge;
 /// 多轮工具循环编排。
 mod multi_turn;
 /// `ProviderStreamer`：Streaming trait 实现 + fallback 接入。

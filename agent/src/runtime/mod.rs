@@ -31,9 +31,9 @@ use crate::prompt::prompt_builder::PromptBuilder;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 
 pub mod budget;
-pub mod session;
-pub mod usage;
-pub mod validate;
+mod session;
+pub(crate) mod usage;
+mod validate;
 
 pub use validate::validate_message_order;
 
@@ -410,6 +410,11 @@ impl AgentLoop {
     /// 记忆根目录。
     pub fn memory_dir(&self) -> &std::path::Path {
         &self.config.memory_dir
+    }
+
+    /// 与本 Agent 消息落盘共用的会话库。
+    pub fn sessions(&self) -> &SessionStore {
+        &self.sessions
     }
 
     /// 当前 Agent 工作区路径。

@@ -129,11 +129,13 @@ astro/
 ├── agent/                  # Agent 循环、流式输出、工具编排
 ├── backend/                # gRPC 服务
 ├── providers/              # 模型供应商
-├── memory/                 # 本地记忆 / 工作区（SQLite）
+├── memory/                 # 本地记忆 / 工作区
+├── session/                # 会话库（SQLite）
+├── usage/                  # 用量与洞察
 ├── skills/                 # Skills
 ├── tools/                  # 工具实现
 ├── mcp/                    # MCP 客户端
-├── permissions/            # 权限策略
+├── hooks/                  # 生命周期钩子
 ├── proto/                  # Protobuf / tonic
 └── common/                 # 共享类型与错误
 ```
@@ -144,9 +146,10 @@ astro/
 | `agent` | 对话与工具调用核心 |
 | `backend` | 独立 gRPC 入口 |
 | `providers` | LLM / 图像等供应商适配 |
-| `memory` | 记忆、工作区、日志 |
+| `memory` | 记忆、工作区 |
+| `session` | 会话消息与账单 |
+| `usage` | 用量统计与 Tracing 洞察 |
 | `skills` / `tools` / `mcp` | 扩展能力 |
-| `permissions` | 访问控制 |
 | `hooks` | Plugin / Gateway / Shell 三套生命周期钩子 |
 | `proto` / `common` | 协议与公共库 |
 

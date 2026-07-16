@@ -1,6 +1,5 @@
 //! LLM 用量双写：UsageDb（kind=llm）与会话账单累加。
 
-use home::default_memory_dir;
 use ::session::{BillingDelta, SessionStore};
 use ::usage::{estimate_usage_cost, CostStatus, NewUsageEvent, UsageDb, UsageTokens};
 use providers::streaming::Usage;
@@ -104,6 +103,9 @@ pub(crate) fn build_llm_usage_event(
 }
 
 /// 写入 UsageDb 并累加 SessionStore 账单；失败仅 warn。
+///
+/// `sessions` 应与写入消息的同一 [`SessionStore`]（通常来自 `AgentLoop`），
+/// 避免再按 `default_memory_dir` 另开库导致自定义 `memory_dir` 下账单分叉。
 pub(crate) fn apply_llm_usage_dual_write(
     agent_id: &str,
     session_id: Option<&str>,
@@ -114,6 +116,7 @@ pub(crate) fn apply_llm_usage_dual_write(
     base_url: &str,
     api_key: &str,
     meta_json: Option<String>,
+    sessions: Option<&SessionStore>,
 ) {
     if usage.is_empty() {
         return;
@@ -135,21 +138,16 @@ pub(crate) fn apply_llm_usage_dual_write(
     let Some(sid) = session_id else {
         return;
     };
-    match open_default_session_store() {
-        Ok(store) => {
-            if let Err(e) = store.update_session_billing(sid, delta) {
-                tracing::warn!(session_id = sid, error = %e, "update_session_billing failed");
-            }
-        }
-        Err(e) => {
-            tracing::warn!(session_id = sid, error = %e, "open session store failed");
-        }
+    let Some(store) = sessions else {
+        tracing::warn!(
+            session_id = sid,
+            "skip session billing: no SessionStore provided"
+        );
+        return;
+    };
+    if let Err(e) = store.update_session_billing(sid, delta) {
+        tracing::warn!(session_id = sid, error = %e, "update_session_billing failed");
     }
-}
-
-fn open_default_session_store() -> anyhow::Result<SessionStore> {
-    let sessions_dir = default_memory_dir().join("sessions");
-    SessionStore::open_sessions_dir(&sessions_dir)
 }
 
 #[cfg(test)]

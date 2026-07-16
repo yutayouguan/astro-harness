@@ -135,12 +135,15 @@ pub async fn execute_job_with_roots(
         None
     };
 
+    // 与 run_agent_job / AgentLoop 共用同一 memory_dir 下的 SessionStore。
+    let memory_dir = default_memory_dir();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
+
     if let Some(ref sid) = session_id {
         let summary = format!("定时任务 · {}", job.title);
-        let sessions_dir = default_memory_dir().join("sessions");
-        if let Ok(sessions) = SessionStore::open_sessions_dir(&sessions_dir) {
-            let _ = sessions.ensure_session(sid, "cron");
-            let _ = sessions.set_session_title(sid, &summary);
+        if let Some(ref store) = sessions {
+            let _ = store.ensure_session(sid, "cron");
+            let _ = store.set_session_title(sid, &summary);
         }
     }
 
@@ -256,6 +259,7 @@ pub async fn execute_job_with_roots(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),
             ),
+            sessions.as_ref(),
         );
     }
 
