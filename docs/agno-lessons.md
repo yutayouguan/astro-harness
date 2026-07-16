@@ -2,6 +2,8 @@
 
 本文汇总对 [Agno](https://github.com/agno-agi/agno)（`libs/agno/agno`）的架构调研，对照 Astro 现状，梳理**可直接复用的设计**、**Astro 已强于 Agno 无需照搬的部分**，以及**建议落地顺序**。
 
+本轮对照以本地源码为准：`/Users/iswm/CodeRope/agno-agi/agno/libs/agno/agno`。
+
 调研分两块：
 1. 多模态 / 多 Provider / 统一工具 / Agent 生命周期 / hooks / tracing / session / skills
 2. 上下文管理 / 记忆 / 学习 / 知识库 / DB / MCP
@@ -91,8 +93,9 @@
 - 明确保留：数字、日期、实体、ID、URL；去掉套话与排版噪音。
 - 计入 usage（compression model）。
 
-### Astro 缺口
-- 有会话级压实（`compact_and_split`），**缺 run 内 / 多工具轮次中**对巨型 tool 输出的压缩。
+### Astro 现状（压缩）
+- 已有会话级压实（`compact_and_split`）。
+- 本轮已补 run 内 tool 结果压缩（见下「已落地」）；辅助模型压缩路由可后续替换启发式。
 
 ### 可复用设计（建议直接落地）
 ```text
@@ -102,6 +105,13 @@ messages 中 tool 结果超阈值
   → 计入 usage（compression model）
 ```
 与现有压实互补：压实管**会话生命周期**，压缩管**单次 run 的 context 预算**。
+
+### 已落地（本轮）
+- `common::Message.compressed_content` + session schema v14 `messages.compressed_content`
+- `agent::compression::ToolCompressionManager`：未压缩 tool 条数 ≥ 3 时触发
+- `AgentLoop::compress_tool_results_if_needed` 接入 `multi_turn`
+- `to_provider_messages` 对 tool 角色优先发送压缩视图；FTS/UI 仍用原文
+- 当前压缩实现为确定性启发式（头/尾保留）；后续可接 auxiliary compaction 模型
 
 ---
 
@@ -216,10 +226,71 @@ messages 中 tool 结果超阈值
 
 ---
 
+## 十一、Team（多 Agent）
+
+### Agno
+Agno 的 Team 是一等运行时，而不是简单「Agent 调 Agent」。核心类型集中在本地源码 `team/`：
+
+- `team/mode.py`：`TeamMode.coordinate` / `route` / `broadcast` / `tasks`
+- `team/team.py`：`Team` 门面，包含 leader model、members、session_state、history 共享选项
+- `team/_default_tools.py`：`delegate_task_to_member(s)` 委托工具
+- `team/task.py`：`tasks` 模式的 `Task` / `TaskList`
+- `run/team.py`、`session/team.py`：`TeamRunOutput` / `TeamRunEvent` / `TeamSession`
+
+四种模式的语义：
+
+| Agno `TeamMode` | 语义 |
+|-----------------|------|
+| `coordinate` | 默认 supervisor：Leader 选择成员、分派任务、综合结果 |
+| `route` | 路由到一个专家，成员输出直接作为 Team 输出 |
+| `broadcast` | 同一任务发给所有成员，并行收集结果 |
+| `tasks` | Leader 维护共享任务列表，循环执行直到目标完成 |
+
+### Astro 现状
+Astro 已有可复用积木，但还没有 Agno 式一等 Team 抽象：
+
+- `delegate/` + `agent/src/exec/delegate.rs`：回合内并行瞬时子 Agent，子 Agent 独立 session，摘要回父
+- `orchestration/` + `agent/src/exec/orchestration.rs`：异步串行流水线，SQLite 状态机，可续跑
+- `tools/src/builtins/agents/multi_agent.rs`：多 Agent 工具入口，薄封装编排
+- `home` 的持久 Agent：可作为 Team 成员池
+- Insights 协作图：已有 handoff 可观测基础
+
+缺口是「Team 配置 + 模式策略 + 团队状态」：
+
+| Team 概念 | Astro 现状 | 缺口 |
+|-----------|------------|------|
+| Team 实体 | 一次性工具参数 / 编排 DB 行 | 无持久 `TeamDefinition` |
+| Leader | 当前聊天主 Agent 隐式承担 | 无 Team 级 leader 策略 |
+| Members | 临时角色或已有 `agent_id` | 无成员表与路由约束 |
+| Modes | 并行 delegate / 串行 orchestration | 无 `coordinate` / `route` / `broadcast` 门面 |
+| 共享状态 | 显式 context / step output 接力 | 无 Team 级 session_state / blackboard |
+
+### 可借鉴
+1. **先做 Team 门面，不重写编排栈**：用现有 delegate/orchestration/create_agent 作为执行底座。
+2. **模式先落前三个**：
+   - `coordinate`：Leader 可委派 Team 成员，随后继续合成。
+   - `route`：委派一个成员后直接返回成员结果。
+   - `broadcast`：同一任务并行发给所有成员，再汇总。
+3. **TeamDefinition 持久化**：`~/.astro/teams/{id}.json`，成员可引用已有 `agent_id` 或临时角色。
+4. **共享状态先轻量**：先做 `team_run_state` JSON merge；`tasks` 共享任务图、嵌套 Team、完整 `TeamRunEvent` 后续再上。
+
+### 已落地（本轮）
+- `orchestration::team`：`TeamDefinition` / `TeamMode` / `~/.astro/teams/{id}.json`
+- 工具：`team_list` / `team_create` / `team_run`（toolset=`multi_agent`）
+- `team_run` 模式映射：
+  - `coordinate`：对全部成员发起 delegate，Leader 继续合成
+  - `route`：单成员直出（多成员时需 `member_id`），`respond_directly=true`
+  - `broadcast`：对全部成员并行 delegate
+  - `tasks`：可持久化，但本轮 `team_run` 拒绝执行
+- 成员执行仍走现有 delegate runtime；成员 `agent_id` 会写入定义，但本轮执行层先按角色/说明作为临时子 Agent 跑
+
+---
+
 ## 建议落地顺序
 
 ```text
 P0  Mid-run tool 结果压缩（Agno CompressionManager）—— 与 compact_and_split 正交，改动面可控
+P0.5 TeamDefinition + coordinate/route/broadcast 门面（复用 delegate/orchestration）
 P1  ContextSource trait + budget（协议化现有 Static/Dynamic/FTS）
 P2  DecisionLog + Propose 写入（挂审批，扩展入梦/review）
 P3  Knowledge Content DB + FTS（可选再 embedding）
@@ -232,7 +303,7 @@ P4  EntityMemory（有真实「记公司/项目」需求再上）
 
 ## 一句话总结
 
-- **直接复用思路**：工具结果压缩阈值 + `compressed_content`、LearningMode（尤其 Propose）、Content DB 生命周期、Context 可插拔预算、MediaAsset/结构化 ToolResult。
+- **直接复用思路**：工具结果压缩阈值 + `compressed_content`、TeamMode 门面、LearningMode（尤其 Propose）、Content DB 生命周期、Context 可插拔预算、MediaAsset/结构化 ToolResult。
 - **已强于 Agno、少抄**：Markdown 记忆 + 审批 + 入梦、本地 Session FTS、MCP Hub。
 - **慎抄**：Always 自动学习、一上来全向量 RAG、远程多后端 DB —— 与 Astro 桌面产品形态不匹配。
 
