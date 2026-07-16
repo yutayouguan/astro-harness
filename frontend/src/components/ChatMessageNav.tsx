@@ -35,7 +35,7 @@ const BASE = 22;
 /** Vertical gap between slots when idle. */
 const GAP = 6;
 /** Track padding-top (must match CSS). */
-const PAD_TOP = 4;
+const PAD_TOP = 10;
 /** Max scale at cursor (macOS-like). */
 const MAX_SCALE = 1.72;
 /** Influence radius in px along the dock axis. */
@@ -163,14 +163,27 @@ export default function ChatMessageNav({
     }
   }, [bottomRef, messages]);
 
+  const hoverRafRef = useRef<number | null>(null);
+  const pendingHoverYRef = useRef<number | null>(null);
+
   const onTrackMove = useCallback((e: MouseEvent<HTMLDivElement>) => {
     const track = trackRef.current;
     if (!track) return;
     const rect = track.getBoundingClientRect();
-    setHoverY(e.clientY - rect.top + track.scrollTop);
+    pendingHoverYRef.current = e.clientY - rect.top + track.scrollTop;
+    if (hoverRafRef.current != null) return;
+    hoverRafRef.current = requestAnimationFrame(() => {
+      hoverRafRef.current = null;
+      setHoverY(pendingHoverYRef.current);
+    });
   }, []);
 
   const onTrackLeave = useCallback(() => {
+    if (hoverRafRef.current != null) {
+      cancelAnimationFrame(hoverRafRef.current);
+      hoverRafRef.current = null;
+    }
+    pendingHoverYRef.current = null;
     setHoverY(null);
     setHoveredId(null);
     setLabelPlacements([]);
@@ -208,7 +221,7 @@ export default function ChatMessageNav({
     return [];
   }, [hoverY, hoveredId, messages]);
 
-  // Portal 标签：先估宽定位，量完真实尺寸再精调一次。
+  // Portal 标签：锚定未缩放的槽位中心，避免 Dock 放大带动文字跟着跳。
   useLayoutEffect(() => {
     if (nearbyRanks.length === 0) {
       setLabelPlacements([]);
@@ -221,11 +234,13 @@ export default function ChatMessageNav({
     for (let rank = 0; rank < nearbyRanks.length; rank++) {
       const item = nearbyRanks[rank]!;
       const el = itemRefs.current.get(item.id);
-      if (!el) continue;
+      const slot = el?.parentElement;
+      if (!el || !slot) continue;
       const text = previews.get(item.id) ?? "";
       if (!text) continue;
 
-      const rect = el.getBoundingClientRect();
+      // 用外层 item（不带 scale）定位，预览气泡不随 Dock 放大位移
+      const rect = slot.getBoundingClientRect();
       const t =
         nearbyRanks.length === 1 ? 0 : Math.min(1, item.dist / maxDist);
       const opacity = 1 - t * 0.58;
@@ -266,7 +281,8 @@ export default function ChatMessageNav({
       for (const p of estimated) {
         const tipEl = labelRefs.current.get(p.id);
         const anchor = itemRefs.current.get(p.id);
-        if (!tipEl || !anchor) {
+        const slot = anchor?.parentElement;
+        if (!tipEl || !anchor || !slot) {
           refined.push(p);
           continue;
         }
@@ -276,7 +292,7 @@ export default function ChatMessageNav({
           continue;
         }
         const placed = clampFloatingTip({
-          anchorRect: anchor.getBoundingClientRect(),
+          anchorRect: slot.getBoundingClientRect(),
           tipSize: size,
           bounds: resolveClipBounds(anchor),
           prefer: "left",
@@ -300,7 +316,7 @@ export default function ChatMessageNav({
       if (dirty) setLabelPlacements(refined);
     });
     return () => cancelAnimationFrame(raf);
-  }, [nearbyRanks, scales, previews]);
+  }, [nearbyRanks, previews]);
 
   if (messages.length === 0) return null;
 
@@ -322,12 +338,9 @@ export default function ChatMessageNav({
           const isUser = m.role === "user";
           const scale = scales.get(m.id) ?? 1;
           const label = previews.get(m.id) ?? "";
-          const slot = BASE * scale;
           const style = {
             "--dock-scale": String(scale),
             "--dock-z": String(Math.round(scale * 100)),
-            width: slot,
-            height: slot,
           } as CSSProperties;
 
           return (
@@ -356,11 +369,7 @@ export default function ChatMessageNav({
                 onClick={() => scrollToMessage(m.id)}
               >
                 {isUser ? (
-                  <User
-                    size={Math.round(10 + 3 * (scale - 1))}
-                    strokeWidth={2.25}
-                    aria-hidden
-                  />
+                  <User size={11} strokeWidth={2.25} aria-hidden />
                 ) : (
                   <span className="chat-msg-nav-glyph" aria-hidden>
                     iC
