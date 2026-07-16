@@ -1566,6 +1566,21 @@ pub async fn copy_paths_to_clipboard(paths: Vec<String>) -> Result<(), String> {
     crate::clipboard_files::write_paths(&resolved)
 }
 
+/// 列出系统剪贴板中的文件路径（仅文件，不含目录）；供聊天输入粘贴附件。
+#[tauri::command]
+pub async fn list_clipboard_file_paths() -> Result<Vec<String>, String> {
+    let paths = crate::clipboard_files::read_paths()?;
+    let files: Vec<String> = paths
+        .into_iter()
+        .filter(|p| p.is_file())
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+    if files.is_empty() {
+        return Err("剪贴板中没有文件".into());
+    }
+    Ok(files)
+}
+
 /// 从剪贴板粘贴路径列表。
 #[tauri::command]
 pub async fn paste_paths_from_clipboard(

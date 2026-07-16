@@ -267,6 +267,7 @@ pub fn run() {
             commands::download_file_to_downloads,
             commands::download_bytes_to_downloads,
             commands::copy_paths_to_clipboard,
+            commands::list_clipboard_file_paths,
             commands::paste_paths_from_clipboard,
             commands::write_file,
             commands::create_file,

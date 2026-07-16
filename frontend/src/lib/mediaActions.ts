@@ -1,12 +1,15 @@
 /**
- * 媒体预览：下载到系统「下载」目录、复制到剪贴板（图片像素 / 文件 / 路径）。
+ * 媒体预览：下载到系统「下载」目录、复制到剪贴板（文件引用 / 图片像素 / 路径）。
  */
 import { invoke } from "@tauri-apps/api/core";
+import { parseClipboardLocalPaths } from "./clipboardLocalPaths";
 import {
   absolutizeMediaPath,
   looksLikeLocalPath,
   stripFileUrl,
 } from "./resolveMediaSrc";
+
+export { parseClipboardLocalPaths };
 
 export type MediaActionKind = "image" | "video" | "audio" | "html" | "document";
 
@@ -82,33 +85,34 @@ export async function downloadMedia(path: string): Promise<string> {
 
 export type CopyMediaResult = "image" | "file" | "text";
 
+async function copyImagePixels(local: string): Promise<void> {
+  const dto = await invoke<FileBase64Dto>("read_file_base64", {
+    path: local,
+  });
+  const bytes = base64ToBytes(dto.base64);
+  const mime = dto.mime.startsWith("image/") ? dto.mime : "image/png";
+  const imageBlob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
+  // 附带绝对路径，便于聊天输入框把粘贴识别为附件而非纯文本
+  const textBlob = new Blob([local], { type: "text/plain" });
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      [mime]: imageBlob,
+      "text/plain": textBlob,
+    }),
+  ]);
+}
+
 /**
  * 复制媒体：
- * - 图片：优先剪贴板图片；失败则复制文件 / 路径
- * - 其它：优先系统剪贴板文件；再退化为路径文本
+ * - 本地文件：优先系统文件剪贴板（聊天输入可粘贴为附件）
+ * - 图片：文件剪贴板失败时再写像素 + 路径文本
+ * - 最后退化为路径文本
  */
 export async function copyMedia(
   path: string,
   kind: MediaActionKind,
 ): Promise<CopyMediaResult> {
   const local = mediaLocalPath(path);
-
-  if (kind === "image" && local && typeof ClipboardItem !== "undefined") {
-    try {
-      const dto = await invoke<FileBase64Dto>("read_file_base64", {
-        path: local,
-      });
-      const bytes = base64ToBytes(dto.base64);
-      const mime = dto.mime.startsWith("image/") ? dto.mime : "image/png";
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
-      await navigator.clipboard.write([
-        new ClipboardItem({ [blob.type]: blob }),
-      ]);
-      return "image";
-    } catch {
-      // fall through
-    }
-  }
 
   if (local) {
     try {
@@ -119,6 +123,48 @@ export async function copyMedia(
     }
   }
 
-  await navigator.clipboard.writeText(path.trim());
+  if (kind === "image" && local && typeof ClipboardItem !== "undefined") {
+    try {
+      await copyImagePixels(local);
+      return "image";
+    } catch {
+      // fall through — 部分 WebView 不接受 image+text 组合
+      try {
+        const dto = await invoke<FileBase64Dto>("read_file_base64", {
+          path: local,
+        });
+        const bytes = base64ToBytes(dto.base64);
+        const mime = dto.mime.startsWith("image/") ? dto.mime : "image/png";
+        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
+        await navigator.clipboard.write([
+          new ClipboardItem({ [mime]: blob }),
+        ]);
+        return "image";
+      } catch {
+        // fall through
+      }
+    }
+  }
+
+  // 远程图片：尽量写入像素，便于粘贴
+  if (kind === "image" && /^https?:/i.test(path.trim()) && typeof ClipboardItem !== "undefined") {
+    try {
+      const res = await fetch(path.trim());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = new Uint8Array(await res.arrayBuffer());
+      const mime =
+        res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
+      const type = mime.startsWith("image/") ? mime : "image/png";
+      const blob = new Blob([buf.buffer as ArrayBuffer], { type });
+      await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
+      return "image";
+    } catch {
+      // fall through
+    }
+  }
+
+  await navigator.clipboard.writeText(
+    local ?? path.trim(),
+  );
   return "text";
 }

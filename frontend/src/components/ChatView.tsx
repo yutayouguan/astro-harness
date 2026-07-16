@@ -55,6 +55,12 @@ import {
   type ChatInteractionMode,
 } from "../lib/chatMode";
 import type { ContextUsageSnapshot } from "../lib/contextUsage";
+import {
+  attachmentsFromOsClipboard,
+  filesFromClipboardRead,
+  pathToAttachment,
+  pathsFromClipboardText,
+} from "../lib/chatPaste";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../lib/thinkingPrefs";
 import type {
   ChatActivity,
@@ -995,6 +1001,16 @@ export default function ChatView({
     [attachments, onAttachmentsChange],
   );
 
+  const addAttachments = useCallback(
+    (created: ChatAttachment[]) => {
+      if (!created.length) return;
+      const room = MAX_ATTACHMENTS - attachments.length;
+      if (room <= 0) return;
+      onAttachmentsChange([...attachments, ...created.slice(0, room)]);
+    },
+    [attachments, onAttachmentsChange],
+  );
+
   const removeAttachment = (id: string) => {
     const target = attachments.find((a) => a.id === id);
     if (target) revokePreview(target);
@@ -1025,18 +1041,71 @@ export default function ChatView({
       return;
     }
     const items = e.clipboardData?.items;
-    if (!items) return;
-    const files: File[] = [];
-    for (let i = 0; i < items.length; i += 1) {
-      const item = items[i];
-      if (item.kind === "file") {
-        const f = item.getAsFile();
-        if (f) files.push(f);
+    if (items) {
+      const files: File[] = [];
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        if (item.kind === "file") {
+          const f = item.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (files.length) {
+        e.preventDefault();
+        await addFiles(files);
+        return;
       }
     }
-    if (files.length) {
+
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    const pathList = pathsFromClipboardText(text);
+    if (pathList.length) {
       e.preventDefault();
-      await addFiles(files);
+      const created: ChatAttachment[] = [];
+      for (const p of pathList) {
+        try {
+          created.push(await pathToAttachment(p));
+        } catch {
+          // skip
+        }
+      }
+      addAttachments(created);
+      return;
+    }
+
+    // 系统文件剪贴板 / 纯图片像素：WebView 的 paste 事件常不带 files
+    const types = Array.from(e.clipboardData?.types ?? []);
+    const maybeBinary =
+      !text.trim() ||
+      types.some(
+        (t) =>
+          t === "Files" ||
+          t.startsWith("image/") ||
+          t === "public.file-url" ||
+          t.includes("file"),
+      );
+    if (!maybeBinary && text.trim()) return;
+
+    e.preventDefault();
+    const fromRead = await filesFromClipboardRead();
+    if (fromRead.length) {
+      await addFiles(fromRead);
+      return;
+    }
+    const fromOs = await attachmentsFromOsClipboard();
+    if (fromOs.length) {
+      addAttachments(fromOs);
+      return;
+    }
+    // 误判且已 preventDefault：若仍有普通文本则补回（极少见）
+    if (text && !pathList.length) {
+      const el = textareaRef.current;
+      if (el) {
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? start;
+        const next = el.value.slice(0, start) + text + el.value.slice(end);
+        onInputChange(next);
+      }
     }
   };
 
