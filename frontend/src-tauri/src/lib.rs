@@ -263,6 +263,7 @@ pub fn run() {
             commands::list_recent_sessions,
             commands::list_sessions,
             commands::rename_session,
+            commands::regenerate_session_title,
             commands::archive_session,
             commands::unarchive_session,
             commands::delete_session_permanently,

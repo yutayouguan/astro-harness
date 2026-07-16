@@ -108,6 +108,7 @@ fn publish_tool_pending_to_hub(
             live_written: false,
         }),
         pending_changed: None,
+        session_metadata_changed: None,
     });
     hub.publish(SessionEventMsg {
         session_id: None,
@@ -117,6 +118,7 @@ fn publish_tool_pending_to_hub(
             pending_count,
             reason: "enqueued".into(),
         }),
+        session_metadata_changed: None,
     });
 }
 
@@ -147,6 +149,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                     live_written,
                 }),
                 pending_changed: None,
+                session_metadata_changed: None,
             });
             if !live_written {
                 let pending_count = memory::list_pending(&memory_dir)
@@ -160,8 +163,34 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                         pending_count,
                         reason: "enqueued".into(),
                     }),
+                    session_metadata_changed: None,
                 });
             }
+        }
+    });
+}
+
+/// 启动首轮标题生成，成功后发布 `session_metadata_changed`。
+async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
+    let hub = hub.clone();
+    let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
+    let agent_id = {
+        let agent = session.lock().await;
+        let id = agent.agent_id().to_string();
+        agent::exec::title_generation::spawn_title_generation_after_turn(&agent, Some(notify_tx));
+        id
+    };
+    tokio::spawn(async move {
+        if let Some(n) = notify_rx.recv().await {
+            hub.publish(SessionEventMsg {
+                session_id: Some(n.session_id),
+                agent_id,
+                memory_updated: None,
+                pending_changed: None,
+                session_metadata_changed: Some(crate::SessionMetadataChangedPayload {
+                    title: n.title,
+                }),
+            });
         }
     });
 }
@@ -808,6 +837,7 @@ impl AstroService for AstroServiceImpl {
                         }))
                         .await;
                     spawn_review_to_hub(&session, &sid_cleanup, &session_events_hub).await;
+                    spawn_title_to_hub(&session, &session_events_hub).await;
                     cleanup().await;
                     return;
                 }
@@ -969,13 +999,14 @@ impl AstroService for AstroServiceImpl {
                             }
                         }
                         if is_done {
-                            // 回合成功后 fire-and-forget review → SessionEventHub（不阻塞 Chat 流）
+                            // 回合成功后 fire-and-forget review / 标题 → SessionEventHub（不阻塞 Chat 流）
                             spawn_review_to_hub(
                                 &session_for_review,
                                 &sid_cleanup,
                                 &session_events_hub,
                             )
                             .await;
+                            spawn_title_to_hub(&session_for_review, &session_events_hub).await;
                             break;
                         }
                     }

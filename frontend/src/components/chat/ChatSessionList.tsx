@@ -1,6 +1,7 @@
 /** 近期会话列表：页签、菜单、归档与永久删除。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
@@ -95,6 +96,35 @@ export default function ChatSessionList({
   }, [loadSessions]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    type SessionEventPayload = {
+      sessionId?: string | null;
+      sessionMetadataChanged?: { title: string } | null;
+    };
+    void listen<SessionEventPayload>("session_event", (ev) => {
+      const sid = ev.payload.sessionId?.trim();
+      const title = ev.payload.sessionMetadataChanged?.title?.trim();
+      if (!sid || !title) return;
+      setItems((prev) =>
+        prev.map((item) =>
+          item.sessionId === sid ? { ...item, summary: title } : item,
+        ),
+      );
+    })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!menuSessionId) return;
     const onPointerDown = (event: MouseEvent) => {
       if (menuRef.current?.contains(event.target as Node)) return;
@@ -166,6 +196,24 @@ export default function ChatSessionList({
       });
     },
     [runSessionAction, t],
+  );
+
+  const handleRegenerateTitle = useCallback(
+    (item: RecentSessionDto) => {
+      void runSessionAction(item.sessionId, async () => {
+        const title = await invoke<string>("regenerate_session_title", {
+          sessionId: item.sessionId,
+        });
+        const next = title.trim();
+        if (!next) return;
+        setItems((prev) =>
+          prev.map((row) =>
+            row.sessionId === item.sessionId ? { ...row, summary: next } : row,
+          ),
+        );
+      });
+    },
+    [runSessionAction],
   );
 
   const handleArchiveToggle = useCallback(
@@ -343,8 +391,8 @@ export default function ChatSessionList({
                       <button
                         type="button"
                         role="menuitem"
-                        disabled
-                        title={t("sessions.regenerateTitleSoon")}
+                        disabled={busy}
+                        onClick={() => handleRegenerateTitle(s)}
                       >
                         {t("sessions.regenerateTitle")}
                       </button>

@@ -4,12 +4,12 @@ use futures::StreamExt;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use home::{default_memory_dir, list_agents};
 use memory::dreaming::{
     build_dream_extract_inputs, finalize_dream_job_from_update, load_dreaming_state,
     mark_agent_dream_error, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
-use home::{default_memory_dir, list_agents};
 use memory::{list_pending, load_memory_config};
 use providers::client::ProviderClient;
 use providers::registry::ProviderRegistry;
@@ -318,6 +318,7 @@ fn emit_dreaming_session_event(app: &AppHandle, base: &std::path::Path, agent_id
                     pending_count,
                     reason: "enqueued".into(),
                 }),
+                session_metadata_changed: None,
             },
         );
     } else {
@@ -334,6 +335,7 @@ fn emit_dreaming_session_event(app: &AppHandle, base: &std::path::Path, agent_id
                     live_written: true,
                 }),
                 pending_changed: None,
+                session_metadata_changed: None,
             },
         );
     }

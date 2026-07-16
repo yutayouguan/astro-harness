@@ -112,10 +112,7 @@ fn pending_target_str(target: memory::MemoryTarget) -> &'static str {
 
 /// 批准并应用一条 pending（写 live）；成功后 emit `session_event`。
 #[tauri::command]
-pub async fn approve_pending_memory_write(
-    app: AppHandle,
-    id: String,
-) -> Result<String, String> {
+pub async fn approve_pending_memory_write(app: AppHandle, id: String) -> Result<String, String> {
     let root = home::default_memory_dir();
     let item = memory::list_pending(&root)
         .map_err(|e| e.to_string())?
@@ -146,6 +143,7 @@ pub async fn approve_pending_memory_write(
                 pending_count,
                 reason: "approved".into(),
             }),
+            session_metadata_changed: None,
         },
     );
     Ok(msg)
@@ -178,6 +176,7 @@ pub async fn reject_pending_memory_write(app: AppHandle, id: String) -> Result<(
                 pending_count,
                 reason: "rejected".into(),
             }),
+            session_metadata_changed: None,
         },
     );
     Ok(())
@@ -261,6 +260,7 @@ pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String,
                             pending_count,
                             reason: "approved".into(),
                         }),
+                        session_metadata_changed: None,
                     },
                 );
             }
@@ -296,6 +296,7 @@ pub async fn reject_all_pending_memory_writes(app: AppHandle) -> Result<String, 
                             pending_count,
                             reason: "rejected".into(),
                         }),
+                        session_metadata_changed: None,
                     },
                 );
             }

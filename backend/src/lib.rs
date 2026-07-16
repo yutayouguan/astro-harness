@@ -7,8 +7,8 @@ pub mod grpc;
 pub mod session_events;
 
 pub use session_events::{
-    event_matches, to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub,
-    SessionEventMsg, SubscribeFilter,
+    event_matches, to_proto, MemoryUpdatedPayload, PendingChangedPayload,
+    SessionEventHub, SessionEventMsg, SessionMetadataChangedPayload, SubscribeFilter,
 };
 
 use std::time::Duration;

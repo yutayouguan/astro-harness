@@ -1321,6 +1321,152 @@ pub async fn rename_session(session_id: String, title: String) -> Result<(), Str
         .map_err(|e| e.to_string())
 }
 
+/// 强制重新生成会话标题（覆盖现有标题）。
+#[tauri::command]
+pub async fn regenerate_session_title(
+    app: AppHandle,
+    session_id: String,
+) -> Result<String, String> {
+    use futures::StreamExt;
+    use providers::registry::ProviderRegistry;
+    use providers::trait_::{ChatMessage, ProviderConfig};
+
+    use crate::auxiliary_resolver::{resolve_auxiliary_targets, ResolvedTarget};
+    use crate::providers_commands::{self, resolve_api_key};
+    use crate::session_events::{
+        emit_session_event, now_ts_ms, SessionEventDto, SessionMetadataChangedDto,
+    };
+
+    let sid = session_id.trim().to_string();
+    if sid.is_empty() {
+        return Err("session_id 不能为空".into());
+    }
+
+    let (user, assistant) = {
+        let store = open_sessions()?;
+        store
+            .first_turn_text(&sid)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
+    };
+
+    let primary = {
+        let state = providers_commands::get_providers_state()?;
+        let id = state
+            .active_provider_id
+            .or_else(|| state.providers.first().map(|p| p.id.clone()))
+            .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
+        let ui = providers_commands::find_provider(&id)?;
+        if ui.model.trim().is_empty() {
+            return Err("激活提供商未配置模型".into());
+        }
+        let (_has, _src, _env, key) = resolve_api_key(&ui);
+        common::ChatTarget {
+            provider_id: ui.id,
+            backend_id: ui.kind.backend_id().to_string(),
+            model: ui.model,
+            api_key: key.unwrap_or_default(),
+            base_url: ui.endpoint,
+        }
+    };
+    let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::TitleGeneration, &primary)?;
+    let chain: Vec<&ResolvedTarget> = std::iter::once(&targets.preferred)
+        .chain(targets.fallback.as_ref())
+        .collect();
+
+    let prompt = format!(
+        "Generate a short chat session title for the conversation below.\n\
+         Rules:\n\
+         - Reply with ONLY the title text\n\
+         - No quotes, markdown, or explanation\n\
+         - Prefer the same language as the user message\n\
+         - At most 40 characters\n\n\
+         User:\n{user}\n\n\
+         Assistant:\n{assistant}"
+    );
+
+    async fn complete_one(target: &ResolvedTarget, prompt: &str) -> Result<String, String> {
+        let registry = ProviderRegistry::default();
+        let provider = registry.get(&target.backend_id).ok_or_else(|| {
+            format!("不支持的提供商后端: {}", target.backend_id)
+        })?;
+        let config = ProviderConfig {
+            api_key: target.api_key.clone(),
+            base_url: if target.provider.endpoint.trim().is_empty() {
+                None
+            } else {
+                Some(target.provider.endpoint.trim_end_matches('/').to_string())
+            },
+            model: target.model.clone(),
+            temperature: 0.3,
+            max_tokens: 64,
+            thinking_enabled: false,
+            reasoning_effort: "high".to_string(),
+            additional_params: serde_json::Value::Null,
+        };
+        let messages = vec![ChatMessage::text("user", prompt)];
+        let mut stream = provider
+            .chat_stream(messages, vec![], &config)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        while let Some(item) = stream.next().await {
+            let chunk = item.map_err(|e| e.to_string())?;
+            if let Some(token) = chunk.token {
+                out.push_str(&token);
+            }
+        }
+        if out.trim().is_empty() {
+            return Err("模型未返回任何内容".into());
+        }
+        Ok(out)
+    }
+
+    let mut last_err = "title generation failed".to_string();
+    let mut raw = None;
+    for target in chain {
+        match complete_one(target, &prompt).await {
+            Ok(text) => {
+                raw = Some(text);
+                break;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    backend = %target.backend_id,
+                    error = %err,
+                    "regenerate title target failed; trying next"
+                );
+                last_err = err;
+            }
+        }
+    }
+    let raw = raw.ok_or(last_err)?;
+    let title = common::sanitize_title(&raw, 40);
+    if title.is_empty() {
+        return Err("模型未返回可用标题".into());
+    }
+
+    open_sessions()?
+        .set_session_title(&sid, &title)
+        .map_err(|e| e.to_string())?;
+
+    emit_session_event(
+        &app,
+        SessionEventDto {
+            session_id: Some(sid.clone()),
+            agent_id: String::new(),
+            ts_ms: now_ts_ms(),
+            memory_updated: None,
+            pending_changed: None,
+            session_metadata_changed: Some(SessionMetadataChangedDto {
+                title: title.clone(),
+            }),
+        },
+    );
+
+    Ok(title)
+}
+
 /// 归档会话。
 #[tauri::command]
 pub async fn archive_session(session_id: String) -> Result<(), String> {

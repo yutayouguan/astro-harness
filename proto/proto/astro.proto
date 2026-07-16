@@ -286,6 +286,7 @@ message SessionEvent {
   oneof payload {
     MemoryUpdatedEvent memory_updated = 10;
     PendingChangedEvent pending_changed = 11;
+    SessionMetadataChangedEvent session_metadata_changed = 12;
   }
 }
 
@@ -299,4 +300,8 @@ message MemoryUpdatedEvent {
 message PendingChangedEvent {
   uint32 pending_count = 1;
   string reason = 2;   // enqueued | approved | rejected
+}
+
+message SessionMetadataChangedEvent {
+  string title = 1;
 }

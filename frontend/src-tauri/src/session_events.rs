@@ -21,6 +21,7 @@ pub struct SessionEventDto {
     pub ts_ms: i64,
     pub memory_updated: Option<MemoryUpdatedDto>,
     pub pending_changed: Option<PendingChangedDto>,
+    pub session_metadata_changed: Option<SessionMetadataChangedDto>,
 }
 
 /// 记忆已更新（或仅入 pending）摘要。
@@ -39,6 +40,13 @@ pub struct MemoryUpdatedDto {
 pub struct PendingChangedDto {
     pub pending_count: u32,
     pub reason: String,
+}
+
+/// 会话元数据变化（如自动/手动标题）。
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMetadataChangedDto {
+    pub title: String,
 }
 
 /// 订阅过滤（可热更新）。
@@ -83,7 +91,7 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
             Some(s.to_string())
         }
     };
-    let (memory_updated, pending_changed) = match ev.payload {
+    let (memory_updated, pending_changed, session_metadata_changed) = match ev.payload {
         Some(proto::session_event::Payload::MemoryUpdated(m)) => (
             Some(MemoryUpdatedDto {
                 source: m.source,
@@ -92,6 +100,7 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
                 live_written: m.live_written,
             }),
             None,
+            None,
         ),
         Some(proto::session_event::Payload::PendingChanged(p)) => (
             None,
@@ -99,8 +108,14 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
                 pending_count: p.pending_count,
                 reason: p.reason,
             }),
+            None,
         ),
-        None => (None, None),
+        Some(proto::session_event::Payload::SessionMetadataChanged(m)) => (
+            None,
+            None,
+            Some(SessionMetadataChangedDto { title: m.title }),
+        ),
+        None => (None, None, None),
     };
     SessionEventDto {
         session_id,
@@ -108,6 +123,7 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
         ts_ms: if ev.ts_ms != 0 { ev.ts_ms } else { now_ts_ms() },
         memory_updated,
         pending_changed,
+        session_metadata_changed,
     }
 }
 
