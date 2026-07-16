@@ -500,12 +500,61 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
   padding: 6px 10px 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-mute);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.model-picker-group-label:hover {
+  color: var(--ink-soft, var(--ink));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 6%, transparent);
+}
+
+.model-picker-group-label-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.model-picker-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.model-picker-group-chevron {
+  flex-shrink: 0;
+  opacity: 0.72;
+}
+
+.model-picker-group.is-collapsed .model-picker-group-label {
+  padding-bottom: 6px;
 }
 
 .model-picker-group-list {

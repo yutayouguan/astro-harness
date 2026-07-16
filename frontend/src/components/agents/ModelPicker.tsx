@@ -8,7 +8,7 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/useClampPopover";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -114,6 +114,27 @@ function ToggleSwitch({
 
 const EFFORTS: ModelEffort[] = ["low", "medium", "high", "xhigh", "max"];
 const CONTEXTS: ModelContextSize[] = ["300k", "1m"];
+const COLLAPSED_GROUPS_KEY = "astro.modelPicker.collapsedGroups";
+
+function loadCollapsedGroups(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_GROUPS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((id): id is string => typeof id === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsedGroups(ids: Set<string>) {
+  try {
+    localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 /** 聊天顶栏：列出各已启用提供商的全部可用模型（缓存），选中即切换提供商并设为默认模型 */
 export default function ModelPicker({
@@ -132,6 +153,9 @@ export default function ModelPicker({
     ...DEFAULT_MODEL_PREFS,
   });
   const [globals] = useState<ModelPickerGlobals>(() => loadPickerGlobals());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => loadCollapsedGroups(),
+  );
   const [, setPrefsTick] = useState(0);
   const ref = useRef<HTMLDivElement | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
@@ -269,6 +293,28 @@ export default function ModelPicker({
     }));
   }, [options]);
 
+  // 打开时确保当前选中模型所在分组展开
+  useEffect(() => {
+    if (!open || !activeProvider) return;
+    setCollapsedGroups((prev) => {
+      if (!prev.has(activeProvider.id)) return prev;
+      const next = new Set(prev);
+      next.delete(activeProvider.id);
+      saveCollapsedGroups(next);
+      return next;
+    });
+  }, [open, activeProvider]);
+
+  const toggleGroup = useCallback((providerId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(providerId)) next.delete(providerId);
+      else next.add(providerId);
+      saveCollapsedGroups(next);
+      return next;
+    });
+  }, []);
+
   const openEdit = (opt: ModelOption, e: ReactMouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
@@ -361,14 +407,50 @@ export default function ModelPicker({
                   {t("providers.modelsEmpty")}
                 </li>
               )}
-              {grouped.map((group) => (
+              {grouped.map((group) => {
+                const collapsed = collapsedGroups.has(group.providerId);
+                return (
                 <li
                   key={group.providerId}
-                  className="model-picker-group"
+                  className={`model-picker-group ${collapsed ? "is-collapsed" : ""}`}
                   role="presentation"
                 >
-                  <div className="model-picker-group-label">{group.name}</div>
-                  <ul className="model-picker-group-list" role="group">
+                  <button
+                    type="button"
+                    className="model-picker-group-label"
+                    aria-expanded={!collapsed}
+                    aria-controls={`model-picker-group-${group.providerId}`}
+                    aria-label={`${t("chat.modelGroupToggle")}: ${group.name}`}
+                    onClick={() => toggleGroup(group.providerId)}
+                  >
+                    <span className="model-picker-group-label-text">
+                      {group.name}
+                      <span className="model-picker-group-count">
+                        {group.items.length}
+                      </span>
+                    </span>
+                    {collapsed ? (
+                      <ChevronRight
+                        size={12}
+                        strokeWidth={2.4}
+                        className="model-picker-group-chevron"
+                        aria-hidden
+                      />
+                    ) : (
+                      <ChevronDown
+                        size={12}
+                        strokeWidth={2.4}
+                        className="model-picker-group-chevron"
+                        aria-hidden
+                      />
+                    )}
+                  </button>
+                  {!collapsed ? (
+                  <ul
+                    id={`model-picker-group-${group.providerId}`}
+                    className="model-picker-group-list"
+                    role="group"
+                  >
                     {group.items.map((opt) => {
                       const selected =
                         opt.providerId === activeProvider?.id &&
@@ -453,8 +535,10 @@ export default function ModelPicker({
                       );
                     })}
                   </ul>
+                  ) : null}
                 </li>
-              ))}
+                );
+              })}
               </ul>
           </div>
 
