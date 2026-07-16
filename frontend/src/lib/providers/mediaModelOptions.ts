@@ -19,6 +19,34 @@ export type MediaModelOption = {
   modelId: string;
 };
 
+export type MediaModelsResultKind =
+  | "cache"
+  | "online-success"
+  | "online-failure";
+
+export type MediaModelsResultDecision = {
+  accept: boolean;
+  showModels: boolean;
+  sanitize: boolean;
+};
+
+export function evaluateMediaModelsResult(
+  activeProviderId: string | null,
+  activeRequestId: number,
+  resultProviderId: string,
+  resultRequestId: number,
+  kind: MediaModelsResultKind,
+): MediaModelsResultDecision {
+  const accept =
+    activeProviderId === resultProviderId &&
+    activeRequestId === resultRequestId;
+  return {
+    accept,
+    showModels: accept && kind !== "online-failure",
+    sanitize: accept && kind === "online-success",
+  };
+}
+
 export const MEDIA_CAPABILITY_BY_FIELD: Record<
   MediaModelField,
   MediaCapabilityKey

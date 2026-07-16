@@ -44,6 +44,7 @@ import { EmptyIllustration } from "../../illustrations";
 import { formatContextWindow } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
+  evaluateMediaModelsResult,
   sanitizeMediaModelValue,
   type MediaCapabilityKey,
 } from "../../lib/providers/mediaModelOptions";
@@ -327,7 +328,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [addKind, setAddKind] = useState<ProviderKindId>("openai");
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelsResolved, setModelsResolved] = useState(false);
+  const [sanitizeModelsProviderId, setSanitizeModelsProviderId] = useState<
+    string | null
+  >(null);
   const [modelsLatency, setModelsLatency] = useState<number | null>(null);
   const [modelLatencies, setModelLatencies] = useState<
     Record<string, ModelLatency>
@@ -356,10 +359,13 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     Record<string, ModelInfo[]>
   >({});
   const autoFetchIdRef = useRef<string | null>(null);
+  const selectedIdRef = useRef(selectedId);
+  const modelsRequestRef = useRef(0);
   const healthRunRef = useRef(0);
   const listRef = useRef<HTMLUListElement | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
+  selectedIdRef.current = selectedId;
 
   const applyState = useCallback(
     (next: ProvidersStateDto) => {
@@ -458,7 +464,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   useEffect(() => {
     if (!selected) {
       setDraft(null);
-      setModelsResolved(false);
+      setSanitizeModelsProviderId(null);
+      modelsRequestRef.current += 1;
       setStoredApiKey(null);
       setApiKeyInput("");
       setShowApiKey(false);
@@ -467,7 +474,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       return;
     }
     setDraft(draftFromProvider(selected));
-    setModelsResolved(false);
+    setSanitizeModelsProviderId(null);
+    modelsRequestRef.current += 1;
     setDetailTab("chat");
     setApiKeyInput("");
     setStoredApiKey(null);
@@ -485,7 +493,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     autoFetchIdRef.current = null;
 
     if (!isTauri() || selected.kind === "ollama" || !selected.has_api_key) {
-      setModelsResolved(true);
       return;
     }
     const id = selected.id;
@@ -529,7 +536,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   );
 
   useEffect(() => {
-    if (!modelsResolved || !selected || !draft) return;
+    if (sanitizeModelsProviderId !== selected?.id || !selected || !draft) return;
     const defaults = MEDIA_MODEL_DEFAULTS[selected.kind];
     if (!defaults) return;
     setDraft((current) => {
@@ -565,7 +572,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       };
       return JSON.stringify(next) === JSON.stringify(current) ? current : next;
     });
-  }, [models, modelsResolved, selected?.id, selected?.kind]);
+  }, [models, sanitizeModelsProviderId, selected?.id, selected?.kind]);
 
   const saveDraft = async () => {
     if (!selected || !draft || !isTauri()) return;
@@ -878,8 +885,24 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     }
   };
 
-  const listModels = async (opts?: { silent?: boolean; skipSave?: boolean }) => {
-    if (!selected || !isTauri()) return;
+  const listModels = async (opts?: {
+    silent?: boolean;
+    skipSave?: boolean;
+    provider?: ProviderDto;
+    requestId?: number;
+  }) => {
+    const provider = opts?.provider ?? selected;
+    if (!provider || !isTauri()) return;
+    const requestId = opts?.requestId ?? ++modelsRequestRef.current;
+    const isCurrentRequest = () =>
+      evaluateMediaModelsResult(
+        selectedIdRef.current,
+        modelsRequestRef.current,
+        provider.id,
+        requestId,
+        "online-failure",
+      ).accept;
+    if (!isCurrentRequest()) return;
     const silent = opts?.silent ?? false;
     setListingModels(true);
     if (!silent) setError(null);
@@ -887,30 +910,35 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       // 手动拉取时先落盘草稿；自动拉取跳过，避免切提供商时用到旧草稿
       if (draft && !opts?.skipSave) {
         await invoke<ProvidersStateDto>("save_provider", {
-          provider: providerSaveInput(selected, draft),
+          provider: providerSaveInput(provider, draft),
         }).then(applyState);
       }
       const result = await invoke<ProviderModelsResult>("list_provider_models", {
-        id: selected.id,
+        id: provider.id,
       });
+      const decision = evaluateMediaModelsResult(
+        selectedIdRef.current,
+        modelsRequestRef.current,
+        provider.id,
+        requestId,
+        "online-success",
+      );
+      if (!decision.accept) return;
       setModels(result.models);
-      setModelsResolved(true);
+      if (decision.sanitize) setSanitizeModelsProviderId(provider.id);
       setModelsLatency(result.latency_ms);
       setModelLatencies({});
-      if (selected.enabled) {
-        setHealthById((prev) => ({ ...prev, [selected.id]: "ok" }));
+      if (provider.enabled) {
+        setHealthById((prev) => ({ ...prev, [provider.id]: "ok" }));
       }
     } catch (err) {
+      if (!isCurrentRequest()) return;
       if (!silent) setError(String(err));
-      setModels([]);
-      setModelsResolved(true);
-      setModelsLatency(null);
-      setModelLatencies({});
-      if (selected.enabled) {
-        setHealthById((prev) => ({ ...prev, [selected.id]: "fail" }));
+      if (provider.enabled) {
+        setHealthById((prev) => ({ ...prev, [provider.id]: "fail" }));
       }
     } finally {
-      setListingModels(false);
+      if (isCurrentRequest()) setListingModels(false);
     }
   };
 
@@ -924,21 +952,34 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     }
     if (autoFetchIdRef.current === selected.id) return;
     autoFetchIdRef.current = selected.id;
+    const provider = selected;
+    const requestId = ++modelsRequestRef.current;
     void (async () => {
       try {
         const cached = await invoke<ProviderModelsResult | null>(
           "get_cached_provider_models",
-          { id: selected.id },
+          { id: provider.id },
         );
-        if (cached && cached.models.length > 0) {
+        const decision = evaluateMediaModelsResult(
+          selectedIdRef.current,
+          modelsRequestRef.current,
+          provider.id,
+          requestId,
+          "cache",
+        );
+        if (decision.showModels && cached && cached.models.length > 0) {
           setModels(cached.models);
           setModelsLatency(cached.latency_ms);
-          setModelsResolved(true);
         }
       } catch {
         // ignore cache miss
       }
-      await listModels({ silent: true, skipSave: true });
+      await listModels({
+        silent: true,
+        skipSave: true,
+        provider,
+        requestId,
+      });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在切换提供商 / 密钥就绪时自动拉取
   }, [active, selected?.id, selected?.has_api_key, selected?.kind]);

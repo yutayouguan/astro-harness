@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { ModelInfo } from "../../types.ts";
 import {
   buildMediaModelOptions,
+  evaluateMediaModelsResult,
   filterModelsByCapability,
   MEDIA_CAPABILITY_BY_FIELD,
   sanitizeMediaModelValue,
@@ -65,4 +66,39 @@ test("maps every media field to its independent capability", () => {
     music_model: "music_gen",
     vision_model: "vision",
   });
+});
+
+test("rejects a previous provider result after switching providers", () => {
+  assert.deepEqual(
+    evaluateMediaModelsResult("provider-b", 2, "provider-a", 1, "online-success"),
+    { accept: false, showModels: false, sanitize: false },
+  );
+});
+
+test("rejects an older request that resolves after a newer request", () => {
+  assert.deepEqual(
+    evaluateMediaModelsResult("provider-a", 2, "provider-a", 1, "online-success"),
+    { accept: false, showModels: false, sanitize: false },
+  );
+});
+
+test("shows current cache without allowing it to sanitize saved values", () => {
+  assert.deepEqual(
+    evaluateMediaModelsResult("provider-a", 1, "provider-a", 1, "cache"),
+    { accept: true, showModels: true, sanitize: false },
+  );
+});
+
+test("preserves cached models and saved values when online refresh fails", () => {
+  assert.deepEqual(
+    evaluateMediaModelsResult("provider-a", 1, "provider-a", 1, "online-failure"),
+    { accept: true, showModels: false, sanitize: false },
+  );
+});
+
+test("sanitizes only after the current online refresh succeeds", () => {
+  assert.deepEqual(
+    evaluateMediaModelsResult("provider-a", 1, "provider-a", 1, "online-success"),
+    { accept: true, showModels: true, sanitize: true },
+  );
 });
