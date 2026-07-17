@@ -236,22 +236,14 @@ html[data-theme="dark"] .nav-icon {
   --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
-  --nav-icon-cutout: color-mix(
-    in srgb,
-    var(--tone-soft, transparent) 55%,
-    var(--sidebar-bg, var(--glass-fill, #fff))
-  );
+  --nav-icon-cutout: color-mix(in srgb, #fff 78%, var(--tone-soft, transparent));
 }
 
 html[data-theme="dark"] .nav-item.active .nav-icon {
   --nav-grad-top: color-mix(in srgb, var(--tone, #e879f9) 55%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 88%, #5b21b6);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 65%, #1e0b3a);
-  --nav-icon-cutout: color-mix(
-    in srgb,
-    var(--tone-soft, transparent) 40%,
-    var(--sidebar-bg, #12081f)
-  );
+  --nav-icon-cutout: color-mix(in srgb, rgba(255, 255, 255, 0.18) 65%, var(--tone-soft, transparent));
 }
 
 .nav-icon svg {
@@ -295,15 +287,11 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   stroke-width: 1.9;
 }
 
-/*
- * 选中真镂空：用 destination-out 把内部细节从填实轮廓中抠掉，
- * 透出下方指示器底板（透镜效果），不再用“底色描边”假镂空。
- */
+/* 选中：内部细节使用浅色透镜色，避免黑色遮罩在 WebKit 中直接显示。 */
 .nav-item.active .nav-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: #000;
+  stroke: var(--nav-icon-cutout);
   stroke-width: 2.4;
-  mix-blend-mode: destination-out;
 }
 
 .nav-icon svg .nav-icon-hole {
@@ -312,9 +300,8 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 .nav-item.active .nav-icon svg .nav-icon-hole {
-  fill: #000;
+  fill: var(--nav-icon-cutout);
   stroke: none;
-  mix-blend-mode: destination-out;
 }
 
 /* 装饰小圆点：默认线稿；选中仍为渐变实心（不是镂空） */
@@ -326,7 +313,6 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .nav-item.active .nav-icon svg .nav-icon-dot {
   fill: var(--nav-grad-paint);
   stroke: none;
-  mix-blend-mode: normal;
 }
 
 /* 仅描边、永不填实（如原子轨道） */
@@ -341,7 +327,6 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .nav-item.active .nav-icon svg .nav-icon-fill {
   fill: var(--nav-grad-paint);
   stroke: none;
-  mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -375,7 +360,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
-  --nav-icon-cutout: color-mix(in srgb, var(--tone-soft, transparent) 40%, var(--glass-fill, #fff));
+  --nav-icon-cutout: color-mix(in srgb, #fff 78%, var(--tone-soft, transparent));
   color: var(--nav-grad-bottom);
   background: color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone, transparent) 18%, transparent);
@@ -401,15 +386,13 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 
 .page-title-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: #000;
+  stroke: var(--nav-icon-cutout);
   stroke-width: 2.4;
-  mix-blend-mode: destination-out;
 }
 
 .page-title-icon svg .nav-icon-hole {
-  fill: #000;
+  fill: var(--nav-icon-cutout);
   stroke: none;
-  mix-blend-mode: destination-out;
 }
 
 .page-title-icon svg .nav-icon-stroke {
@@ -420,14 +403,13 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .page-title-icon svg .nav-icon-fill {
   fill: var(--nav-grad-paint);
   stroke: none;
-  mix-blend-mode: normal;
 }
 
 html[data-theme="dark"] .page-title-icon {
   --nav-grad-top: color-mix(in srgb, var(--tone, #e879f9) 55%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 88%, #5b21b6);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 65%, #1e0b3a);
-  --nav-icon-cutout: color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.92));
+  --nav-icon-cutout: color-mix(in srgb, rgba(255, 255, 255, 0.18) 65%, var(--tone-soft, transparent));
   background: color-mix(in srgb, var(--tone-soft, transparent) 42%, rgba(8, 6, 18, 0.35));
   border-color: color-mix(in srgb, var(--tone, transparent) 26%, transparent);
 }

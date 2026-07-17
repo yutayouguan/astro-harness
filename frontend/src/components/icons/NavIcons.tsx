@@ -143,12 +143,11 @@ export function IconCron(props: IconProps) {
   );
 }
 
-/** 数据洞察 — 饼图：扇区可填实，外环弧只描边 */
+/** 数据洞察 — 趋势箭头剪影，选中可整体填实 */
 export function IconInsights(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" />
-      <path className="nav-icon-stroke" d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+      <path d="M4.4 19.1 3 17.7l6.6-6.6 3.2 3.2 5.8-5.8H16V6h6v6h-2.5V9.9l-6.7 6.7-3.2-3.2z" />
     </IconBase>
   );
 }
