@@ -29,7 +29,11 @@ use crate::prompt::context::{DynamicContext, StaticContext};
 use crate::prompt::hooks::CancelSignal;
 use crate::prompt::prompt_builder::PromptBuilder;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
-use crate::compression::ToolCompressionManager;
+use crate::compression::{
+    protect_tail_start_index, prune_tool_view, should_prune_tool_at_stage,
+    CompressionThrashingGuard, ContextMaintenanceResult, ToolCompressionManager,
+    HARD_STAGE_RECOMMEND_COMPACT_RATIO,
+};
 
 pub mod budget;
 mod session;
@@ -143,6 +147,8 @@ pub struct AgentLoop {
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）；
     /// `begin_user_turn` 时清零，供 `pre_verify` 等下游钩子（Task 7）判断是否需要校验。
     turn_wrote_disk: bool,
+    /// 本轮 tool 上下文维护 thrashing 保护（Claude Code 风格）。
+    compression_guard: CompressionThrashingGuard,
 }
 
 impl AgentLoop {
@@ -263,6 +269,7 @@ impl AgentLoop {
             async_spawner,
             orchestration_spawner,
             turn_wrote_disk: false,
+            compression_guard: CompressionThrashingGuard::default(),
         })
     }
 
@@ -368,6 +375,7 @@ impl AgentLoop {
     pub fn begin_user_turn(&mut self) {
         self.tool_rounds = 0;
         self.turn_wrote_disk = false;
+        self.compression_guard = CompressionThrashingGuard::default();
     }
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
@@ -740,75 +748,117 @@ impl AgentLoop {
         }
     }
 
-    /// 压缩本 run 中尚未压缩的 tool 结果，并写回 DB 的 `compressed_content`。
+    /// Run 内 tool 上下文工业级维护：prune → 分阶段 head/tail → thrashing 保护。
     ///
-    /// 触发：未压缩 tool 条数 ≥ 阈值，**或**会话占用达到窗口 Soft/Medium/Hard 阶段。
-    /// 截断强度随阶段加深；原始 content 始终保留。
-    pub fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
+    /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
+    pub fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
+        let mut result = ContextMaintenanceResult::default();
+        if !self.compression_guard.allow_run() {
+            result.thrashing_disabled = true;
+            return Ok(result);
+        }
+
         let manager =
             ToolCompressionManager::default().with_context_window(self.context_window());
         let Some(stage) = manager.stage_for_compress(&self.session_messages) else {
-            return Ok(0);
+            return Ok(result);
         };
 
+        result.stage_ratio = Some(stage.min_ratio);
+        result.occupancy_before = manager.occupancy_ratio(&self.session_messages);
+
         let stored = self.sessions.get_messages(&self.session_id)?;
-        let candidates: Vec<_> = stored
-            .iter()
-            .filter(|m| {
-                if m.role != "tool" {
-                    return false;
-                }
-                let Some(content) = m.content.as_deref() else {
-                    return false;
-                };
-                if content.trim().is_empty() {
-                    return false;
-                }
-                match m.compressed_content.as_deref() {
-                    None => true,
-                    // 占用升到更硬阶段时，对仍偏长的压缩视图用原文重压
-                    Some(c) => c.chars().count() > stage.max_compressed_chars,
-                }
-            })
-            .collect();
-        if candidates.is_empty() {
-            return Ok(0);
-        }
+        let protect_start =
+            protect_tail_start_index(stored.len(), self.config.protect_last_n);
 
-        tracing::debug!(
-            stage_ratio = stage.min_ratio,
-            window = manager.effective_context_window(),
-            occupancy = manager.occupancy_ratio(&self.session_messages),
-            candidates = candidates.len(),
-            "tool compression stage selected"
-        );
-
-        let mut compressed = 0usize;
-        for stored_msg in candidates {
+        for (idx, stored_msg) in stored.iter().enumerate() {
+            if stored_msg.role != "tool" {
+                continue;
+            }
             let Some(content) = stored_msg.content.as_deref() else {
                 continue;
             };
-            let Some(new_content) =
+            if content.trim().is_empty() {
+                continue;
+            }
+
+            let spill_path = common::tool_spill::spill_file_path(
+                self.memory_dir(),
+                &self.session_id,
+                stored_msg.id,
+            );
+            let spill_rel = spill_path
+                .exists()
+                .then(|| common::spill_path_for_prompt(self.memory_dir(), &spill_path));
+
+            if idx < protect_start
+                && should_prune_tool_at_stage(stage, content.chars().count())
+            {
+                let current = stored_msg.compressed_content.as_deref().unwrap_or(content);
+                if common::is_externalized_view(current)
+                    && current.chars().count() <= stage.max_compressed_chars
+                {
+                    continue;
+                }
+                let view = prune_tool_view(stored_msg.tool_name.as_deref(), spill_rel.as_deref());
+                self.apply_tool_compressed_view(stored_msg, content, &view)?;
+                result.pruned += 1;
+                continue;
+            }
+
+            let needs_compress = match stored_msg.compressed_content.as_deref() {
+                None => true,
+                Some(c) => {
+                    !common::is_externalized_view(c)
+                        && c.chars().count() > stage.max_compressed_chars
+                }
+            };
+            if !needs_compress {
+                continue;
+            }
+            let Some(view) =
                 manager.compress_content(stored_msg.tool_name.as_deref(), content, stage)
             else {
                 continue;
             };
-            self.sessions
-                .update_message_compressed_content(stored_msg.id, Some(&new_content))?;
-            if let Some(runtime_msg) = self.session_messages.iter_mut().find(|m| {
-                m.role == Role::Tool
-                    && match (&m.tool_call_id, &stored_msg.tool_call_id) {
-                        (Some(a), Some(b)) => a == b,
-                        (None, None) => m.content_str() == content,
-                        _ => false,
-                    }
-            }) {
-                runtime_msg.compressed_content = Some(new_content);
-            }
-            compressed += 1;
+            self.apply_tool_compressed_view(stored_msg, content, &view)?;
+            result.compressed += 1;
         }
 
-        Ok(compressed)
+        result.occupancy_after = manager.occupancy_ratio(&self.session_messages);
+        self.compression_guard
+            .record_outcome(result.occupancy_before, result.occupancy_after);
+        result.thrashing_disabled = self.compression_guard.disabled;
+        result.recommend_session_compact =
+            result.occupancy_after >= HARD_STAGE_RECOMMEND_COMPACT_RATIO;
+        Ok(result)
+    }
+
+    fn apply_tool_compressed_view(
+        &mut self,
+        stored_msg: &::session::StoredMessage,
+        content: &str,
+        view: &str,
+    ) -> anyhow::Result<()> {
+        self.sessions
+            .update_message_compressed_content(stored_msg.id, Some(view))?;
+        if let Some(runtime_msg) = self.session_messages.iter_mut().find(|m| {
+            m.role == Role::Tool
+                && match (&m.tool_call_id, &stored_msg.tool_call_id) {
+                    (Some(a), Some(b)) => a == b,
+                    (None, None) => m.content_str() == content,
+                    _ => false,
+                }
+        }) {
+            runtime_msg.compressed_content = Some(view.to_string());
+        }
+        Ok(())
+    }
+
+    /// 压缩本 run 中尚未压缩的 tool 结果（兼容旧调用；委托 [`Self::maintain_tool_context`]）。
+    pub fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
+        let report = self.maintain_tool_context()?;
+        Ok(report.pruned + report.compressed)
     }
 
     /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。
@@ -1249,18 +1299,52 @@ impl AgentLoop {
             Some(serde_json::to_string(&media)?)
         };
         self.sessions.ensure_session(&self.session_id, "tauri")?;
-        self.sessions.append_message(NewMessage {
+        let msg_id = self.sessions.append_message(NewMessage {
             content: Some(content),
             tool_call_id,
             tool_name,
             media_json: media_owned.as_deref(),
             ..NewMessage::empty(&self.session_id, "tool")
         })?;
+
+        let mut spill_view: Option<String> = None;
+        if content.len() >= common::DEFAULT_SPILL_THRESHOLD_BYTES {
+            match common::write_tool_spill(
+                self.memory_dir(),
+                &self.session_id,
+                msg_id,
+                content,
+            ) {
+                Ok(path) => {
+                    let rel = common::spill_path_for_prompt(self.memory_dir(), &path);
+                    let view = common::make_spill_view(
+                        tool_name,
+                        &rel,
+                        content.len(),
+                        content,
+                    );
+                    if self
+                        .sessions
+                        .update_message_compressed_content(msg_id, Some(&view))
+                        .is_ok()
+                    {
+                        spill_view = Some(view);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "tool spill write failed; keeping inline content");
+                }
+            }
+        }
+
         let mut msg = match tool_call_id {
             Some(id) if !id.is_empty() => Message::tool_with_id(id, content),
             _ => Message::tool(content),
         };
         msg.media = media;
+        if let Some(view) = spill_view {
+            msg.compressed_content = Some(view);
+        }
         self.session_messages.push(msg);
         Ok(())
     }

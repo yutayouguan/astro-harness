@@ -207,6 +207,84 @@ fn provider_facing_chars(m: &Message) -> usize {
     body.saturating_add(tool_calls)
 }
 
+/// Hard 阶段仍高于该占用时，建议用户 `/compact`（会话级整段摘要）。
+pub const HARD_STAGE_RECOMMEND_COMPACT_RATIO: f32 = 0.85;
+
+/// 单次维护占用下降低于该比例视为「低收益」。
+pub const THRASHING_MIN_GAIN_RATIO: f32 = 0.05;
+
+pub const MAX_CONSECUTIVE_LOW_GAIN: u32 = 3;
+
+#[derive(Debug, Clone, Default)]
+pub struct CompressionThrashingGuard {
+    consecutive_low_gain: u32,
+    pub disabled: bool,
+}
+
+impl CompressionThrashingGuard {
+    pub fn allow_run(&self) -> bool {
+        !self.disabled
+    }
+
+    pub fn record_outcome(&mut self, before: f32, after: f32) {
+        if before <= 0.0 {
+            return;
+        }
+        let gain = (before - after).max(0.0);
+        let low_gain =
+            gain < THRASHING_MIN_GAIN_RATIO || after >= HARD_STAGE_RECOMMEND_COMPACT_RATIO;
+        if low_gain {
+            self.consecutive_low_gain = self.consecutive_low_gain.saturating_add(1);
+            if self.consecutive_low_gain >= MAX_CONSECUTIVE_LOW_GAIN {
+                self.disabled = true;
+                tracing::warn!(
+                    consecutive = self.consecutive_low_gain,
+                    before,
+                    after,
+                    "tool context maintenance thrashing: disabling auto maintenance for this user turn"
+                );
+            }
+        } else {
+            self.consecutive_low_gain = 0;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ContextMaintenanceResult {
+    pub pruned: usize,
+    pub compressed: usize,
+    pub stage_ratio: Option<f32>,
+    pub occupancy_before: f32,
+    pub occupancy_after: f32,
+    pub thrashing_disabled: bool,
+    pub recommend_session_compact: bool,
+}
+
+pub fn protect_tail_start_index(message_len: usize, protect_tail_messages: usize) -> usize {
+    if message_len == 0 {
+        return 0;
+    }
+    message_len.saturating_sub(protect_tail_messages.max(1))
+}
+
+pub fn should_prune_tool_at_stage(stage: CompressionStage, content_chars: usize) -> bool {
+    if stage.min_ratio >= DEFAULT_COMPRESSION_STAGES[2].min_ratio {
+        return true;
+    }
+    if stage.min_ratio >= DEFAULT_COMPRESSION_STAGES[0].min_ratio {
+        return content_chars >= common::PRUNE_MIN_CHARS;
+    }
+    false
+}
+
+pub fn prune_tool_view(
+    tool_name: Option<&str>,
+    spill_rel: Option<&str>,
+) -> String {
+    common::make_prune_view(tool_name, spill_rel)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,5 +388,21 @@ mod tests {
         assert!(compressed.len() < content.len());
         assert!(compressed.contains("id=abc123"));
         assert!(compressed.contains("final_url=https://example.com/end"));
+    }
+
+    #[test]
+    fn thrashing_disables_after_low_gain_streak() {
+        let mut guard = CompressionThrashingGuard::default();
+        guard.record_outcome(0.90, 0.89);
+        guard.record_outcome(0.89, 0.88);
+        assert!(!guard.disabled);
+        guard.record_outcome(0.88, 0.87);
+        assert!(guard.disabled);
+    }
+
+    #[test]
+    fn hard_stage_prunes_all_outside_tail() {
+        let stage = DEFAULT_COMPRESSION_STAGES[2];
+        assert!(should_prune_tool_at_stage(stage, 10));
     }
 }

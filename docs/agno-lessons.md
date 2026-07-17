@@ -137,10 +137,11 @@ messages 中 tool 结果超阈值
 
 ### 已落地（本轮）
 - `common::Message.compressed_content` + session schema v14 `messages.compressed_content`
-- `agent::compression::ToolCompressionManager`：条数兜底（默认 ≥ 12）**或**按上下文窗口占用分阶段（Soft 40% / Medium 60% / Hard 80%）；`AgentLoop::set_context_window` 注入模型窗口（默认 128k）
-- `AgentLoop::compress_tool_results_if_needed` 接入 `multi_turn`
+- `agent::compression::ToolCompressionManager`：条数兜底（≥12）+ 窗口分阶段 Soft/Medium/Hard；`set_context_window` 注入模型窗口
+- **工业级 Run 内维护**：`maintain_tool_context` = spill（≥16KiB）+ prune + head/tail + thrashing 保护；详见 [`docs/context-compression.md`](context-compression.md)
+- `AgentLoop::compress_tool_results_if_needed` 委托 `maintain_tool_context`
 - `to_provider_messages` 对 tool 角色优先发送压缩视图；FTS/UI 仍用原文
-- 当前压缩实现为确定性启发式（头/尾保留）；后续可接 auxiliary compaction 模型
+- 会话级 `compact_and_split` + 辅模型 `AuxiliaryTask::Compaction`（整段摘要，拆 session）
 
 ---
 

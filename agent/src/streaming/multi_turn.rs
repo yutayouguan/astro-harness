@@ -847,10 +847,25 @@ async fn run_multi_turn_stream_inner(
 
         {
             let mut agent = session.lock().await;
-            if let Ok(count) = agent.compress_tool_results_if_needed() {
-                if count > 0 {
-                    tracing::info!(count, "compressed tool results for next model round");
+            match agent.maintain_tool_context() {
+                Ok(report) if report.pruned + report.compressed > 0 => {
+                    tracing::info!(
+                        pruned = report.pruned,
+                        compressed = report.compressed,
+                        occupancy_before = report.occupancy_before,
+                        occupancy_after = report.occupancy_after,
+                        stage_ratio = ?report.stage_ratio,
+                        "tool context maintenance applied"
+                    );
                 }
+                Ok(report) if report.recommend_session_compact => {
+                    tracing::warn!(
+                        occupancy = report.occupancy_after,
+                        "context still critical after tool maintenance; recommend /compact"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "tool context maintenance failed"),
             }
         }
 
