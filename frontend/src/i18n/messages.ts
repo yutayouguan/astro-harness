@@ -16,6 +16,12 @@ export const zh = {
   "nav.auxiliary": "辅助模型",
   "nav.settings": "偏好设置",
 
+  "dialog.cancel": "取消",
+  "dialog.confirm": "确定",
+  "dialog.save": "保存",
+  "dialog.unsavedTitle": "有未保存的更改",
+  "dialog.deleteTitle": "确认删除",
+
   "page.chat.title": "智能对话",
   "page.chat.sub": "与 Astro Agent 对话，自动召回记忆并调用工具",
   "page.memory.title": "记忆",
@@ -915,6 +921,15 @@ export const zh = {
   "prefs.theme.darkDesc": "深紫玻璃拟态，适合夜间使用",
   "prefs.theme.auto": "自动",
   "prefs.theme.autoDesc": "跟随系统外观设置",
+
+  "prefs.appIcon.title": "应用图标",
+  "prefs.appIcon.sub": "切换托盘、程序坞与窗口图标，选择保存在本机并在启动时应用",
+  "prefs.appIcon.finderNote": "注：已安装应用在访达 / 任务栏的图标为安装包内置，不随此设置更改；仅影响托盘、macOS 程序坞与 Windows/Linux 窗口图标。",
+  "prefs.appIcon.blue": "蓝色",
+  "prefs.appIcon.deepBlue": "深蓝",
+  "prefs.appIcon.white": "白色",
+  "prefs.appIcon.whiteLogo": "白色徽标",
+
   "prefs.app.aboutTitle": "关于Astro",
   "prefs.app.about":
     "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。",
@@ -1304,6 +1319,12 @@ export const en: Record<MessageKey, string> = {
   "nav.providers": "Providers",
   "nav.auxiliary": "Auxiliary Models",
   "nav.settings": "Preferences",
+
+  "dialog.cancel": "Cancel",
+  "dialog.confirm": "Confirm",
+  "dialog.save": "Save",
+  "dialog.unsavedTitle": "Unsaved changes",
+  "dialog.deleteTitle": "Confirm delete",
 
   "page.chat.title": "Chat",
   "page.chat.sub": "Talk with Astro Agent — memory recall and tools included",
@@ -2204,6 +2225,15 @@ export const en: Record<MessageKey, string> = {
   "prefs.theme.darkDesc": "Deep purple glass for night use",
   "prefs.theme.auto": "Auto",
   "prefs.theme.autoDesc": "Follow system appearance",
+
+  "prefs.appIcon.title": "App icon",
+  "prefs.appIcon.sub": "Switch the tray, dock, and window icon. Saved locally and applied on launch.",
+  "prefs.appIcon.finderNote": "Note: the installed app icon in Finder / taskbar is baked into the bundle and does not change here; this only affects the tray, macOS dock, and Windows/Linux window icon.",
+  "prefs.appIcon.blue": "Blue",
+  "prefs.appIcon.deepBlue": "Deep blue",
+  "prefs.appIcon.white": "White",
+  "prefs.appIcon.whiteLogo": "White logo",
+
   "prefs.app.aboutTitle": "About Astro",
   "prefs.app.about":
     "Astro (阿童木) is a local AI desktop workstation, named after the classic anime Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. Preferences are saved on this device.",

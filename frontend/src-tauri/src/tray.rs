@@ -33,10 +33,14 @@ pub fn install_tray<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri:
     let s = locale.strings();
     let menu = build_tray_menu(app, locale)?;
 
-    let icon = app
-        .default_window_icon()
-        .cloned()
-        .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
+    // 托盘图标按持久化的应用图标变体加载；失败回退到内置窗口图标。
+    let icon = match crate::app_icon::icon_image(&crate::app_icon::load_variant()) {
+        Ok(img) => img,
+        Err(_) => app
+            .default_window_icon()
+            .cloned()
+            .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?,
+    };
 
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)

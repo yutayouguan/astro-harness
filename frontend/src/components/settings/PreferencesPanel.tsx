@@ -12,6 +12,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useAppIcon } from "../../hooks/settings/useAppIcon";
+import type { AppIconId } from "../../types";
 import type { ThemeMode } from "../../hooks/app/useTheme";
 import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -105,6 +107,22 @@ export default function PreferencesPanel({
   activeSessionId,
 }: Props) {
   const { locale, setLocale, t } = useI18n();
+  const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
+
+  const appIconLabel = (id: AppIconId): string => {
+    switch (id) {
+      case "blue":
+        return t("prefs.appIcon.blue");
+      case "deep_blue":
+        return t("prefs.appIcon.deepBlue");
+      case "white":
+        return t("prefs.appIcon.white");
+      case "white_logo":
+        return t("prefs.appIcon.whiteLogo");
+      default:
+        return id;
+    }
+  };
 
   const [sessionId, setSessionId] = useState(activeSessionId ?? "");
   const [turnId, setTurnId] = useState("");
@@ -253,6 +271,40 @@ export default function PreferencesPanel({
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="prefs-card">
+        <div className="prefs-card-head">
+          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+            <IconAtom width={22} height={22} />
+          </div>
+          <div>
+            <h2 className="prefs-card-title">{t("prefs.appIcon.title")}</h2>
+            <p className="prefs-card-sub">{t("prefs.appIcon.sub")}</p>
+          </div>
+        </div>
+
+        <div
+          className="app-icon-grid"
+          role="radiogroup"
+          aria-label={t("prefs.appIcon.title")}
+        >
+          {(appIcon?.options ?? []).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              role="radio"
+              aria-checked={appIcon?.current === opt.id}
+              className={`app-icon-option ${appIcon?.current === opt.id ? "active" : ""}`}
+              data-tone={tone}
+              onClick={() => void setAppIcon(opt.id)}
+            >
+              <img className="app-icon-thumb" src={opt.dataUrl} alt={appIconLabel(opt.id)} />
+              <span className="app-icon-label">{appIconLabel(opt.id)}</span>
+            </button>
+          ))}
+        </div>
+        <p className="prefs-card-note">{t("prefs.appIcon.finderNote")}</p>
       </section>
 
       <section className="prefs-card">

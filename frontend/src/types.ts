@@ -259,6 +259,21 @@ export type EvolutionSettingsDto = {
   activeModel: string;
 };
 
+/** 应用图标变体 id（对齐 `app_icon::VARIANTS`） */
+export type AppIconId = "blue" | "deep_blue" | "white" | "white_logo";
+
+/** 单个图标变体（含 base64 缩略图） */
+export type AppIconOptionDto = {
+  id: AppIconId;
+  dataUrl: string;
+};
+
+/** 应用图标设置（当前变体 + 可选项）（Tauri `get_app_icon`） */
+export type AppIconSettingsDto = {
+  current: AppIconId;
+  options: AppIconOptionDto[];
+};
+
 /** 拉取模型列表结果 */
 export type ProviderModelsResult = {
   models: ModelInfo[];

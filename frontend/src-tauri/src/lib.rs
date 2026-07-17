@@ -9,9 +9,11 @@ mod clipboard_files;
 mod commands;
 mod compaction_commands;
 mod config_commands;
+mod app_icon;
 mod dreaming_commands;
 mod env_hydrate;
 mod evolution_commands;
+mod icon_commands;
 mod fs_ops;
 mod grpc;
 mod ip_location;
@@ -413,6 +415,8 @@ pub fn run() {
             evolution_commands::set_evolution_route,
             evolution_commands::reset_evolution_route,
             evolution_commands::set_evolution_gates,
+            icon_commands::get_app_icon,
+            icon_commands::set_app_icon,
         ])
         .setup(|app| {
             if let Err(err) = memory::ensure_default_workspace() {
@@ -466,6 +470,9 @@ pub fn run() {
             if let Err(err) = tray::install_tray(app.handle(), AppLocale::Zh) {
                 tracing::warn!("system tray install failed: {err}");
             }
+
+            // 重放持久化的应用图标（托盘/程序坞/窗口）
+            app_icon::apply_app_icon(app.handle(), &app_icon::load_variant());
 
             notify::install(app.handle());
 
