@@ -897,6 +897,11 @@ html[data-theme="dark"] .html-preview-bar {
   margin: 0;
 }
 
+/* 卡片头部已有下载/复制，隐藏预览栏内重复的工具栏（保留「用系统应用打开」） */
+.gen-media-card .gen-media-card-preview.html-preview .html-preview-bar .media-toolbar {
+  display: none;
+}
+
 /* 图 / 视频：贴边铺满卡片宽，按比例增高，去掉灰底 letterbox */
 .gen-media-card[data-kind="image"] .gen-media-card-body,
 .gen-media-card[data-kind="video"] .gen-media-card-body {
