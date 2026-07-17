@@ -93,9 +93,7 @@ fn register_and_list_by_category() {
     )
     .unwrap();
 
-    let listed = db
-        .list(Some("doc"), None, false, 50, false, None)
-        .unwrap();
+    let listed = db.list(Some("doc"), None, false, 50, false, None).unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].session_id.as_deref(), Some("sess-1"));
     assert_eq!(listed[0].name, "note.md");
@@ -119,8 +117,14 @@ fn reconcile_adds_and_marks_missing() {
     let db = ArtifactDb::new(memory_root.join("sessions/artifacts.db")).unwrap();
     let gone = workspace.join("gone.txt");
     std::fs::write(&gone, b"x").unwrap();
-    db.register(gone.to_str().unwrap(), ArtifactSource::AgentWrite, Some("s"), None, None)
-        .unwrap();
+    db.register(
+        gone.to_str().unwrap(),
+        ArtifactSource::AgentWrite,
+        Some("s"),
+        None,
+        None,
+    )
+    .unwrap();
     std::fs::remove_file(&gone).unwrap();
 
     let report = db.reconcile(&memory_root).unwrap();
@@ -228,10 +232,22 @@ fn remove_by_paths_deletes_rows() {
     let p2 = dir.path().join("b.md");
     std::fs::write(&p1, b"1").unwrap();
     std::fs::write(&p2, b"2").unwrap();
-    db.register(p1.to_str().unwrap(), ArtifactSource::AgentWrite, None, None, None)
-        .unwrap();
-    db.register(p2.to_str().unwrap(), ArtifactSource::AgentWrite, None, None, None)
-        .unwrap();
+    db.register(
+        p1.to_str().unwrap(),
+        ArtifactSource::AgentWrite,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    db.register(
+        p2.to_str().unwrap(),
+        ArtifactSource::AgentWrite,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
 
     let n = db
         .remove_by_paths(&[p1.to_string_lossy().to_string()])

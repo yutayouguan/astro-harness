@@ -107,8 +107,10 @@ impl KnowledgeDb {
                 "UPDATE contents SET title = ?1, status = ?2, updated_at = datetime('now') WHERE id = ?3",
                 params![title, status, id],
             )?;
-            self.conn
-                .execute("DELETE FROM contents_fts WHERE content_id = ?1", params![id])?;
+            self.conn.execute(
+                "DELETE FROM contents_fts WHERE content_id = ?1",
+                params![id],
+            )?;
             self.conn.execute(
                 "INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)",
                 params![title, body, id],
@@ -227,8 +229,10 @@ impl KnowledgeDb {
 
     /// 删除登记与 FTS 行。
     pub fn delete(&self, id: &str) -> anyhow::Result<bool> {
-        self.conn
-            .execute("DELETE FROM contents_fts WHERE content_id = ?1", params![id])?;
+        self.conn.execute(
+            "DELETE FROM contents_fts WHERE content_id = ?1",
+            params![id],
+        )?;
         let n = self
             .conn
             .execute("DELETE FROM contents WHERE id = ?1", params![id])?;

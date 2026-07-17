@@ -41,7 +41,13 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON artifacts(agent_id, created_at
 
 /// Agent 工作区内不参与 reconcile 的核心模板文件名
 const MEMORY_TEMPLATES: &[&str] = &[
-    "AGENT.md", "IDENTITY.md", "USER.md", "SOUL.md", "AGENTS.md", "TOOLS.md", "MEMORY.md",
+    "AGENT.md",
+    "IDENTITY.md",
+    "USER.md",
+    "SOUL.md",
+    "AGENTS.md",
+    "TOOLS.md",
+    "MEMORY.md",
 ];
 
 /// 文件登记来源
@@ -156,8 +162,8 @@ pub fn category_from_name(name: &str) -> &'static str {
         "csv" | "xls" | "xlsx" | "tsv" => "sheet",
         "png" | "jpg" | "jpeg" | "webp" | "gif" | "svg" | "heic" => "image",
         "mp4" | "mov" | "webm" | "mp3" | "wav" | "m4a" | "aac" | "flac" => "av",
-        "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "java" | "c" | "cpp" | "h"
-        | "json" | "toml" | "yaml" | "yml" | "html" | "css" | "sh" => "code",
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "java" | "c" | "cpp" | "h" | "json"
+        | "toml" | "yaml" | "yml" | "html" | "css" | "sh" => "code",
         "pdf" | "ppt" | "pptx" => "pdf_ppt",
         _ => "other",
     }
@@ -228,9 +234,7 @@ impl ArtifactDb {
         let size = std::fs::metadata(&p).map(|m| m.len() as i64).unwrap_or(0);
         let id = Uuid::new_v4().to_string();
         let default_agent_id = home::DEFAULT_AGENT_ID;
-        let mut agent_id = home::normalize_agent_id(
-            agent_id.unwrap_or(default_agent_id),
-        );
+        let mut agent_id = home::normalize_agent_id(agent_id.unwrap_or(default_agent_id));
         if agent_id.is_empty() {
             agent_id = default_agent_id.to_string();
         }
@@ -422,8 +426,7 @@ impl ArtifactDb {
              ) OR name LIKE '._%'",
             [],
         )?;
-        let mut roots: Vec<(PathBuf, Option<String>)> =
-            vec![(memory_root.join("uploads"), None)];
+        let mut roots: Vec<(PathBuf, Option<String>)> = vec![(memory_root.join("uploads"), None)];
         // 所有 Agent 工作区：workspace + workspace-*
         if let Ok(entries) = std::fs::read_dir(memory_root) {
             for entry in entries.flatten() {
@@ -440,10 +443,7 @@ impl ArtifactDb {
                 continue;
             }
             for entry in walkdir_files(root)? {
-                let name = entry
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let name = entry.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if is_junk_artifact_name(name) {
                     continue;
                 }
@@ -475,16 +475,18 @@ impl ArtifactDb {
                          WHERE path = ?1",
                         params![
                             path_str,
-                            std::fs::metadata(&entry).map(|m| m.len() as i64).unwrap_or(0)
+                            std::fs::metadata(&entry)
+                                .map(|m| m.len() as i64)
+                                .unwrap_or(0)
                         ],
                     )?;
                 }
             }
         }
 
-        let mut stmt = self.conn.prepare(
-            "SELECT path FROM artifacts WHERE missing = 0",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path FROM artifacts WHERE missing = 0")?;
         let paths: Vec<String> = stmt
             .query_map([], |r| r.get(0))?
             .collect::<Result<Vec<_>, _>>()?;
@@ -630,9 +632,7 @@ mod tests {
         assert_eq!(images.len(), 1);
         assert_eq!(images[0].name, "photo.png");
 
-        let docs = db
-            .list(Some("doc"), None, false, 50, false, None)
-            .unwrap();
+        let docs = db.list(Some("doc"), None, false, 50, false, None).unwrap();
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].name, "notes.md");
         assert_eq!(docs[0].source, "reconcile");
