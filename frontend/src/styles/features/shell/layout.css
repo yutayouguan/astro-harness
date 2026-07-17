@@ -110,17 +110,7 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 .sidebar.is-labels .nav-item {
   justify-content: flex-start;
   padding: 11px 12px;
-  gap: 6px;
-}
-
-.sidebar.is-labels .nav-icon {
-  width: 20px;
-  height: 20px;
-}
-
-.sidebar.is-labels .nav-icon svg {
-  width: 20px;
-  height: 20px;
+  gap: 10px;
 }
 
 .sidebar.is-labels .nav-label {
@@ -370,7 +360,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .page-title-block {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 }
@@ -384,8 +374,8 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 .page-title-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 10px;
   display: grid;
   place-items: center;
@@ -410,9 +400,10 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .page-title-icon svg {
   position: relative;
   z-index: 1;
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   fill: var(--nav-grad-paint);
+  stroke-width: 1.45;
 }
 
 .page-title-icon svg[data-nav-fill="outline"] {
@@ -423,13 +414,13 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .page-title-icon svg .nav-icon-cutout {
   fill: none;
   stroke: var(--nav-grad-top);
-  stroke-width: 2.35;
+  stroke-width: 1.9;
 }
 
 .page-title-icon svg path.nav-icon-cutout {
   fill: none !important;
   stroke: var(--nav-grad-top) !important;
-  stroke-width: 2.35;
+  stroke-width: 1.9;
 }
 
 .page-title-icon svg circle.nav-icon-cutout {
