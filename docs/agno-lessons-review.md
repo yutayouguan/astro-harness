@@ -52,8 +52,14 @@
 9. R7：`search_context` / `pin_context` 工具；pinned 写入 workspace 并注入 Dynamic。
 10. R8：`team_run` tasks 串行共享任务板；`ToolEntry.exclusive_access` 替代硬编码表。
 11. R3：`ChatContentPart` Audio/Video；Gemini 入模，OpenAI/Anthropic 文本回落；`Message.media` 并入 parts。
+12. R4 收尾：`SqliteStore` 下沉 `common::sqlite`；Usage/Session/Knowledge/Artifact/Cron/Orchestration 全量 `impl`；删除 `usage::sqlite_store`。
 
 ## 归档
 
-- 记债已清（R6 明确不做）。
-- 建议 tag：`v-agno-lessons-complete-r3`（叠在首轮 `v-agno-lessons-complete` 之上）。
+- 记债已清（R6 与文档声明的「不必 / 刻意保留」项除外）。
+- Tags：
+  - `v-agno-lessons-complete`（首轮课时）
+  - `v-agno-lessons-complete-r3`（含 R3 多模态入模）
+  - `v-agno-lessons-final`（含 common::sqlite 统一与全量 Review 收尾）
+- 关键测试（本机）：common 14 / usage 13 / artifacts 6 / agent 74 / tools 120 passed。
+- **流程结束**：Agno 课时全循环 + Review 修复已锁定。
