@@ -499,22 +499,32 @@ html[data-theme="dark"] .media-lightbox-close:hover {
   max-width: 100%;
 }
 
+/* 生成图：按自身比例铺满卡片宽，去掉灰底相框与 letterbox */
 .a2ui-image-hero {
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-  box-shadow:
-    0 10px 28px color-mix(in srgb, var(--ink) 10%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
+.a2ui-image-hero .media-preview,
 .a2ui-image-hero .media-preview.is-compact {
   max-width: 100%;
+  width: 100%;
   margin: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 14px;
 }
 
 .a2ui-image-hero .media-preview-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: unset;
   border-radius: 0;
   background: transparent;
 }
