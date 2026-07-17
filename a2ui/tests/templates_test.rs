@@ -38,8 +38,9 @@ fn wizard_step_count(ops: &[Value]) -> usize {
             op.pointer("/updateComponents/components")
                 .and_then(|v| v.as_array())
                 .and_then(|arr| {
-                    arr.iter()
-                        .find(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
+                    arr.iter().find(|c| {
+                        c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard")
+                    })
                 })
                 .and_then(|w| w.get("steps"))
                 .and_then(|v| v.as_array())
@@ -75,7 +76,10 @@ fn clarify_single_step_uses_wizard() {
     let has_title_id = ops.iter().any(|op| {
         op.pointer("/updateComponents/components")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().any(|c| c.get("id").and_then(|i| i.as_str()) == Some("title")))
+            .map(|arr| {
+                arr.iter()
+                    .any(|c| c.get("id").and_then(|i| i.as_str()) == Some("title"))
+            })
             .unwrap_or(false)
     });
     assert!(!has_title_id);
@@ -109,7 +113,10 @@ fn clarify_multi_step_template_validates() {
     let has_title_id = ops.iter().any(|op| {
         op.pointer("/updateComponents/components")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().any(|c| c.get("id").and_then(|i| i.as_str()) == Some("title")))
+            .map(|arr| {
+                arr.iter()
+                    .any(|c| c.get("id").and_then(|i| i.as_str()) == Some("title"))
+            })
             .unwrap_or(false)
     });
     assert!(has_title_id);

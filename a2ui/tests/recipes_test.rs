@@ -40,8 +40,18 @@ fn delete_surface_validates() {
 #[test]
 fn form_surface_validates() {
     let fields = [
-        FormField { id: "name", kind: "text", label: "姓名", required: true },
-        FormField { id: "agree", kind: "checkbox", label: "同意条款", required: false },
+        FormField {
+            id: "name",
+            kind: "text",
+            label: "姓名",
+            required: true,
+        },
+        FormField {
+            id: "agree",
+            kind: "checkbox",
+            label: "同意条款",
+            required: false,
+        },
     ];
     let ops = build_form_surface("surf-form1", "提交信息", &fields, "确认提交");
     validate_operations(&ops).unwrap();

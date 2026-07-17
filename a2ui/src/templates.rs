@@ -103,11 +103,7 @@ pub struct ClarifyStep {
 ///
 /// Frontend renders tabs (when 2+) + layered cards with transition animation.
 /// Submit emits `choose` with `{ answers: { stepId: option }, value: summary }`.
-pub fn build_clarify_surface(
-    surface_id: &str,
-    title: &str,
-    steps: &[ClarifyStep],
-) -> Vec<Value> {
+pub fn build_clarify_surface(surface_id: &str, title: &str, steps: &[ClarifyStep]) -> Vec<Value> {
     let steps_json: Vec<Value> = steps
         .iter()
         .map(|s| {
@@ -384,42 +380,34 @@ pub fn build_generated_media_surface(
 
 /// 从生成文件路径提炼展示标题（去掉 `YYYYMMDD-HHMMSS-xxxxxxxx` 后缀）。
 pub fn media_title_from_path(path: &str) -> String {
-    let base = path
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(path);
-    let stem = base
-        .rsplit_once('.')
-        .map(|(s, _)| s)
-        .unwrap_or(base);
+    let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(base);
     let cleaned = {
-        let re_tail = stem
-            .rfind('-')
-            .and_then(|i| {
-                let after = &stem[i + 1..];
-                if after.len() == 8 && after.chars().all(|c| c.is_ascii_hexdigit()) {
-                    // strip -xxxxxxxx; then try -HHMMSS before that
-                    let without_id = &stem[..i];
-                    without_id.rfind('-').and_then(|j| {
-                        let mid = &without_id[j + 1..];
-                        if mid.len() == 6 && mid.chars().all(|c| c.is_ascii_digit()) {
-                            let without_time = &without_id[..j];
-                            without_time.rfind('-').and_then(|k| {
-                                let date = &without_time[k + 1..];
-                                if date.len() == 8 && date.chars().all(|c| c.is_ascii_digit()) {
-                                    Some(without_time[..k].to_string())
-                                } else {
-                                    None
-                                }
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                } else {
-                    None
-                }
-            });
+        let re_tail = stem.rfind('-').and_then(|i| {
+            let after = &stem[i + 1..];
+            if after.len() == 8 && after.chars().all(|c| c.is_ascii_hexdigit()) {
+                // strip -xxxxxxxx; then try -HHMMSS before that
+                let without_id = &stem[..i];
+                without_id.rfind('-').and_then(|j| {
+                    let mid = &without_id[j + 1..];
+                    if mid.len() == 6 && mid.chars().all(|c| c.is_ascii_digit()) {
+                        let without_time = &without_id[..j];
+                        without_time.rfind('-').and_then(|k| {
+                            let date = &without_time[k + 1..];
+                            if date.len() == 8 && date.chars().all(|c| c.is_ascii_digit()) {
+                                Some(without_time[..k].to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            }
+        });
         re_tail.unwrap_or_else(|| stem.to_string())
     };
     let trimmed = cleaned.trim_matches('-').trim();
@@ -513,7 +501,11 @@ pub fn build_metrics_surface(
             "label": label,
             "value": value
         });
-        if let Some(h) = hint.as_ref().map(|s| s.as_str().trim()).filter(|s| !s.is_empty()) {
+        if let Some(h) = hint
+            .as_ref()
+            .map(|s| s.as_str().trim())
+            .filter(|s| !s.is_empty())
+        {
             m["hint"] = json!(h);
         }
         components.push(m);
@@ -560,12 +552,7 @@ pub fn build_callout_surface(
     ]
 }
 
-pub fn build_result_surface(
-    surface_id: &str,
-    title: &str,
-    body: &str,
-    status: &str,
-) -> Vec<Value> {
+pub fn build_result_surface(surface_id: &str, title: &str, body: &str, status: &str) -> Vec<Value> {
     let v = match status {
         "warn" | "danger" | "success" | "info" => status,
         _ => "success",
@@ -679,8 +666,11 @@ pub fn build_chip_list_surface(
     title: &str,
     chips: &[impl AsRef<str>],
 ) -> Vec<Value> {
-    let chip_ids: Vec<String> =
-        chips.iter().enumerate().map(|(i, _)| format!("chip{i}")).collect();
+    let chip_ids: Vec<String> = chips
+        .iter()
+        .enumerate()
+        .map(|(i, _)| format!("chip{i}"))
+        .collect();
 
     let col_children = if chips.is_empty() {
         vec!["title".to_string()]
@@ -698,7 +688,8 @@ pub fn build_chip_list_surface(
         components.push(json!({ "id": "row", "component": "Row", "children": chip_ids }));
         for (i, chip) in chips.iter().enumerate() {
             let label = chip.as_ref();
-            components.push(json!({ "id": format!("chip{i}"), "component": "Chip", "text": label }));
+            components
+                .push(json!({ "id": format!("chip{i}"), "component": "Chip", "text": label }));
         }
     }
 

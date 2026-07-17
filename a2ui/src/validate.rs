@@ -17,7 +17,10 @@ pub enum Error {
     #[error("operation must have exactly one of: createSurface, updateComponents, updateDataModel, deleteSurface")]
     InvalidOperationKind,
     #[error("createSurface.catalogId must be {expected}, got {got:?}")]
-    InvalidCatalogId { expected: &'static str, got: Option<String> },
+    InvalidCatalogId {
+        expected: &'static str,
+        got: Option<String>,
+    },
     #[error("unknown component: {0}")]
     UnknownComponent(String),
     #[error("invalid operation structure: {0}")]
@@ -53,19 +56,13 @@ pub fn validate_operations(ops: &[Value]) -> Result<(), Error> {
         }
 
         if let Some(update) = obj.get("updateComponents") {
-            let components = update
-                .get("components")
-                .and_then(|v| v.as_array())
-                .ok_or(Error::InvalidStructure(
-                    "updateComponents.components must be an array",
-                ))?;
+            let components = update.get("components").and_then(|v| v.as_array()).ok_or(
+                Error::InvalidStructure("updateComponents.components must be an array"),
+            )?;
             for component in components {
-                let name = component
-                    .get("component")
-                    .and_then(|v| v.as_str())
-                    .ok_or(Error::InvalidStructure(
-                        "component entry must have a string component field",
-                    ))?;
+                let name = component.get("component").and_then(|v| v.as_str()).ok_or(
+                    Error::InvalidStructure("component entry must have a string component field"),
+                )?;
                 if !ALLOWED_COMPONENTS.contains(&name) {
                     return Err(Error::UnknownComponent(name.to_owned()));
                 }
