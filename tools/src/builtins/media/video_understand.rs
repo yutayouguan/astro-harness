@@ -3,9 +3,7 @@
 
 use base64::Engine;
 use futures::StreamExt;
-use providers::files_http::{
-    google_files_delete, google_files_upload_and_wait, INLINE_MAX_BYTES,
-};
+use providers::files_http::{google_files_delete, google_files_upload_and_wait, INLINE_MAX_BYTES};
 use providers::interactions_http::{
     default_video_understand_prompt, google_interactions_video, try_parse_timeline_events,
     VideoInputPart, VideoUnderstandMode,
@@ -149,11 +147,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     if video_url.is_empty() {
         anyhow::bail!("video_understand 需要 video_url");
     }
-    let mode: VideoUnderstandMode = parsed
-        .mode
-        .as_deref()
-        .unwrap_or("qa")
-        .parse()?;
+    let mode: VideoUnderstandMode = parsed.mode.as_deref().unwrap_or("qa").parse()?;
     let prompt = parsed
         .prompt
         .as_deref()
@@ -179,7 +173,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         },
         model: model.clone(),
         ..ProviderConfig::default()
-};
+    };
     let files_client = build_files_client()?;
     let interactions_client = build_interactions_client()?;
 
@@ -187,7 +181,12 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         resolve_video_input(&files_client, &config, ctx, video_url).await?;
 
     let text = match google_interactions_video(
-        &interactions_client, &config, &model, &prompt, &video_part, mode,
+        &interactions_client,
+        &config,
+        &model,
+        &prompt,
+        &video_part,
+        mode,
     )
     .await
     {
@@ -247,10 +246,7 @@ async fn resolve_video_input(
             let bytes = std::fs::read(&path)
                 .map_err(|e| anyhow::anyhow!("读取视频失败 {}: {e}", path.display()))?;
             let mime = mime_from_path(&path);
-            let display = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("video");
+            let display = path.file_name().and_then(|s| s.to_str()).unwrap_or("video");
             bytes_to_part(client, config, &bytes, mime, display).await
         }
     }
@@ -360,14 +356,8 @@ mod tests {
 
     #[test]
     fn mime_mp4() {
-        assert_eq!(
-            mime_from_path(std::path::Path::new("a.MP4")),
-            "video/mp4"
-        );
-        assert_eq!(
-            mime_from_path(std::path::Path::new("a.webm")),
-            "video/webm"
-        );
+        assert_eq!(mime_from_path(std::path::Path::new("a.MP4")), "video/mp4");
+        assert_eq!(mime_from_path(std::path::Path::new("a.webm")), "video/webm");
     }
 
     #[test]
@@ -412,7 +402,10 @@ mod tests {
         let client = reqwest::Client::new();
         let url = format!("http://{addr}/video.mp4");
         let err = download_bytes(&client, &url).await.unwrap_err();
-        assert!(err.to_string().contains("远程视频过大"), "unexpected: {err}");
+        assert!(
+            err.to_string().contains("远程视频过大"),
+            "unexpected: {err}"
+        );
     }
 
     #[tokio::test]
@@ -451,7 +444,10 @@ mod tests {
         let client = reqwest::Client::new();
         let url = format!("http://{addr}/video.mp4");
         let err = download_bytes(&client, &url).await.unwrap_err();
-        assert!(err.to_string().contains("远程视频过大"), "unexpected: {err}");
+        assert!(
+            err.to_string().contains("远程视频过大"),
+            "unexpected: {err}"
+        );
     }
 }
 
@@ -499,9 +495,6 @@ mod path_tests {
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.mp4").unwrap_err();
-        assert!(
-            err.to_string().contains("工作区内"),
-            "unexpected: {err}"
-        );
+        assert!(err.to_string().contains("工作区内"), "unexpected: {err}");
     }
 }

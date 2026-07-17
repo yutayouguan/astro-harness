@@ -53,9 +53,7 @@ pub fn compose_music_prompt(prompt: &str, lyrics: Option<&str>) -> String {
     } else {
         format!("Lyrics:\n{lyrics}")
     };
-    format!(
-        "{base}\n\nSing the following lyrics exactly (do not rewrite):\n{lyrics_block}"
-    )
+    format!("{base}\n\nSing the following lyrics exactly (do not rewrite):\n{lyrics_block}")
 }
 
 pub fn validate_music_gen_args(
@@ -147,7 +145,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         },
         model: model_id.clone(),
         ..ProviderConfig::default()
-};
+    };
     let prompt = compose_music_prompt(parsed.prompt.as_str(), parsed.lyrics.as_deref());
     let req = InteractionMusicRequest {
         model: model_id.clone(),
@@ -267,10 +265,7 @@ mod tests {
     #[test]
     fn compose_prompt_without_lyrics_is_passthrough() {
         assert_eq!(compose_music_prompt("  lofi beats  ", None), "lofi beats");
-        assert_eq!(
-            compose_music_prompt("jazz", Some("  ")),
-            "jazz"
-        );
+        assert_eq!(compose_music_prompt("jazz", Some("  ")), "jazz");
     }
 
     #[test]
@@ -314,9 +309,12 @@ mod tests {
 
     #[test]
     fn reject_wav_for_configured_model_that_only_contains_pro() {
-        let err = validate_music_gen_args(&args("piano", None, Some("wav"), None), "music-production-v1")
-            .unwrap_err()
-            .to_string();
+        let err = validate_music_gen_args(
+            &args("piano", None, Some("wav"), None),
+            "music-production-v1",
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("wav") || err.contains("pro"));
     }
 

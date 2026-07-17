@@ -115,10 +115,7 @@ fn list_script_rel_paths(root: &Path) -> Vec<String> {
 
 fn format_path_section(root: &Path, scripts: &[String]) -> String {
     let root_disp = home::display_user_path(root);
-    let mut lines = vec![
-        "## Skill 路径".to_string(),
-        format!("root: `{root_disp}`"),
-    ];
+    let mut lines = vec!["## Skill 路径".to_string(), format!("root: `{root_disp}`")];
     if scripts.is_empty() {
         lines.push("scripts: （无 scripts/ 目录或为空）".into());
     } else {
@@ -228,9 +225,9 @@ fn patch_skill_md(path: &Path, rel_label: &str, old: &str, new: &str) -> anyhow:
             fs::write(path, updated.as_bytes())?;
             Ok(format!("已 patch 技能 `{rel_label}`（1 处替换）"))
         }
-        n => anyhow::bail!(
-            "patch 的 old_string 不唯一（{n} 处匹配），请提供更长上下文: {rel_label}"
-        ),
+        n => {
+            anyhow::bail!("patch 的 old_string 不唯一（{n} 处匹配），请提供更长上下文: {rel_label}")
+        }
     }
 }
 
@@ -317,8 +314,7 @@ fn manage_skill(
             let old = old_string
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("manage patch 需要 old_string"))?;
-            let new = new_string
-                .ok_or_else(|| anyhow::anyhow!("manage patch 需要 new_string"))?;
+            let new = new_string.ok_or_else(|| anyhow::anyhow!("manage patch 需要 new_string"))?;
             let skill_md = resolve_agent_skill_md(skill_id, &skills_dir)?;
             patch_skill_md(&skill_md, skill_id, old, new)
         }
@@ -329,9 +325,7 @@ fn manage_skill(
                     home::display_user_path(&dest)
                 );
             }
-            let canon = dest
-                .canonicalize()
-                .unwrap_or_else(|_| dest.clone());
+            let canon = dest.canonicalize().unwrap_or_else(|_| dest.clone());
             let agent_root = skills_dir
                 .canonicalize()
                 .unwrap_or_else(|_| skills_dir.clone());
@@ -428,10 +422,7 @@ mod tests {
 
     #[test]
     fn format_path_section_mentions_root_and_scripts() {
-        let text = format_path_section(
-            Path::new("/tmp/skill-demo"),
-            &["scripts/run.py".into()],
-        );
+        let text = format_path_section(Path::new("/tmp/skill-demo"), &["scripts/run.py".into()]);
         assert!(text.contains("## Skill 路径"));
         assert!(text.contains("scripts/run.py"));
         assert!(text.contains("运行示例"));
@@ -518,20 +509,9 @@ mod tests {
         assert!(err0.to_string().contains("0 处匹配"));
 
         // make duplicate
-        fs::write(
-            skills_dir.join("patch-demo/SKILL.md"),
-            "xx xx xx\n",
-        )
-        .unwrap();
-        let err_n = manage_skill(
-            "patch-demo",
-            "patch",
-            None,
-            None,
-            Some("xx"),
-            Some("yy"),
-        )
-        .unwrap_err();
+        fs::write(skills_dir.join("patch-demo/SKILL.md"), "xx xx xx\n").unwrap();
+        let err_n =
+            manage_skill("patch-demo", "patch", None, None, Some("xx"), Some("yy")).unwrap_err();
         assert!(err_n.to_string().contains("不唯一"));
     }
 

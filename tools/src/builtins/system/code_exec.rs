@@ -61,9 +61,9 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         "python" | "python3" | "py" => ("python3", vec![], "snippet.py"),
         "javascript" | "js" => ("node", vec![], "snippet.js"),
         "shell" | "bash" | "sh" => ("sh", vec![], "snippet.sh"),
-        other => anyhow::bail!(
-            "code_exec 不支持 language={other}；请使用 python、javascript 或 shell"
-        ),
+        other => {
+            anyhow::bail!("code_exec 不支持 language={other}；请使用 python、javascript 或 shell")
+        }
     };
 
     let root = ctx.ensure_project_or_workspace()?;
@@ -138,17 +138,15 @@ mod tests {
     async fn rejects_unknown_language() {
         let dir = tempfile::tempdir().unwrap();
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
-        let err = dispatch(
-            &ctx,
-            &serde_json::json!({"code": "1", "language": "ruby"}),
-        )
-        .await
-        .unwrap_err()
-        .to_string();
+        let err = dispatch(&ctx, &serde_json::json!({"code": "1", "language": "ruby"}))
+            .await
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("不支持"), "{err}");
     }
 
@@ -156,7 +154,8 @@ mod tests {
     async fn large_stdout_is_truncated() {
         let dir = tempfile::tempdir().unwrap();
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);

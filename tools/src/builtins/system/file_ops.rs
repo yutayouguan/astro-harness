@@ -246,19 +246,14 @@ fn list_dir_capped(full: &Path, workspace: &Path) -> anyhow::Result<String> {
     let dir = if full.is_dir() {
         full.to_path_buf()
     } else {
-        full.parent()
-            .unwrap_or(workspace)
-            .to_path_buf()
+        full.parent().unwrap_or(workspace).to_path_buf()
     };
 
     let mut names: Vec<String> = Vec::new();
     for entry in std::fs::read_dir(&dir)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().to_string();
-        let is_dir = entry
-            .file_type()
-            .map(|t| t.is_dir())
-            .unwrap_or(false);
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
         if is_dir {
             names.push(format!("{name}/"));
         } else {
@@ -301,9 +296,8 @@ fn search_under(
         start.to_path_buf()
     } else if start.is_file() {
         // 单文件：只扫这一份
-        return search_one_file(start, workspace, &needle).map(|hit| {
-            hit.unwrap_or_else(|| format!("未找到匹配「{query}」"))
-        });
+        return search_one_file(start, workspace, &needle)
+            .map(|hit| hit.unwrap_or_else(|| format!("未找到匹配「{query}」")));
     } else {
         anyhow::bail!("路径不存在: {}", display_rel(workspace, start));
     };
@@ -359,9 +353,7 @@ fn search_under(
     }
 
     if hits.is_empty() {
-        return Ok(format!(
-            "未找到匹配「{query}」（已扫描 {scanned} 个文件）"
-        ));
+        return Ok(format!("未找到匹配「{query}」（已扫描 {scanned} 个文件）"));
     }
 
     let mut out = format!("找到 {} 处匹配「{query}」:\n", hits.len());
@@ -383,12 +375,7 @@ fn search_under(
 }
 
 /// 精准替换：`old` 必须在文件中恰好出现一次。
-fn patch_file_unique(
-    path: &Path,
-    rel: &str,
-    old: &str,
-    new: &str,
-) -> anyhow::Result<String> {
+fn patch_file_unique(path: &Path, rel: &str, old: &str, new: &str) -> anyhow::Result<String> {
     if old.is_empty() {
         anyhow::bail!("patch 的 old_string 不能为空");
     }
@@ -428,7 +415,9 @@ fn search_one_file(
     };
     if meta.len() > MAX_SEARCH_FILE_BYTES {
         return Ok(if name_hit {
-            Some(format!("{rel}  (filename match; file >1MiB, content skipped)"))
+            Some(format!(
+                "{rel}  (filename match; file >1MiB, content skipped)"
+            ))
         } else {
             None
         });
@@ -539,9 +528,8 @@ fn reaffirm_within(path: &Path, workspace: &Path) -> anyhow::Result<()> {
         .unwrap_or_else(|_| workspace.to_path_buf());
     if let Ok(meta) = std::fs::symlink_metadata(path) {
         if meta.file_type().is_symlink() {
-            let target = std::fs::canonicalize(path).map_err(|e| {
-                anyhow::anyhow!("无法解析符号链接 {}: {e}", path.display())
-            })?;
+            let target = std::fs::canonicalize(path)
+                .map_err(|e| anyhow::anyhow!("无法解析符号链接 {}: {e}", path.display()))?;
             if !target.starts_with(&base) {
                 anyhow::bail!("路径越界：不允许访问 workspace 之外的文件");
             }
@@ -677,7 +665,11 @@ mod tests {
     fn search_matches_filename_and_content() {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("src")).unwrap();
-        fs::write(dir.path().join("src/hello.rs"), "fn main() { todo_marker(); }\n").unwrap();
+        fs::write(
+            dir.path().join("src/hello.rs"),
+            "fn main() { todo_marker(); }\n",
+        )
+        .unwrap();
         fs::write(dir.path().join("readme.md"), "no hit here\n").unwrap();
         fs::write(dir.path().join("todo_notes.txt"), "filename only\n").unwrap();
 

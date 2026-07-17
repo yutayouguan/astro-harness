@@ -117,7 +117,11 @@ pub fn register(registry: &mut ToolRegistry) {
 }
 
 /// 分发 `search_context` / `pin_context`。
-pub fn dispatch(ctx: &ToolContext<'_>, name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
+pub fn dispatch(
+    ctx: &ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
     match name {
         "search_context" => dispatch_search(ctx, args),
         "pin_context" => dispatch_pin(ctx, args),
@@ -329,7 +333,11 @@ fn format_pinned_list(store: &PinnedStore) -> String {
             )
         })
         .collect();
-    format!("固定上下文 {} 条:\n{}", store.entries.len(), lines.join("\n"))
+    format!(
+        "固定上下文 {} 条:\n{}",
+        store.entries.len(),
+        lines.join("\n")
+    )
 }
 
 fn search_entries(entries: &[String], query: &str, limit: usize) -> Vec<String> {

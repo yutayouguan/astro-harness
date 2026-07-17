@@ -296,7 +296,10 @@ mod tests {
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].title, "Rust Programming Language");
         assert_eq!(hits[0].url, "https://www.rust-lang.org/");
-        assert_eq!(hits[0].snippet, "Rust is blazingly fast & memory-efficient.");
+        assert_eq!(
+            hits[0].snippet,
+            "Rust is blazingly fast & memory-efficient."
+        );
         assert_eq!(hits[1].title, "Tokio");
         assert_eq!(hits[1].url, "https://tokio.rs/");
         assert_eq!(hits[1].snippet, "An async runtime for Rust.");

@@ -3,12 +3,12 @@
 use std::path::{Path, PathBuf};
 
 use home::{generated_dir, GeneratedKind};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use providers::media_http::{
     default_video_model, google_native_generate_video, VideoGenExtras, VideoImagePart,
 };
 use providers::trait_::ProviderConfig;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
@@ -174,16 +174,14 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         },
         model: model.clone(),
         ..ProviderConfig::default()
-};
+    };
 
     let mut reference_parts = Vec::with_capacity(refs.len());
     for r in &refs {
         reference_parts.push(load_image_part(ctx, r)?);
     }
 
-    let extend_video = extend_path
-        .map(|p| load_video_part(ctx, p))
-        .transpose()?;
+    let extend_video = extend_path.map(|p| load_video_part(ctx, p)).transpose()?;
     let (extend_video, extend_video_uri, extend_video_id) = if extend_video.is_some() {
         (extend_video, None, None)
     } else if extend_uri.is_some() {
@@ -203,17 +201,21 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         extend_video,
         person_generation: opt_owned(parsed.person_generation.as_deref()),
         seed: parsed.seed,
-        image: image_path
-            .map(|p| load_image_part(ctx, p))
-            .transpose()?,
+        image: image_path.map(|p| load_image_part(ctx, p)).transpose()?,
         last_frame: last_frame_path
             .map(|p| load_image_part(ctx, p))
             .transpose()?,
         reference_images: reference_parts,
     };
 
-    let has_native_ignored = parsed.negative_prompt.as_deref().is_some_and(|s| !s.trim().is_empty())
-        || parsed.style.as_deref().is_some_and(|s| !s.trim().is_empty());
+    let has_native_ignored = parsed
+        .negative_prompt
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty())
+        || parsed
+            .style
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty());
 
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Videos);
     std::fs::create_dir_all(&dir)?;
@@ -231,23 +233,15 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         let _ = std::fs::write(&progress_path, &body);
     };
 
-    let video = google_native_generate_video(
-        &client,
-        prompt,
-        &config,
-        &extras,
-        Some(&mut on_progress),
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("Google Veo 视频失败: {e}"))?;
+    let video =
+        google_native_generate_video(&client, prompt, &config, &extras, Some(&mut on_progress))
+            .await
+            .map_err(|e| anyhow::anyhow!("Google Veo 视频失败: {e}"))?;
     on_progress("api_path=native");
     let api_path = "native";
 
-    let filename = super::media_out::generated_media_filename(
-        parsed.title.as_deref(),
-        "视频",
-        "mp4",
-    );
+    let filename =
+        super::media_out::generated_media_filename(parsed.title.as_deref(), "视频", "mp4");
     let path = dir.join(&filename);
     std::fs::write(&path, &video.data)?;
     let rel = rel_workspace(ctx, &path);
@@ -304,7 +298,11 @@ fn rel_workspace(ctx: &ToolContext<'_>, path: &Path) -> String {
         .unwrap_or_else(|_| path.display().to_string())
 }
 
-fn resolve_workspace_file(ctx: &ToolContext<'_>, input: &str, kind: &str) -> anyhow::Result<PathBuf> {
+fn resolve_workspace_file(
+    ctx: &ToolContext<'_>,
+    input: &str,
+    kind: &str,
+) -> anyhow::Result<PathBuf> {
     let p = PathBuf::from(input);
     let path = if p.is_absolute() {
         p

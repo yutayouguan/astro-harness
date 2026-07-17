@@ -43,8 +43,10 @@ pub fn sanitize_media_title(raw: Option<&str>) -> Option<String> {
         if ok {
             out.push(ch);
             last_was_sep = false;
-        } else if matches!(ch, ' ' | '\t' | '\n' | '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
-            && !last_was_sep
+        } else if matches!(
+            ch,
+            ' ' | '\t' | '\n' | '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+        ) && !last_was_sep
             && !out.is_empty()
         {
             out.push('-');
@@ -73,7 +75,10 @@ mod tests {
             sanitize_media_title(Some("  采菌子歌 / 云南  ")).as_deref(),
             Some("采菌子歌-云南")
         );
-        assert_eq!(sanitize_media_title(Some("../evil")).as_deref(), Some("evil"));
+        assert_eq!(
+            sanitize_media_title(Some("../evil")).as_deref(),
+            Some("evil")
+        );
         assert!(sanitize_media_title(Some("   ")).is_none());
         assert!(sanitize_media_title(None).is_none());
     }

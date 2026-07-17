@@ -221,7 +221,7 @@ async fn call_google(
         },
         model: model.clone(),
         ..ProviderConfig::default()
-};
+    };
     let media = resolve_google_media(ctx, audio_url, is_yt).await?;
     let client = reqwest::Client::new();
     let text = google_interactions_audio(&client, prompt, &media, mode, &config).await?;
@@ -385,7 +385,7 @@ fn resolve_openai_describe_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-},
+            },
             model,
         ));
     }
@@ -406,7 +406,7 @@ fn resolve_openai_describe_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-},
+            },
             model,
         ));
     }
@@ -421,7 +421,7 @@ fn resolve_openai_describe_config(
             base_url: Some("https://api.openai.com/v1".into()),
             model: model.clone(),
             ..ProviderConfig::default()
-},
+        },
         model,
     ))
 }
@@ -442,7 +442,7 @@ fn resolve_openai_whisper_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-},
+            },
             model,
         ));
     }
@@ -458,7 +458,7 @@ fn resolve_openai_whisper_config(
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
-},
+            },
             model,
         ));
     }
@@ -472,7 +472,7 @@ fn resolve_openai_whisper_config(
             base_url: Some("https://api.openai.com/v1".into()),
             model: model.clone(),
             ..ProviderConfig::default()
-},
+        },
         model,
     ))
 }
@@ -526,7 +526,10 @@ mod tests {
     fn mime_from_path_maps_common_extensions() {
         assert_eq!(mime_from_path(std::path::Path::new("a.wav")), "audio/wav");
         assert_eq!(mime_from_path(std::path::Path::new("a.M4A")), "audio/mp4");
-        assert_eq!(mime_from_path(std::path::Path::new("a.unknown")), "audio/mp3");
+        assert_eq!(
+            mime_from_path(std::path::Path::new("a.unknown")),
+            "audio/mp3"
+        );
     }
 
     /// Finding 3：mime 须依据 URL 路径部分，剥离 `?query`/`#fragment` 后再取扩展名。
@@ -643,7 +646,14 @@ mod path_escape_tests {
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(
+            &mut memory,
+            &sessions,
+            dir.path().to_path_buf(),
+            ws,
+            &targets,
+            &providers,
+        );
 
         let err = load_audio_bytes(&ctx, "../outside/secret.mp3")
             .await
@@ -667,7 +677,14 @@ mod path_escape_tests {
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(
+            &mut memory,
+            &sessions,
+            dir.path().to_path_buf(),
+            ws,
+            &targets,
+            &providers,
+        );
 
         let (bytes, mime, filename) = load_audio_bytes(&ctx, "ok.wav").await.unwrap();
         assert_eq!(bytes, b"ok-bytes");
@@ -690,7 +707,14 @@ mod path_escape_tests {
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(
+            &mut memory,
+            &sessions,
+            dir.path().to_path_buf(),
+            ws,
+            &targets,
+            &providers,
+        );
 
         let err = resolve_google_media(&ctx, "../outside/secret.mp3", false)
             .await
@@ -716,7 +740,14 @@ mod path_escape_tests {
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(
+            &mut memory,
+            &sessions,
+            dir.path().to_path_buf(),
+            ws,
+            &targets,
+            &providers,
+        );
 
         let media = resolve_google_media(&ctx, "clip.wav", false).await.unwrap();
         match media {
@@ -750,7 +781,14 @@ mod path_escape_tests {
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
-        let ctx = build_ctx(&mut memory, &sessions, dir.path().to_path_buf(), ws, &targets, &providers);
+        let ctx = build_ctx(
+            &mut memory,
+            &sessions,
+            dir.path().to_path_buf(),
+            ws,
+            &targets,
+            &providers,
+        );
 
         let media = resolve_google_media(&ctx, "https://youtu.be/abc", true)
             .await
@@ -815,10 +853,7 @@ mod download_limit_tests {
     #[tokio::test]
     async fn rejects_declared_content_length_over_limit() {
         let over_limit = MAX_AUDIO_DOWNLOAD_BYTES + 1;
-        let (url, handle) = spawn_raw_http_server(
-            &format!("Content-Length: {over_limit}\r\n"),
-            0,
-        );
+        let (url, handle) = spawn_raw_http_server(&format!("Content-Length: {over_limit}\r\n"), 0);
 
         let err = download_audio_bytes(&url).await.unwrap_err();
         assert!(

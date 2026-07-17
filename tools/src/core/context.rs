@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use memory::MemoryManager;
-use session::SessionStore;
 use providers::registry::ProviderRegistry;
+use session::SessionStore;
 
 /// 单个媒体生成 Provider 的调用凭证。
 ///
@@ -114,11 +114,7 @@ impl ImageGenTargets {
         self.primary
             .as_ref()
             .filter(|c| c.provider == provider)
-            .or_else(|| {
-                self.fallback
-                    .as_ref()
-                    .filter(|c| c.provider == provider)
-            })
+            .or_else(|| self.fallback.as_ref().filter(|c| c.provider == provider))
     }
 
     /// Google 媒体生成凭证（图 / 视频 / TTS 共用 key）。
@@ -181,9 +177,7 @@ impl<'a> ToolContext<'a> {
 
     /// 终端 / 文件操作的沙箱根：优先 `project_root`，否则记忆 `workspace_dir`。
     pub fn project_or_workspace(&self) -> &Path {
-        self.project_root
-            .as_ref()
-            .unwrap_or(&self.workspace_dir)
+        self.project_root.as_ref().unwrap_or(&self.workspace_dir)
     }
 
     /// 确保 [`Self::project_or_workspace`] 目录存在。

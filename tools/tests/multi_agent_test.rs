@@ -8,7 +8,8 @@ async fn multi_agent_queues_orchestration() {
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = ToolContext {
@@ -63,7 +64,8 @@ async fn multi_agent_queues_orchestration() {
 async fn multi_agent_rejects_empty_agents() {
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = ToolContext {

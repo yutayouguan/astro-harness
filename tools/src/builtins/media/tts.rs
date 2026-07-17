@@ -6,14 +6,14 @@
 //! 音频写入工作区 `generated/audio/`。
 
 use home::{generated_dir, GeneratedKind};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use providers::http_stream::openai_compatible_base;
 use providers::interactions_http::{
     build_tts_input, google_interactions_tts, InteractionSpeechConfig, InteractionTtsRequest,
 };
 use providers::media_http::default_tts_model;
 use providers::trait_::ProviderConfig;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
@@ -73,8 +73,8 @@ crate::submit_builtin_tool! {
 
 /// 请求 TTS，将音频保存到工作区并返回路径。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: TtsArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("tts 参数无效: {e}"))?;
+    let parsed: TtsArgs =
+        serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("tts 参数无效: {e}"))?;
     let text = parsed.text.trim();
     if text.is_empty() {
         anyhow::bail!("tts 需要 text");
@@ -92,7 +92,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     }
 
     let stream = parsed.stream.unwrap_or(false);
-    let style = parsed.style.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let style = parsed
+        .style
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     let advanced = parsed.speakers.is_some() || style.is_some() || parsed.stream == Some(true);
 
     if let Some(creds) = ctx.image_gen_targets.google() {
@@ -139,7 +143,7 @@ async fn synthesize_google(
         },
         model: model.clone(),
         ..ProviderConfig::default()
-};
+    };
     let req = InteractionTtsRequest {
         model: model.clone(),
         input,
@@ -165,8 +169,7 @@ async fn synthesize_google(
     Ok(super::media_out::with_generated_media(
         format!(
             "语音已生成：{rel}\nprovider=google\nmodel={model}\ninteraction_id={}\nstream={}",
-            result.interaction_id,
-            stream
+            result.interaction_id, stream
         ),
         common::MediaKind::Audio,
         &rel,
@@ -243,9 +246,7 @@ async fn synthesize_openai(
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(super::media_out::generated_media_filename(
-        title,
-        "语音",
-        "mp3",
+        title, "语音", "mp3",
     ));
     std::fs::write(&path, &bytes)?;
     let rel = path
@@ -253,9 +254,7 @@ async fn synthesize_openai(
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
     Ok(super::media_out::with_generated_media(
-        format!(
-            "语音已生成：{rel}\nprovider=openai\nmodel=gpt-4o-mini-tts"
-        ),
+        format!("语音已生成：{rel}\nprovider=openai\nmodel=gpt-4o-mini-tts"),
         common::MediaKind::Audio,
         &rel,
         "audio/mpeg",

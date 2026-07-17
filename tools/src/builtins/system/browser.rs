@@ -107,7 +107,10 @@ fn assert_public_http_url(raw: &str) -> anyhow::Result<()> {
 }
 
 fn is_blocked_host(host: &str) -> bool {
-    let h = host.trim().trim_matches(|c| c == '[' || c == ']').to_ascii_lowercase();
+    let h = host
+        .trim()
+        .trim_matches(|c| c == '[' || c == ']')
+        .to_ascii_lowercase();
     matches!(
         h.as_str(),
         "localhost" | "localhost.localdomain" | "0.0.0.0" | "::1" | "metadata.google.internal"
@@ -129,7 +132,8 @@ fn is_blocked_v4(ip: Ipv4Addr) -> bool {
         || ip.is_link_local()
         || ip.is_broadcast()
         || ip.is_unspecified()
-        || ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000) == 0b0100_0000 // 100.64/10
+        || ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000) == 0b0100_0000
+    // 100.64/10
 }
 
 fn is_blocked_v6(ip: Ipv6Addr) -> bool {

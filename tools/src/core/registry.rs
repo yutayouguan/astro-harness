@@ -127,8 +127,7 @@ impl ToolRegistry {
     /// `AgentRuntimeConfig.tools_enabled`（缺失时回退全局），与前端
     /// `save_tools_enabled_for_agent` 对齐。
     pub fn reload_enabled_from_disk(&mut self, agent_id: Option<&str>) {
-        self.enabled =
-            home::sync_tools_enabled_defaults_for_agent(agent_id).unwrap_or_default();
+        self.enabled = home::sync_tools_enabled_defaults_for_agent(agent_id).unwrap_or_default();
     }
 
     /// 判断指定 toolset 是否启用；未在映射中出现时默认返回 `true`。

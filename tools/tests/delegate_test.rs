@@ -41,7 +41,8 @@ async fn delegate_requires_goal() {
     let _registry = ToolRegistry::new();
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
@@ -60,7 +61,8 @@ async fn delegate_requires_goal() {
 async fn delegate_goal_hits_runner_or_key() {
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
@@ -90,7 +92,8 @@ async fn delegate_async_status_collect_cancel_flow() {
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
@@ -142,14 +145,14 @@ async fn delegate_async_cancel_marks_cancelled() {
         let tid = task_id.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(500)).await;
-            delegate::AsyncDelegateRegistry::global()
-                .finish_ok(&tid, r#"{"late":true}"#.into());
+            delegate::AsyncDelegateRegistry::global().finish_ok(&tid, r#"{"late":true}"#.into());
         });
     });
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
@@ -187,7 +190,8 @@ async fn delegate_blocked_at_max_spawn_depth() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
 
     let ctx_depth = home::SpawnDepthCtx {
@@ -205,8 +209,5 @@ async fn delegate_blocked_at_max_spawn_depth() {
     })
     .await
     .unwrap_err();
-    assert!(
-        err.to_string().contains("spawn depth"),
-        "got: {err}"
-    );
+    assert!(err.to_string().contains("spawn depth"), "got: {err}");
 }

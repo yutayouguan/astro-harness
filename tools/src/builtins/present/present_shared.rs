@@ -13,8 +13,7 @@ pub fn dispatch_present(
 ) -> anyhow::Result<String> {
     let surface_id = format!("{}-{}", tool_name, uuid::Uuid::new_v4());
     let ops = ops_fn(&surface_id);
-    a2ui::validate_operations(&ops)
-        .map_err(|e| anyhow::anyhow!("{tool_name} A2UI 无效: {e}"))?;
+    a2ui::validate_operations(&ops).map_err(|e| anyhow::anyhow!("{tool_name} A2UI 无效: {e}"))?;
     Ok(json!({
         "astro_ui": true,
         "summary": summary,

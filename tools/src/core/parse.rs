@@ -220,7 +220,6 @@ pub fn resolve_tool_calls(
     extract_tool_calls(assistant_text)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

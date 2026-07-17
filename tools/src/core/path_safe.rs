@@ -50,9 +50,8 @@ pub fn resolve_safe(workspace: &Path, rel: &str) -> anyhow::Result<PathBuf> {
 
         match std::fs::symlink_metadata(&cur) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                let target = std::fs::canonicalize(&cur).map_err(|e| {
-                    anyhow::anyhow!("无法解析符号链接 {}: {e}", cur.display())
-                })?;
+                let target = std::fs::canonicalize(&cur)
+                    .map_err(|e| anyhow::anyhow!("无法解析符号链接 {}: {e}", cur.display()))?;
                 if !target.starts_with(&base) {
                     anyhow::bail!("路径越界：不允许访问 workspace 之外的文件");
                 }

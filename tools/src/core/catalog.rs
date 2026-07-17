@@ -185,10 +185,7 @@ pub fn catalog_for_ui(registry: &ToolRegistry) -> Vec<ToolCatalogItem> {
 
     let mut by_set: BTreeMap<String, Vec<&crate::registry::ToolEntry>> = BTreeMap::new();
     for entry in registry.all_tools() {
-        by_set
-            .entry(entry.toolset.clone())
-            .or_default()
-            .push(entry);
+        by_set.entry(entry.toolset.clone()).or_default().push(entry);
     }
 
     let mut out = Vec::new();
@@ -276,7 +273,10 @@ mod tests {
         assert!(file_ops.params.iter().any(|p| p.name == "path"));
         assert!(!file_ops.functions.is_empty());
         assert_eq!(file_ops.functions[0].icon, "folder-kanban");
-        let web = cat.iter().find(|c| c.id == "web_search").expect("web_search");
+        let web = cat
+            .iter()
+            .find(|c| c.id == "web_search")
+            .expect("web_search");
         assert!(
             web.functions.iter().any(|f| f.name == "web_extract"),
             "web_search toolset should include web_extract"
@@ -297,7 +297,10 @@ mod tests {
         assert!(mem.params.iter().any(|p| p.name == "target"));
         // Lucide kebab-case id，不是 Unicode emoji
         assert_eq!(mem.icon, "brain");
-        assert!(mem.icon.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()));
+        assert!(mem
+            .icon
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()));
     }
 
     #[test]

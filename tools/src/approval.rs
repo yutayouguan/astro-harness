@@ -33,7 +33,10 @@ fn deny_patterns() -> &'static [(Regex, &'static str)] {
             (r"(?i)\bdd\s+.*\bof\s*=\s*/dev/", "dd write to block device"),
             (r"(?i)>\s*/etc/", "overwrite under /etc"),
             (r":\(\)\s*\{\s*:\|:&\s*\}\s*;?", "fork bomb"),
-            (r"(?i)\bsystemctl\s+(stop|disable|mask)\s+(ssh|networking|firewalld|ufw)\b", "stop critical system service"),
+            (
+                r"(?i)\bsystemctl\s+(stop|disable|mask)\s+(ssh|networking|firewalld|ufw)\b",
+                "stop critical system service",
+            ),
         ])
     })
 }
@@ -43,13 +46,22 @@ fn ask_patterns() -> &'static [(Regex, &'static str)] {
     static P: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     P.get_or_init(|| {
         compile(&[
-            (r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)", "recursive delete (rm -rf)"),
+            (
+                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)",
+                "recursive delete (rm -rf)",
+            ),
             (r"(?i)\bdd\s+.*\bof\s*=", "dd write"),
             (r"(?i)curl\s+[^|]*\|\s*(ba)?sh", "curl piped to shell"),
             (r"(?i)wget\s+[^|]*\|\s*(ba)?sh", "wget piped to shell"),
             (r"(?i)\bDROP\s+TABLE\b", "SQL DROP TABLE"),
-            (r"(?i)\bDELETE\s+FROM\b(?![^\n]*\bWHERE\b)", "SQL DELETE without WHERE"),
-            (r"(?i)\bsystemctl\s+(stop|disable|mask)\b", "systemctl stop/disable"),
+            (
+                r"(?i)\bDELETE\s+FROM\b(?![^\n]*\bWHERE\b)",
+                "SQL DELETE without WHERE",
+            ),
+            (
+                r"(?i)\bsystemctl\s+(stop|disable|mask)\b",
+                "systemctl stop/disable",
+            ),
         ])
     })
 }

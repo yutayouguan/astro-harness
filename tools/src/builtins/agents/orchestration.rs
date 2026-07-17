@@ -55,12 +55,13 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "orchestration_status".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Query status and step outputs of an orchestration started by orchestration_run."
-            .to_string(),
+        description:
+            "Query status and step outputs of an orchestration started by orchestration_run."
+                .to_string(),
         schema: schema_for_args::<OrchestrationStatusArgs>(),
         check_fn: None,
         icon: "list-checks",
-            ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
 }
 

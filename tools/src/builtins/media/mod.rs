@@ -3,9 +3,9 @@
 pub mod audio_understand;
 pub mod image_gen;
 pub(crate) mod media_out;
+pub mod music_gen;
+pub mod robotics;
+pub mod tts;
 pub mod video_gen;
 pub mod video_understand;
-pub mod tts;
-pub mod music_gen;
 pub mod vision;
-pub mod robotics;

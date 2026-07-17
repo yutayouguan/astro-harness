@@ -144,7 +144,10 @@ fn simplify_type_field(obj: &Map<String, Value>) -> Option<Map<String, Value>> {
     let Value::Array(types) = obj.get("type")? else {
         return None;
     };
-    let non_null: Vec<&Value> = types.iter().filter(|t| t.as_str() != Some("null")).collect();
+    let non_null: Vec<&Value> = types
+        .iter()
+        .filter(|t| t.as_str() != Some("null"))
+        .collect();
     if non_null.len() != 1 {
         return None;
     }
@@ -187,7 +190,8 @@ fn simplify_any_of_null(obj: &Map<String, Value>) -> Option<Map<String, Value>> 
     };
     // 保留外层 description（若有）
     if let Some(desc) = obj.get("description") {
-        next.entry("description".to_string()).or_insert(desc.clone());
+        next.entry("description".to_string())
+            .or_insert(desc.clone());
     }
     Some(next)
 }

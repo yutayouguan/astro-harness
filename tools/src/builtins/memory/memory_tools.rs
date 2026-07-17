@@ -92,7 +92,11 @@ pub fn register(registry: &mut ToolRegistry) {
 /// 将记忆工具调用委托给 `memory::dispatch_memory_tool`。
 ///
 /// 需要可变 `ToolContext` 以访问 `MemoryManager`。
-pub fn dispatch(ctx: &mut ToolContext<'_>, name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
+pub fn dispatch(
+    ctx: &mut ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
     memory::dispatch_memory_tool(ctx.memory, name, args)
 }
 

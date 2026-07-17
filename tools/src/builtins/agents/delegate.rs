@@ -105,16 +105,18 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<DelegateTaskIdArgs>(),
         check_fn: None,
         icon: "list-checks",
-            ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "delegate_collect".to_string(),
         toolset: "delegate".to_string(),
-        description: "Wait until a background delegate finishes (or timeout) and return its result.".to_string(),
+        description:
+            "Wait until a background delegate finishes (or timeout) and return its result."
+                .to_string(),
         schema: schema_for_args::<DelegateCollectArgs>(),
         check_fn: None,
         icon: "hourglass",
-            ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "delegate_cancel".to_string(),
@@ -191,7 +193,6 @@ pub fn dispatch_cancel(args: &serde_json::Value) -> anyhow::Result<String> {
     Ok(record_to_json(&rec, true))
 }
 
-
 /// 本模块统一入口：同步 / 异步委派及状态查询。
 async fn handle(
     ctx: &mut ToolContext<'_>,
@@ -238,8 +239,8 @@ fn build_run_request(
         .max_concurrent
         .unwrap_or(cfg.delegation.max_concurrent_children)
         .clamp(1, 8);
-    let max_spawn_depth = home::scoped_max_spawn_depth()
-        .unwrap_or(cfg.delegation.max_spawn_depth.max(1));
+    let max_spawn_depth =
+        home::scoped_max_spawn_depth().unwrap_or(cfg.delegation.max_spawn_depth.max(1));
     Ok(delegate::DelegateRunRequest {
         parent_agent_id: ctx.memory.agent_id.clone(),
         parent_session_id: ctx.session_id.clone(),

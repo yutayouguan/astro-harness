@@ -100,7 +100,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     }
 }
 
-fn resolve_google_images(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::Result<Vec<VisionImagePart>> {
+fn resolve_google_images(
+    ctx: &ToolContext<'_>,
+    urls: &[String],
+) -> anyhow::Result<Vec<VisionImagePart>> {
     let mut out = Vec::new();
     for u in urls {
         let u = u.trim();
@@ -136,7 +139,10 @@ fn resolve_google_images(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::Resu
     Ok(out)
 }
 
-fn resolve_openai_image_urls(ctx: &ToolContext<'_>, urls: &[String]) -> anyhow::Result<Vec<String>> {
+fn resolve_openai_image_urls(
+    ctx: &ToolContext<'_>,
+    urls: &[String],
+) -> anyhow::Result<Vec<String>> {
     let mut out = Vec::new();
     for u in urls {
         let u = u.trim();
@@ -182,11 +188,7 @@ fn mime_from_url_or_path(s: &str) -> &'static str {
 }
 
 fn mime_from_path(path: &std::path::Path) -> &'static str {
-    mime_from_extension(
-        path.extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or(""),
-    )
+    mime_from_extension(path.extension().and_then(|e| e.to_str()).unwrap_or(""))
 }
 
 fn mime_from_extension(ext: &str) -> &'static str {
@@ -222,7 +224,7 @@ async fn call_google_vision(
         },
         model: model.clone(),
         ..ProviderConfig::default()
-};
+    };
     let client = reqwest::Client::new();
     let text = google_interactions_vision(&client, prompt, images, mode, &config).await?;
     Ok(format!(
@@ -254,7 +256,7 @@ async fn call_openai_vision(
             },
             model: model.clone(),
             ..ProviderConfig::default()
-};
+        };
         let text = openai_vision_completions(&client, prompt, image_urls, mode, &config).await?;
         return Ok(format_openai_vision_output(&text, &model, mode));
     }
@@ -275,7 +277,7 @@ async fn call_openai_vision(
             base_url: base,
             model: model.clone(),
             ..ProviderConfig::default()
-};
+        };
         let text = openai_vision_completions(&client, prompt, image_urls, mode, &config).await?;
         return Ok(format_openai_vision_output(&text, &model, mode));
     }
@@ -290,7 +292,7 @@ async fn call_openai_vision(
         base_url: Some("https://api.openai.com/v1".into()),
         model: model.clone(),
         ..ProviderConfig::default()
-};
+    };
     let text = openai_vision_completions(&client, prompt, image_urls, mode, &config).await?;
     Ok(format_openai_vision_output(&text, &model, mode))
 }

@@ -62,12 +62,13 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "team_list".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "List persisted Team definitions from ~/.astro/teams, or inspect one team by team_id."
-            .to_string(),
+        description:
+            "List persisted Team definitions from ~/.astro/teams, or inspect one team by team_id."
+                .to_string(),
         schema: schema_for_args::<TeamIdArgs>(),
         check_fn: None,
         icon: "users",
-            ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "team_create".to_string(),
@@ -94,7 +95,12 @@ pub fn register(registry: &mut ToolRegistry) {
 pub fn dispatch_list(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: TeamIdArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("team_list 参数无效: {e}"))?;
-    if let Some(id) = parsed.team_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(id) = parsed
+        .team_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         let team = orchestration::load_team(&ctx.memory_dir, id)?;
         return Ok(serde_json::to_string_pretty(&team)?);
     }

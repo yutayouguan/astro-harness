@@ -82,12 +82,11 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
             if question.is_empty() {
                 return None;
             }
-            let id = q
-                .id
-                .as_ref()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| format!("q{i}"));
+            let id =
+                q.id.as_ref()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| format!("q{i}"));
             Some(a2ui::templates::ClarifyStep {
                 id,
                 question: question.to_string(),

@@ -8,8 +8,7 @@ use std::path::{Path, PathBuf};
 
 use home::{generated_dir, GeneratedKind};
 use providers::interactions_http::{
-    google_interactions_image, InteractionImagePart, InteractionImageRequest,
-    InteractionVideoInput,
+    google_interactions_image, InteractionImagePart, InteractionImageRequest, InteractionVideoInput,
 };
 use providers::trait_::{GeneratedImage, ProviderConfig};
 use schemars::JsonSchema;
@@ -62,15 +61,23 @@ fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()> {
     if args.prompt.trim().is_empty() {
         anyhow::bail!("image_gen 需要 prompt 参数");
     }
-    if let Some(sz) = args.image_size.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(sz) = args
+        .image_size
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         match sz {
             "0.5K" | "1K" | "2K" | "4K" => {}
-            _ => anyhow::bail!(
-                "image_size 无效: {sz}（仅支持 0.5K / 1K / 2K / 4K，须大写 K）"
-            ),
+            _ => anyhow::bail!("image_size 无效: {sz}（仅支持 0.5K / 1K / 2K / 4K，须大写 K）"),
         }
     }
-    if let Some(level) = args.thinking_level.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(level) = args
+        .thinking_level
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         match level {
             "minimal" | "high" => {}
             _ => anyhow::bail!("thinking_level 无效: {level}（仅支持 minimal / high）"),
@@ -234,7 +241,7 @@ async fn generate_one_google(
         },
         model: creds.model.clone(),
         ..ProviderConfig::default()
-};
+    };
 
     let reference_images = if let Some(refs) = &args.reference_images {
         refs.iter()
@@ -320,7 +327,7 @@ async fn generate_one_openai_compat(
         },
         model: creds.model.clone(),
         ..ProviderConfig::default()
-};
+    };
 
     let images = provider.generate_image(prompt, &config).await?;
     let img = images
@@ -404,7 +411,10 @@ fn resolve_workspace_file(ctx: &ToolContext<'_>, input: &str) -> anyhow::Result<
     Ok(canon)
 }
 
-fn load_reference_image(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<InteractionImagePart> {
+fn load_reference_image(
+    ctx: &ToolContext<'_>,
+    relative: &str,
+) -> anyhow::Result<InteractionImagePart> {
     let path = resolve_workspace_file(ctx, relative)?;
     let data = std::fs::read(&path)
         .map_err(|e| anyhow::anyhow!("读取参考图失败 {}: {e}", path.display()))?;
@@ -429,7 +439,10 @@ fn check_video_byte_len(len: usize) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn load_video_input(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<InteractionVideoInput> {
+fn load_video_input(
+    ctx: &ToolContext<'_>,
+    relative: &str,
+) -> anyhow::Result<InteractionVideoInput> {
     let path = resolve_workspace_file(ctx, relative)?;
     let meta = std::fs::metadata(&path)?;
     check_video_byte_len(meta.len() as usize)?;
@@ -680,7 +693,8 @@ mod path_tests {
         std::fs::write(outside.join("secret.txt"), b"x").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
         let ctx = ToolContext {
@@ -705,10 +719,7 @@ mod path_tests {
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.txt").unwrap_err();
-        assert!(
-            err.to_string().contains("工作区内"),
-            "unexpected: {err}"
-        );
+        assert!(err.to_string().contains("工作区内"), "unexpected: {err}");
     }
 
     #[test]
@@ -719,7 +730,8 @@ mod path_tests {
         std::fs::write(ws.join("ok.txt"), b"ok").unwrap();
 
         let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let providers = ProviderRegistry::new();
         let ctx = ToolContext {

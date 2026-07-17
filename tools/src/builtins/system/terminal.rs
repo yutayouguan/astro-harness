@@ -58,7 +58,12 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     }
 
     let root = ctx.ensure_project_or_workspace()?;
-    let cwd = if let Some(rel) = parsed.cwd.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let cwd = if let Some(rel) = parsed
+        .cwd
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         crate::path_safe::resolve_safe(&root, rel)?
     } else {
         root
@@ -118,7 +123,8 @@ mod tests {
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let ctx = ToolContext {
@@ -157,7 +163,8 @@ mod tests {
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let bus = std::sync::Arc::new(hooks::PluginHookBus::new());

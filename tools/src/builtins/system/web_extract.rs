@@ -43,10 +43,11 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "web_extract".to_string(),
         toolset: "web_search".to_string(),
-        description: "Fetch one or more public http(s) URLs and extract readable text (HTML stripped). \
+        description:
+            "Fetch one or more public http(s) URLs and extract readable text (HTML stripped). \
              Use after web_search when you need page body, not just snippets. \
              Rejects localhost/private IPs. Each page capped by max_chars (default 12000)."
-            .to_string(),
+                .to_string(),
         schema: schema_for_args::<WebExtractArgs>(),
         check_fn: None,
         icon: "file-text",
@@ -79,7 +80,12 @@ pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyho
         }
     }
     if targets.is_empty() {
-        if let Some(u) = parsed.url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(u) = parsed
+            .url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             targets.push(u.to_string());
         }
     }
@@ -100,7 +106,13 @@ pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyho
     for (i, url) in targets.iter().enumerate() {
         assert_public_http_url(url)?;
         match fetch_and_extract(&client, url, max_chars).await {
-            Ok(body) => sections.push(format!("### [{}/{}] {}\n\n{}", i + 1, targets.len(), url, body)),
+            Ok(body) => sections.push(format!(
+                "### [{}/{}] {}\n\n{}",
+                i + 1,
+                targets.len(),
+                url,
+                body
+            )),
             Err(e) => sections.push(format!(
                 "### [{}/{}] {}\n\n错误: {e}",
                 i + 1,
@@ -178,9 +190,25 @@ fn html_to_text(html: &str) -> String {
                 in_tag = false;
                 let t = tag_buf.to_ascii_lowercase();
                 if matches!(
-                    t.trim_start_matches('/').split_whitespace().next().unwrap_or(""),
-                    "p" | "div" | "br" | "li" | "tr" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
-                        | "section" | "article" | "header" | "footer" | "blockquote"
+                    t.trim_start_matches('/')
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or(""),
+                    "p" | "div"
+                        | "br"
+                        | "li"
+                        | "tr"
+                        | "h1"
+                        | "h2"
+                        | "h3"
+                        | "h4"
+                        | "h5"
+                        | "h6"
+                        | "section"
+                        | "article"
+                        | "header"
+                        | "footer"
+                        | "blockquote"
                 ) {
                     out.push('\n');
                 }

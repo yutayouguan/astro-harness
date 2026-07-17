@@ -84,12 +84,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &Value) -> anyhow::Result<Str
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
-    let prompt = default_robotics_prompt(
-        mode,
-        queries.as_deref(),
-        robot_api,
-        user_prompt,
-    );
+    let prompt = default_robotics_prompt(mode, queries.as_deref(), robot_api, user_prompt);
     let thinking_budget = parsed.thinking_budget.unwrap_or(0);
     let model = parsed
         .model
@@ -145,7 +140,7 @@ async fn call_google(
         },
         model: model.to_string(),
         ..ProviderConfig::default()
-};
+    };
     let client = reqwest::Client::new();
     google_robotics_generate(&client, model, prompt, images, thinking_budget, &config).await
 }
@@ -243,7 +238,10 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(args.image_url.as_deref(), Some("a.png"));
-        assert_eq!(RoboticsMode::parse(args.mode.as_deref().unwrap_or("")).unwrap(), RoboticsMode::Point);
+        assert_eq!(
+            RoboticsMode::parse(args.mode.as_deref().unwrap_or("")).unwrap(),
+            RoboticsMode::Point
+        );
     }
 
     #[test]

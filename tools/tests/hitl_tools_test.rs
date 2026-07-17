@@ -15,7 +15,8 @@ fn make_ctx(
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
     let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions =
+        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     (memory, sessions, providers, targets, workspace)
@@ -117,9 +118,8 @@ async fn clarify_emits_valid_a2ui_hitl() {
         op.pointer("/updateComponents/components")
             .and_then(|c| c.as_array())
             .map(|arr| {
-                arr.iter().any(|c| {
-                    c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard")
-                })
+                arr.iter()
+                    .any(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
             })
             .unwrap_or(false)
     });
@@ -178,8 +178,9 @@ async fn clarify_free_text_step_allows_empty_options() {
             op.pointer("/updateComponents/components")
                 .and_then(|c| c.as_array())
                 .and_then(|arr| {
-                    arr.iter()
-                        .find(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
+                    arr.iter().find(|c| {
+                        c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard")
+                    })
                 })
                 .and_then(|w| w.get("steps"))
                 .and_then(|s| s.as_array())
@@ -254,9 +255,8 @@ async fn clarify_multi_emits_wizard_hitl() {
         op.pointer("/updateComponents/components")
             .and_then(|c| c.as_array())
             .map(|arr| {
-                arr.iter().any(|c| {
-                    c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard")
-                })
+                arr.iter()
+                    .any(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
             })
             .unwrap_or(false)
     });
