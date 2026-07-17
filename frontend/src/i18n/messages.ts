@@ -1809,7 +1809,7 @@ export const en: Record<MessageKey, string> = {
   "sessions.unpin": "Unpin",
   "sessions.pinnedBadge": "Pinned",
   "sessions.export": "Export",
-  "sessions.exportDone": "Exported to Downloads",
+  "sessions.exportDone": "Exported to {path}",
   "sessions.exportEmpty": "Nothing to export in this session",
   "sessions.branch": "Branch",
   "sessions.branchEmpty": "No messages to branch from",
