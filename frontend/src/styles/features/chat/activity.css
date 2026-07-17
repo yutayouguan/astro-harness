@@ -282,23 +282,26 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-card.is-media {
-  --gmc-tone: var(--tone-green, #16a34a);
+  --gmc-tone: var(--tone, #2563eb);
   position: relative;
   max-width: min(100%, 440px);
   overflow: hidden;
   isolation: isolate;
-  border-color: var(--a2ui-glass-border, var(--glass-edge));
-  background: var(--a2ui-glass-bg, var(--glass-panel, var(--panel, var(--bg))));
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 24%, var(--a2ui-glass-border, var(--glass-edge)));
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, #fff 30%, transparent) 0%,
+      transparent 100%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 65%, var(--a2ui-glass-bg, transparent));
   box-shadow: var(--a2ui-glass-shadow, none);
   backdrop-filter: blur(var(--a2ui-glass-blur, 14px)) saturate(1.25);
   -webkit-backdrop-filter: blur(var(--a2ui-glass-blur, 14px)) saturate(1.25);
   animation: gen-media-card-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.a2ui-card.is-media:has(.a2ui-media-video) {
-  --gmc-tone: #e11d48;
-}
-
+.a2ui-card.is-media:has(.a2ui-media-video),
 .a2ui-card.is-media:has(.a2ui-media-image) {
   --gmc-tone: var(--tone, #2563eb);
 }
