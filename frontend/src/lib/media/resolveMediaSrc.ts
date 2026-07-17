@@ -8,18 +8,37 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 const PASSTHROUGH =
   /^(https?:|data:|blob:|asset:|tauri:|ipc:)/i;
 
+/**
+ * Markdown / 浏览器常把中文文件名编成 `%E4%BA%91…`。
+ * 按路径段安全解码，避免把真实文件系统名对不上。
+ */
+export function decodeMediaPathEncoding(path: string): string {
+  if (!/%[0-9A-Fa-f]{2}/.test(path)) return path;
+  return path
+    .split(/([/\\])/)
+    .map((part) => {
+      if (part === "/" || part === "\\") return part;
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return part;
+      }
+    })
+    .join("");
+}
+
 /** 去掉 file:// 前缀（含多余斜杠），得到本地路径 */
 export function stripFileUrl(src: string): string {
   const trimmed = src.trim();
-  if (!/^file:/i.test(trimmed)) return trimmed;
+  if (!/^file:/i.test(trimmed)) return decodeMediaPathEncoding(trimmed);
   try {
     const u = new URL(trimmed);
     let path = decodeURIComponent(u.pathname);
     // Windows: /C:/Users/... → C:/Users/...
     if (/^\/[A-Za-z]:\//.test(path)) path = path.slice(1);
-    return path;
+    return decodeMediaPathEncoding(path);
   } catch {
-    return trimmed.replace(/^file:\/\//i, "");
+    return decodeMediaPathEncoding(trimmed.replace(/^file:\/\//i, ""));
   }
 }
 
@@ -54,7 +73,7 @@ export function absolutizeMediaPath(
   baseDir?: string | null,
 ): string | null {
   if (src == null) return null;
-  const raw = src.trim();
+  const raw = decodeMediaPathEncoding(src.trim());
   if (!raw) return null;
   if (PASSTHROUGH.test(raw)) return null;
 

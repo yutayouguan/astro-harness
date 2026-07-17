@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   absolutizeMediaPath,
+  decodeMediaPathEncoding,
   looksLikeLocalPath,
   looksLikeRelativeLocalPath,
   resolveMediaPreviewPath,
@@ -21,6 +22,19 @@ test("looksLikeLocalPath recognizes abs and file urls", () => {
 test("stripFileUrl decodes file urls", () => {
   assert.equal(stripFileUrl("file:///Users/a/b%20c.png"), "/Users/a/b c.png");
   assert.equal(stripFileUrl("/Users/a/b.png"), "/Users/a/b.png");
+});
+
+test("decodeMediaPathEncoding restores CJK filenames from markdown", () => {
+  assert.equal(
+    decodeMediaPathEncoding(
+      "generated/images/%E4%BA%91%E5%8D%97%E9%87%87%E8%8F%8C%E5%A5%B3%E5%AD%A9-20260718-005548-69591c8b.jpg",
+    ),
+    "generated/images/云南采菌女孩-20260718-005548-69591c8b.jpg",
+  );
+  assert.equal(
+    decodeMediaPathEncoding("/Users/a/generated/images/plain.jpg"),
+    "/Users/a/generated/images/plain.jpg",
+  );
 });
 
 test("resolveMediaSrc passthrough for http/data/blob", () => {
@@ -75,6 +89,31 @@ test("absolutizeMediaPath joins relative under workspace baseDir", () => {
   assert.equal(absolutizeMediaPath("https://ex.com/a.png", "/ws"), null);
   assert.equal(
     absolutizeMediaPath("generated/../etc/passwd", "/Users/a/.astro/workspace"),
+    null,
+  );
+});
+
+test("absolutizeMediaPath decodes percent-encoded CJK before join", () => {
+  assert.equal(
+    absolutizeMediaPath(
+      "generated/images/%E4%BA%91%E5%8D%97%E9%87%87%E8%8F%8C%E5%A5%B3%E5%AD%A9-20260718-005548-69591c8b.jpg",
+      "/Users/a/.astro/workspace",
+    ),
+    "/Users/a/.astro/workspace/generated/images/云南采菌女孩-20260718-005548-69591c8b.jpg",
+  );
+  assert.equal(
+    absolutizeMediaPath(
+      "/Users/a/.astro/workspace/generated/images/%E4%BA%91%E5%8D%97.jpg",
+      null,
+    ),
+    "/Users/a/.astro/workspace/generated/images/云南.jpg",
+  );
+  // 解码后的 .. 仍拒绝
+  assert.equal(
+    absolutizeMediaPath(
+      "generated/%2e%2e/etc/passwd",
+      "/Users/a/.astro/workspace",
+    ),
     null,
   );
 });
