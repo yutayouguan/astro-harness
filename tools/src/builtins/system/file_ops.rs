@@ -92,6 +92,28 @@ crate::submit_builtin_tool! {
     sync_ctx: dispatch,
 }
 
+/// 写入 HTML 文件时附加 media sidecar，使前端活动卡渲染可预览的 HTML 卡片。
+///
+/// 前端 `commands.rs` 已把 `file` 类且扩展名为 html/htm 的 sidecar 映射为 html 预览。
+fn maybe_html_sidecar(text: String, rel: &str) -> String {
+    let is_html = rel
+        .rsplit('.')
+        .next()
+        .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "html" | "htm"));
+    if is_html {
+        common::append_media_sidecar(
+            &text,
+            &[common::MediaAsset::workspace(
+                common::MediaKind::File,
+                rel,
+                "text/html",
+            )],
+        )
+    } else {
+        text
+    }
+}
+
 /// 按 `operation` 执行文件系统操作。
 ///
 /// 路径经 `resolve_safe` 解析；`write`/`append`/`mkdir` 会自动创建父目录。
@@ -116,7 +138,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             // resolve_safe 已拒绝越界 symlink；写前再确认最终路径仍在沙箱根
             reaffirm_within(&full, root)?;
             std::fs::write(&full, content.as_bytes())?;
-            Ok(format!("已写入 {rel}"))
+            Ok(maybe_html_sidecar(format!("已写入 {rel}"), &rel))
         }
         "append" => {
             use std::io::Write;
