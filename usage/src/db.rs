@@ -800,7 +800,7 @@ mod tests {
         let path = dir.path().join("usage.db");
         let db = UsageDb::new(path.clone()).unwrap();
         assert_eq!(SqliteStore::path(&db), path.as_path());
-        db.migrate().unwrap();
+        SqliteStore::migrate(&db).unwrap();
         let ver: i32 = db
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
