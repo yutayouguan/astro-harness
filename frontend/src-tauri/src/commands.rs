@@ -2523,10 +2523,54 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
         .find(|j| j.id == id || j.id.starts_with(&id))
         .ok_or_else(|| "未找到定时任务".to_string())?;
     let creds = resolve_creds_for_job(&job)?;
-    let row = agent::exec::cron::execute_job(&job, creds, "manual")
-        .await
-        .map_err(|e| e.to_string())?;
+    let label = {
+        let t = job.title.trim();
+        if !t.is_empty() {
+            t.to_string()
+        } else {
+            let task = job.task.trim();
+            let mut it = task.chars();
+            let head: String = it.by_ref().take(48).collect();
+            if it.next().is_some() {
+                format!("{head}…")
+            } else {
+                head
+            }
+        }
+    };
+    let row = match agent::exec::cron::execute_job(&job, creds, "manual").await {
+        Ok(row) => row,
+        Err(err) => {
+            common::notify_important("定时任务失败", format!("{label}\n{err}"));
+            return Err(err.to_string());
+        }
+    };
     let _ = store.touch_last_run(&job.id, Some(row.fired_at.clone()));
+    if row.status == "success" {
+        let body = if row.summary.trim().is_empty() {
+            label
+        } else {
+            format!("{label}\n{}", row.summary.chars().take(120).collect::<String>())
+        };
+        common::notify_important("定时任务完成", body);
+    } else {
+        let detail = row
+            .error
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.chars().take(120).collect::<String>())
+            .or_else(|| {
+                let s = row.summary.trim();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.chars().take(120).collect())
+                }
+            })
+            .unwrap_or_else(|| row.status.clone());
+        common::notify_important("定时任务失败", format!("{label}\n{detail}"));
+    }
     Ok(run_to_dto(row))
 }
 

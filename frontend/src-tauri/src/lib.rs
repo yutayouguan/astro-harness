@@ -18,6 +18,7 @@ mod keystore;
 mod litellm_meta;
 mod memory_commands;
 mod model_meta;
+mod notify;
 mod providers_commands;
 mod session_events;
 mod skills_commands;
@@ -232,6 +233,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .on_menu_event(|app, event| {
             if event.id() == MENU_PREFERENCES_ID {
                 let _ = app.emit(EVENT_OPEN_PREFERENCES, ());
@@ -407,6 +409,8 @@ pub fn run() {
             if let Err(err) = tray::install_tray(app.handle()) {
                 tracing::warn!("system tray install failed: {err}");
             }
+
+            notify::install(app.handle());
 
             let config = app
                 .config()

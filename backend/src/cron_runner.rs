@@ -182,6 +182,7 @@ pub async fn tick_and_execute() {
 
     for job in jobs {
         let creds = resolve_cron_credentials(&job);
+        let label = cron_notify_label(&job);
         match cron_exec::execute_job(&job, creds, "due").await {
             Ok(row) => {
                 tracing::info!(
@@ -192,15 +193,64 @@ pub async fn tick_and_execute() {
                     task = %job.task,
                     "cron job executed"
                 );
+                if row.status == "success" {
+                    let body = if row.summary.trim().is_empty() {
+                        label
+                    } else {
+                        format!("{label}\n{}", truncate_for_notify(&row.summary, 120))
+                    };
+                    common::notify_important("定时任务完成", body);
+                } else {
+                    let detail = row
+                        .error
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(|s| truncate_for_notify(s, 120))
+                        .or_else(|| {
+                            let s = row.summary.trim();
+                            if s.is_empty() {
+                                None
+                            } else {
+                                Some(truncate_for_notify(s, 120))
+                            }
+                        })
+                        .unwrap_or_else(|| row.status.clone());
+                    common::notify_important("定时任务失败", format!("{label}\n{detail}"));
+                }
             }
-            Err(err) => tracing::warn!(
-                job_id = %job.id,
-                schedule = %job.schedule,
-                task = %job.task,
-                error = %err,
-                "cron job execution failed"
-            ),
+            Err(err) => {
+                tracing::warn!(
+                    job_id = %job.id,
+                    schedule = %job.schedule,
+                    task = %job.task,
+                    error = %err,
+                    "cron job execution failed"
+                );
+                common::notify_important(
+                    "定时任务失败",
+                    format!("{label}\n{}", truncate_for_notify(&err.to_string(), 120)),
+                );
+            }
         }
+    }
+}
+
+fn cron_notify_label(job: &CronJob) -> String {
+    let title = job.title.trim();
+    if !title.is_empty() {
+        return title.to_string();
+    }
+    truncate_for_notify(job.task.trim(), 48)
+}
+
+fn truncate_for_notify(s: &str, max_chars: usize) -> String {
+    let mut it = s.chars();
+    let head: String = it.by_ref().take(max_chars).collect();
+    if it.next().is_some() {
+        format!("{head}…")
+    } else {
+        head
     }
 }
 

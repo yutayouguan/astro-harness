@@ -22,6 +22,7 @@
     "core:webview:allow-set-webview-size",
     "core:webview:allow-set-webview-background-color",
     "core:window:allow-set-background-color",
-    "core:window:allow-set-theme"
+    "core:window:allow-set-theme",
+    "notification:default"
   ]
 }

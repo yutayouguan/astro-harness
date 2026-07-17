@@ -5,6 +5,7 @@ pub mod chat_target;
 pub mod error;
 pub mod media;
 pub mod message;
+pub mod notify;
 pub mod sqlite;
 pub mod text;
 pub mod title;
@@ -16,6 +17,7 @@ pub use media::{
     append_media_sidecar, extract_tool_media, parse_generated_labels, MediaAsset, MediaKind,
     MediaRef,
 };
+pub use notify::{notify_important, set_important_notify_handler, ImportantNotice};
 pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
 pub use title::sanitize_title;
 
