@@ -929,10 +929,15 @@ html[data-theme="dark"] .gen-media-card[data-kind="video"] .gen-media-card-previ
   max-width: min(100%, 520px);
 }
 
-/* Markdown 内联媒体：audio/video/html → 卡片；图片仍走 MediaPreview */
+/* Markdown 媒体：统一走 GeneratedMediaCard，铺满可用宽 */
 .msg-md-media-card {
   margin: 10px 0;
+  width: 100%;
   max-width: min(100%, 440px);
+}
+
+.msg-md p:has(> .msg-md-media-card) {
+  margin: 0.55em 0;
 }
 
 .msg-md-media {
