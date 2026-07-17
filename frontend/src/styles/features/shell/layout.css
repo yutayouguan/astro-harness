@@ -110,7 +110,17 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 .sidebar.is-labels .nav-item {
   justify-content: flex-start;
   padding: 11px 12px;
-  gap: 10px;
+  gap: 6px;
+}
+
+.sidebar.is-labels .nav-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar.is-labels .nav-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .sidebar.is-labels .nav-label {
