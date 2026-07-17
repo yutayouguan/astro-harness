@@ -1322,6 +1322,33 @@ fn permanent_delete_removes_messages_and_fts() {
 }
 
 #[test]
+fn permanent_delete_detaches_child_branches_before_removing_parent() {
+    let (_dir, store) = test_store();
+    store
+        .create_session("parent", "tauri", None, None, None)
+        .unwrap();
+    store
+        .create_session("child", "tauri", None, None, Some("parent"))
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("keep-child"),
+            ..NewMessage::empty("child", "user")
+        })
+        .unwrap();
+
+    store.delete_session_permanently("parent").unwrap();
+
+    assert!(store.get_session("parent").unwrap().is_none());
+    let child = store.get_session("child").unwrap().unwrap();
+    assert!(child.parent_session_id.is_none());
+    assert_eq!(
+        store.get_messages("child").unwrap()[0].content.as_deref(),
+        Some("keep-child")
+    );
+}
+
+#[test]
 fn first_turn_text_returns_first_non_empty_user_and_assistant() {
     let (_dir, store) = test_store();
     store.create_session("s1", "tauri", None, None, None).unwrap();

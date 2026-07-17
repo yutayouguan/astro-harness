@@ -193,8 +193,15 @@ impl SessionStore {
     }
 
     /// 永久删除会话与其消息。
+    ///
+    /// 若存在以本会话为 `parent_session_id` 的分支，先断开引用再删，
+    /// 避免外键拦住父会话删除（子分支会话本身保留）。
     pub fn delete_session_permanently(&self, id: &str) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "UPDATE sessions SET parent_session_id = NULL WHERE parent_session_id = ?1",
+            params![id],
+        )?;
         tx.execute("DELETE FROM messages WHERE session_id = ?1", params![id])?;
         let changed = tx.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
         anyhow::ensure!(changed == 1, "delete_session_permanently: session not found");
