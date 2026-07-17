@@ -1,5 +1,5 @@
-/** 单条聊天活动卡：kind 图标 + 可折叠正文（生成媒体预览与 Input/Output）。 */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+/** 单条聊天活动卡：kind 图标 + 可折叠 IO；生成媒体以精美卡片始终露出。 */
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, ChevronDown, Webhook } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useLiveElapsedSec } from "../../hooks/chat/useLiveElapsedSec";
@@ -15,7 +15,7 @@ import {
 } from "../../lib/media/resolveMediaSrc";
 import type { ChatActivity, ChatActivityKind } from "../../types";
 import McpIcon from "../icons/McpIcon";
-import MediaPreview from "../media/MediaPreview";
+import GeneratedMediaCard from "../media/GeneratedMediaCard";
 import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
 
 type Props = {
@@ -70,23 +70,13 @@ export default function MsgActivity({
         })),
     [mediaItems, mediaBaseDir],
   );
-  const [open, setOpen] = useState(
-    () => (defaultOpen && hasBody) || mediaItems.length > 0,
-  );
+  const [open, setOpen] = useState(() => defaultOpen && hasBody);
   const running = activity.status === "running";
   const liveSec = useLiveElapsedSec(running, activity.at ?? null);
-  const prevMediaCountRef = useRef(mediaItems.length);
 
   useEffect(() => {
-    if (hasBody && mediaItems.length === 0) setOpen(defaultOpen);
-  }, [defaultOpen, hasBody, mediaItems.length]);
-
-  // 生成刚完成（0 → N）时展开以便看到结果；之后尊重用户折叠，不再强行打开。
-  useEffect(() => {
-    const prev = prevMediaCountRef.current;
-    prevMediaCountRef.current = mediaItems.length;
-    if (prev === 0 && mediaItems.length > 0) setOpen(true);
-  }, [mediaItems.length]);
+    if (hasBody) setOpen(defaultOpen);
+  }, [defaultOpen, hasBody]);
 
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
@@ -138,41 +128,38 @@ export default function MsgActivity({
         ) : (
           <div className="msg-activity-summary">{summary}</div>
         )}
-        {open ? (
-          <>
-            {previewMedia.length > 0 ? (
-              <div className="msg-activity-media">
-                {previewMedia.map((m) => (
-                  <MediaPreview
-                    key={`${m.kind}:${m.path}`}
-                    kind={m.kind}
-                    path={m.path}
-                    compact
-                  />
-                ))}
+        {/* 生成媒体始终露出，不随 Input/Output 折叠 */}
+        {previewMedia.length > 0 ? (
+          <div className="msg-activity-media">
+            {previewMedia.map((m) => (
+              <GeneratedMediaCard
+                key={`${m.kind}:${m.path}`}
+                kind={m.kind}
+                path={m.path}
+                compact
+              />
+            ))}
+          </div>
+        ) : null}
+        {open && (input || output) ? (
+          <div className="msg-activity-io">
+            {input ? (
+              <div className="msg-activity-io-block">
+                <span className="msg-activity-io-label">
+                  {t("chat.activityInput")}
+                </span>
+                <pre className="msg-activity-detail">{input}</pre>
               </div>
             ) : null}
-            {input || output ? (
-              <div className="msg-activity-io">
-                {input ? (
-                  <div className="msg-activity-io-block">
-                    <span className="msg-activity-io-label">
-                      {t("chat.activityInput")}
-                    </span>
-                    <pre className="msg-activity-detail">{input}</pre>
-                  </div>
-                ) : null}
-                {output ? (
-                  <div className="msg-activity-io-block">
-                    <span className="msg-activity-io-label">
-                      {t("chat.activityOutput")}
-                    </span>
-                    <pre className="msg-activity-detail">{output}</pre>
-                  </div>
-                ) : null}
+            {output ? (
+              <div className="msg-activity-io-block">
+                <span className="msg-activity-io-label">
+                  {t("chat.activityOutput")}
+                </span>
+                <pre className="msg-activity-detail">{output}</pre>
               </div>
             ) : null}
-          </>
+          </div>
         ) : null}
         {showTimestamp && activity.at ? (
           <span className="msg-activity-time">
