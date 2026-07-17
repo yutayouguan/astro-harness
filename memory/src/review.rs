@@ -134,7 +134,9 @@ mod tests {
         let raw = r#"{"suggestions":[{"action":"add","target":"memory","content":"prefers rust"}],"daily_note":"reviewed today"}"#;
         let out = parse_review_llm_output(raw).unwrap();
         let msgs = apply_review_suggestions(&mut mgr, &out).unwrap();
-        assert!(msgs.iter().any(|m| m.contains("待审批") || m.contains("pending") || m.contains("入队")));
+        assert!(msgs
+            .iter()
+            .any(|m| m.contains("待审批") || m.contains("pending") || m.contains("入队")));
         // live untouched
         assert!(!mgr.memory.live_render().contains("prefers rust"));
         // diary not gated

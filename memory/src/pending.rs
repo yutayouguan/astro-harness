@@ -12,12 +12,12 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use home::scan_memory_content;
 use crate::config::load_memory_config;
 use crate::parse_memory_entries;
 use crate::MemoryManager;
 use crate::MemoryStore;
 use crate::MemoryTarget;
+use home::scan_memory_content;
 
 /// 一条待审批的记忆写入。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

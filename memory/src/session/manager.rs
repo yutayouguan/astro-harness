@@ -5,13 +5,13 @@
 
 use std::path::PathBuf;
 
-use home::{
-    active_agent_id, daily_memory_path, ensure_agent_space, ensure_daily_memory, normalize_agent_id,
-    today_date_string, DEFAULT_AGENT_ID,
-};
 use crate::config::{load_memory_config, MemoryConfig};
-use crate::MemoryStore;
 use crate::workspace::ensure_workspace;
+use crate::MemoryStore;
+use home::{
+    active_agent_id, daily_memory_path, ensure_agent_space, ensure_daily_memory,
+    normalize_agent_id, today_date_string, DEFAULT_AGENT_ID,
+};
 
 /// 记忆写入/替换/删除的目标存储位置（工具面仅 MEMORY / USER）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,15 +197,12 @@ impl MemoryManager {
                 self.handle_memory_add(content, target)
             }
             "replace" => {
-                let old_text = old_text
-                    .ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
-                let content = content
-                    .ok_or_else(|| anyhow::anyhow!("缺少 content 参数"))?;
+                let old_text = old_text.ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
+                let content = content.ok_or_else(|| anyhow::anyhow!("缺少 content 参数"))?;
                 self.handle_memory_replace(old_text, content, target)
             }
             "remove" => {
-                let old_text = old_text
-                    .ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
+                let old_text = old_text.ok_or_else(|| anyhow::anyhow!("缺少 old_text 参数"))?;
                 self.handle_memory_remove(old_text, target)
             }
             other => anyhow::bail!("未知 memory action: {other}（期望 add|replace|remove）"),
@@ -323,10 +320,7 @@ fn format_write_message(label: &str, result: &crate::MemoryWriteResult) -> Strin
             result.usage
         )
     } else {
-        format!(
-            "已写入{label}（用量 {}）；{SNAPSHOT_NOTE}",
-            result.usage
-        )
+        format!("已写入{label}（用量 {}）；{SNAPSHOT_NOTE}", result.usage)
     }
 }
 
@@ -470,7 +464,9 @@ memory:
             parse_memory_target(None).unwrap(),
             MemoryTarget::Memory
         ));
-        let err = parse_memory_target(Some("project")).unwrap_err().to_string();
+        let err = parse_memory_target(Some("project"))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("未知的 memory target"));
         let err = parse_memory_target(Some("bogus")).unwrap_err().to_string();
         assert!(err.contains("未知的 memory target"));
@@ -493,7 +489,11 @@ memory:
         .unwrap();
         assert!(added.contains("已写盘（live）"));
         assert!(added.contains("快照未刷新"));
-        assert!(mgr.memory.live_entries().iter().any(|e| e.contains("深色主题")));
+        assert!(mgr
+            .memory
+            .live_entries()
+            .iter()
+            .any(|e| e.contains("深色主题")));
 
         let replaced = dispatch_memory_tool(
             &mut mgr,
@@ -506,8 +506,16 @@ memory:
             }),
         )
         .unwrap();
-        assert!(replaced.contains("已替换") || replaced.contains("浅色主题") || replaced.contains("已写盘"));
-        assert!(mgr.memory.live_entries().iter().any(|e| e.contains("浅色主题")));
+        assert!(
+            replaced.contains("已替换")
+                || replaced.contains("浅色主题")
+                || replaced.contains("已写盘")
+        );
+        assert!(mgr
+            .memory
+            .live_entries()
+            .iter()
+            .any(|e| e.contains("浅色主题")));
 
         let removed = dispatch_memory_tool(
             &mut mgr,
@@ -520,7 +528,11 @@ memory:
         )
         .unwrap();
         assert!(removed.contains("已删除") || removed.contains("已写盘"));
-        assert!(!mgr.memory.live_entries().iter().any(|e| e.contains("浅色主题")));
+        assert!(!mgr
+            .memory
+            .live_entries()
+            .iter()
+            .any(|e| e.contains("浅色主题")));
     }
 
     #[test]
@@ -531,10 +543,7 @@ memory:
             let err = dispatch_memory_tool(&mut mgr, name, &serde_json::json!({}))
                 .unwrap_err()
                 .to_string();
-            assert!(
-                err.contains("未知记忆工具"),
-                "unexpected for {name}: {err}"
-            );
+            assert!(err.contains("未知记忆工具"), "unexpected for {name}: {err}");
         }
     }
 }

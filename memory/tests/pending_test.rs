@@ -1,9 +1,7 @@
 //! write_approval pending 队列集成测试。
 
-use memory::pending::{
-    approve, enqueue, list_pending, pending_dir, reject, PendingMemoryWrite,
-};
 use home::scan_memory_content;
+use memory::pending::{approve, enqueue, list_pending, pending_dir, reject, PendingMemoryWrite};
 use memory::{MemoryManager, MemoryTarget};
 use std::fs;
 use tempfile::TempDir;
@@ -58,7 +56,10 @@ fn list_approve_reject_roundtrip() {
     );
     // live 未改
     assert!(
-        !mgr.memory.live_entries().iter().any(|e| e.contains("alpha fact")),
+        !mgr.memory
+            .live_entries()
+            .iter()
+            .any(|e| e.contains("alpha fact")),
         "write_approval must not mutate live"
     );
 
@@ -75,7 +76,10 @@ fn list_approve_reject_roundtrip() {
     );
     mgr.refresh_memory_snapshot().unwrap();
     assert!(
-        mgr.memory.live_entries().iter().any(|e| e.contains("alpha fact")),
+        mgr.memory
+            .live_entries()
+            .iter()
+            .any(|e| e.contains("alpha fact")),
         "approve must write live"
     );
     assert!(list_pending(dir.path()).unwrap().is_empty());
@@ -98,7 +102,10 @@ fn list_approve_reject_roundtrip() {
     reject(dir.path(), &p2.id).unwrap();
     assert!(list_pending(dir.path()).unwrap().is_empty());
     assert!(
-        !mgr.user.live_entries().iter().any(|e| e.contains("reject me")),
+        !mgr.user
+            .live_entries()
+            .iter()
+            .any(|e| e.contains("reject me")),
         "reject must not apply"
     );
 }
@@ -139,8 +146,8 @@ fn append_daily_not_gated_by_write_approval() {
 
 #[test]
 fn dreaming_finalize_enqueues_when_write_approval() {
-    use memory::dreaming::{finalize_dream_job, DreamDiary, DreamJob, DreamingState};
     use home::{agent_workspace_dir, create_agent};
+    use memory::dreaming::{finalize_dream_job, DreamDiary, DreamJob, DreamingState};
     use memory::workspace::ensure_workspace;
 
     let dir = TempDir::new().unwrap();

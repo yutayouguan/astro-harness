@@ -18,11 +18,11 @@ use chrono::Utc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::config::load_memory_config;
+use crate::{parse_memory_entries, MemoryStore};
 use home::{
     agent_workspace_dir, daily_memory_path, list_agents, list_daily_memory_dates, AgentInfo,
 };
-use crate::config::load_memory_config;
-use crate::{parse_memory_entries, MemoryStore};
 
 /// 入梦全局状态文件：`{base}/dreaming.json`
 const STATE_FILE: &str = "dreaming.json";
@@ -185,10 +185,7 @@ fn read_text(path: &Path) -> String {
 }
 
 /// 选出尚未入梦的日记（新→旧，受数量与字符上限约束）
-pub fn select_undreamed_diaries(
-    workspace: &Path,
-    stats: &AgentDreamStats,
-) -> Vec<DreamDiary> {
+pub fn select_undreamed_diaries(workspace: &Path, stats: &AgentDreamStats) -> Vec<DreamDiary> {
     let dreamed: std::collections::HashSet<&str> =
         stats.dreamed_dates.iter().map(|s| s.as_str()).collect();
     let mut out = Vec::new();
@@ -219,7 +216,11 @@ pub fn select_undreamed_diaries(
 }
 
 /// 构建完整对话用的 system / user 提示词（非 Extractor 路径）
-pub fn build_dream_prompts(agent_name: &str, memory: &str, diaries: &[DreamDiary]) -> (String, String) {
+pub fn build_dream_prompts(
+    agent_name: &str,
+    memory: &str,
+    diaries: &[DreamDiary],
+) -> (String, String) {
     let system = format!(
         r#"你是 Astro 的「入梦」记忆提炼助手，正在为专家「{agent_name}」整理长期记忆。
 
@@ -287,7 +288,10 @@ pub fn sanitize_memory_output(raw: &str) -> String {
     let mut s = raw.trim().to_string();
     if s.starts_with("```") {
         if let Some(rest) = s.strip_prefix("```") {
-            let rest = rest.strip_prefix("markdown").or_else(|| rest.strip_prefix("md")).unwrap_or(rest);
+            let rest = rest
+                .strip_prefix("markdown")
+                .or_else(|| rest.strip_prefix("md"))
+                .unwrap_or(rest);
             let rest = rest.trim_start_matches('\n');
             if let Some(end) = rest.rfind("```") {
                 s = rest[..end].trim().to_string();
@@ -310,7 +314,11 @@ pub fn count_memory_bullets(content: &str) -> u64 {
 }
 
 /// 为单个 Agent 准备入梦任务；无新日记则返回 None
-pub fn prepare_dream_job(base: &Path, agent: &AgentInfo, state: &DreamingState) -> Option<DreamJob> {
+pub fn prepare_dream_job(
+    base: &Path,
+    agent: &AgentInfo,
+    state: &DreamingState,
+) -> Option<DreamJob> {
     let ws = agent_workspace_dir(base, &agent.id);
     let stats = state.agents.get(&agent.id).cloned().unwrap_or_default();
     let diaries = select_undreamed_diaries(&ws, &stats);
@@ -319,8 +327,7 @@ pub fn prepare_dream_job(base: &Path, agent: &AgentInfo, state: &DreamingState) 
     }
     let memory_path = ws.join("MEMORY.md");
     let memory_before = read_text(&memory_path);
-    let (system_prompt, user_prompt) =
-        build_dream_prompts(&agent.name, &memory_before, &diaries);
+    let (system_prompt, user_prompt) = build_dream_prompts(&agent.name, &memory_before, &diaries);
     Some(DreamJob {
         agent_id: agent.id.clone(),
         agent_name: agent.name.clone(),
@@ -570,7 +577,10 @@ mod tests {
         );
         let after = fs::read_to_string(ws.join("MEMORY.md")).unwrap();
         assert_eq!(after, before);
-        assert!(!state.agents.contains_key(&agent.id) || state.agents[&agent.id].dreamed_dates.is_empty());
+        assert!(
+            !state.agents.contains_key(&agent.id)
+                || state.agents[&agent.id].dreamed_dates.is_empty()
+        );
     }
 
     #[test]

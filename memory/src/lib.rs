@@ -18,26 +18,26 @@ pub(crate) mod test_env;
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::workspace;
 pub use config::{
-    load_auxiliary_config, load_learning_config, load_memory_config, resolve_auxiliary,
-    set_background_review_enabled, set_auto_refresh_on_update, set_auxiliary_route, set_write_approval,
-    reset_all_auxiliary_routes, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute, LearningConfig,
-    MemoryConfig,
-};
-pub use pending::{
-    approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,
-    pending_dir, reject as reject_pending_memory, PendingMemoryWrite,
+    load_auxiliary_config, load_learning_config, load_memory_config, reset_all_auxiliary_routes,
+    resolve_auxiliary, set_auto_refresh_on_update, set_auxiliary_route,
+    set_background_review_enabled, set_write_approval, AuxiliaryConfig, AuxiliaryKind,
+    AuxiliaryRoute, LearningConfig, MemoryConfig,
 };
 pub use decision_log::{
     append_decision, decisions_path, list_recent as list_recent_decisions, try_append_decision,
     DecisionEntry, DecisionKind,
 };
-pub use review::{
-    apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,
-    ReviewSuggestion, REVIEW_SYSTEM_PROMPT,
-};
 pub use dreaming::{
     load_dreaming_state, prepare_all_dream_jobs, save_dreaming_state, set_dreaming_enabled,
     DreamMemoryUpdate, DreamRunReport, DreamingState,
+};
+pub use pending::{
+    approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,
+    pending_dir, reject as reject_pending_memory, PendingMemoryWrite,
+};
+pub use review::{
+    apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,
+    ReviewSuggestion, REVIEW_SYSTEM_PROMPT,
 };
 pub use session::manager::{dispatch_memory_tool, MemoryManager, MemoryTarget};
 pub use workspace::{ensure_default_workspace, ensure_workspace};

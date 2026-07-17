@@ -165,10 +165,7 @@ impl MemoryOps for FileMemoryOps {
 }
 
 /// 便于测试：从临时目录构造 MEMORY 目标 ops。
-pub fn open_memory_ops_for_test(
-    base: &Path,
-    max_chars: usize,
-) -> anyhow::Result<FileMemoryOps> {
+pub fn open_memory_ops_for_test(base: &Path, max_chars: usize) -> anyhow::Result<FileMemoryOps> {
     let path = base.join("MEMORY.md");
     FileMemoryOps::open(path, max_chars, base.to_path_buf(), MemoryTarget::Memory)
 }

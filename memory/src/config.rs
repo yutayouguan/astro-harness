@@ -280,7 +280,10 @@ fn ensure_mapping_path<'a>(
     for &seg in segs {
         let key = serde_yaml::Value::String(seg.to_string());
         if !cur.contains_key(&key) || !cur.get(&key).is_some_and(|v| v.is_mapping()) {
-            cur.insert(key.clone(), serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+            cur.insert(
+                key.clone(),
+                serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            );
         }
         cur = cur
             .get_mut(&key)
@@ -314,7 +317,12 @@ fn route_to_value(route: &AuxiliaryRoute) -> serde_yaml::Value {
     serde_yaml::Value::Mapping(map)
 }
 
-fn set_nested_route(base: &Path, parents: &[&str], key: &str, route: &AuxiliaryRoute) -> anyhow::Result<()> {
+fn set_nested_route(
+    base: &Path,
+    parents: &[&str],
+    key: &str,
+    route: &AuxiliaryRoute,
+) -> anyhow::Result<()> {
     let mut root = load_yaml_root(base)?;
     let map = ensure_mapping_path(&mut root, parents)?;
     map.insert(
@@ -380,15 +388,13 @@ pub fn resolve_auxiliary(
     session_model: &str,
 ) -> (String, String) {
     let route = aux.route(kind);
-    let provider = if route.provider.trim().is_empty()
-        || route.provider.eq_ignore_ascii_case("auto")
-    {
-        session_provider.to_string()
-    } else {
-        route.provider.trim().to_string()
-    };
-    let model = if route.model.trim().is_empty() || route.model.eq_ignore_ascii_case("auto")
-    {
+    let provider =
+        if route.provider.trim().is_empty() || route.provider.eq_ignore_ascii_case("auto") {
+            session_provider.to_string()
+        } else {
+            route.provider.trim().to_string()
+        };
+    let model = if route.model.trim().is_empty() || route.model.eq_ignore_ascii_case("auto") {
         session_model.to_string()
     } else {
         route.model.trim().to_string()
@@ -588,4 +594,3 @@ auxiliary:
         assert_eq!(cfg.dreaming, AuxiliaryRoute::default());
     }
 }
-

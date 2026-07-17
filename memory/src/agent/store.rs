@@ -322,14 +322,12 @@ fn over_limit_message(used: usize, limit: usize, entries: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{entry_chars, ENTRY_DELIMITER, MemoryStore};
+    use super::{entry_chars, MemoryStore, ENTRY_DELIMITER};
 
     #[test]
     fn current_chars_counts_delimiter() {
         let entries = vec!["a".to_string(), "bb".to_string()];
-        let expected = "a".chars().count()
-            + ENTRY_DELIMITER.chars().count()
-            + "bb".chars().count();
+        let expected = "a".chars().count() + ENTRY_DELIMITER.chars().count() + "bb".chars().count();
         assert_eq!(entry_chars(&entries), expected);
     }
 
@@ -475,7 +473,9 @@ mod tests {
         store.replace(&long_entry, "short").unwrap();
         assert_eq!(store.live_entries(), &["short"]);
 
-        let err = store.replace("short", "this replacement grows usage too much").unwrap_err();
+        let err = store
+            .replace("short", "this replacement grows usage too much")
+            .unwrap_err();
         assert!(
             err.to_string().contains("limit") || err.to_string().contains("上限"),
             "unexpected error: {err}"
@@ -518,7 +518,7 @@ mod tests {
 
         let err = store
             .replace_all_entries(vec![
-                "this entry alone already exceeds the tiny char limit".into(),
+                "this entry alone already exceeds the tiny char limit".into()
             ])
             .unwrap_err();
         assert!(
