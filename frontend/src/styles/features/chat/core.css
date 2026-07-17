@@ -10,6 +10,8 @@
 .message-list {
   flex: 1;
   overflow: auto;
+  /* 预留滚动条槽位，避免出现/消失时整栏左右抖动 */
+  scrollbar-gutter: stable;
   /* 右侧给锚点 Dock 留空，放大时不贴气泡 */
   padding: 20px 56px 12px 20px;
   display: flex;
