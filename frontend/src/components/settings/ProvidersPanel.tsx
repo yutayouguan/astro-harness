@@ -10,7 +10,7 @@ import {
 } from "react";
 import {
   Box,
-  Bot,
+  Atom,
   Eye,
   EyeOff,
   Globe,
