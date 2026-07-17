@@ -75,8 +75,6 @@ pub struct MenuStrings {
 impl MenuStrings {
     const fn zh() -> Self {
         Self {
-            about_title: "关于Astro",
-            about_credits: "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。",
             preferences: "偏好设置...",
             submenu_file: "文件",
             submenu_edit: "编辑",
@@ -106,8 +104,6 @@ impl MenuStrings {
 
     const fn en() -> Self {
         Self {
-            about_title: "About Astro",
-            about_credits: "Astro (阿童木) is a local AI desktop workstation, named after the classic anime Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. Preferences are saved on this device.",
             preferences: "Preferences...",
             submenu_file: "File",
             submenu_edit: "Edit",
