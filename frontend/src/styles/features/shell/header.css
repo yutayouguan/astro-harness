@@ -67,7 +67,8 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 /* 展开对话：收起侧栏后加大聊天区呼吸感 */
-.app-shell.is-chat-expanded .content-sub {
+.app-shell.is-chat-expanded .content-sub,
+.app-shell.is-chat-expanded .content-sub-sep {
   display: none;
 }
 

@@ -362,15 +362,15 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex: 1;
 }
 
-/* B：标题 · 副标题同一行 */
+/* B：标题 · 副标题强制同一行；副标题过长省略 */
 .page-title-text {
   display: flex;
   align-items: baseline;
-  gap: 8px;
   min-width: 0;
-  flex-wrap: wrap;
+  flex: 1;
 }
 
 .page-title-icon {
@@ -585,6 +585,7 @@ html[data-theme="light"] .page-title-icon {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: 1;
 }
 
 .sidebar-toggle {
@@ -665,11 +666,19 @@ html[data-theme="light"] .page-title-icon {
 }
 
 .content-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.2;
+}
+
+.content-title-main {
   flex-shrink: 0;
 }
 
@@ -677,6 +686,7 @@ html[data-theme="light"] .page-title-icon {
   color: var(--ink-mute);
   opacity: 0.55;
   font-size: 15px;
+  font-weight: 600;
   line-height: 1.2;
   flex-shrink: 0;
   user-select: none;
@@ -684,12 +694,13 @@ html[data-theme="light"] .page-title-icon {
 
 .content-sub {
   margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 500;
   color: var(--ink-mute);
   line-height: 1.2;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

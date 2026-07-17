@@ -588,12 +588,12 @@ export default function App() {
                 </div>
                 <div className="page-title-text">
                   <h1 className="content-title" data-tone={activeTone}>
-                    {t(meta.titleKey)}
+                    <span className="content-title-main">{t(meta.titleKey)}</span>
+                    <span className="content-sub-sep" aria-hidden>
+                      ·
+                    </span>
+                    <span className="content-sub">{t(meta.subKey)}</span>
                   </h1>
-                  <span className="content-sub-sep" aria-hidden>
-                    ·
-                  </span>
-                  <p className="content-sub">{t(meta.subKey)}</p>
                 </div>
               </div>
             </div>
