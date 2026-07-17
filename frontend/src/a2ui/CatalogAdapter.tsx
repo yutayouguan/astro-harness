@@ -4,12 +4,16 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   Check,
+  Clapperboard,
   HelpCircle,
+  Image as ImageIcon,
   Info,
   MapPin,
+  Music2,
   Shield,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import GeneratedMediaCard from "../components/media/GeneratedMediaCard";
 import MediaPreview from "../components/media/MediaPreview";
 import { resolveMediaPreviewPath } from "../lib/media/resolveMediaSrc";
 import ClarifyWizard from "./ClarifyWizard";
@@ -27,6 +31,9 @@ const AVATAR_ICONS: Record<string, LucideIcon> = {
   check: Check,
   success: Check,
   "map-pin": MapPin,
+  music: Music2,
+  clapperboard: Clapperboard,
+  image: ImageIcon,
 };
 
 type RenderCtx = {
@@ -106,10 +113,17 @@ function CatalogNode({
     }
     case "Divider":
       return <hr className="a2ui-divider" />;
-    case "Card":
+    case "Card": {
+      const mediaVariant = node.variant === "media";
       return (
-        <div className="a2ui-card">{renderChild(node.child, ctx)}</div>
+        <div
+          className={`a2ui-card ${mediaVariant ? "is-media" : ""}`.trim()}
+          data-a2ui-id={node.id}
+        >
+          {renderChild(node.child, ctx)}
+        </div>
       );
+    }
     case "Column":
       return (
         <div className="a2ui-column">
@@ -130,19 +144,50 @@ function CatalogNode({
           ))}
         </ul>
       );
-    case "Image": {
+    case "Image":
+    case "Audio":
+    case "Video": {
       const src =
         (typeof node.src === "string" && node.src) ||
         (typeof node.url === "string" && node.url) ||
         "";
       if (!src) return null;
       const path = resolveMediaPreviewPath(src, ctx.mediaBaseDir);
+      const kind =
+        node.component === "Audio"
+          ? "audio"
+          : node.component === "Video"
+            ? "video"
+            : "image";
+      const alt = typeof node.alt === "string" ? node.alt : undefined;
+      // 媒体 surface（Card variant=media）已有标题头：槽内只放播放器，避免双层卡头
+      const nestedInMediaCard = Boolean(
+        [...ctx.byId.values()].some(
+          (c) => c.component === "Card" && c.variant === "media",
+        ),
+      );
+      if (nestedInMediaCard) {
+        return (
+          <div
+            className={`a2ui-media-slot a2ui-media-${kind}`}
+            data-a2ui-id={node.id}
+          >
+            <MediaPreview
+              kind={kind}
+              path={path}
+              alt={alt}
+              compact
+              className="a2ui-media-preview"
+            />
+          </div>
+        );
+      }
       return (
         <div
           className="a2ui-image-wrap a2ui-image a2ui-image-hero"
           data-a2ui-id={node.id}
         >
-          <MediaPreview kind="image" path={path} compact />
+          <GeneratedMediaCard kind={kind} path={path} label={alt} compact />
         </div>
       );
     }

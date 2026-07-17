@@ -1,7 +1,7 @@
 /** 可折叠的 A2UI surface 卡头：非 HITL 的 present_* 工具结果用此包裹。 */
 
 import { useState } from "react";
-import { AlertCircle, BarChart3, CheckCircle, ChevronDown, Info } from "lucide-react";
+import { AlertCircle, BarChart3, CheckCircle, ChevronDown, Info, Music2 } from "lucide-react";
 import type { UiSurface } from "../../types";
 import { collectComponents, parseOperations } from "../../a2ui/validate";
 import A2UIRenderer from "../../a2ui/A2UIRenderer";
@@ -12,7 +12,7 @@ type Props = {
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
 
-type SurfaceKind = "metrics" | "callout" | "result" | "info";
+type SurfaceKind = "metrics" | "callout" | "result" | "info" | "media";
 
 function surfaceComponents(surface: UiSurface) {
   const ops = parseOperations(surface.operations);
@@ -22,6 +22,12 @@ function surfaceComponents(surface: UiSurface) {
 function detectKind(surface: UiSurface): SurfaceKind {
   const components = surfaceComponents(surface);
   const types = new Set(components.map((c) => c.component));
+  if (types.has("Audio") || types.has("Video") || (types.has("Image") && types.has("Badge"))) {
+    const card = components.find((c) => c.component === "Card");
+    if (card?.variant === "media" || types.has("Audio") || types.has("Video")) {
+      return "media";
+    }
+  }
   const badge = components.find((c) => c.component === "Badge");
   if (types.has("Metric")) return "metrics";
   if (types.has("Callout")) return "callout";
@@ -69,6 +75,8 @@ function KindIcon({ kind }: { kind: SurfaceKind }) {
       return <AlertCircle size={14} strokeWidth={2} aria-hidden />;
     case "result":
       return <CheckCircle size={14} strokeWidth={2} aria-hidden />;
+    case "media":
+      return <Music2 size={14} strokeWidth={2} aria-hidden />;
     default:
       return <Info size={14} strokeWidth={2} aria-hidden />;
   }
@@ -79,42 +87,45 @@ export default function A2UISurfaceCard({
   mediaBaseDir,
   onAction,
 }: Props) {
-  const [open, setOpen] = useState(true);
   const kind = detectKind(surface);
+  const [open, setOpen] = useState(true);
   const title = extractTitle(surface);
   const statusBadge = extractStatusBadge(surface);
   const disabled = surface.status !== "active";
+  const isMedia = kind === "media";
 
   return (
     <div
-      className={`msg-activity a2ui-surface-card is-kind-${kind} ${open ? "is-open" : ""}`.trim()}
+      className={`msg-activity a2ui-surface-card is-kind-${kind} ${open || isMedia ? "is-open" : ""}`.trim()}
     >
       <div className="msg-activity-body">
-        <button
-          type="button"
-          className="msg-activity-toggle"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <span className="msg-activity-kind-icon">
-            <KindIcon kind={kind} />
-          </span>
-          <span className="msg-activity-title">{title}</span>
-          {statusBadge ? (
-            <span
-              className={`a2ui-badge is-${statusBadge.variant} a2ui-surface-header-badge`}
-            >
-              {statusBadge.text}
+        {isMedia ? null : (
+          <button
+            type="button"
+            className="msg-activity-toggle"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <span className="msg-activity-kind-icon">
+              <KindIcon kind={kind} />
             </span>
-          ) : null}
-          <ChevronDown
-            size={14}
-            strokeWidth={2}
-            className="msg-activity-chevron"
-            aria-hidden
-          />
-        </button>
-        {open && (
+            <span className="msg-activity-title">{title}</span>
+            {statusBadge ? (
+              <span
+                className={`a2ui-badge is-${statusBadge.variant} a2ui-surface-header-badge`}
+              >
+                {statusBadge.text}
+              </span>
+            ) : null}
+            <ChevronDown
+              size={14}
+              strokeWidth={2}
+              className="msg-activity-chevron"
+              aria-hidden
+            />
+          </button>
+        )}
+        {(open || isMedia) && (
           <div className="a2ui-surface-card-body">
             <A2UIRenderer
               operations={surface.operations}

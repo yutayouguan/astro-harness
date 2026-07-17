@@ -816,6 +816,60 @@ async fn run_multi_turn_stream_inner(
                 return;
             }
 
+            // 生成类媒体：在可折叠工具活动之外，再挂一套 A2UI 精美卡片（两套 UI）
+            if !tool_media.is_empty() {
+                for (i, asset) in tool_media.iter().enumerate() {
+                    let Some(path) = asset.workspace_path() else {
+                        continue;
+                    };
+                    let kind = match asset.kind {
+                        common::MediaKind::Audio => "audio",
+                        common::MediaKind::Video => "video",
+                        common::MediaKind::Image => "image",
+                        common::MediaKind::File => continue,
+                    };
+                    let title = a2ui::templates::media_title_from_path(path);
+                    let caption = asset.label.as_deref();
+                    let surface_id = format!("media-{}-{}", call.id, i);
+                    let ops = a2ui::templates::build_generated_media_surface(
+                        &surface_id,
+                        kind,
+                        &title,
+                        path,
+                        caption,
+                    );
+                    if a2ui::validate_operations(&ops).is_err() {
+                        continue;
+                    }
+                    let message_id = format!("a2ui-surface-media-{}-{}", call.id, i);
+                    let ops_value = serde_json::Value::Array(ops);
+                    let content_json =
+                        serde_json::json!({ "operations": ops_value }).to_string();
+                    timeline.upsert_surface(
+                        serde_json::json!({
+                            "messageId": message_id,
+                            "activityType": "a2ui-surface",
+                            "operations": ops_value,
+                            "status": "active",
+                        }),
+                        now_ms(),
+                    );
+                    if !emit(
+                        &tx,
+                        MultiTurnStreamItem::Activity {
+                            message_id,
+                            activity_type: "a2ui-surface".into(),
+                            content_json,
+                            replace: true,
+                        },
+                    )
+                    .await
+                    {
+                        return;
+                    }
+                }
+            }
+
             if matches!(call.name.as_str(), "memory")
                 && !result.starts_with("工具错误")
                 && !result.starts_with("工具已禁用")

@@ -13,6 +13,8 @@ pub const ALLOWED_COMPONENTS: &[&str] = &[
     "ChoicePicker",
     "CheckBox",
     "Image",
+    "Audio",
+    "Video",
     "List",
     // astro extensions (v2)
     "Badge",

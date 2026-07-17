@@ -263,6 +263,103 @@ html[data-theme="light"] .a2ui-surface {
   padding: 14px 16px;
 }
 
+.a2ui-surface-card.is-kind-media {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.a2ui-surface-card.is-kind-media .a2ui-surface-card-body {
+  padding: 0;
+}
+
+.a2ui-surface-card.is-kind-media .a2ui-surface {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.a2ui-card.is-media {
+  --gmc-tone: #34d399;
+  position: relative;
+  max-width: min(100%, 440px);
+  overflow: hidden;
+  isolation: isolate;
+  border-color: color-mix(in srgb, var(--gmc-tone) 28%, var(--a2ui-glass-border));
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--gmc-tone) 14%, transparent) 0%,
+      color-mix(in srgb, #fff 5%, transparent) 42%,
+      transparent 100%
+    ),
+    var(--a2ui-glass-bg);
+  animation: gen-media-card-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.a2ui-card.is-media:has(.a2ui-media-video) {
+  --gmc-tone: #fb7185;
+}
+
+.a2ui-card.is-media:has(.a2ui-media-image) {
+  --gmc-tone: #60a5fa;
+}
+
+.a2ui-card.is-media::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gmc-tone) 90%, #fff),
+    color-mix(in srgb, var(--gmc-tone) 35%, transparent)
+  );
+  pointer-events: none;
+}
+
+.a2ui-card.is-media [data-a2ui-id="header"] {
+  gap: 10px;
+}
+
+.a2ui-card.is-media [data-a2ui-id="title"] {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.a2ui-card.is-media .a2ui-media-slot {
+  border-radius: 12px;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse 80% 120% at 12% 50%,
+      color-mix(in srgb, var(--gmc-tone) 18%, transparent),
+      transparent 55%
+    ),
+    color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.a2ui-card.is-media .a2ui-media-preview.media-preview,
+.a2ui-card.is-media .a2ui-media-preview.media-preview.is-compact {
+  max-width: 100%;
+  margin: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.a2ui-card.is-media .media-preview-audio {
+  padding: 12px;
+}
+
+.a2ui-card.is-media .media-toolbar {
+  opacity: 0.92;
+  pointer-events: auto;
+}
+
 .a2ui-column {
   display: flex;
   flex-direction: column;

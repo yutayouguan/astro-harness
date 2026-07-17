@@ -59,6 +59,8 @@ export const ALLOWED_COMPONENTS = new Set([
   "ChoicePicker",
   "CheckBox",
   "Image",
+  "Audio",
+  "Video",
   "List",
   "Badge",
   "Chip",
