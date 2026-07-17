@@ -723,6 +723,8 @@ impl AstroService for AstroServiceImpl {
         let chat_fallbacks = req.chat_fallbacks;
         let auxiliary_targets = parse_auxiliary_targets(req.auxiliary_targets);
         let thinking_enabled = req.thinking_enabled;
+        // 当前模型最大输出 token（前端由模型元数据下传）；0 = 用默认。
+        let chat_max_output_tokens = req.max_output_tokens;
         let images = req.images;
         let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
             "high".to_string()
@@ -964,9 +966,14 @@ impl AstroService for AstroServiceImpl {
                 thinking_enabled,
                 reasoning_effort: reasoning_effort.clone(),
                 additional_params,
-                // 默认 4096 对会写文件的 agent 偏低：单次写入较大文件时 tool-call
-                // 参数 JSON 易被截断（EOF 解析失败）。抬到 8192，兼顾主流模型输出上限。
-                max_tokens: 8192,
+                // 优先用当前模型元数据的 max_output_tokens；未知(0)时回退 8192。
+                // 默认 4096 对会写文件的 agent 偏低，单次写大文件时 tool-call 参数
+                // JSON 易被截断（EOF 解析失败）。
+                max_tokens: if chat_max_output_tokens > 0 {
+                    chat_max_output_tokens
+                } else {
+                    8192
+                },
                 ..ProviderConfig::default()
             };
 

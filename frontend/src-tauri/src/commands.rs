@@ -10,7 +10,8 @@ use uuid::Uuid;
 
 use crate::grpc::{default_grpc_address, endpoint_url};
 use crate::providers_commands::{
-    cached_model_context_window, resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
+    cached_model_context_window, cached_model_max_output_tokens, resolve_chat_targets,
+    resolve_image_gen_targets, ImageGenTarget,
 };
 
 fn open_sessions() -> Result<session::SessionStore, String> {
@@ -745,6 +746,15 @@ pub async fn start_chat(
                 .filter(|n| *n > 0)
         })
         .unwrap_or(0);
+    // 当前模型最大输出 token（与 context_window 同源）；未知为 0，后端兜底默认。
+    let max_output_tokens = cached_model_max_output_tokens(&primary.provider_id, &primary.model)
+        .or_else(|| {
+            crate::model_meta::enrich_from_id(&primary.model, &primary.backend_id, None)
+                .max_output_tokens
+                .and_then(|n| u32::try_from(n).ok())
+                .filter(|n| *n > 0)
+        })
+        .unwrap_or(0);
 
     let app2 = app.clone();
     let sid2 = sid.clone();
@@ -770,6 +780,7 @@ pub async fn start_chat(
             &reasoning_effort,
             &resume_json,
             context_window,
+            max_output_tokens,
         )
         .await;
 
@@ -891,6 +902,7 @@ async fn run_chat_stream(
     reasoning_effort: &str,
     resume_json: &str,
     context_window: u32,
+    max_output_tokens: u32,
 ) -> Result<(), String> {
     let endpoint = endpoint_url(grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
@@ -933,6 +945,7 @@ async fn run_chat_stream(
             images: images.to_vec(),
             auxiliary_targets: auxiliary_targets.to_vec(),
             context_window,
+            max_output_tokens,
         })
         .await
         .map_err(|e| e.to_string())?

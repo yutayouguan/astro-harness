@@ -94,6 +94,8 @@ message ChatRequest {
   repeated AuxiliaryModelTarget auxiliary_targets = 28;
   // 主模型上下文窗口（token）；0 = 后端用默认 128k；用于分阶段 tool 压缩
   uint32 context_window = 29;
+  // 主模型最大输出 token（来自模型元数据）；0 = 后端用默认（8192）
+  uint32 max_output_tokens = 30;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。
