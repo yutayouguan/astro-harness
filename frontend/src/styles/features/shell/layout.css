@@ -188,10 +188,10 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  /* 默认：银灰 → 中灰，保证浅色侧栏上可读 */
-  --nav-grad-top: #d8d8e0;
-  --nav-grad-bottom: #8e8e9a;
-  --nav-icon-depth: #6e6e7a;
+  /* 默认：中性深灰渐变（对齐参考线稿 #555） */
+  --nav-grad-top: #8a8a8a;
+  --nav-grad-bottom: #555555;
+  --nav-icon-depth: #3d3d3d;
   --nav-icon-cutout: var(--sidebar-bg, var(--glass-fill, #fff));
   color: var(--nav-grad-bottom);
   /* 阴影放在容器上，避免干扰 SVG 内部 destination-out 镂空 */
@@ -202,9 +202,9 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 }
 
 html[data-theme="dark"] .nav-icon {
-  --nav-grad-top: #d2d2da;
-  --nav-grad-bottom: #9a9aa8;
-  --nav-icon-depth: #5c5c6a;
+  --nav-grad-top: #a0a0a0;
+  --nav-grad-bottom: #6e6e6e;
+  --nav-icon-depth: #2a2a2a;
   --nav-icon-cutout: color-mix(in srgb, var(--sidebar-bg, #12081f) 88%, #000);
 }
 
@@ -447,12 +447,6 @@ html[data-theme="dark"] .page-title-icon {
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 88%, #5b21b6);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 65%, #1e0b3a);
   --nav-icon-cutout: color-mix(in srgb, rgba(255, 255, 255, 0.18) 65%, var(--tone-soft, transparent));
-  background: color-mix(in srgb, var(--tone-soft, transparent) 42%, rgba(8, 6, 18, 0.35));
-  border-color: color-mix(in srgb, var(--tone, transparent) 26%, transparent);
-}
-
-html[data-theme="light"] .page-title-icon {
-  background: color-mix(in srgb, var(--tone-soft, transparent) 60%, #fff);
 }
 
 .page-title-icon[data-tone="blue"] {
