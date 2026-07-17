@@ -18,6 +18,8 @@ export type MediaPreviewProps = {
   alt?: string;
   className?: string;
   compact?: boolean;
+  /** 是否显示下载/复制等工具条；卡片头已有操作时可关 */
+  showToolbar?: boolean;
 };
 
 export default function MediaPreview({
@@ -27,6 +29,7 @@ export default function MediaPreview({
   alt,
   className,
   compact,
+  showToolbar = true,
 }: MediaPreviewProps) {
   const src = useMemo(() => resolveMediaSrc(path), [path]);
   // path/src 可能随后端或 mediaBaseDir 异步变为可加载 URL；勿把首屏失败粘成永久 Broken
@@ -76,7 +79,9 @@ export default function MediaPreview({
           preload="metadata"
           onError={() => setLoadError(true)}
         />
-        <MediaToolbar path={path} kind="video" compact={compact} />
+        {showToolbar ? (
+          <MediaToolbar path={path} kind="video" compact={compact} />
+        ) : null}
       </div>
     );
   }
@@ -84,12 +89,21 @@ export default function MediaPreview({
   if (kind === "audio") {
     return (
       <div className={wrap} data-kind="audio">
+        {showToolbar ? (
+          <div className="media-preview-audio-actions">
+            <MediaToolbar
+              path={path}
+              kind="audio"
+              compact={compact}
+              className="is-inline"
+            />
+          </div>
+        ) : null}
         <GlassAudioPlayer
           src={src}
           className="media-preview-audio"
           onError={() => setLoadError(true)}
         />
-        <MediaToolbar path={path} kind="audio" compact={compact} />
       </div>
     );
   }
@@ -109,7 +123,9 @@ export default function MediaPreview({
           onError={() => setLoadError(true)}
         />
       </button>
-      <MediaToolbar path={path} kind="image" compact={compact} alt={alt} />
+      {showToolbar ? (
+        <MediaToolbar path={path} kind="image" compact={compact} alt={alt} />
+      ) : null}
       {lightboxOpen ? (
         <MediaLightbox
           src={src}

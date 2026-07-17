@@ -308,6 +308,7 @@ html[data-theme="light"] .a2ui-surface {
 
 .a2ui-card.is-media [data-a2ui-id="header"] {
   gap: 10px;
+  padding-right: 64px; /* 给右上角下载/复制留位 */
 }
 
 .a2ui-card.is-media [data-a2ui-id="title"] {
@@ -316,11 +317,23 @@ html[data-theme="light"] .a2ui-surface {
   letter-spacing: 0.01em;
 }
 
+.a2ui-card.is-media [data-a2ui-id="badge"] {
+  display: none;
+}
+
 .a2ui-card.is-media .a2ui-media-slot {
+  position: static;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   border: none;
   background: transparent;
+}
+
+.a2ui-card.is-media .a2ui-media-slot-actions {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  z-index: 2;
 }
 
 .a2ui-card.is-media .a2ui-media-preview.media-preview,
@@ -330,6 +343,10 @@ html[data-theme="light"] .a2ui-surface {
   border: none;
   background: transparent;
   box-shadow: none;
+}
+
+.a2ui-card.is-media .media-preview[data-kind="audio"] {
+  /* 播放器毛玻璃层 */
 }
 
 .a2ui-card.is-media .media-preview[data-kind="audio"] .media-toolbar {

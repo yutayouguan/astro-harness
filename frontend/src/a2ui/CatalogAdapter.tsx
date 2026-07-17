@@ -15,6 +15,7 @@ import {
 import type { ReactNode } from "react";
 import GeneratedMediaCard from "../components/media/GeneratedMediaCard";
 import MediaPreview from "../components/media/MediaPreview";
+import MediaToolbar from "../components/media/MediaToolbar";
 import { resolveMediaPreviewPath } from "../lib/media/resolveMediaSrc";
 import ClarifyWizard from "./ClarifyWizard";
 import { parseClarifySteps } from "./clarifySteps";
@@ -172,11 +173,21 @@ function CatalogNode({
             className={`a2ui-media-slot a2ui-media-${kind}`}
             data-a2ui-id={node.id}
           >
+            <div className="a2ui-media-slot-actions">
+              <MediaToolbar
+                path={path}
+                kind={kind}
+                compact
+                className="is-inline"
+                alt={alt}
+              />
+            </div>
             <MediaPreview
               kind={kind}
               path={path}
               alt={alt}
               compact
+              showToolbar={false}
               className="a2ui-media-preview"
             />
           </div>

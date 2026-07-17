@@ -1,9 +1,10 @@
-/** 多媒体生成结果卡片：标题 + 种别色带 + 可播放预览。 */
+/** 多媒体生成结果卡片：标题行含操作，下方仅播放/预览。 */
 import { Clapperboard, FileCode2, Image as ImageIcon, Music2 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
 import { displayTitleFromMediaPath } from "../../lib/media/displayTitleFromMediaPath";
 import MediaPreview from "./MediaPreview";
+import MediaToolbar from "./MediaToolbar";
 
 export type GeneratedMediaCardProps = {
   kind: GeneratedMediaKind;
@@ -60,7 +61,13 @@ export default function GeneratedMediaCard({
           <h3 className="gen-media-card-title">{title}</h3>
           <p className="gen-media-card-caption">{caption}</p>
         </div>
-        <span className="gen-media-card-badge">{kindLabel}</span>
+        <MediaToolbar
+          path={path}
+          kind={kind === "html" ? "html" : kind}
+          compact
+          className="is-inline gen-media-card-actions"
+          alt={title}
+        />
       </header>
       <div className="gen-media-card-body">
         <MediaPreview
@@ -68,6 +75,7 @@ export default function GeneratedMediaCard({
           path={path}
           alt={title}
           compact={compact}
+          showToolbar={false}
           className="gen-media-card-preview"
         />
       </div>
