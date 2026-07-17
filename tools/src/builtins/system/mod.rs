@@ -5,3 +5,4 @@ pub mod terminal;
 pub mod code_exec;
 pub mod browser;
 pub mod web_search;
+pub mod web_extract;

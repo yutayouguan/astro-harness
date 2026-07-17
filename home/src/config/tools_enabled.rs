@@ -202,7 +202,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "video_understand" => "video_understand",
         "file_ops" => "file_ops",
         "terminal" => "terminal",
-        "web_search" => "web_search",
+        "web_search" | "web_extract" => "web_search",
         "browser" => "browser",
         "code_exec" => "code_exec",
         "vision" => "vision",
@@ -257,6 +257,18 @@ mod tests {
         save_tools_enabled(&state).unwrap();
         assert!(!is_tool_call_allowed("memory"));
         assert!(is_tool_call_allowed("cron_list"));
+    }
+
+    #[test]
+    fn web_extract_maps_to_web_search_toolset() {
+        assert_eq!(tool_name_to_toolset("web_extract"), "web_search");
+        assert_eq!(tool_name_to_toolset("web_search"), "web_search");
+        let dir = TempDir::new().unwrap();
+        let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
+        let mut state = HashMap::new();
+        state.insert("web_search".into(), false);
+        save_tools_enabled(&state).unwrap();
+        assert!(!is_tool_call_allowed("web_extract"));
     }
 
     #[test]

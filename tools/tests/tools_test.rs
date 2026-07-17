@@ -25,6 +25,7 @@ async fn register_all_includes_panel_tools() {
         "file_ops",
         "terminal",
         "web_search",
+        "web_extract",
         "browser",
         "code_exec",
         "vision",

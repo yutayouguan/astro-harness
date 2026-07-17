@@ -1241,6 +1241,7 @@ impl AgentLoop {
             (
                 "skills",
                 serde_json::json!({
+                    "action": "load",
                     "skill_id": name,
                     "input": args_owned,
                 }),
@@ -1733,8 +1734,16 @@ fn tool_writes_disk(name: &str, args: &Value) -> bool {
                 .and_then(|v| v.as_str())
                 .map(str::to_lowercase)
                 .as_deref(),
-            Some("write") | Some("append") | Some("delete") | Some("mkdir")
+            Some("write") | Some("append") | Some("delete") | Some("mkdir") | Some("patch")
         ),
+        "skills" => {
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("load")
+                .to_ascii_lowercase();
+            action == "manage"
+        }
         _ => false,
     }
 }

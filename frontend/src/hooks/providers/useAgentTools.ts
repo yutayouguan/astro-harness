@@ -122,6 +122,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "query", type: "string" },
       { name: "max_results", type: "number", optional: true },
+      { name: "url", type: "string", optional: true },
+      { name: "urls", type: "string", optional: true },
+      { name: "max_chars", type: "number", optional: true },
     ],
   },
   {
@@ -155,6 +158,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "path", type: "string" },
       { name: "operation", type: "string" },
       { name: "content", type: "string", optional: true },
+      { name: "query", type: "string", optional: true },
+      { name: "old_string", type: "string", optional: true },
+      { name: "new_string", type: "string", optional: true },
       { name: "offset", type: "number", optional: true },
       { name: "limit", type: "number", optional: true },
       { name: "recursive", type: "boolean", optional: true },
@@ -285,7 +291,11 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     Icon: IconSkillsTool,
     tone: "amber",
     params: [
-      { name: "skill_id", type: "string" },
+      { name: "action", type: "string", optional: true },
+      { name: "skill_id", type: "string", optional: true },
+      { name: "manage_action", type: "string", optional: true },
+      { name: "content", type: "string", optional: true },
+      { name: "description", type: "string", optional: true },
       { name: "input", type: "object", optional: true },
     ],
   },

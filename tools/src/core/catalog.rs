@@ -276,6 +276,11 @@ mod tests {
         assert!(file_ops.params.iter().any(|p| p.name == "path"));
         assert!(!file_ops.functions.is_empty());
         assert_eq!(file_ops.functions[0].icon, "folder-kanban");
+        let web = cat.iter().find(|c| c.id == "web_search").expect("web_search");
+        assert!(
+            web.functions.iter().any(|f| f.name == "web_extract"),
+            "web_search toolset should include web_extract"
+        );
     }
 
     #[test]

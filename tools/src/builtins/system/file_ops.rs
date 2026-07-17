@@ -41,7 +41,7 @@ const MAX_SEARCH_FILES_SCANNED: usize = 2000;
 pub struct FileOpsArgs {
     /// 相对于工作区的路径。
     pub path: String,
-    /// 操作类型：`read` | `write` | `append` | `list` | `delete` | `mkdir` | `search`。
+    /// 操作类型：`read` | `write` | `append` | `list` | `delete` | `mkdir` | `search` | `patch`。
     pub operation: String,
     /// `write` / `append` 时写入的内容；`write` 必填，`append` 可省略则报错。
     #[serde(default)]
@@ -49,6 +49,12 @@ pub struct FileOpsArgs {
     /// `search` 时的查询串（文件名或文件内容子串，大小写不敏感）。也可用 `content` 代替。
     #[serde(default)]
     pub query: Option<String>,
+    /// `patch`：要替换的原文（须在文件中唯一出现）。
+    #[serde(default)]
+    pub old_string: Option<String>,
+    /// `patch`：替换后的新文本。
+    #[serde(default)]
+    pub new_string: Option<String>,
     /// `read` 时从该字节偏移开始读（默认 0）；用于大文件分段续读。
     #[serde(default)]
     pub offset: Option<u64>,
@@ -66,10 +72,11 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "file_ops".to_string(),
         toolset: "file_ops".to_string(),
-        description: "Read, write, append, list, mkdir, delete, or search files under project_root when set (delegated worktree), else the agent memory workspace. \
+        description: "Read, write, append, list, mkdir, delete, search, or patch files under project_root when set (delegated worktree), else the agent memory workspace. \
              read returns at most 64KiB UTF-8 (use offset/limit to continue). \
              list caps at 500 entries / 64KiB and marks dirs with '/'. \
              search finds filenames or text content under path (query required; case-insensitive; caps hits/bytes). \
+             patch does unique old_string→new_string replace (fails if 0 or >1 matches). \
              delete refuses workspace root; directories need recursive=true to remove trees."
             .to_string(),
         schema: schema_for_args::<FileOpsArgs>(),
@@ -135,6 +142,18 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .unwrap_or(MAX_SEARCH_HITS)
                 .clamp(1, MAX_SEARCH_HITS);
             search_under(&full, root, query, max_hits)
+        }
+        "patch" => {
+            let old = parsed
+                .old_string
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("patch 需要 old_string"))?;
+            let new = parsed
+                .new_string
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("patch 需要 new_string"))?;
+            reaffirm_within(&full, root)?;
+            patch_file_unique(&full, &rel, old, new)
         }
         "delete" => delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false)),
         "mkdir" => {
@@ -355,6 +374,33 @@ fn search_under(
         ));
     }
     Ok(out)
+}
+
+/// 精准替换：`old` 必须在文件中恰好出现一次。
+fn patch_file_unique(
+    path: &Path,
+    rel: &str,
+    old: &str,
+    new: &str,
+) -> anyhow::Result<String> {
+    if old.is_empty() {
+        anyhow::bail!("patch 的 old_string 不能为空");
+    }
+    let raw = std::fs::read(path)?;
+    let text = std::str::from_utf8(&raw)
+        .map_err(|_| anyhow::anyhow!("patch 仅支持 UTF-8 文本文件: {rel}"))?;
+    let matches = text.matches(old).count();
+    match matches {
+        0 => anyhow::bail!("patch 未找到 old_string（0 处匹配）: {rel}"),
+        1 => {
+            let updated = text.replacen(old, new, 1);
+            std::fs::write(path, updated.as_bytes())?;
+            Ok(format!("已 patch {rel}（1 处替换）"))
+        }
+        n => anyhow::bail!(
+            "patch 的 old_string 不唯一（{n} 处匹配），请提供更长/更独特的上下文: {rel}"
+        ),
+    }
 }
 
 fn search_one_file(
@@ -644,5 +690,32 @@ mod tests {
         let missing = dir.path().join("nope");
         let err = search_under(&missing, dir.path(), "x", 10).unwrap_err();
         assert!(err.to_string().contains("不存在"));
+    }
+
+    #[test]
+    fn patch_unique_replace_succeeds() {
+        let dir = TempDir::new().unwrap();
+        let p = write_ws_file(&dir, "a.rs", b"fn foo() {}\nfn bar() {}\n");
+        let out = patch_file_unique(&p, "a.rs", "fn foo() {}", "fn foo() { 1 }").unwrap();
+        assert!(out.contains("1 处替换"));
+        let body = fs::read_to_string(&p).unwrap();
+        assert_eq!(body, "fn foo() { 1 }\nfn bar() {}\n");
+    }
+
+    #[test]
+    fn patch_zero_matches_fails() {
+        let dir = TempDir::new().unwrap();
+        let p = write_ws_file(&dir, "a.txt", b"hello\n");
+        let err = patch_file_unique(&p, "a.txt", "missing", "x").unwrap_err();
+        assert!(err.to_string().contains("0 处匹配"));
+    }
+
+    #[test]
+    fn patch_multiple_matches_fails() {
+        let dir = TempDir::new().unwrap();
+        let p = write_ws_file(&dir, "a.txt", b"aa aa aa\n");
+        let err = patch_file_unique(&p, "a.txt", "aa", "bb").unwrap_err();
+        assert!(err.to_string().contains("不唯一"));
+        assert_eq!(fs::read_to_string(&p).unwrap(), "aa aa aa\n");
     }
 }

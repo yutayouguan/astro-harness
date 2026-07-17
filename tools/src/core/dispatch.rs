@@ -56,6 +56,7 @@ pub async fn dispatch_tool(
         "file_ops" => crate::file_ops::dispatch(ctx, args),
         "terminal" => crate::terminal::dispatch(ctx, args).await,
         "web_search" => crate::web_search::dispatch(ctx, args).await,
+        "web_extract" => crate::web_extract::dispatch(ctx, args).await,
         "code_exec" => crate::code_exec::dispatch(ctx, args).await,
         "vision" => crate::vision::dispatch(ctx, args).await,
         "robotics" => crate::robotics::dispatch(ctx, args).await,
@@ -93,6 +94,7 @@ pub async fn dispatch_tool(
                     .any(|s| s.name == other && s.enabled)
             {
                 let rewritten = serde_json::json!({
+                    "action": "load",
                     "skill_id": other,
                     "input": args,
                 });

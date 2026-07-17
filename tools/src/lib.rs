@@ -20,7 +20,8 @@ pub(crate) use builtins::{
     audio_understand, browser, clarify, code_exec, confirm, context_tools, create_agent, delegate,
     file_ops, image_gen, memory_tools, multi_agent, music, music_gen, orchestration, present_callout,
     present_metrics, present_result, present_ui, request_user_location, robotics, scheduled,
-    skills_tool, task_plan, team, terminal, tts, video_gen, video_understand, vision, web_search,
+    skills_tool, task_plan, team, terminal, tts, video_gen, video_understand, vision, web_extract,
+    web_search,
 };
 pub use context_tools::render_pinned_for_prompt;
 
@@ -68,6 +69,7 @@ pub fn register_all(registry: &mut ToolRegistry) {
     code_exec::register(registry);
     browser::register(registry);
     web_search::register(registry);
+    web_extract::register(registry);
     // hitl
     clarify::register(registry);
     confirm::register(registry);
