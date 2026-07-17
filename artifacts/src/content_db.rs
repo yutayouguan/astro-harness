@@ -1,0 +1,233 @@
+//! Knowledge Content DB：文档登记 + FTS5 正文检索（不做 embedding）。
+//!
+//! 库路径：`{sessions_dir}/knowledge.db`（与 artifacts.db 并列）。
+
+use anyhow::Context;
+use rusqlite::{params, Connection, OptionalExtension};
+use std::path::{Path, PathBuf};
+use uuid::Uuid;
+
+const SCHEMA_VERSION: i32 = 1;
+
+const DDL: &str = r#"
+CREATE TABLE IF NOT EXISTS contents (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    path TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'ready',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS contents_fts USING fts5(
+    title,
+    body,
+    content_id UNINDEXED,
+    tokenize = 'unicode61'
+);
+"#;
+
+/// 内容处理状态。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContentRow {
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    pub status: String,
+    pub created_at: String,
+}
+
+/// Knowledge Content 库。
+pub struct KnowledgeDb {
+    conn: Connection,
+    path: PathBuf,
+}
+
+impl KnowledgeDb {
+    pub fn open(path: impl Into<PathBuf>) -> anyhow::Result<Self> {
+        let path = path.into();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let conn = Connection::open(&path)
+            .with_context(|| format!("open knowledge db {}", path.display()))?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+        let ver: i32 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if ver < SCHEMA_VERSION {
+            conn.execute_batch(DDL)?;
+            conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
+        }
+        Ok(Self { conn, path })
+    }
+
+    pub fn open_default() -> anyhow::Result<Self> {
+        let path = home::default_memory_dir()
+            .join("sessions")
+            .join("knowledge.db");
+        Self::open(path)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// 登记文档并写入 FTS 正文；同 path 则更新。
+    pub fn register(
+        &self,
+        title: &str,
+        path: &str,
+        body: &str,
+        status: &str,
+    ) -> anyhow::Result<ContentRow> {
+        let title = title.trim();
+        let path = path.trim();
+        if title.is_empty() || path.is_empty() {
+            anyhow::bail!("title/path 不能为空");
+        }
+        let status = if status.trim().is_empty() {
+            "ready"
+        } else {
+            status.trim()
+        };
+
+        let existing: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT id FROM contents WHERE path = ?1",
+                params![path],
+                |r| r.get(0),
+            )
+            .optional()?;
+
+        let id = if let Some(id) = existing {
+            self.conn.execute(
+                "UPDATE contents SET title = ?1, status = ?2, updated_at = datetime('now') WHERE id = ?3",
+                params![title, status, id],
+            )?;
+            self.conn
+                .execute("DELETE FROM contents_fts WHERE content_id = ?1", params![id])?;
+            self.conn.execute(
+                "INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)",
+                params![title, body, id],
+            )?;
+            id
+        } else {
+            let id = Uuid::new_v4().to_string();
+            self.conn.execute(
+                "INSERT INTO contents(id, title, path, status) VALUES (?1, ?2, ?3, ?4)",
+                params![id, title, path, status],
+            )?;
+            self.conn.execute(
+                "INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)",
+                params![title, body, id],
+            )?;
+            id
+        };
+
+        self.get(&id)?
+            .ok_or_else(|| anyhow::anyhow!("register 后读回失败"))
+    }
+
+    pub fn get(&self, id: &str) -> anyhow::Result<Option<ContentRow>> {
+        self.conn
+            .query_row(
+                "SELECT id, title, path, status, created_at FROM contents WHERE id = ?1",
+                params![id],
+                |r| {
+                    Ok(ContentRow {
+                        id: r.get(0)?,
+                        title: r.get(1)?,
+                        path: r.get(2)?,
+                        status: r.get(3)?,
+                        created_at: r.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn list(&self, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, path, status, created_at FROM contents
+             ORDER BY created_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map(params![limit as i64], |r| {
+                Ok(ContentRow {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    path: r.get(2)?,
+                    status: r.get(3)?,
+                    created_at: r.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// FTS 检索；返回匹配的内容元数据（citation 用 path/title）。
+    pub fn search(&self, query: &str, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
+        let q = query.trim();
+        if q.is_empty() {
+            return self.list(limit);
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.title, c.path, c.status, c.created_at
+             FROM contents_fts f
+             JOIN contents c ON c.id = f.content_id
+             WHERE contents_fts MATCH ?1
+             LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![q, limit as i64], |r| {
+                Ok(ContentRow {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    path: r.get(2)?,
+                    status: r.get(3)?,
+                    created_at: r.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// 删除登记与 FTS 行。
+    pub fn delete(&self, id: &str) -> anyhow::Result<bool> {
+        self.conn
+            .execute("DELETE FROM contents_fts WHERE content_id = ?1", params![id])?;
+        let n = self
+            .conn
+            .execute("DELETE FROM contents WHERE id = ?1", params![id])?;
+        Ok(n > 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn register_search_delete() {
+        let dir = TempDir::new().unwrap();
+        let db = KnowledgeDb::open(dir.path().join("knowledge.db")).unwrap();
+        let row = db
+            .register(
+                "Rust Guide",
+                "/docs/rust.md",
+                "Rust ownership and borrowing are core.",
+                "ready",
+            )
+            .unwrap();
+        assert_eq!(row.title, "Rust Guide");
+        let hits = db.search("ownership", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, "/docs/rust.md");
+        assert!(db.delete(&row.id).unwrap());
+        assert!(db.search("ownership", 10).unwrap().is_empty());
+        assert!(db.list(10).unwrap().is_empty());
+    }
+}

@@ -226,6 +226,11 @@ messages 中 tool 结果超阈值
 3. 检索结果走 **citation**，对齐 Agno 的 source attribution。
 4. Skills 当作「打包好的 knowledge 包」，KB 管「用户文档」。
 
+### 已落地（本轮）
+- `artifacts::KnowledgeDb`（`sessions/knowledge.db`）：`contents` 表 + FTS5 `contents_fts`
+- API：`register` / `list` / `search` / `delete`（删登记+FTS）
+- **未做**：embedding / rerank / agentic filter
+
 ---
 
 ## 九、DB
