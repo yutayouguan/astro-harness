@@ -1,9 +1,7 @@
 //! Session-scoped memory event fan-out for gRPC subscribers.
 
 use proto::session_event::Payload;
-use proto::{
-    MemoryUpdatedEvent, PendingChangedEvent, SessionEvent, SessionMetadataChangedEvent,
-};
+use proto::{MemoryUpdatedEvent, PendingChangedEvent, SessionEvent, SessionMetadataChangedEvent};
 use tokio::sync::broadcast;
 
 /// Subscriber filter matching [`SubscribeSessionEventsRequest`] semantics.
@@ -135,9 +133,11 @@ pub fn to_proto(msg: &SessionEventMsg) -> SessionEvent {
             reason: pend.reason.clone(),
         }))
     } else if let Some(ref meta) = msg.session_metadata_changed {
-        Some(Payload::SessionMetadataChanged(SessionMetadataChangedEvent {
-            title: meta.title.clone(),
-        }))
+        Some(Payload::SessionMetadataChanged(
+            SessionMetadataChangedEvent {
+                title: meta.title.clone(),
+            },
+        ))
     } else {
         None
     };

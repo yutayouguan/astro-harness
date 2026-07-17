@@ -8,14 +8,14 @@ pub mod grpc;
 pub mod session_events;
 
 pub use session_events::{
-    event_matches, to_proto, MemoryUpdatedPayload, PendingChangedPayload,
-    SessionEventHub, SessionEventMsg, SessionMetadataChangedPayload, SubscribeFilter,
+    event_matches, to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub,
+    SessionEventMsg, SessionMetadataChangedPayload, SubscribeFilter,
 };
 
 use std::time::Duration;
 
-use anyhow::Context;
 use crate::grpc::AstroServiceImpl;
+use anyhow::Context;
 use cron::cron_dir;
 use home::{default_memory_dir, init_logging, logs_dir};
 use memory::ensure_workspace;

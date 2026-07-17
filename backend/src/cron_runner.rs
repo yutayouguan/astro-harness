@@ -113,7 +113,12 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
     if let Some(file) = load_providers_file() {
         if let Some(primary_entry) = find_primary_entry(&file, job) {
             if let Some(mut primary) = entry_to_target(primary_entry) {
-                if let Some(m) = job.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                if let Some(m) = job
+                    .model
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
                     primary.model = m.to_string();
                 }
                 let refs: Vec<FallbackRef> = primary_entry
@@ -197,10 +202,7 @@ pub async fn tick_and_execute() {
                     let body = if row.summary.trim().is_empty() {
                         label
                     } else {
-                        format!(
-                            "{label}\n{}",
-                            common::truncate_notify(&row.summary, 120)
-                        )
+                        format!("{label}\n{}", common::truncate_notify(&row.summary, 120))
                     };
                     common::notify_kind(common::ImportantKind::CronSuccess, body);
                 } else {

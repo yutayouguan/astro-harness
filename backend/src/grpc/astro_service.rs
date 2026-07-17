@@ -18,8 +18,8 @@ use proto::astro_service_server::AstroService;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
     ContextUsageSegment, Empty, FileListRequest, FileListResponse, ImageEvent, ImageRequest,
-    MemoryQuery, MemoryResult, McpServerList, SessionEvent, SessionSnippet as ProtoSessionSnippet,
-    SkillEvent, SkillList, SkillRequest, SkillInfo, SubscribeSessionEventsRequest, UsageEvent,
+    McpServerList, MemoryQuery, MemoryResult, SessionEvent, SessionSnippet as ProtoSessionSnippet,
+    SkillEvent, SkillInfo, SkillList, SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::registry::ProviderRegistry;
 use providers::trait_::ProviderConfig;
@@ -29,9 +29,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use super::interrupt_store::{
-    clear_interrupt_file, resume_items_from_proto, save_interrupt_file,
-};
+use super::interrupt_store::{clear_interrupt_file, resume_items_from_proto, save_interrupt_file};
 use crate::{
     to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub, SessionEventMsg,
     SubscribeFilter,
@@ -39,7 +37,8 @@ use crate::{
 
 fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+        .map_err(|e| e.to_string())
 }
 
 /// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 AgentLoop。
@@ -48,7 +47,8 @@ fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, 
 fn parse_auxiliary_targets(
     items: Vec<proto::AuxiliaryModelTarget>,
 ) -> HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>> {
-    let mut grouped: HashMap<common::AuxiliaryTask, Vec<(u32, common::ChatTarget)>> = HashMap::new();
+    let mut grouped: HashMap<common::AuxiliaryTask, Vec<(u32, common::ChatTarget)>> =
+        HashMap::new();
     for item in items {
         let Some(task) = common::AuxiliaryTask::from_str(item.task.trim()) else {
             continue;
@@ -434,13 +434,15 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                 )),
             })
         }
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Usage(UsageEvent {
-                prompt_tokens: u.prompt_tokens(),
-                completion_tokens: u.completion_tokens(),
-                total_tokens: u.total_tokens(),
-            })),
-        }),
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)) => {
+            Some(ChatEvent {
+                payload: Some(proto::chat_event::Payload::Usage(UsageEvent {
+                    prompt_tokens: u.prompt_tokens(),
+                    completion_tokens: u.completion_tokens(),
+                    total_tokens: u.total_tokens(),
+                })),
+            })
+        }
         MultiTurnStreamItem::ToolResult {
             id,
             name,
@@ -465,21 +467,23 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
             )),
         }),
         MultiTurnStreamItem::ContextUsage(snap) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::ContextUsage(ContextUsageEvent {
-                context_window: snap.context_window,
-                total_tokens: snap.total_tokens,
-                segments: snap
-                    .segments
-                    .into_iter()
-                    .map(|s| ContextUsageSegment {
-                        id: s.id,
-                        tokens: s.tokens,
-                        count: s.meta.and_then(|m| m.count).unwrap_or(0),
-                    })
-                    .collect(),
-                updated_at: snap.updated_at,
-                recommend_compact: snap.recommend_compact,
-            })),
+            payload: Some(proto::chat_event::Payload::ContextUsage(
+                ContextUsageEvent {
+                    context_window: snap.context_window,
+                    total_tokens: snap.total_tokens,
+                    segments: snap
+                        .segments
+                        .into_iter()
+                        .map(|s| ContextUsageSegment {
+                            id: s.id,
+                            tokens: s.tokens,
+                            count: s.meta.and_then(|m| m.count).unwrap_or(0),
+                        })
+                        .collect(),
+                    updated_at: snap.updated_at,
+                    recommend_compact: snap.recommend_compact,
+                },
+            )),
         }),
         MultiTurnStreamItem::RunStarted { thread_id, run_id } => Some(ChatEvent {
             payload: Some(proto::chat_event::Payload::RunStarted(
@@ -529,9 +533,8 @@ impl AstroService for AstroServiceImpl {
     /// [`chat`](Self::chat) 流类型。
     type ChatStream = ChatStream;
     /// [`generate_image`](Self::generate_image) 流类型。
-    type GenerateImageStream = Pin<
-        Box<dyn futures::Stream<Item = Result<ImageEvent, Status>> + Send>,
-    >;
+    type GenerateImageStream =
+        Pin<Box<dyn futures::Stream<Item = Result<ImageEvent, Status>> + Send>>;
     /// [`execute_skill`](Self::execute_skill) 流类型。
     type ExecuteSkillStream =
         Pin<Box<dyn futures::Stream<Item = Result<SkillEvent, Status>> + Send>>;
@@ -597,8 +600,9 @@ impl AstroService for AstroServiceImpl {
         };
         match action {
             ChatControlAction::ChatControlPause => pause.pause(),
-            ChatControlAction::ChatControlResume
-            | ChatControlAction::ChatControlStreamResume => pause.resume(),
+            ChatControlAction::ChatControlResume | ChatControlAction::ChatControlStreamResume => {
+                pause.resume()
+            }
             ChatControlAction::ChatControlCancel => {
                 pause.cancel();
                 drop(map);
@@ -1016,11 +1020,8 @@ impl AstroService for AstroServiceImpl {
                                 let interrupts: Vec<agent::Interrupt> =
                                     serde_json::from_str(interrupts_json).unwrap_or_default();
                                 if !interrupts.is_empty() {
-                                    let _ = save_interrupt_file(
-                                        &memory_dir,
-                                        &sid_cleanup,
-                                        &interrupts,
-                                    );
+                                    let _ =
+                                        save_interrupt_file(&memory_dir, &sid_cleanup, &interrupts);
                                 }
                             }
                         }
@@ -1108,9 +1109,9 @@ impl AstroService for AstroServiceImpl {
         tokio::spawn(async move {
             let _ = tx
                 .send(Ok(ImageEvent {
-                    payload: Some(proto::image_event::Payload::Progress(
-                        format!("正在使用 {provider_name} 生成图片…"),
-                    )),
+                    payload: Some(proto::image_event::Payload::Progress(format!(
+                        "正在使用 {provider_name} 生成图片…"
+                    ))),
                 }))
                 .await;
 
@@ -1189,10 +1190,7 @@ impl AstroService for AstroServiceImpl {
     }
 
     /// 列出本机已安装技能；`category` 字段编码启用状态与 `source_dir`。
-    async fn list_skills(
-        &self,
-        _request: Request<Empty>,
-    ) -> Result<Response<SkillList>, Status> {
+    async fn list_skills(&self, _request: Request<Empty>) -> Result<Response<SkillList>, Status> {
         let skills = skills::list_installed()
             .into_iter()
             .map(|s| SkillInfo {
@@ -1259,18 +1257,14 @@ impl AstroService for AstroServiceImpl {
                 Ok(Err(err)) => {
                     let _ = tx
                         .send(Ok(SkillEvent {
-                            payload: Some(proto::skill_event::Payload::Error(
-                                err.to_string(),
-                            )),
+                            payload: Some(proto::skill_event::Payload::Error(err.to_string())),
                         }))
                         .await;
                 }
                 Err(err) => {
                     let _ = tx
                         .send(Ok(SkillEvent {
-                            payload: Some(proto::skill_event::Payload::Error(
-                                err.to_string(),
-                            )),
+                            payload: Some(proto::skill_event::Payload::Error(err.to_string())),
                         }))
                         .await;
                 }
@@ -1343,8 +1337,8 @@ impl AstroService for AstroServiceImpl {
         let memory = MemoryManager::new(self.memory_dir.clone())
             .map_err(|e| Status::internal(e.to_string()))?;
         let (memory_content, user_content) = memory.prompt_content();
-        let sessions = open_sessions(&self.memory_dir)
-            .map_err(|e| Status::internal(e.to_string()))?;
+        let sessions =
+            open_sessions(&self.memory_dir).map_err(|e| Status::internal(e.to_string()))?;
 
         let sessions = sessions
             .search_messages(&query.query, None, None, query.limit.max(1) as i64)
@@ -1376,12 +1370,8 @@ impl AstroService for AstroServiceImpl {
         request: Request<FileListRequest>,
     ) -> Result<Response<FileListResponse>, Status> {
         let req = request.into_inner();
-        let entries = crate::grpc::files::list_directory(
-            &self.memory_dir,
-            &req.path,
-            req.depth,
-        )
-        .map_err(|e| Status::invalid_argument(e.to_string()))?;
+        let entries = crate::grpc::files::list_directory(&self.memory_dir, &req.path, req.depth)
+            .map_err(|e| Status::invalid_argument(e.to_string()))?;
 
         Ok(Response::new(FileListResponse { entries }))
     }
@@ -1459,7 +1449,12 @@ mod tests {
         service.chat_control(request).await.expect("second release");
 
         assert!(service.sessions.read().await.get(session_id).is_none());
-        assert!(service.pause_controls.read().await.get(session_id).is_none());
+        assert!(service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_none());
         assert!(service.hitl_registry.get(session_id).await.is_none());
         drop(pause);
         drop(gate);
@@ -1562,7 +1557,9 @@ mod tests {
             },
         ]);
 
-        let chain = map.get(&common::AuxiliaryTask::Compaction).expect("compaction");
+        let chain = map
+            .get(&common::AuxiliaryTask::Compaction)
+            .expect("compaction");
         assert_eq!(chain.len(), 2);
         assert_eq!(chain[0].provider_id, "p-pref");
         assert_eq!(chain[1].provider_id, "p-fb");

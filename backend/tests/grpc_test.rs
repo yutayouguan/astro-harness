@@ -66,10 +66,7 @@ async fn release_session_runtime_is_idempotent() {
         .chat_control(request.clone())
         .await
         .expect("first release");
-    client
-        .chat_control(request)
-        .await
-        .expect("second release");
+    client.chat_control(request).await.expect("second release");
 }
 
 /// Live：依赖本机 Ollama。未设置 `ASTRO_LIVE_OLLAMA=1` 时直接 return（默认套件仍绿）。
