@@ -188,10 +188,10 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  /* 默认：中性深灰渐变（对齐参考线稿 #555） */
-  --nav-grad-top: #8a8a8a;
-  --nav-grad-bottom: #555555;
-  --nav-icon-depth: #3d3d3d;
+  /* 默认：与导航文字 --ink-soft 同色系的浅渐变 */
+  --nav-grad-top: color-mix(in srgb, var(--ink-soft) 55%, #fff);
+  --nav-grad-bottom: var(--ink-soft);
+  --nav-icon-depth: color-mix(in srgb, var(--ink-soft) 45%, #64748b);
   --nav-icon-cutout: var(--sidebar-bg, var(--glass-fill, #fff));
   color: var(--nav-grad-bottom);
   /* 阴影放在容器上，避免干扰 SVG 内部 destination-out 镂空 */
@@ -202,9 +202,9 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 }
 
 html[data-theme="dark"] .nav-icon {
-  --nav-grad-top: #a0a0a0;
-  --nav-grad-bottom: #6e6e6e;
-  --nav-icon-depth: #2a2a2a;
+  --nav-grad-top: color-mix(in srgb, var(--ink-soft) 70%, #fff);
+  --nav-grad-bottom: var(--ink-soft);
+  --nav-icon-depth: color-mix(in srgb, var(--ink-soft) 35%, #000);
   --nav-icon-cutout: color-mix(in srgb, var(--sidebar-bg, #12081f) 88%, #000);
 }
 
