@@ -45,6 +45,10 @@ Astro 中 Google / Gemini 相关调用计划统一迁移到 Interactions API（`
 
 迁移时优先对照 [01-migrate-to-interactions.md](./01-migrate-to-interactions.md) 与各功能章节中的 Python / JavaScript / REST 示例。
 
+**Astro 落地与线上 wire 差异**（工具入参 `{}`、`arguments_delta`、`function_call.signature`、`thought_signature`、usage 字段等）见：
+
+- [14 · Astro 实现备注](./14-astro-implementation-notes.md)
+
 ## 1.4 关键概念速查
 
 ```text
