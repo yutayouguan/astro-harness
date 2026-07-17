@@ -33,14 +33,14 @@ function IconBase({ children, style, ...props }: IconProps) {
   );
 }
 
-/** 智能对话 — 气泡填实；三点选中后镂空透出 */
+/** 智能对话 — 默认空心+三点线稿；选中填实后三点变透镜镂空 */
 export function IconChat(props: IconProps) {
   return (
     <IconBase {...props}>
       <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-      <path className="nav-icon-cutout" d="M8 12h.01" />
-      <path className="nav-icon-cutout" d="M12 12h.01" />
-      <path className="nav-icon-cutout" d="M16 12h.01" />
+      <circle className="nav-icon-cutout" cx="8" cy="12" r="1" />
+      <circle className="nav-icon-cutout" cx="12" cy="12" r="1" />
+      <circle className="nav-icon-cutout" cx="16" cy="12" r="1" />
     </IconBase>
   );
 }
@@ -58,7 +58,7 @@ export function IconMemory(props: IconProps) {
   );
 }
 
-/** 工作空间 — 文件夹填实；<> 选中后镂空 */
+/** 工作空间 — 默认空心+<> 线稿；选中填实后 <> 变透镜镂空 */
 export function IconWorkspace(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -69,7 +69,7 @@ export function IconWorkspace(props: IconProps) {
   );
 }
 
-/** 文件空间 — 文件夹填实；折角与内部横线选中后镂空 */
+/** 文件空间 — 默认空心+折角/横线；选中填实后内部细节变透镜镂空 */
 export function IconFileSpace(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -131,7 +131,7 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** 定时任务 — 表盘填实；顶部耳与勾选选中后镂空透出 */
+/** 定时任务 — 默认空心+勾线稿；选中表盘填实，勾变透镜镂空 */
 export function IconCron(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -161,7 +161,7 @@ export function IconProviders(props: IconProps) {
   );
 }
 
-/** 偏好设置 — 齿轮填实；中心圆孔选中后镂空 */
+/** 偏好设置 — 默认空心+中心圆线稿；选中填实后中心变透镜孔 */
 export function IconSettings(props: IconProps) {
   return (
     <IconBase {...props}>
