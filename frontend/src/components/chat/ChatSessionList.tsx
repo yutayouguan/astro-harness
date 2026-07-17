@@ -31,6 +31,7 @@ import {
   markSessionUnread,
   subscribeSessionUnread,
 } from "../../lib/chat/sessionUnread";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import type { RecentSessionDto } from "../../types";
 import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
@@ -158,6 +159,7 @@ export default function ChatSessionList({
   onClearDeletedCurrentSession,
 }: Props) {
   const { t } = useI18n();
+  const { showToast, toastHost } = useTransientToast();
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);

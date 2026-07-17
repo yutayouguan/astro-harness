@@ -551,7 +551,7 @@ export const zh = {
   "sessions.unpin": "取消置顶",
   "sessions.pinnedBadge": "置顶",
   "sessions.export": "导出",
-  "sessions.exportDone": "已导出到下载目录",
+  "sessions.exportDone": "已导出到 {path}",
   "sessions.exportEmpty": "该会话暂无可导出内容",
   "sessions.branch": "分支",
   "sessions.branchEmpty": "该会话暂无消息，无法分支",
