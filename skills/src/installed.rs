@@ -171,20 +171,58 @@ fn machine_skill_roots() -> Vec<PathBuf> {
 
 /// 解析 SKILL.md YAML frontmatter 为元数据。
 fn parse_skill_frontmatter(content: &str) -> (String, String) {
+    let meta = parse_skill_frontmatter_full(content);
+    (meta.name, meta.description)
+}
+
+/// 解析 frontmatter（含可选 `astro_tools` 列表）。
+pub fn parse_skill_frontmatter_full(content: &str) -> SkillMetadata {
     let mut name = String::new();
     let mut description = String::new();
+    let mut astro_tools = Vec::new();
     if let Some(rest) = content.strip_prefix("---") {
         if let Some(end) = rest.find("\n---") {
-            for line in rest[..end].lines() {
-                if let Some(v) = line.strip_prefix("name:") {
+            let block = &rest[..end];
+            let mut in_astro_tools = false;
+            for line in block.lines() {
+                let trimmed = line.trim();
+                if let Some(v) = trimmed.strip_prefix("name:") {
                     name = v.trim().trim_matches('"').to_string();
-                } else if let Some(v) = line.strip_prefix("description:") {
+                    in_astro_tools = false;
+                } else if let Some(v) = trimmed.strip_prefix("description:") {
                     description = v.trim().trim_matches('"').to_string();
+                    in_astro_tools = false;
+                } else if trimmed.starts_with("astro_tools:") {
+                    in_astro_tools = true;
+                    let rest = trimmed["astro_tools:".len()..].trim();
+                    if rest.starts_with('[') {
+                        // inline: astro_tools: [a, b]
+                        for part in rest.trim_matches(|c| c == '[' || c == ']').split(',') {
+                            let t = part.trim().trim_matches('"').trim_matches('\'').to_string();
+                            if !t.is_empty() {
+                                astro_tools.push(t);
+                            }
+                        }
+                        in_astro_tools = false;
+                    }
+                } else if in_astro_tools {
+                    if let Some(item) = trimmed.strip_prefix("- ") {
+                        let t = item.trim().trim_matches('"').trim_matches('\'').to_string();
+                        if !t.is_empty() {
+                            astro_tools.push(t);
+                        }
+                    } else if !trimmed.is_empty() && !trimmed.starts_with('-') {
+                        in_astro_tools = false;
+                    }
                 }
             }
         }
     }
-    (name, description)
+    SkillMetadata {
+        name,
+        description,
+        astro_tools,
+    }
 }
 
 /// 比较两条路径是否同一位置（canonicalize 后）。
@@ -482,9 +520,15 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
         .with_context(|| format!("读取 {}", installed.path))?;
 
     Ok(LoadedSkill {
-        metadata: SkillMetadata {
-            name: installed.name,
-            description: installed.description,
+        metadata: {
+            let mut meta = parse_skill_frontmatter_full(&content);
+            if meta.name.is_empty() {
+                meta.name = installed.name.clone();
+            }
+            if meta.description.is_empty() {
+                meta.description = installed.description.clone();
+            }
+            meta
         },
         path: std::path::PathBuf::from(&installed.path),
         content,
@@ -938,5 +982,17 @@ mod tests {
         assert!(astro.iter().any(|s| s.name == "astro-only"));
         let machine = list_installed_for_agent(Some("workspace"), Some("machine"));
         assert!(!machine.iter().any(|s| s.name == "astro-only"));
+    }
+
+    #[test]
+    fn parse_astro_tools_list_and_inline() {
+        let block = "---\nname: t\ndescription: d\nastro_tools:\n  - terminal\n  - file_ops\n---\nbody\n";
+        let m = parse_skill_frontmatter_full(block);
+        assert_eq!(m.name, "t");
+        assert_eq!(m.astro_tools, vec!["terminal", "file_ops"]);
+
+        let inline = "---\nname: t2\ndescription: d\nastro_tools: [web_search, browser]\n---\n";
+        let m2 = parse_skill_frontmatter_full(inline);
+        assert_eq!(m2.astro_tools, vec!["web_search", "browser"]);
     }
 }

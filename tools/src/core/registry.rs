@@ -65,6 +65,8 @@ pub struct ToolRegistry {
     tools: HashMap<String, ToolEntry>,
     /// 与当前 Agent / 全局 `tools-enabled` 对齐的 toolset 开关；缺失键视为启用。
     enabled: HashMap<String, bool>,
+    /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
+    skill_override_enabled: std::collections::HashSet<String>,
 }
 
 impl ToolRegistry {
@@ -73,6 +75,7 @@ impl ToolRegistry {
         ToolRegistry {
             tools: HashMap::new(),
             enabled: HashMap::new(),
+            skill_override_enabled: std::collections::HashSet::new(),
         }
     }
 
@@ -92,8 +95,30 @@ impl ToolRegistry {
     }
 
     /// 判断指定 toolset 是否启用；未在映射中出现时默认返回 `true`。
+    ///
+    /// Skill 激活的 `skill_override_enabled` 可 additive 放宽被禁用的 toolset。
     pub fn is_toolset_enabled(&self, toolset: &str) -> bool {
+        if self.skill_override_enabled.contains(toolset) {
+            return true;
+        }
         self.enabled.get(toolset).copied().unwrap_or(true)
+    }
+
+    /// 将 skill 声明的 toolset 并入 additive 放宽集合。
+    pub fn activate_skill_toolsets(&mut self, toolsets: &[String]) {
+        for ts in toolsets {
+            let t = ts.trim();
+            if !t.is_empty() {
+                self.skill_override_enabled.insert(t.to_string());
+            }
+        }
+    }
+
+    /// 当前 skill 放宽的 toolset 列表（测试 / 观测）。
+    pub fn skill_override_toolsets(&self) -> Vec<String> {
+        let mut v: Vec<_> = self.skill_override_enabled.iter().cloned().collect();
+        v.sort();
+        v
     }
 
     /// 判断指定工具名当前是否允许调用。
@@ -314,6 +339,27 @@ mod tests {
         let names = schema_names(&reg);
         assert!(!names.iter().any(|n| n == "memory"));
         assert!(names.iter().any(|n| n == "cron_list"));
+    }
+
+    #[test]
+    fn skill_override_reenables_disabled_toolset() {
+        let mut reg = ToolRegistry::new();
+        reg.register(ToolEntry {
+            name: "memory".into(),
+            toolset: "memory".into(),
+            description: "add".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "brain",
+            ..ToolEntry::lifecycle_defaults()
+        });
+        let mut enabled = HashMap::new();
+        enabled.insert("memory".into(), false);
+        reg.set_enabled_map(enabled);
+        assert!(!reg.is_tool_allowed("memory"));
+        reg.activate_skill_toolsets(&["memory".into()]);
+        assert!(reg.is_tool_allowed("memory"));
+        assert_eq!(reg.skill_override_toolsets(), vec!["memory".to_string()]);
     }
 }
 

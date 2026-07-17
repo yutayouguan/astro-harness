@@ -866,12 +866,39 @@ impl AgentLoop {
             anyhow::bail!("prompt cancelled");
         }
         let raw_result = self.dispatch_named_tool(name, &args_owned).await?;
+        if name == "skills" {
+            self.activate_skill_toolsets_from_args(&args_owned);
+        }
         if tool_writes_disk(name, &args_owned) {
             self.turn_wrote_disk = true;
         }
         Ok(self
             .finalize_tool_call_result(name, &args_owned, raw_result)
             .await)
+    }
+
+    /// `skills` 工具成功加载后：按 frontmatter `astro_tools` additive 放宽 toolset。
+    fn activate_skill_toolsets_from_args(&mut self, args: &serde_json::Value) {
+        let Some(skill_id) = args
+            .get("skill_id")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            return;
+        };
+        let Ok(loaded) = skills::load_skill_by_name(skill_id) else {
+            return;
+        };
+        if !loaded.metadata.astro_tools.is_empty() {
+            tracing::info!(
+                skill = %loaded.metadata.name,
+                toolsets = ?loaded.metadata.astro_tools,
+                "skill activated toolsets (additive)"
+            );
+            self.tool_registry
+                .activate_skill_toolsets(&loaded.metadata.astro_tools);
+        }
     }
 
     /// `pub(crate)`：供 `exec::delegate` 的 `subagent_start`/`subagent_stop` 顺序测试复用。

@@ -27,6 +27,7 @@ pub mod timeline;
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
 /// HITL 闸门 re-export。
+#[allow(deprecated)]
 pub use control::hitl::{
     is_exclusive_tool, is_interactive_tool, HitlGate, HitlRegistry, HitlRequest, HitlResolution,
     HITL_DEFAULT_TIMEOUT_SECS,

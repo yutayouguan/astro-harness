@@ -36,8 +36,8 @@ pub use seed::{
 pub use installed::{
     link_skill_to_agent, list_enabled_for_prompt, list_installed, list_installed_for_agent,
     list_skill_files, list_skill_files_ex, load_skill_by_name, open_skill_file_externally,
-    open_skill_folder, read_skill_file, read_skill_file_ex, reveal_skill_file, set_enabled,
-    set_enabled_for_agent,
+    open_skill_folder, parse_skill_frontmatter_full, read_skill_file, read_skill_file_ex,
+    reveal_skill_file, set_enabled, set_enabled_for_agent,
 };
 pub use models::{
     InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,

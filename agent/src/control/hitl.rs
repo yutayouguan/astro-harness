@@ -264,6 +264,13 @@ impl HitlRegistry {
 }
 
 /// 工具名是否为 interactive（整批强制串行）。
+///
+/// 已由 [`tools::registry::ToolEntry::needs_confirmation`] 取代；保留供旧调用方兼容。
+/// 新代码请用 `ToolRegistry::any_needs_confirmation`。
+#[deprecated(
+    since = "0.1.0",
+    note = "use ToolEntry.needs_confirmation / ToolRegistry::any_needs_confirmation"
+)]
 pub fn is_interactive_tool(name: &str) -> bool {
     matches!(name, "confirm" | "clarify" | "request_user_location")
 }
@@ -448,9 +455,12 @@ mod tests {
     fn delegate_is_exclusive() {
         assert!(is_exclusive_tool("delegate"));
         assert!(!is_exclusive_tool("web_search"));
-        assert!(is_interactive_tool("confirm"));
-        assert!(is_interactive_tool("clarify"));
-        assert!(is_interactive_tool("request_user_location"));
-        assert!(!is_interactive_tool("terminal"));
+        #[allow(deprecated)]
+        {
+            assert!(is_interactive_tool("confirm"));
+            assert!(is_interactive_tool("clarify"));
+            assert!(is_interactive_tool("request_user_location"));
+            assert!(!is_interactive_tool("terminal"));
+        }
     }
 }

@@ -9,6 +9,9 @@ pub struct SkillMetadata {
     pub name: String,
     /// 简短说明。
     pub description: String,
+    /// 可选：加载本 skill 后 additive 放宽的 toolset id 列表（`astro_tools` frontmatter）。
+    #[serde(default)]
+    pub astro_tools: Vec<String>,
 }
 
 /// 磁盘加载后的完整 Skill。

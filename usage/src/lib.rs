@@ -6,6 +6,7 @@
 //! - [`trace_insights`]：按 session 聚合调用链（可读 `session` 库）
 
 pub mod db;
+pub mod eval_export;
 pub mod pricing;
 pub mod stats;
 pub mod trace_insights;
@@ -13,6 +14,10 @@ pub mod trace_insights;
 pub use db::{
     period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
     UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint, USAGE_SCHEMA_VERSION,
+};
+pub use eval_export::{
+    export_session_eval_jsonl, export_session_eval_jsonl_with_db, write_eval_record_jsonl,
+    EvalEvent, EvalMessagePreview, EvalSessionRecord,
 };
 pub use pricing::{
     estimate_usage_cost, resolve_billing_route, BillingRoute, CostResult, CostStatus, UsageTokens,

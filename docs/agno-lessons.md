@@ -54,7 +54,8 @@
 - `ToolRegistry::any_needs_confirmation` / `any_stop_after`：`multi_turn` 串行门控与「执行后结束 run」
 - `agent::streaming::run_state::{RunPhase, RunRequirements, RunState}`：派生 `RunFinished.outcome_type`（含 HITL）
 - `prompt::sanitize::sanitize_tool_pairs`：发送 Provider / hydrate session 前清理悬挂 tool_calls 与孤儿 tool 消息
-- **未做**：用注册表标志完全替换 `is_interactive_tool` 名称硬编码；工具级 hooks 仍走现有 hooks crate
+- `is_interactive_tool` 已 deprecated；串行门控以 `needs_confirmation` 为准（§三）
+- **未做**：工具级 hooks 仍走现有 hooks crate（刻意保留）
 
 ---
 
@@ -71,6 +72,12 @@
 ### 可借鉴
 - Skills 的「渐进式披露」Astro 已具备，可继续强化「按需加载工具」而非全量注入。
 - Trace 数据可导出为 eval 数据集（复用现有 usage + session，不必新造监控栈）。
+
+### 已落地（本轮）
+- `multi_turn` 串行门控改用 `ToolEntry.needs_confirmation`；`is_interactive_tool` 标 deprecated
+- `usage::eval_export::export_session_eval_jsonl`：session trace → JSONL eval 行（复用 usage.db）
+- Skill frontmatter 可选 `astro_tools`；`skills` 工具加载后 `ToolRegistry::activate_skill_toolsets` **additive 放宽**禁用 toolset
+- Hooks：本轮不新增 per-tool hooks，继续用现有 `pre/post_tool_call` 总线
 
 ---
 
