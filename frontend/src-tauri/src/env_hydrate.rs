@@ -47,6 +47,7 @@ fn known_api_key_names() -> HashSet<&'static str> {
         }
     }
     set.insert("ASTRO_GRPC_ADDR");
+    set.insert("ASTRO_EMBED_BACKEND");
     set
 }
 

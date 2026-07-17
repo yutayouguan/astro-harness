@@ -119,6 +119,7 @@ dependencies = [
  "agent",
  "anyhow",
  "artifacts",
+ "backend",
  "base64 0.22.1",
  "chrono",
  "common",

@@ -105,19 +105,28 @@ cargo build -p astro-agent --release --target x86_64-apple-darwin
 - 首次使用 Release 前，在仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**。
 - 推送到 GitHub 后，在 Actions 页点 **Run workflow** 即可试跑。
 
-## 可选：独立 gRPC 后端
+## gRPC 后端（默认内嵌）
 
-桌面端默认内嵌业务逻辑；如需单独跑后端服务：
-
-```bash
-cargo run -p backend
-```
+`tauri dev` / 打包后的 `.app` **默认在同进程启动 gRPC backend**（含 cron），无需另开终端。双击 APP 即可聊天。
 
 默认监听 `127.0.0.1:50051`，可用环境变量覆盖：
 
 ```bash
 export ASTRO_GRPC_ADDR=127.0.0.1:50051
 ```
+
+如需**独立进程**调试（避免双开抢端口）：
+
+```bash
+# 终端 1：只跑 backend
+cargo run -p backend
+
+# 终端 2：关掉内嵌，连外部 backend
+export ASTRO_EMBED_BACKEND=0
+cd frontend && npm run tauri dev
+```
+
+也可在 `~/.astro/.env` 写入 `ASTRO_EMBED_BACKEND=0` / `ASTRO_GRPC_ADDR=…`。
 
 ## 仓库结构
 
@@ -144,7 +153,7 @@ astro/
 |-------|------|
 | `astro-agent` | Tauri 桌面应用（`frontend/src-tauri`） |
 | `agent` | 对话与工具调用核心 |
-| `backend` | 独立 gRPC 入口 |
+| `backend` | gRPC 服务（可独立运行；桌面壳默认同进程内嵌） |
 | `providers` | LLM / 图像等供应商适配 |
 | `memory` | 记忆、工作区 |
 | `session` | 会话消息与账单 |

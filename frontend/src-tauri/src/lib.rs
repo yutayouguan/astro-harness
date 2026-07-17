@@ -368,6 +368,31 @@ pub fn run() {
                 tracing::warn!("workspace bootstrap failed: {err}");
             }
 
+            // 默认同进程内嵌 gRPC；ASTRO_EMBED_BACKEND=0 时连外部 backend。
+            if grpc::embed_backend_enabled() {
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = backend::run_embedded().await {
+                        tracing::error!(
+                            error = %err,
+                            "embedded backend exited (port in use? set ASTRO_EMBED_BACKEND=0 to use external backend)"
+                        );
+                    }
+                });
+                // 短等 listen 就绪，减少 session bridge / 首聊闪错。
+                tauri::async_runtime::block_on(async {
+                    if !grpc::wait_grpc_ready(std::time::Duration::from_secs(5)).await {
+                        tracing::warn!(
+                            "embedded backend not ready within 5s; session bridge will keep retrying"
+                        );
+                    }
+                });
+            } else {
+                tracing::info!(
+                    "ASTRO_EMBED_BACKEND disabled; expecting external backend at {}",
+                    grpc::default_grpc_address()
+                );
+            }
+
             session_events::start_bridge(app.handle());
 
             if let Err(err) = install_app_menu(app.handle()) {

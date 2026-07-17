@@ -1,6 +1,7 @@
 //! Astro 独立 gRPC 后端入口。
 //!
 //! 引导工作区、启动 [`AstroServiceImpl`]，并在后台每 30s 认领并执行到期 cron。
+//! 也可由桌面壳同进程调用 [`run_embedded`]（跳过二次日志初始化）。
 
 pub mod cron_runner;
 pub mod grpc;
@@ -20,15 +21,30 @@ use memory::ensure_workspace;
 use proto::astro_service_server::AstroServiceServer;
 use tonic::transport::Server;
 
-/// 启动日志、工作区、cron ticker 与 gRPC 服务（默认 `127.0.0.1:50051`）。
+/// 启动日志后进入 [`serve`]（独立 `cargo run -p backend` 入口）。
+///
+/// # 错误
+/// 日志初始化失败，或 [`serve`] 失败。
+pub async fn run() -> anyhow::Result<()> {
+    init_logging("agent")?;
+    serve().await
+}
+
+/// 供 Tauri 同进程内嵌：不做 `init_logging`（壳侧已初始化）。
+///
+/// # 错误
+/// 同 [`serve`]。
+pub async fn run_embedded() -> anyhow::Result<()> {
+    serve().await
+}
+
+/// 工作区、cron ticker 与 gRPC 服务（默认 `127.0.0.1:50051`）。
 ///
 /// 地址可由环境变量 `ASTRO_GRPC_ADDR` 覆盖。
 ///
 /// # 错误
-/// 地址解析失败、工作区初始化失败，或 tonic 服务异常退出。
-pub async fn run() -> anyhow::Result<()> {
-    init_logging("agent")?;
-
+/// 地址解析失败、工作区初始化失败，或 tonic 监听/服务异常退出（含端口占用）。
+pub async fn serve() -> anyhow::Result<()> {
     let addr = std::env::var("ASTRO_GRPC_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:50051".to_string())
         .parse()?;

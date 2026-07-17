@@ -1216,7 +1216,12 @@ fn parse_size(size: Option<&str>) -> (i32, i32) {
 /// 将底层错误转为面向用户的中文提示。
 fn friendly_error(err: &str) -> String {
     if err.contains("transport") || err.contains("Connection refused") || err.contains("connect") {
-        "无法连接后端服务。请先运行：cargo run -p backend".into()
+        if crate::grpc::embed_backend_enabled() {
+            "无法连接后端服务。内嵌 backend 可能尚未就绪或启动失败，请查看日志后重试。".into()
+        } else {
+            "无法连接后端服务。请先运行：cargo run -p backend（或去掉 ASTRO_EMBED_BACKEND=0 使用内嵌）"
+                .into()
+        }
     } else {
         err.to_string()
     }
