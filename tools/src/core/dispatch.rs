@@ -85,6 +85,20 @@ pub async fn dispatch_tool(
         "create_agent" => crate::create_agent::dispatch(ctx, args),
         "task_plan" => crate::task_plan::dispatch(ctx, args),
         "browser" => crate::browser::dispatch(ctx, args).await,
-        other => anyhow::bail!("未知工具: {other}"),
+        other => {
+            // Soft-alias：模型常把 Skill 名当成工具名；若命中已启用 Skill，改走 skills 工具。
+            if home::is_tool_call_allowed("skills")
+                && skills::list_installed()
+                    .into_iter()
+                    .any(|s| s.name == other && s.enabled)
+            {
+                let rewritten = serde_json::json!({
+                    "skill_id": other,
+                    "input": args,
+                });
+                return crate::skills_tool::dispatch(ctx, &rewritten);
+            }
+            anyhow::bail!("未知工具: {other}")
+        }
     }
 }

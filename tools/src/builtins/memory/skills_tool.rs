@@ -24,7 +24,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "skills".to_string(),
         toolset: "skills".to_string(),
-        description: "Load an installed skill by name (skill_id matches skill name) and return its SKILL.md text. Does not execute the skill—only returns instructions. Body capped at 64KiB."
+        description: "Load an installed skill by name. Call with name=\"skills\" and arguments.skill_id equal to the skill name (e.g. brainstorming). Do not use the skill name itself as the tool name. Returns SKILL.md instructions only—does not execute the skill. Body capped at 64KiB."
             .to_string(),
         schema: schema_for_args::<SkillsArgs>(),
         check_fn: None,

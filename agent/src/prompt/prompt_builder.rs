@@ -50,7 +50,7 @@ impl PromptBuilder {
     /// 追加工具调用格式与思考标签的使用说明（固定文案）。
     pub fn with_tool_guidance(mut self) -> Self {
         self.layers.push(
-            "# 工具使用\n使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n每次思考用 <think>...</think> 标签包裹。".to_string(),
+            "# 工具使用\n使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称。\n每次思考用 <think>...</think> 标签包裹。".to_string(),
         );
         self
     }
@@ -92,7 +92,11 @@ impl PromptBuilder {
                 .map(|(n, d)| format!("- **{}**: {}", n, d))
                 .collect::<Vec<_>>()
                 .join("\n");
-            self.layers.push(format!("# 可用 Skills\n{}", index));
+            self.layers.push(format!(
+                "# 可用 Skills\n\
+                 通过工具 `skills` 加载（arguments.skill_id = 下列名称），不要把 Skill 名当作工具名直接调用。\n\
+                 {index}"
+            ));
         }
         self
     }

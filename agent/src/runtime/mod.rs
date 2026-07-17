@@ -1038,7 +1038,7 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let guidance = "# 工具使用\n使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n每次思考用 <think>...</think> 标签包裹。";
+        let guidance = "# 工具使用\n使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称。\n每次思考用 <think>...</think> 标签包裹。";
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
         let timestamp = format!("# 当前时间\n{now}");
         let mut budget =
@@ -1230,15 +1230,33 @@ impl AgentLoop {
         if self.cancel.is_cancelled() {
             anyhow::bail!("prompt cancelled");
         }
-        let raw_result = self.dispatch_named_tool(name, &args_owned).await?;
-        if name == "skills" {
-            self.activate_skill_toolsets_from_args(&args_owned);
+        // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
+        let (exec_name, exec_args) = if !is_mcp_tool_name(name)
+            && !self.tool_registry.has_tool(name)
+            && self.tool_registry.is_tool_allowed("skills")
+            && skills::list_installed()
+                .into_iter()
+                .any(|s| s.name == name && s.enabled)
+        {
+            (
+                "skills",
+                serde_json::json!({
+                    "skill_id": name,
+                    "input": args_owned,
+                }),
+            )
+        } else {
+            (name, args_owned)
+        };
+        let raw_result = self.dispatch_named_tool(exec_name, &exec_args).await?;
+        if exec_name == "skills" {
+            self.activate_skill_toolsets_from_args(&exec_args);
         }
-        if tool_writes_disk(name, &args_owned) {
+        if tool_writes_disk(exec_name, &exec_args) {
             self.turn_wrote_disk = true;
         }
         Ok(self
-            .finalize_tool_call_result(name, &args_owned, raw_result)
+            .finalize_tool_call_result(exec_name, &exec_args, raw_result)
             .await)
     }
 

@@ -160,7 +160,11 @@ pub fn assemble_system_layers(
             .map(|(n, d)| format!("- **{n}**: {d}"))
             .collect::<Vec<_>>()
             .join("\n");
-        format!("# 可用 Skills\n{index}")
+        format!(
+            "# 可用 Skills\n\
+             通过工具 `skills` 加载（arguments.skill_id = 下列名称），不要把 Skill 名当作工具名直接调用。\n\
+             {index}"
+        )
     };
     let skills_src = RenderedSource::new("skills", skills_body);
     let guidance_src = RenderedSource::new("guidance", guidance);
