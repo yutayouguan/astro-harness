@@ -128,13 +128,15 @@ export function IconWorkspace(props: IconProps) {
   );
 }
 
-/** 文件空间 — 与工作空间同款文件夹+<>，默认空心线稿；选中填实后 <> 镂空 */
+/** 文件空间 — 文档+折角+三横线；默认空心线稿，选中填实后细节镂空 */
 export function IconFileSpace(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" />
-      <path className="nav-icon-cutout" d="M10 10.5 8 13l2 2.5" />
-      <path className="nav-icon-cutout" d="M14 10.5 16 13l-2 2.5" />
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path className="nav-icon-cutout" d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path className="nav-icon-cutout" d="M8 9h3" />
+      <path className="nav-icon-cutout" d="M8 13h8" />
+      <path className="nav-icon-cutout" d="M8 17h8" />
     </IconBase>
   );
 }
