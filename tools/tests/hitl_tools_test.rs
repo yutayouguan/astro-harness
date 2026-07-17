@@ -105,8 +105,20 @@ async fn clarify_emits_valid_a2ui_hitl() {
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(v["astro_hitl"], true);
     assert_eq!(v["reason"], "input_required");
+    assert_eq!(v["response_schema"]["required"][0], "answers");
     let ops = v["operations"].as_array().expect("operations array");
     a2ui::validate_operations(ops).unwrap();
+    let has_wizard = ops.iter().any(|op| {
+        op.pointer("/updateComponents/components")
+            .and_then(|c| c.as_array())
+            .map(|arr| {
+                arr.iter().any(|c| {
+                    c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard")
+                })
+            })
+            .unwrap_or(false)
+    });
+    assert!(has_wizard);
 }
 
 #[tokio::test]

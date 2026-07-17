@@ -3,8 +3,7 @@
 //! 返回带 `astro_hitl` 标记的 A2UI JSON；由 streaming 层经 `HitlGate` 同回合 park，
 //! 用户提交后写入标准 tool result 并续跑（不再结束 run）。
 //!
-//! - 单题：`question` + `options` → ChoicePicker 卡
-//! - 多题：`questions[]`（≥2）→ 叠层 Tab 向导 `ClarifyWizard`
+//! 统一走叠层 Tab 向导 `ClarifyWizard`（`questions`，或兼容 `question`+`options`）。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -15,7 +14,7 @@ use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
 
-/// 多题澄清中的一步。
+/// 澄清中的一步。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ClarifyQuestion {
     /// 答案键；缺省时用 `q0` / `q1` …
@@ -31,16 +30,16 @@ pub struct ClarifyQuestion {
 /// `clarify` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ClarifyArgs {
-    /// 单题模式：向用户提出的澄清问题。
+    /// 兼容写法：单题问题（无 `questions` 时使用）。
     #[serde(default)]
     pub question: Option<String>,
-    /// 单题模式选项；为空时提供「继续」单按钮。
+    /// 兼容写法：单题选项。
     #[serde(default)]
     pub options: Vec<String>,
-    /// 多题模式：一卡多问（≥2 时启用叠层 Tab 向导）。
+    /// 澄清步骤列表（推荐）；1 题也走同一向导。
     #[serde(default)]
     pub questions: Vec<ClarifyQuestion>,
-    /// 多题向导标题；缺省为「请确认几项」。
+    /// 向导标题；缺省：多题「请确认几项」，单题用问题正文。
     #[serde(default)]
     pub title: Option<String>,
 }
@@ -51,7 +50,7 @@ pub fn register(registry: &mut ToolRegistry) {
         name: "clarify".to_string(),
         toolset: "clarify".to_string(),
         description: "Ask clarifying question(s) with choices before proceeding. \
-Use `questions` (2+) for a stacked multi-step wizard; or `question`+`options` for a single picker."
+Prefer `questions` (1+ steps) for a stacked wizard; `question`+`options` still works as one step."
             .to_string(),
         schema: schema_for_args::<ClarifyArgs>(),
         check_fn: None,
@@ -79,7 +78,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
     let parsed: ClarifyArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("clarify 参数无效: {e}"))?;
 
-    let multi_steps: Vec<a2ui::templates::ClarifyStep> = parsed
+    let mut steps: Vec<a2ui::templates::ClarifyStep> = parsed
         .questions
         .iter()
         .enumerate()
@@ -102,71 +101,57 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
         })
         .collect();
 
-    let surface_id = format!("clarify-{}", Uuid::new_v4());
-
-    if multi_steps.len() >= 2 {
-        let title = parsed
-            .title
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .unwrap_or("请确认几项");
-        let operations =
-            a2ui::templates::build_multi_clarify_surface(&surface_id, title, &multi_steps);
-        a2ui::validate_operations(&operations)
-            .map_err(|e| anyhow::anyhow!("clarify A2UI 无效: {e}"))?;
-
-        let message = format!(
-            "{}（{} 项）",
-            title,
-            multi_steps.len()
-        );
-        let payload = json!({
-            "astro_hitl": true,
-            "reason": "input_required",
-            "message": message,
-            "operations": operations,
-            "response_schema": {
-                "type": "object",
-                "properties": {
-                    "answers": { "type": "object" },
-                    "value": { "type": "string" }
-                },
-                "required": ["answers", "value"]
-            }
-        });
-        return Ok(payload.to_string());
-    }
-
-    // Single-question path (legacy + questions[0] fallback).
-    let (question, options) = if let Some(step) = multi_steps.into_iter().next() {
-        (step.question, step.options)
-    } else {
+    if steps.is_empty() {
         let question = parsed
             .question
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .ok_or_else(|| anyhow::anyhow!("clarify 需要 question 或 questions"))?;
-        (
-            question.to_string(),
-            normalize_options(parsed.options, "继续"),
-        )
-    };
+        steps.push(a2ui::templates::ClarifyStep {
+            id: "q0".into(),
+            question: question.to_string(),
+            options: normalize_options(parsed.options, "继续"),
+        });
+    }
 
-    let operations = a2ui::templates::build_clarify_surface(&surface_id, &question, &options);
+    let title = parsed
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if steps.len() == 1 {
+                steps[0].question.clone()
+            } else {
+                "请确认几项".into()
+            }
+        });
+
+    let surface_id = format!("clarify-{}", Uuid::new_v4());
+    let operations = a2ui::templates::build_clarify_surface(&surface_id, &title, &steps);
     a2ui::validate_operations(&operations)
         .map_err(|e| anyhow::anyhow!("clarify A2UI 无效: {e}"))?;
+
+    let message = if steps.len() == 1 {
+        steps[0].question.clone()
+    } else {
+        format!("{}（{} 项）", title, steps.len())
+    };
 
     let payload = json!({
         "astro_hitl": true,
         "reason": "input_required",
-        "message": question,
+        "message": message,
         "operations": operations,
         "response_schema": {
             "type": "object",
-            "properties": { "value": { "type": "string" } },
-            "required": ["value"]
+            "properties": {
+                "answers": { "type": "object" },
+                "value": { "type": "string" }
+            },
+            "required": ["answers", "value"]
         }
     });
     Ok(payload.to_string())

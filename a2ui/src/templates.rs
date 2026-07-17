@@ -90,7 +90,7 @@ pub fn build_confirm_surface(surface_id: &str, title: &str, body: &str) -> Vec<V
     ]
 }
 
-/// One step in a multi-question clarify wizard.
+/// One step in a clarify wizard.
 #[derive(Debug, Clone)]
 pub struct ClarifyStep {
     /// Stable answer key (also used as tab id).
@@ -99,74 +99,11 @@ pub struct ClarifyStep {
     pub options: Vec<String>,
 }
 
-/// Build A2UI operations for a clarify (choose among options) HITL surface.
-pub fn build_clarify_surface(
-    surface_id: &str,
-    question: &str,
-    options: &[String],
-) -> Vec<Value> {
-    let option_values: Vec<Value> = options.iter().map(|o| json!(o)).collect();
-    vec![
-        json!({
-            "version": "v0.9",
-            "createSurface": {
-                "surfaceId": surface_id,
-                "catalogId": ASTRO_CATALOG_ID
-            }
-        }),
-        json!({
-            "version": "v0.9",
-            "updateComponents": {
-                "surfaceId": surface_id,
-                "components": [
-                    { "id": "root", "component": "Card", "child": "col" },
-                    {
-                        "id": "col",
-                        "component": "Column",
-                        "children": ["badge", "question", "value", "submit"]
-                    },
-                    {
-                        "id": "badge",
-                        "component": "Badge",
-                        "text": "Clarify",
-                        "variant": "info"
-                    },
-                    {
-                        "id": "question",
-                        "component": "Text",
-                        "text": question,
-                        "variant": "h2"
-                    },
-                    {
-                        "id": "value",
-                        "component": "ChoicePicker",
-                        "label": "选项",
-                        "options": option_values,
-                        "required": true
-                    },
-                    {
-                        "id": "submit",
-                        "component": "Button",
-                        "child": "submit_label",
-                        "variant": "primary",
-                        "action": { "event": { "name": "choose" } }
-                    },
-                    {
-                        "id": "submit_label",
-                        "component": "Text",
-                        "text": "Submit"
-                    }
-                ]
-            }
-        }),
-    ]
-}
-
-/// Multi-question clarify: stacked tab wizard (`ClarifyWizard`).
+/// Clarify HITL surface via stacked-tab `ClarifyWizard` (1+ steps).
 ///
-/// Frontend renders tabs + layered cards with transition animation.
+/// Frontend renders tabs (when 2+) + layered cards with transition animation.
 /// Submit emits `choose` with `{ answers: { stepId: option }, value: summary }`.
-pub fn build_multi_clarify_surface(
+pub fn build_clarify_surface(
     surface_id: &str,
     title: &str,
     steps: &[ClarifyStep],
@@ -182,6 +119,40 @@ pub fn build_multi_clarify_surface(
         })
         .collect();
 
+    let col_children: Vec<&str> = if steps.len() > 1 {
+        vec!["badge", "title", "wizard"]
+    } else {
+        vec!["badge", "wizard"]
+    };
+
+    let mut components = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({
+            "id": "col",
+            "component": "Column",
+            "children": col_children
+        }),
+        json!({
+            "id": "badge",
+            "component": "Badge",
+            "text": "Clarify",
+            "variant": "info"
+        }),
+    ];
+    if steps.len() > 1 {
+        components.push(json!({
+            "id": "title",
+            "component": "Text",
+            "text": title,
+            "variant": "h2"
+        }));
+    }
+    components.push(json!({
+        "id": "wizard",
+        "component": "ClarifyWizard",
+        "steps": steps_json
+    }));
+
     vec![
         json!({
             "version": "v0.9",
@@ -194,31 +165,7 @@ pub fn build_multi_clarify_surface(
             "version": "v0.9",
             "updateComponents": {
                 "surfaceId": surface_id,
-                "components": [
-                    { "id": "root", "component": "Card", "child": "col" },
-                    {
-                        "id": "col",
-                        "component": "Column",
-                        "children": ["badge", "title", "wizard"]
-                    },
-                    {
-                        "id": "badge",
-                        "component": "Badge",
-                        "text": "Clarify",
-                        "variant": "info"
-                    },
-                    {
-                        "id": "title",
-                        "component": "Text",
-                        "text": title,
-                        "variant": "h2"
-                    },
-                    {
-                        "id": "wizard",
-                        "component": "ClarifyWizard",
-                        "steps": steps_json
-                    }
-                ]
+                "components": components
             }
         }),
     ]

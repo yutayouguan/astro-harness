@@ -101,43 +101,46 @@ export default function ClarifyWizard({
 
   if (!steps.length || !step) return null;
 
-  const backPeek = steps
-    .slice(safeIndex + 1, safeIndex + 3)
-    .map((_, i) => i + 1);
+  const multi = steps.length > 1;
+  const backPeek = multi
+    ? steps.slice(safeIndex + 1, safeIndex + 3).map((_, i) => i + 1)
+    : [];
 
   return (
     <div
-      className={`a2ui-clarify-wizard ${disabled ? "is-disabled" : ""}`}
+      className={`a2ui-clarify-wizard ${disabled ? "is-disabled" : ""} ${multi ? "is-multi" : "is-single"}`}
       data-a2ui-id="wizard"
     >
-      <div className="a2ui-clarify-tabs" role="tablist" aria-label={t("chat.a2ui.clarifyTabs")}>
-        {steps.map((s, i) => {
-          const answered = Boolean(answers[s.id]);
-          const active = i === safeIndex;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={[
-                "a2ui-clarify-tab",
-                active ? "is-active" : "",
-                answered ? "is-done" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              disabled={disabled || phase === "exit"}
-              onClick={() => goTo(i)}
-            >
-              <span className="a2ui-clarify-tab-index">{i + 1}</span>
-              <span className="a2ui-clarify-tab-label">
-                {s.question.length > 10 ? `${s.question.slice(0, 10)}…` : s.question}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {multi ? (
+        <div className="a2ui-clarify-tabs" role="tablist" aria-label={t("chat.a2ui.clarifyTabs")}>
+          {steps.map((s, i) => {
+            const answered = Boolean(answers[s.id]);
+            const active = i === safeIndex;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={[
+                  "a2ui-clarify-tab",
+                  active ? "is-active" : "",
+                  answered ? "is-done" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                disabled={disabled || phase === "exit"}
+                onClick={() => goTo(i)}
+              >
+                <span className="a2ui-clarify-tab-index">{i + 1}</span>
+                <span className="a2ui-clarify-tab-label">
+                  {s.question.length > 10 ? `${s.question.slice(0, 10)}…` : s.question}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div className="a2ui-clarify-stack" aria-live="polite">
         {backPeek.map((depth) => (
@@ -158,11 +161,13 @@ export default function ClarifyWizard({
             .join(" ")}
           role="tabpanel"
         >
-          <p className="a2ui-clarify-progress">
-            {t("chat.a2ui.clarifyProgress")
-              .replace("{current}", String(safeIndex + 1))
-              .replace("{total}", String(steps.length))}
-          </p>
+          {multi ? (
+            <p className="a2ui-clarify-progress">
+              {t("chat.a2ui.clarifyProgress")
+                .replace("{current}", String(safeIndex + 1))
+                .replace("{total}", String(steps.length))}
+            </p>
+          ) : null}
           <h3 className="a2ui-clarify-question">{step.question}</h3>
           <div className="a2ui-clarify-options">
             {step.options.map((opt) => {
@@ -180,41 +185,43 @@ export default function ClarifyWizard({
               );
             })}
           </div>
-          <div className="a2ui-clarify-nav">
-            <button
-              type="button"
-              className="a2ui-button"
-              disabled={disabled || safeIndex === 0 || phase === "exit"}
-              onClick={() => goTo(safeIndex - 1)}
-            >
-              {t("chat.a2ui.clarifyBack")}
-            </button>
-            {!isLast ? (
+          {multi ? (
+            <div className="a2ui-clarify-nav">
               <button
                 type="button"
-                className="a2ui-button is-primary"
-                disabled={
-                  disabled || !answers[step.id] || phase === "exit"
-                }
-                onClick={() => goTo(safeIndex + 1)}
+                className="a2ui-button"
+                disabled={disabled || safeIndex === 0 || phase === "exit"}
+                onClick={() => goTo(safeIndex - 1)}
               >
-                {t("chat.a2ui.clarifyNext")}
+                {t("chat.a2ui.clarifyBack")}
               </button>
-            ) : (
-              <button
-                type="button"
-                className="a2ui-button is-primary"
-                disabled={
-                  disabled ||
-                  steps.some((s) => !answers[s.id]) ||
-                  phase === "exit"
-                }
-                onClick={() => submitAll(answers)}
-              >
-                {t("chat.a2ui.clarifySubmit")}
-              </button>
-            )}
-          </div>
+              {!isLast ? (
+                <button
+                  type="button"
+                  className="a2ui-button is-primary"
+                  disabled={
+                    disabled || !answers[step.id] || phase === "exit"
+                  }
+                  onClick={() => goTo(safeIndex + 1)}
+                >
+                  {t("chat.a2ui.clarifyNext")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="a2ui-button is-primary"
+                  disabled={
+                    disabled ||
+                    steps.some((s) => !answers[s.id]) ||
+                    phase === "exit"
+                  }
+                  onClick={() => submitAll(answers)}
+                >
+                  {t("chat.a2ui.clarifySubmit")}
+                </button>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

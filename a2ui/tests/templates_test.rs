@@ -1,6 +1,6 @@
 use a2ui::templates::{
     build_clarify_surface, build_confirm_surface, build_info_surface,
-    build_location_request_surface, build_multi_clarify_surface, ClarifyStep,
+    build_location_request_surface, ClarifyStep,
 };
 use a2ui::{validate_operations, ASTRO_CATALOG_ID};
 use serde_json::Value;
@@ -32,6 +32,22 @@ fn all_component_names(ops: &[Value]) -> Vec<String> {
     names
 }
 
+fn wizard_step_count(ops: &[Value]) -> usize {
+    ops.iter()
+        .find_map(|op| {
+            op.pointer("/updateComponents/components")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| {
+                    arr.iter()
+                        .find(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
+                })
+                .and_then(|w| w.get("steps"))
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+        })
+        .unwrap_or(0)
+}
+
 #[test]
 fn confirm_template_validates_and_uses_v2() {
     let ops = build_confirm_surface("surf-confirm-1", "删除文件？", "将永久删除 report.pdf");
@@ -43,21 +59,30 @@ fn confirm_template_validates_and_uses_v2() {
 }
 
 #[test]
-fn clarify_template_validates() {
-    let ops = build_clarify_surface(
-        "surf-clarify-1",
-        "选哪个环境？",
-        &["staging".into(), "production".into()],
-    );
+fn clarify_single_step_uses_wizard() {
+    let steps = [ClarifyStep {
+        id: "env".into(),
+        question: "选哪个环境？".into(),
+        options: vec!["staging".into(), "production".into()],
+    }];
+    let ops = build_clarify_surface("surf-clarify-1", "选哪个环境？", &steps);
     validate_operations(&ops).unwrap();
     assert_eq!(catalog_ids(&ops), vec![ASTRO_CATALOG_ID]);
     let names = all_component_names(&ops);
-    assert!(names.iter().any(|n| n == "ChoicePicker"));
-    assert!(names.iter().any(|n| n == "Button"));
+    assert!(names.iter().any(|n| n == "ClarifyWizard"));
+    assert!(!names.iter().any(|n| n == "ChoicePicker"));
+    assert_eq!(wizard_step_count(&ops), 1);
+    let has_title_id = ops.iter().any(|op| {
+        op.pointer("/updateComponents/components")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().any(|c| c.get("id").and_then(|i| i.as_str()) == Some("title")))
+            .unwrap_or(false)
+    });
+    assert!(!has_title_id);
 }
 
 #[test]
-fn multi_clarify_template_validates() {
+fn clarify_multi_step_template_validates() {
     let steps = [
         ClarifyStep {
             id: "style".into(),
@@ -75,28 +100,19 @@ fn multi_clarify_template_validates() {
             options: vec!["欢快洗脑".into(), "优美自然".into()],
         },
     ];
-    let ops = build_multi_clarify_surface("surf-clarify-multi", "开干前确认", &steps);
+    let ops = build_clarify_surface("surf-clarify-multi", "开干前确认", &steps);
     validate_operations(&ops).unwrap();
     assert_eq!(catalog_ids(&ops), vec![ASTRO_CATALOG_ID]);
     let names = all_component_names(&ops);
     assert!(names.iter().any(|n| n == "ClarifyWizard"));
-    let wizard = ops
-        .iter()
-        .find_map(|op| {
-            op.pointer("/updateComponents/components")
-                .and_then(|v| v.as_array())
-                .and_then(|arr| {
-                    arr.iter()
-                        .find(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
-                })
-        })
-        .expect("wizard component");
-    let step_count = wizard
-        .get("steps")
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-    assert_eq!(step_count, 3);
+    assert_eq!(wizard_step_count(&ops), 3);
+    let has_title_id = ops.iter().any(|op| {
+        op.pointer("/updateComponents/components")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().any(|c| c.get("id").and_then(|i| i.as_str()) == Some("title")))
+            .unwrap_or(false)
+    });
+    assert!(has_title_id);
 }
 
 #[test]
