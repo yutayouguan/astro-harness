@@ -3,8 +3,10 @@
 pub mod auxiliary_target;
 pub mod chat_target;
 pub mod error;
+pub mod grpc_addr;
 pub mod media;
 pub mod message;
+pub mod model_spec;
 pub mod notify;
 pub mod sqlite;
 pub mod text;
@@ -13,6 +15,10 @@ pub mod tool;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
 pub use chat_target::*;
+pub use grpc_addr::{
+    grpc_bind_address, resolve_grpc_address, runtime_grpc_address, set_runtime_grpc_address,
+};
+pub use model_spec::{ModelRole, ModelSpec};
 pub use media::{
     append_media_sidecar, extract_tool_media, parse_generated_labels, MediaAsset, MediaKind,
     MediaRef,

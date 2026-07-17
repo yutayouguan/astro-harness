@@ -117,20 +117,25 @@ cargo build -p astro-agent --release --target x86_64-apple-darwin
 
 `tauri dev` / 打包后的 `.app` **默认在同进程启动 gRPC backend**（含 cron），无需另开终端。双击 APP 即可聊天。
 
-默认监听 `127.0.0.1:50051`，可用环境变量覆盖：
+**端口：** 未设置 `ASTRO_GRPC_ADDR` 时内嵌使用 `127.0.0.1:0`，由系统分配空闲端口，并在进程内告诉壳侧客户端（用户无感、不与其它进程抢 50051）。独立 `cargo run -p backend` 仍默认 `127.0.0.1:50051`。
+
+调试固定端口：
 
 ```bash
 export ASTRO_GRPC_ADDR=127.0.0.1:50051
 ```
 
-如需**独立进程**调试（避免双开抢端口）：
+**单实例：** 再次打开 APP 不会起第二套进程/backend，而是把已有窗口拉到前台（Windows/Linux 走 single-instance 插件；macOS 另支持 Dock 再点 / Reopen）。
+
+如需**独立进程**调试：
 
 ```bash
-# 终端 1：只跑 backend
+# 终端 1：只跑 backend（默认 50051）
 cargo run -p backend
 
 # 终端 2：关掉内嵌，连外部 backend
 export ASTRO_EMBED_BACKEND=0
+export ASTRO_GRPC_ADDR=127.0.0.1:50051
 cd frontend && npm run tauri dev
 ```
 

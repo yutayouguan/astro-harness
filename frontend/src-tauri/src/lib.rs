@@ -269,6 +269,10 @@ pub fn run() {
     env_hydrate::hydrate_process_env();
 
     tauri::Builder::default()
+        // 单实例须最先注册：二次启动聚焦已有窗口（Windows/Linux；macOS 另见 Reopen）。
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window(app);
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .on_menu_event(|app, event| {
@@ -416,29 +420,26 @@ pub fn run() {
             }
 
             // 默认同进程内嵌 gRPC；ASTRO_EMBED_BACKEND=0 时连外部 backend。
-            // bind 成功才视为就绪，避免端口被占用时误连其它进程。
+            // 未设 ASTRO_GRPC_ADDR 时 bind 127.0.0.1:0，实际端口经 oneshot + 进程内地址共享。
             if grpc::embed_backend_enabled() {
                 let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
                 tauri::async_runtime::spawn(async move {
                     if let Err(err) = backend::run_embedded(Some(ready_tx)).await {
                         tracing::error!(
                             error = %err,
-                            "embedded backend exited (port in use? set ASTRO_EMBED_BACKEND=0 to use external backend)"
+                            "embedded backend exited (port in use? set ASTRO_GRPC_ADDR or ASTRO_EMBED_BACKEND=0)"
                         );
                     }
                 });
                 match tauri::async_runtime::block_on(async {
                     tokio::time::timeout(std::time::Duration::from_secs(5), ready_rx).await
                 }) {
-                    Ok(Ok(())) => {
-                        tracing::info!(
-                            "embedded gRPC listening on {}",
-                            grpc::default_grpc_address()
-                        );
+                    Ok(Ok(addr)) => {
+                        tracing::info!("embedded gRPC listening on {addr}");
                     }
                     Ok(Err(_)) => {
                         tracing::error!(
-                            "embedded backend failed before listen; chat may be unavailable (port in use?)"
+                            "embedded backend failed before listen; chat may be unavailable"
                         );
                     }
                     Err(_) => {

@@ -1,8 +1,8 @@
 //! 桌面壳与可选独立 / 内嵌 backend 之间的 gRPC 地址约定。
 
-/// 默认监听地址；可由环境变量 `ASTRO_GRPC_ADDR` 覆盖。
+/// 客户端连接地址（内嵌分配端口后走进程内实际地址）。
 pub fn default_grpc_address() -> String {
-    std::env::var("ASTRO_GRPC_ADDR").unwrap_or_else(|_| "127.0.0.1:50051".into())
+    common::resolve_grpc_address()
 }
 
 /// 将裸主机端口补全为 tonic 可用的 `http://…` URL。
@@ -46,7 +46,6 @@ mod tests {
 
     #[test]
     fn embed_flag_parses_off_values() {
-        // 不依赖真实环境：直接测解析逻辑副本
         fn enabled(raw: Option<&str>) -> bool {
             match raw {
                 Some(v) => {
