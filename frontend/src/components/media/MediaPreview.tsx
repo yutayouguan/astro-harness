@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import BrokenMedia from "./BrokenMedia";
+import GlassAudioPlayer from "./GlassAudioPlayer";
 import HtmlPreview from "./HtmlPreview";
 import MediaLightbox from "./MediaLightbox";
 import MediaToolbar from "./MediaToolbar";
@@ -83,11 +84,9 @@ export default function MediaPreview({
   if (kind === "audio") {
     return (
       <div className={wrap} data-kind="audio">
-        <audio
-          className="media-preview-audio"
+        <GlassAudioPlayer
           src={src}
-          controls
-          preload="metadata"
+          className="media-preview-audio"
           onError={() => setLoadError(true)}
         />
         <MediaToolbar path={path} kind="audio" compact={compact} />

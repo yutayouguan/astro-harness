@@ -288,8 +288,10 @@ html[data-theme="light"] .a2ui-surface {
   overflow: hidden;
   isolation: isolate;
   border-color: var(--a2ui-glass-border, var(--glass-edge));
-  background: var(--a2ui-glass-bg, var(--panel, var(--bg)));
+  background: var(--a2ui-glass-bg, var(--glass-panel, var(--panel, var(--bg))));
   box-shadow: var(--a2ui-glass-shadow, none);
+  backdrop-filter: blur(var(--a2ui-glass-blur, 14px)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--a2ui-glass-blur, 14px)) saturate(1.25);
   animation: gen-media-card-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -314,8 +316,8 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-card.is-media .a2ui-media-slot {
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  border: none;
+  background: transparent;
 }
 
 .a2ui-card.is-media .a2ui-media-preview.media-preview,
@@ -327,12 +329,8 @@ html[data-theme="light"] .a2ui-surface {
   box-shadow: none;
 }
 
-.a2ui-card.is-media .media-preview-audio {
-  padding: 10px 12px 0;
-}
-
 .a2ui-card.is-media .media-preview[data-kind="audio"] .media-toolbar {
-  margin: 0 8px 8px 0;
+  margin: 0;
 }
 
 .a2ui-column {
