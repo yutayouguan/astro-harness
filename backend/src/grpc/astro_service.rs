@@ -964,6 +964,9 @@ impl AstroService for AstroServiceImpl {
                 thinking_enabled,
                 reasoning_effort: reasoning_effort.clone(),
                 additional_params,
+                // 默认 4096 对会写文件的 agent 偏低：单次写入较大文件时 tool-call
+                // 参数 JSON 易被截断（EOF 解析失败）。抬到 8192，兼顾主流模型输出上限。
+                max_tokens: 8192,
                 ..ProviderConfig::default()
             };
 

@@ -178,16 +178,27 @@ impl ToolCallAccumulator {
                         call.signature = s.signature;
                         call
                     }
-                    Err(err) => ParsedToolCall {
-                        id,
-                        name: s.name,
-                        arguments: serde_json::json!({
-                            "_parse_error": format!("{err}"),
-                            "_raw": trimmed,
-                        }),
-                        args_parse_error: true,
-                        signature: s.signature,
-                    },
+                    Err(err) => {
+                        // EOF 通常意味着参数 JSON 被截断（模型单次输出超长），
+                        // 给出可操作提示，便于循环把结果回喂后让模型拆分重试。
+                        let detail = if err.is_eof() {
+                            format!(
+                                "工具参数 JSON 不完整，疑似单次输出超长被截断。请将超长内容拆分为多次调用（分段写入 / 追加），或缩短本次内容后重试。原始错误: {err}"
+                            )
+                        } else {
+                            format!("工具参数 JSON 无效（请检查引号与转义）: {err}")
+                        };
+                        ParsedToolCall {
+                            id,
+                            name: s.name,
+                            arguments: serde_json::json!({
+                                "_parse_error": detail,
+                                "_raw": trimmed,
+                            }),
+                            args_parse_error: true,
+                            signature: s.signature,
+                        }
+                    }
                 }
             })
             .collect()
@@ -274,6 +285,26 @@ before
         let calls = acc.finish();
         assert!(calls[0].args_parse_error);
         assert!(calls[0].arguments.get("_parse_error").is_some());
+    }
+
+    #[test]
+    fn truncated_args_hint_mentions_split() {
+        // 模拟超长 HTML 被截断：字符串未闭合、对象未收尾。
+        let mut acc = ToolCallAccumulator::new();
+        acc.push(&ToolCallDelta {
+            index: 0,
+            id: Some("t".into()),
+            name: Some("file_ops".into()),
+            arguments: Some(
+                "{\"operation\":\"write\",\"content\":\"<div>very long".into(),
+            ),
+            signature: None,
+        });
+        let calls = acc.finish();
+        assert!(calls[0].args_parse_error);
+        let msg = calls[0].arguments["_parse_error"].as_str().unwrap();
+        assert!(msg.contains("截断"), "should hint truncation: {msg}");
+        assert!(calls[0].arguments.get("_raw").is_some());
     }
 
     #[test]
