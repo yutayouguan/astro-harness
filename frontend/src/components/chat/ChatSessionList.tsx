@@ -37,6 +37,7 @@ import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
 import AgentPicker from "../agents/AgentPicker";
 import ExpandableSearch from "../ui/ExpandableSearch";
+import EmptyIllustration from "../../illustrations/EmptyIllustration";
 
 type ChatHistoryExportDto = {
   messages: Array<{
@@ -466,10 +467,17 @@ export default function ChatSessionList({
     );
   }, [items, query]);
 
-  const emptyLabel =
-    listKind === "archived"
+  const hasQuery = query.trim().length > 0;
+  const emptyTitle = hasQuery
+    ? t("sessions.searchEmpty")
+    : listKind === "archived"
       ? t("sessions.noArchived")
       : t("chat.rightPanel.noSessions");
+  const emptyHint = hasQuery
+    ? undefined
+    : listKind === "archived"
+      ? t("sessions.noArchivedHint")
+      : t("sessions.emptyHint");
 
   return (
     <div className="chat-session-list">
@@ -528,7 +536,13 @@ export default function ChatSessionList({
       </div>
       {error && <div className="side-error">{error}</div>}
       {filtered.length === 0 ? (
-        <p className="muted">{emptyLabel}</p>
+        <EmptyIllustration
+          scene="chat"
+          size="sm"
+          className="chat-session-empty"
+          title={emptyTitle}
+          hint={emptyHint}
+        />
       ) : (
         <ul>
           {filtered.map((s) => {

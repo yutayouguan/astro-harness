@@ -194,3 +194,8 @@ html[data-theme="dark"] .astro-cover-swatch {
 .cron-empty.astro-empty {
   --tone: var(--tone-orange, #ea580c);
 }
+
+.chat-session-empty.astro-empty {
+  --tone: var(--tone-blue, #2563eb);
+  margin: 16px auto 0;
+}
