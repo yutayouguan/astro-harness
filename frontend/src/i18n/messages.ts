@@ -12,7 +12,7 @@ export const zh = {
   "nav.tools": "我的工具",
   "nav.insights": "数据洞察",
   "nav.cron": "定时任务",
-  "nav.providers": "模型提供商",
+  "nav.providers": "模型服务",
   "nav.auxiliary": "辅助模型",
   "nav.settings": "偏好设置",
 
@@ -110,7 +110,7 @@ export const zh = {
   "cron.agentHint": "切换 Agent 后，只显示该 Agent 的定时任务",
   "tools.searchPlaceholder": "搜索工具…",
   "cron.searchPlaceholder": "搜索定时任务…",
-  "page.providers.title": "模型提供商",
+  "page.providers.title": "模型服务",
   "page.providers.sub": "读取环境变量 API Key，测试连通性与延时，拉取可用模型",
   "page.auxiliary.title": "辅助模型",
   "page.auxiliary.sub": "为标题、压缩、审批与记忆维护指定专用模型",
