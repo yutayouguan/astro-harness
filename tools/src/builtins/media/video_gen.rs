@@ -17,7 +17,7 @@ use crate::schema::schema_for_args;
 /// `video_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VideoGenArgs {
-    /// 视频画面的文字描述（不可为空）。
+    /// 详细视频提示词（不可为空）。须写充实描述，勿只用短句：主体与动作、镜头运动、场景、光影/色彩、风格与氛围、时间节奏。若思考过程已写好详细描述，必须原样传入。
     pub prompt: String,
     /// 宽高比，如 `16:9` / `9:16`（可选）。
     #[serde(default)]
@@ -68,7 +68,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video via Google native Veo (predictLongRunning). Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
+        description: "Generate a short video via Google native Veo (predictLongRunning). prompt MUST be a rich, detailed shot description (subject/action, camera move, setting, lighting, style, mood)—NOT a short summary; pass thinking drafts verbatim. Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,
