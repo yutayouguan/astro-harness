@@ -378,6 +378,12 @@ pub struct StreamState {
     fc_slots: Vec<(u64, u32)>,
     next_fc_index: u32,
     saw_function_call: bool,
+    /// 最近一个 `function_call` step.start 分配到的槽位。
+    ///
+    /// `arguments` 增量事件的顶层 `index` 可能缺失或与 function_call step 的
+    /// index 不一致（Gemini 3 默认先产出 `thought` step，占用 index 0），
+    /// 此时参数应归到当前 function_call，而非新建一个无名槽位。
+    current_fc_slot: Option<u32>,
     interaction_id: Option<String>,
 }
 
@@ -390,6 +396,22 @@ impl StreamState {
         self.next_fc_index += 1;
         self.fc_slots.push((step_index, slot));
         slot
+    }
+
+    /// 仅返回已登记的 step.index 对应槽位，不新建。
+    fn existing_slot(&self, step_index: u64) -> Option<u32> {
+        self.fc_slots
+            .iter()
+            .find(|(i, _)| *i == step_index)
+            .map(|(_, s)| *s)
+    }
+
+    /// 为一次 `arguments` 增量解析目标槽位：优先按 index 命中已知
+    /// function_call，其次归到当前 function_call，绝不新建无名槽位。
+    fn arguments_slot(&self, step_index: Option<u64>) -> Option<u32> {
+        step_index
+            .and_then(|i| self.existing_slot(i))
+            .or(self.current_fc_slot)
     }
 
     fn note_interaction_id(&mut self, v: &Value) {
@@ -451,6 +473,7 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                     .and_then(|i| i.as_u64())
                     .unwrap_or(state.next_fc_index as u64);
                 let slot = state.slot_for(step_index);
+                state.current_fc_slot = Some(slot);
                 let id = step
                     .and_then(|s| s.get("id"))
                     .and_then(|x| x.as_str())
@@ -511,9 +534,11 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                     }
                 }
                 "arguments" => {
-                    let step_index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
-                    let slot = state.slot_for(step_index);
                     state.saw_function_call = true;
+                    // 参数增量归到当前 function_call 槽位；顶层 index 缺失或与
+                    // function_call step 的 index 不一致时也不会拆散 name/arguments。
+                    let step_index = v.get("index").and_then(|i| i.as_u64());
+                    let slot = state.arguments_slot(step_index).unwrap_or(0);
                     let partial = delta
                         .and_then(|d| {
                             d.get("partial_arguments")
@@ -851,6 +876,43 @@ mod tests {
         );
         assert_eq!(done[0].finish_reason.as_deref(), Some("tool_calls"));
         assert_eq!(done[0].interaction_id.as_deref(), Some("ix_1"));
+    }
+
+    #[test]
+    fn arguments_delta_without_index_binds_to_current_function_call() {
+        // Gemini 3 先产出 thought(step index 0)，function_call 在 index 1；
+        // 若 arguments 增量缺失顶层 index（回退 0），旧逻辑会把参数分到一个
+        // 新的无名槽位，导致工具入参丢成 `{}`。此处校验参数仍归到 name 的槽位。
+        let mut state = StreamState::default();
+
+        let _thought = extract_interactions_chat_events(
+            r#"{"event_type":"step.start","index":0,"step":{"type":"thought"}}"#,
+            &mut state,
+        );
+        let start = extract_interactions_chat_events(
+            r#"{"event_type":"step.start","index":1,"step":{"type":"function_call","id":"fc_1","name":"image_gen"}}"#,
+            &mut state,
+        );
+        let name_slot = start[0].tool_call_deltas[0].index;
+        assert_eq!(start[0].tool_call_deltas[0].name.as_deref(), Some("image_gen"));
+
+        // arguments 增量不带顶层 index
+        let args = extract_interactions_chat_events(
+            r#"{"event_type":"step.delta","delta":{"type":"arguments","partial_arguments":"{\"prompt\":\"a cat\"}"}}"#,
+            &mut state,
+        );
+        assert_eq!(args[0].tool_call_deltas[0].index, name_slot);
+        assert_eq!(
+            args[0].tool_call_deltas[0].arguments.as_deref(),
+            Some(r#"{"prompt":"a cat"}"#)
+        );
+
+        // arguments 增量带 thought 的 index 0（与 function_call 的 index 1 不一致）
+        let args2 = extract_interactions_chat_events(
+            r#"{"event_type":"step.delta","index":0,"delta":{"type":"arguments","partial_arguments":"!"}}"#,
+            &mut state,
+        );
+        assert_eq!(args2[0].tool_call_deltas[0].index, name_slot);
     }
 
     #[test]
