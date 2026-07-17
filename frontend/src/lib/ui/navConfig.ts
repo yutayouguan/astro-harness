@@ -8,7 +8,6 @@ import {
   IconProviders,
   IconSettings,
   IconSkills,
-  IconAtom,
   IconTools,
   IconWorkspace,
 } from "../../components/icons";
@@ -24,7 +23,6 @@ export type NavId =
   | "insights"
   | "cron"
   | "providers"
-  | "auxiliary"
   | "settings";
 
 export type Tone =
@@ -70,12 +68,6 @@ export const NAV: {
     tone: "blue",
   },
   {
-    id: "auxiliary",
-    labelKey: "nav.auxiliary",
-    Icon: IconAtom,
-    tone: "purple",
-  },
-  {
     id: "insights",
     labelKey: "nav.insights",
     Icon: IconInsights,
@@ -110,10 +102,6 @@ export const PAGE_META: Record<
   providers: {
     titleKey: "page.providers.title",
     subKey: "page.providers.sub",
-  },
-  auxiliary: {
-    titleKey: "page.auxiliary.title",
-    subKey: "page.auxiliary.sub",
   },
   settings: { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };

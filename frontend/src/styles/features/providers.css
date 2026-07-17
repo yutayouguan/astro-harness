@@ -8,6 +8,48 @@
   --tone-glow: var(--tone-blue-glow);
 }
 
+.providers-page-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  margin: 0 0 14px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--sidebar-bg, var(--glass-fill)) 88%, transparent);
+  border: 1px solid var(--glass-edge);
+  width: fit-content;
+}
+
+.providers-page-tab {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.providers-page-tab:hover {
+  color: var(--ink);
+}
+
+.providers-page-tab.is-active {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone-soft, transparent) 70%, var(--sidebar-bg, #fff));
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="dark"] .providers-page-tab.is-active {
+  background: color-mix(in srgb, var(--tone-soft, transparent) 55%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
 .providers-layout {
   flex: 1;
   min-height: 0;

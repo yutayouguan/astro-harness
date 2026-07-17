@@ -310,6 +310,19 @@ html[data-theme="dark"] .aux-error {
   gap: 12px;
 }
 
+.aux-list-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.aux-page-embedded {
+  padding-top: 0;
+}
+
 .aux-muted {
   color: var(--ink-mute);
   font-size: 12px;

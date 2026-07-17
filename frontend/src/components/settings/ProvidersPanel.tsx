@@ -41,6 +41,7 @@ import { SelectMenu } from "../ui/SelectMenu";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
+import AuxiliaryModelsPanel from "./AuxiliaryModelsPanel";
 import { formatContextWindow } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
@@ -130,6 +131,8 @@ type Draft = {
 };
 
 type DetailTab = "chat" | "media";
+
+type PageTab = "providers" | "auxiliary";
 
 const MEDIA_MODEL_DEFAULTS: Record<
   string,
@@ -317,6 +320,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("chat");
+  const [pageTab, setPageTab] = useState<PageTab>("providers");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [storedApiKey, setStoredApiKey] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -1271,6 +1275,30 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
 
   return (
     <div className="providers-page" data-tone="blue">
+      <div className="providers-page-tabs" role="tablist" aria-label={t("providers.pageTabs")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pageTab === "providers"}
+          className={`providers-page-tab ${pageTab === "providers" ? "is-active" : ""}`}
+          onClick={() => setPageTab("providers")}
+        >
+          {t("providers.tabProviders")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pageTab === "auxiliary"}
+          className={`providers-page-tab ${pageTab === "auxiliary" ? "is-active" : ""}`}
+          onClick={() => setPageTab("auxiliary")}
+        >
+          {t("providers.tabAuxiliary")}
+        </button>
+      </div>
+
+      {pageTab === "auxiliary" ? (
+        <AuxiliaryModelsPanel active={active} embedded />
+      ) : (
       <div className="providers-layout">
         <aside className="providers-pane providers-pane-list">
           <div className="providers-pane-head">
@@ -2189,6 +2217,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           {error && <p className="providers-error">{error}</p>}
         </section>
       </div>
+      )}
     </div>
   );
 }

@@ -27,6 +27,8 @@ import { SelectMenu } from "../ui/SelectMenu";
 
 type Props = {
   active: boolean;
+  /** 嵌在模型服务页 Tab 内时隐藏顶部 hero，操作并入列表头 */
+  embedded?: boolean;
 };
 
 const TASKS: {
@@ -83,13 +85,14 @@ function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {
             image_gen: false,
             video_gen: false,
             audio_gen: false,
+            music_gen: false,
           },
         },
         ...models,
       ];
 }
 
-export default function AuxiliaryModelsPanel({ active }: Props) {
+export default function AuxiliaryModelsPanel({ active, embedded = false }: Props) {
   const { t } = useI18n();
   const {
     loading,
@@ -223,42 +226,51 @@ export default function AuxiliaryModelsPanel({ active }: Props) {
     [editingTask, selectedProviderId, setRoute],
   );
 
+  const actionButtons = (
+    <>
+      <button
+        type="button"
+        className="aux-action aux-action-ghost"
+        onClick={() => void reload()}
+        disabled={loading}
+      >
+        <RefreshCw size={15} />
+        {t("aux.refresh")}
+      </button>
+      <button
+        type="button"
+        className="aux-action"
+        onClick={() => {
+          void resetAll();
+          setEditingTask(null);
+        }}
+        disabled={loading}
+      >
+        <RotateCcw size={15} />
+        {t("aux.resetAll")}
+      </button>
+    </>
+  );
+
   return (
-    <div className="aux-page prefs-page" data-tone="purple">
-      <section className="prefs-card aux-hero">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge">
-            <Bot size={21} />
+    <div
+      className={`aux-page prefs-page${embedded ? " aux-page-embedded" : ""}`}
+      data-tone="purple"
+    >
+      {!embedded && (
+        <section className="prefs-card aux-hero">
+          <div className="prefs-card-head">
+            <div className="prefs-icon-badge">
+              <Bot size={21} />
+            </div>
+            <div>
+              <h2 className="prefs-card-title">{t("aux.title")}</h2>
+              <p className="prefs-card-sub">{t("aux.subtitle")}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="prefs-card-title">{t("aux.title")}</h2>
-            <p className="prefs-card-sub">{t("aux.subtitle")}</p>
-          </div>
-        </div>
-        <div className="aux-hero-actions">
-          <button
-            type="button"
-            className="aux-action aux-action-ghost"
-            onClick={() => void reload()}
-            disabled={loading}
-          >
-            <RefreshCw size={15} />
-            {t("aux.refresh")}
-          </button>
-          <button
-            type="button"
-            className="aux-action"
-            onClick={() => {
-              void resetAll();
-              setEditingTask(null);
-            }}
-            disabled={loading}
-          >
-            <RotateCcw size={15} />
-            {t("aux.resetAll")}
-          </button>
-        </div>
-      </section>
+          <div className="aux-hero-actions">{actionButtons}</div>
+        </section>
+      )}
 
       {(error || providersError) && (
         <div className="aux-error">
@@ -271,9 +283,14 @@ export default function AuxiliaryModelsPanel({ active }: Props) {
         <div className="aux-list-head">
           <div>
             <h2 className="prefs-card-title">{t("aux.routesTitle")}</h2>
-            <p className="prefs-card-sub">{t("aux.routesSub")}</p>
+            <p className="prefs-card-sub">
+              {embedded ? t("aux.subtitle") : t("aux.routesSub")}
+            </p>
           </div>
-          {providersLoading && <span className="aux-muted">{t("aux.loading")}</span>}
+          <div className="aux-list-head-actions">
+            {providersLoading && <span className="aux-muted">{t("aux.loading")}</span>}
+            {embedded ? actionButtons : null}
+          </div>
         </div>
 
         <div className="aux-task-list">
