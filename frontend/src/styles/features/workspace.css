@@ -78,6 +78,19 @@
   transform: scale(0.96);
 }
 
+.ws-tool-btn.is-active {
+  color: #fff;
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 92%, #fff), var(--tone, var(--tone-purple, #8b5cf6)));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 28%, transparent);
+}
+
+.ws-tool-btn.is-active:hover:not(:disabled) {
+  color: #fff;
+  background:
+    linear-gradient(165deg, var(--tone, var(--tone-purple, #8b5cf6)), color-mix(in srgb, var(--tone, var(--tone-purple, #7c3aed)) 88%, #000));
+}
+
 .ws-tool-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -793,6 +806,7 @@ html[data-theme="dark"] .ws-file-glyph {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .ws-editor-head {
@@ -961,23 +975,39 @@ html[data-theme="dark"] .ws-md-mode.is-active {
   backdrop-filter: blur(12px) saturate(1.2);
 }
 
-/* 媒体 / HTML 预览视图：压缩顶部工具栏与文件信息卡，给预览让位 */
-.ws-editor-toolbar:has(~ .ws-media-stage) {
-  padding: 8px 14px 4px;
+/* 文件信息内联到返回按钮之后，取消独立信息卡（媒体 / 编辑视图通用） */
+.ws-editor-toolbar:has(.ws-editor-toolbar-lead) {
+  padding: 10px 14px;
+  flex-wrap: nowrap;
 }
 
-.ws-editor-head:has(~ .ws-media-stage) {
-  margin: 0 14px 8px;
-  padding: 7px 12px;
-  gap: 10px;
+.ws-editor-toolbar-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
-.ws-editor-head:has(~ .ws-media-stage) .ws-editor-filename {
+.ws-editor-head-inline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ws-editor-head-inline .ws-editor-meta-block {
+  min-width: 0;
+  flex: 1;
+}
+
+.ws-editor-head-inline .ws-editor-filename {
   font-size: 13.5px;
 }
 
-.ws-editor-head:has(~ .ws-media-stage) .ws-editor-path {
-  margin-top: 2px;
+.ws-editor-head-inline .ws-editor-path {
+  margin-top: 1px;
 }
 
 /* HTML 预览：铺满整个舞台，去掉居中留白 / 720px 相框 / 棋盘底 */
@@ -1007,6 +1037,11 @@ html[data-theme="dark"] .ws-md-mode.is-active {
   max-width: 100%;
   height: 100%;
   margin: 0;
+}
+
+/* 标题栏迁移到顶部工具栏，这里去掉预览自带的「HTML 预览」条 */
+.ws-media-stage[data-kind="html"] .html-preview-bar {
+  display: none;
 }
 
 .ws-media-stage[data-kind="html"] .html-preview-frame {

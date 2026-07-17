@@ -29,6 +29,7 @@ import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
 import MediaPreview from "../media/MediaPreview";
+import MediaToolbar from "../media/MediaToolbar";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
 import WorkspaceBatchBar from "./WorkspaceBatchBar";
@@ -223,6 +224,8 @@ export default function WorkspacePanel({ onClose }: Props) {
 
   const dirty = view === "editor" && draftContent !== savedContent;
   const editorIsMarkdown = isMarkdownFilename(editorName);
+  const editorIsHtml = mediaKindOf(editorName) === "html";
+  const canPreviewEditor = editorIsMarkdown || editorIsHtml;
   const showMdPreview = editorIsMarkdown && mdMode === "preview";
 
   const setMdModePersist = (mode: MdMode) => {
@@ -372,6 +375,19 @@ export default function WorkspacePanel({ onClose }: Props) {
     setMediaMeta("");
     setView("editor");
     setError(null);
+  };
+
+  /** 源码视图 → 预览：md 切到预览模式；html 切到媒体预览视图 */
+  const previewCurrent = () => {
+    if (editorIsMarkdown) {
+      setMdModePersist("preview");
+      return;
+    }
+    if (editorIsHtml) {
+      setMediaKind("html");
+      setView("media");
+      setError(null);
+    }
   };
 
   const openMedia = (
@@ -1304,7 +1320,7 @@ export default function WorkspacePanel({ onClose }: Props) {
             <div className="ws-editor-toolbar-lead">
               <button
                 type="button"
-                className="ws-tool-btn ws-tool-btn--text"
+                className="ws-tool-btn"
                 onClick={() => void backToBrowse()}
                 title={t("workspace.backToList")}
                 aria-label={t("workspace.backToList")}
@@ -1340,15 +1356,23 @@ export default function WorkspacePanel({ onClose }: Props) {
                   {t("media.htmlSource")}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="ghost-btn"
-                onClick={() => void openCurrentExternally()}
-                disabled={!editorPath}
-                data-tip={t("workspace.openExternally")}
-              >
-                {t("workspace.openExternally")}
-              </button>
+              {mediaKind === "html" && editorPath ? (
+                <MediaToolbar
+                  path={editorPath}
+                  kind="html"
+                  className="is-inline"
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => void openCurrentExternally()}
+                  disabled={!editorPath}
+                  data-tip={t("workspace.openExternally")}
+                >
+                  {t("workspace.openExternally")}
+                </button>
+              )}
               <button
                 type="button"
                 className="ws-tool-btn ws-delete-btn"
@@ -1392,16 +1416,28 @@ export default function WorkspacePanel({ onClose }: Props) {
       ) : (
         <>
           <div className="ws-editor-toolbar">
-            <button
-              type="button"
-              className="ws-tool-btn ws-tool-btn--text"
-              onClick={() => void backToBrowse()}
-              title={t("workspace.backToList")}
-              aria-label={t("workspace.backToList")}
-            >
-              <IconWsArrowLeft width={18} height={18} />
-            </button>
+            <div className="ws-editor-toolbar-lead">
+              <button
+                type="button"
+                className="ws-tool-btn"
+                onClick={() => void backToBrowse()}
+                title={t("workspace.backToList")}
+                aria-label={t("workspace.backToList")}
+              >
+                <IconWsArrowLeft width={18} height={18} />
+              </button>
+              <div className="ws-editor-head-inline">
+                <FileGlyph name={editorName} isDir={false} />
+                <div className="ws-editor-meta-block">
+                  <h3 className="ws-editor-filename">{editorName}</h3>
+                  <p className="ws-editor-path">{editorPath}</p>
+                </div>
+              </div>
+            </div>
             <div className="ws-editor-actions">
+              {dirty && (
+                <span className="ws-dirty-badge">{t("workspace.unsaved")}</span>
+              )}
               {dirty && (
                 <>
                   <button
@@ -1424,6 +1460,31 @@ export default function WorkspacePanel({ onClose }: Props) {
                   </button>
                 </>
               )}
+              {canPreviewEditor && (
+                <button
+                  type="button"
+                  className={`ws-tool-btn ${showMdPreview ? "is-active" : ""}`}
+                  onClick={() =>
+                    showMdPreview ? setMdModePersist("source") : previewCurrent()
+                  }
+                  title={
+                    showMdPreview
+                      ? t("workspace.previewSource")
+                      : t("workspace.previewMode")
+                  }
+                  aria-label={
+                    showMdPreview
+                      ? t("workspace.previewSource")
+                      : t("workspace.previewMode")
+                  }
+                >
+                  {showMdPreview ? (
+                    <FileCode2 size={17} strokeWidth={2.1} aria-hidden />
+                  ) : (
+                    <Eye size={17} strokeWidth={2.1} aria-hidden />
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 className="ws-tool-btn ws-delete-btn"
@@ -1435,43 +1496,6 @@ export default function WorkspacePanel({ onClose }: Props) {
                 <IconWsTrash width={16} height={16} />
               </button>
             </div>
-          </div>
-
-          <div className="ws-editor-head">
-            <FileGlyph name={editorName} isDir={false} />
-            <div className="ws-editor-meta-block">
-              <h3 className="ws-editor-filename">{editorName}</h3>
-              <p className="ws-editor-path">{editorPath}</p>
-            </div>
-            {editorIsMarkdown && (
-              <div
-                className="ws-md-modes"
-                role="tablist"
-                aria-label={t("workspace.previewMode")}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={mdMode === "preview"}
-                  className={`ws-md-mode ${mdMode === "preview" ? "is-active" : ""}`}
-                  onClick={() => setMdModePersist("preview")}
-                >
-                  <Eye size={13} strokeWidth={2.3} aria-hidden />
-                  {t("workspace.previewMode")}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={mdMode === "source"}
-                  className={`ws-md-mode ${mdMode === "source" ? "is-active" : ""}`}
-                  onClick={() => setMdModePersist("source")}
-                >
-                  <FileCode2 size={13} strokeWidth={2.3} aria-hidden />
-                  {t("workspace.previewSource")}
-                </button>
-              </div>
-            )}
-            {dirty && <span className="ws-dirty-badge">{t("workspace.unsaved")}</span>}
           </div>
 
           {error && <div className="side-error">{error}</div>}
