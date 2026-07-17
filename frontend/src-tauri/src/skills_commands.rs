@@ -1,19 +1,19 @@
 //! Tauri IPC 薄封装 → `skills` 领域层
 
+use serde::Serialize;
+use skills::models::SkillOriginRecord;
+use skills::origins::load_origins;
 use skills::{
     check_updates_for_agent, fetch_detail, install_from_ref, link_skill_to_agent,
-    list_installed_for_agent, list_skill_backups as skills_list_skill_backups,
-    list_skill_files_ex, load_skill_by_name,
-    preview_skill_update as skills_preview_skill_update, reveal_skill_backup as skills_reveal_skill_backup,
+    list_installed_for_agent, list_skill_backups as skills_list_skill_backups, list_skill_files_ex,
+    load_skill_by_name, open_skill_file_externally as open_skill_file_fs,
+    open_skill_folder as open_skill_folder_fs, preview_skill_update as skills_preview_skill_update,
+    read_skill_file_ex, reveal_skill_backup as skills_reveal_skill_backup,
+    reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
     update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
-    open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
-    read_skill_file_ex, reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
     InstalledSkill, SkillBackupEntry, SkillBundle, SkillStoreFilter, SkillUpdateCheckResult,
     SkillUpdateItemResult, SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
 };
-use skills::models::SkillOriginRecord;
-use skills::origins::load_origins;
-use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct SkillMetadataDto {
@@ -139,10 +139,7 @@ pub async fn list_installed_skills(
     scope: Option<String>,
 ) -> Result<Vec<InstalledSkill>, String> {
     let id = normalize_agent_id(agent_id);
-    let scope = scope
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
+    let scope = scope.as_deref().map(str::trim).filter(|s| !s.is_empty());
     Ok(list_installed_for_agent(id.as_deref(), scope))
 }
 
@@ -154,7 +151,8 @@ pub async fn search_store_skills(
     limit: Option<usize>,
     page: Option<usize>,
 ) -> Result<Vec<StoreSkill>, String> {
-    let filter = SkillStoreFilter::parse(&store).ok_or_else(|| format!("unknown store: {store}"))?;
+    let filter =
+        SkillStoreFilter::parse(&store).ok_or_else(|| format!("unknown store: {store}"))?;
     let limit = limit.unwrap_or(24);
     let page = page.unwrap_or(1);
     search(&query, filter, limit, page)
@@ -226,10 +224,7 @@ pub async fn get_skill_content(name: String) -> Result<SkillContentDto, String> 
 
 /// 列出技能目录下的全部相关文件。
 #[tauri::command]
-pub async fn list_skill_bundle(
-    name: String,
-    id: Option<String>,
-) -> Result<SkillBundle, String> {
+pub async fn list_skill_bundle(name: String, id: Option<String>) -> Result<SkillBundle, String> {
     list_skill_files_ex(&name, id.as_deref()).map_err(|e| e.to_string())
 }
 

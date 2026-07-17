@@ -160,10 +160,7 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
                 info.context_window = Some(n);
             }
         }
-        let api_has_output = hints
-            .as_ref()
-            .and_then(|h| h.max_output_tokens)
-            .is_some()
+        let api_has_output = hints.as_ref().and_then(|h| h.max_output_tokens).is_some()
             || retained_api_out.is_some();
         if let Some(n) = entry.max_output_tokens {
             if !api_has_output {
@@ -171,11 +168,7 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             }
         }
 
-        let mode = entry
-            .mode
-            .as_deref()
-            .unwrap_or("")
-            .to_lowercase();
+        let mode = entry.mode.as_deref().unwrap_or("").to_lowercase();
         let mode_image = mode.contains("image");
         let mode_video = mode.contains("video");
         let mode_music = mode.contains("music") || mode == "audio_generation";

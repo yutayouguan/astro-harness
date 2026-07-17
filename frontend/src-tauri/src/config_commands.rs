@@ -19,9 +19,7 @@ fn normalize_agent_id(agent_id: Option<String>) -> Option<String> {
 
 /// 读取当前 Agent（或全局）的工具集启用表。
 #[tauri::command]
-pub async fn get_tools_enabled(
-    agent_id: Option<String>,
-) -> Result<HashMap<String, bool>, String> {
+pub async fn get_tools_enabled(agent_id: Option<String>) -> Result<HashMap<String, bool>, String> {
     let id = normalize_agent_id(agent_id);
     home::sync_tools_enabled_defaults_for_agent(id.as_deref()).map_err(|e| e.to_string())
 }
@@ -203,9 +201,7 @@ pub struct UsageInsightsArgs {
 
 /// Tauri 命令：按 period / agent 聚合用量洞察。
 #[tauri::command]
-pub async fn get_usage_insights(
-    args: UsageInsightsArgs,
-) -> Result<usage::UsageInsights, String> {
+pub async fn get_usage_insights(args: UsageInsightsArgs) -> Result<usage::UsageInsights, String> {
     let period = match args.period.to_lowercase().as_str() {
         "month" => usage::UsagePeriod::Month,
         "quarter" => usage::UsagePeriod::Quarter,
@@ -266,9 +262,7 @@ pub struct TraceInsightsArgs {
 
 /// Tauri 命令：按 period / agent 聚合 Agent 调用链 Tracing。
 #[tauri::command]
-pub async fn get_trace_insights(
-    args: TraceInsightsArgs,
-) -> Result<usage::TraceInsights, String> {
+pub async fn get_trace_insights(args: TraceInsightsArgs) -> Result<usage::TraceInsights, String> {
     let period = match args.period.to_lowercase().as_str() {
         "month" => usage::UsagePeriod::Month,
         "quarter" => usage::UsagePeriod::Quarter,

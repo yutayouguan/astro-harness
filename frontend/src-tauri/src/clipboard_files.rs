@@ -124,7 +124,15 @@ fn path_to_file_uri(path: &Path) -> String {
         let mut out = String::from("file:///");
         for b in normalized.as_bytes() {
             match *b {
-                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'.' | b'-' | b'_' | b'~' | b':' => {
+                b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'0'..=b'9'
+                | b'/'
+                | b'.'
+                | b'-'
+                | b'_'
+                | b'~'
+                | b':' => {
                     out.push(*b as char);
                 }
                 _ => out.push_str(&format!("%{b:02X}")),
@@ -157,7 +165,10 @@ fn paths_as_plain_text(paths: &[PathBuf]) -> String {
 }
 
 fn require_existing_files(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, String> {
-    let files: Vec<PathBuf> = paths.into_iter().filter(|p| p.is_file() || p.is_dir()).collect();
+    let files: Vec<PathBuf> = paths
+        .into_iter()
+        .filter(|p| p.is_file() || p.is_dir())
+        .collect();
     if files.is_empty() {
         Err("剪贴板中没有文件".into())
     } else {
@@ -176,8 +187,7 @@ fn write_macos(paths: &[PathBuf]) -> Result<(), String> {
     unsafe {
         let ns_pasteboard_cls =
             Class::get("NSPasteboard").ok_or_else(|| "NSPasteboard 不可用".to_string())?;
-        let ns_string_cls =
-            Class::get("NSString").ok_or_else(|| "NSString 不可用".to_string())?;
+        let ns_string_cls = Class::get("NSString").ok_or_else(|| "NSString 不可用".to_string())?;
         let ns_url_cls = Class::get("NSURL").ok_or_else(|| "NSURL 不可用".to_string())?;
         let ns_array_cls =
             Class::get("NSMutableArray").ok_or_else(|| "NSMutableArray 不可用".to_string())?;
@@ -229,10 +239,8 @@ fn read_macos() -> Result<Vec<PathBuf>, String> {
         let ns_url_cls = Class::get("NSURL").ok_or_else(|| "NSURL 不可用".to_string())?;
         let ns_dict_cls =
             Class::get("NSDictionary").ok_or_else(|| "NSDictionary 不可用".to_string())?;
-        let ns_number_cls =
-            Class::get("NSNumber").ok_or_else(|| "NSNumber 不可用".to_string())?;
-        let ns_string_cls =
-            Class::get("NSString").ok_or_else(|| "NSString 不可用".to_string())?;
+        let ns_number_cls = Class::get("NSNumber").ok_or_else(|| "NSNumber 不可用".to_string())?;
+        let ns_string_cls = Class::get("NSString").ok_or_else(|| "NSString 不可用".to_string())?;
 
         let pb: *mut Object = msg_send![ns_pasteboard_cls, generalPasteboard];
         if pb.is_null() {
@@ -303,9 +311,7 @@ fn write_windows(paths: &[PathBuf]) -> Result<(), String> {
         .map(|p| format!("'{}'", p.to_string_lossy().replace('\'', "''")))
         .collect::<Vec<_>>()
         .join(",");
-    let script = format!(
-        "$ErrorActionPreference='Stop'; Set-Clipboard -Path @({joined})"
-    );
+    let script = format!("$ErrorActionPreference='Stop'; Set-Clipboard -Path @({joined})");
     let status = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .status()
@@ -420,9 +426,7 @@ fn write_linux(paths: &[PathBuf]) -> Result<(), String> {
         })
         .or_else(|_| pipe_to_command("xsel", &["--clipboard", "--input"], plain_bytes));
 
-    plain_ok.map_err(|e| {
-        format!("复制到剪贴板失败（需要 wl-clipboard、xclip 或 xsel）: {e}")
-    })
+    plain_ok.map_err(|e| format!("复制到剪贴板失败（需要 wl-clipboard、xclip 或 xsel）: {e}"))
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -452,12 +456,13 @@ fn read_linux() -> Result<Vec<PathBuf>, String> {
         })
         .or_else(|| read_command_stdout("wl-paste", &["--type", "text/plain"]))
         .or_else(|| {
-            read_command_stdout("xclip", &["-selection", "clipboard", "-t", "text/plain", "-o"])
+            read_command_stdout(
+                "xclip",
+                &["-selection", "clipboard", "-t", "text/plain", "-o"],
+            )
         })
         .or_else(|| read_command_stdout("xsel", &["--clipboard", "--output"]))
-        .ok_or_else(|| {
-            "读取剪贴板失败（需要 wl-clipboard、xclip 或 xsel）".to_string()
-        })?;
+        .ok_or_else(|| "读取剪贴板失败（需要 wl-clipboard、xclip 或 xsel）".to_string())?;
 
     let text = String::from_utf8_lossy(&bytes);
     let paths = parse_path_lines(&text);
@@ -501,10 +506,7 @@ mod tests {
         let uri = path_to_file_uri(&file);
         let got = parse_path_lines(&uri);
         assert_eq!(got.len(), 1);
-        assert_eq!(
-            got[0].canonicalize().unwrap(),
-            file.canonicalize().unwrap()
-        );
+        assert_eq!(got[0].canonicalize().unwrap(), file.canonicalize().unwrap());
         let _ = std::fs::remove_file(&file);
     }
 
@@ -525,10 +527,7 @@ mod tests {
         write_paths(&[file.clone()]).expect("write clipboard");
         let got = read_paths().expect("read clipboard");
         assert_eq!(got.len(), 1);
-        assert_eq!(
-            got[0].canonicalize().unwrap(),
-            file.canonicalize().unwrap()
-        );
+        assert_eq!(got[0].canonicalize().unwrap(), file.canonicalize().unwrap());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -56,9 +56,18 @@ fn is_auto_route(route: &AuxiliaryRoute) -> bool {
     provider.is_empty() || provider.eq_ignore_ascii_case("auto")
 }
 
-fn resolved_from_ui_provider(provider: UiProvider, model: String, api_key: String) -> ResolvedTarget {
+fn resolved_from_ui_provider(
+    provider: UiProvider,
+    model: String,
+    api_key: String,
+) -> ResolvedTarget {
     let backend_id = provider.kind.backend_id().to_string();
-    ResolvedTarget { provider, backend_id, model, api_key }
+    ResolvedTarget {
+        provider,
+        backend_id,
+        model,
+        api_key,
+    }
 }
 
 /// 核心解析逻辑：Provider 查找与 API key 解析通过闭包注入，供单测脱离全局
@@ -76,24 +85,36 @@ where
 {
     let primary_provider = find_provider(&primary.provider_id)
         .ok_or_else(|| format!("primary provider not found: {}", primary.provider_id))?;
-    let primary_resolved =
-        resolved_from_ui_provider(primary_provider, primary.model.clone(), primary.api_key.clone());
+    let primary_resolved = resolved_from_ui_provider(
+        primary_provider,
+        primary.model.clone(),
+        primary.api_key.clone(),
+    );
 
     let route = aux.route(kind);
     if is_auto_route(route) {
-        return Ok(AuxiliaryTargets { preferred: primary_resolved, fallback: None });
+        return Ok(AuxiliaryTargets {
+            preferred: primary_resolved,
+            fallback: None,
+        });
     }
 
     let explicit = find_provider(route.provider.trim()).filter(|p| p.enabled);
     let Some(p) = explicit else {
         // 显式供应商已被删除或禁用：静默退回主模型，不阻塞该辅助任务。
-        return Ok(AuxiliaryTargets { preferred: primary_resolved, fallback: None });
+        return Ok(AuxiliaryTargets {
+            preferred: primary_resolved,
+            fallback: None,
+        });
     };
 
     let (has_key, api_key) = resolve_key(&p);
     let allow_empty_key = p.kind.backend_id() == "ollama";
     if !has_key && !allow_empty_key {
-        return Ok(AuxiliaryTargets { preferred: primary_resolved, fallback: None });
+        return Ok(AuxiliaryTargets {
+            preferred: primary_resolved,
+            fallback: None,
+        });
     }
 
     let model = {
@@ -116,7 +137,10 @@ where
         Some(primary_resolved)
     };
 
-    Ok(AuxiliaryTargets { preferred: explicit_resolved, fallback })
+    Ok(AuxiliaryTargets {
+        preferred: explicit_resolved,
+        fallback,
+    })
 }
 
 fn resolve_for_config(
@@ -232,7 +256,9 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<common::ChatT
 ///
 /// 单个任务解析失败（如 primary 的 UI Provider 已被删除）时跳过该任务，不阻塞
 /// 主聊天；跳过的任务在 backend 侧 `AgentLoop::auxiliary_targets` 中回退主模型。
-pub fn build_auxiliary_model_targets(primary: &common::ChatTarget) -> Vec<proto::AuxiliaryModelTarget> {
+pub fn build_auxiliary_model_targets(
+    primary: &common::ChatTarget,
+) -> Vec<proto::AuxiliaryModelTarget> {
     let aux = memory::load_auxiliary_config(&home::default_memory_dir());
     let mut out = Vec::new();
     for kind in AuxiliaryKind::ALL {
@@ -259,7 +285,12 @@ pub fn build_auxiliary_model_targets(primary: &common::ChatTarget) -> Vec<proto:
 mod tests {
     use super::*;
 
-    fn ui_provider(id: &str, kind: providers_commands::ProviderKind, model: &str, enabled: bool) -> UiProvider {
+    fn ui_provider(
+        id: &str,
+        kind: providers_commands::ProviderKind,
+        model: &str,
+        enabled: bool,
+    ) -> UiProvider {
         UiProvider {
             id: id.into(),
             kind,
@@ -321,7 +352,10 @@ mod tests {
     #[test]
     fn explicit_route_to_different_provider_adds_primary_as_fallback() {
         let mut aux = AuxiliaryConfig::default();
-        aux.compaction = AuxiliaryRoute { provider: "prov-cheap".into(), model: "gpt-mini".into() };
+        aux.compaction = AuxiliaryRoute {
+            provider: "prov-cheap".into(),
+            model: "gpt-mini".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,
@@ -354,8 +388,10 @@ mod tests {
     #[test]
     fn explicit_route_to_same_provider_different_model_falls_back() {
         let mut aux = AuxiliaryConfig::default();
-        aux.smart_approval =
-            AuxiliaryRoute { provider: "prov-primary".into(), model: "gpt-mini".into() };
+        aux.smart_approval = AuxiliaryRoute {
+            provider: "prov-primary".into(),
+            model: "gpt-mini".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,
@@ -374,15 +410,19 @@ mod tests {
 
         assert_eq!(result.preferred.provider.id, "prov-primary");
         assert_eq!(result.preferred.model, "gpt-mini");
-        let fallback = result.fallback.expect("same provider different model needs fallback");
+        let fallback = result
+            .fallback
+            .expect("same provider different model needs fallback");
         assert_eq!(fallback.model, "gpt-5.6");
     }
 
     #[test]
     fn explicit_route_identical_to_primary_has_no_fallback() {
         let mut aux = AuxiliaryConfig::default();
-        aux.smart_approval =
-            AuxiliaryRoute { provider: "prov-primary".into(), model: "gpt-5.6".into() };
+        aux.smart_approval = AuxiliaryRoute {
+            provider: "prov-primary".into(),
+            model: "gpt-5.6".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,
@@ -406,7 +446,10 @@ mod tests {
     #[test]
     fn explicit_route_falls_back_to_primary_when_provider_missing() {
         let mut aux = AuxiliaryConfig::default();
-        aux.dreaming = AuxiliaryRoute { provider: "prov-deleted".into(), model: "m".into() };
+        aux.dreaming = AuxiliaryRoute {
+            provider: "prov-deleted".into(),
+            model: "m".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,
@@ -430,8 +473,10 @@ mod tests {
     #[test]
     fn explicit_route_falls_back_to_primary_when_provider_disabled() {
         let mut aux = AuxiliaryConfig::default();
-        aux.title_generation =
-            AuxiliaryRoute { provider: "prov-disabled".into(), model: "m".into() };
+        aux.title_generation = AuxiliaryRoute {
+            provider: "prov-disabled".into(),
+            model: "m".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,
@@ -461,8 +506,10 @@ mod tests {
     #[test]
     fn explicit_route_falls_back_to_primary_when_no_api_key() {
         let mut aux = AuxiliaryConfig::default();
-        aux.background_review =
-            AuxiliaryRoute { provider: "prov-nokey".into(), model: "m".into() };
+        aux.background_review = AuxiliaryRoute {
+            provider: "prov-nokey".into(),
+            model: "m".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,
@@ -492,7 +539,10 @@ mod tests {
     #[test]
     fn explicit_route_allows_empty_key_for_ollama() {
         let mut aux = AuxiliaryConfig::default();
-        aux.compaction = AuxiliaryRoute { provider: "prov-ollama".into(), model: "llama".into() };
+        aux.compaction = AuxiliaryRoute {
+            provider: "prov-ollama".into(),
+            model: "llama".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,
@@ -522,7 +572,10 @@ mod tests {
     #[test]
     fn to_chat_targets_includes_fallback_when_present() {
         let mut aux = AuxiliaryConfig::default();
-        aux.dreaming = AuxiliaryRoute { provider: "prov-cheap".into(), model: "m".into() };
+        aux.dreaming = AuxiliaryRoute {
+            provider: "prov-cheap".into(),
+            model: "m".into(),
+        };
         let primary_ui = ui_provider(
             "prov-primary",
             providers_commands::ProviderKind::Openai,

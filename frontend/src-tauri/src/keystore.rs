@@ -8,8 +8,8 @@ const APP_NAME: &str = "astro";
 
 /// 将 API Key 写入钥匙串（`service` 通常为 [`keyring_service_for_provider`]）。
 pub fn save_api_key(service: &str, key: &str) -> Result<()> {
-    let entry = Entry::new(service, APP_NAME)
-        .with_context(|| format!("无法创建密钥链条目: {service}"))?;
+    let entry =
+        Entry::new(service, APP_NAME).with_context(|| format!("无法创建密钥链条目: {service}"))?;
     entry
         .set_password(key)
         .with_context(|| format!("无法保存 API Key: {service}"))?;
@@ -18,8 +18,8 @@ pub fn save_api_key(service: &str, key: &str) -> Result<()> {
 
 /// 删除指定服务的 API Key。
 pub fn delete_api_key(service: &str) -> Result<()> {
-    let entry = Entry::new(service, APP_NAME)
-        .with_context(|| format!("无法访问密钥链: {service}"))?;
+    let entry =
+        Entry::new(service, APP_NAME).with_context(|| format!("无法访问密钥链: {service}"))?;
     entry
         .delete_credential()
         .with_context(|| format!("无法删除 API Key: {service}"))?;

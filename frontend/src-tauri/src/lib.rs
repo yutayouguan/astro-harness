@@ -30,12 +30,12 @@ use std::sync::Mutex;
 
 use menu_locale::AppLocale;
 use tauri::{
-    AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder,
     menu::{
-        AboutMetadata, HELP_SUBMENU_ID, Menu, MenuItem, PredefinedMenuItem, Submenu,
+        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
         WINDOW_SUBMENU_ID,
     },
     window::Color,
+    AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder,
 };
 
 /// 原生窗全透明；内容由 CSS 铺满。macOS 用系统装饰 + Overlay 标题栏（红绿灯）。
@@ -57,10 +57,7 @@ pub fn request_app_exit<R: tauri::Runtime>(app: &AppHandle<R>) {
 }
 
 /// 安装应用菜单（关于、偏好设置、窗口与帮助），文案随 [`AppLocale`]。
-fn install_app_menu<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    locale: AppLocale,
-) -> tauri::Result<()> {
+fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri::Result<()> {
     let s = locale.strings();
     let pkg = app.package_info();
     let about = AboutMetadata {
@@ -214,12 +211,7 @@ fn configure_macos_window(win: &tauri::WebviewWindow) {
         fn method_setImplementation(method: *mut c_void, imp: Imp) -> Imp;
     }
 
-    unsafe extern "C" fn ns_window_zoom_noop(
-        _this: *mut Object,
-        _cmd: Sel,
-        _sender: *mut Object,
-    ) {
-    }
+    unsafe extern "C" fn ns_window_zoom_noop(_this: *mut Object, _cmd: Sel, _sender: *mut Object) {}
 
     static PATCH_ZOOM: Once = Once::new();
     PATCH_ZOOM.call_once(|| unsafe {

@@ -30,10 +30,13 @@ pub fn unique_dest_name(dest_dir: &Path, preferred_name: &str) -> PathBuf {
 /// 无法生成唯一文件名时的毫秒时间戳兜底后缀。
 fn uuid_fallback() -> String {
     // 极不可能走到；避免无限循环
-    format!("{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0))
+    format!(
+        "{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    )
 }
 
 /// 词法判断 `path` 是否位于 `root` 之下。

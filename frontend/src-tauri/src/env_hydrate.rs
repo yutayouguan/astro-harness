@@ -95,7 +95,9 @@ fn set_if_missing(key: &str, value: &str) -> bool {
 /// 转义写入 dotenv 的值。
 fn escape_dotenv_value(value: &str) -> String {
     if value.is_empty()
-        || value.chars().any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '#' | '='))
+        || value
+            .chars()
+            .any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '#' | '='))
     {
         format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
     } else {
@@ -293,11 +295,7 @@ fn persist_discovered_to_dotenv(
     }
 
     let is_new = !path.exists();
-    let mut file = match fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-    {
+    let mut file = match fs::OpenOptions::new().create(true).append(true).open(path) {
         Ok(f) => f,
         Err(err) => {
             tracing::warn!(error = %err, path = %path.display(), "open ~/.astro/.env failed");
@@ -365,8 +363,6 @@ pub fn hydrate_process_env() {
     let persisted = persist_discovered_to_dotenv(&path, &discovered, &wanted);
 
     if from_file == 0 && from_platform == 0 && persisted == 0 {
-        tracing::debug!(
-            "no API env discovered; relying on keyring / manual provider keys"
-        );
+        tracing::debug!("no API env discovered; relying on keyring / manual provider keys");
     }
 }

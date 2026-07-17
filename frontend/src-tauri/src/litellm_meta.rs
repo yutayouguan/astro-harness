@@ -117,10 +117,7 @@ fn mark_ready() {
 
 /// 内存缓存是否已加载。
 fn memory_loaded() -> bool {
-    map_lock()
-        .read()
-        .map(|g| !g.is_empty())
-        .unwrap_or(false)
+    map_lock().read().map(|g| !g.is_empty()).unwrap_or(false)
 }
 
 /// 解析磁盘 JSON 为内存 Map。
@@ -136,10 +133,7 @@ fn parse_map(value: serde_json::Value) -> HashMap<String, LiteLlmEntry> {
         if let Ok(entry) = serde_json::from_value::<RawEntry>(raw.clone()) {
             let e = entry.into_entry(key);
             // 保留有上下文、能力标记、mode 或单价的条目（跳过无信息占位）
-            let has_mode = e
-                .mode
-                .as_ref()
-                .is_some_and(|m| !m.trim().is_empty());
+            let has_mode = e.mode.as_ref().is_some_and(|m| !m.trim().is_empty());
             if e.max_input_tokens.is_some()
                 || e.supports_vision
                 || e.supports_function_calling
@@ -300,9 +294,7 @@ fn provider_matches_kind(provider: &str, kind: &str) -> bool {
     match kind {
         "openai" => p.contains("openai"),
         "deepseek" => p.contains("deepseek"),
-        "google" => {
-            p.contains("gemini") || p.contains("vertex") || p.contains("google")
-        }
+        "google" => p.contains("gemini") || p.contains("vertex") || p.contains("google"),
         "anthropic" => p.contains("anthropic") || p.contains("claude"),
         "azure" => p.contains("azure"),
         "zhipu" => p.contains("zhipu") || p.contains("zai") || p.contains("glm"),

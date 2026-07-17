@@ -78,7 +78,10 @@ fn build_task_dto(
     }
     let found = providers.iter().find(|p| p.id == route.provider);
     let (display_label, unavailable) = match found {
-        Some(p) => (format!("{} · {}", p.display_name, route.model), !p.enabled || !p.has_api_key),
+        Some(p) => (
+            format!("{} · {}", p.display_name, route.model),
+            !p.enabled || !p.has_api_key,
+        ),
         None => (format!("{}（供应商不存在）", route.provider), true),
     };
     AuxiliaryTaskDto {
@@ -165,7 +168,11 @@ mod tests {
             model: "gpt-5.6".into(),
             enabled,
             has_api_key,
-            key_source: if has_api_key { "keyring".into() } else { "none".into() },
+            key_source: if has_api_key {
+                "keyring".into()
+            } else {
+                "none".into()
+            },
             env_key_name: None,
             backend_id: "openai".into(),
             official_key_url: None,
@@ -235,26 +242,40 @@ mod tests {
             dto("prov-nokey", "No Key Provider", true, false),
         ];
 
-        let ok_route = memory::AuxiliaryRoute { provider: "prov-ok".into(), model: "gpt-mini".into() };
+        let ok_route = memory::AuxiliaryRoute {
+            provider: "prov-ok".into(),
+            model: "gpt-mini".into(),
+        };
         let ok_task = build_task_dto(memory::AuxiliaryKind::Compaction, &ok_route, &providers);
         assert!(!ok_task.unavailable);
         assert_eq!(ok_task.display_label, "OK Provider · gpt-mini");
 
-        let disabled_route =
-            memory::AuxiliaryRoute { provider: "prov-disabled".into(), model: "gpt-mini".into() };
-        let disabled_task =
-            build_task_dto(memory::AuxiliaryKind::Compaction, &disabled_route, &providers);
+        let disabled_route = memory::AuxiliaryRoute {
+            provider: "prov-disabled".into(),
+            model: "gpt-mini".into(),
+        };
+        let disabled_task = build_task_dto(
+            memory::AuxiliaryKind::Compaction,
+            &disabled_route,
+            &providers,
+        );
         assert!(disabled_task.unavailable);
 
-        let nokey_route =
-            memory::AuxiliaryRoute { provider: "prov-nokey".into(), model: "gpt-mini".into() };
-        let nokey_task = build_task_dto(memory::AuxiliaryKind::Compaction, &nokey_route, &providers);
+        let nokey_route = memory::AuxiliaryRoute {
+            provider: "prov-nokey".into(),
+            model: "gpt-mini".into(),
+        };
+        let nokey_task =
+            build_task_dto(memory::AuxiliaryKind::Compaction, &nokey_route, &providers);
         assert!(nokey_task.unavailable);
     }
 
     #[test]
     fn build_task_dto_missing_provider_is_unavailable() {
-        let route = memory::AuxiliaryRoute { provider: "prov-gone".into(), model: "m".into() };
+        let route = memory::AuxiliaryRoute {
+            provider: "prov-gone".into(),
+            model: "m".into(),
+        };
         let task = build_task_dto(memory::AuxiliaryKind::SmartApproval, &route, &[]);
         assert!(task.unavailable);
         assert_eq!(task.provider, "prov-gone");

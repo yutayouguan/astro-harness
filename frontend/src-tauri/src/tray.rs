@@ -1,9 +1,9 @@
 //! 系统托盘：关窗进托盘常驻，点击恢复，菜单「退出」才真正结束进程。
 
 use tauri::{
-    AppHandle, Manager, Runtime,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, Runtime,
 };
 
 use crate::menu_locale::AppLocale;
@@ -21,10 +21,7 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-fn build_tray_menu<R: Runtime>(
-    app: &AppHandle<R>,
-    locale: AppLocale,
-) -> tauri::Result<Menu<R>> {
+fn build_tray_menu<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri::Result<Menu<R>> {
     let s = locale.strings();
     let show = MenuItem::with_id(app, TRAY_SHOW_ID, s.tray_show, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, TRAY_QUIT_ID, s.tray_quit, true, None::<&str>)?;

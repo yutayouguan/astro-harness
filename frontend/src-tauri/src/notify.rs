@@ -7,13 +7,7 @@ use tauri_plugin_notification::{NotificationExt, PermissionState};
 
 /// 向操作系统弹出一条通知（失败仅打日志）。
 pub fn show<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
-    if let Err(err) = app
-        .notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show()
-    {
+    if let Err(err) = app.notification().builder().title(title).body(body).show() {
         tracing::warn!(error = %err, title, "desktop notification failed");
     }
 }

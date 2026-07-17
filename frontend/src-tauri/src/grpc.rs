@@ -34,10 +34,7 @@ mod tests {
 
     #[test]
     fn endpoint_url_adds_http() {
-        assert_eq!(
-            endpoint_url("127.0.0.1:50051"),
-            "http://127.0.0.1:50051"
-        );
+        assert_eq!(endpoint_url("127.0.0.1:50051"), "http://127.0.0.1:50051");
         assert_eq!(
             endpoint_url("http://127.0.0.1:50051"),
             "http://127.0.0.1:50051"
