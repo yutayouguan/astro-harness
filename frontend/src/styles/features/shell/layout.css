@@ -17,45 +17,32 @@
   pointer-events: none;
   transform: translateY(var(--nav-indicator-y, 0));
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  /* 选中态以晶莹玻璃球为主视觉，指示器只做柔光衬底 */
-  background: radial-gradient(
-    ellipse 80% 70% at 50% 50%,
-    color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 28%, transparent),
-    transparent 72%
-  );
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--tone-soft, transparent) 60%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone, transparent) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
 }
 
 .sidebar.is-icons .sidebar-nav-indicator {
   left: 50%;
-  width: 38px;
-  height: 38px;
-  top: 2px;
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  top: 0;
+  border-radius: 12px;
   transform: translate(-50%, var(--nav-indicator-y, 0));
-  background: radial-gradient(
-    circle at 50% 50%,
-    color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 42%, transparent),
-    transparent 70%
-  );
 }
 
 html[data-theme="dark"] .sidebar-nav-indicator {
-  background: radial-gradient(
-    ellipse 80% 70% at 50% 50%,
-    color-mix(in srgb, var(--tone-glow, var(--tone)) 36%, transparent),
-    transparent 72%
-  );
-}
-
-html[data-theme="dark"] .sidebar.is-icons .sidebar-nav-indicator {
-  background: radial-gradient(
-    circle at 50% 50%,
-    color-mix(in srgb, var(--tone-glow, var(--tone)) 48%, transparent),
-    transparent 70%
-  );
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 48%, rgba(8, 6, 18, 0.4));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -233,92 +220,89 @@ html[data-theme="dark"] .sidebar.is-icons .sidebar-nav-indicator {
 /*
  * 选中：晶莹透亮玻璃球（对齐参考图导航选中态）
  * — 顶侧高光 / 底侧色调内发光 / 半透明色相 / 白色 glyph
+ * 注意：侧栏已有 backdrop-filter，球内再套 blur 会在 WebKit 下把背景吃掉，
+ * 故只用渐变模拟玻璃质感。
  */
 .nav-item.active .nav-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   color: #fff;
   opacity: 1;
-  isolation: isolate;
   /* 镂空透出球心色，而非平面对比色 */
-  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 42%, #0a1a14);
+  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 55%, #062018);
   background:
     radial-gradient(
-      circle at 30% 22%,
-      rgba(255, 255, 255, 0.92) 0%,
-      rgba(255, 255, 255, 0.35) 16%,
-      transparent 42%
+      circle at 28% 22%,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.42) 14%,
+      transparent 40%
     ),
     radial-gradient(
-      circle at 72% 82%,
-      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
-      transparent 52%
+      circle at 70% 78%,
+      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
+      transparent 48%
     ),
     radial-gradient(
-      circle at 48% 46%,
-      color-mix(in srgb, var(--tone, var(--accent)) 82%, transparent) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 48%, rgba(4, 18, 12, 0.42)) 100%
+      circle at 50% 48%,
+      color-mix(in srgb, var(--tone, var(--accent)) 92%, #fff) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 72%, #0a1a12) 100%
     );
-  border: 1px solid color-mix(in srgb, #fff 48%, var(--tone, var(--accent)));
+  border: 1px solid color-mix(in srgb, #fff 55%, var(--tone, var(--accent)));
   box-shadow:
-    0 2px 3px rgba(0, 0, 0, 0.16),
-    0 6px 16px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 58%, transparent),
-    0 0 22px color-mix(in srgb, var(--tone, var(--accent)) 32%, transparent),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.62),
-    inset 0 -5px 12px color-mix(in srgb, var(--tone, var(--accent)) 48%, rgba(0, 0, 0, 0.38)),
-    inset 0 0 0 1px color-mix(in srgb, #fff 20%, transparent);
-  backdrop-filter: blur(10px) saturate(1.5);
-  -webkit-backdrop-filter: blur(10px) saturate(1.5);
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 4px 12px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 70%, transparent),
+    0 0 18px color-mix(in srgb, var(--tone, var(--accent)) 40%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7),
+    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 35%, rgba(0, 0, 0, 0.45));
 }
 
 /* 镜面高光点 */
 .nav-item.active .nav-icon::before {
   content: "";
   position: absolute;
-  top: 4px;
-  left: 7px;
-  width: 9px;
-  height: 5px;
+  top: 3px;
+  left: 6px;
+  width: 8px;
+  height: 4px;
   border-radius: 50%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.15));
-  filter: blur(0.4px);
-  opacity: 0.9;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.2));
+  filter: blur(0.3px);
+  opacity: 0.95;
   pointer-events: none;
   z-index: 2;
 }
 
 html[data-theme="light"] .nav-item.active .nav-icon {
-  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 38%, #fff);
+  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 45%, #fff);
   background:
     radial-gradient(
-      circle at 30% 22%,
-      rgba(255, 255, 255, 0.98) 0%,
-      rgba(255, 255, 255, 0.48) 18%,
-      transparent 44%
+      circle at 28% 22%,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(255, 255, 255, 0.55) 16%,
+      transparent 42%
     ),
     radial-gradient(
-      circle at 72% 82%,
-      color-mix(in srgb, var(--tone, var(--accent)) 55%, #fff) 0%,
-      transparent 55%
+      circle at 70% 78%,
+      color-mix(in srgb, var(--tone, var(--accent)) 65%, #fff) 0%,
+      transparent 52%
     ),
     radial-gradient(
-      circle at 48% 46%,
-      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 58%, transparent) 100%
+      circle at 50% 48%,
+      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 68%, #dfe7f2) 100%
     );
-  border-color: color-mix(in srgb, #fff 62%, var(--tone, var(--accent)));
+  border-color: color-mix(in srgb, #fff 70%, var(--tone, var(--accent)));
   box-shadow:
-    0 2px 4px color-mix(in srgb, var(--tone, var(--accent)) 18%, rgba(15, 23, 42, 0.08)),
-    0 8px 18px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 42%, transparent),
-    0 0 16px color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.88),
-    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 28%, rgba(15, 23, 42, 0.08)),
-    inset 0 0 0 1px color-mix(in srgb, #fff 55%, transparent);
+    0 1px 3px color-mix(in srgb, var(--tone, var(--accent)) 22%, rgba(15, 23, 42, 0.1)),
+    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 55%, transparent),
+    0 0 14px color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.95),
+    inset 0 -3px 8px color-mix(in srgb, var(--tone, var(--accent)) 30%, rgba(15, 23, 42, 0.1));
 }
 
 html[data-theme="dark"] .nav-item.active .nav-icon {
-  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 48%, #04140e);
+  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 55%, #04140e);
 }
 
 .nav-item.active .nav-badge {
@@ -389,35 +373,31 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   place-items: center;
   flex-shrink: 0;
   position: relative;
-  isolation: isolate;
   color: #fff;
   background:
     radial-gradient(
-      circle at 30% 22%,
-      rgba(255, 255, 255, 0.92) 0%,
-      rgba(255, 255, 255, 0.35) 16%,
-      transparent 42%
+      circle at 28% 22%,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.42) 14%,
+      transparent 40%
     ),
     radial-gradient(
-      circle at 72% 82%,
-      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
-      transparent 52%
+      circle at 70% 78%,
+      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
+      transparent 48%
     ),
     radial-gradient(
-      circle at 48% 46%,
-      color-mix(in srgb, var(--tone, var(--accent)) 82%, transparent) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 48%, rgba(4, 18, 12, 0.42)) 100%
+      circle at 50% 48%,
+      color-mix(in srgb, var(--tone, var(--accent)) 92%, #fff) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 72%, #0a1a12) 100%
     );
-  border: 1px solid color-mix(in srgb, #fff 48%, var(--tone, var(--accent)));
+  border: 1px solid color-mix(in srgb, #fff 55%, var(--tone, var(--accent)));
   box-shadow:
-    0 2px 3px rgba(0, 0, 0, 0.14),
-    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 48%, transparent),
-    0 0 16px color-mix(in srgb, var(--tone, var(--accent)) 26%, transparent),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.62),
-    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 42%, rgba(0, 0, 0, 0.32)),
-    inset 0 0 0 1px color-mix(in srgb, #fff 20%, transparent);
-  backdrop-filter: blur(10px) saturate(1.45);
-  -webkit-backdrop-filter: blur(10px) saturate(1.45);
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 4px 12px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 55%, transparent),
+    0 0 14px color-mix(in srgb, var(--tone, var(--accent)) 32%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7),
+    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 32%, rgba(0, 0, 0, 0.4));
 }
 
 .page-title-icon::before {
@@ -459,28 +439,27 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 html[data-theme="light"] .page-title-icon {
   background:
     radial-gradient(
-      circle at 30% 22%,
-      rgba(255, 255, 255, 0.98) 0%,
-      rgba(255, 255, 255, 0.48) 18%,
-      transparent 44%
+      circle at 28% 22%,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(255, 255, 255, 0.55) 16%,
+      transparent 42%
     ),
     radial-gradient(
-      circle at 72% 82%,
-      color-mix(in srgb, var(--tone, var(--accent)) 55%, #fff) 0%,
-      transparent 55%
+      circle at 70% 78%,
+      color-mix(in srgb, var(--tone, var(--accent)) 65%, #fff) 0%,
+      transparent 52%
     ),
     radial-gradient(
-      circle at 48% 46%,
-      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 58%, transparent) 100%
+      circle at 50% 48%,
+      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 68%, #dfe7f2) 100%
     );
-  border-color: color-mix(in srgb, #fff 62%, var(--tone, var(--accent)));
+  border-color: color-mix(in srgb, #fff 70%, var(--tone, var(--accent)));
   box-shadow:
-    0 2px 4px color-mix(in srgb, var(--tone, var(--accent)) 16%, rgba(15, 23, 42, 0.06)),
-    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 36%, transparent),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.88),
-    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 24%, rgba(15, 23, 42, 0.06)),
-    inset 0 0 0 1px color-mix(in srgb, #fff 55%, transparent);
+    0 1px 3px color-mix(in srgb, var(--tone, var(--accent)) 18%, rgba(15, 23, 42, 0.08)),
+    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 42%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.95),
+    inset 0 -3px 8px color-mix(in srgb, var(--tone, var(--accent)) 26%, rgba(15, 23, 42, 0.08));
   color: #fff;
 }
 
