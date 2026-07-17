@@ -426,6 +426,37 @@ fn patch_last_assistant_reasoning_details_merges_surfaces() {
 }
 
 #[test]
+fn patch_last_assistant_reasoning_details_handles_null_column() {
+    // 既有 assistant 行的 reasoning_details 为 NULL 时，patch 不应报
+    // "Invalid column type Null"，而应正常写入。
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "assistant",
+            content: Some("no details yet"),
+            reasoning_details: None,
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .patch_last_assistant_reasoning_details(
+            "s1",
+            &serde_json::json!({
+                "astro_surfaces_v1": [{"messageId": "surf"}]
+            }),
+        )
+        .unwrap();
+    let msgs = store.get_messages("s1").unwrap();
+    let details = msgs[0].reasoning_details.as_ref().unwrap();
+    assert_eq!(details["astro_surfaces_v1"][0]["messageId"], "surf");
+}
+
+#[test]
 fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
     let dir = TempDir::new().unwrap();
     let sessions_dir = dir.path().join("sessions");

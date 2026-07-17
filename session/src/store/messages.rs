@@ -166,6 +166,8 @@ impl SessionStore {
         session_id: &str,
         details: &Value,
     ) -> Result<()> {
+        // 该列可能为 SQL NULL：闭包按 Option<String> 读，避免 NULL 触发
+        // "Invalid column type Null"（.optional() 仅处理「无行」，不处理「列为 NULL」）。
         let existing: Option<String> = self
             .conn
             .query_row(
@@ -173,9 +175,10 @@ impl SessionStore {
              WHERE session_id = ?1 AND role = 'assistant'
              ORDER BY id DESC LIMIT 1",
                 params![session_id],
-                |row| row.get(0),
+                |row| row.get::<_, Option<String>>(0),
             )
-            .optional()?;
+            .optional()?
+            .flatten();
         let mut obj = match existing.as_deref().map(serde_json::from_str::<Value>) {
             Some(Ok(Value::Object(m))) => m,
             _ => serde_json::Map::new(),
