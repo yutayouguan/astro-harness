@@ -87,7 +87,9 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 }
 
 .nav-item:hover:not(.active) .nav-icon {
-  color: var(--tone, var(--ink));
+  --nav-grad-top: color-mix(in srgb, var(--tone, #a78bfa) 42%, #fff);
+  --nav-grad-bottom: var(--tone, #a78bfa);
+  --nav-icon-depth: color-mix(in srgb, var(--tone, #a78bfa) 55%, #3b0764);
   opacity: 1;
 }
 
@@ -115,7 +117,7 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   display: inline;
 }
 
-/* 晶莹球已足够标识选中，labels 模式不再叠左侧圆点 */
+/* 选中态由指示器底板 + 渐变图标标识，labels 模式不再叠左侧圆点 */
 .sidebar.is-labels .nav-item.active::before {
   display: none;
 }
@@ -182,20 +184,26 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   position: relative;
   width: 18px;
   height: 18px;
-  opacity: 0.78;
+  opacity: 0.92;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  /* 默认不上色：中性描边 */
-  color: var(--ink-mute, var(--ink-soft));
+  /* 默认：浅紫 → 中紫纵向渐变（对齐参考图未选中态） */
+  --nav-grad-top: #efe9ff;
+  --nav-grad-bottom: #b7a0f8;
+  --nav-icon-depth: #4c1d95;
+  --nav-icon-cutout: var(--sidebar-bg, var(--glass-fill, #fff));
+  color: var(--nav-grad-bottom);
   transition:
-    color 0.18s ease,
     opacity 0.18s ease,
-    width 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-    height 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-    background 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
+    filter 0.18s ease;
+}
+
+html[data-theme="dark"] .nav-icon {
+  --nav-grad-top: #ddd6fe;
+  --nav-grad-bottom: #9b87f5;
+  --nav-icon-depth: #2e1065;
+  --nav-icon-cutout: color-mix(in srgb, var(--sidebar-bg, #12081f) 88%, #000);
 }
 
 .nav-badge {
@@ -218,131 +226,73 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 }
 
 /*
- * 选中：晶莹透亮玻璃球（对齐参考图导航选中态）
- * — 顶侧高光 / 底侧色调内发光 / 半透明色相 / 白色 glyph
- * 注意：侧栏已有 backdrop-filter，球内再套 blur 会在 WebKit 下把背景吃掉，
- * 故只用渐变模拟玻璃质感。
+ * 选中：取消晶莹球，仅切换为更饱和的 tone 纵向渐变 + 轻微立体阴影
+ * （参考图：品红/亮紫顶 → 中紫底，无镜面高光）
  */
 .nav-item.active .nav-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  color: #fff;
   opacity: 1;
-  /* 镂空透出球心色，而非平面对比色 */
-  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 55%, #062018);
-  background:
-    radial-gradient(
-      circle at 28% 22%,
-      rgba(255, 255, 255, 0.95) 0%,
-      rgba(255, 255, 255, 0.42) 14%,
-      transparent 40%
-    ),
-    radial-gradient(
-      circle at 70% 78%,
-      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
-      transparent 48%
-    ),
-    radial-gradient(
-      circle at 50% 48%,
-      color-mix(in srgb, var(--tone, var(--accent)) 92%, #fff) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 72%, #0a1a12) 100%
-    );
-  border: 1px solid color-mix(in srgb, #fff 55%, var(--tone, var(--accent)));
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.2),
-    0 4px 12px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 70%, transparent),
-    0 0 18px color-mix(in srgb, var(--tone, var(--accent)) 40%, transparent),
-    inset 0 1px 1px rgba(255, 255, 255, 0.7),
-    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 35%, rgba(0, 0, 0, 0.45));
-}
-
-/* 镜面高光点 */
-.nav-item.active .nav-icon::before {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 6px;
-  width: 8px;
-  height: 4px;
-  border-radius: 50%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.2));
-  filter: blur(0.3px);
-  opacity: 0.95;
-  pointer-events: none;
-  z-index: 2;
-}
-
-html[data-theme="light"] .nav-item.active .nav-icon {
-  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 45%, #fff);
-  background:
-    radial-gradient(
-      circle at 28% 22%,
-      rgba(255, 255, 255, 1) 0%,
-      rgba(255, 255, 255, 0.55) 16%,
-      transparent 42%
-    ),
-    radial-gradient(
-      circle at 70% 78%,
-      color-mix(in srgb, var(--tone, var(--accent)) 65%, #fff) 0%,
-      transparent 52%
-    ),
-    radial-gradient(
-      circle at 50% 48%,
-      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 68%, #dfe7f2) 100%
-    );
-  border-color: color-mix(in srgb, #fff 70%, var(--tone, var(--accent)));
-  box-shadow:
-    0 1px 3px color-mix(in srgb, var(--tone, var(--accent)) 22%, rgba(15, 23, 42, 0.1)),
-    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 55%, transparent),
-    0 0 14px color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent),
-    inset 0 1px 1px rgba(255, 255, 255, 0.95),
-    inset 0 -3px 8px color-mix(in srgb, var(--tone, var(--accent)) 30%, rgba(15, 23, 42, 0.1));
+  --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
+  --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
+  --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
+  --nav-icon-cutout: color-mix(
+    in srgb,
+    var(--tone-soft, transparent) 55%,
+    var(--sidebar-bg, var(--glass-fill, #fff))
+  );
 }
 
 html[data-theme="dark"] .nav-item.active .nav-icon {
-  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 55%, #04140e);
-}
-
-.nav-item.active .nav-badge {
-  top: -3px;
-  right: -4px;
+  --nav-grad-top: color-mix(in srgb, var(--tone, #e879f9) 55%, #fff);
+  --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 88%, #5b21b6);
+  --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 65%, #1e0b3a);
+  --nav-icon-cutout: color-mix(
+    in srgb,
+    var(--tone-soft, transparent) 40%,
+    var(--sidebar-bg, #12081f)
+  );
 }
 
 .nav-icon svg {
   display: block;
   position: relative;
   z-index: 1;
-  transition: fill 0.15s ease, stroke 0.15s ease, width 0.2s ease, height 0.2s ease;
+  width: 18px;
+  height: 18px;
+  /* 侧栏内：渐变填实 + 描边，贴近参考图软立体图标 */
+  fill: var(--nav-grad-paint);
+  /* 轻微下沉阴影，模拟参考图的软立体层，避免玻璃球高光 */
+  filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
+  transition: filter 0.18s ease;
 }
 
-/* 选中：球内白色实心 glyph */
-.nav-item.active .nav-icon svg {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-  stroke: currentColor;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.22));
-}
-
-/* 复杂线稿：浅填充，保留描边细节 */
-.nav-item.active .nav-icon svg[data-nav-fill="soft"] {
-  fill: currentColor;
-  fill-opacity: 0.22;
-  stroke: currentColor;
-}
-
-/* 内部线条：对比色描边，避免填实后看不清 */
-.nav-item.active .nav-icon svg .nav-icon-cutout {
+/* outline 线稿：只描边，不填实 */
+.nav-icon svg[data-nav-fill="outline"] {
   fill: none;
-  stroke: var(--nav-icon-cutout, #fff);
+}
+
+/* 局部浅填（保留描边） */
+.nav-icon svg[data-nav-fill="soft"] {
+  fill: var(--nav-grad-paint);
+  fill-opacity: 0.28;
+}
+
+/* 内部线条：镂空对比色，避免填实后看不清 */
+.nav-icon svg .nav-icon-cutout {
+  fill: none;
+  stroke: var(--nav-icon-cutout);
   stroke-width: 2.25;
 }
 
-/* 内部圆孔：对比色实心，形成镂空 */
-.nav-item.active .nav-icon svg .nav-icon-hole {
-  fill: var(--nav-icon-cutout, #fff);
+/* 内部圆孔：镂空 */
+.nav-icon svg .nav-icon-hole {
+  fill: var(--nav-icon-cutout);
+  stroke: none;
+}
+
+/* 实心小圆点（如 sparkles） */
+.nav-icon svg .nav-icon-dot,
+.nav-icon svg .nav-icon-fill {
+  fill: var(--nav-grad-paint);
   stroke: none;
 }
 
@@ -368,103 +318,67 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .page-title-icon {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
   position: relative;
-  color: #fff;
-  background:
-    radial-gradient(
-      circle at 28% 22%,
-      rgba(255, 255, 255, 0.95) 0%,
-      rgba(255, 255, 255, 0.42) 14%,
-      transparent 40%
-    ),
-    radial-gradient(
-      circle at 70% 78%,
-      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
-      transparent 48%
-    ),
-    radial-gradient(
-      circle at 50% 48%,
-      color-mix(in srgb, var(--tone, var(--accent)) 92%, #fff) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 72%, #0a1a12) 100%
-    );
-  border: 1px solid color-mix(in srgb, #fff 55%, var(--tone, var(--accent)));
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.18),
-    0 4px 12px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 55%, transparent),
-    0 0 14px color-mix(in srgb, var(--tone, var(--accent)) 32%, transparent),
-    inset 0 1px 1px rgba(255, 255, 255, 0.7),
-    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 32%, rgba(0, 0, 0, 0.4));
+  /* 与侧栏一致：渐变图标，无晶莹球 */
+  --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
+  --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
+  --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
+  --nav-icon-cutout: color-mix(in srgb, var(--tone-soft, transparent) 40%, var(--glass-fill, #fff));
+  color: var(--nav-grad-bottom);
+  background: color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, transparent) 18%, transparent);
+  box-shadow: none;
 }
 
 .page-title-icon::before {
-  content: "";
-  position: absolute;
-  top: 4px;
-  left: 7px;
-  width: 9px;
-  height: 5px;
-  border-radius: 50%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.15));
-  filter: blur(0.4px);
-  opacity: 0.88;
-  pointer-events: none;
-  z-index: 2;
+  display: none;
 }
 
 .page-title-icon svg {
   position: relative;
   z-index: 1;
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-  stroke: currentColor;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+  width: 16px;
+  height: 16px;
+  fill: var(--nav-grad-paint);
+  filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
+}
+
+.page-title-icon svg[data-nav-fill="outline"] {
+  fill: none;
 }
 
 .page-title-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: color-mix(in srgb, var(--tone, var(--accent)) 42%, #0a1a14);
+  stroke: var(--nav-icon-cutout);
   stroke-width: 2.25;
 }
 
 .page-title-icon svg .nav-icon-hole {
-  fill: color-mix(in srgb, var(--tone, var(--accent)) 42%, #0a1a14);
+  fill: var(--nav-icon-cutout);
   stroke: none;
 }
 
-html[data-theme="light"] .page-title-icon {
-  background:
-    radial-gradient(
-      circle at 28% 22%,
-      rgba(255, 255, 255, 1) 0%,
-      rgba(255, 255, 255, 0.55) 16%,
-      transparent 42%
-    ),
-    radial-gradient(
-      circle at 70% 78%,
-      color-mix(in srgb, var(--tone, var(--accent)) 65%, #fff) 0%,
-      transparent 52%
-    ),
-    radial-gradient(
-      circle at 50% 48%,
-      color-mix(in srgb, var(--tone, var(--accent)) 88%, #fff) 0%,
-      color-mix(in srgb, var(--tone, var(--accent)) 68%, #dfe7f2) 100%
-    );
-  border-color: color-mix(in srgb, #fff 70%, var(--tone, var(--accent)));
-  box-shadow:
-    0 1px 3px color-mix(in srgb, var(--tone, var(--accent)) 18%, rgba(15, 23, 42, 0.08)),
-    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 42%, transparent),
-    inset 0 1px 1px rgba(255, 255, 255, 0.95),
-    inset 0 -3px 8px color-mix(in srgb, var(--tone, var(--accent)) 26%, rgba(15, 23, 42, 0.08));
-  color: #fff;
+.page-title-icon svg .nav-icon-dot,
+.page-title-icon svg .nav-icon-fill {
+  fill: var(--nav-grad-paint);
+  stroke: none;
 }
 
 html[data-theme="dark"] .page-title-icon {
-  color: #fff;
+  --nav-grad-top: color-mix(in srgb, var(--tone, #e879f9) 55%, #fff);
+  --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 88%, #5b21b6);
+  --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 65%, #1e0b3a);
+  --nav-icon-cutout: color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.92));
+  background: color-mix(in srgb, var(--tone-soft, transparent) 42%, rgba(8, 6, 18, 0.35));
+  border-color: color-mix(in srgb, var(--tone, transparent) 26%, transparent);
+}
+
+html[data-theme="light"] .page-title-icon {
+  background: color-mix(in srgb, var(--tone-soft, transparent) 60%, #fff);
 }
 
 .page-title-icon[data-tone="blue"] {
