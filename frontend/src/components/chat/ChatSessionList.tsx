@@ -389,13 +389,16 @@ export default function ChatSessionList({
         if (!markdown.replace(/^#.*$/m, "").trim()) {
           throw new Error(t("sessions.exportEmpty"));
         }
-        await invoke<string>("download_bytes_to_downloads", {
+        const savedPath = await invoke<string>("download_bytes_to_downloads", {
           filename: sanitizeExportFilename(title, item.sessionId),
           base64Data: utf8ToBase64(markdown),
         });
+        showToast(t("sessions.exportDone", { path: savedPath }), {
+          tone: "success",
+        });
       });
     },
-    [runSessionAction, t],
+    [runSessionAction, showToast, t],
   );
 
   const handleBranch = useCallback(
@@ -738,6 +741,7 @@ export default function ChatSessionList({
           })}
         </ul>
       )}
+      {toastHost}
     </div>
   );
 }
