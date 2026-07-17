@@ -311,19 +311,11 @@ fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>>
 }
 
 fn delete_usage_db_files(path: &Path) {
-    let base = path.to_string_lossy();
-    for p in [
-        path.to_path_buf(),
-        PathBuf::from(format!("{base}-wal")),
-        PathBuf::from(format!("{base}-shm")),
-    ] {
-        let _ = std::fs::remove_file(p);
-    }
+    common::delete_sqlite_files(path);
 }
 
 fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
-    let conn = Connection::open(path)?;
-    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    let conn = common::open_wal(path)?;
     conn.execute_batch(DDL)?;
     conn.execute_batch(&format!(
         "PRAGMA user_version = {USAGE_SCHEMA_VERSION};"
@@ -331,7 +323,7 @@ fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
     Ok(conn)
 }
 
-impl crate::sqlite_store::SqliteStore for UsageDb {
+impl common::SqliteStore for UsageDb {
     fn path(&self) -> &Path {
         &self.path
     }
@@ -378,8 +370,7 @@ impl UsageDb {
             return Ok(Self { conn, path });
         }
 
-        let conn = Connection::open(&path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+        let conn = common::open_wal(&path)?;
         if version < 4 {
             let has_turn: bool = {
                 let mut stmt = conn.prepare("PRAGMA table_info(usage_events)")?;

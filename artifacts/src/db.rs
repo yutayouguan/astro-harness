@@ -11,6 +11,7 @@
 //! - Agent 工作区内的核心模板 md 与 `SKILL.md` 不参与 reconcile 登记
 
 use anyhow::Context;
+use common::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -99,6 +100,7 @@ pub struct ReconcileReport {
 /// Artifact SQLite 访问层
 pub struct ArtifactDb {
     conn: Connection,
+    path: PathBuf,
 }
 
 /// 默认数据库路径：`{memory_dir}/sessions/artifacts.db`
@@ -190,18 +192,18 @@ const JUNK_NAME_SQL: &str = " AND lower(name) NOT IN (
 impl ArtifactDb {
     /// 打开或创建数据库并执行 DDL；缺 `agent_id` 的旧库直接丢弃重建。
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
         if path.exists() && !db_has_agent_id_column(&path)? {
-            let _ = std::fs::remove_file(&path);
-            let _ = std::fs::remove_file(format!("{}-wal", path.display()));
-            let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+            common::delete_sqlite_files(&path);
         }
-        let conn = Connection::open(&path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-        conn.execute_batch(DDL)?;
-        Ok(Self { conn })
+        let conn = common::open_wal(&path)?;
+        let db = Self { conn, path };
+        db.migrate()?;
+        Ok(db)
+    }
+
+    /// 数据库文件路径
+    pub fn db_path(&self) -> &Path {
+        &self.path
     }
 
     /// 登记或更新文件索引；垃圾文件名会拒绝；同 path UPSERT
@@ -499,6 +501,17 @@ impl ArtifactDb {
     }
 }
 
+impl SqliteStore for ArtifactDb {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn migrate(&self) -> anyhow::Result<()> {
+        self.conn.execute_batch(DDL)?;
+        Ok(())
+    }
+}
+
 /// 递归收集目录下所有普通文件（跳过 `__MACOSX` 与垃圾文件名）
 fn walkdir_files(root: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let mut out = Vec::new();
@@ -627,5 +640,15 @@ mod tests {
         let counts = db.category_counts(false, None).unwrap();
         assert!(counts.iter().any(|(c, n)| c == "image" && *n == 1));
         assert!(counts.iter().any(|(c, n)| c == "doc" && *n == 1));
+    }
+
+    #[test]
+    fn artifact_db_impls_sqlite_store() {
+        let root = TempDir::new().unwrap();
+        fs::create_dir_all(root.path().join("sessions")).unwrap();
+        let path = artifacts_db_path(root.path());
+        let db = ArtifactDb::new(path.clone()).unwrap();
+        assert_eq!(SqliteStore::path(&db), path.as_path());
+        db.migrate().unwrap();
     }
 }

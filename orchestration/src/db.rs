@@ -11,8 +11,9 @@
 //! - 时间戳为 ISO UTC（RFC3339，秒精度，与 usage period_window 一致）
 
 use chrono::{SecondsFormat, Utc};
+use common::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// 建表 DDL（`orchestrations` + `orchestration_steps` 及常用索引）
@@ -160,6 +161,7 @@ pub struct NewOrchestration {
 /// 编排状态 SQLite 访问层
 pub struct OrchestrationDb {
     conn: Connection,
+    path: PathBuf,
 }
 
 /// 默认数据库路径：`{ASTRO_MEMORY_DIR|~/.astro}/orchestration.db`
@@ -245,23 +247,23 @@ fn db_has_spawn_creds(path: &std::path::Path) -> anyhow::Result<bool> {
 impl OrchestrationDb {
     /// 打开或创建数据库并执行 DDL（WAL 模式）；缺凭据列的旧库直接丢弃重建。
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
         if path.exists() && !db_has_spawn_creds(&path)? {
-            let _ = std::fs::remove_file(&path);
-            let _ = std::fs::remove_file(format!("{}-wal", path.display()));
-            let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+            common::delete_sqlite_files(&path);
         }
-        let conn = Connection::open(&path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-        conn.execute_batch(DDL)?;
-        Ok(Self { conn })
+        let conn = common::open_wal(&path)?;
+        let db = Self { conn, path };
+        db.migrate()?;
+        Ok(db)
     }
 
     /// 打开默认 `~/.astro/orchestration.db`
     pub fn open_default() -> anyhow::Result<Self> {
         Self::new(orchestration_db_path())
+    }
+
+    /// 数据库文件路径
+    pub fn db_path(&self) -> &Path {
+        &self.path
     }
 
     /// 插入编排（queued）及步骤（pending），返回 orchestration id
@@ -544,6 +546,17 @@ impl OrchestrationDb {
             "UPDATE orchestrations SET created_at = ?2, updated_at = ?2 WHERE id = ?1",
             params![id, created_at],
         )?;
+        Ok(())
+    }
+}
+
+impl SqliteStore for OrchestrationDb {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn migrate(&self) -> anyhow::Result<()> {
+        self.conn.execute_batch(DDL)?;
         Ok(())
     }
 }

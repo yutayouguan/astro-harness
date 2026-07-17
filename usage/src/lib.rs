@@ -5,7 +5,7 @@
 //! - [`pricing`]：路由感知费用估算
 //! - [`trace_insights`]：按 session 聚合调用链（可读 `session` 库）
 //! - [`eval_export`]：session trace → eval JSONL
-//! - [`sqlite_store`]：共享 `open_wal` / [`SqliteStore`] 协议
+//! - [`sqlite_store`]：兼容 re-export（实现见 [`common::sqlite`]）
 
 pub mod db;
 pub mod eval_export;

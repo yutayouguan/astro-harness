@@ -2,7 +2,7 @@
 //!
 //! 库路径：`{sessions_dir}/knowledge.db`（与 artifacts.db 并列）。
 
-use anyhow::Context;
+use common::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -45,20 +45,11 @@ pub struct KnowledgeDb {
 impl KnowledgeDb {
     pub fn open(path: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let path = path.into();
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let conn = Connection::open(&path)
-            .with_context(|| format!("open knowledge db {}", path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
-        let ver: i32 = conn
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
-            .unwrap_or(0);
-        if ver < SCHEMA_VERSION {
-            conn.execute_batch(DDL)?;
-            conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
-        }
-        Ok(Self { conn, path })
+        let conn = common::open_wal(&path)?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        let db = Self { conn, path };
+        db.migrate()?;
+        Ok(db)
     }
 
     pub fn open_default() -> anyhow::Result<Self> {
@@ -70,6 +61,17 @@ impl KnowledgeDb {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    fn apply_migrate(conn: &Connection) -> anyhow::Result<()> {
+        let ver: i32 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if ver < SCHEMA_VERSION {
+            conn.execute_batch(DDL)?;
+            conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
+        }
+        Ok(())
     }
 
     /// 登记文档并写入 FTS 正文；同 path 则更新。
@@ -234,6 +236,16 @@ impl KnowledgeDb {
     }
 }
 
+impl SqliteStore for KnowledgeDb {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn migrate(&self) -> anyhow::Result<()> {
+        Self::apply_migrate(&self.conn)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,5 +282,19 @@ mod tests {
         let _ = db.search("a AND OR \"", 10).unwrap();
         let hits = db.search("Guide", 10).unwrap();
         assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn knowledge_db_impls_sqlite_store() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("knowledge.db");
+        let db = KnowledgeDb::open(&path).unwrap();
+        assert_eq!(SqliteStore::path(&db), path.as_path());
+        db.migrate().unwrap();
+        let ver: i32 = db
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(ver, SCHEMA_VERSION);
     }
 }

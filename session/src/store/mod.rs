@@ -6,6 +6,7 @@ mod messages;
 mod search;
 
 use anyhow::{anyhow, Context, Result};
+use common::SqliteStore;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -217,15 +218,12 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
 pub struct SessionStore {
     pub(crate) conn: Connection,
+    path: PathBuf,
 }
 
 impl SessionStore {
     /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时进行增量迁移。
     pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("create parent dir for {}", path.display()))?;
-        }
         if path.exists() {
             let version = peek_schema_version(path).unwrap_or(0);
             // v13→v14 / v14→v15 为 additive ALTER，可就地升级，不必丢历史。
@@ -238,16 +236,18 @@ impl SessionStore {
                     target = SCHEMA_VERSION,
                     "session state.db outdated; discarding prior chat history"
                 );
-                delete_sqlite_files(path);
+                common::delete_sqlite_files(path);
             } else {
                 tracing::debug!(version, target = SCHEMA_VERSION, "session state.db opened");
             }
         }
-        let conn = Connection::open(path)
+        let conn = common::open_wal(path)
             .with_context(|| format!("open session store at {}", path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
-        let store = Self { conn };
+        let store = Self {
+            conn,
+            path: path.to_path_buf(),
+        };
         store.migrate_schema()?;
         // FTS 触发器自愈。
         store.repair_messages_fts_if_needed()?;
@@ -266,6 +266,11 @@ impl SessionStore {
         Ok(store)
     }
 
+    /// 数据库文件路径
+    pub fn db_path(&self) -> &Path {
+        &self.path
+    }
+
     /// 读取当前 `schema_version` 表中的版本号。
     pub fn schema_version(&self) -> Result<i32> {
         let version: Option<i32> = self
@@ -281,16 +286,19 @@ impl SessionStore {
 
 }
 
+impl SqliteStore for SessionStore {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn migrate(&self) -> anyhow::Result<()> {
+        self.migrate_schema()
+    }
+}
+
 /// 删除 SQLite 主库及其 WAL/SHM 旁路文件。
 fn delete_sqlite_files(path: &Path) {
-    let base = path.to_string_lossy();
-    for p in [
-        path.to_path_buf(),
-        PathBuf::from(format!("{base}-wal")),
-        PathBuf::from(format!("{base}-shm")),
-    ] {
-        let _ = std::fs::remove_file(p);
-    }
+    common::delete_sqlite_files(path);
 }
 
 /// 读取已有库的 schema 版本；无法读取时视为 0。

@@ -26,7 +26,7 @@
 | R5 | 低 | Knowledge FTS `MATCH` 特殊字符易失败 | MATCH 失败回退 title/path `LIKE` | **已修**（本轮） |
 | R2 | 中 | 用户附图未落 `messages.media_json`；hydrate 仅 tool sidecar | schema v15 + NewMessage/StoredMessage + hydrate | **已修**（本轮） |
 | R3 | 低 | `ChatContentPart` 不支持 audio/video 入模 | `AudioUrl`/`VideoUrl` + Gemini inlineData；其它厂商文本回落 | **已修**（本轮） |
-| R4 | 低 | `SqliteStore` 仅 Example，未挂真实 UsageDb/KnowledgeDb | `UsageDb` 存 `path` + `impl SqliteStore`；`KnowledgeDb` 已有 `path()` + open 时 migrate | **已修**（本轮） |
+| R4 | 低 | `SqliteStore` 仅 Example，未挂真实库 | 协议下沉 `common::sqlite`；Usage/Session/Knowledge/Artifact/Cron/Orchestration 均已 `impl` | **已修** |
 | R6 | 信息 | EntityMemory / Always / embedding / Postgres | 文档「不必 / P4」 | **不做** |
 | R7 | 信息 | `search_context` / `pin_context` | `context_tools` + pinned 注入 Dynamic | **已修**（本轮） |
 | R8 | 信息 | Team `tasks`、`is_exclusive_tool` 名称表 | `tasks` 串行共享任务板；`exclusive_access` 进 ToolEntry | **已修**（本轮） |

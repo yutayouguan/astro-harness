@@ -246,14 +246,15 @@ messages 中 tool 结果超阈值
 关键路径：`session/src/store/schema.rs`、`session/src/store/mod.rs`、`usage/src/db.rs`
 
 ### 可借鉴
-- 统一 **`Db` trait**：`sessions` / `memories` / `knowledge_contents` / `traces` 接口形状对齐，实现仍 rusqlite。
+- 统一 **打开/迁移协议**（`path` + `migrate`），实现仍 rusqlite；**不要**做成跨域大一统 CRUD / ORM。
 - **不要**为对齐 Agno 急上 Postgres；桌面场景价值低。
 - Trace/eval 数据集可从现有 usage + session 导出。
 
-### 已落地（本轮）
-- `usage::sqlite_store::{open_wal, SqliteStore, ExampleSqliteStore}`：WAL 打开 + path/migrate 协议
-- 示范 migrate 空库；不合并多库、不上 Postgres
-- Knowledge/Usage 等现有库可逐步 `impl SqliteStore`
+### 已落地
+- `common::sqlite::{open_wal, delete_sqlite_files, SqliteStore, ExampleSqliteStore}`：共享 WAL 打开 + path/migrate 协议
+- 生产库均已 `impl SqliteStore`：`UsageDb` / `SessionStore` / `KnowledgeDb` / `ArtifactDb` / `CronRunDb` / `OrchestrationDb`
+- `usage::sqlite_store` 保持兼容 re-export；不合并多库、不上 Postgres
+- Memory 仍为 Markdown + `MemoryOps`，不塞进 SQLite trait
 
 ---
 
@@ -346,7 +347,7 @@ P2  DecisionLog + Propose 写入（挂审批，扩展入梦/review）
 P3  Knowledge Content DB + FTS（可选再 embedding）
 P4  EntityMemory（有真实「记公司/项目」需求再上）
 —   MediaAsset + 结构化 ToolResult（§一；ChatContentPart 多模态 audio/video 入模已补）
-—   MCP / 多后端 DB：观望或小改即可
+—   MCP / 多后端 DB：观望；SQLite 打开协议已收敛到 `common::sqlite`
 ```
 
 ---

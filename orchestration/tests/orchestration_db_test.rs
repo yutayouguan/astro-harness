@@ -303,3 +303,13 @@ fn skip_pending_steps_after_marks_later_pending() {
     assert_eq!(steps[1].status, StepStatus::Skipped.as_str());
     assert_eq!(steps[2].status, StepStatus::Skipped.as_str());
 }
+
+#[test]
+fn orchestration_db_impls_sqlite_store() {
+    use common::SqliteStore;
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("orchestration.db");
+    let db = OrchestrationDb::new(path.clone()).unwrap();
+    assert_eq!(SqliteStore::path(&db), path.as_path());
+    db.migrate().unwrap();
+}

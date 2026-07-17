@@ -6,6 +6,7 @@ description = "用量事件库、统计与定价估算（usage.db）"
 
 [dependencies]
 anyhow = { workspace = true }
+common = { path = "../common" }
 home = { path = "../home" }
 session = { path = "../session" }
 chrono = { version = "0.4", features = ["clock", "serde"] }

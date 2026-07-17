@@ -20,6 +20,17 @@ fn opens_fresh_db_at_current_schema() {
 }
 
 #[test]
+fn session_store_impls_sqlite_store() {
+    use common::SqliteStore;
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    let store = SessionStore::open(&path).unwrap();
+    assert_eq!(SqliteStore::path(&store), path.as_path());
+    store.migrate().unwrap();
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+}
+
+#[test]
 fn append_and_reload_tool_calls_and_reasoning() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();

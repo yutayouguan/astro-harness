@@ -9,6 +9,7 @@
 //! - 运行中记录以 `status = 'running'` 标识；同一 job 可并发查询是否在跑
 //! - 使用 WAL 模式；`id` 为主键 UUID
 
+use common::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -102,6 +103,7 @@ pub struct CronRunFilters {
 /// Cron 执行记录 SQLite 访问层
 pub struct CronRunDb {
     conn: Connection,
+    path: PathBuf,
 }
 
 /// 默认数据库路径：`{cron_root}/cron.db`
@@ -147,13 +149,10 @@ const SELECT_COLS: &str = "id, job_id, title, agent_id, schedule, task, fired_at
 impl CronRunDb {
     /// 打开或创建数据库并执行 DDL（WAL 模式）
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let conn = Connection::open(&path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-        conn.execute_batch(DDL)?;
-        Ok(Self { conn })
+        let conn = common::open_wal(&path)?;
+        let db = Self { conn, path };
+        db.migrate()?;
+        Ok(db)
     }
 
     /// 打开默认 `~/.astro/cron/cron.db`
@@ -161,6 +160,11 @@ impl CronRunDb {
         let root = crate::cron_dir();
         std::fs::create_dir_all(&root)?;
         Self::new(cron_db_path(&root))
+    }
+
+    /// 数据库文件路径
+    pub fn db_path(&self) -> &Path {
+        &self.path
     }
 
     /// 插入一条 `status = running` 记录，返回新 id
@@ -283,6 +287,17 @@ impl CronRunDb {
     }
 }
 
+impl SqliteStore for CronRunDb {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn migrate(&self) -> anyhow::Result<()> {
+        self.conn.execute_batch(DDL)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,5 +326,14 @@ mod tests {
         let got = db.get(&id).unwrap().unwrap();
         assert!(got.summary.len() <= MAX_SUMMARY_BYTES);
         assert!(got.output.len() <= MAX_OUTPUT_BYTES);
+    }
+
+    #[test]
+    fn cron_run_db_impls_sqlite_store() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("cron.db");
+        let db = CronRunDb::new(path.clone()).unwrap();
+        assert_eq!(SqliteStore::path(&db), path.as_path());
+        db.migrate().unwrap();
     }
 }
