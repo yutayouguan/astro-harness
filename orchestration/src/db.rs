@@ -346,14 +346,7 @@ impl OrchestrationDb {
              SET status = ?2, updated_at = ?3, error = ?4, result_summary = ?5,
                  finished_at = COALESCE(?6, finished_at)
              WHERE id = ?1",
-            params![
-                id,
-                status.as_str(),
-                now,
-                error,
-                result_summary,
-                finished_at,
-            ],
+            params![id, status.as_str(), now, error, result_summary, finished_at,],
         )?;
         if changed == 0 {
             anyhow::bail!("orchestration not found: {id}");

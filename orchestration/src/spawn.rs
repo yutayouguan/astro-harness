@@ -21,5 +21,4 @@ pub struct OrchestrationSpawnRequest {
     pub allow_reclaim: bool,
 }
 
-pub type OrchestrationSpawner =
-    Arc<dyn Fn(OrchestrationSpawnRequest) + Send + Sync + 'static>;
+pub type OrchestrationSpawner = Arc<dyn Fn(OrchestrationSpawnRequest) + Send + Sync + 'static>;
