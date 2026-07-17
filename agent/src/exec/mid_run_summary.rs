@@ -96,9 +96,9 @@ async fn complete_summary_chat(
     prompt: &str,
 ) -> anyhow::Result<String> {
     let registry = ProviderRegistry::default();
-    let provider = registry.get(&target.backend_id).ok_or_else(|| {
-        anyhow::anyhow!("unsupported compaction backend: {}", target.backend_id)
-    })?;
+    let provider = registry
+        .get(&target.backend_id)
+        .ok_or_else(|| anyhow::anyhow!("unsupported compaction backend: {}", target.backend_id))?;
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {
@@ -211,9 +211,7 @@ mod tests {
 
     #[test]
     fn collapse_keeps_head_and_tail() {
-        let msgs: Vec<_> = (0..10)
-            .map(|i| Message::user(&format!("m{i}")))
-            .collect();
+        let msgs: Vec<_> = (0..10).map(|i| Message::user(&format!("m{i}"))).collect();
         let out = collapse_history_with_handoff(&msgs, "HANDOFF", 2, 3);
         assert_eq!(out.len(), 2 + 1 + 3);
         assert_eq!(out[0].content_str(), "m0");

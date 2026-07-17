@@ -91,13 +91,9 @@ async fn test_agent_loop_fts_recall_after_long_session() {
     let mut agent = AgentLoop::new(config).unwrap();
 
     agent.run_turn("消息一", "task-1").await.unwrap();
-    agent
-        .record_assistant_message("回复一")
-        .unwrap();
+    agent.record_assistant_message("回复一").unwrap();
     agent.run_turn("消息二", "task-2").await.unwrap();
-    agent
-        .record_assistant_message("回复二")
-        .unwrap();
+    agent.record_assistant_message("回复二").unwrap();
 
     let result = agent
         .run_turn("三个月前我们定了地图点叫 Aurora", "task-3")
@@ -106,7 +102,9 @@ async fn test_agent_loop_fts_recall_after_long_session() {
 
     match result {
         TurnResult::Continue { system_prompt, .. } => {
-            assert!(system_prompt.contains("Aurora") || agent.recalled_context().contains("Aurora"));
+            assert!(
+                system_prompt.contains("Aurora") || agent.recalled_context().contains("Aurora")
+            );
         }
         _ => panic!("expected Continue"),
     }

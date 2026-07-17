@@ -18,10 +18,10 @@ use providers::streaming::{PauseControl, Usage};
 use providers::trait_::{AiProvider, ProviderConfig};
 use tokio::sync::{mpsc, Mutex};
 
-use crate::control::hitl::HitlGate;
-use crate::runtime::AgentLoop;
-use crate::runtime::usage::apply_llm_usage_dual_write;
 use super::run_state::{RunPhase, RunState};
+use crate::control::hitl::HitlGate;
+use crate::runtime::usage::apply_llm_usage_dual_write;
+use crate::runtime::AgentLoop;
 
 use super::hitl_bridge::{
     parse_astro_hitl, register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx,
@@ -116,10 +116,7 @@ async fn finish_done(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>) {
 }
 
 /// 发送 RunFinished(success) 后 Done。
-async fn finish_success(
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
-) {
+async fn finish_success(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>, run_id: &str) {
     let mut state = RunState::new();
     state.set_phase(RunPhase::Finished);
     let _ = emit(
@@ -294,20 +291,32 @@ async fn run_multi_turn_stream_inner(
             break;
         }
         if pause.is_cancelled() {
-            finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
+            finish_usage_and_done(
+                &session,
+                &streamer,
+                &tx,
+                saw_usage.then_some(total_usage),
+                &run_id,
+            )
+            .await;
             return;
         }
         if !pause.wait_if_paused().await {
-            finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
+            finish_usage_and_done(
+                &session,
+                &streamer,
+                &tx,
+                saw_usage.then_some(total_usage),
+                &run_id,
+            )
+            .await;
             return;
         }
 
         // Gateway 85% 预压安全网（Hermes Session Hygiene）：进 LLM 前再跑一轮廉价维护。
         {
             let mut agent = session.lock().await;
-            if agent.occupancy_ratio()
-                >= crate::compression::HARD_STAGE_RECOMMEND_COMPACT_RATIO
-            {
+            if agent.occupancy_ratio() >= crate::compression::HARD_STAGE_RECOMMEND_COMPACT_RATIO {
                 match agent.maintain_tool_context().await {
                     Ok(report) if report.pruned + report.compressed > 0 => {
                         tracing::info!(
@@ -372,25 +381,24 @@ async fn run_multi_turn_stream_inner(
             let agent = session.lock().await;
             let (system_chars, memory_chars, skills_chars, recall_chars) =
                 agent.system_prompt_layer_chars();
-            let snap = crate::prompt::context_usage::build_snapshot(crate::prompt::context_usage::ContextUsageInput {
-                system_chars,
-                memory_chars,
-                skills_chars,
-                recall_chars,
-                tools: &tools,
-                messages: &history,
-                context_window: agent.context_window(),
-                updated_at_ms: chrono::Utc::now().timestamp_millis(),
-                recommend_compact: agent.should_recommend_compact(),
-            });
+            let snap = crate::prompt::context_usage::build_snapshot(
+                crate::prompt::context_usage::ContextUsageInput {
+                    system_chars,
+                    memory_chars,
+                    skills_chars,
+                    recall_chars,
+                    tools: &tools,
+                    messages: &history,
+                    context_window: agent.context_window(),
+                    updated_at_ms: chrono::Utc::now().timestamp_millis(),
+                    recommend_compact: agent.should_recommend_compact(),
+                },
+            );
             drop(agent);
             let _ = emit(&tx, MultiTurnStreamItem::ContextUsage(snap)).await;
         }
 
-        let raw_stream = match streamer
-            .stream_chat(&system_prompt, &history, tools)
-            .await
-        {
+        let raw_stream = match streamer.stream_chat(&system_prompt, &history, tools).await {
             Ok(s) => {
                 let agent = session.lock().await;
                 let sid = agent.session_id().to_string();
@@ -546,8 +554,8 @@ async fn run_multi_turn_stream_inner(
                         saw_usage = true;
                     }
                     finish_error(
-                    &session,
-                    &streamer,
+                        &session,
+                        &streamer,
                         &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
@@ -565,7 +573,14 @@ async fn run_multi_turn_stream_inner(
                 total_usage.add_assign(u);
                 saw_usage = true;
             }
-            finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
+            finish_usage_and_done(
+                &session,
+                &streamer,
+                &tx,
+                saw_usage.then_some(total_usage),
+                &run_id,
+            )
+            .await;
             return;
         }
 
@@ -579,8 +594,8 @@ async fn run_multi_turn_stream_inner(
 
         if full_response.is_empty() && calls.is_empty() {
             finish_error(
-                    &session,
-                    &streamer,
+                &session,
+                &streamer,
                 &tx,
                 "模型返回了空回复。请重试，或换一个模型。",
                 saw_usage.then_some(total_usage),
@@ -641,7 +656,9 @@ async fn run_multi_turn_stream_inner(
                 // `session_messages` 会出现连续 assistant，导致下一轮历史触发
                 // Anthropic/Gemini 400。与 inject 保持同一文本形态，且不再排队注入，
                 // 避免下一轮 history 重复出现该 user 消息（连续 user）。
-                if let Err(err) = agent.record_user_message(&format!("[astro:hook-context]\n{prompt}")) {
+                if let Err(err) =
+                    agent.record_user_message(&format!("[astro:hook-context]\n{prompt}"))
+                {
                     drop(agent);
                     finish_error(
                         &session,
@@ -762,23 +779,15 @@ async fn run_multi_turn_stream_inner(
         };
 
         let outcomes = if force_serial || hitl_gate.is_none() {
-            execute_tools_serial(
-                &session,
-                &calls,
-                &pause,
-                &tx,
-                &run_id,
-                hitl_gate.as_ref(),
-            )
-            .await
+            execute_tools_serial(&session, &calls, &pause, &tx, &run_id, hitl_gate.as_ref()).await
         } else {
             execute_tools_concurrent(&session, &calls, &pause).await
         };
 
         let Some(outcomes) = outcomes else {
             finish_usage_and_done(
-                    &session,
-                    &streamer,
+                &session,
+                &streamer,
                 &tx,
                 saw_usage.then_some(total_usage),
                 &run_id,
@@ -843,8 +852,7 @@ async fn run_multi_turn_stream_inner(
                     }
                     let message_id = format!("a2ui-surface-media-{}-{}", call.id, i);
                     let ops_value = serde_json::Value::Array(ops);
-                    let content_json =
-                        serde_json::json!({ "operations": ops_value }).to_string();
+                    let content_json = serde_json::json!({ "operations": ops_value }).to_string();
                     timeline.upsert_surface(
                         serde_json::json!({
                             "messageId": message_id,
@@ -908,8 +916,7 @@ async fn run_multi_turn_stream_inner(
 
             if let Some(ref ui) = info_ui {
                 let message_id = format!("a2ui-surface-{}", call.id);
-                let content_json =
-                    serde_json::json!({ "operations": ui.operations }).to_string();
+                let content_json = serde_json::json!({ "operations": ui.operations }).to_string();
                 timeline.upsert_surface(
                     serde_json::json!({
                         "messageId": message_id,
@@ -948,6 +955,16 @@ async fn run_multi_turn_stream_inner(
                         }
                     }
                 }
+            }
+        }
+
+        // 工具循环后回写 timeline/surfaces，避免历史恢复丢 A2UI 卡片。
+        {
+            let agent = session.lock().await;
+            if let Err(e) =
+                agent.patch_last_assistant_timeline(timeline.reasoning_details_snapshot())
+            {
+                tracing::warn!(error = %e, "patch assistant timeline after tools failed");
             }
         }
 
@@ -993,7 +1010,10 @@ async fn run_multi_turn_stream_inner(
             agent.tool_registry().any_stop_after(&names)
         };
         if stop_after {
-            tracing::info!(?names, "stop_after_tool_call: ending run without next LLM round");
+            tracing::info!(
+                ?names,
+                "stop_after_tool_call: ending run without next LLM round"
+            );
             need_summary = false;
             break;
         }
@@ -1054,7 +1074,14 @@ async fn run_multi_turn_stream_inner(
         );
     }
 
-    finish_usage_and_done(&session, &streamer, &tx, saw_usage.then_some(total_usage), &run_id).await;
+    finish_usage_and_done(
+        &session,
+        &streamer,
+        &tx,
+        saw_usage.then_some(total_usage),
+        &run_id,
+    )
+    .await;
 }
 
 /// 在后台 task 启动 [`run_multi_turn_stream`]，并返回可消费的 [`MultiTurnStream`]。

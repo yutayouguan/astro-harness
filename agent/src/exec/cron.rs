@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use common::ChatTarget;
-use futures::StreamExt;
 use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
+use futures::StreamExt;
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
@@ -18,10 +18,10 @@ use providers::trait_::ProviderConfig;
 use session::SessionStore;
 use uuid::Uuid;
 
-use crate::streaming::fallback::try_stream_completion_with_fallback;
-use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 use crate::prompt::messages::to_provider_messages;
 use crate::runtime::usage::apply_llm_usage_dual_write;
+use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
+use crate::streaming::fallback::try_stream_completion_with_fallback;
 
 /// 执行定时任务所需的 LLM 凭据与路由信息。
 ///
@@ -398,10 +398,9 @@ async fn run_provider_loop(
         }
 
         for call in calls {
-            let result = tokio::task::block_in_place(|| {
-                agent.handle_tool_call(&call.name, &call.arguments)
-            })
-            .unwrap_or_else(|e| format!("工具错误: {e}"));
+            let result =
+                tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
+                    .unwrap_or_else(|e| format!("工具错误: {e}"));
 
             agent.record_tool_result_with_id(
                 Some(&call.id),

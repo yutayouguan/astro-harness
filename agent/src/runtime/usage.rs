@@ -31,13 +31,7 @@ pub(crate) fn build_llm_usage_event(
     let base_url_opt = (!base_url.is_empty()).then_some(base_url);
     let api_key_opt = (!api_key.is_empty()).then_some(api_key);
 
-    let cost_result = estimate_usage_cost(
-        model,
-        &tokens,
-        provider_opt,
-        base_url_opt,
-        api_key_opt,
-    );
+    let cost_result = estimate_usage_cost(model, &tokens, provider_opt, base_url_opt, api_key_opt);
 
     let status_str = match cost_result.status {
         CostStatus::Estimated => "estimated",
@@ -122,14 +116,7 @@ pub(crate) fn apply_llm_usage_dual_write(
         return;
     }
     let (mut event, delta) = build_llm_usage_event(
-        agent_id,
-        session_id,
-        turn_id,
-        model,
-        usage,
-        provider,
-        base_url,
-        api_key,
+        agent_id, session_id, turn_id, model, usage, provider, base_url, api_key,
     );
     if let Some(meta) = meta_json {
         event.meta_json = Some(meta);

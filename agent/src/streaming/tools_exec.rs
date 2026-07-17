@@ -41,10 +41,7 @@ pub(crate) fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> b
     if name != "terminal" {
         return false;
     }
-    let cmd = args
-        .get("command")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let cmd = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
     matches!(
         tools::classify_dangerous_command(cmd).map(|d| d.action),
         Some(tools::ApprovalAction::Ask)
@@ -66,7 +63,10 @@ pub(crate) async fn execute_tools_serial(
         run_id: run_id.to_string(),
     });
     PARENT_HITL_CTX
-        .scope(ctx, execute_tools_serial_inner(session, calls, pause, tx, run_id, hitl_gate))
+        .scope(
+            ctx,
+            execute_tools_serial_inner(session, calls, pause, tx, run_id, hitl_gate),
+        )
         .await
 }
 
@@ -115,8 +115,7 @@ async fn execute_tools_serial_inner(
                         let (approval_session_id, approval_turn_id) = {
                             let agent = session.lock().await;
                             let approval_session_id = agent.session_id().to_string();
-                            let approval_turn_id =
-                                agent.current_turn_id().map(str::to_string);
+                            let approval_turn_id = agent.current_turn_id().map(str::to_string);
                             agent.fire_hook(
                                 hooks::PRE_APPROVAL_REQUEST,
                                 hooks::HookPayload {
@@ -224,21 +223,19 @@ async fn execute_tools_serial_inner(
             let mut agent = session.lock().await;
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
-            tokio::task::block_in_place(|| {
-                agent.handle_tool_call(&call.name, &call.arguments)
-            })
-            .unwrap_or_else(|e| {
-                memory::try_append_decision(
-                    &memory_dir,
-                    memory::DecisionEntry::new(
-                        memory::DecisionKind::ToolFailure,
-                        format!("{e}"),
-                    )
-                    .with_tool(call.name.clone())
-                    .with_session(session_id),
-                );
-                format!("工具错误: {e}")
-            })
+            tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
+                .unwrap_or_else(|e| {
+                    memory::try_append_decision(
+                        &memory_dir,
+                        memory::DecisionEntry::new(
+                            memory::DecisionKind::ToolFailure,
+                            format!("{e}"),
+                        )
+                        .with_tool(call.name.clone())
+                        .with_session(session_id),
+                    );
+                    format!("工具错误: {e}")
+                })
         };
 
         // confirm/clarify：astro_hitl → 同回合 park
@@ -357,11 +354,7 @@ struct ToolExecSnapshot {
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
-fn run_tool_on_snapshot(
-    snap: &ToolExecSnapshot,
-    name: &str,
-    args: &serde_json::Value,
-) -> String {
+fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::Value) -> String {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -370,19 +363,16 @@ fn run_tool_on_snapshot(
         Err(e) => return format!("工具错误: runtime: {e}"),
     };
     rt.block_on(async {
-        let mut memory = match memory::MemoryManager::for_agent(
-            snap.memory_dir.clone(),
-            &snap.agent_id,
-        ) {
-            Ok(m) => m,
-            Err(e) => return format!("工具错误: memory: {e}"),
-        };
-        let sessions = match session::SessionStore::open_sessions_dir(
-            &snap.memory_dir.join("sessions"),
-        ) {
-            Ok(s) => s,
-            Err(e) => return format!("工具错误: sessions: {e}"),
-        };
+        let mut memory =
+            match memory::MemoryManager::for_agent(snap.memory_dir.clone(), &snap.agent_id) {
+                Ok(m) => m,
+                Err(e) => return format!("工具错误: memory: {e}"),
+            };
+        let sessions =
+            match session::SessionStore::open_sessions_dir(&snap.memory_dir.join("sessions")) {
+                Ok(s) => s,
+                Err(e) => return format!("工具错误: sessions: {e}"),
+            };
         let mut ctx = tools::ToolContext {
             memory: &mut memory,
             sessions: &sessions,
@@ -408,12 +398,9 @@ fn run_tool_on_snapshot(
             .unwrap_or_else(|e| {
                 memory::try_append_decision(
                     &snap.memory_dir,
-                    memory::DecisionEntry::new(
-                        memory::DecisionKind::ToolFailure,
-                        format!("{e}"),
-                    )
-                    .with_tool(name.to_string())
-                    .with_session(snap.session_id.clone()),
+                    memory::DecisionEntry::new(memory::DecisionKind::ToolFailure, format!("{e}"))
+                        .with_tool(name.to_string())
+                        .with_session(snap.session_id.clone()),
                 );
                 format!("工具错误: {e}")
             })

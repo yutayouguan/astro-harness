@@ -85,10 +85,7 @@ where
         match complete(target).await {
             Ok(text) if !text.trim().is_empty() => return Ok(parse_smart_verdict(&text)),
             Ok(_) => {
-                last_err = format!(
-                    "empty smart-approval response from {}",
-                    target.backend_id
-                );
+                last_err = format!("empty smart-approval response from {}", target.backend_id);
             }
             Err(err) => {
                 tracing::warn!(
@@ -222,10 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn preferred_error_falls_back_to_second_target_ask() {
-        let targets = vec![
-            target("pref", "mini"),
-            target("fallback", "main"),
-        ];
+        let targets = vec![target("pref", "mini"), target("fallback", "main")];
         let mut calls = 0usize;
         let verdict = evaluate_smart_approval_with_completion(&targets, |_t| {
             calls += 1;
@@ -245,10 +239,7 @@ mod tests {
 
     #[tokio::test]
     async fn both_targets_fail_returns_error_not_auto() {
-        let targets = vec![
-            target("pref", "mini"),
-            target("fallback", "main"),
-        ];
+        let targets = vec![target("pref", "mini"), target("fallback", "main")];
         let err = evaluate_smart_approval_with_completion(&targets, |_t| async {
             Err("provider error".into())
         })
@@ -259,11 +250,9 @@ mod tests {
 
     #[tokio::test]
     async fn empty_targets_returns_error() {
-        let err = evaluate_smart_approval_with_completion(&[], |_t| async {
-            Ok("AUTO".into())
-        })
-        .await
-        .expect_err("empty targets");
+        let err = evaluate_smart_approval_with_completion(&[], |_t| async { Ok("AUTO".into()) })
+            .await
+            .expect_err("empty targets");
         assert_eq!(err, "no approval targets");
     }
 }

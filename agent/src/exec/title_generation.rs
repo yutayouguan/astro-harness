@@ -169,14 +169,11 @@ fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionSt
     )?)
 }
 
-async fn complete_title_chat(
-    target: &common::ChatTarget,
-    prompt: &str,
-) -> anyhow::Result<String> {
+async fn complete_title_chat(target: &common::ChatTarget, prompt: &str) -> anyhow::Result<String> {
     let registry = ProviderRegistry::default();
-    let provider = registry.get(&target.backend_id).ok_or_else(|| {
-        anyhow::anyhow!("不支持的标题生成提供商后端: {}", target.backend_id)
-    })?;
+    let provider = registry
+        .get(&target.backend_id)
+        .ok_or_else(|| anyhow::anyhow!("不支持的标题生成提供商后端: {}", target.backend_id))?;
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {

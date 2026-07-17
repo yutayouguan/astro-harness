@@ -40,9 +40,8 @@ pub(crate) async fn run_max_iterations_summary(
     used: usize,
     max_total: usize,
 ) -> SummaryOutcome {
-    let notice = format!(
-        "⚠️ 迭代预算已用尽（{used}/{max_total}），正在请求模型总结（不再调用工具）…\n\n"
-    );
+    let notice =
+        format!("⚠️ 迭代预算已用尽（{used}/{max_total}），正在请求模型总结（不再调用工具）…\n\n");
     if !emit(
         tx,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(notice)),
@@ -54,7 +53,9 @@ pub(crate) async fn run_max_iterations_summary(
 
     let history = {
         let mut agent = session.lock().await;
-        agent.session_messages.push(Message::user(MAX_ITERATIONS_SUMMARY_PROMPT));
+        agent
+            .session_messages
+            .push(Message::user(MAX_ITERATIONS_SUMMARY_PROMPT));
         agent.session_messages.clone()
     };
 

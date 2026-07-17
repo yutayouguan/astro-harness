@@ -99,7 +99,8 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         }
     }
 
-    let mut call_names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut call_names: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     for m in input.messages {
         if let Some(calls) = &m.tool_calls {
             for c in calls {
@@ -261,9 +262,7 @@ mod tests {
         });
         assert_eq!(snap.segment("subagent").map(|s| s.tokens), Some(10));
         assert_eq!(
-            snap.segment("conversation")
-                .map(|s| s.tokens)
-                .unwrap_or(0),
+            snap.segment("conversation").map(|s| s.tokens).unwrap_or(0),
             0
         );
     }

@@ -47,7 +47,9 @@ async fn second_claim_is_noop_without_llm() {
         max_spawn_depth: home::DEFAULT_MAX_SPAWN_DEPTH,
         allow_reclaim: false,
     };
-    agent::exec::orchestration::run_orchestration(req).await.unwrap();
+    agent::exec::orchestration::run_orchestration(req)
+        .await
+        .unwrap();
 
     let orch = db.get(&id).unwrap().unwrap();
     assert_eq!(orch.status, OrchestrationStatus::Running.as_str());
@@ -97,17 +99,15 @@ async fn empty_api_key_marks_failed_and_emits_telemetry() {
         max_spawn_depth: home::DEFAULT_MAX_SPAWN_DEPTH,
         allow_reclaim: false,
     };
-    agent::exec::orchestration::run_orchestration(req).await.unwrap();
+    agent::exec::orchestration::run_orchestration(req)
+        .await
+        .unwrap();
 
     let orch = db.get(&id).unwrap().unwrap();
     assert_eq!(orch.status, OrchestrationStatus::Failed.as_str());
     let steps = db.list_steps(&id).unwrap();
     assert_eq!(steps[0].status, "failed");
-    assert!(steps[0]
-        .error
-        .as_deref()
-        .unwrap_or("")
-        .contains("API Key"));
+    assert!(steps[0].error.as_deref().unwrap_or("").contains("API Key"));
     assert_eq!(
         steps[1].status, "skipped",
         "remaining pending steps should be skipped on failure"

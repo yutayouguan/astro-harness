@@ -282,11 +282,9 @@ mod tests {
 
     #[test]
     fn notify_summarizes_count() {
-        let n = review_notify_from_applied(&[
-            "added memory entry".into(),
-            "added user profile".into(),
-        ])
-        .unwrap();
+        let n =
+            review_notify_from_applied(&["added memory entry".into(), "added user profile".into()])
+                .unwrap();
         assert_eq!(n.op, "background_review");
         assert!(n.content.contains("记忆已更新（2）"));
         assert!(n.content.contains("added memory"));
@@ -348,11 +346,10 @@ mod tests {
             target("cheap", "deepseek", "mini", "cheap-key"),
             target("main", "openai", "gpt", "main-key"),
         ];
-        let err = complete_review_with_targets(&targets, |_t| async {
-            Err("provider error".into())
-        })
-        .await
-        .expect_err("both failures");
+        let err =
+            complete_review_with_targets(&targets, |_t| async { Err("provider error".into()) })
+                .await
+                .expect_err("both failures");
         assert!(err.contains("provider error"));
     }
 }

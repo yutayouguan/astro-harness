@@ -50,10 +50,7 @@ pub enum MultiTurnStreamItem {
     /// 本轮 API 请求前的上下文占用估算（分层 token 快照）。
     ContextUsage(crate::prompt::context_usage::ContextUsageSnapshot),
     /// AG-UI `RUN_STARTED`：一次用户发送对应一个 run。
-    RunStarted {
-        thread_id: String,
-        run_id: String,
-    },
+    RunStarted { thread_id: String, run_id: String },
     /// AG-UI `ACTIVITY_SNAPSHOT`（如 A2UI surface）。
     Activity {
         message_id: String,
@@ -80,8 +77,7 @@ pub type AssistantContentStream =
     Pin<Box<dyn Stream<Item = anyhow::Result<StreamedAssistantContent>> + Send>>;
 
 /// 多轮 Agent 事件流：由 [`super::stream_multi_turn`] 暴露给 gRPC / UI 消费。
-pub type MultiTurnStream =
-    Pin<Box<dyn Stream<Item = anyhow::Result<MultiTurnStreamItem>> + Send>>;
+pub type MultiTurnStream = Pin<Box<dyn Stream<Item = anyhow::Result<MultiTurnStreamItem>> + Send>>;
 
 /// 将单个 Provider [`ChatChunk`] 拆分为零或多个 [`StreamedAssistantContent`]。
 ///

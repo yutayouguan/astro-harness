@@ -24,14 +24,9 @@ async fn execute_job_fails_without_api_key() {
         base_url: String::new(),
         targets: vec![],
     };
-    let row = agent::exec::cron::execute_job_with_roots(
-        dir.path(),
-        &job,
-        creds,
-        "manual",
-    )
-    .await
-    .unwrap();
+    let row = agent::exec::cron::execute_job_with_roots(dir.path(), &job, creds, "manual")
+        .await
+        .unwrap();
     assert_eq!(row.status, "failure");
     assert!(row.error.as_deref().unwrap_or("").contains("API"));
 }

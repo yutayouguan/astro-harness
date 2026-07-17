@@ -6,21 +6,21 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use common::truncate_chars;
-use futures::StreamExt;
-use home::default_memory_dir;
 use delegate::{
     create_task_worktree, find_git_root, resolve_project_root, DelegateRole, DelegateRunRequest,
     DelegateTaskSpec, WorktreeHandle,
 };
+use futures::StreamExt;
+use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
-use crate::streaming::fallback::try_stream_completion_with_fallback;
-use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 use crate::prompt::messages::to_provider_messages;
+use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
+use crate::streaming::fallback::try_stream_completion_with_fallback;
 
 const OUTPUT_TRUNCATE: usize = 8_000;
 
@@ -244,7 +244,12 @@ async fn run_one_child_inner(
     let registry = ProviderRegistry::new();
     let mut targets = effective_chat_targets(&creds, &registry);
     let mut member_temp: Option<f32> = None;
-    if let Some(spec_str) = task.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(spec_str) = task
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         match common::ModelSpec::parse(spec_str) {
             Ok(spec) => {
                 member_temp = spec.temperature;
@@ -515,10 +520,9 @@ async fn run_provider_loop(
         }
 
         for call in calls {
-            let mut result = tokio::task::block_in_place(|| {
-                agent.handle_tool_call(&call.name, &call.arguments)
-            })
-            .unwrap_or_else(|e| format!("工具错误: {e}"));
+            let mut result =
+                tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
+                    .unwrap_or_else(|e| format!("工具错误: {e}"));
             if let Some(hitl) = crate::streaming::parse_astro_hitl(&result) {
                 result = match crate::streaming::try_park_parent_hitl(
                     &call.id,
@@ -770,7 +774,9 @@ mod subagent_lifecycle_tests {
             hook_bus: Some(Arc::clone(&bus)),
         };
 
-        let raw_result = run_delegate(req).await.expect("run_delegate should still return a summary JSON on child failure");
+        let raw_result = run_delegate(req)
+            .await
+            .expect("run_delegate should still return a summary JSON on child failure");
 
         let mut agent =
             AgentLoop::new(AgentConfig::with_defaults(mem_dir.path().to_path_buf())).unwrap();
@@ -818,7 +824,9 @@ mod subagent_lifecycle_tests {
             hook_bus: None,
         };
 
-        let raw_result = run_delegate(req).await.expect("run_delegate should not panic without a hook bus");
+        let raw_result = run_delegate(req)
+            .await
+            .expect("run_delegate should not panic without a hook bus");
         let v: serde_json::Value = serde_json::from_str(&raw_result).unwrap();
         assert_eq!(v["tasks"].as_array().unwrap().len(), 1);
     }

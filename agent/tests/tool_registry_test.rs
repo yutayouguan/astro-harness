@@ -15,7 +15,7 @@ fn test_tool_registration_and_dispatch() {
         schema: serde_json::json!({"type": "object", "properties": {"query": {"type": "string"}}}),
         check_fn: None,
         icon: "🔍",
-    ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     let tools = registry.available_tools();
     assert_eq!(tools.len(), 1);
@@ -32,7 +32,7 @@ fn test_check_fn_filters_unavailable() {
         schema: serde_json::json!({}),
         check_fn: Some(Box::new(|| false)),
         icon: "❌",
-    ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     let tools = registry.available_tools();
     assert_eq!(tools.len(), 0);
@@ -48,7 +48,7 @@ fn test_enabled_map_filters_toolset() {
         schema: serde_json::json!({}),
         check_fn: None,
         icon: "🧠",
-    ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
         name: "cron_list".to_string(),
@@ -57,7 +57,7 @@ fn test_enabled_map_filters_toolset() {
         schema: serde_json::json!({}),
         check_fn: None,
         icon: "⏰",
-    ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     let mut enabled = std::collections::HashMap::new();
     enabled.insert("memory".into(), false);
@@ -100,7 +100,7 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
             icon: "plug",
-        ..ToolEntry::lifecycle_defaults()
+            ..ToolEntry::lifecycle_defaults()
         });
     }
 
@@ -144,7 +144,7 @@ fn reload_uses_agent_specific_tools_enabled() {
         schema: serde_json::json!({"type": "object"}),
         check_fn: None,
         icon: "brain",
-    ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
     reg.reload_enabled_from_disk(Some("custom-bot"));
     assert!(!reg.is_tool_allowed("memory"));

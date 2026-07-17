@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use common::message::Message;
 use ::session::SessionStore;
+use common::message::Message;
 
 /// 从 `SessionStore` 冷启动重建 `session_messages`（权威以 DB 为准）。
 pub fn hydrate_session_messages(
@@ -112,5 +112,6 @@ pub fn resolve_session_project_root() -> Option<PathBuf> {
     if flag != "1" && !flag.eq_ignore_ascii_case("true") {
         return None;
     }
-    delegate::resolve_project_root(None).filter(|p| delegate::find_git_root(p).is_some() || p.is_dir())
+    delegate::resolve_project_root(None)
+        .filter(|p| delegate::find_git_root(p).is_some() || p.is_dir())
 }

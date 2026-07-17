@@ -20,30 +20,30 @@ pub mod fallback;
 pub(crate) mod hitl_bridge;
 /// 多轮工具循环编排。
 mod multi_turn;
-/// 显式 Run 阶段 / requirements。
-pub mod run_state;
 /// `ProviderStreamer`：Streaming trait 实现 + fallback 接入。
 mod provider;
+/// 显式 Run 阶段 / requirements。
+pub mod run_state;
 /// 迭代预算耗尽后的强制总结轮。
 mod summary;
-/// 三层 Streaming trait。
-mod traits;
 /// 单轮工具调用执行：串行（HITL/危险命令）与并发（普通工具）。
 mod tools_exec;
+/// 三层 Streaming trait。
+mod traits;
 /// 流式事件与内容类型。
 mod types;
 
-pub use types::{
-    AssistantContentStream, MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent,
-};
-pub use run_state::{RunPhase, RunRequirements, RunState};
-pub use traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
-pub use provider::{
-    chat_target_from_provider_config, targets_and_registry_from_primary, ProviderStreamer,
-};
+/// 供 `exec::delegate` 使用（子 Agent park 到父会话 HITL）。
+pub(crate) use hitl_bridge::{parse_astro_hitl, try_park_parent_hitl};
 pub use multi_turn::{
     run_multi_turn_stream, run_multi_turn_stream_from_provider, stream_multi_turn,
     stream_multi_turn_from_provider, stream_multi_turn_with_hitl,
 };
-/// 供 `exec::delegate` 使用（子 Agent park 到父会话 HITL）。
-pub(crate) use hitl_bridge::{parse_astro_hitl, try_park_parent_hitl};
+pub use provider::{
+    chat_target_from_provider_config, targets_and_registry_from_primary, ProviderStreamer,
+};
+pub use run_state::{RunPhase, RunRequirements, RunState};
+pub use traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
+pub use types::{
+    AssistantContentStream, MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent,
+};

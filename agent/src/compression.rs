@@ -156,7 +156,9 @@ impl ToolCompressionManager {
         }
 
         let head_n = stage.head_chars.min(stage.max_compressed_chars);
-        let tail_n = stage.tail_chars.min(stage.max_compressed_chars.saturating_sub(head_n));
+        let tail_n = stage
+            .tail_chars
+            .min(stage.max_compressed_chars.saturating_sub(head_n));
         let head: String = trimmed.chars().take(head_n).collect();
         let tail_vec: Vec<char> = trimmed.chars().rev().take(tail_n).collect();
         let tail: String = tail_vec.into_iter().rev().collect();
@@ -279,10 +281,7 @@ pub fn should_prune_tool_at_stage(stage: CompressionStage, content_chars: usize)
     false
 }
 
-pub fn prune_tool_view(
-    tool_name: Option<&str>,
-    spill_rel: Option<&str>,
-) -> String {
+pub fn prune_tool_view(tool_name: Option<&str>, spill_rel: Option<&str>) -> String {
     common::make_prune_view(tool_name, spill_rel)
 }
 
@@ -302,11 +301,7 @@ mod tests {
         almost.pop();
         assert!(!mgr.should_compress(&almost));
 
-        let mut marked = vec![
-            Message::tool("a"),
-            Message::tool("b"),
-            Message::tool("c"),
-        ];
+        let mut marked = vec![Message::tool("a"), Message::tool("b"), Message::tool("c")];
         for m in &mut marked {
             m.compressed_content = Some("done".into());
         }
@@ -329,10 +324,7 @@ mod tests {
         let big = "x".repeat(2_000);
         let above = vec![Message::tool(&big)];
         assert!(mgr.occupancy_ratio(&above) >= 0.40);
-        assert_eq!(
-            mgr.active_stage(&above).map(|s| s.min_ratio),
-            Some(0.40)
-        );
+        assert_eq!(mgr.active_stage(&above).map(|s| s.min_ratio), Some(0.40));
         assert!(mgr.should_compress(&above));
     }
 
@@ -344,14 +336,9 @@ mod tests {
         // ~3600 chars → ~900 tokens → 90%
         let huge = "x".repeat(3_600);
         let messages = vec![Message::tool(&huge)];
-        assert_eq!(
-            mgr.active_stage(&messages).map(|s| s.min_ratio),
-            Some(0.80)
-        );
+        assert_eq!(mgr.active_stage(&messages).map(|s| s.min_ratio), Some(0.80));
         let stage = mgr.stage_for_compress(&messages).unwrap();
-        let out = mgr
-            .compress_content(Some("search"), &huge, stage)
-            .unwrap();
+        let out = mgr.compress_content(Some("search"), &huge, stage).unwrap();
         assert!(out.contains("stage≥80%"));
         assert!(out.len() < huge.len());
     }

@@ -91,7 +91,9 @@ impl RunState {
             RunPhase::AwaitingHitl => "hitl_waiting",
             RunPhase::Cancelled => "interrupt",
             RunPhase::Error => "error",
-            RunPhase::Finished | RunPhase::StreamingLlm | RunPhase::ExecutingTools
+            RunPhase::Finished
+            | RunPhase::StreamingLlm
+            | RunPhase::ExecutingTools
             | RunPhase::Summarizing => "success",
         }
     }

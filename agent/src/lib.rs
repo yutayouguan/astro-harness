@@ -26,6 +26,8 @@ pub mod timeline;
 
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
+/// Agno 风格模型声明（实现位于 `common`）。
+pub use common::{ModelRole, ModelSpec};
 /// HITL 闸门 re-export。
 #[allow(deprecated)]
 pub use control::hitl::{
@@ -36,8 +38,6 @@ pub use control::hitl::{
 pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
 pub use runtime::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
-/// Agno 风格模型声明（实现位于 `common`）。
-pub use common::{ModelRole, ModelSpec};
 /// 流式 API re-export。
 pub use streaming::{
     run_multi_turn_stream, run_multi_turn_stream_from_provider, stream_multi_turn,

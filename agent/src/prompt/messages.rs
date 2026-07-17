@@ -4,9 +4,7 @@
 //! 并补齐 system 前缀与 tool 角色的 `name` 回溯（Provider 要求 tool 消息关联原调用名）。
 
 use common::message::{Message, MessageContent, Role};
-use providers::trait_::{
-    ChatContentPart, ChatMessage as ProviderMessage, ChatToolCall,
-};
+use providers::trait_::{ChatContentPart, ChatMessage as ProviderMessage, ChatToolCall};
 
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
@@ -77,10 +75,8 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
             }
             MessageContent::Parts(ps) => {
                 let text = message.content_text();
-                let parts: Vec<ChatContentPart> = ps
-                    .iter()
-                    .filter_map(content_part_to_chat)
-                    .collect();
+                let parts: Vec<ChatContentPart> =
+                    ps.iter().filter_map(content_part_to_chat).collect();
                 (text, Some(parts).filter(|v| !v.is_empty()))
             }
         };
@@ -105,9 +101,10 @@ fn content_part_to_chat(p: &common::message::ContentPart) -> Option<ChatContentP
         "text" => Some(ChatContentPart::Text {
             text: p.text.clone().unwrap_or_default(),
         }),
-        "image_url" => p.image_url.as_ref().map(|u| ChatContentPart::ImageUrl {
-            url: u.url.clone(),
-        }),
+        "image_url" => p
+            .image_url
+            .as_ref()
+            .map(|u| ChatContentPart::ImageUrl { url: u.url.clone() }),
         "audio_url" => p.audio_url.as_ref().map(|u| ChatContentPart::AudioUrl {
             url: u.url.clone(),
             mime_type: u.mime_type.clone(),
@@ -259,7 +256,7 @@ mod tests {
                     id: "c1".into(),
                     name: "a".into(),
                     arguments: json!({}),
-                                    signature: None,
+                    signature: None,
                 }],
             ),
             Message::tool("orphan"),
@@ -281,13 +278,13 @@ mod tests {
                         id: "c1".into(),
                         name: "a".into(),
                         arguments: json!({}),
-                                            signature: None,
+                        signature: None,
                     },
                     ToolCall {
                         id: "c2".into(),
                         name: "b".into(),
                         arguments: json!({}),
-                                            signature: None,
+                        signature: None,
                     },
                 ],
             ),
@@ -308,7 +305,7 @@ mod tests {
                 id: "c1".into(),
                 name: "search".into(),
                 arguments: json!({}),
-                            signature: None,
+                signature: None,
             }],
         );
         let mut tool = Message::tool_with_id("c1", "original long result");

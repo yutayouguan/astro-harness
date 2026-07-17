@@ -16,7 +16,12 @@ pub fn sanitize_tool_pairs(messages: &mut Vec<Message>) {
     let mut result_ids = HashSet::new();
     for m in messages.iter() {
         if m.role == Role::Tool {
-            if let Some(id) = m.tool_call_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(id) = m
+                .tool_call_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
                 result_ids.insert(id.to_string());
             }
         }
@@ -46,7 +51,12 @@ pub fn sanitize_tool_pairs(messages: &mut Vec<Message>) {
         if m.role != Role::Tool {
             return true;
         }
-        match m.tool_call_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        match m
+            .tool_call_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             Some(id) => declared_ids.contains(id),
             None => false,
         }
@@ -77,13 +87,13 @@ mod tests {
                         id: "c1".into(),
                         name: "a".into(),
                         arguments: json!({}),
-                                            signature: None,
+                        signature: None,
                     },
                     ToolCall {
                         id: "c2".into(),
                         name: "b".into(),
                         arguments: json!({}),
-                                            signature: None,
+                        signature: None,
                     },
                 ],
             ),
@@ -105,7 +115,7 @@ mod tests {
                 id: "c1".into(),
                 name: "a".into(),
                 arguments: json!({}),
-                            signature: None,
+                signature: None,
             }],
         )];
         sanitize_tool_pairs(&mut msgs);
@@ -122,7 +132,7 @@ mod tests {
                     id: "c1".into(),
                     name: "a".into(),
                     arguments: json!({}),
-                                    signature: None,
+                    signature: None,
                 }],
             ),
             Message::tool_with_id("c1", "ok"),

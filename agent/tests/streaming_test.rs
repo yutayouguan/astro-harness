@@ -91,7 +91,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
                         id: Some("call_1".into()),
                         name: Some("echo".into()),
                         arguments: Some(r#"{"text":"hi"}"#.into()),
-                                            signature: None,
+                        signature: None,
                     }],
                     finish_reason: Some("tool_calls".into()),
                     usage: Some(Usage::from_parts(10, 5)),
@@ -165,9 +165,11 @@ fn cold_start_hydrates_session_messages_from_db() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().to_path_buf();
     {
-        let mut agent =
-            AgentLoop::with_session_id(AgentConfig::with_defaults(path.clone()), "hydrate-me".into())
-                .unwrap();
+        let mut agent = AgentLoop::with_session_id(
+            AgentConfig::with_defaults(path.clone()),
+            "hydrate-me".into(),
+        )
+        .unwrap();
         agent.ensure_session("test").unwrap();
         // 经公开 API 写入：user 落盘 + assistant 镜像
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -221,7 +223,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
                         id: Some("call_persist".into()),
                         name: Some("echo".into()),
                         arguments: Some(r#"{"text":"hi"}"#.into()),
-                                            signature: None,
+                        signature: None,
                     }],
                     finish_reason: Some("tool_calls".into()),
                     usage: Some(Usage::from_parts(10, 5)),
@@ -343,9 +345,11 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     let mut agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
-    agent.hook_bus().register(::hooks::TRANSFORM_LLM_OUTPUT, |_| {
-        ::hooks::HookOutcome::ReplaceText("REPLACED".into())
-    });
+    agent
+        .hook_bus()
+        .register(::hooks::TRANSFORM_LLM_OUTPUT, |_| {
+            ::hooks::HookOutcome::ReplaceText("REPLACED".into())
+        });
     agent
         .session_messages
         .push(common::message::Message::user("say hi"));
@@ -489,7 +493,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
                     arguments: Some(
                         r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
                     ),
-                                    signature: None,
+                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -591,7 +595,8 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         .session_messages
         .iter()
         .filter(|m| {
-            m.role == common::message::Role::User && m.content_str().starts_with("[astro:hook-context]")
+            m.role == common::message::Role::User
+                && m.content_str().starts_with("[astro:hook-context]")
         })
         .collect();
     assert_eq!(
@@ -641,7 +646,6 @@ async fn pause_control_blocks_then_cancels() {
     pause.cancel();
     assert!(!handle.await.unwrap());
 }
-
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cumulative_usage_chunks_use_last_per_round() {
@@ -706,8 +710,7 @@ async fn error_is_followed_by_done() {
     let session = Arc::new(Mutex::new(agent));
     {
         let mut a = session.lock().await;
-        a.session_messages
-            .push(common::message::Message::user("x"));
+        a.session_messages.push(common::message::Message::user("x"));
     }
     struct Boom;
     #[async_trait]
@@ -734,8 +737,12 @@ async fn error_is_followed_by_done() {
     }
     #[async_trait]
     impl AiProvider for Boom {
-        fn name(&self) -> &str { "boom" }
-        fn default_model(&self) -> &str { "x" }
+        fn name(&self) -> &str {
+            "boom"
+        }
+        fn default_model(&self) -> &str {
+            "x"
+        }
     }
     let provider: Arc<dyn AiProvider> = Arc::new(Boom);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -852,10 +859,7 @@ async fn tool_call_delta_and_memory_path() {
             matches!(i, MultiTurnStreamItem::MemoryUpdate { op, .. } if op == "memory")
         }),
         "memory success should emit MemoryUpdate; got: {:?}",
-        items
-            .iter()
-            .map(|i| format!("{i:?}"))
-            .collect::<Vec<_>>()
+        items.iter().map(|i| format!("{i:?}")).collect::<Vec<_>>()
     );
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
@@ -884,7 +888,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
                     arguments: Some(
                         r#"{"title":"Delete?","body":"Really delete the file?"}"#.into(),
                     ),
-                                    signature: None,
+                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -983,10 +987,13 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let captured_pre: Arc<std::sync::Mutex<Option<(Option<String>, String)>>> =
         Arc::new(std::sync::Mutex::new(None));
     let captured_pre2 = Arc::clone(&captured_pre);
-    agent.hook_bus().register(hooks::PRE_APPROVAL_REQUEST, move |payload| {
-        *captured_pre2.lock().unwrap() = Some((payload.message.clone(), payload.detail.clone()));
-        hooks::HookOutcome::Continue
-    });
+    agent
+        .hook_bus()
+        .register(hooks::PRE_APPROVAL_REQUEST, move |payload| {
+            *captured_pre2.lock().unwrap() =
+                Some((payload.message.clone(), payload.detail.clone()));
+            hooks::HookOutcome::Continue
+        });
     let captured_post: Arc<std::sync::Mutex<Option<(Option<String>, String)>>> =
         Arc::new(std::sync::Mutex::new(None));
     let captured_post2 = Arc::clone(&captured_post);
@@ -1014,7 +1021,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
                     id: Some("call_term_allow".into()),
                     name: Some("terminal".into()),
                     arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
-                                    signature: None,
+                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -1101,7 +1108,11 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         .unwrap()
         .clone()
         .expect("pre_approval_request payload captured");
-    assert_eq!(pre.0.as_deref(), Some(cmd), "pre payload.message should be the command");
+    assert_eq!(
+        pre.0.as_deref(),
+        Some(cmd),
+        "pre payload.message should be the command"
+    );
     assert!(
         pre.1.contains("surface=terminal") && pre.1.contains("ask="),
         "pre detail should include surface/ask: {}",
@@ -1113,7 +1124,11 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         .unwrap()
         .clone()
         .expect("post_approval_response payload captured");
-    assert_eq!(post.0.as_deref(), Some(cmd), "post payload.message should be the command");
+    assert_eq!(
+        post.0.as_deref(),
+        Some(cmd),
+        "post payload.message should be the command"
+    );
     assert!(
         post.1.contains("surface=terminal") && post.1.contains("choice=allow"),
         "post detail should include surface/choice=allow: {}",
@@ -1158,7 +1173,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
                     id: Some("call_term_deny".into()),
                     name: Some("terminal".into()),
                     arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
-                                    signature: None,
+                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -1278,7 +1293,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
                     id: Some("call_b".into()),
                     name: Some("echo".into()),
                     arguments: Some(r#"{"text":"x"}"#.into()),
-                                    signature: None,
+                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 usage: Some(Usage::from_parts(5, 2)),

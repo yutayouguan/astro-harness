@@ -21,7 +21,11 @@ impl TimelineBuilder {
         }
         if let Some(last) = self.segments.last_mut() {
             if last.get("type").and_then(|t| t.as_str()) == Some("reasoning") {
-                let text = last.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string()
+                let text = last
+                    .get("text")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("")
+                    .to_string()
                     + delta;
                 last.as_object_mut()
                     .unwrap()
@@ -66,9 +70,11 @@ impl TimelineBuilder {
         if sid.is_empty() {
             return;
         }
-        if let Some(pos) = self.surfaces.iter().position(|s| {
-            s.get("messageId").and_then(|v| v.as_str()) == Some(sid.as_str())
-        }) {
+        if let Some(pos) = self
+            .surfaces
+            .iter()
+            .position(|s| s.get("messageId").and_then(|v| v.as_str()) == Some(sid.as_str()))
+        {
             self.surfaces[pos] = surface;
         } else {
             self.surfaces.push(surface);

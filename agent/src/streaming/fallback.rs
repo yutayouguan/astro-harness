@@ -3,9 +3,7 @@
 use common::ChatTarget;
 use futures::{stream, StreamExt};
 use providers::registry::ProviderRegistry;
-use providers::trait_::{
-    ChatChunk, ChatMessage as ProviderMessage, ChatStream, ProviderConfig,
-};
+use providers::trait_::{ChatChunk, ChatMessage as ProviderMessage, ChatStream, ProviderConfig};
 
 /// 实际命中目标的可观测元数据（写入 usage 等，不改会话默认模型）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,8 +32,7 @@ impl ActiveTargetMeta {
 pub fn is_failover_eligible(err: &anyhow::Error) -> bool {
     let s = err.to_string().to_ascii_lowercase();
 
-    let cancel_like =
-        s.contains("cancelled") || s.contains("canceled") || s.contains("aborted");
+    let cancel_like = s.contains("cancelled") || s.contains("canceled") || s.contains("aborted");
     let rate_limit_like = s.contains("429") || s.contains("rate limit");
     if cancel_like && !rate_limit_like {
         return false;
@@ -112,7 +109,9 @@ pub async fn probe_or_wrap_pre_content(mut stream: ChatStream) -> anyhow::Result
                     .unwrap_or_else(|| "error: unknown".into());
                 return Err(anyhow::anyhow!("{msg}"));
             }
-            Ok(Box::pin(stream::once(async move { Ok(chunk) }).chain(stream)))
+            Ok(Box::pin(
+                stream::once(async move { Ok(chunk) }).chain(stream),
+            ))
         }
     }
 }
@@ -186,28 +185,48 @@ mod tests {
 
     #[test]
     fn failover_eligible_for_429_and_5xx() {
-        assert!(is_failover_eligible(&anyhow::anyhow!("HTTP 429 Too Many Requests")));
-        assert!(is_failover_eligible(&anyhow::anyhow!("status 503 service unavailable")));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "HTTP 429 Too Many Requests"
+        )));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "status 503 service unavailable"
+        )));
         assert!(is_failover_eligible(&anyhow::anyhow!("401 Unauthorized")));
-        assert!(is_failover_eligible(&anyhow::anyhow!("connection reset by peer")));
-        assert!(!is_failover_eligible(&anyhow::anyhow!("HTTP 400 bad request")));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "connection reset by peer"
+        )));
+        assert!(!is_failover_eligible(&anyhow::anyhow!(
+            "HTTP 400 bad request"
+        )));
         assert!(!is_failover_eligible(&anyhow::anyhow!("cancelled by user")));
     }
 
     #[test]
     fn failover_eligible_edge_cases() {
         assert!(is_failover_eligible(&anyhow::anyhow!("403 Forbidden")));
-        assert!(is_failover_eligible(&anyhow::anyhow!("rate limit exceeded")));
-        assert!(is_failover_eligible(&anyhow::anyhow!("tls handshake failure")));
-        assert!(is_failover_eligible(&anyhow::anyhow!("dns resolution failed")));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "rate limit exceeded"
+        )));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "tls handshake failure"
+        )));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "dns resolution failed"
+        )));
         assert!(is_failover_eligible(&anyhow::anyhow!("request timeout")));
-        assert!(is_failover_eligible(&anyhow::anyhow!("HTTP 500 Internal Server Error")));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "HTTP 500 Internal Server Error"
+        )));
         assert!(!is_failover_eligible(&anyhow::anyhow!("aborted by client")));
         assert!(!is_failover_eligible(&anyhow::anyhow!("canceled")));
         // 同时含取消与限流语义 → 仍可切
-        assert!(is_failover_eligible(&anyhow::anyhow!("cancelled: HTTP 429")));
+        assert!(is_failover_eligible(&anyhow::anyhow!(
+            "cancelled: HTTP 429"
+        )));
         // 勿把 ms 超时数字当成 5xx
-        assert!(!is_failover_eligible(&anyhow::anyhow!("waited 5000ms then gave up")));
+        assert!(!is_failover_eligible(&anyhow::anyhow!(
+            "waited 5000ms then gave up"
+        )));
     }
 
     #[tokio::test]

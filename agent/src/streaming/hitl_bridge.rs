@@ -220,8 +220,7 @@ async fn park_astro_hitl_resolution(
         expires_at: String::new(),
         metadata_json: String::new(),
     };
-    let interrupts_json =
-        serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
+    let interrupts_json = serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
     let mut hitl_state = super::run_state::RunState::new();
     hitl_state.await_hitl(super::run_state::RunRequirements::for_hitl_reason(
         &hitl.reason,
@@ -307,7 +306,10 @@ mod child_hitl_tests {
             .await
             .expect("park should return");
 
-        assert!(result.contains("approved") || result.contains("true"), "got {result}");
+        assert!(
+            result.contains("approved") || result.contains("true"),
+            "got {result}"
+        );
         resolve_task.await.unwrap();
 
         // 至少收到 Activity 或 hitl_waiting
@@ -381,7 +383,10 @@ mod child_hitl_tests {
         let result = try_park_parent_hitl("tc-async", hitl, Some("async-parent"))
             .await
             .expect("live park");
-        assert!(result.contains("approved") || result.contains("true"), "got {result}");
+        assert!(
+            result.contains("approved") || result.contains("true"),
+            "got {result}"
+        );
         resolve_task.await.unwrap();
         unregister_live_parent_hitl("async-parent").await;
 

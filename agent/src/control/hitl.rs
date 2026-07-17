@@ -283,11 +283,7 @@ pub fn is_interactive_tool(name: &str) -> bool {
 pub fn is_exclusive_tool(name: &str) -> bool {
     matches!(
         name,
-        "memory"
-            | "session_search"
-            | "pin_context"
-            | "create_agent"
-            | "delegate"
+        "memory" | "session_search" | "pin_context" | "create_agent" | "delegate"
     )
 }
 
@@ -428,9 +424,7 @@ mod tests {
             ..Default::default()
         };
         let rx = gate.begin_wait(interrupt).await;
-        let res = gate
-            .finish_wait("t1", rx, Duration::from_millis(30))
-            .await;
+        let res = gate.finish_wait("t1", rx, Duration::from_millis(30)).await;
         assert_eq!(res.status, "timeout");
         assert!(!gate.is_waiting().await);
     }

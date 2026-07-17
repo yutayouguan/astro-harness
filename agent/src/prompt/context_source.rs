@@ -105,10 +105,7 @@ const LAYER_SEP: &str = "\n\n---\n\n";
 ///
 /// 在已有层上追加时，先预留 [`LAYER_SEP`] 再 `contribute`，避免极限预算下
 /// 内容已扣费却接不上分隔符、或分隔符挤占后续层的不精确行为。
-pub fn assemble_from_sources(
-    budget: &mut ContextBudget,
-    sources: &[&dyn ContextSource],
-) -> String {
+pub fn assemble_from_sources(budget: &mut ContextBudget, sources: &[&dyn ContextSource]) -> String {
     let sep_cost = LAYER_SEP.chars().count();
     let mut layers = Vec::new();
     for src in sources {

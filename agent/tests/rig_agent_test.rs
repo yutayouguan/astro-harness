@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
 use agent::prompt::context::{DynamicContext, StaticContext};
-use agent::runtime::{AgentConfig, AgentLoop, MaxDepthError};
 use agent::prompt::prompt_builder::PromptBuilder;
+use agent::runtime::{AgentConfig, AgentLoop, MaxDepthError};
 use common::message::Message;
 use home::AgentRuntimeConfig;
 use tempfile::TempDir;
@@ -110,10 +110,7 @@ async fn test_agent_builder_from_runtime_config() {
     let (agent, spec) = AgentBuilder::new(dir.path())
         .from_runtime_config(&cfg)
         .static_context(StaticContext::from_workspace_files(
-            "preamble",
-            "mem",
-            "user",
-            "",
+            "preamble", "mem", "user", "",
         ))
         .dynamic_context(4)
         .build()
@@ -220,7 +217,10 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
 
     // 只读操作不应置位
     let _ = agent
-        .handle_tool_call_async("file_ops", &serde_json::json!({"path": ".", "operation": "list"}))
+        .handle_tool_call_async(
+            "file_ops",
+            &serde_json::json!({"path": ".", "operation": "list"}),
+        )
         .await
         .unwrap();
     assert!(!agent.turn_wrote_disk());

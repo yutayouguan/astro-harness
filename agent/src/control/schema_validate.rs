@@ -111,10 +111,7 @@ mod tests {
             "required": ["answers", "value"]
         });
         assert!(validate_against_schema(&schema, &json!({"value": "ok"})).is_err());
-        assert!(
-            validate_against_schema(&schema, &json!({"answers": {}, "value": 1})).is_err()
-        );
-        validate_against_schema(&schema, &json!({"answers": {"q0": "ok"}, "value": "ok"}))
-            .unwrap();
+        assert!(validate_against_schema(&schema, &json!({"answers": {}, "value": 1})).is_err());
+        validate_against_schema(&schema, &json!({"answers": {"q0": "ok"}, "value": "ok"})).unwrap();
     }
 }

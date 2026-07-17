@@ -35,7 +35,11 @@ pub fn tool_summary_prompt(tool_name: &str, content: &str, max_chars: usize) -> 
     )
 }
 
-pub fn make_llm_compress_view(tool_name: Option<&str>, summary: &str, original_chars: usize) -> String {
+pub fn make_llm_compress_view(
+    tool_name: Option<&str>,
+    summary: &str,
+    original_chars: usize,
+) -> String {
     let name = tool_name
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -56,9 +60,9 @@ async fn complete_compaction_chat(
     max_tokens: u32,
 ) -> anyhow::Result<String> {
     let registry = ProviderRegistry::default();
-    let provider = registry.get(&target.backend_id).ok_or_else(|| {
-        anyhow::anyhow!("unsupported compaction backend: {}", target.backend_id)
-    })?;
+    let provider = registry
+        .get(&target.backend_id)
+        .ok_or_else(|| anyhow::anyhow!("unsupported compaction backend: {}", target.backend_id))?;
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {
@@ -113,7 +117,11 @@ pub async fn summarize_tool_result(
     for target in targets.iter().take(2) {
         match complete_compaction_chat(target, &prompt, max_tokens).await {
             Ok(text) => {
-                return Ok(make_llm_compress_view(tool_name, &text, content.chars().count()));
+                return Ok(make_llm_compress_view(
+                    tool_name,
+                    &text,
+                    content.chars().count(),
+                ));
             }
             Err(e) => {
                 warn!(

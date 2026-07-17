@@ -3,8 +3,8 @@
 //! 基于 Tokio `broadcast` 将 token、工具调用、记忆更新等事件推送给多个订阅方（如前端 SSE）。
 //! 发送失败（无订阅者或通道已满）时静默丢弃，避免阻塞 Agent 主循环。
 
-use tokio::sync::broadcast;
 use serde_json::Value;
+use tokio::sync::broadcast;
 
 /// Agent 生命周期内可观测的单次事件。
 #[derive(Debug, Clone)]

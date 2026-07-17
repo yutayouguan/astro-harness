@@ -74,8 +74,7 @@ impl PromptBuilder {
     /// 追加用户画像层。
     pub fn with_user_profile(mut self, user_content: &str) -> Self {
         if !user_content.is_empty() {
-            self.layers
-                .push(format!("# 用户画像\n{}", user_content));
+            self.layers.push(format!("# 用户画像\n{}", user_content));
         }
         self
     }
@@ -83,10 +82,8 @@ impl PromptBuilder {
     /// 追加当日记忆层（mermaid/日文件来源）。
     pub fn with_daily_memory(mut self, daily_content: &str) -> Self {
         if !daily_content.is_empty() {
-            self.layers.push(format!(
-                "# 今日记忆（流水截断）\n{}",
-                daily_content
-            ));
+            self.layers
+                .push(format!("# 今日记忆（流水截断）\n{}", daily_content));
         }
         self
     }
@@ -111,8 +108,7 @@ impl PromptBuilder {
     /// 追加 FTS/向量召回的对话上下文块（标题与 `DynamicContext` 区分）。
     pub fn with_recalled_context(mut self, context: &str) -> Self {
         if !context.is_empty() {
-            self.layers
-                .push(format!("# 召回的对话上下文\n{}", context));
+            self.layers.push(format!("# 召回的对话上下文\n{}", context));
         }
         self
     }

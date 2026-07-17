@@ -18,15 +18,15 @@ use home::{default_memory_dir, AgentRuntimeConfig};
 use orchestration::{
     OrchestrationDb, OrchestrationRow, OrchestrationSpawnRequest, OrchestrationStatus, StepRow,
 };
-use usage::{NewUsageEvent, UsageDb};
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
 use providers::trait_::ProviderConfig;
+use usage::{NewUsageEvent, UsageDb};
 use uuid::Uuid;
 
-use crate::streaming::fallback::try_stream_completion_with_fallback;
-use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 use crate::prompt::messages::to_provider_messages;
+use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
+use crate::streaming::fallback::try_stream_completion_with_fallback;
 
 /// 单步执行超时（秒）
 const STEP_TIMEOUT_SECS: u64 = 120;
@@ -180,7 +180,9 @@ async fn run_step(
     let mut worktree: Option<delegate::WorktreeHandle> = None;
     let mut project_root: Option<std::path::PathBuf> = None;
     if del_cfg.worktree {
-        if let Some(repo) = delegate::resolve_project_root(None).and_then(|p| delegate::find_git_root(&p)) {
+        if let Some(repo) =
+            delegate::resolve_project_root(None).and_then(|p| delegate::find_git_root(&p))
+        {
             match delegate::create_task_worktree(&repo, &step.id) {
                 Ok(handle) => {
                     project_root = Some(handle.path().to_path_buf());
@@ -200,10 +202,7 @@ async fn run_step(
         Some(id) if !id.is_empty() => (id.to_string(), prompt.to_string()),
         _ => {
             // 临时角色：复用父 Agent 工作区，不 create_agent
-            let msg = format!(
-                "Role: {}\nGoal: {}\n\n{}",
-                step.role, orch.goal, prompt
-            );
+            let msg = format!("Role: {}\nGoal: {}\n\n{}", step.role, orch.goal, prompt);
             (orch.parent_agent_id.clone(), msg)
         }
     };
@@ -221,8 +220,7 @@ async fn run_step(
 
     let mut agent = AgentLoop::with_session_id_for_agent(config, sid, &target_agent_id)?;
     agent.set_project_root(project_root);
-    let depth_ctx =
-        home::SpawnDepthCtx::from_caller(req.caller_depth, req.max_spawn_depth);
+    let depth_ctx = home::SpawnDepthCtx::from_caller(req.caller_depth, req.max_spawn_depth);
     crate::exec::delegate::apply_nested_agent_tool_strips_depth_only(
         agent.tool_registry_mut(),
         depth_ctx,
@@ -237,8 +235,7 @@ async fn run_step(
         match turn_result {
             TurnResult::Finished(message) => Ok(message),
             TurnResult::Continue { system_prompt, .. } => {
-                let (output, _) =
-                    run_provider_loop(&mut agent, &system_prompt, depth_ctx).await?;
+                let (output, _) = run_provider_loop(&mut agent, &system_prompt, depth_ctx).await?;
                 Ok(output)
             }
             TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
@@ -273,12 +270,7 @@ fn resolve_creds(
             }
         }
     }
-    (
-        provider,
-        model,
-        req.api_key.clone(),
-        req.base_url.clone(),
-    )
+    (provider, model, req.api_key.clone(), req.base_url.clone())
 }
 
 /// 有效聊天目标：优先 `req.chat_targets`，否则由四字段合成单元素链。
@@ -400,10 +392,9 @@ async fn run_provider_loop(
         }
 
         for call in calls {
-            let mut result = tokio::task::block_in_place(|| {
-                agent.handle_tool_call(&call.name, &call.arguments)
-            })
-            .unwrap_or_else(|e| format!("工具错误: {e}"));
+            let mut result =
+                tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
+                    .unwrap_or_else(|e| format!("工具错误: {e}"));
 
             // 编排后台无 UI：HITL 视为 cancelled，不 park
             if is_orchestration_hitl_payload(&result) {

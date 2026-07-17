@@ -15,25 +15,23 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use ::session::{build_conversation_context, format_recalled_context, NewMessage, SessionStore};
 use common::message::{Message, Role};
-use memory::MemoryManager;
-use ::session::{
-    build_conversation_context, format_recalled_context, NewMessage, SessionStore,
-};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
+use memory::MemoryManager;
 use providers::registry::ProviderRegistry;
 use serde_json::Value;
 use tools::{dispatch_tool, register_all, ToolContext, ToolEntry, ToolRegistry};
 
-use crate::prompt::context::{DynamicContext, StaticContext};
-use crate::prompt::hooks::CancelSignal;
-use crate::prompt::prompt_builder::PromptBuilder;
-use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 use crate::compression::{
     protect_tail_start_index, prune_tool_view, should_prune_tool_at_stage,
     CompressionThrashingGuard, ContextMaintenanceResult, ToolCompressionManager,
     HARD_STAGE_RECOMMEND_COMPACT_RATIO,
 };
+use crate::prompt::context::{DynamicContext, StaticContext};
+use crate::prompt::hooks::CancelSignal;
+use crate::prompt::prompt_builder::PromptBuilder;
+use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 
 pub mod budget;
 mod session;
@@ -207,9 +205,8 @@ impl AgentLoop {
                 }
             });
         });
-        let delegate_runner: delegate::DelegateRunner = Arc::new(|req| {
-            crate::exec::delegate::run_delegate_blocking(req)
-        });
+        let delegate_runner: delegate::DelegateRunner =
+            Arc::new(|req| crate::exec::delegate::run_delegate_blocking(req));
         let async_spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, req| {
             tokio::spawn(async move {
                 let reg = delegate::AsyncDelegateRegistry::global();
@@ -237,9 +234,10 @@ impl AgentLoop {
             delegate::resume_incomplete_async_delegates(&async_spawner_resume);
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 handle.spawn(async move {
-                    if let Err(e) =
-                        crate::exec::orchestration::resume_incomplete_orchestrations(&orch_spawner_resume)
-                            .await
+                    if let Err(e) = crate::exec::orchestration::resume_incomplete_orchestrations(
+                        &orch_spawner_resume,
+                    )
+                    .await
                     {
                         tracing::warn!(error = %e, "orchestration resume failed");
                     }
@@ -331,11 +329,7 @@ impl AgentLoop {
     }
 
     /// 触发插件钩子（UI 观察由进程 `HookRuntime.ui_slot` 承接）。
-    pub fn fire_hook(
-        &self,
-        name: &str,
-        payload: ::hooks::HookPayload,
-    ) -> ::hooks::HookOutcome {
+    pub fn fire_hook(&self, name: &str, payload: ::hooks::HookPayload) -> ::hooks::HookOutcome {
         self.hook_bus.fire(name, &payload)
     }
 
@@ -616,15 +610,16 @@ impl AgentLoop {
     }
 
     fn primary_chat_target(&self) -> common::ChatTarget {
-        self.chat_targets.first().cloned().unwrap_or_else(|| {
-            common::ChatTarget {
+        self.chat_targets
+            .first()
+            .cloned()
+            .unwrap_or_else(|| common::ChatTarget {
                 provider_id: self.chat_provider.clone(),
                 backend_id: self.chat_provider.clone(),
                 model: self.chat_model.clone(),
                 api_key: self.chat_api_key.clone(),
                 base_url: self.chat_base_url.clone(),
-            }
-        })
+            })
     }
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
@@ -644,10 +639,7 @@ impl AgentLoop {
             self.chat_model = primary.model.clone();
             self.chat_api_key = primary.api_key.clone();
             self.chat_base_url = primary.base_url.clone();
-            self.model_spec = Some(common::ModelSpec::new(
-                &primary.backend_id,
-                &primary.model,
-            ));
+            self.model_spec = Some(common::ModelSpec::new(&primary.backend_id, &primary.model));
         }
         self.chat_targets = targets;
     }
@@ -762,8 +754,7 @@ impl AgentLoop {
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
     pub fn reload_tool_gates(&mut self) {
         let agent_id = self.memory.agent_id.clone();
-        self.tool_registry
-            .reload_enabled_from_disk(Some(&agent_id));
+        self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
     }
 
     /// 从磁盘重载 MCP 配置，并将启用工具挂接到 [`ToolRegistry`]。
@@ -855,8 +846,7 @@ impl AgentLoop {
             return Ok(result);
         }
 
-        let manager =
-            ToolCompressionManager::default().with_context_window(self.context_window());
+        let manager = ToolCompressionManager::default().with_context_window(self.context_window());
         let Some(stage) = manager.stage_for_compress(&self.session_messages) else {
             return Ok(result);
         };
@@ -865,8 +855,7 @@ impl AgentLoop {
         result.occupancy_before = manager.occupancy_ratio(&self.session_messages);
 
         let stored = self.sessions.get_messages(&self.session_id)?;
-        let protect_start =
-            protect_tail_start_index(stored.len(), self.config.protect_last_n);
+        let protect_start = protect_tail_start_index(stored.len(), self.config.protect_last_n);
 
         #[derive(Clone)]
         struct CompressCandidate {
@@ -897,9 +886,7 @@ impl AgentLoop {
                 .exists()
                 .then(|| common::spill_path_for_prompt(self.memory_dir(), &spill_path));
 
-            if idx < protect_start
-                && should_prune_tool_at_stage(stage, content.chars().count())
-            {
+            if idx < protect_start && should_prune_tool_at_stage(stage, content.chars().count()) {
                 let current = stored_msg.compressed_content.as_deref().unwrap_or(content);
                 if common::is_externalized_view(current)
                     && current.chars().count() <= stage.max_compressed_chars
@@ -1050,9 +1037,7 @@ impl AgentLoop {
                 dyn_ctx.items.insert(0, pinned);
             }
             if let Some(ref nudge) = self.pending_learning_nudge {
-                dyn_ctx
-                    .items
-                    .insert(0, format!("# 学习提示\n{nudge}"));
+                dyn_ctx.items.insert(0, format!("# 学习提示\n{nudge}"));
             }
             dyn_ctx
         };
@@ -1080,8 +1065,7 @@ impl AgentLoop {
         let guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
         let timestamp = format!("# 当前时间\n{now}");
-        let mut budget =
-            crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
+        let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
         crate::prompt::assemble_system_layers(
             &mut budget,
             &static_ctx,
@@ -1102,7 +1086,10 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let guidance_ts = PromptBuilder::new().with_tool_guidance().with_timestamp().build();
+        let guidance_ts = PromptBuilder::new()
+            .with_tool_guidance()
+            .with_timestamp()
+            .build();
         let mut system_chars = guidance_ts.len();
         for part in [&static_ctx.soul, &static_ctx.identity, &static_ctx.agent_md] {
             system_chars += part.trim().len();
@@ -1110,7 +1097,10 @@ impl AgentLoop {
         let memory_chars = static_ctx.memory.trim().len()
             + static_ctx.user_profile.trim().len()
             + static_ctx.daily.trim().len();
-        let skills_chars = PromptBuilder::new().with_skills_index(&skill_index).build().len();
+        let skills_chars = PromptBuilder::new()
+            .with_skills_index(&skill_index)
+            .build()
+            .len();
         let recall_chars = dynamic_ctx.render().len();
         (system_chars, memory_chars, skills_chars, recall_chars)
     }
@@ -1129,8 +1119,7 @@ impl AgentLoop {
         args: &serde_json::Value,
     ) -> anyhow::Result<String> {
         let agent_id = self.memory.agent_id.clone();
-        self.tool_registry
-            .reload_enabled_from_disk(Some(&agent_id));
+        self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
 
         if is_mcp_tool_name(name) {
             let _ = self.mcp_hub.sync_enablement_from_disk();
@@ -1365,7 +1354,8 @@ impl AgentLoop {
             },
         );
         if name == "delegate" || name == "multi_agent" {
-            self.fire_subagent_stop_from_delegate_result(&raw_result).await;
+            self.fire_subagent_stop_from_delegate_result(&raw_result)
+                .await;
         }
         result
     }
@@ -1390,10 +1380,7 @@ impl AgentLoop {
                 .get("session_id")
                 .and_then(|s| s.as_str())
                 .unwrap_or("unknown");
-            let summary = t
-                .get("summary")
-                .and_then(|s| s.as_str())
-                .unwrap_or("");
+            let summary = t.get("summary").and_then(|s| s.as_str()).unwrap_or("");
             let _ = self.fire_hook(
                 ::hooks::SUBAGENT_STOP,
                 ::hooks::HookPayload {
@@ -1453,6 +1440,15 @@ impl AgentLoop {
         Ok(())
     }
 
+    /// 工具执行后回写最近一条 assistant 的 timeline/surfaces（避免历史丢 A2UI 卡）。
+    pub fn patch_last_assistant_timeline(
+        &self,
+        reasoning_details: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.sessions
+            .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details)
+    }
+
     /// 将 user 角色消息写入记忆与会话镜像。
     ///
     /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：与 `pending_inject_context`
@@ -1497,20 +1493,10 @@ impl AgentLoop {
 
         let mut spill_view: Option<String> = None;
         if content.len() >= common::DEFAULT_SPILL_THRESHOLD_BYTES {
-            match common::write_tool_spill(
-                self.memory_dir(),
-                &self.session_id,
-                msg_id,
-                content,
-            ) {
+            match common::write_tool_spill(self.memory_dir(), &self.session_id, msg_id, content) {
                 Ok(path) => {
                     let rel = common::spill_path_for_prompt(self.memory_dir(), &path);
-                    let view = common::make_spill_view(
-                        tool_name,
-                        &rel,
-                        content.len(),
-                        content,
-                    );
+                    let view = common::make_spill_view(tool_name, &rel, content.len(), content);
                     if self
                         .sessions
                         .update_message_compressed_content(msg_id, Some(&view))
@@ -1692,7 +1678,11 @@ mod tests {
         })
         .to_string();
         let final_result = agent
-            .finalize_tool_call_result("delegate", &serde_json::json!({"ignored": true}), raw_result)
+            .finalize_tool_call_result(
+                "delegate",
+                &serde_json::json!({"ignored": true}),
+                raw_result,
+            )
             .await;
 
         assert_eq!(final_result, "REDACTED");
@@ -1753,7 +1743,10 @@ mod tests {
         agent.set_auxiliary_targets(map);
 
         let smart = agent.auxiliary_targets(common::AuxiliaryTask::SmartApproval);
-        assert_eq!(smart, vec![t("p1", "claude", "opus"), t("p0", "openai", "gpt-5.6")]);
+        assert_eq!(
+            smart,
+            vec![t("p1", "claude", "opus"), t("p0", "openai", "gpt-5.6")]
+        );
 
         // 未配置的任务仍回退主 ChatTarget，不受其它任务配置影响。
         let dreaming = agent.auxiliary_targets(common::AuxiliaryTask::Dreaming);
@@ -1841,4 +1834,3 @@ pub enum TurnResult {
     /// 用户或上层触发了取消。
     Interrupted,
 }
-
