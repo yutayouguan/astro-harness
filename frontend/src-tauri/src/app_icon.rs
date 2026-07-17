@@ -20,6 +20,7 @@ pub const DEFAULT_VARIANT: &str = "blue";
 const VARIANTS: &[(&str, &[u8])] = &[
     ("blue", include_bytes!("../icons/blue.png")),
     ("deep_blue", include_bytes!("../icons/deep_blue.png")),
+    ("black", include_bytes!("../icons/black.png")),
     ("white", include_bytes!("../icons/white.png")),
     ("white_logo", include_bytes!("../icons/white_logo.png")),
 ];
@@ -168,9 +169,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn variants_cover_four_and_decode() {
+    fn variants_cover_all_and_decode() {
         let ids = variant_ids();
-        assert_eq!(ids, ["blue", "deep_blue", "white", "white_logo"]);
+        assert_eq!(ids, ["blue", "deep_blue", "black", "white", "white_logo"]);
         for id in ids {
             assert!(!variant_png(id).is_empty(), "{id} png empty");
             assert!(icon_image(id).is_ok(), "{id} decode failed");

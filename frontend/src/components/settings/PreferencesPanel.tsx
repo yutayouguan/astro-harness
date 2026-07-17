@@ -115,6 +115,8 @@ export default function PreferencesPanel({
         return t("prefs.appIcon.blue");
       case "deep_blue":
         return t("prefs.appIcon.deepBlue");
+      case "black":
+        return t("prefs.appIcon.black");
       case "white":
         return t("prefs.appIcon.white");
       case "white_logo":

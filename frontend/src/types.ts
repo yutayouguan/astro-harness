@@ -260,7 +260,7 @@ export type EvolutionSettingsDto = {
 };
 
 /** 应用图标变体 id（对齐 `app_icon::VARIANTS`） */
-export type AppIconId = "blue" | "deep_blue" | "white" | "white_logo";
+export type AppIconId = "blue" | "deep_blue" | "black" | "white" | "white_logo";
 
 /** 单个图标变体（含 base64 缩略图） */
 export type AppIconOptionDto = {

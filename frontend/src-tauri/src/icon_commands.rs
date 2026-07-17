@@ -65,9 +65,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn options_cover_four_variants_with_data_urls() {
+    fn options_cover_variants_with_data_urls() {
         let opts = build_options();
-        assert_eq!(opts.len(), 4);
+        assert_eq!(opts.len(), 5);
         assert_eq!(opts[0].id, "blue");
         for o in &opts {
             assert!(o.data_url.starts_with("data:image/png;base64,"));
