@@ -1,5 +1,5 @@
 /** 聊天右侧栏（会话 / 上下文等 Tab）。 */
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Bot,
   Layers,
@@ -80,6 +80,8 @@ export default function ChatRightPanel({
 }: Props) {
   const { t } = useI18n();
   const tabs: ChatRightTab[] = ["sessions", "context", "agent"];
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,6 +90,31 @@ export default function ChatRightPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  useLayoutEffect(() => {
+    const root = tabsRef.current;
+    if (!root) return;
+
+    const sync = () => {
+      const active = root.querySelector<HTMLElement>(".chat-right-tab.is-active");
+      if (!active) return;
+      const inset = Math.round(active.offsetWidth * 0.16);
+      setIndicator({
+        left: active.offsetLeft + inset,
+        width: Math.max(0, active.offsetWidth - inset * 2),
+        ready: true,
+      });
+    };
+
+    sync();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    ro?.observe(root);
+    window.addEventListener("resize", sync);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, [tab, t]);
 
   return (
     <>
@@ -113,7 +140,15 @@ export default function ChatRightPanel({
             <X size={14} strokeWidth={1.75} aria-hidden />
           </button>
         </div>
-        <div className="chat-right-tabs" role="tablist">
+        <div className="chat-right-tabs" role="tablist" ref={tabsRef}>
+          <span
+            className={`chat-right-tab-indicator${indicator.ready ? " is-ready" : ""}`}
+            aria-hidden
+            style={{
+              transform: `translateX(${indicator.left}px)`,
+              width: indicator.width,
+            }}
+          />
           {tabs.map((id) => {
             const Icon = TAB_ICONS[id];
             return (
@@ -132,7 +167,12 @@ export default function ChatRightPanel({
           })}
         </div>
         <div className="chat-right-body">
-          <AnimatedSwitch switchKey={tab} className="anim-switch--fill" variant="fade">
+          <AnimatedSwitch
+            switchKey={tab}
+            className="anim-switch--fill"
+            variant="fade"
+            mode="enter"
+          >
             {tab === "sessions" && (
               <ChatSessionList
                 activeSessionId={sessionId}

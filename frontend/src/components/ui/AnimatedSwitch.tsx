@@ -36,6 +36,11 @@ type Props = {
   className?: string;
   /** soft = 淡入淡出 + 轻微位移；fade = 仅透明度 */
   variant?: "soft" | "fade";
+  /**
+   * out-in：先淡出旧内容再换入（默认）
+   * enter：立刻换内容并淡入，避免 Tab 已切、旧内容还在淡出
+   */
+  mode?: "out-in" | "enter";
 };
 
 /**
@@ -47,6 +52,7 @@ export default function AnimatedSwitch({
   children,
   className = "",
   variant = "soft",
+  mode = "out-in",
 }: Props) {
   const reduceMotion = usePrefersReducedMotion();
   const [shown, setShown] = useState(children);
@@ -78,9 +84,16 @@ export default function AnimatedSwitch({
       return;
     }
 
+    if (mode === "enter") {
+      setShownKey(switchKey);
+      setShown(childrenRef.current);
+      setPhase("enter");
+      return;
+    }
+
     if (phaseRef.current === "exit") return;
     setPhase("exit");
-  }, [switchKey, shownKey, reduceMotion]);
+  }, [switchKey, shownKey, reduceMotion, mode]);
 
   useEffect(() => {
     if (phase !== "exit") return;
