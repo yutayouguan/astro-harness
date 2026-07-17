@@ -10,12 +10,15 @@ import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "../../i18n/LocaleContext";
+import { liftHtmlMediaTags } from "../../lib/chat/liftHtmlMediaTags";
 import {
   absolutizeMediaPath,
   resolveMediaSrc,
   stripFileUrl,
 } from "../../lib/media/resolveMediaSrc";
+import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
 import BrokenMedia from "../media/BrokenMedia";
+import GeneratedMediaCard from "../media/GeneratedMediaCard";
 import HtmlPreview from "../media/HtmlPreview";
 import MediaPreview from "../media/MediaPreview";
 
@@ -48,7 +51,22 @@ function childrenToText(children: ReactNode): string {
   return "";
 }
 
-function MarkdownImage({
+function mediaKindFromMarkdown(
+  src: string | undefined,
+  alt: string | undefined,
+): GeneratedMediaKind {
+  const hint = (alt ?? "").trim().toLowerCase();
+  if (hint === "audio" || hint === "video" || hint === "image" || hint === "html") {
+    return hint;
+  }
+  const path = (src ?? "").split("?")[0]?.toLowerCase() ?? "";
+  if (/\.(mp3|wav|m4a|aac|ogg|flac|opus|wma)$/i.test(path)) return "audio";
+  if (/\.(mp4|webm|mov|mkv|m4v|avi)$/i.test(path)) return "video";
+  if (/\.(html?)$/i.test(path)) return "html";
+  return "image";
+}
+
+function MarkdownMedia({
   src,
   alt,
   baseDir,
@@ -57,6 +75,7 @@ function MarkdownImage({
   alt?: string;
   baseDir?: string | null;
 }) {
+  const kind = mediaKindFromMarkdown(src, alt);
   const pathForActions = useMemo(() => {
     const abs = absolutizeMediaPath(src, baseDir);
     if (abs) return abs;
@@ -70,6 +89,17 @@ function MarkdownImage({
 
   if (!resolved || !pathForActions) {
     return <BrokenMedia path={src} />;
+  }
+
+  if (kind === "audio" || kind === "video" || kind === "html") {
+    return (
+      <GeneratedMediaCard
+        kind={kind}
+        path={pathForActions}
+        compact
+        className="msg-md-media-card"
+      />
+    );
   }
 
   return (
@@ -259,7 +289,10 @@ export function ChatMarkdown({
   caret = false,
   mediaBaseDir = null,
 }: Props) {
-  const source = useMemo(() => content.replace(/\r\n/g, "\n"), [content]);
+  const source = useMemo(
+    () => liftHtmlMediaTags(content.replace(/\r\n/g, "\n")),
+    [content],
+  );
 
   if (plain) {
     return (
@@ -287,7 +320,7 @@ export function ChatMarkdown({
             <LocalHtmlLink href={href}>{children}</LocalHtmlLink>
           ),
           img: ({ src, alt }) => (
-            <MarkdownImage src={src} alt={alt} baseDir={mediaBaseDir} />
+            <MarkdownMedia src={src} alt={alt} baseDir={mediaBaseDir} />
           ),
           code: ({ className, children, ...props }) => {
             const text = String(children ?? "");

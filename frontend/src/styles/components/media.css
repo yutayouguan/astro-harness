@@ -895,6 +895,17 @@ html[data-theme="dark"] .gen-media-card .gen-media-card-preview.media-preview {
   max-width: min(100%, 520px);
 }
 
+/* Markdown 内联媒体：audio/video/html → 卡片；图片仍走 MediaPreview */
+.msg-md-media-card {
+  margin: 10px 0;
+  max-width: min(100%, 440px);
+}
+
+.msg-md-media {
+  margin: 8px 0;
+  max-width: min(100%, 520px);
+}
+
 .msg-md-img-wrap img {
   display: block;
   width: 100%;
