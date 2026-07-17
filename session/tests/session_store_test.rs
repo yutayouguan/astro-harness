@@ -153,6 +153,54 @@ fn build_chat_history_folds_tools_into_activities() {
 }
 
 #[test]
+fn build_chat_history_restores_tool_media_json() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "user",
+            content: Some("画一只猫"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "assistant",
+            content: Some(""),
+            tool_calls: Some(serde_json::json!([{
+                "id": "c1", "name": "image_gen",
+                "arguments": {"prompt": "cat"}
+            }])),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    let media = r#"[{"kind":"image","mime_type":"image/jpeg","reference":{"workspace_path":"generated/images/img-1.jpg"},"label":"图片已生成"}]"#;
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "tool",
+            content: Some("图片已生成：generated/images/img-1.jpg"),
+            tool_call_id: Some("c1"),
+            tool_name: Some("image_gen"),
+            media_json: Some(media),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+
+    let ui = store.build_chat_history("s1", 200).unwrap();
+    assert_eq!(ui.len(), 2);
+    assert_eq!(ui[1].activities.len(), 1);
+    let media_val = ui[1].activities[0].media.as_ref().expect("media");
+    let path = media_val[0]["reference"]["workspace_path"]
+        .as_str()
+        .unwrap();
+    assert_eq!(path, "generated/images/img-1.jpg");
+}
+
+#[test]
 fn build_chat_history_restores_timeline() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();

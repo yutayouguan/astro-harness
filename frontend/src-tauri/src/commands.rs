@@ -141,6 +141,58 @@ pub struct ChatHistoryActivityDto {
     pub input: Option<String>,
     pub output: Option<String>,
     pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<ChatHistoryMediaDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatHistoryMediaDto {
+    pub kind: String,
+    pub path: String,
+}
+
+/// 从 `messages.media_json`（MediaAsset 数组）提取 UI 预览用 kind/path。
+fn history_media_from_json(media: Option<&serde_json::Value>) -> Vec<ChatHistoryMediaDto> {
+    let Some(serde_json::Value::Array(arr)) = media else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|item| {
+            let kind = item.get("kind")?.as_str()?;
+            let kind = match kind {
+                "image" | "video" | "audio" | "html" => kind,
+                "file" => {
+                    // 文件类：仅 html 进入内嵌预览
+                    let path = media_ref_path(item.get("reference")?)?;
+                    if path.rsplit('.').next().is_some_and(|e| {
+                        matches!(e.to_ascii_lowercase().as_str(), "html" | "htm")
+                    }) {
+                        "html"
+                    } else {
+                        return None;
+                    }
+                }
+                _ => return None,
+            };
+            let path = media_ref_path(item.get("reference")?)?;
+            if path.is_empty() {
+                return None;
+            }
+            Some(ChatHistoryMediaDto {
+                kind: kind.to_string(),
+                path: path.to_string(),
+            })
+        })
+        .collect()
+}
+
+fn media_ref_path(reference: &serde_json::Value) -> Option<&str> {
+    reference
+        .get("workspace_path")
+        .or_else(|| reference.get("data_url"))
+        .or_else(|| reference.get("remote_uri"))
+        .and_then(|v| v.as_str())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1252,6 +1304,7 @@ pub async fn get_chat_history(
                     input: a.input,
                     output: a.output,
                     status: a.status,
+                    media: history_media_from_json(a.media.as_ref()),
                 })
                 .collect(),
             segments: m.segments,

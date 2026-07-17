@@ -143,6 +143,8 @@ export type ChatHistoryActivityDto = {
   input?: string | null;
   output?: string | null;
   status?: string | null;
+  /** 结构化媒体（来自 messages.media_json）；缺省时前端可从 output 解析 */
+  media?: Array<{ kind: string; path: string }> | null;
 };
 
 /** `get_chat_history` 单条气泡（user / assistant，含 reasoning + activities） */

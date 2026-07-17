@@ -187,6 +187,8 @@ pub struct ChatActivityStored {
     pub input: Option<String>,
     pub output: Option<String>,
     pub status: Option<String>,
+    /// 工具结果结构化媒体（`messages.media_json` 解析后的 JSON 数组）。
+    pub media: Option<Value>,
 }
 
 pub(crate) fn now_epoch_secs() -> Result<f64> {
@@ -386,6 +388,7 @@ pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<Chat
                 input,
                 output: None,
                 status: Some("running".into()),
+                media: None,
             })
         })
         .collect()
@@ -396,11 +399,15 @@ pub(crate) fn attach_tool_output(
     call_id: Option<&str>,
     output: Option<String>,
     tool_name: Option<&str>,
+    media: Option<Value>,
 ) {
     if let Some(cid) = call_id {
         if let Some(act) = assistant.activities.iter_mut().find(|a| a.id == cid) {
             act.output = output;
             act.status = Some("done".into());
+            if media.is_some() {
+                act.media = media;
+            }
             if act.title == "tool" {
                 if let Some(name) = tool_name {
                     act.title = name.to_string();
@@ -423,6 +430,9 @@ pub(crate) fn attach_tool_output(
         }
         act.output = output;
         act.status = Some("done".into());
+        if media.is_some() {
+            act.media = media;
+        }
         return;
     }
     assistant.activities.push(ChatActivityStored {
@@ -432,6 +442,7 @@ pub(crate) fn attach_tool_output(
         input: None,
         output,
         status: Some("done".into()),
+        media,
     });
 }
 

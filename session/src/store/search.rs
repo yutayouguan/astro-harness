@@ -97,9 +97,20 @@ impl SessionStore {
                 "tool" => {
                     let call_id = m.tool_call_id.as_deref();
                     let output = m.content.clone();
+                    let media = m
+                        .media_json
+                        .as_deref()
+                        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                        .filter(|v| matches!(v, Value::Array(a) if !a.is_empty()));
                     if let Some(assistant) = out.iter_mut().rev().find(|msg| msg.role == "assistant")
                     {
-                        attach_tool_output(assistant, call_id, output, m.tool_name.as_deref());
+                        attach_tool_output(
+                            assistant,
+                            call_id,
+                            output,
+                            m.tool_name.as_deref(),
+                            media,
+                        );
                     }
                 }
                 _ => {}
