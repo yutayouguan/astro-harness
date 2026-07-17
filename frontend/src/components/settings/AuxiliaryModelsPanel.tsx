@@ -255,7 +255,7 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
   return (
     <div
       className={`aux-page prefs-page${embedded ? " aux-page-embedded" : ""}`}
-      data-tone="purple"
+      data-tone={embedded ? "blue" : "purple"}
     >
       {!embedded && (
         <section className="prefs-card aux-hero">

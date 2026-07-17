@@ -321,6 +321,10 @@ html[data-theme="dark"] .aux-error {
 
 .aux-page-embedded {
   padding-top: 0;
+  /* 嵌在模型服务页时跟随主 Tab（蓝）主题，不单独用紫 */
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+  --tone-glow: var(--tone-blue-glow);
 }
 
 .aux-muted {

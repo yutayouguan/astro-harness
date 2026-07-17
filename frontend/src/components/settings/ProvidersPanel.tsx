@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   Box,
+  Bot,
   Eye,
   EyeOff,
   Globe,
@@ -32,6 +33,7 @@ import {
   Trash2,
   Waypoints,
   Wrench,
+  Zap,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -1283,6 +1285,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           className={`providers-page-tab ${pageTab === "providers" ? "is-active" : ""}`}
           onClick={() => setPageTab("providers")}
         >
+          <Zap size={14} strokeWidth={2.2} aria-hidden />
           {t("providers.tabProviders")}
         </button>
         <button
@@ -1292,6 +1295,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           className={`providers-page-tab ${pageTab === "auxiliary" ? "is-active" : ""}`}
           onClick={() => setPageTab("auxiliary")}
         >
+          <Bot size={14} strokeWidth={2.2} aria-hidden />
           {t("providers.tabAuxiliary")}
         </button>
       </div>
