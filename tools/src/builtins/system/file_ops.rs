@@ -24,20 +24,36 @@ const MAX_LIST_ENTRIES: usize = 500;
 /// `list` 输出总字节软上限（与 read 对齐，避免目录名爆炸撑爆上下文）。
 const MAX_LIST_BYTES: usize = 64 * 1024;
 
+/// `search` 最多返回的命中条数。
+const MAX_SEARCH_HITS: usize = 50;
+
+/// `search` 输出总字节软上限。
+const MAX_SEARCH_BYTES: usize = 64 * 1024;
+
+/// `search` 扫描单文件内容的大小上限（更大则只匹配文件名）。
+const MAX_SEARCH_FILE_BYTES: u64 = 1024 * 1024;
+
+/// 递归搜索时最多访问的文件数（防超大目录拖垮）。
+const MAX_SEARCH_FILES_SCANNED: usize = 2000;
+
 /// `file_ops` 工具的参数结构。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct FileOpsArgs {
     /// 相对于工作区的路径。
     pub path: String,
-    /// 操作类型：`read` | `write` | `append` | `list` | `delete` | `mkdir`。
+    /// 操作类型：`read` | `write` | `append` | `list` | `delete` | `mkdir` | `search`。
     pub operation: String,
     /// `write` / `append` 时写入的内容；`write` 必填，`append` 可省略则报错。
     #[serde(default)]
     pub content: Option<String>,
+    /// `search` 时的查询串（文件名或文件内容子串，大小写不敏感）。也可用 `content` 代替。
+    #[serde(default)]
+    pub query: Option<String>,
     /// `read` 时从该字节偏移开始读（默认 0）；用于大文件分段续读。
     #[serde(default)]
     pub offset: Option<u64>,
     /// `read` 时本次最多读取的字节数；超过 [`MAX_READ_BYTES`] 会被钳制。
+    /// `search` 时表示最多返回命中数（默认/上限 [`MAX_SEARCH_HITS`]）。
     #[serde(default)]
     pub limit: Option<usize>,
     /// `delete` 目录时：为 `true` 才整树删除；默认仅删空目录。
@@ -50,9 +66,10 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "file_ops".to_string(),
         toolset: "file_ops".to_string(),
-        description: "Read, write, append, list, mkdir, or delete files under project_root when set (delegated worktree), else the agent memory workspace. \
+        description: "Read, write, append, list, mkdir, delete, or search files under project_root when set (delegated worktree), else the agent memory workspace. \
              read returns at most 64KiB UTF-8 (use offset/limit to continue). \
              list caps at 500 entries / 64KiB and marks dirs with '/'. \
+             search finds filenames or text content under path (query required; case-insensitive; caps hits/bytes). \
              delete refuses workspace root; directories need recursive=true to remove trees."
             .to_string(),
         schema: schema_for_args::<FileOpsArgs>(),
@@ -105,6 +122,20 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             Ok(format!("已追加 {rel}"))
         }
         "list" => list_dir_capped(&full, root),
+        "search" => {
+            let query = parsed
+                .query
+                .as_deref()
+                .or(parsed.content.as_deref())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("search 需要 query（或 content）参数"))?;
+            let max_hits = parsed
+                .limit
+                .unwrap_or(MAX_SEARCH_HITS)
+                .clamp(1, MAX_SEARCH_HITS);
+            search_under(&full, root, query, max_hits)
+        }
         "delete" => delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false)),
         "mkdir" => {
             std::fs::create_dir_all(&full)?;
@@ -231,6 +262,178 @@ fn list_dir_capped(full: &Path, workspace: &Path) -> anyhow::Result<String> {
         shown += 1;
     }
     Ok(out)
+}
+
+/// 在 `start`（文件或目录）下搜索文件名 / 文本内容。
+fn search_under(
+    start: &Path,
+    workspace: &Path,
+    query: &str,
+    max_hits: usize,
+) -> anyhow::Result<String> {
+    let needle = query.to_lowercase();
+    let root = if start.is_dir() {
+        start.to_path_buf()
+    } else if start.is_file() {
+        // 单文件：只扫这一份
+        return search_one_file(start, workspace, &needle).map(|hit| {
+            hit.unwrap_or_else(|| format!("未找到匹配「{query}」"))
+        });
+    } else {
+        anyhow::bail!("路径不存在: {}", display_rel(workspace, start));
+    };
+
+    let mut hits: Vec<String> = Vec::new();
+    let mut scanned = 0usize;
+    let mut truncated = false;
+    let mut stack = vec![root];
+
+    while let Some(dir) = stack.pop() {
+        if hits.len() >= max_hits || scanned >= MAX_SEARCH_FILES_SCANNED {
+            truncated = true;
+            break;
+        }
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            if hits.len() >= max_hits || scanned >= MAX_SEARCH_FILES_SCANNED {
+                truncated = true;
+                break;
+            }
+            let path = entry.path();
+            let Ok(ft) = entry.file_type() else {
+                continue;
+            };
+            if ft.is_symlink() {
+                continue;
+            }
+            if ft.is_dir() {
+                // 跳过常见噪音目录
+                let name = entry.file_name().to_string_lossy().to_string();
+                if matches!(
+                    name.as_str(),
+                    "node_modules" | ".git" | "target" | ".astro" | "dist" | "build" | ".venv"
+                ) {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            if !ft.is_file() {
+                continue;
+            }
+            scanned += 1;
+            if let Some(hit) = search_one_file(&path, workspace, &needle)? {
+                hits.push(hit);
+            }
+        }
+    }
+
+    if hits.is_empty() {
+        return Ok(format!(
+            "未找到匹配「{query}」（已扫描 {scanned} 个文件）"
+        ));
+    }
+
+    let mut out = format!("找到 {} 处匹配「{query}」:\n", hits.len());
+    for hit in &hits {
+        let line = format!("\n{hit}");
+        if out.len() + line.len() > MAX_SEARCH_BYTES {
+            truncated = true;
+            break;
+        }
+        out.push_str(&line);
+    }
+    if truncated {
+        out.push_str(&format!(
+            "\n\n[truncated] scanned={scanned}, hits={}, caps: {max_hits} hits / {MAX_SEARCH_FILES_SCANNED} files / {MAX_SEARCH_BYTES} bytes. Narrow path or query."
+            , hits.len().min(max_hits)
+        ));
+    }
+    Ok(out)
+}
+
+fn search_one_file(
+    path: &Path,
+    workspace: &Path,
+    needle_lower: &str,
+) -> anyhow::Result<Option<String>> {
+    let rel = display_rel(workspace, path);
+    let name_hit = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.to_lowercase().contains(needle_lower))
+        .unwrap_or(false)
+        || rel.to_lowercase().contains(needle_lower);
+
+    let meta = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
+    if meta.len() > MAX_SEARCH_FILE_BYTES {
+        return Ok(if name_hit {
+            Some(format!("{rel}  (filename match; file >1MiB, content skipped)"))
+        } else {
+            None
+        });
+    }
+
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(_) => {
+            return Ok(if name_hit {
+                Some(format!("{rel}  (filename match)"))
+            } else {
+                None
+            })
+        }
+    };
+    // 粗略跳过明显二进制
+    if bytes.iter().take(512).any(|&b| b == 0) {
+        return Ok(if name_hit {
+            Some(format!("{rel}  (filename match; binary skipped)"))
+        } else {
+            None
+        });
+    }
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        return Ok(if name_hit {
+            Some(format!("{rel}  (filename match; non-utf8 skipped)"))
+        } else {
+            None
+        });
+    };
+
+    let mut line_hits: Vec<String> = Vec::new();
+    for (idx, line) in text.lines().enumerate() {
+        if line.to_lowercase().contains(needle_lower) {
+            let trimmed = line.trim();
+            let snippet = if trimmed.chars().count() > 160 {
+                let s: String = trimmed.chars().take(160).collect();
+                format!("{s}…")
+            } else {
+                trimmed.to_string()
+            };
+            line_hits.push(format!("L{}: {snippet}", idx + 1));
+            if line_hits.len() >= 5 {
+                break;
+            }
+        }
+    }
+
+    if line_hits.is_empty() {
+        return Ok(if name_hit {
+            Some(format!("{rel}  (filename match)"))
+        } else {
+            None
+        });
+    }
+
+    Ok(Some(format!("{rel}\n  {}", line_hits.join("\n  "))))
 }
 
 fn delete_path(
@@ -416,5 +619,30 @@ mod tests {
         assert!(err.to_string().contains("recursive"));
         delete_path(&nested, dir.path(), "nest", true).unwrap();
         assert!(!nested.exists());
+    }
+
+    #[test]
+    fn search_matches_filename_and_content() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("src")).unwrap();
+        fs::write(dir.path().join("src/hello.rs"), "fn main() { todo_marker(); }\n").unwrap();
+        fs::write(dir.path().join("readme.md"), "no hit here\n").unwrap();
+        fs::write(dir.path().join("todo_notes.txt"), "filename only\n").unwrap();
+
+        let out = search_under(dir.path(), dir.path(), "todo_marker", 20).unwrap();
+        assert!(out.contains("src/hello.rs") || out.contains("src\\hello.rs"));
+        assert!(out.contains("L1:"));
+
+        let by_name = search_under(dir.path(), dir.path(), "todo_notes", 20).unwrap();
+        assert!(by_name.contains("todo_notes.txt"));
+        assert!(by_name.contains("filename match"));
+    }
+
+    #[test]
+    fn search_empty_query_path_missing_handled_by_dispatch_contract() {
+        let dir = TempDir::new().unwrap();
+        let missing = dir.path().join("nope");
+        let err = search_under(&missing, dir.path(), "x", 10).unwrap_err();
+        assert!(err.to_string().contains("不存在"));
     }
 }
