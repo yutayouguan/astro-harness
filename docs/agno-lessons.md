@@ -32,7 +32,8 @@
 - 生成工具（`image_gen` / `tts` / `video_gen` / `music_gen`）附加 `astro_media_v1:` sidecar
 - 流事件 `MultiTurnStreamItem::ToolResult.media` → proto `ToolCallEvent.media` → Tauri/UI
 - 前端 `MsgActivity` 优先用结构化 `activity.media`，回落 `parseGeneratedMedia`（含 sidecar）
-- **未做**：改写 `ChatContentPart` 支持 audio/video 进 LLM；用户附图 `media_json` 列持久化（hydrate 仅从 tool sidecar 提取；见 Review）
+- session schema **v15** `messages.media_json`：用户附图 / 工具媒体落盘；hydrate 优先读列，tool 回落 sidecar
+- **未做**：改写 `ChatContentPart` 支持 audio/video 二进制进 LLM（仍用 Parts/data URL 与文本摘要）
 
 ## 二、统一工具调用与 Agent 生命周期
 

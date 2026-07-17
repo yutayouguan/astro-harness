@@ -43,6 +43,7 @@ fn append_and_reload_tool_calls_and_reasoning() {
             reasoning_details: None,
             codex_reasoning_items: None,
             codex_message_items: None,
+            media_json: None,
         })
         .unwrap();
     store
@@ -60,6 +61,7 @@ fn append_and_reload_tool_calls_and_reasoning() {
             reasoning_details: None,
             codex_reasoning_items: None,
             codex_message_items: None,
+            media_json: None,
         })
         .unwrap();
 
@@ -1276,4 +1278,71 @@ fn first_turn_text_returns_none_without_assistant() {
         .unwrap();
 
     assert!(store.first_turn_text("s1").unwrap().is_none());
+}
+
+#[test]
+fn append_and_reload_media_json() {
+    let (_dir, store) = test_store();
+    store.create_session("s1", "test", None, None, None).unwrap();
+    let media = r#"[{"kind":"image","mime_type":"image/png","reference":{"data_url":"data:image/png;base64,abc"}}]"#;
+    store
+        .append_message(NewMessage {
+            content: Some("see pic"),
+            media_json: Some(media),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    let msgs = store.get_messages("s1").unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0].media_json.as_deref(), Some(media));
+}
+
+#[test]
+fn v14_to_v15_adds_media_json_without_data_loss() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+             CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                started_at REAL NOT NULL,
+                message_count INTEGER DEFAULT 0,
+                tool_call_count INTEGER DEFAULT 0,
+                archived_at REAL
+             );
+             CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT,
+                compressed_content TEXT,
+                tool_call_id TEXT,
+                tool_calls TEXT,
+                tool_name TEXT,
+                timestamp REAL NOT NULL,
+                token_count INTEGER,
+                finish_reason TEXT,
+                reasoning TEXT,
+                reasoning_content TEXT,
+                reasoning_details TEXT,
+                codex_reasoning_items TEXT,
+                codex_message_items TEXT
+             );
+             INSERT INTO schema_version (version) VALUES (14);
+             INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
+             VALUES ('s1', 'test', 1.0, 1, 0);
+             INSERT INTO messages (session_id, role, content, timestamp)
+             VALUES ('s1', 'user', 'hello v14', 1.0);",
+        )
+        .unwrap();
+    }
+    let store = SessionStore::open(&path).unwrap();
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+    let msgs = store.get_messages("s1").unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0].content.as_deref(), Some("hello v14"));
+    assert!(msgs[0].media_json.is_none());
 }

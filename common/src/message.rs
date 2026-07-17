@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::media::MediaAsset;
+use crate::media::{MediaAsset, MediaKind};
 
 /// 消息角色。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -205,7 +205,19 @@ impl Message {
             compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
-            media: Vec::new(),
+            media: image_data_urls
+                .iter()
+                .map(|u| u.trim())
+                .filter(|u| !u.is_empty())
+                .map(|u| {
+                    let mime = u
+                        .strip_prefix("data:")
+                        .and_then(|rest| rest.split(';').next())
+                        .unwrap_or("image/*")
+                        .to_string();
+                    MediaAsset::data_url(MediaKind::Image, u, mime)
+                })
+                .collect(),
         }
     }
 

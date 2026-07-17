@@ -1064,17 +1064,25 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
+        let (_, media) = common::extract_tool_media(content);
+        let media_owned = if media.is_empty() {
+            None
+        } else {
+            Some(serde_json::to_string(&media)?)
+        };
         self.sessions.ensure_session(&self.session_id, "tauri")?;
         self.sessions.append_message(NewMessage {
             content: Some(content),
             tool_call_id,
             tool_name,
+            media_json: media_owned.as_deref(),
             ..NewMessage::empty(&self.session_id, "tool")
         })?;
-        let msg = match tool_call_id {
+        let mut msg = match tool_call_id {
             Some(id) if !id.is_empty() => Message::tool_with_id(id, content),
             _ => Message::tool(content),
         };
+        msg.media = media;
         self.session_messages.push(msg);
         Ok(())
     }
@@ -1093,7 +1101,7 @@ impl AgentLoop {
 
     /// 同 [`Self::run_turn`]，附带本轮图片 data URL（`data:image/...;base64,...`）。
     ///
-    /// FTS / `record_message` 仍只记文本；图片只进内存 `session_messages` 的 Parts。
+    /// FTS 仍只索引文本；附图写入 `messages.media_json` 并进入内存 `session_messages`。
     pub async fn run_turn_with_images(
         &mut self,
         user_message: &str,
@@ -1111,8 +1119,27 @@ impl AgentLoop {
         self.reload_tools_and_mcp().await;
 
         self.sessions.ensure_session(&self.session_id, "tauri")?;
+        let media_assets: Vec<common::MediaAsset> = image_data_urls
+            .iter()
+            .map(|u| u.trim())
+            .filter(|u| !u.is_empty())
+            .map(|u| {
+                let mime = u
+                    .strip_prefix("data:")
+                    .and_then(|rest| rest.split(';').next())
+                    .unwrap_or("image/*")
+                    .to_string();
+                common::MediaAsset::data_url(common::MediaKind::Image, u, mime)
+            })
+            .collect();
+        let media_owned = if media_assets.is_empty() {
+            None
+        } else {
+            Some(serde_json::to_string(&media_assets)?)
+        };
         self.sessions.append_message(NewMessage {
             content: Some(user_message),
+            media_json: media_owned.as_deref(),
             ..NewMessage::empty(&self.session_id, "user")
         })?;
 

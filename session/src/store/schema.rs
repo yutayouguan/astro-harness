@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 14;
+pub const SCHEMA_VERSION: i32 = 15;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL,
     content TEXT,
     compressed_content TEXT,
+    media_json TEXT,
     tool_call_id TEXT,
     tool_calls TEXT,
     tool_name TEXT,
@@ -128,6 +129,7 @@ impl SessionStore {
         // 版本已到也要自愈缺列，避免「stamp=14 但列缺失」的半迁移库。
         if self.table_exists("messages")? {
             self.ensure_messages_compressed_content_column()?;
+            self.ensure_messages_media_json_column()?;
         }
         if self.table_exists("sessions")? && !self.column_exists("sessions", "archived_at")? {
             self.conn
@@ -147,6 +149,19 @@ impl SessionStore {
                 "ALTER TABLE messages ADD COLUMN compressed_content TEXT",
                 [],
             )?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn ensure_messages_media_json_column(&self) -> Result<()> {
+        let exists: bool = self.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('messages') WHERE name = 'media_json'",
+            [],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            self.conn
+                .execute("ALTER TABLE messages ADD COLUMN media_json TEXT", [])?;
         }
         Ok(())
     }

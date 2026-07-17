@@ -1,4 +1,4 @@
-//! 单库会话存储（schema v14）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
+//! 单库会话存储（schema v15）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
 mod schema;
 mod sessions;
@@ -67,6 +67,8 @@ pub struct NewMessage<'a> {
     pub reasoning_details: Option<Value>,
     pub codex_reasoning_items: Option<Value>,
     pub codex_message_items: Option<Value>,
+    /// 结构化媒体 JSON 数组（`MediaAsset[]`）；空则不写列。
+    pub media_json: Option<&'a str>,
 }
 
 impl<'a> NewMessage<'a> {
@@ -86,6 +88,7 @@ impl<'a> NewMessage<'a> {
             reasoning_details: None,
             codex_reasoning_items: None,
             codex_message_items: None,
+            media_json: None,
         }
     }
 }
@@ -109,6 +112,8 @@ pub struct StoredMessage {
     pub reasoning_details: Option<Value>,
     pub codex_reasoning_items: Option<Value>,
     pub codex_message_items: Option<Value>,
+    /// 结构化媒体 JSON 数组字符串。
+    pub media_json: Option<String>,
 }
 
 /// 从库中读出的会话元数据行。
@@ -221,8 +226,10 @@ impl SessionStore {
         }
         if path.exists() {
             let version = peek_schema_version(path).unwrap_or(0);
-            // v13→v14 仅新增 messages.compressed_content，可就地 ALTER，不必丢历史。
-            let additive_only = version == 13 && SCHEMA_VERSION == 14;
+            // v13→v14 / v14→v15 为 additive ALTER，可就地升级，不必丢历史。
+            let additive_only = (version == 13 && SCHEMA_VERSION >= 14)
+                || (version == 14 && SCHEMA_VERSION == 15)
+                || (version == 13 && SCHEMA_VERSION == 15);
             if version < SCHEMA_VERSION && !additive_only {
                 tracing::warn!(
                     version,

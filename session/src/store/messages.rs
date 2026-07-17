@@ -22,12 +22,12 @@ impl SessionStore {
                 session_id, role, content, tool_call_id, tool_calls, tool_name,
                 timestamp, token_count, finish_reason,
                 reasoning, reasoning_content, reasoning_details,
-                codex_reasoning_items, codex_message_items
+                codex_reasoning_items, codex_message_items, media_json
              ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6,
                 ?7, ?8, ?9,
                 ?10, ?11, ?12,
-                ?13, ?14
+                ?13, ?14, ?15
              )",
             params![
                 msg.session_id,
@@ -44,6 +44,7 @@ impl SessionStore {
                 reasoning_details,
                 codex_reasoning_items,
                 codex_message_items,
+                msg.media_json,
             ],
         )?;
         let id = tx.last_insert_rowid();
@@ -73,7 +74,7 @@ impl SessionStore {
             "SELECT id, session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
-                    codex_reasoning_items, codex_message_items
+                    codex_reasoning_items, codex_message_items, media_json
              FROM messages
              WHERE session_id = ?1
              ORDER BY timestamp ASC, id ASC",
@@ -96,6 +97,7 @@ impl SessionStore {
                 row.get::<_, Option<String>>(13)?,
                 row.get::<_, Option<String>>(14)?,
                 row.get::<_, Option<String>>(15)?,
+                row.get::<_, Option<String>>(16)?,
             ))
         })?;
 
@@ -118,6 +120,7 @@ impl SessionStore {
                 reasoning_details_raw,
                 codex_reasoning_items_raw,
                 codex_message_items_raw,
+                media_json,
             ) = row?;
             out.push(StoredMessage {
                 id,
@@ -136,6 +139,7 @@ impl SessionStore {
                 reasoning_details: json_from_db(reasoning_details_raw)?,
                 codex_reasoning_items: json_from_db(codex_reasoning_items_raw)?,
                 codex_message_items: json_from_db(codex_message_items_raw)?,
+                media_json,
             });
         }
         Ok(out)
@@ -202,12 +206,12 @@ impl SessionStore {
                     session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
-                    codex_reasoning_items, codex_message_items
+                    codex_reasoning_items, codex_message_items, media_json
                  ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                     ?8, ?9, ?10,
                     ?11, ?12, ?13,
-                    ?14, ?15
+                    ?14, ?15, ?16
                  )",
                 params![
                     new_id,
@@ -225,6 +229,7 @@ impl SessionStore {
                     reasoning_details,
                     codex_reasoning_items,
                     codex_message_items,
+                    m.media_json,
                 ],
             )?;
             message_count += 1;
@@ -422,12 +427,12 @@ impl SessionStore {
                             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                             timestamp, token_count, finish_reason,
                             reasoning, reasoning_content, reasoning_details,
-                            codex_reasoning_items, codex_message_items
+                            codex_reasoning_items, codex_message_items, media_json
                          ) VALUES (
                             ?1, ?2, ?3, ?4, ?5, ?6, ?7,
                             ?8, ?9, ?10,
                             ?11, ?12, ?13,
-                            ?14, ?15
+                            ?14, ?15, ?16
                          )",
                         params![
                             new_id,
@@ -445,6 +450,7 @@ impl SessionStore {
                             reasoning_details,
                             codex_reasoning_items,
                             codex_message_items,
+                            m.media_json,
                         ],
                     )?;
                     message_count += 1;

@@ -24,7 +24,7 @@
 | R1 | 中 | 并发工具失败路径未写 DecisionLog | `run_tool_on_snapshot` 写 DecisionLog | **已修**（首轮） |
 | R9 | **高** | §四把 `pending_inject_context` 编进 `build_system_prompt`，与 `take_inject_context`→`[astro:hook-context]` user 消息**双重注入** | `build_system_prompt` 对 inject 传 `None`；协议层仍支持 inject 参数供测试 | **已修**（本轮） |
 | R5 | 低 | Knowledge FTS `MATCH` 特殊字符易失败 | MATCH 失败回退 title/path `LIKE` | **已修**（本轮） |
-| R2 | 中 | 用户附图未落 `messages.media_json`；hydrate 仅 tool sidecar | schema v15 + NewMessage/StoredMessage + hydrate | **记债** |
+| R2 | 中 | 用户附图未落 `messages.media_json`；hydrate 仅 tool sidecar | schema v15 + NewMessage/StoredMessage + hydrate | **已修**（本轮） |
 | R3 | 低 | `ChatContentPart` 不支持 audio/video 入模 | Provider 原生多模态后再做 | **记债** |
 | R4 | 低 | `SqliteStore` 仅 Example，未挂真实 UsageDb/KnowledgeDb | 各库缓存 path 后 `impl` | **记债** |
 | R6 | 信息 | EntityMemory / Always / embedding / Postgres | 文档「不必 / P4」 | **不做** |

@@ -22,7 +22,35 @@ pub fn hydrate_session_messages(
 fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Option<Message>> {
     let content = m.content.unwrap_or_default();
     let mut msg = match m.role.as_str() {
-        "user" => Message::user(&content),
+        "user" => {
+            // 优先从 media_json 还原附图；否则纯文本
+            let media = parse_media_json(m.media_json.as_deref());
+            if media.is_empty() {
+                Message::user(&content)
+            } else {
+                let urls: Vec<String> = media
+                    .iter()
+                    .filter_map(|a| match &a.reference {
+                        common::MediaRef::DataUrl(u) => Some(u.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                if urls.is_empty() {
+                    let mut msg = Message::user(&content);
+                    msg.media = media;
+                    msg
+                } else {
+                    let mut msg = Message::user_with_images(&content, &urls);
+                    // 保留非 data-url 附件（workspace/remote）
+                    for a in media {
+                        if !matches!(a.reference, common::MediaRef::DataUrl(_)) {
+                            msg.media.push(a);
+                        }
+                    }
+                    msg
+                }
+            }
+        }
         "system" => Message::system(&content),
         "assistant" => {
             let tool_calls: Option<Vec<common::message::ToolCall>> = match m.tool_calls {
@@ -39,8 +67,13 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
                 Some(id) => Message::tool_with_id(id, &content),
                 None => Message::tool(&content),
             };
-            let (_, media) = common::extract_tool_media(&content);
-            msg.media = media;
+            let from_col = parse_media_json(m.media_json.as_deref());
+            if !from_col.is_empty() {
+                msg.media = from_col;
+            } else {
+                let (_, media) = common::extract_tool_media(&content);
+                msg.media = media;
+            }
             msg
         }
         other => {
@@ -49,7 +82,24 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
         }
     };
     msg.compressed_content = m.compressed_content;
+    // assistant 等角色若带 media_json 也还原
+    if msg.media.is_empty() {
+        let media = parse_media_json(m.media_json.as_deref());
+        if !media.is_empty() {
+            msg.media = media;
+        }
+    }
     Ok(Some(msg))
+}
+
+fn parse_media_json(raw: Option<&str>) -> Vec<common::MediaAsset> {
+    let Some(s) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Vec::new();
+    };
+    serde_json::from_str(s).unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "skip invalid media_json on hydrate");
+        Vec::new()
+    })
 }
 
 /// 会话级项目根：`ASTRO_SESSION_WORKTREE=1` 且存在 `ASTRO_PROJECT_ROOT`（或 cwd git root）时启用。
