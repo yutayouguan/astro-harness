@@ -10,8 +10,7 @@ use std::sync::OnceLock;
 
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
-    filter::LevelFilter,
-    fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
+    filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
 };
 
 use crate::workspace::default_memory_dir;

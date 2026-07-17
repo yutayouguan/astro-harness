@@ -192,8 +192,8 @@ pub const AUTO_LUCIDE_ICONS: &[AutoLucideIcon] = &[
 ];
 
 const COLORS: &[&str] = &[
-    "#2563eb", "#0891b2", "#0d9488", "#16a34a", "#d97706", "#ea580c",
-    "#dc2626", "#db2777", "#7c3aed", "#4f46e5", "#0f172a", "#65a30d",
+    "#2563eb", "#0891b2", "#0d9488", "#16a34a", "#d97706", "#ea580c", "#dc2626", "#db2777",
+    "#7c3aed", "#4f46e5", "#0f172a", "#65a30d",
 ];
 
 fn hash_seed(s: &str) -> usize {
@@ -251,13 +251,18 @@ fn color_for(name: &str) -> &'static str {
 pub fn lucide_svg_bytes(icon_id: &str, name_for_color: &str) -> Option<Vec<u8>> {
     let item = AUTO_LUCIDE_ICONS.iter().find(|i| i.id == icon_id)?;
     let color = color_for(name_for_color);
-    let inner = item.inner_svg.replace("#2563eb", color).replace("currentColor", color);
+    let inner = item
+        .inner_svg
+        .replace("#2563eb", color)
+        .replace("currentColor", color);
     let svg = format!(
         concat!(
-            r#"<?xml version="1.0" encoding="UTF-8"?>"#, "\n",
+            r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+            "\n",
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" "#,
             r#"viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" "#,
-            r#"stroke-linecap="round" stroke-linejoin="round">"#, "{inner}</svg>"
+            r#"stroke-linecap="round" stroke-linejoin="round">"#,
+            "{inner}</svg>"
         ),
         color = color,
         inner = inner,
@@ -278,11 +283,7 @@ pub fn apply_auto_lucide_icon(
     if assets.is_dir() {
         if let Ok(entries) = std::fs::read_dir(&assets) {
             for entry in entries.flatten() {
-                if entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("emoji.")
-                {
+                if entry.file_name().to_string_lossy().starts_with("emoji.") {
                     return Ok(None);
                 }
             }
@@ -304,14 +305,21 @@ mod tests {
 
     #[test]
     fn suggests_code_for_dev_names() {
-        assert_eq!(suggest_lucide_icon_id("代码助手", "帮我写 Rust", ""), "code-2");
+        assert_eq!(
+            suggest_lucide_icon_id("代码助手", "帮我写 Rust", ""),
+            "code-2"
+        );
     }
 
     #[test]
     fn writes_svg_when_missing() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path();
-        std::fs::write(ws.join("IDENTITY.md"), "# IDENTITY\n\n- **Name:** Demo\n- **Emoji:** _(可选)_\n").unwrap();
+        std::fs::write(
+            ws.join("IDENTITY.md"),
+            "# IDENTITY\n\n- **Name:** Demo\n- **Emoji:** _(可选)_\n",
+        )
+        .unwrap();
         let id = apply_auto_lucide_icon(ws, "设计专家", "UI 设计", "简洁").unwrap();
         assert_eq!(id, Some("palette"));
         assert!(ws.join("assets/emoji.svg").is_file());

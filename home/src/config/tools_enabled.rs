@@ -50,16 +50,13 @@ pub fn tools_enabled_path() -> PathBuf {
 
 /// 规范化 Agent 键：去空白、`"default"` 映射为 [`DEFAULT_AGENT_ID`]；空则返回 `None`。
 fn normalize_agent_key(agent_id: Option<&str>) -> Option<String> {
-    agent_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| {
-            if s == "default" {
-                DEFAULT_AGENT_ID.to_string()
-            } else {
-                s.to_string()
-            }
-        })
+    agent_id.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
+        if s == "default" {
+            DEFAULT_AGENT_ID.to_string()
+        } else {
+            s.to_string()
+        }
+    })
 }
 
 /// 读取全局工具开关；文件不存在或解析失败时返回空 map。
@@ -195,8 +192,9 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "session_search" => "session_search",
         "search_context" => "search_context",
         "pin_context" => "pin_context",
-        "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
-        | "scheduled" => "scheduled",
+        "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable" | "scheduled" => {
+            "scheduled"
+        }
         "image_gen" => "image_gen",
         "video_gen" => "video_gen",
         "video_understand" => "video_understand",
@@ -217,8 +215,13 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "present_ui" => "present_ui",
         "delegate" | "delegate_async" | "delegate_status" | "delegate_collect"
         | "delegate_cancel" => "delegate",
-        "multi_agent" | "create_agent" | "orchestration_run" | "orchestration_status"
-        | "team_list" | "team_create" | "team_run" => "multi_agent",
+        "multi_agent"
+        | "create_agent"
+        | "orchestration_run"
+        | "orchestration_status"
+        | "team_list"
+        | "team_create"
+        | "team_run" => "multi_agent",
         "task_plan" => "task_plan",
         other => other,
     }

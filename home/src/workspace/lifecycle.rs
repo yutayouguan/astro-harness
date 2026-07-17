@@ -3,9 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::config::{
-    apply_auto_lucide_icon, apply_pending_agent_icons, resolve_icon_field,
-};
+use crate::config::{apply_auto_lucide_icon, apply_pending_agent_icons, resolve_icon_field};
 use crate::GENERATED_SUBDIRS;
 
 use super::agent_config::AgentRuntimeConfig;
@@ -90,11 +88,7 @@ fn parse_identity_field_line(line: &str) -> Option<(String, String)> {
     }
     let rest = trimmed.trim_start_matches('-').trim();
     let (key_part, value_part) = rest.split_once(':')?;
-    let key = key_part
-        .trim()
-        .trim_matches('*')
-        .trim()
-        .to_lowercase();
+    let key = key_part.trim().trim_matches('*').trim().to_lowercase();
     let value = clean_identity_value(value_part);
     if key.is_empty() || value.is_empty() || value.starts_with("_(") {
         return None;
@@ -135,9 +129,7 @@ fn read_agent_display_name(ws: &Path, fallback: &str) -> String {
     if let Ok(cfg) = AgentRuntimeConfig::load(
         ws.parent().unwrap_or(ws),
         &agent_id_from_workspace_dir_name(
-            ws.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(fallback),
+            ws.file_name().and_then(|s| s.to_str()).unwrap_or(fallback),
         )
         .unwrap_or_else(|| fallback.to_string()),
     ) {
@@ -262,7 +254,14 @@ pub fn create_agent_with_profile(
         anyhow::bail!("不能覆盖默认 Agent `workspace`，请换一个名称");
     }
     const RESERVED: &[&str] = &[
-        "sessions", "skills", "cron", "logs", "uploads", "cache", "agents", "workspace",
+        "sessions",
+        "skills",
+        "cron",
+        "logs",
+        "uploads",
+        "cache",
+        "agents",
+        "workspace",
     ];
     if RESERVED.contains(&id.as_str()) || id.starts_with("workspace-") {
         anyhow::bail!("名称 `{id}` 为系统保留，请换一个");
@@ -308,12 +307,7 @@ pub fn create_agent_with_profile(
 }
 
 /// 按 `AgentProfile` 写入 AGENT/IDENTITY/SOUL/USER/MEMORY 初始内容
-fn apply_agent_profile(
-    ws: &Path,
-    id: &str,
-    name: &str,
-    p: &AgentProfile,
-) -> anyhow::Result<()> {
+fn apply_agent_profile(ws: &Path, id: &str, name: &str, p: &AgentProfile) -> anyhow::Result<()> {
     let agent_md = format!(
         r#"# AGENT.md — 本记忆空间的 Agent
 
@@ -336,8 +330,16 @@ fn apply_agent_profile(
 "#,
         name = name,
         id = id,
-        focus = if p.focus.is_empty() { "_(待补充)_" } else { &p.focus },
-        avoid = if p.avoid.is_empty() { "_(待补充)_" } else { &p.avoid },
+        focus = if p.focus.is_empty() {
+            "_(待补充)_"
+        } else {
+            &p.focus
+        },
+        avoid = if p.avoid.is_empty() {
+            "_(待补充)_"
+        } else {
+            &p.avoid
+        },
         background = if p.background.is_empty() {
             "_(待补充)_"
         } else {
@@ -372,7 +374,11 @@ fn apply_agent_profile(
         } else {
             &p.style
         },
-        avoid = if p.avoid.is_empty() { "破坏性操作前先确认" } else { &p.avoid },
+        avoid = if p.avoid.is_empty() {
+            "破坏性操作前先确认"
+        } else {
+            &p.avoid
+        },
     );
     fs::write(ws.join("IDENTITY.md"), identity)?;
 
@@ -400,7 +406,11 @@ fn apply_agent_profile(
 - 不要做：{avoid}
 "#,
             style = p.style,
-            avoid = if p.avoid.is_empty() { "破坏性操作前先确认" } else { &p.avoid },
+            avoid = if p.avoid.is_empty() {
+                "破坏性操作前先确认"
+            } else {
+                &p.avoid
+            },
         );
         fs::write(ws.join("SOUL.md"), soul)?;
     }
@@ -420,7 +430,11 @@ fn apply_agent_profile(
 
 _(随协作持续更新)_
 "#,
-        call_me = if p.call_me.is_empty() { "_(待补充)_" } else { &p.call_me },
+        call_me = if p.call_me.is_empty() {
+            "_(待补充)_"
+        } else {
+            &p.call_me
+        },
         preferences = if p.preferences.is_empty() {
             "_(待补充)_"
         } else {
@@ -444,7 +458,6 @@ _(随协作持续更新)_
     Ok(())
 }
 
-
 /// 确保日记忆文件存在（不存在则写模板）
 pub fn ensure_daily_memory(workspace: &Path, date: &str) -> anyhow::Result<PathBuf> {
     let mermaid = workspace.join("mermaid");
@@ -458,7 +471,6 @@ pub fn ensure_daily_memory(workspace: &Path, date: &str) -> anyhow::Result<PathB
     }
     Ok(path)
 }
-
 
 /// 确保单个 Agent 记忆空间的核心文件与子目录
 pub fn ensure_agent_space(
@@ -479,15 +491,13 @@ pub fn ensure_agent_space(
         fs::create_dir_all(workspace.join(rel))?;
     }
 
-    let name = display_name
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            if id == DEFAULT_AGENT_ID {
-                "Astro".to_string()
-            } else {
-                id.clone()
-            }
-        });
+    let name = display_name.map(|s| s.to_string()).unwrap_or_else(|| {
+        if id == DEFAULT_AGENT_ID {
+            "Astro".to_string()
+        } else {
+            id.clone()
+        }
+    });
 
     for (filename, template) in CORE_FILES {
         let dest = workspace.join(filename);
@@ -584,11 +594,11 @@ pub struct EnsureWorkspaceReport {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::paths::{
         active_agent_id, agent_workspace_dir, list_daily_memory_dates, set_active_agent,
     };
     use super::super::templates::{CORE_FILES, ENSURED_DIRS, STATE_JSON_FILES};
+    use super::*;
     use tempfile::TempDir;
 
     #[test]
@@ -617,10 +627,7 @@ mod tests {
         assert!(ws.join("mermaid").is_dir());
         assert!(ws.join("skills").is_dir());
         for rel in GENERATED_SUBDIRS {
-            assert!(
-                ws.join(rel).is_dir(),
-                "missing workspace/{rel}"
-            );
+            assert!(ws.join(rel).is_dir(), "missing workspace/{rel}");
         }
         for rel in ENSURED_DIRS {
             assert!(dir.path().join(rel).is_dir(), "missing dir {rel}");
@@ -635,10 +642,19 @@ mod tests {
         );
         assert!(report.created_files.iter().any(|f| f == "cron/jobs.json"));
         assert!(report.created_files.iter().any(|f| f == "models.json"));
-        assert!(report.created_files.iter().any(|f| f == "skills-enabled.json"));
-        assert!(report.created_files.iter().any(|f| f == "tools-enabled.json"));
+        assert!(report
+            .created_files
+            .iter()
+            .any(|f| f == "skills-enabled.json"));
+        assert!(report
+            .created_files
+            .iter()
+            .any(|f| f == "tools-enabled.json"));
         assert!(report.created_files.iter().any(|f| f == "mcp.json"));
-        assert!(report.created_files.iter().any(|f| f == "active-agent.json"));
+        assert!(report
+            .created_files
+            .iter()
+            .any(|f| f == "active-agent.json"));
         assert_eq!(report.workspace_dir, ws);
         assert_eq!(report.ensured_dirs.len(), ENSURED_DIRS.len());
         assert!(dir.path().join("cron/jobs.json").is_file());
@@ -735,8 +751,15 @@ mod tests {
             call_me: "老板".into(),
             preferences: "先给大纲".into(),
         };
-        let info =
-            create_agent_with_profile(dir.path(), "演示专家", Some("demo-expert"), Some(&profile), true, true).unwrap();
+        let info = create_agent_with_profile(
+            dir.path(),
+            "演示专家",
+            Some("demo-expert"),
+            Some(&profile),
+            true,
+            true,
+        )
+        .unwrap();
         assert_eq!(info.id, "demo-expert");
         assert!(info.path.ends_with("workspace-demo-expert"));
         let ws = PathBuf::from(&info.path);
@@ -763,4 +786,3 @@ mod tests {
         assert_eq!(list_daily_memory_dates(&ws), vec!["2026-07-11".to_string()]);
     }
 }
-

@@ -67,9 +67,7 @@ mod tests {
     fn generated_dir_joins_kind_subdir() {
         let ws = Path::new("/Users/a/.astro/workspace");
         for kind in ALL_KINDS {
-            let expected = ws
-                .join("generated")
-                .join(kind.dir_name());
+            let expected = ws.join("generated").join(kind.dir_name());
             assert_eq!(generated_dir(ws, kind), expected);
         }
     }

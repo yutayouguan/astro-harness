@@ -19,7 +19,11 @@ fn tool_calls_path(agent_id: &str) -> PathBuf {
 /// 追加记录一次工具发起调用（时间戳、名称、参数）。
 ///
 /// 以 append 模式打开 JSONL 文件；调用方通常可忽略错误，不影响主流程。
-pub fn record_tool_call(agent_id: &str, name: &str, args: &serde_json::Value) -> anyhow::Result<()> {
+pub fn record_tool_call(
+    agent_id: &str,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<()> {
     let path = tool_calls_path(agent_id);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

@@ -133,10 +133,7 @@ pub fn normalize_agent_id(raw: &str) -> String {
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect();
-    let cleaned = cleaned
-        .trim_matches('-')
-        .trim_matches('_')
-        .to_string();
+    let cleaned = cleaned.trim_matches('-').trim_matches('_').to_string();
     if cleaned.is_empty() {
         if raw.trim().is_empty() {
             return DEFAULT_AGENT_ID.to_string();
@@ -203,8 +200,7 @@ pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
             if path.extension().and_then(|x| x.to_str()) != Some("md") {
                 return None;
             }
-            path.file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
+            path.file_stem().map(|s| s.to_string_lossy().into_owned())
         })
         .filter(|s| s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-'))
         .collect();
@@ -254,8 +250,7 @@ mod tests {
         let home_abs = home.canonicalize().unwrap_or(home);
         let dl_abs = dl.canonicalize().unwrap_or(dl.clone());
         assert!(
-            dl_abs.starts_with(&home_abs)
-                || std::env::var("XDG_DOWNLOAD_DIR").is_ok(),
+            dl_abs.starts_with(&home_abs) || std::env::var("XDG_DOWNLOAD_DIR").is_ok(),
             "downloads {:?} should be under home {:?}",
             dl_abs,
             home_abs

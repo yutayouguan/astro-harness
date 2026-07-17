@@ -75,10 +75,7 @@ pub fn resolve_icon_field(ws: &Path, value: Option<&str>) -> Option<String> {
     if raw.is_empty() || raw.starts_with("_(") {
         return None;
     }
-    if raw.starts_with("http://")
-        || raw.starts_with("https://")
-        || raw.starts_with("data:image/")
-    {
+    if raw.starts_with("http://") || raw.starts_with("https://") || raw.starts_with("data:image/") {
         return Some(raw.to_string());
     }
     let path = if Path::new(raw).is_absolute() {
@@ -197,9 +194,11 @@ pub fn apply_pending_agent_icons(base: &Path, ws: &Path) -> anyhow::Result<bool>
     let mut applied = false;
     for kind in [AgentIconKind::Emoji, AgentIconKind::Avatar] {
         let stem = kind.as_str();
-        let found = fs::read_dir(&dir)?
-            .flatten()
-            .find(|e| e.file_name().to_string_lossy().starts_with(&format!("{stem}.")));
+        let found = fs::read_dir(&dir)?.flatten().find(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(&format!("{stem}."))
+        });
         let Some(entry) = found else {
             continue;
         };
@@ -261,7 +260,9 @@ fn upsert_identity_icon(ws: &Path, kind: AgentIconKind, rel_path: &str) -> anyho
         // also match **Emoji:**
         let is_field = is_field
             || (trimmed.starts_with('-')
-                && trimmed.to_lowercase().contains(&format!("**{key_lower}:**")));
+                && trimmed
+                    .to_lowercase()
+                    .contains(&format!("**{key_lower}:**")));
         if is_field {
             if !found {
                 out.push(new_line.clone());
@@ -278,7 +279,8 @@ fn upsert_identity_icon(ws: &Path, kind: AgentIconKind, rel_path: &str) -> anyho
         for line in &out {
             with_insert.push(line.clone());
             let lower = line.to_lowercase();
-            if !inserted && (lower.contains("**name:**") || lower.trim_start().starts_with("- name:"))
+            if !inserted
+                && (lower.contains("**name:**") || lower.trim_start().starts_with("- name:"))
             {
                 with_insert.push(new_line.clone());
                 inserted = true;
@@ -307,7 +309,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("workspace-demo");
         fs::create_dir_all(&ws).unwrap();
-        fs::write(ws.join("IDENTITY.md"), "# IDENTITY.md\n\n- **Name:** Demo\n").unwrap();
+        fs::write(
+            ws.join("IDENTITY.md"),
+            "# IDENTITY.md\n\n- **Name:** Demo\n",
+        )
+        .unwrap();
 
         let rel = write_agent_icon(&ws, AgentIconKind::Avatar, b"fake-png", "a.PNG").unwrap();
         assert_eq!(rel, "assets/avatar.png");
@@ -333,10 +339,12 @@ mod tests {
         assert!(apply_pending_agent_icons(base.path(), &ws).unwrap());
         assert!(ws.join("assets/emoji.webp").is_file());
         assert!(ws.join("assets/avatar.jpg").is_file());
-        assert!(!pending_icons_dir(base.path()).exists() || {
-            fs::read_dir(pending_icons_dir(base.path()))
-                .map(|d| d.count() == 0)
-                .unwrap_or(true)
-        });
+        assert!(
+            !pending_icons_dir(base.path()).exists() || {
+                fs::read_dir(pending_icons_dir(base.path()))
+                    .map(|d| d.count() == 0)
+                    .unwrap_or(true)
+            }
+        );
     }
 }

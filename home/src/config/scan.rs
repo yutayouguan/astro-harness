@@ -3,7 +3,10 @@
 /// 扫描待写入的记忆内容，拦截不可见 Unicode 与常见威胁模式。
 pub fn scan_memory_content(content: &str) -> Result<(), String> {
     if let Some(ch) = find_invisible_unicode(content) {
-        return Err(format!("记忆内容包含不可见 Unicode 字符 (U+{:04X})", ch as u32));
+        return Err(format!(
+            "记忆内容包含不可见 Unicode 字符 (U+{:04X})",
+            ch as u32
+        ));
     }
 
     let lower = content.to_lowercase();

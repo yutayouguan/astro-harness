@@ -18,10 +18,10 @@ pub use spawn_depth::{
     scoped_max_spawn_depth, SpawnDepthCtx, DEFAULT_MAX_SPAWN_DEPTH,
 };
 
-pub use infra::logging::{init_logging, logs_dir};
 pub use infra::log_query::{
     default_agent_log_query, query_agent_logs, AgentLogLine, AgentLogQuery, LogSource,
 };
+pub use infra::logging::{init_logging, logs_dir};
 pub use infra::tool_calls::record_tool_call;
 
 pub use config::{

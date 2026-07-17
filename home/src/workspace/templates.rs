@@ -240,4 +240,3 @@ pub(crate) fn render_template(template: &str, agent_id: &str, display_name: &str
         .replace("{{ID}}", agent_id)
         .replace("{{NAME}}", display_name)
 }
-
