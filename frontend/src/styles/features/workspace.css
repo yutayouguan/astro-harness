@@ -1,4 +1,59 @@
 /* ── Workspace panel ── */
+/* 「文件」页外壳：顶部浏览/产物分段切换 + 下方复用工作区/文件空间面板 */
+.files-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.files-mode-switch {
+  align-self: flex-start;
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  background: color-mix(in srgb, var(--chip-bg) 70%, transparent);
+}
+
+.files-mode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-mute);
+  background: transparent;
+  cursor: pointer;
+}
+
+.files-mode-tab.is-active {
+  color: var(--tone-purple, #8b5cf6);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4)),
+    color-mix(in srgb, var(--tone-purple, #8b5cf6) 14%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+html[data-theme="dark"] .files-mode-tab.is-active {
+  background: color-mix(in srgb, var(--tone-purple, #8b5cf6) 16%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-purple, #8b5cf6) 28%, transparent);
+  color: color-mix(in srgb, #fff 18%, var(--tone-purple, #8b5cf6));
+}
+
+.files-mode-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .workspace-panel {
   flex: 1;
   min-height: 0;
@@ -963,7 +1018,8 @@ html[data-theme="dark"] .ws-md-mode.is-active {
 }
 
 .ws-media-frame {
-  width: min(100%, 720px);
+  width: 100%;
+  height: 100%;
   max-height: 100%;
   display: flex;
   align-items: center;
@@ -1084,7 +1140,7 @@ html[data-theme="dark"] .ws-md-mode.is-active {
 .ws-media-image {
   display: block;
   max-width: 100%;
-  max-height: min(62vh, 560px);
+  max-height: 100%;
   width: auto;
   height: auto;
   border-radius: 14px;
@@ -1092,10 +1148,42 @@ html[data-theme="dark"] .ws-md-mode.is-active {
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
 }
 
+/* 图片 / 视频预览：内容平铺填满相框（覆盖 MediaPreview 的 520px 上限） */
+.ws-media-stage[data-kind="image"] .media-preview,
+.ws-media-stage[data-kind="video"] .media-preview {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  margin: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ws-media-stage[data-kind="image"] .media-preview-image-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.ws-media-stage[data-kind="image"] .media-preview-image,
+.ws-media-stage[data-kind="video"] .media-preview-video {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: transparent;
+}
+
 .ws-media-video {
   display: block;
   width: 100%;
-  max-height: min(62vh, 560px);
+  max-height: 100%;
   border-radius: 14px;
   background: #0f172a;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);

@@ -33,13 +33,14 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "../workspace/WorkspaceIcons";
-import { resolveFileType } from "../../lib/filespace/fileTypeIcon";
 import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
+import FileGlyph from "./FileGlyph";
 import FileSpaceBatchBar from "./FileSpaceBatchBar";
 import FileSpaceViewer from "./FileSpaceViewer";
+import { formatSize, isTauri } from "../../lib/filespace/fileMeta";
 import { EmptyIllustration } from "../../illustrations";
 import { useFileSelection } from "../../hooks/ui/useFileSelection";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
@@ -56,6 +57,8 @@ type Props = {
   onClose?: () => void;
   /** 将选中产物作为附件挂到聊天 */
   onAttachFiles?: (files: ArtifactDto[], mode: AttachMode) => void | Promise<void>;
+  /** 在工作区（浏览模式）中打开该产物的绝对路径 */
+  onOpenInWorkspace?: (path: string) => void;
 };
 
 /** 列表 / 网格布局 */
@@ -97,33 +100,11 @@ const CAT_ICONS: Record<
   other: IconWsFile,
 };
 
-/** 是否运行在 Tauri 壳内 */
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-/** 人类可读文件大小 */
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 /** ISO 时间本地化 */
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
-}
-
-/** 按扩展名选择 Lucide 图标并着色 */
-function FileGlyph({ name }: { name: string; category?: string }) {
-  const { kind, Icon } = resolveFileType(name, false);
-  return (
-    <span className="fs-file-glyph" data-kind={kind} aria-hidden>
-      <Icon size={18} strokeWidth={2} />
-    </span>
-  );
 }
 
 const listMainStyle: CSSProperties = {
@@ -162,6 +143,7 @@ export default function FileSpacePanel({
   onOpenSession,
   onClose,
   onAttachFiles,
+  onOpenInWorkspace,
 }: Props) {
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -519,6 +501,11 @@ export default function FileSpacePanel({
       case "removeIndex":
         await runRemoveIndex(files);
         break;
+      case "openInWorkspace":
+        if (files.length === 1 && !files[0].missing) {
+          onOpenInWorkspace?.(files[0].path);
+        }
+        break;
     }
   };
 
@@ -549,6 +536,15 @@ export default function FileSpacePanel({
         labelKey: "filespace.menu.reveal" as const,
         disabled: !singleOk,
       },
+      ...(onOpenInWorkspace
+        ? [
+            {
+              action: "openInWorkspace" as const,
+              labelKey: "filespace.menu.openInWorkspace" as const,
+              disabled: !singleOk,
+            },
+          ]
+        : []),
       {
         action: "copyPath" as const,
         labelKey: "filespace.menu.copyPath" as const,
@@ -594,7 +590,7 @@ export default function FileSpacePanel({
             separatorBefore: true,
           },
     ];
-  }, [menuFiles, t]);
+  }, [menuFiles, t, onOpenInWorkspace]);
 
   const toggleGroup = (key: string) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -772,7 +768,7 @@ export default function FileSpacePanel({
                         openMenuAt(file.id, e.clientX, e.clientY);
                       }}
                     >
-                      <FileGlyph category={file.category} name={file.name} />
+                      <FileGlyph name={file.name} className="fs-file-glyph" />
                       <span className="fs-grid-name" title={file.name}>
                         {file.name}
                       </span>
@@ -857,8 +853,8 @@ export default function FileSpacePanel({
                                   }}
                                 >
                                   <FileGlyph
-                                    category={file.category}
                                     name={file.name}
+                                    className="fs-file-glyph"
                                   />
                                   <span className="fs-file-meta">
                                     <span className="fs-file-name">{file.name}</span>
@@ -920,7 +916,7 @@ export default function FileSpacePanel({
             ) : (
               <>
                 <div className="fs-preview-head">
-                  <FileGlyph category={selected.category} name={selected.name} />
+                  <FileGlyph name={selected.name} className="fs-file-glyph" />
                   <div className="fs-preview-titles">
                     <div className="fs-preview-name">{selected.name}</div>
                     <div className="fs-preview-path" title={selected.path}>

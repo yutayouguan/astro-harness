@@ -32,6 +32,8 @@ import MediaPreview from "../media/MediaPreview";
 import MediaToolbar from "../media/MediaToolbar";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
+import FileGlyph from "../filespace/FileGlyph";
+import { formatSize, isTauri } from "../../lib/filespace/fileMeta";
 import WorkspaceBatchBar from "./WorkspaceBatchBar";
 import WorkspaceEditor from "./WorkspaceEditor";
 import { EmptyIllustration } from "../../illustrations";
@@ -57,6 +59,10 @@ import {
 type Props = {
   /** 关闭面板（若由覆盖层打开） */
   onClose?: () => void;
+  /** 挂载时定位并打开的绝对文件路径（来自「产物 → 在工作区中打开」） */
+  openPath?: string | null;
+  /** openPath 消费完成后回调（便于父级清空，避免重复触发） */
+  onDidOpenPath?: () => void;
 };
 
 /** 浏览 / 文本编辑 / 媒体预览 */
@@ -74,11 +80,6 @@ type MenuKind = "blank" | "entries";
 
 const LIST_LAYOUT_KEY = "astro-workspace-list-layout";
 const MAX_OPEN_EXTERNALLY = 5;
-
-/** 是否运行在 Tauri 壳内 */
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
 
 /** 焦点是否在可输入控件（用于忽略快捷键） */
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -123,13 +124,6 @@ function localMediaSrc(path: string): string | null {
   }
 }
 
-/** 人类可读文件大小 */
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 /** 绝对路径 → `~/…` 展示 */
 function formatTildePath(absPath: string): string {
   if (!absPath) return "";
@@ -172,17 +166,11 @@ function buildBreadcrumbs(
   return crumbs;
 }
 
-/** 工作区条目图标（按后缀直接映射 Lucide） */
-function FileGlyph({ name, isDir }: { name: string; isDir: boolean }) {
-  const { kind, Icon } = resolveFileType(name, isDir);
-  return (
-    <span className="ws-file-glyph" data-kind={kind} aria-hidden>
-      <Icon size={18} strokeWidth={2} />
-    </span>
-  );
-}
-
-export default function WorkspacePanel({ onClose }: Props) {
+export default function WorkspacePanel({
+  onClose,
+  openPath,
+  onDidOpenPath,
+}: Props) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const { resolved: theme } = useTheme();
@@ -307,7 +295,16 @@ export default function WorkspacePanel({ onClose }: Props) {
   }, []);
 
   useEffect(() => {
-    void load();
+    if (openPath) {
+      void (async () => {
+        await openAbsolutePath(openPath);
+        onDidOpenPath?.();
+      })();
+    } else {
+      void load();
+    }
+    // 仅挂载时消费一次 openPath；后续切回浏览会重新挂载
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only bootstrap
   }, [load]);
 
   useAgentsChanged(() => {
@@ -455,6 +452,32 @@ export default function WorkspacePanel({ onClose }: Props) {
       return;
     }
     void openFile(entry);
+  };
+
+  /** 定位并打开一个绝对文件路径：列出其所在目录并打开该文件 */
+  const openAbsolutePath = async (abs: string) => {
+    setError(null);
+    const norm = abs.replace(/\\/g, "/");
+    const idx = norm.lastIndexOf("/");
+    const dir = idx > 0 ? abs.slice(0, idx) : abs;
+    try {
+      const cfg = await invoke<{
+        memory_dir: string;
+        workspace_dir: string;
+        active_agent_id: string;
+        agents: AgentInfo[];
+      }>("get_config");
+      setAgents(cfg.agents);
+      setActiveAgentId(cfg.active_agent_id);
+      setWorkspaceRoot(cfg.workspace_dir);
+      const list = await invoke<FileEntryDto[]>("list_files", { path: dir });
+      setEntries(list);
+      setRoot(dir);
+      const entry = list.find((e) => e.path === abs);
+      if (entry) await openFile(entry);
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   const goUp = async () => {
@@ -1366,16 +1389,24 @@ export default function WorkspacePanel({ onClose }: Props) {
               </div>
             </div>
             <div className="ws-editor-actions">
-              <button
-                type="button"
-                className="ws-tool-btn"
-                onClick={() => void openCurrentExternally()}
-                disabled={!editorPath}
-                title={t("workspace.openExternally")}
-                aria-label={t("workspace.openExternally")}
-              >
-                <ExternalLink size={17} strokeWidth={2.1} aria-hidden />
-              </button>
+              {editorPath && mediaKind ? (
+                <MediaToolbar
+                  path={editorPath}
+                  kind={mediaKind}
+                  className="is-inline"
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="ws-tool-btn"
+                  onClick={() => void openCurrentExternally()}
+                  disabled={!editorPath}
+                  title={t("workspace.openExternally")}
+                  aria-label={t("workspace.openExternally")}
+                >
+                  <ExternalLink size={17} strokeWidth={2.1} aria-hidden />
+                </button>
+              )}
               <button
                 type="button"
                 className="ws-tool-btn ws-delete-btn"
@@ -1399,6 +1430,7 @@ export default function WorkspacePanel({ onClose }: Props) {
                   path={editorPath}
                   htmlSource={mediaKind === "html" ? draftContent : null}
                   alt={editorName}
+                  showToolbar={false}
                 />
               ) : (
                 <div className="ws-media-fallback">

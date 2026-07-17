@@ -2,7 +2,6 @@ import type { ComponentType, SVGProps } from "react";
 import {
   IconChat,
   IconCron,
-  IconFileSpace,
   IconInsights,
   IconMemory,
   IconProviders,
@@ -16,8 +15,7 @@ import type { MessageKey } from "../../i18n/messages";
 export type NavId =
   | "chat"
   | "memory"
-  | "workspace"
-  | "filespace"
+  | "files"
   | "skills"
   | "tools"
   | "insights"
@@ -47,16 +45,10 @@ export const NAV: {
   { id: "chat", labelKey: "nav.chat", Icon: IconChat, tone: "blue" },
   { id: "memory", labelKey: "nav.memory", Icon: IconMemory, tone: "green" },
   {
-    id: "workspace",
-    labelKey: "nav.workspace",
+    id: "files",
+    labelKey: "nav.files",
     Icon: IconWorkspace,
     tone: "purple",
-  },
-  {
-    id: "filespace",
-    labelKey: "nav.filespace",
-    Icon: IconFileSpace,
-    tone: "cyan",
   },
   { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
   { id: "tools", labelKey: "nav.tools", Icon: IconTools, tone: "orange" },
@@ -87,13 +79,9 @@ export const PAGE_META: Record<
 > = {
   chat: { titleKey: "page.chat.title", subKey: "page.chat.sub" },
   memory: { titleKey: "page.memory.title", subKey: "page.memory.sub" },
-  workspace: {
-    titleKey: "page.workspace.title",
-    subKey: "page.workspace.sub",
-  },
-  filespace: {
-    titleKey: "page.filespace.title",
-    subKey: "page.filespace.sub",
+  files: {
+    titleKey: "page.files.title",
+    subKey: "page.files.sub",
   },
   skills: { titleKey: "page.skills.title", subKey: "page.skills.sub" },
   tools: { titleKey: "page.tools.title", subKey: "page.tools.sub" },

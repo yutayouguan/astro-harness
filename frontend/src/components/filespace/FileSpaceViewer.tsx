@@ -12,6 +12,11 @@ import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTheme } from "../../hooks/app/useTheme";
 import { filespaceViewerKind } from "../../lib/filespace/filespaceViewerKind";
+import {
+  readWorkspaceMdMode,
+  writeWorkspaceMdMode,
+  type MdMode,
+} from "../../lib/filespace/workspaceMdMode";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
 import WorkspaceEditor from "../workspace/WorkspaceEditor";
@@ -29,8 +34,6 @@ type Props = {
   category?: string | null;
   onOpenExternally: () => void;
 };
-
-type DocMode = "preview" | "source";
 
 type TextState = {
   path: string;
@@ -54,9 +57,14 @@ export default function FileSpaceViewer({
   const { resolved: theme } = useTheme();
   const kind = filespaceViewerKind({ name, missing, mime, category });
 
-  const [docMode, setDocMode] = useState<DocMode>("preview");
+  const [docMode, setDocMode] = useState<MdMode>(() => readWorkspaceMdMode());
   const [text, setText] = useState<TextState | null>(null);
   const [pdfBroken, setPdfBroken] = useState(false);
+
+  const setDocModePersist = (mode: MdMode) => {
+    setDocMode(mode);
+    writeWorkspaceMdMode(mode);
+  };
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textRef = useRef<TextState | null>(null);
@@ -137,7 +145,7 @@ export default function FileSpaceViewer({
         }
       }
       clearTimer();
-      setDocMode(kind === "text" ? "source" : "preview");
+      setDocMode(kind === "text" ? "source" : readWorkspaceMdMode());
       setPdfBroken(false);
 
       if (!isEditable || missing) {
@@ -306,7 +314,7 @@ export default function FileSpaceViewer({
               role="tab"
               aria-selected={docMode === "preview"}
               className={`ws-md-mode ${docMode === "preview" ? "is-active" : ""}`}
-              onClick={() => setDocMode("preview")}
+              onClick={() => setDocModePersist("preview")}
             >
               <Eye size={13} strokeWidth={2.3} aria-hidden />
               {t("workspace.previewMode")}
@@ -316,7 +324,7 @@ export default function FileSpaceViewer({
               role="tab"
               aria-selected={docMode === "source"}
               className={`ws-md-mode ${docMode === "source" ? "is-active" : ""}`}
-              onClick={() => setDocMode("source")}
+              onClick={() => setDocModePersist("source")}
             >
               <FileCode2 size={13} strokeWidth={2.3} aria-hidden />
               {t("workspace.previewSource")}

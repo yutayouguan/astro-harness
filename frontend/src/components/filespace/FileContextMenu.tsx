@@ -11,6 +11,7 @@ import {
   FileX,
   FolderOpen,
   FolderPlus,
+  FolderTree,
   MessageSquare,
   MessageSquarePlus,
   Pencil,
@@ -41,7 +42,8 @@ export type FileMenuAction =
   | "paste"
   | "newFile"
   | "newFolder"
-  | "openExternally";
+  | "openExternally"
+  | "openInWorkspace";
 
 /** 菜单单项 */
 type Item = {
@@ -85,6 +87,7 @@ const ACTION_ICONS: Record<FileMenuAction, ComponentType<LucideProps>> = {
   newFile: FilePlus,
   newFolder: FolderPlus,
   openExternally: ExternalLink,
+  openInWorkspace: FolderTree,
 };
 
 export default function FileContextMenu({ x, y, items, onAction, onClose, className }: Props) {

@@ -13,7 +13,7 @@ import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ChatView from "./components/chat/ChatView";
 import CronPanel from "./components/schedule/CronPanel";
-import FileSpacePanel from "./components/filespace/FileSpacePanel";
+import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
 import MemoryPanel from "./components/settings/MemoryPanel";
 import ModelPicker from "./components/agents/ModelPicker";
@@ -22,7 +22,6 @@ import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
 import SkillsPanel from "./components/settings/SkillsPanel";
 import ToolsPanel from "./components/settings/ToolsPanel";
-import WorkspacePanel from "./components/workspace/WorkspacePanel";
 import {
   AstroLogoMark,
   IconChat,
@@ -754,12 +753,9 @@ export default function App() {
               {nav === "memory" && (
                 <MemoryPanel onClose={() => setNav("chat")} sessionId={chat.sessionId} />
               )}
-              {nav === "workspace" && (
-                <WorkspacePanel onClose={() => setNav("chat")} />
-              )}
-              {nav === "filespace" && (
-                <FileSpacePanel
-                  active={nav === "filespace"}
+              {nav === "files" && (
+                <FilesPage
+                  active={nav === "files"}
                   onOpenSession={openSessionFromFilespace}
                   onAttachFiles={attachArtifactsToChat}
                   onClose={() => setNav("chat")}
