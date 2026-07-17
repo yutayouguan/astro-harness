@@ -614,10 +614,18 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
   margin: 8px 0;
   max-width: min(100%, 640px);
   min-height: 200px;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
-  border: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.08));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--gmc-tone, #2563eb) 18%,
+      var(--glass-edge, rgba(15, 23, 42, 0.08))
+    );
   background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 10px 26px color-mix(in srgb, var(--gmc-tone, #2563eb) 10%, transparent);
 }
 
 .html-preview.is-compact {
@@ -626,36 +634,85 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
 }
 
 .html-preview-bar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 8px 10px 8px 14px;
   font-size: 12px;
   color: var(--ink-soft, #64748b);
-  background: color-mix(in srgb, var(--glass, #f8fafc) 80%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, #fff 70%, transparent),
+      transparent
+    ),
+    color-mix(in srgb, var(--glass, #f8fafc) 82%, transparent);
   border-bottom: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.06));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
+/* 标签前置 macOS 风格红黄绿窗控点，营造「浏览器窗口」质感 */
 .html-preview-bar .html-preview-label {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding-left: 46px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.html-preview-label::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow:
+    14px 0 0 #febc2e,
+    28px 0 0 #28c840;
+}
+
+.html-preview-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .html-preview-open {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  border: none;
-  background: transparent;
-  color: var(--tone, var(--ink-soft));
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--tone, #2563eb) 26%, transparent);
+  background: color-mix(in srgb, var(--tone, #2563eb) 12%, transparent);
+  color: var(--tone, #2563eb);
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
 }
 
 .html-preview-open:hover {
-  background: var(--glass, rgba(0, 0, 0, 0.04));
+  background: color-mix(in srgb, var(--tone, #2563eb) 20%, transparent);
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 42%, transparent);
+  transform: translateY(-1px);
+}
+
+.html-preview-open:active {
+  transform: translateY(0);
 }
 
 .html-preview-frame {
@@ -667,6 +724,31 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
 
 .html-preview.is-compact .html-preview-frame {
   height: 220px;
+}
+
+html[data-theme="dark"] .html-preview {
+  border-color: color-mix(
+    in srgb,
+    var(--gmc-tone, #a78bfa) 30%,
+    rgba(255, 255, 255, 0.1)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 26px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .html-preview-bar {
+  color: var(--ink-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
+    rgba(20, 16, 34, 0.72);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .html-preview-open {
+    transition: none;
+  }
 }
 
 .fs-preview-body .media-preview,
