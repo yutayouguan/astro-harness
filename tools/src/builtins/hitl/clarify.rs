@@ -3,7 +3,7 @@
 //! 返回带 `astro_hitl` 标记的 A2UI JSON；由 streaming 层经 `HitlGate` 同回合 park，
 //! 用户提交后写入标准 tool result 并续跑（不再结束 run）。
 //!
-//! 统一走叠层 Tab 向导 `ClarifyWizard`（`questions`，或兼容 `question`+`options`）。
+//! 统一走叠层 Tab 向导 `ClarifyWizard`（仅 `questions`）。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -30,13 +30,7 @@ pub struct ClarifyQuestion {
 /// `clarify` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ClarifyArgs {
-    /// 兼容写法：单题问题（无 `questions` 时使用）。
-    #[serde(default)]
-    pub question: Option<String>,
-    /// 兼容写法：单题选项。
-    #[serde(default)]
-    pub options: Vec<String>,
-    /// 澄清步骤列表（推荐）；1 题也走同一向导。
+    /// 澄清步骤列表；1 题也走同一向导。
     #[serde(default)]
     pub questions: Vec<ClarifyQuestion>,
     /// 向导标题；缺省：多题「请确认几项」，单题用问题正文。
@@ -50,7 +44,7 @@ pub fn register(registry: &mut ToolRegistry) {
         name: "clarify".to_string(),
         toolset: "clarify".to_string(),
         description: "Ask clarifying question(s) with choices before proceeding. \
-Prefer `questions` (1+ steps) for a stacked wizard; `question`+`options` still works as one step."
+Use `questions` (1+ steps) for a stacked wizard."
             .to_string(),
         schema: schema_for_args::<ClarifyArgs>(),
         check_fn: None,
@@ -78,7 +72,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
     let parsed: ClarifyArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("clarify 参数无效: {e}"))?;
 
-    let mut steps: Vec<a2ui::templates::ClarifyStep> = parsed
+    let steps: Vec<a2ui::templates::ClarifyStep> = parsed
         .questions
         .iter()
         .enumerate()
@@ -102,17 +96,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
         .collect();
 
     if steps.is_empty() {
-        let question = parsed
-            .question
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| anyhow::anyhow!("clarify 需要 question 或 questions"))?;
-        steps.push(a2ui::templates::ClarifyStep {
-            id: "q0".into(),
-            question: question.to_string(),
-            options: normalize_options(parsed.options, "继续"),
-        });
+        anyhow::bail!("clarify 需要至少一个 question");
     }
 
     let title = parsed

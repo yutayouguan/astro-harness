@@ -153,7 +153,7 @@ A2UIOperations → CatalogAdapter.resolve(component) → React nodes
 | Path | Mechanism | Interrupt? |
 |------|-----------|------------|
 | `confirm` tool | Args → fixed A2UI template → `activity` + interrupt | Yes |
-| `clarify` tool | Redesign: question/options → template surface; retire `<clarify>` text as primary UX | Yes (`input_required`) |
+| `clarify` tool | `questions[]` → `ClarifyWizard` A2UI surface; no text fallback | Yes (`input_required`) |
 | Info cards | Tool result or model A2UI JSONL → **catalog validate** → `activity` | No |
 
 HITL templates live as checked-in JSON/Rust constants. Info-card JSON must pass validation before render.

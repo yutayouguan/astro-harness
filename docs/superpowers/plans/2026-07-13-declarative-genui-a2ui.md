@@ -479,8 +479,8 @@ EOF
 
 - [ ] **Step 2: 改造 `clarify`**
 
-同样返回 `astro_hitl` + `build_clarify_surface` + `reason: input_required` + schema `{ "value": string }`。  
-保留旧 `<clarify>` 仅作 fallback 若 flag 关闭（MVP 可直接切换）。
+同样返回 `astro_hitl` + `build_clarify_surface` + `reason: input_required` + schema `{ "answers": object, "value": string }`。  
+`clarify` 仅接受 `questions[]`，统一渲染 `ClarifyWizard`。
 
 - [ ] **Step 3: Agent 在 `ToolResult` 后解析**
 

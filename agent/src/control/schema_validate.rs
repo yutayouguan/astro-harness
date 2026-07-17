@@ -101,13 +101,20 @@ mod tests {
     }
 
     #[test]
-    fn clarify_value_must_be_string() {
+    fn clarify_payload_requires_answers_and_value() {
         let schema = json!({
             "type": "object",
-            "properties": { "value": { "type": "string" } },
-            "required": ["value"]
+            "properties": {
+                "answers": { "type": "object" },
+                "value": { "type": "string" }
+            },
+            "required": ["answers", "value"]
         });
-        assert!(validate_against_schema(&schema, &json!({"value": 1})).is_err());
-        validate_against_schema(&schema, &json!({"value": "ok"})).unwrap();
+        assert!(validate_against_schema(&schema, &json!({"value": "ok"})).is_err());
+        assert!(
+            validate_against_schema(&schema, &json!({"answers": {}, "value": 1})).is_err()
+        );
+        validate_against_schema(&schema, &json!({"answers": {"q0": "ok"}, "value": "ok"}))
+            .unwrap();
     }
 }

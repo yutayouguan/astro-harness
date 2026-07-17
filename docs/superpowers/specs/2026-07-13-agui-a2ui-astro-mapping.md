@@ -42,7 +42,7 @@
 |-------|------------|------|----------|
 | `RunFinished { outcome: interrupt, interrupts[] }` | 无；流直接 `done` | Astro 无「等用户再开新 run」模型 | 新增 interrupt 结局；会话挂起待 `resume` |
 | `RunAgentInput.resume[{interruptId, status, payload}]` | `ChatControl.resume` = **恢复流式生成** | **语义冲突**：同名不同义 | 控制动作改名或分流：`stream_resume` vs `interrupt_resume` |
-| `reason: tool_call \| input_required \| confirmation` | `clarify` 工具返回 `<clarify>` 文本 | 非结构化、非阻塞 run | clarify/confirm → interrupt +（可选）A2UI 表单 |
+| `reason: tool_call \| input_required \| confirmation` | `clarify` / `confirm` 通过 A2UI HITL surface 挂起 run | 已结构化、同回合阻塞 | clarify/confirm → interrupt + A2UI 表单 |
 | `responseSchema` | 无 | — | 与 A2UI dataModel / 表单提交对齐 |
 | `pause` / `cancel` | `ChatControl.pause/cancel` | AG-UI 无对等 pause | **保留** Astro 流控，不塞进 AG-UI interrupt |
 
@@ -111,7 +111,7 @@ Agent 需要 UI
 | `resume` 命名冲突 | 流恢复 ≠ interrupt 恢复 |
 | 无 A2UI renderer / catalog | 前端未接组件目录 |
 | 无 ui_action 上行 | ChatControl 仅 pause/resume/cancel |
-| clarify 非 GenUI | `<clarify>` 标记，非 Surface |
+| clarify GenUI | `ClarifyWizard` A2UI Surface + interrupt |
 
 ---
 

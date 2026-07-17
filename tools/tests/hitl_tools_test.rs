@@ -95,8 +95,13 @@ async fn clarify_emits_valid_a2ui_hitl() {
         &mut ctx,
         "clarify",
         &serde_json::json!({
-            "question": "Which env?",
-            "options": ["staging", "production"]
+            "questions": [
+                {
+                    "id": "env",
+                    "question": "Which env?",
+                    "options": ["staging", "production"]
+                }
+            ]
         }),
     )
     .await
