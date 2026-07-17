@@ -27,6 +27,9 @@ pub struct DelegateTaskArgs {
     /// 子 Agent 最大迭代轮次；缺省用配置 child_max_iterations（通常 50）。
     #[serde(default)]
     pub max_iterations: Option<usize>,
+    /// 可选模型：`provider:model_id`。
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 /// `delegate` / `delegate_async` 工具参数。
@@ -47,6 +50,9 @@ pub struct DelegateArgs {
     /// 单任务最大迭代轮次。
     #[serde(default)]
     pub max_iterations: Option<usize>,
+    /// 单任务可选模型：`provider:model_id`。
+    #[serde(default)]
+    pub model: Option<String>,
     /// 并行子任务（1～3 建议；上限 8）。
     #[serde(default)]
     pub tasks: Option<Vec<DelegateTaskArgs>>,
@@ -243,6 +249,12 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<delegate::Delegate
                 role: delegate::DelegateRole::parse(t.role.as_deref().unwrap_or("leaf")),
                 toolsets: t.toolsets.clone(),
                 max_iterations: t.max_iterations,
+                model: t
+                    .model
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string),
             });
         }
         return Ok(out);
@@ -258,6 +270,12 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<delegate::Delegate
         role: delegate::DelegateRole::parse(parsed.role.as_deref().unwrap_or("leaf")),
         toolsets: parsed.toolsets.clone(),
         max_iterations: parsed.max_iterations,
+        model: parsed
+            .model
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
     }])
 }
 
@@ -300,6 +318,7 @@ mod resolve_tests {
             role: Some("orchestrator".into()),
             toolsets: Some(vec!["terminal".into(), "file".into()]),
             max_iterations: Some(12),
+            model: Some("claude:opus".into()),
             tasks: None,
             max_concurrent: None,
         };
@@ -311,5 +330,6 @@ mod resolve_tests {
             &vec!["terminal".to_string(), "file".to_string()]
         );
         assert_eq!(specs[0].max_iterations, Some(12));
+        assert_eq!(specs[0].model.as_deref(), Some("claude:opus"));
     }
 }

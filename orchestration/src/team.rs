@@ -46,6 +46,9 @@ pub struct TeamMember {
     pub agent_id: Option<String>,
     #[serde(default)]
     pub toolsets: Option<Vec<String>>,
+    /// 可选成员模型简写：`provider:model_id`（见 [`common::ModelSpec`]）。
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,11 +166,13 @@ mod tests {
                 description: Some("Searches current docs".into()),
                 agent_id: None,
                 toolsets: Some(vec!["web".into()]),
+                model: Some("openai:gpt-5.6".into()),
             }],
         };
         save_team(dir.path(), &team).unwrap();
         let loaded = load_team(dir.path(), "research").unwrap();
         assert_eq!(loaded.mode, TeamMode::Broadcast);
+        assert_eq!(loaded.members[0].model.as_deref(), Some("openai:gpt-5.6"));
         assert_eq!(list_teams(dir.path()).unwrap().len(), 1);
     }
 }

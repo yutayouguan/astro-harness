@@ -37,6 +37,9 @@ pub struct DelegateTaskSpec {
     /// 子 Agent 最大工具跟随轮次；缺省读配置 `child_max_iterations`（默认 50）。
     #[serde(default)]
     pub max_iterations: Option<usize>,
+    /// 可选成员模型：`provider:model_id`（见 [`common::ModelSpec`]）；缺省继承父凭据。
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 impl DelegateTaskSpec {
@@ -47,6 +50,7 @@ impl DelegateTaskSpec {
             role: DelegateRole::Leaf,
             toolsets: None,
             max_iterations: None,
+            model: None,
         }
     }
 }

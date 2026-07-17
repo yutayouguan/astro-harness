@@ -242,8 +242,29 @@ async fn run_one_child_inner(
         &creds.base_url,
     );
     let registry = ProviderRegistry::new();
-    let targets = effective_chat_targets(&creds, &registry);
+    let mut targets = effective_chat_targets(&creds, &registry);
+    let mut member_temp: Option<f32> = None;
+    if let Some(spec_str) = task.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        match common::ModelSpec::parse(spec_str) {
+            Ok(spec) => {
+                member_temp = spec.temperature;
+                if let Some(primary) = targets.first_mut() {
+                    *primary = spec.apply_to(primary);
+                } else {
+                    targets.push(spec.to_chat_target(&creds.api_key, &creds.base_url));
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, model = %spec_str, "delegate task model spec ignored");
+            }
+        }
+    }
     agent.set_chat_targets(targets);
+    if let Some(t) = member_temp {
+        agent.set_model(
+            common::ModelSpec::new(agent.chat_provider(), agent.chat_model()).with_temperature(t),
+        );
+    }
 
     fire_subagent_start(&creds, &task, role);
 

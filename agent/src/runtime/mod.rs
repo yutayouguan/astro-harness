@@ -117,6 +117,8 @@ pub struct AgentLoop {
     chat_model: String,
     /// 含 primary 的聊天 fallback 链（供工具/委派下传）。
     chat_targets: Vec<common::ChatTarget>,
+    /// 主模型声明（Agno 风格 `model=`）；与 `chat_targets` 同步，不含 API key。
+    model_spec: Option<common::ModelSpec>,
     /// 五类辅助任务的已解析目标链（preferred + 可选 fallback）；由 backend 每次
     /// `Chat` 请求时下传，仅存于内存（含 API key），不落盘。缺失的任务在
     /// [`Self::auxiliary_targets`] 中回退当前主 `ChatTarget`。
@@ -247,6 +249,7 @@ impl AgentLoop {
             chat_provider: String::new(),
             chat_model: String::new(),
             chat_targets: Vec::new(),
+            model_spec: None,
             auxiliary_targets: std::collections::HashMap::new(),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             pending_inject_context: None,
@@ -398,6 +401,59 @@ impl AgentLoop {
         self.chat_model = model.to_string();
         self.chat_api_key = api_key.to_string();
         self.chat_base_url = base_url.to_string();
+        if !provider.trim().is_empty() || !model.trim().is_empty() {
+            self.model_spec = Some(common::ModelSpec::new(provider, model));
+        }
+    }
+
+    /// Agno 风格主模型入口：`Agent(model=…)`。
+    ///
+    /// 更新 `chat_provider` / `chat_model` 与可选温度；若已有 `chat_targets`，
+    /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
+    pub fn set_model(&mut self, spec: common::ModelSpec) {
+        if !spec.provider_id.trim().is_empty() {
+            self.chat_provider = spec.provider_id.trim().to_string();
+        }
+        if !spec.model_id.trim().is_empty() {
+            self.chat_model = spec.model_id.trim().to_string();
+        }
+        if let Some(t) = spec.temperature {
+            self.config.temperature = t;
+        }
+        if let Some(primary) = self.chat_targets.first_mut() {
+            *primary = spec.apply_to(primary);
+            self.chat_api_key = primary.api_key.clone();
+            self.chat_base_url = primary.base_url.clone();
+        } else if !self.chat_api_key.is_empty() || !self.chat_base_url.is_empty() {
+            let target = spec.to_chat_target(&self.chat_api_key, &self.chat_base_url);
+            self.chat_targets = vec![target];
+        }
+        self.model_spec = Some(spec);
+    }
+
+    /// 按角色设置模型（主聊或辅助任务）。
+    pub fn set_role_model(&mut self, role: common::ModelRole, spec: common::ModelSpec) {
+        match role {
+            common::ModelRole::Main => self.set_model(spec),
+            common::ModelRole::Auxiliary(task) => {
+                let base = self.chat_targets.first().cloned().unwrap_or_else(|| {
+                    common::ChatTarget {
+                        provider_id: self.chat_provider.clone(),
+                        backend_id: self.chat_provider.clone(),
+                        model: self.chat_model.clone(),
+                        api_key: self.chat_api_key.clone(),
+                        base_url: self.chat_base_url.clone(),
+                    }
+                });
+                let target = spec.apply_to(&base);
+                self.auxiliary_targets.insert(task, vec![target]);
+            }
+        }
+    }
+
+    /// 当前主模型声明（若有）。
+    pub fn model_spec(&self) -> Option<&common::ModelSpec> {
+        self.model_spec.as_ref()
     }
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
@@ -412,6 +468,16 @@ impl AgentLoop {
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / delegate 共用）。
     pub fn set_chat_targets(&mut self, targets: Vec<common::ChatTarget>) {
+        if let Some(primary) = targets.first() {
+            self.chat_provider = primary.backend_id.clone();
+            self.chat_model = primary.model.clone();
+            self.chat_api_key = primary.api_key.clone();
+            self.chat_base_url = primary.base_url.clone();
+            self.model_spec = Some(common::ModelSpec::new(
+                &primary.backend_id,
+                &primary.model,
+            ));
+        }
         self.chat_targets = targets;
     }
 

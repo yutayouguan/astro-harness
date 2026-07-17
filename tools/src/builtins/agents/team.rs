@@ -21,6 +21,9 @@ pub struct TeamMemberArgs {
     pub agent_id: Option<String>,
     #[serde(default)]
     pub toolsets: Option<Vec<String>>,
+    /// 可选：`provider:model_id`（如 `claude:claude-sonnet-4-5`）。
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -131,6 +134,10 @@ pub fn dispatch_create(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyho
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty()),
                 toolsets: m.toolsets,
+                model: m
+                    .model
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
             })
             .collect(),
     };
@@ -186,6 +193,7 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
             role: delegate::DelegateRole::Leaf,
             toolsets: member.toolsets.clone(),
             max_iterations: None,
+            model: member.model.clone(),
         })
         .collect();
 
@@ -286,6 +294,7 @@ fn run_tasks_mode(
                 role: delegate::DelegateRole::Leaf,
                 toolsets: item.member.toolsets.clone(),
                 max_iterations: None,
+                model: item.member.model.clone(),
             }],
             caller_depth: home::current_spawn_depth(),
             max_spawn_depth: home::effective_max_spawn_depth(),
@@ -420,6 +429,9 @@ fn member_context(
         if let Some(agent_id) = &m.agent_id {
             ctx.push_str(&format!(" (agent_id: {agent_id})"));
         }
+        if let Some(model) = &m.model {
+            ctx.push_str(&format!(" [model: {model}]"));
+        }
         ctx.push('\n');
     }
     if let Some(desc) = &member.description {
@@ -452,6 +464,7 @@ mod tests {
                     description: None,
                     agent_id: None,
                     toolsets: None,
+                    model: None,
                 },
                 orchestration::TeamMember {
                     id: "b".into(),
@@ -459,6 +472,7 @@ mod tests {
                     description: None,
                     agent_id: None,
                     toolsets: None,
+                    model: Some("claude:opus".into()),
                 },
             ],
         }

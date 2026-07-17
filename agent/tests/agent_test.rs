@@ -127,3 +127,42 @@ async fn test_memory_tools_registered() {
     assert!(names.contains(&"search_context"));
     assert!(names.contains(&"pin_context"));
 }
+
+#[tokio::test]
+async fn test_set_model_agno_style_entry() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    agent.set_chat_credentials("openai", "gpt-old", "sk-test", "https://api.openai.com/v1");
+    agent.set_chat_targets(vec![common::ChatTarget {
+        provider_id: "openai".into(),
+        backend_id: "openai".into(),
+        model: "gpt-old".into(),
+        api_key: "sk-test".into(),
+        base_url: "https://api.openai.com/v1".into(),
+    }]);
+
+    let spec = common::ModelSpec::parse("claude:claude-sonnet-4-5")
+        .unwrap()
+        .with_temperature(0.2);
+    agent.set_model(spec);
+
+    assert_eq!(agent.chat_provider(), "claude");
+    assert_eq!(agent.chat_model(), "claude-sonnet-4-5");
+    assert_eq!(agent.temperature(), 0.2);
+    let primary = &agent.chat_targets()[0];
+    assert_eq!(primary.backend_id, "claude");
+    assert_eq!(primary.model, "claude-sonnet-4-5");
+    assert_eq!(primary.api_key, "sk-test");
+    assert_eq!(
+        agent.model_spec().map(|s| s.as_str()),
+        Some("claude:claude-sonnet-4-5".into())
+    );
+
+    agent.set_role_model(
+        common::ModelRole::Auxiliary(common::AuxiliaryTask::Compaction),
+        common::ModelSpec::parse("openai:gpt-5.6").unwrap(),
+    );
+    let aux = agent.auxiliary_targets(common::AuxiliaryTask::Compaction);
+    assert_eq!(aux[0].backend_id, "openai");
+    assert_eq!(aux[0].model, "gpt-5.6");
+}

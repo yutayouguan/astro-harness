@@ -53,6 +53,7 @@
 10. R8：`team_run` tasks 串行共享任务板；`ToolEntry.exclusive_access` 替代硬编码表。
 11. R3：`ChatContentPart` Audio/Video；Gemini 入模，OpenAI/Anthropic 文本回落；`Message.media` 并入 parts。
 12. R4 收尾：`SqliteStore` 下沉 `common::sqlite`；Usage/Session/Knowledge/Artifact/Cron/Orchestration 全量 `impl`；删除 `usage::sqlite_store`。
+13. Model 一等公民：`ModelSpec` / `ModelRole` + `AgentLoop::set_model`；Team/delegate 可选 `model`。
 
 ## 归档
 
@@ -62,4 +63,4 @@
   - `v-agno-lessons-complete-r3`（含 R3 多模态入模）
   - `v-agno-lessons-final`（含 common::sqlite 统一与全量 Review 收尾）
 - 关键测试（本机）：common 14 / usage 13 / artifacts 6 / agent 74 / tools 120 passed。
-- **流程结束**：Agno 课时全循环 + Review 修复已锁定。
+- **流程结束**：Agno 课时全循环 + Review 修复已锁定；后续 `ModelSpec` 为增量增强。
