@@ -17,6 +17,7 @@ pub const TOOL_GUIDANCE: &str = "\
 需求含糊、有多种理解或缺关键信息时，别猜别硬做：用 ask 向用户提问（questions 数组，可带 options；也可只给自由输入框），拿到答复再继续。\n\
 敏感或不可逆操作（对外发送、删除文件、改系统配置等）执行前，用 ask（mode=confirm，title+body）请用户批准。\n\
 向用户展示本工作区媒体/网页时，在回复正文写 ![audio](path) / ![video](path) / ![image](path) / ![html](path)；path 用工具返回的工作区相对路径（如 generated/audio/…、generated/html/…），HTML 文件请写入 generated/html/ 目录；不要写绝对路径，也不要用「文件：`路径`」这类纯文本，更不要用 present_* / A2UI 挂媒体卡。\n\
+展示已写入的代码/文本文件（.py/.rs/.c/.ts/.json/.md 等）时，同样在正文写 ![code](path) 引用工作区相对路径，前端会按后缀语法高亮渲染成可复制/下载/引用的代码卡片；不要把文件全文再粘回正文，避免重复占用上下文。\n\
 每次思考用 <think>...</think> 标签包裹。";
 
 /// 可链式追加的 prompt 层容器。
