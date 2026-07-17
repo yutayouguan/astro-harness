@@ -1370,6 +1370,7 @@ export default function ChatView({
                               <LocationA2UISurface
                                 operations={surface.operations}
                                 disabled={surface.status !== "active"}
+                                mediaBaseDir={mediaBaseDir}
                                 onAction={(name, context) =>
                                   onUiAction?.(m.id, name, context)
                                 }
@@ -1378,6 +1379,7 @@ export default function ChatView({
                                 <A2UIRenderer
                                   operations={surface.operations}
                                   disabled={surface.status !== "active"}
+                                  mediaBaseDir={mediaBaseDir}
                                   onAction={(name, context) =>
                                     onUiAction?.(m.id, name, context)
                                   }
@@ -1385,6 +1387,7 @@ export default function ChatView({
                               ) : (
                                 <A2UISurfaceCard
                                   surface={surface}
+                                  mediaBaseDir={mediaBaseDir}
                                   onAction={(name, context) =>
                                     onUiAction?.(m.id, name, context)
                                   }

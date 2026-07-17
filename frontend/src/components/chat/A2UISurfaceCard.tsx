@@ -8,6 +8,7 @@ import A2UIRenderer from "../../a2ui/A2UIRenderer";
 
 type Props = {
   surface: UiSurface;
+  mediaBaseDir?: string | null;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
 
@@ -48,7 +49,11 @@ function KindIcon({ kind }: { kind: SurfaceKind }) {
   }
 }
 
-export default function A2UISurfaceCard({ surface, onAction }: Props) {
+export default function A2UISurfaceCard({
+  surface,
+  mediaBaseDir,
+  onAction,
+}: Props) {
   const [open, setOpen] = useState(true);
   const kind = detectKind(surface);
   const title = extractTitle(surface);
@@ -79,6 +84,7 @@ export default function A2UISurfaceCard({ surface, onAction }: Props) {
             <A2UIRenderer
               operations={surface.operations}
               disabled={disabled}
+              mediaBaseDir={mediaBaseDir}
               onAction={onAction}
             />
           </div>

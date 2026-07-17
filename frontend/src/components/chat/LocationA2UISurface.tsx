@@ -6,12 +6,14 @@ import { useIpCitySuggestion } from "../../hooks/ui/useIpCitySuggestion";
 type Props = {
   operations: unknown[];
   disabled?: boolean;
+  mediaBaseDir?: string | null;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
 
 export default function LocationA2UISurface({
   operations,
   disabled = false,
+  mediaBaseDir,
   onAction,
 }: Props) {
   const { t } = useI18n();
@@ -34,6 +36,7 @@ export default function LocationA2UISurface({
         operations={operations}
         disabled={disabled}
         initialFieldValues={initialFieldValues}
+        mediaBaseDir={mediaBaseDir}
         onAction={onAction}
       />
     </div>

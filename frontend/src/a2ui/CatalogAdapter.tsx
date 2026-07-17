@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import MediaPreview from "../components/media/MediaPreview";
+import { resolveMediaPreviewPath } from "../lib/media/resolveMediaSrc";
 import { mergeActionContext, missingRequiredFields } from "./formState";
 import type { A2uiComponent } from "./types";
 import { isKnownComponent } from "./validate";
@@ -33,6 +34,7 @@ type RenderCtx = {
   unknownLabel: string;
   fieldValues: Record<string, unknown>;
   setFieldValue: (id: string, value: unknown) => void;
+  mediaBaseDir?: string | null;
   /** True when any required field is still empty. */
   requiredBlocked: boolean;
 };
@@ -114,9 +116,10 @@ function CatalogNode({
         (typeof node.url === "string" && node.url) ||
         "";
       if (!src) return null;
+      const path = resolveMediaPreviewPath(src, ctx.mediaBaseDir);
       return (
         <div className="a2ui-image-wrap a2ui-image">
-          <MediaPreview kind="image" path={src} compact />
+          <MediaPreview kind="image" path={path} compact />
         </div>
       );
     }
@@ -305,6 +308,7 @@ export function renderCatalogTree(
     unknownLabel: string;
     fieldValues: Record<string, unknown>;
     setFieldValue: (id: string, value: unknown) => void;
+    mediaBaseDir?: string | null;
   },
 ): ReactNode {
   const byId = new Map(components.map((c) => [c.id, c]));
@@ -325,6 +329,7 @@ export function renderCatalogTree(
     unknownLabel: opts.unknownLabel,
     fieldValues: opts.fieldValues,
     setFieldValue: opts.setFieldValue,
+    mediaBaseDir: opts.mediaBaseDir,
     requiredBlocked,
   };
   return <CatalogNode node={root} ctx={ctx} />;

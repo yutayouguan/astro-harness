@@ -10,6 +10,7 @@ type Props = {
   operations: unknown[];
   disabled?: boolean;
   initialFieldValues?: Record<string, unknown>;
+  mediaBaseDir?: string | null;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
 
@@ -31,6 +32,7 @@ export default function A2UIRenderer({
   operations,
   disabled = false,
   initialFieldValues,
+  mediaBaseDir = null,
   onAction,
 }: Props) {
   const { t } = useI18n();
@@ -61,6 +63,7 @@ export default function A2UIRenderer({
         fieldValues,
         setFieldValue: (id, value) =>
           setFieldValues((prev) => ({ ...prev, [id]: value })),
+        mediaBaseDir,
       })}
     </div>
   );
