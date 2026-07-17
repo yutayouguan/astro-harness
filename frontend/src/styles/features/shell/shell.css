@@ -573,10 +573,9 @@ html[data-tone="teal"] {
   text-overflow: ellipsis;
   background: linear-gradient(
     100deg,
-    #0084fd 0%,
-    #1d57fd 32%,
-    #4130fc 58%,
-    #6020fc 100%
+    color-mix(in srgb, var(--tone, #2563eb) 82%, #0b1020 18%) 0%,
+    var(--tone, #2563eb) 46%,
+    color-mix(in srgb, var(--tone, #2563eb) 60%, #ffffff 40%) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
