@@ -26,6 +26,9 @@ const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 pub struct ImageGenArgs {
     /// 详细画面提示词（不可为空）。须写充实描述，勿只用短句摘要：主体与动作、场景/背景、构图与景别、光影与色彩、材质质感、艺术风格/媒介、氛围情绪。关键视觉方向不明确且无法从上下文合理推断时，先用 `clarify` 询问用户；用户明确要求自由发挥时无需追问。若思考过程已写好详细描述，必须原样传入本字段。宽高比与分辨率用 `aspect_ratio` / `image_size`，勿只写进本 prompt。
     pub prompt: String,
+    /// 短标题（建议中文，如「雨后山菌」），用于落盘文件名：`{title}-{时间戳}-{短id}.png`。缺省则用「图片」。
+    #[serde(default)]
+    pub title: Option<String>,
     /// 宽高比（用户要 16:9 / 9:16 / 1:1 等时必须传此字段，勿只写进 prompt）。常用：`1:1` / `16:9` / `9:16` / `4:3` / `3:4`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
@@ -154,7 +157,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate or edit images via Gemini Interactions (Nano Banana). BEFORE calling: if key visual direction (especially subject, style/medium, composition, or mood) is unclear and cannot be reasonably inferred from context, use `clarify` to ask the user, preferably with concise options. Do not ask when the user explicitly delegates creative choices (e.g. \"you decide\" / \"surprise me\"). prompt MUST be a rich, detailed image description (subject/action, setting, composition, lighting, colors, materials, art style/medium, mood)—NOT a short summary; if you already drafted a detailed prompt in thinking, pass it verbatim. REQUIRED: if the user asks for aspect ratio (e.g. 16:9) or resolution (e.g. 2K), you MUST set aspect_ratio and/or image_size fields — do NOT only put them in prompt text. image_size values: 0.5K|1K|2K|4K. Also supports reference_images (≤14), previous_interaction_id, google_search/image_search, thinking_level, video_uri/video. OpenAI fallback is prompt-only. Writes generated/images/."
+        description: "Generate or edit images via Gemini Interactions (Nano Banana). BEFORE calling: if key visual direction (especially subject, style/medium, composition, or mood) is unclear and cannot be reasonably inferred from context, use `clarify` to ask the user, preferably with concise options. Do not ask when the user explicitly delegates creative choices (e.g. \"you decide\" / \"surprise me\"). prompt MUST be a rich, detailed image description (subject/action, setting, composition, lighting, colors, materials, art style/medium, mood)—NOT a short summary; if you already drafted a detailed prompt in thinking, pass it verbatim. Optional title: short Chinese name for the saved file (e.g. 雨后山菌 → 雨后山菌-YYYYMMDD-….png; default 图片). REQUIRED: if the user asks for aspect ratio (e.g. 16:9) or resolution (e.g. 2K), you MUST set aspect_ratio and/or image_size fields — do NOT only put them in prompt text. image_size values: 0.5K|1K|2K|4K. Also supports reference_images (≤14), previous_interaction_id, google_search/image_search, thinking_level, video_uri/video. OpenAI fallback is prompt-only. Writes generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
@@ -266,7 +269,7 @@ async fn generate_one_google(
         .build()?;
 
     let result = google_interactions_image(&client, &config, &req).await?;
-    let rel = save_generated_image(ctx, &result.image)?;
+    let rel = save_generated_image(ctx, &result.image, args.title.as_deref())?;
 
     let mut out = format!(
         "图片已生成：{rel}\nprovider={}\nmodel={}\ninteraction_id={}",
@@ -319,7 +322,7 @@ async fn generate_one_openai_compat(
         .next()
         .ok_or_else(|| anyhow::anyhow!("未返回图片数据"))?;
 
-    let rel = save_generated_image(ctx, &img)?;
+    let rel = save_generated_image(ctx, &img, args.title.as_deref())?;
     let mut out = format!(
         "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）",
         creds.provider, creds.model
@@ -338,7 +341,11 @@ async fn generate_one_openai_compat(
     ))
 }
 
-fn save_generated_image(ctx: &ToolContext<'_>, img: &GeneratedImage) -> anyhow::Result<String> {
+fn save_generated_image(
+    ctx: &ToolContext<'_>,
+    img: &GeneratedImage,
+    title: Option<&str>,
+) -> anyhow::Result<String> {
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Images);
     std::fs::create_dir_all(&dir)?;
     let ext = if img.mime_type.contains("jpeg") || img.mime_type.contains("jpg") {
@@ -348,12 +355,7 @@ fn save_generated_image(ctx: &ToolContext<'_>, img: &GeneratedImage) -> anyhow::
     } else {
         "png"
     };
-    let filename = format!(
-        "img-{}-{}.{}",
-        chrono::Local::now().format("%Y%m%d-%H%M%S"),
-        &uuid::Uuid::new_v4().simple().to_string()[..8],
-        ext
-    );
+    let filename = super::media_out::generated_media_filename(title, "图片", ext);
     let path = dir.join(filename);
     std::fs::write(&path, &img.data)?;
     Ok(rel_workspace(ctx, &path))
@@ -469,6 +471,7 @@ mod arg_tests {
     fn rejects_lowercase_image_size() {
         let a = ImageGenArgs {
             prompt: "x".into(),
+            title: None,
             aspect_ratio: None,
             image_size: Some("1k".into()),
             reference_images: None,
@@ -486,6 +489,7 @@ mod arg_tests {
     fn rejects_image_search_without_google_search() {
         let a = ImageGenArgs {
             prompt: "x".into(),
+            title: None,
             aspect_ratio: None,
             image_size: None,
             reference_images: None,
@@ -503,6 +507,7 @@ mod arg_tests {
     fn rejects_both_video_inputs() {
         let a = ImageGenArgs {
             prompt: "x".into(),
+            title: None,
             aspect_ratio: None,
             image_size: None,
             reference_images: None,
@@ -520,6 +525,7 @@ mod arg_tests {
     fn accepts_valid_size_and_thinking() {
         let a = ImageGenArgs {
             prompt: "x".into(),
+            title: None,
             aspect_ratio: Some("1:1".into()),
             image_size: Some("1K".into()),
             reference_images: None,
@@ -537,6 +543,7 @@ mod arg_tests {
     fn normalize_lowercase_image_size() {
         let mut a = ImageGenArgs {
             prompt: "cat".into(),
+            title: None,
             aspect_ratio: None,
             image_size: Some("2k".into()),
             reference_images: None,
@@ -555,6 +562,7 @@ mod arg_tests {
     fn base_args() -> ImageGenArgs {
         ImageGenArgs {
             prompt: "x".into(),
+            title: None,
             aspect_ratio: None,
             image_size: None,
             reference_images: None,

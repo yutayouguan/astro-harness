@@ -23,6 +23,9 @@ use crate::schema::schema_for_args;
 pub struct MusicGenArgs {
     /// 音乐描述（流派/乐器/BPM/情绪/结构等）。不含歌词正文时写主题即可。
     pub prompt: String,
+    /// 短标题（建议中文，如「采菌子歌」），用于落盘文件名：`{title}-{时间戳}-{短id}.mp3`。缺省则用「音乐」。
+    #[serde(default)]
+    pub title: Option<String>,
     /// 可选歌词。有则按此演唱（勿省略已写好的歌词）；无则由 Lyria 自写。建议带 `[Verse]`/`[Chorus]` 等分段标签。
     #[serde(default)]
     pub lyrics: Option<String>,
@@ -106,7 +109,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "music_gen".to_string(),
         toolset: "music_gen".to_string(),
-        description: "Generate music with Google Lyria 3 (Interactions). prompt=style/mood/instrumentation; optional lyrics (if you already wrote lyrics, MUST pass them here — otherwise Lyria invents its own); model=clip|pro; optional reference_images (≤10); format=mp3|wav (wav requires pro). Google only — not local playback. Writes generated/audio/.".to_string(),
+        description: "Generate music with Google Lyria 3 (Interactions). prompt=style/mood/instrumentation; optional title (short Chinese name for the file, e.g. 采菌子歌 → 采菌子歌-YYYYMMDD-….mp3; default 音乐); optional lyrics (if you already wrote lyrics, MUST pass them here — otherwise Lyria invents its own); model=clip|pro; optional reference_images (≤10); format=mp3|wav (wav requires pro). Google only — not local playback. Writes generated/audio/.".to_string(),
         schema: schema_for_args::<MusicGenArgs>(),
         check_fn: None,
         icon: "music",
@@ -155,11 +158,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let ext = music_extension(&result.mime_type, format);
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
     std::fs::create_dir_all(&dir)?;
-    let path = dir.join(format!(
-        "music-{}-{}.{}",
-        chrono::Local::now().format("%Y%m%d-%H%M%S"),
-        &uuid::Uuid::new_v4().simple().to_string()[..8],
-        ext
+    let path = dir.join(super::media_out::generated_media_filename(
+        parsed.title.as_deref(),
+        "音乐",
+        ext,
     ));
     std::fs::write(&path, &result.audio_bytes)?;
     let rel = path
@@ -248,6 +250,7 @@ mod tests {
     ) -> MusicGenArgs {
         MusicGenArgs {
             prompt: prompt.into(),
+            title: None,
             lyrics: None,
             model: model.map(str::to_string),
             reference_images,

@@ -33,6 +33,9 @@ pub struct TtsSpeaker {
 pub struct TtsArgs {
     /// 待合成的文本（不可为空；可含 `[whispers]` 等音频标记）。
     pub text: String,
+    /// 短标题（建议中文，如「旁白草稿」），用于落盘文件名：`{title}-{时间戳}-{短id}.wav`。缺省则用「语音」。
+    #[serde(default)]
+    pub title: Option<String>,
     /// 单说话人音色：Google 预置如 `Kore`；OpenAI 路径可用 `alloy` 等。
     /// 若同时提供 `speakers`，以 `speakers` 为准。
     #[serde(default)]
@@ -53,7 +56,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "tts".to_string(),
         toolset: "tts".to_string(),
-        description: "Convert text to speech. Google: Gemini Interactions TTS (voices, optional speakers[max 2], style director notes, stream). OpenAI: /audio/speech fallback when Google is not configured. Advanced speakers/style/stream are Google-only."
+        description: "Convert text to speech. Google: Gemini Interactions TTS (voices, optional speakers[max 2], style director notes, stream). Optional title: short Chinese name for the saved file (e.g. 旁白草稿 → 旁白草稿-YYYYMMDD-….wav; default 语音). OpenAI: /audio/speech fallback when Google is not configured. Advanced speakers/style/stream are Google-only."
             .to_string(),
         schema: schema_for_args::<TtsArgs>(),
         check_fn: None,
@@ -96,7 +99,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("alloy");
-    let msg = synthesize_openai(ctx, text, voice).await?;
+    let msg = synthesize_openai(ctx, text, voice, parsed.title.as_deref()).await?;
     if advanced {
         Ok(format!(
             "{msg}\nnote: speakers/style/stream 仅 Google Interactions TTS 生效"
@@ -143,10 +146,10 @@ async fn synthesize_google(
     let result = google_interactions_tts(&client, &config, &req).await?;
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
     std::fs::create_dir_all(&dir)?;
-    let path = dir.join(format!(
-        "tts-{}-{}.wav",
-        chrono::Local::now().format("%Y%m%d-%H%M%S"),
-        &uuid::Uuid::new_v4().simple().to_string()[..8]
+    let path = dir.join(super::media_out::generated_media_filename(
+        parsed.title.as_deref(),
+        "语音",
+        "wav",
     ));
     std::fs::write(&path, &result.wav_bytes)?;
     let rel = path
@@ -208,6 +211,7 @@ async fn synthesize_openai(
     ctx: &ToolContext<'_>,
     text: &str,
     voice: &str,
+    title: Option<&str>,
 ) -> anyhow::Result<String> {
     let (api_key, base) = resolve_openai_tts(ctx)?;
     let url = format!("{base}/audio/speech");
@@ -232,10 +236,10 @@ async fn synthesize_openai(
     let bytes = resp.bytes().await?;
     let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
     std::fs::create_dir_all(&dir)?;
-    let path = dir.join(format!(
-        "tts-{}-{}.mp3",
-        chrono::Local::now().format("%Y%m%d-%H%M%S"),
-        &uuid::Uuid::new_v4().simple().to_string()[..8]
+    let path = dir.join(super::media_out::generated_media_filename(
+        title,
+        "语音",
+        "mp3",
     ));
     std::fs::write(&path, &bytes)?;
     let rel = path
@@ -291,6 +295,7 @@ mod tests {
     fn resolve_speakers_prefers_speakers_over_voice() {
         let args = TtsArgs {
             text: "Joe: hi".into(),
+            title: None,
             voice: Some("Fenrir".into()),
             speakers: Some(vec![TtsSpeaker {
                 speaker: "Joe".into(),

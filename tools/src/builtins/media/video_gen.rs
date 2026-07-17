@@ -19,6 +19,9 @@ use crate::schema::schema_for_args;
 pub struct VideoGenArgs {
     /// 详细视频提示词（不可为空）。须写充实描述，勿只用短句：主体与动作、镜头运动、场景、光影/色彩、风格与氛围、时间节奏。关键视觉或镜头方向不明确且无法从上下文合理推断时，先用 `clarify` 询问用户；用户明确要求自由发挥时无需追问。若思考过程已写好详细描述，必须原样传入。
     pub prompt: String,
+    /// 短标题（建议中文，如「山间采菌」），用于落盘文件名：`{title}-{时间戳}-{短id}.mp4`。缺省则用「视频」。
+    #[serde(default)]
+    pub title: Option<String>,
     /// 宽高比，如 `16:9` / `9:16`（可选）。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
@@ -68,7 +71,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video via Google native Veo (predictLongRunning). BEFORE calling: if key visual or shot direction (especially subject/action, camera movement, style, or mood) is unclear and cannot be reasonably inferred from context, use `clarify` to ask the user, preferably with concise options. Do not ask when the user explicitly delegates creative choices. prompt MUST be a rich, detailed shot description (subject/action, camera move, setting, lighting, style, mood)—NOT a short summary; pass thinking drafts verbatim. Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
+        description: "Generate a short video via Google native Veo (predictLongRunning). BEFORE calling: if key visual or shot direction (especially subject/action, camera movement, style, or mood) is unclear and cannot be reasonably inferred from context, use `clarify` to ask the user, preferably with concise options. Do not ask when the user explicitly delegates creative choices. prompt MUST be a rich, detailed shot description (subject/action, camera move, setting, lighting, style, mood)—NOT a short summary; pass thinking drafts verbatim. Optional title: short Chinese name for the saved file (e.g. 山间采菌 → 山间采菌-YYYYMMDD-….mp4; default 视频). Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,
@@ -234,10 +237,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     on_progress("api_path=native");
     let api_path = "native";
 
-    let filename = format!(
-        "vid-{}-{}.mp4",
-        chrono::Local::now().format("%Y%m%d-%H%M%S"),
-        &uuid::Uuid::new_v4().simple().to_string()[..8]
+    let filename = super::media_out::generated_media_filename(
+        parsed.title.as_deref(),
+        "视频",
+        "mp4",
     );
     let path = dir.join(&filename);
     std::fs::write(&path, &video.data)?;
