@@ -9,7 +9,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { Eye, FileCode2 } from "lucide-react";
+import { Eye, ExternalLink, FileCode2, Save, Undo2 } from "lucide-react";
 import { useTheme } from "../../hooks/app/useTheme";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -225,8 +225,10 @@ export default function WorkspacePanel({ onClose }: Props) {
   const dirty = view === "editor" && draftContent !== savedContent;
   const editorIsMarkdown = isMarkdownFilename(editorName);
   const editorIsHtml = mediaKindOf(editorName) === "html";
-  const canPreviewEditor = editorIsMarkdown || editorIsHtml;
+  const canTogglePreview = editorIsMarkdown || editorIsHtml;
+  const docPreview = canTogglePreview && mdMode === "preview";
   const showMdPreview = editorIsMarkdown && mdMode === "preview";
+  const showHtmlPreview = editorIsHtml && mdMode === "preview";
 
   const setMdModePersist = (mode: MdMode) => {
     setMdMode(mode);
@@ -377,19 +379,6 @@ export default function WorkspacePanel({ onClose }: Props) {
     setError(null);
   };
 
-  /** 源码视图 → 预览：md 切到预览模式；html 切到媒体预览视图 */
-  const previewCurrent = () => {
-    if (editorIsMarkdown) {
-      setMdModePersist("preview");
-      return;
-    }
-    if (editorIsHtml) {
-      setMediaKind("html");
-      setView("media");
-      setError(null);
-    }
-  };
-
   const openMedia = (
     entry: FileEntryDto,
     kind: MediaKind,
@@ -430,7 +419,8 @@ export default function WorkspacePanel({ onClose }: Props) {
       setError(null);
       try {
         const content = await invoke<string>("read_file", { path: entry.path });
-        openMedia(entry, "html", content);
+        openEditor(entry.path, entry.name, content);
+        setMdMode("preview");
       } catch {
         await openWithSystemApp(entry.path);
       } finally {
@@ -1009,6 +999,37 @@ export default function WorkspacePanel({ onClose }: Props) {
     runPaste,
   ]);
 
+  const previewToggle = canTogglePreview ? (
+    <div
+      className="ws-md-modes"
+      role="tablist"
+      aria-label={t("workspace.previewMode")}
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={docPreview}
+        className={`ws-md-mode ws-md-mode--icon ${docPreview ? "is-active" : ""}`}
+        onClick={() => setMdModePersist("preview")}
+        title={t("workspace.previewMode")}
+        aria-label={t("workspace.previewMode")}
+      >
+        <Eye size={15} strokeWidth={2.3} aria-hidden />
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={!docPreview}
+        className={`ws-md-mode ws-md-mode--icon ${!docPreview ? "is-active" : ""}`}
+        onClick={() => setMdModePersist("source")}
+        title={t("workspace.previewSource")}
+        aria-label={t("workspace.previewSource")}
+      >
+        <FileCode2 size={15} strokeWidth={2.3} aria-hidden />
+      </button>
+    </div>
+  ) : null;
+
   return (
     <aside
       className="workspace-panel"
@@ -1345,34 +1366,16 @@ export default function WorkspacePanel({ onClose }: Props) {
               </div>
             </div>
             <div className="ws-editor-actions">
-              {mediaKind === "html" && editorPath ? (
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  onClick={() =>
-                    openEditor(editorPath, editorName, draftContent)
-                  }
-                >
-                  {t("media.htmlSource")}
-                </button>
-              ) : null}
-              {mediaKind === "html" && editorPath ? (
-                <MediaToolbar
-                  path={editorPath}
-                  kind="html"
-                  className="is-inline"
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  onClick={() => void openCurrentExternally()}
-                  disabled={!editorPath}
-                  data-tip={t("workspace.openExternally")}
-                >
-                  {t("workspace.openExternally")}
-                </button>
-              )}
+              <button
+                type="button"
+                className="ws-tool-btn"
+                onClick={() => void openCurrentExternally()}
+                disabled={!editorPath}
+                title={t("workspace.openExternally")}
+                aria-label={t("workspace.openExternally")}
+              >
+                <ExternalLink size={17} strokeWidth={2.1} aria-hidden />
+              </button>
               <button
                 type="button"
                 className="ws-tool-btn ws-delete-btn"
@@ -1442,49 +1445,34 @@ export default function WorkspacePanel({ onClose }: Props) {
                 <>
                   <button
                     type="button"
-                    className="ghost-btn"
+                    className="ws-tool-btn"
                     onClick={undoEdits}
                     disabled={saving || deleting}
-                    data-tip={t("workspace.undo")}
+                    title={t("workspace.undo")}
+                    aria-label={t("workspace.undo")}
                   >
-                    {t("workspace.undo")}
+                    <Undo2 size={17} strokeWidth={2.1} aria-hidden />
                   </button>
                   <button
                     type="button"
-                    className="ghost-btn active"
+                    className="ws-tool-btn is-active"
                     onClick={() => void saveFile()}
                     disabled={saving || deleting}
-                    data-tip={t("workspace.save")}
+                    title={t("workspace.save")}
+                    aria-label={t("workspace.save")}
                   >
-                    {saving ? "…" : t("workspace.save")}
+                    <Save size={17} strokeWidth={2.1} aria-hidden />
                   </button>
                 </>
               )}
-              {canPreviewEditor && (
-                <button
-                  type="button"
-                  className={`ws-tool-btn ${showMdPreview ? "is-active" : ""}`}
-                  onClick={() =>
-                    showMdPreview ? setMdModePersist("source") : previewCurrent()
-                  }
-                  title={
-                    showMdPreview
-                      ? t("workspace.previewSource")
-                      : t("workspace.previewMode")
-                  }
-                  aria-label={
-                    showMdPreview
-                      ? t("workspace.previewSource")
-                      : t("workspace.previewMode")
-                  }
-                >
-                  {showMdPreview ? (
-                    <FileCode2 size={17} strokeWidth={2.1} aria-hidden />
-                  ) : (
-                    <Eye size={17} strokeWidth={2.1} aria-hidden />
-                  )}
-                </button>
-              )}
+              {editorIsHtml && editorPath ? (
+                <MediaToolbar
+                  path={editorPath}
+                  kind="html"
+                  className="is-inline"
+                />
+              ) : null}
+              {previewToggle}
               <button
                 type="button"
                 className="ws-tool-btn ws-delete-btn"
@@ -1500,11 +1488,21 @@ export default function WorkspacePanel({ onClose }: Props) {
 
           {error && <div className="side-error">{error}</div>}
 
-          <div className="ws-editor-wrap">
+          <div
+            className="ws-editor-wrap"
+            data-mode={docPreview ? "preview" : "source"}
+          >
             {showMdPreview ? (
               <div className="ws-md-preview">
                 <ChatMarkdown content={draftContent} />
               </div>
+            ) : showHtmlPreview && editorPath ? (
+              <MediaPreview
+                kind="html"
+                path={editorPath}
+                htmlSource={draftContent}
+                className="ws-editor-html"
+              />
             ) : (
               <WorkspaceEditor
                 value={draftContent}
