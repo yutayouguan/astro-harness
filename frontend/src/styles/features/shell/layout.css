@@ -407,9 +407,14 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 .page-title-icon svg .nav-icon-cutout {
+  fill: var(--nav-icon-cutout);
+  stroke: none;
+}
+
+.page-title-icon svg path.nav-icon-cutout {
   fill: none;
   stroke: var(--nav-icon-cutout);
-  stroke-width: 2.4;
+  stroke-width: 2.35;
 }
 
 .page-title-icon svg .nav-icon-hole {
