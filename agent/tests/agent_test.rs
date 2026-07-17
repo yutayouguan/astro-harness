@@ -166,3 +166,43 @@ async fn test_set_model_agno_style_entry() {
     assert_eq!(aux[0].backend_id, "openai");
     assert_eq!(aux[0].model, "gpt-5.6");
 }
+
+#[tokio::test]
+async fn test_set_fallback_models_keeps_primary() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    agent.set_chat_targets(vec![common::ChatTarget {
+        provider_id: "claude".into(),
+        backend_id: "claude".into(),
+        model: "opus".into(),
+        api_key: "sk-claude".into(),
+        base_url: "https://api.anthropic.com".into(),
+    }]);
+
+    agent.set_fallback_models(&[
+        common::ModelSpec::parse("openai:gpt-5.6").unwrap(),
+        common::ModelSpec::parse("google:gemini-2.5-flash").unwrap(),
+        common::ModelSpec::parse("openai:gpt-4o").unwrap(), // same provider → skip
+        common::ModelSpec::parse("deepseek:chat").unwrap(), // would be 4th → capped
+        common::ModelSpec::parse("zhipu:glm").unwrap(),
+    ]);
+
+    let chain = agent.chat_targets();
+    assert_eq!(chain.len(), 4); // primary + 3 fallbacks
+    assert_eq!(chain[0].backend_id, "claude");
+    assert_eq!(chain[0].model, "opus");
+    assert_eq!(chain[1].backend_id, "openai");
+    assert_eq!(chain[1].model, "gpt-5.6");
+    assert_eq!(chain[1].api_key, "sk-claude"); // inherits primary creds
+    assert_eq!(chain[2].backend_id, "google");
+    assert_eq!(chain[3].backend_id, "deepseek");
+
+    agent.set_role_fallback_models(
+        common::ModelRole::Auxiliary(common::AuxiliaryTask::TitleGeneration),
+        &[common::ModelSpec::parse("openai:gpt-5.6").unwrap()],
+    );
+    let aux = agent.auxiliary_targets(common::AuxiliaryTask::TitleGeneration);
+    assert_eq!(aux.len(), 2);
+    assert_eq!(aux[0].backend_id, "claude"); // preferred = primary
+    assert_eq!(aux[1].backend_id, "openai");
+}

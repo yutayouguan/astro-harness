@@ -34,7 +34,7 @@
 - 前端 `MsgActivity` 优先用结构化 `activity.media`，回落 `parseGeneratedMedia`（含 sidecar）
 - session schema **v15** `messages.media_json`：用户附图 / 工具媒体落盘；hydrate 优先读列，tool 回落 sidecar
 - **已做**：`ChatContentPart::{AudioUrl,VideoUrl}`；Gemini native/Interactions 走 inlineData；OpenAI/Anthropic 回落文本标注；`to_provider_messages` 映射 Parts + `Message.media`
-- **Model 一等公民**：`common::{ModelSpec, ModelRole}`（`provider:model_id` 简写）；`AgentLoop::set_model` / `set_role_model`；Team 成员 / `DelegateTaskSpec` 可选 `model` 覆盖子 Agent 模型
+- **Model 一等公民**：`common::{ModelSpec, ModelRole}`（`provider:model_id` 简写）；`AgentLoop::set_model` / `set_role_model`；`set_fallback_models` / `set_role_fallback_models`（糖，复用 `chat_targets`）；Team 成员 / `DelegateTaskSpec` 可选 `model` 覆盖子 Agent 模型
 
 ## 二、统一工具调用与 Agent 生命周期
 

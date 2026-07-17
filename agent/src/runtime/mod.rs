@@ -436,17 +436,68 @@ impl AgentLoop {
         match role {
             common::ModelRole::Main => self.set_model(spec),
             common::ModelRole::Auxiliary(task) => {
-                let base = self.chat_targets.first().cloned().unwrap_or_else(|| {
-                    common::ChatTarget {
-                        provider_id: self.chat_provider.clone(),
-                        backend_id: self.chat_provider.clone(),
-                        model: self.chat_model.clone(),
-                        api_key: self.chat_api_key.clone(),
-                        base_url: self.chat_base_url.clone(),
-                    }
-                });
+                let base = self.primary_chat_target();
                 let target = spec.apply_to(&base);
                 self.auxiliary_targets.insert(task, vec![target]);
+            }
+        }
+    }
+
+    /// Agno 风格主聊 fallback 入口：只改 `chat_targets[1..]`，保留 primary。
+    ///
+    /// - 条数上限：[`common::MAX_CHAT_FALLBACKS`]
+    /// - 凭据：默认继承 primary 的 `api_key` / `base_url`（跨厂商且 key 不同时，
+    ///   请改用已解析的 [`Self::set_chat_targets`]）
+    /// - 同 `provider_id` 去重（对齐 `expand_chat_targets`）
+    pub fn set_fallback_models(&mut self, specs: &[common::ModelSpec]) {
+        let primary = self.primary_chat_target();
+        let mut chain = vec![primary.clone()];
+        let mut seen = std::collections::HashSet::new();
+        seen.insert(primary.provider_id.clone());
+        for spec in specs.iter().take(common::MAX_CHAT_FALLBACKS * 2) {
+            if chain.len() >= 1 + common::MAX_CHAT_FALLBACKS {
+                break;
+            }
+            let t = spec.apply_to(&primary);
+            if t.provider_id.trim().is_empty() || !seen.insert(t.provider_id.clone()) {
+                continue;
+            }
+            chain.push(t);
+        }
+        self.chat_targets = chain;
+    }
+
+    /// 按角色设置 fallback 链（主聊或辅助任务）。
+    ///
+    /// 辅助任务：保留 preferred（链首；若尚无则先用当前主目标），再接 fallback。
+    pub fn set_role_fallback_models(
+        &mut self,
+        role: common::ModelRole,
+        specs: &[common::ModelSpec],
+    ) {
+        match role {
+            common::ModelRole::Main => self.set_fallback_models(specs),
+            common::ModelRole::Auxiliary(task) => {
+                let preferred = self
+                    .auxiliary_targets
+                    .get(&task)
+                    .and_then(|v| v.first())
+                    .cloned()
+                    .unwrap_or_else(|| self.primary_chat_target());
+                let mut chain = vec![preferred.clone()];
+                let mut seen = std::collections::HashSet::new();
+                seen.insert(preferred.provider_id.clone());
+                for spec in specs.iter().take(common::MAX_CHAT_FALLBACKS * 2) {
+                    if chain.len() >= 1 + common::MAX_CHAT_FALLBACKS {
+                        break;
+                    }
+                    let t = spec.apply_to(&preferred);
+                    if t.provider_id.trim().is_empty() || !seen.insert(t.provider_id.clone()) {
+                        continue;
+                    }
+                    chain.push(t);
+                }
+                self.auxiliary_targets.insert(task, chain);
             }
         }
     }
@@ -454,6 +505,18 @@ impl AgentLoop {
     /// 当前主模型声明（若有）。
     pub fn model_spec(&self) -> Option<&common::ModelSpec> {
         self.model_spec.as_ref()
+    }
+
+    fn primary_chat_target(&self) -> common::ChatTarget {
+        self.chat_targets.first().cloned().unwrap_or_else(|| {
+            common::ChatTarget {
+                provider_id: self.chat_provider.clone(),
+                backend_id: self.chat_provider.clone(),
+                model: self.chat_model.clone(),
+                api_key: self.chat_api_key.clone(),
+                base_url: self.chat_base_url.clone(),
+            }
+        })
     }
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
