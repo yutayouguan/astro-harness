@@ -717,13 +717,13 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
 
 .html-preview-frame {
   width: 100%;
-  height: 320px;
+  height: 460px;
   border: none;
   background: #fff;
 }
 
 .html-preview.is-compact .html-preview-frame {
-  height: 220px;
+  height: 320px;
 }
 
 html[data-theme="dark"] .html-preview {
