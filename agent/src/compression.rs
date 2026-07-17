@@ -132,15 +132,26 @@ mod tests {
 
     #[test]
     fn threshold_counts_uncompressed_tool_results() {
-        let mut messages = vec![
+        let messages: Vec<_> = (0..DEFAULT_TOOL_RESULTS_LIMIT)
+            .map(|i| Message::tool(&format!("tool-{i}")))
+            .collect();
+        let mgr = ToolCompressionManager::default();
+        assert!(mgr.should_compress(&messages));
+
+        let mut almost = messages;
+        almost.pop();
+        assert!(!mgr.should_compress(&almost));
+
+        // once marked compressed, they no longer count toward the limit
+        let mut marked = vec![
             Message::tool("a"),
             Message::tool("b"),
             Message::tool("c"),
         ];
-        let mgr = ToolCompressionManager::default();
-        assert!(mgr.should_compress(&messages));
-        messages[0].compressed_content = Some("a".into());
-        assert!(!mgr.should_compress(&messages));
+        for m in &mut marked {
+            m.compressed_content = Some("done".into());
+        }
+        assert!(!mgr.should_compress(&marked));
     }
 
     #[test]
