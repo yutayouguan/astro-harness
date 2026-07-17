@@ -248,6 +248,11 @@ messages 中 tool 结果超阈值
 - **不要**为对齐 Agno 急上 Postgres；桌面场景价值低。
 - Trace/eval 数据集可从现有 usage + session 导出。
 
+### 已落地（本轮）
+- `usage::sqlite_store::{open_wal, SqliteStore, ExampleSqliteStore}`：WAL 打开 + path/migrate 协议
+- 示范 migrate 空库；不合并多库、不上 Postgres
+- Knowledge/Usage 等现有库可逐步 `impl SqliteStore`
+
 ---
 
 ## 十、MCP
