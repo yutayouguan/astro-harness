@@ -671,10 +671,15 @@ impl AgentLoop {
         (static_ctx, dynamic_ctx, skill_pairs)
     }
 
-    /// 组装完整 system prompt：静态上下文 + inject + 动态召回 + 技能索引 + 工具指引 + 时间戳。
+    /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
     ///
     /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
     /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算（优先 static）。
+    ///
+    /// **不**把 `pending_inject_context` 编入 system：hooks / KeepGoing 注入仍走
+    /// [`Self::take_inject_context`] → 消息侧 `[astro:hook-context]`（见 `multi_turn`），
+    /// 避免与 system 层双重注入。
+    ///
     /// 副作用：设置 `ASTRO_WORKSPACE` 环境变量供工具读取。
     pub fn build_system_prompt(&self) -> String {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
@@ -692,7 +697,7 @@ impl AgentLoop {
         crate::prompt::assemble_system_layers(
             &mut budget,
             &static_ctx,
-            self.pending_inject_context.as_deref(),
+            None, // inject 走 take_inject_context / user 消息，不进 system
             &skill_index,
             &dynamic_ctx,
             guidance,

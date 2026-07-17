@@ -168,20 +168,49 @@ impl KnowledgeDb {
     }
 
     /// FTS 检索；返回匹配的内容元数据（citation 用 path/title）。
+    ///
+    /// `MATCH` 失败（特殊字符等）时回退为 title/path `LIKE` 子串搜索。
     pub fn search(&self, query: &str, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
         let q = query.trim();
         if q.is_empty() {
             return self.list(limit);
         }
+        let fts = (|| -> anyhow::Result<Vec<ContentRow>> {
+            let mut stmt = self.conn.prepare(
+                "SELECT c.id, c.title, c.path, c.status, c.created_at
+                 FROM contents_fts f
+                 JOIN contents c ON c.id = f.content_id
+                 WHERE contents_fts MATCH ?1
+                 LIMIT ?2",
+            )?;
+            let rows = stmt
+                .query_map(params![q, limit as i64], |r| {
+                    Ok(ContentRow {
+                        id: r.get(0)?,
+                        title: r.get(1)?,
+                        path: r.get(2)?,
+                        status: r.get(3)?,
+                        created_at: r.get(4)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })();
+        match fts {
+            Ok(rows) => Ok(rows),
+            Err(_) => self.search_like(q, limit),
+        }
+    }
+
+    fn search_like(&self, query: &str, limit: usize) -> anyhow::Result<Vec<ContentRow>> {
+        let pattern = format!("%{query}%");
         let mut stmt = self.conn.prepare(
-            "SELECT c.id, c.title, c.path, c.status, c.created_at
-             FROM contents_fts f
-             JOIN contents c ON c.id = f.content_id
-             WHERE contents_fts MATCH ?1
-             LIMIT ?2",
+            "SELECT id, title, path, status, created_at FROM contents
+             WHERE title LIKE ?1 OR path LIKE ?1
+             ORDER BY created_at DESC LIMIT ?2",
         )?;
         let rows = stmt
-            .query_map(params![q, limit as i64], |r| {
+            .query_map(params![pattern, limit as i64], |r| {
                 Ok(ContentRow {
                     id: r.get(0)?,
                     title: r.get(1)?,
@@ -229,5 +258,17 @@ mod tests {
         assert!(db.delete(&row.id).unwrap());
         assert!(db.search("ownership", 10).unwrap().is_empty());
         assert!(db.list(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_falls_back_on_bad_fts_query() {
+        let dir = TempDir::new().unwrap();
+        let db = KnowledgeDb::open(dir.path().join("knowledge.db")).unwrap();
+        db.register("Guide", "/docs/a.md", "plain body text", "ready")
+            .unwrap();
+        // FTS 特殊字符常导致 MATCH 语法错误；应回退 LIKE（可能空结果但不 panic）
+        let _ = db.search("a AND OR \"", 10).unwrap();
+        let hits = db.search("Guide", 10).unwrap();
+        assert_eq!(hits.len(), 1);
     }
 }
