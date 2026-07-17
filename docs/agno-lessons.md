@@ -103,6 +103,12 @@
 2. **Agentic context 工具**：按需 `search_context` / `pin_context`，而不是每轮塞满 Dynamic。
 3. 不必照搬 Agno 的 Python Context 全家桶；Astro 分层 prompt 已够用，缺的是「预算 + 协议」。
 
+### 已落地（本轮）
+- `agent::prompt::context_source::{ContextSource, ContextBudget, assemble_system_layers}`
+- `build_system_prompt` 按 static → inject → skills → guidance → timestamp → dynamic 共享字符预算
+- `AgentConfig.context_budget_chars`（默认 200_000）
+- **未做**：`search_context` / `pin_context` agentic 工具
+
 ---
 
 ## 五、运行中压缩（最值得复用）

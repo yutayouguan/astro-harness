@@ -58,6 +58,8 @@ pub struct AgentConfig {
     pub additional_params: Value,
     /// 动态上下文（召回记忆）最大条目数。
     pub dynamic_max_items: usize,
+    /// System prompt 总字符预算（[`crate::prompt::ContextBudget`]）；默认宽裕。
+    pub context_budget_chars: usize,
     /// 可选的静态上下文覆盖，用于测试或自定义 prompt。
     pub static_override: Option<StaticContext>,
 }
@@ -82,6 +84,7 @@ impl AgentConfig {
             temperature: 0.7,
             additional_params: Value::Null,
             dynamic_max_items: 3,
+            context_budget_chars: crate::prompt::DEFAULT_CONTEXT_BUDGET_CHARS,
             static_override: None,
         }
     }
@@ -668,9 +671,10 @@ impl AgentLoop {
         (static_ctx, dynamic_ctx, skill_pairs)
     }
 
-    /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
+    /// 组装完整 system prompt：静态上下文 + inject + 动态召回 + 技能索引 + 工具指引 + 时间戳。
     ///
     /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
+    /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算（优先 static）。
     /// 副作用：设置 `ASTRO_WORKSPACE` 环境变量供工具读取。
     pub fn build_system_prompt(&self) -> String {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
@@ -680,13 +684,20 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        PromptBuilder::new()
-            .with_static_context(&static_ctx)
-            .with_dynamic_context(&dynamic_ctx)
-            .with_skills_index(&skill_index)
-            .with_tool_guidance()
-            .with_timestamp()
-            .build()
+        let guidance = "# 工具使用\n使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n每次思考用 <think>...</think> 标签包裹。";
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
+        let timestamp = format!("# 当前时间\n{now}");
+        let mut budget =
+            crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
+        crate::prompt::assemble_system_layers(
+            &mut budget,
+            &static_ctx,
+            self.pending_inject_context.as_deref(),
+            &skill_index,
+            &dynamic_ctx,
+            guidance,
+            &timestamp,
+        )
     }
 
     /// 与 `build_system_prompt` 同源的分层字符数，供上下文占用估算。
