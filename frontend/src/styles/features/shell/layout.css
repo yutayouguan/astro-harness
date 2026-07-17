@@ -188,10 +188,10 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  /* 默认：浅紫 → 中紫纵向渐变（对齐参考图未选中态） */
-  --nav-grad-top: #efe9ff;
-  --nav-grad-bottom: #b7a0f8;
-  --nav-icon-depth: #4c1d95;
+  /* 默认：浅白 → 中白纵向渐变，保留柔和下沉层次 */
+  --nav-grad-top: #fff;
+  --nav-grad-bottom: #d7d5dc;
+  --nav-icon-depth: #8b8396;
   --nav-icon-cutout: var(--sidebar-bg, var(--glass-fill, #fff));
   color: var(--nav-grad-bottom);
   transition:
@@ -200,9 +200,9 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 }
 
 html[data-theme="dark"] .nav-icon {
-  --nav-grad-top: #ddd6fe;
-  --nav-grad-bottom: #9b87f5;
-  --nav-icon-depth: #2e1065;
+  --nav-grad-top: #fff;
+  --nav-grad-bottom: #d1ced8;
+  --nav-icon-depth: #71687f;
   --nav-icon-cutout: color-mix(in srgb, var(--sidebar-bg, #12081f) 88%, #000);
 }
 
@@ -258,42 +258,55 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   z-index: 1;
   width: 18px;
   height: 18px;
-  /* 侧栏内：渐变填实 + 描边，贴近参考图软立体图标 */
-  fill: var(--nav-grad-paint);
+  /* 默认与 hover 保持渐变线稿，只有选中态填实。 */
+  fill: none;
   /* 轻微下沉阴影，模拟参考图的软立体层，避免玻璃球高光 */
   filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
   transition: filter 0.18s ease;
 }
 
-/* outline 线稿：只描边，不填实 */
-.nav-icon svg[data-nav-fill="outline"] {
-  fill: none;
-}
-
-/* 局部浅填（保留描边） */
-.nav-icon svg[data-nav-fill="soft"] {
+/* 选中态：以 tone 渐变填实轮廓。 */
+.nav-item.active .nav-icon svg,
+.nav-item.active .nav-icon svg[data-nav-fill="soft"] {
   fill: var(--nav-grad-paint);
-  fill-opacity: 0.28;
+  fill-opacity: 1;
 }
 
-/* 内部线条：镂空对比色，避免填实后看不清 */
+/* 默认与 hover：内部细节沿用当前渐变。 */
 .nav-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: var(--nav-icon-cutout);
+  stroke: var(--nav-grad-paint);
   stroke-width: 2.25;
 }
 
-/* 内部圆孔：镂空 */
+/* 选中：内部线条切换为底色，形成镂空。 */
+.nav-item.active .nav-icon svg .nav-icon-cutout {
+  stroke: var(--nav-icon-cutout);
+}
+
+/* 默认圆孔保留渐变轮廓，选中后镂空填充。 */
 .nav-icon svg .nav-icon-hole {
+  fill: none;
+  stroke: var(--nav-grad-paint);
+}
+
+.nav-item.active .nav-icon svg .nav-icon-hole {
   fill: var(--nav-icon-cutout);
   stroke: none;
 }
 
-/* 实心小圆点（如 sparkles） */
-.nav-icon svg .nav-icon-dot,
-.nav-icon svg .nav-icon-fill {
+/* 小圆点保持实心；Memory 中心圆仅在选中时填实。 */
+.nav-icon svg .nav-icon-dot {
   fill: var(--nav-grad-paint);
   stroke: none;
+}
+
+.nav-icon svg .nav-icon-fill {
+  fill: none;
+}
+
+.nav-item.active .nav-icon svg .nav-icon-fill {
+  fill: var(--nav-grad-paint);
 }
 
 @media (prefers-reduced-motion: reduce) {
