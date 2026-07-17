@@ -258,40 +258,44 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   z-index: 1;
   width: 18px;
   height: 18px;
-  /* 默认与 hover 保持渐变线稿，只有选中态填实。 */
+  /* 默认 / hover：仅渐变线稿，不加粗填实 */
   fill: none;
-  /* 默认线稿更纤细，不加粗 */
   stroke-width: 1.6;
-  /* 轻微下沉阴影，模拟参考图的软立体层，避免玻璃球高光 */
   filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
   transition: filter 0.18s ease;
 }
 
-/* 选中态：以 tone 渐变填实轮廓。 */
+/* 明确禁止非选中态填实 */
+.nav-item:not(.active) .nav-icon svg,
+.nav-item:hover:not(.active) .nav-icon svg {
+  fill: none;
+}
+
+.nav-item:not(.active) .nav-icon svg .nav-icon-fill,
+.nav-item:not(.active) .nav-icon svg .nav-icon-hole {
+  fill: none;
+}
+
+/* 仅选中：tone 渐变填实 + 内部镂空 */
 .nav-item.active .nav-icon svg,
 .nav-item.active .nav-icon svg[data-nav-fill="soft"] {
   fill: var(--nav-grad-paint);
   fill-opacity: 1;
 }
 
-/* 默认与 hover：内部细节沿用当前渐变。 */
+/* 内部细节：默认跟线稿同色；选中后改为底色镂空 */
 .nav-icon svg .nav-icon-cutout {
   fill: none;
   stroke: var(--nav-grad-paint);
   stroke-width: 1.9;
 }
 
-/* 选中填实后内部线条略加粗，保证镂空清晰。 */
 .nav-item.active .nav-icon svg .nav-icon-cutout {
+  fill: none;
+  stroke: var(--nav-icon-cutout);
   stroke-width: 2.25;
 }
 
-/* 选中：内部线条切换为底色，形成镂空。 */
-.nav-item.active .nav-icon svg .nav-icon-cutout {
-  stroke: var(--nav-icon-cutout);
-}
-
-/* 默认圆孔保留渐变轮廓，选中后镂空填充。 */
 .nav-icon svg .nav-icon-hole {
   fill: none;
   stroke: var(--nav-grad-paint);
@@ -302,8 +306,13 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   stroke: none;
 }
 
-/* 小圆点保持实心；Memory 中心圆仅在选中时填实。 */
+/* 小圆点：默认跟线稿；选中后用渐变实心 */
 .nav-icon svg .nav-icon-dot {
+  fill: none;
+  stroke: var(--nav-grad-paint);
+}
+
+.nav-item.active .nav-icon svg .nav-icon-dot {
   fill: var(--nav-grad-paint);
   stroke: none;
 }
@@ -314,6 +323,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 
 .nav-item.active .nav-icon svg .nav-icon-fill {
   fill: var(--nav-grad-paint);
+  stroke: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
