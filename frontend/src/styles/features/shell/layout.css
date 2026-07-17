@@ -188,10 +188,10 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  /* 默认：浅白 → 中白纵向渐变，保留柔和下沉层次 */
-  --nav-grad-top: #fff;
-  --nav-grad-bottom: #d7d5dc;
-  --nav-icon-depth: #8b8396;
+  /* 默认：浅灰 → 中灰纵向渐变（对齐参考图线稿） */
+  --nav-grad-top: #ececf0;
+  --nav-grad-bottom: #b4b4be;
+  --nav-icon-depth: #9a9aa6;
   --nav-icon-cutout: var(--sidebar-bg, var(--glass-fill, #fff));
   color: var(--nav-grad-bottom);
   transition:
@@ -200,9 +200,9 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 }
 
 html[data-theme="dark"] .nav-icon {
-  --nav-grad-top: #fff;
-  --nav-grad-bottom: #d1ced8;
-  --nav-icon-depth: #71687f;
+  --nav-grad-top: #e4e4ea;
+  --nav-grad-bottom: #a8a8b4;
+  --nav-icon-depth: #7a7a88;
   --nav-icon-cutout: color-mix(in srgb, var(--sidebar-bg, #12081f) 88%, #000);
 }
 
