@@ -889,6 +889,14 @@ html[data-theme="dark"] .html-preview-bar {
   border-radius: 12px;
 }
 
+/* HTML 预览：卡片内撑满可用宽度，与消息框对齐（去掉 640px 上限） */
+.gen-media-card .gen-media-card-preview.html-preview,
+.gen-media-card .gen-media-card-preview.html-preview.is-compact {
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+}
+
 /* 图 / 视频：贴边铺满卡片宽，按比例增高，去掉灰底 letterbox */
 .gen-media-card[data-kind="image"] .gen-media-card-body,
 .gen-media-card[data-kind="video"] .gen-media-card-body {
