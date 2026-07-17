@@ -233,7 +233,7 @@ export const zh = {
   "agentTools.imageGen.title": "图像生成",
   "agentTools.imageGen.desc": "Gemini Interactions 出图；prompt 须含主体/构图/光影/风格等详细描述；用户要 16:9/2K 等须传 aspect_ratio、image_size；备用 OpenAI",
   "agentTools.videoGen.title": "视频生成",
-  "agentTools.videoGen.desc": "Google Veo 原生生成（失败回退兼容接口）；建议 image_gen 首尾帧，续拍用 extend_video；写入 generated/videos",
+  "agentTools.videoGen.desc": "Google Veo 原生生成；prompt 须含镜头/动作/场景/风格等详细描述；建议 image_gen 首尾帧，续拍用 extend_video",
   "agentTools.videoUnderstand.title": "视频理解",
   "agentTools.videoUnderstand.desc": "Google Gemini 原生：本地/链接/YouTube 视频问答与时间线（Interactions；支持 MM:SS）",
   "agentTools.tts.title": "文本转语音",
