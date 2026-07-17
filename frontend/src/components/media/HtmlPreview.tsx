@@ -1,6 +1,5 @@
 /** 沙箱 HTML 预览：srcDoc + allow-scripts（无 same-origin / top-nav） */
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n/LocaleContext";
 import BrokenMedia from "./BrokenMedia";
@@ -114,19 +113,7 @@ export default function HtmlPreview({
       <div className="html-preview-bar">
         <span className="html-preview-label">{t("media.htmlPreview")}</span>
         <div className="html-preview-bar-actions">
-          {path ? (
-            <>
-              <MediaToolbar path={path} kind="html" compact />
-              <button
-                type="button"
-                className="html-preview-open"
-                onClick={openExternally}
-              >
-                <ExternalLink size={13} strokeWidth={2.1} aria-hidden />
-                {t("workspace.openExternally")}
-              </button>
-            </>
-          ) : null}
+          {path ? <MediaToolbar path={path} kind="html" compact /> : null}
         </div>
       </div>
       <iframe

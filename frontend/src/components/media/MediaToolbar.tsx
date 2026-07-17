@@ -4,9 +4,11 @@ import {
   Check,
   Copy,
   Download,
+  ExternalLink,
   Maximize2,
   Quote,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useChatMediaAttach } from "../../contexts/ChatMediaAttachContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -43,7 +45,12 @@ export default function MediaToolbar({
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const previewSrc = useMemo(() => resolveMediaSrc(path), [path]);
-  const canQuote = kind === "image" && Boolean(attachApi);
+  const canQuote =
+    (kind === "image" ||
+      kind === "html" ||
+      kind === "code" ||
+      kind === "document") &&
+    Boolean(attachApi);
   const canZoom = kind === "image" && Boolean(previewSrc);
 
   const onQuote = useCallback(
@@ -127,11 +134,21 @@ export default function MediaToolbar({
     [busy, path, kind, showToast, t],
   );
 
+  const onOpenExternal = useCallback(
+    (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void invoke("open_path_externally", { path }).catch(() => {});
+    },
+    [path],
+  );
+
   const icon = compact ? 14 : 15;
   const quoteLabel = t("media.quote");
   const zoomLabel = t("media.zoom");
   const copyLabel = copied ? t("media.copied") : t("media.copy");
   const dlLabel = t("media.download");
+  const openLabel = t("workspace.openExternally");
 
   return (
     <>
@@ -164,6 +181,15 @@ export default function MediaToolbar({
             <Maximize2 size={icon} strokeWidth={2.1} aria-hidden />
           </button>
         ) : null}
+        <button
+          type="button"
+          className="media-toolbar-btn"
+          onClick={onOpenExternal}
+          title={openLabel}
+          aria-label={openLabel}
+        >
+          <ExternalLink size={icon} strokeWidth={2.1} aria-hidden />
+        </button>
         <button
           type="button"
           className="media-toolbar-btn"
