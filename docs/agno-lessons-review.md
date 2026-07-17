@@ -25,7 +25,7 @@
 | R9 | **高** | §四把 `pending_inject_context` 编进 `build_system_prompt`，与 `take_inject_context`→`[astro:hook-context]` user 消息**双重注入** | `build_system_prompt` 对 inject 传 `None`；协议层仍支持 inject 参数供测试 | **已修**（本轮） |
 | R5 | 低 | Knowledge FTS `MATCH` 特殊字符易失败 | MATCH 失败回退 title/path `LIKE` | **已修**（本轮） |
 | R2 | 中 | 用户附图未落 `messages.media_json`；hydrate 仅 tool sidecar | schema v15 + NewMessage/StoredMessage + hydrate | **已修**（本轮） |
-| R3 | 低 | `ChatContentPart` 不支持 audio/video 入模 | Provider 原生多模态后再做 | **记债** |
+| R3 | 低 | `ChatContentPart` 不支持 audio/video 入模 | `AudioUrl`/`VideoUrl` + Gemini inlineData；其它厂商文本回落 | **已修**（本轮） |
 | R4 | 低 | `SqliteStore` 仅 Example，未挂真实 UsageDb/KnowledgeDb | `UsageDb` 存 `path` + `impl SqliteStore`；`KnowledgeDb` 已有 `path()` + open 时 migrate | **已修**（本轮） |
 | R6 | 信息 | EntityMemory / Always / embedding / Postgres | 文档「不必 / P4」 | **不做** |
 | R7 | 信息 | `search_context` / `pin_context` | `context_tools` + pinned 注入 Dynamic | **已修**（本轮） |
@@ -51,3 +51,9 @@
 8. R10：`assemble_from_sources` 先预留分隔符再 contribute，空层 refund。
 9. R7：`search_context` / `pin_context` 工具；pinned 写入 workspace 并注入 Dynamic。
 10. R8：`team_run` tasks 串行共享任务板；`ToolEntry.exclusive_access` 替代硬编码表。
+11. R3：`ChatContentPart` Audio/Video；Gemini 入模，OpenAI/Anthropic 文本回落；`Message.media` 并入 parts。
+
+## 归档
+
+- 记债已清（R6 明确不做）。
+- 建议 tag：`v-agno-lessons-complete-r3`（叠在首轮 `v-agno-lessons-complete` 之上）。

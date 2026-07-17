@@ -35,13 +35,17 @@ pub struct ChatMessage {
     pub name: Option<String>,
 }
 
-/// OpenAI 兼容 content 数组元素。
+/// OpenAI / Gemini 兼容 content 数组元素（含 audio/video 入模）。
 #[derive(Debug, Clone)]
 pub enum ChatContentPart {
     /// 文本。
     Text { text: String },
     /// 图片（data URL 或 http(s)）。
     ImageUrl { url: String },
+    /// 音频（data URL 或远程 URI）；Gemini 走 inlineData，其它厂商回落文本标注。
+    AudioUrl { url: String, mime_type: String },
+    /// 视频（data URL 或远程 URI）；Gemini 走 inlineData，其它厂商回落文本标注。
+    VideoUrl { url: String, mime_type: String },
 }
 
 impl ChatMessage {

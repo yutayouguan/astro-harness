@@ -76,28 +76,31 @@ pub fn openai_tools_to_interactions(tools: &[Value]) -> Vec<Value> {
 }
 
 /// 从 data URL / http(s) 拼 Interactions image content 块。
-fn image_content_from_url(url: &str) -> Value {
+fn media_content_from_url(kind: &str, url: &str, mime_hint: &str) -> Value {
     let url = url.trim();
     if let Some(rest) = url.strip_prefix("data:") {
-        // data:image/png;base64,....
         if let Some((meta, b64)) = rest.split_once(',') {
             let mime = meta
                 .split(';')
                 .next()
-                .unwrap_or("image/png")
+                .unwrap_or(mime_hint)
                 .trim()
                 .to_string();
             return json!({
-                "type": "image",
+                "type": kind,
                 "mime_type": mime,
                 "data": b64,
             });
         }
     }
     json!({
-        "type": "image",
+        "type": kind,
         "uri": url,
     })
+}
+
+fn image_content_from_url(url: &str) -> Value {
+    media_content_from_url("image", url, "image/png")
 }
 
 fn user_content_parts(m: &ChatMessage) -> Vec<Value> {
@@ -108,6 +111,22 @@ fn user_content_parts(m: &ChatMessage) -> Vec<Value> {
                 .map(|p| match p {
                     ChatContentPart::Text { text } => json!({ "type": "text", "text": text }),
                     ChatContentPart::ImageUrl { url } => image_content_from_url(url),
+                    ChatContentPart::AudioUrl { url, mime_type } => {
+                        let hint = if mime_type.trim().is_empty() {
+                            "audio/wav"
+                        } else {
+                            mime_type.as_str()
+                        };
+                        media_content_from_url("audio", url, hint)
+                    }
+                    ChatContentPart::VideoUrl { url, mime_type } => {
+                        let hint = if mime_type.trim().is_empty() {
+                            "video/mp4"
+                        } else {
+                            mime_type.as_str()
+                        };
+                        media_content_from_url("video", url, hint)
+                    }
                 })
                 .collect();
         }

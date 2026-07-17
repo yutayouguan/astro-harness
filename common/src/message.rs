@@ -51,10 +51,10 @@ pub enum MessageContent {
     Parts(Vec<ContentPart>),
 }
 
-/// 多段正文中的一段（对齐 OpenAI 兼容 vision：`type` + `text` 或 `image_url.url`）。
+/// 多段正文中的一段（text / image_url / audio_url / video_url）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentPart {
-    /// 段类型：`text` / `image_url`。
+    /// 段类型：`text` / `image_url` / `audio_url` / `video_url`。
     #[serde(rename = "type")]
     pub kind: String,
     /// 文本载荷（`type=text`）。
@@ -63,12 +63,26 @@ pub struct ContentPart {
     /// 图片 URL 或 `data:image/...;base64,...`（`type=image_url`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_url: Option<ContentImageUrl>,
+    /// 音频 URL 或 data URL（`type=audio_url`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_url: Option<ContentMediaUrl>,
+    /// 视频 URL 或 data URL（`type=video_url`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_url: Option<ContentMediaUrl>,
 }
 
 /// `image_url` 载荷。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentImageUrl {
     pub url: String,
+}
+
+/// `audio_url` / `video_url` 载荷。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentMediaUrl {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mime_type: String,
 }
 
 impl ContentPart {
@@ -78,6 +92,8 @@ impl ContentPart {
             kind: "text".into(),
             text: Some(s.into()),
             image_url: None,
+            audio_url: None,
+            video_url: None,
         }
     }
 
@@ -87,6 +103,36 @@ impl ContentPart {
             kind: "image_url".into(),
             text: None,
             image_url: Some(ContentImageUrl { url: url.into() }),
+            audio_url: None,
+            video_url: None,
+        }
+    }
+
+    /// 音频段。
+    pub fn audio_url(url: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        Self {
+            kind: "audio_url".into(),
+            text: None,
+            image_url: None,
+            audio_url: Some(ContentMediaUrl {
+                url: url.into(),
+                mime_type: mime_type.into(),
+            }),
+            video_url: None,
+        }
+    }
+
+    /// 视频段。
+    pub fn video_url(url: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        Self {
+            kind: "video_url".into(),
+            text: None,
+            image_url: None,
+            audio_url: None,
+            video_url: Some(ContentMediaUrl {
+                url: url.into(),
+                mime_type: mime_type.into(),
+            }),
         }
     }
 }

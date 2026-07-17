@@ -109,16 +109,34 @@ fn build_user_parts(m: &ChatMessage) -> Vec<Value> {
 fn part_to_gemini(p: &ChatContentPart) -> Value {
     match p {
         ChatContentPart::Text { text } => json!({ "text": text }),
-        ChatContentPart::ImageUrl { url } => {
-            if let Some(rest) = url.strip_prefix("data:") {
-                if let Some((meta, data)) = rest.split_once(',') {
-                    let mime = meta.split(';').next().unwrap_or("image/jpeg");
-                    return json!({ "inlineData": { "mimeType": mime, "data": data } });
-                }
-            }
-            json!({ "fileData": { "fileUri": url } })
+        ChatContentPart::ImageUrl { url } => gemini_inline_or_file(url, "image/jpeg"),
+        ChatContentPart::AudioUrl { url, mime_type } => {
+            let mime = if mime_type.trim().is_empty() {
+                "audio/wav"
+            } else {
+                mime_type.as_str()
+            };
+            gemini_inline_or_file(url, mime)
+        }
+        ChatContentPart::VideoUrl { url, mime_type } => {
+            let mime = if mime_type.trim().is_empty() {
+                "video/mp4"
+            } else {
+                mime_type.as_str()
+            };
+            gemini_inline_or_file(url, mime)
         }
     }
+}
+
+fn gemini_inline_or_file(url: &str, default_mime: &str) -> Value {
+    if let Some(rest) = url.strip_prefix("data:") {
+        if let Some((meta, data)) = rest.split_once(',') {
+            let mime = meta.split(';').next().unwrap_or(default_mime);
+            return json!({ "inlineData": { "mimeType": mime, "data": data } });
+        }
+    }
+    json!({ "fileData": { "fileUri": url, "mimeType": default_mime } })
 }
 
 fn normalize_args(args: &Value) -> Value {

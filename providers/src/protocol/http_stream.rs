@@ -250,6 +250,21 @@ fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
                                 "type": "image_url",
                                 "image_url": { "url": url }
                             }),
+                            // OpenAI chat completions 无通用 audio/video part：回落为文本标注
+                            ChatContentPart::AudioUrl { mime_type, .. } => json!({
+                                "type": "text",
+                                "text": format!(
+                                    "[audio attached: {}]",
+                                    if mime_type.trim().is_empty() { "audio/*" } else { mime_type }
+                                )
+                            }),
+                            ChatContentPart::VideoUrl { mime_type, .. } => json!({
+                                "type": "text",
+                                "text": format!(
+                                    "[video attached: {}]",
+                                    if mime_type.trim().is_empty() { "video/*" } else { mime_type }
+                                )
+                            }),
                         })
                         .collect();
                     obj.insert("content".into(), Value::Array(arr));
@@ -736,6 +751,24 @@ fn anthropic_user_content(m: &ChatMessage) -> Value {
                         }
                     }));
                 }
+            }
+            ChatContentPart::AudioUrl { mime_type, .. } => {
+                blocks.push(json!({
+                    "type": "text",
+                    "text": format!(
+                        "[audio attached: {}]",
+                        if mime_type.trim().is_empty() { "audio/*" } else { mime_type }
+                    )
+                }));
+            }
+            ChatContentPart::VideoUrl { mime_type, .. } => {
+                blocks.push(json!({
+                    "type": "text",
+                    "text": format!(
+                        "[video attached: {}]",
+                        if mime_type.trim().is_empty() { "video/*" } else { mime_type }
+                    )
+                }));
             }
         }
     }

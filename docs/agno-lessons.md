@@ -33,7 +33,7 @@
 - 流事件 `MultiTurnStreamItem::ToolResult.media` → proto `ToolCallEvent.media` → Tauri/UI
 - 前端 `MsgActivity` 优先用结构化 `activity.media`，回落 `parseGeneratedMedia`（含 sidecar）
 - session schema **v15** `messages.media_json`：用户附图 / 工具媒体落盘；hydrate 优先读列，tool 回落 sidecar
-- **未做**：改写 `ChatContentPart` 支持 audio/video 二进制进 LLM（仍用 Parts/data URL 与文本摘要）
+- **已做**：`ChatContentPart::{AudioUrl,VideoUrl}`；Gemini native/Interactions 走 inlineData；OpenAI/Anthropic 回落文本标注；`to_provider_messages` 映射 Parts + `Message.media`
 
 ## 二、统一工具调用与 Agent 生命周期
 
@@ -345,7 +345,7 @@ P1  ContextSource trait + budget（协议化现有 Static/Dynamic/FTS）
 P2  DecisionLog + Propose 写入（挂审批，扩展入梦/review）
 P3  Knowledge Content DB + FTS（可选再 embedding）
 P4  EntityMemory（有真实「记公司/项目」需求再上）
-—   MediaAsset + 结构化 ToolResult（§一已落地竖切；ChatContentPart 多模态入模 / 用户附图持久化后续）
+—   MediaAsset + 结构化 ToolResult（§一；ChatContentPart 多模态 audio/video 入模已补）
 —   MCP / 多后端 DB：观望或小改即可
 ```
 
