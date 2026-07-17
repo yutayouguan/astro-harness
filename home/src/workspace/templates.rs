@@ -145,9 +145,10 @@ pub(crate) const TEMPLATE_AGENTS: &str = r#"# AGENTS.md — 本记忆空间的�
 
 **先问再做：**
 
-- 对外发送（邮件、社媒、公开帖）
-- 破坏性命令、不可逆删除
-- 改动系统级配置（crontab、shell rc 等）
+- 需求不清或有多种理解 → 用 `clarify` 提问（别猜）
+- 对外发送（邮件、社媒、公开帖）→ 用 `confirm` 请求批准
+- 破坏性命令、不可逆删除 → 用 `confirm` 请求批准
+- 改动系统级配置（crontab、shell rc 等）→ 用 `confirm` 请求批准
 
 ## 协作原则
 
