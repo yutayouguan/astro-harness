@@ -1,12 +1,39 @@
 /**
  * 从工具结果文本中解析生成媒体路径（image_gen / video_gen / tts / music_gen 固定文案）。
  */
-export type GeneratedMediaKind = "image" | "video" | "audio" | "html";
+export type GeneratedMediaKind = "image" | "video" | "audio" | "html" | "code";
 
 export type GeneratedMedia = {
   kind: GeneratedMediaKind;
   path: string;
 };
+
+/** 可按代码块渲染（语法高亮）的文本/代码文件后缀。不含媒体/HTML/SVG（另有归类）。 */
+export const CODE_EXT: ReadonlySet<string> = new Set([
+  "txt", "text", "log", "md", "markdown", "mdx", "rst",
+  "json", "jsonl", "json5", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties",
+  "csv", "tsv",
+  "js", "mjs", "cjs", "jsx", "ts", "tsx", "cts", "mts",
+  "rs", "py", "pyi", "rb", "go", "java", "kt", "kts", "scala", "swift", "dart",
+  "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "hxx", "m", "mm",
+  "cs", "php", "pl", "pm", "lua", "r", "jl", "hs", "ex", "exs", "erl", "clj", "cljs",
+  "css", "scss", "sass", "less",
+  "xml", "vue", "svelte", "astro",
+  "sh", "bash", "zsh", "fish", "ksh", "ps1", "bat", "cmd",
+  "sql", "graphql", "gql", "proto", "dockerfile", "makefile", "cmake", "gradle", "diff", "patch",
+]);
+
+/** 无扩展名但常见的纯文本文件名（小写整名匹配）。 */
+const CODE_BASENAME: ReadonlySet<string> = new Set([
+  "dockerfile", "makefile", "cmakelists.txt", "readme", "license", ".gitignore", ".env",
+]);
+
+/** 判断路径是否应作为代码/文本文件（语法高亮）渲染。 */
+export function isCodePath(path: string): boolean {
+  const base = (path.split(/[\\/]/).pop() ?? path).toLowerCase();
+  if (CODE_BASENAME.has(base)) return true;
+  return CODE_EXT.has(extOf(path));
+}
 
 const LABELED =
   /(?:图片|视频|语音|音乐)已生成[：:]\s*(\S+)/g;

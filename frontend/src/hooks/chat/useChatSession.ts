@@ -42,6 +42,7 @@ import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
 import type { ChatRightTab } from "../../components/chat/ChatRightPanel";
 import { useChatStreamBuffers } from "./useChatStreamBuffers";
+import { useGeneratingPreview } from "./useGeneratingPreview";
 import { useSend } from "./useSend";
 import { useConfirm } from "../ui/DialogContext";
 
@@ -145,6 +146,15 @@ export function useChatSession({
   const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("sessions");
   const confirm = useConfirm();
 
+  // ── 生成中文件实时预览 ──────────────────────────────────────────────────────
+  const { preview: generatingPreview, api: generatingPreviewApi } =
+    useGeneratingPreview({
+      onActivate: () => {
+        setChatRightTab("preview");
+        setChatRightOpen(true);
+      },
+    });
+
   // ── Refs ──────────────────────────────────────────────────────────────────
   const unlistenRef = useRef<(() => void) | null>(null);
   const restoringRef = useRef(false);
@@ -201,6 +211,7 @@ export function useChatSession({
     flushStreamTokens,
     flushToolDeltas,
     settleMessageUsage,
+    generatingPreviewApi,
     streamGenRef,
     currentRunIdRef,
     activeAssistantIdRef,
@@ -1246,6 +1257,7 @@ export function useChatSession({
     memoryPendingCount,
     chatRightOpen,
     chatRightTab,
+    generatingPreview,
     // setters needed by App
     setInput,
     setAttachments,

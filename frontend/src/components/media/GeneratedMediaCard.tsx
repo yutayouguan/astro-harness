@@ -1,8 +1,9 @@
 /** 多媒体生成结果卡片：标题行含操作，下方仅播放/预览。 */
-import { Clapperboard, FileCode2, Image as ImageIcon, Music2 } from "lucide-react";
+import { Clapperboard, Code2, FileCode2, Image as ImageIcon, Music2 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
 import { displayTitleFromMediaPath } from "../../lib/media/displayTitleFromMediaPath";
+import CodeFileCard from "./CodeFileCard";
 import MediaPreview from "./MediaPreview";
 import MediaToolbar from "./MediaToolbar";
 
@@ -24,6 +25,8 @@ function KindGlyph({ kind }: { kind: GeneratedMediaKind }) {
       return <Clapperboard {...props} />;
     case "html":
       return <FileCode2 {...props} />;
+    case "code":
+      return <Code2 {...props} />;
     default:
       return <ImageIcon {...props} />;
   }
@@ -45,7 +48,9 @@ export default function GeneratedMediaCard({
         ? t("media.kind.video")
         : kind === "html"
           ? t("media.kind.html")
-          : t("media.kind.image");
+          : kind === "code"
+            ? t("media.kind.code")
+            : t("media.kind.image");
   const customLabel = label?.trim();
 
   return (
@@ -65,21 +70,29 @@ export default function GeneratedMediaCard({
         </div>
         <MediaToolbar
           path={path}
-          kind={kind === "html" ? "html" : kind}
+          kind={kind}
           compact
           className="is-inline gen-media-card-actions"
           alt={title}
         />
       </header>
       <div className="gen-media-card-body">
-        <MediaPreview
-          kind={kind}
-          path={path}
-          alt={title}
-          compact={compact}
-          showToolbar={false}
-          className="gen-media-card-preview"
-        />
+        {kind === "code" ? (
+          <CodeFileCard
+            path={path}
+            compact={compact}
+            className="gen-media-card-preview"
+          />
+        ) : (
+          <MediaPreview
+            kind={kind}
+            path={path}
+            alt={title}
+            compact={compact}
+            showToolbar={false}
+            className="gen-media-card-preview"
+          />
+        )}
       </div>
     </article>
   );

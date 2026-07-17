@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Bot,
+  Eye,
   Layers,
   MessagesSquare,
   PanelRight,
@@ -11,13 +12,15 @@ import {
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
+import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
 import ChatSessionList from "./ChatSessionList";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
+import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 
 /** 聊天右侧栏 Tab */
-export type ChatRightTab = "sessions" | "context" | "agent";
+export type ChatRightTab = "sessions" | "context" | "preview" | "agent";
 
 /** 右侧栏入参 */
 type Props = {
@@ -49,17 +52,21 @@ type Props = {
   onOpenSkills: () => void;
   /** 正在流式输出的会话 id；无流式时为 null */
   streamingSessionId?: string | null;
+  /** 生成中的文件实时预览（preview Tab） */
+  generatingPreview?: GeneratingPreview | null;
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
   sessions: "chat.rightPanel.sessions",
   context: "chat.rightPanel.context",
+  preview: "chat.rightPanel.preview",
   agent: "chat.rightPanel.agent",
 };
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
   sessions: MessagesSquare,
   context: Layers,
+  preview: Eye,
   agent: Bot,
 };
 
@@ -80,9 +87,10 @@ export default function ChatRightPanel({
   onOpenMemory,
   onOpenSkills,
   streamingSessionId = null,
+  generatingPreview = null,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["sessions", "context", "agent"];
+  const tabs: ChatRightTab[] = ["sessions", "context", "preview", "agent"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
 
@@ -193,6 +201,9 @@ export default function ChatRightPanel({
                 windowTokens={contextWindow}
                 sessionLabel={sessionId ?? "—"}
               />
+            )}
+            {tab === "preview" && (
+              <GeneratingPreviewPanel preview={generatingPreview} />
             )}
             {tab === "agent" && (
               <ChatAgentInfo

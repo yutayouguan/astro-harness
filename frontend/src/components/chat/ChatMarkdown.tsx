@@ -17,7 +17,10 @@ import {
   resolveMediaSrc,
   stripFileUrl,
 } from "../../lib/media/resolveMediaSrc";
-import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
+import {
+  isCodePath,
+  type GeneratedMediaKind,
+} from "../../lib/media/parseGeneratedMedia";
 import BrokenMedia from "../media/BrokenMedia";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
 import HtmlPreview from "../media/HtmlPreview";
@@ -56,13 +59,20 @@ function mediaKindFromMarkdown(
   alt: string | undefined,
 ): GeneratedMediaKind {
   const hint = (alt ?? "").trim().toLowerCase();
-  if (hint === "audio" || hint === "video" || hint === "image" || hint === "html") {
+  if (
+    hint === "audio" ||
+    hint === "video" ||
+    hint === "image" ||
+    hint === "html" ||
+    hint === "code"
+  ) {
     return hint;
   }
   const path = (src ?? "").split("?")[0]?.toLowerCase() ?? "";
   if (/\.(mp3|wav|m4a|aac|ogg|flac|opus|wma)$/i.test(path)) return "audio";
   if (/\.(mp4|webm|mov|mkv|m4v|avi)$/i.test(path)) return "video";
   if (/\.(html?)$/i.test(path)) return "html";
+  if (isCodePath(path)) return "code";
   return "image";
 }
 

@@ -738,6 +738,7 @@ export default function App() {
                       tokenUsage={chat.tokenUsage}
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
+                      generatingPreview={chat.generatingPreview}
                       streamingSessionId={chat.streaming ? chat.sessionId : null}
                       onOpenSession={(id) => void openSessionFromFilespace(id)}
                       onNewSession={startNewChat}

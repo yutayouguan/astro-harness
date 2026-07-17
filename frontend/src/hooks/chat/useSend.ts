@@ -32,6 +32,8 @@ import type {
   UiSurface,
 } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
+import type { GeneratingPreviewApi } from "./useGeneratingPreview";
+import { isCodePath } from "../../lib/media/parseGeneratedMedia";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
@@ -82,6 +84,8 @@ export interface UseSendDeps {
   flushStreamTokens: () => void;
   flushToolDeltas: () => void;
   settleMessageUsage: (messageId: string, endedAt?: number) => void;
+  /** 生成中文件实时预览 */
+  generatingPreviewApi: GeneratingPreviewApi;
   // stream buffer refs
   streamGenRef: MutableRefObject<number>;
   currentRunIdRef: MutableRefObject<string | null>;
@@ -155,6 +159,7 @@ export function useSend(deps: UseSendDeps) {
         flushStreamTokens,
         flushToolDeltas,
         settleMessageUsage,
+        generatingPreviewApi,
         streamGenRef,
         currentRunIdRef,
         activeAssistantIdRef,
@@ -351,6 +356,7 @@ export function useSend(deps: UseSendDeps) {
       setStatusPhase("connecting");
       setStatusDetail(null);
       clearStreamBuffers();
+      generatingPreviewApi.reset();
       activeAssistantIdRef.current = assistantId;
       streamStartRef.current.set(assistantId, Date.now());
       firstTokenRef.current.delete(assistantId);
@@ -536,6 +542,12 @@ export function useSend(deps: UseSendDeps) {
               name: payload.name,
               arguments: payload.arguments,
             });
+            generatingPreviewApi.onToolDelta({
+              index: payload.index ?? 0,
+              id: payload.id,
+              name: payload.name,
+              arguments: payload.arguments,
+            });
             setStatusPhase("generating");
           } else if (payload.type === "tool_call") {
             if (toolDeltaRafRef.current != null) {
@@ -555,22 +567,35 @@ export function useSend(deps: UseSendDeps) {
             const structuredMedia = Array.isArray(payload.media)
               ? payload.media
                   .map((m) => {
-                    const kind =
+                    const path = m.ref_value;
+                    let kind: NonNullable<ChatActivity["media"]>[number]["kind"] | null =
                       m.kind === "image" ||
                       m.kind === "video" ||
                       m.kind === "audio" ||
                       m.kind === "html"
                         ? m.kind
                         : null;
-                    const path =
-                      m.ref_kind === "workspace_path" || !m.ref_kind
-                        ? m.ref_value
-                        : m.ref_value;
+                    // 后端把 file_ops 产物标为 kind="file"；按扩展名归类（对齐历史加载逻辑）
+                    if (!kind && m.kind === "file" && path) {
+                      if (/\.html?$/i.test(path)) kind = "html";
+                      else if (/\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(path))
+                        kind = "image";
+                      else if (/\.(mp4|webm|mov|mkv|m4v)$/i.test(path)) kind = "video";
+                      else if (/\.(wav|mp3|m4a|aac|ogg|flac|opus)$/i.test(path))
+                        kind = "audio";
+                      else if (isCodePath(path)) kind = "code";
+                    }
                     if (!kind || !path) return null;
                     return { kind, path };
                   })
                   .filter(Boolean) as ChatActivity["media"]
               : undefined;
+            generatingPreviewApi.onToolCall({
+              id: payload.id,
+              name: payload.name,
+              arguments_json: payload.arguments_json,
+              result: payload.result,
+            });
             const activity: ChatActivity = {
               id,
               kind,
@@ -710,6 +735,7 @@ export function useSend(deps: UseSendDeps) {
               activeAssistantIdRef.current = null;
               return next;
             });
+            generatingPreviewApi.onStreamEnd();
             setStreaming(false);
             setStreamPaused(false);
             setStatus("ready");
@@ -747,6 +773,7 @@ export function useSend(deps: UseSendDeps) {
                 );
               }),
             );
+            generatingPreviewApi.onStreamEnd();
             setStreaming(false);
             setStreamPaused(false);
             setStatus("error");

@@ -11,7 +11,13 @@ import {
 
 export { parseClipboardLocalPaths };
 
-export type MediaActionKind = "image" | "video" | "audio" | "html" | "document";
+export type MediaActionKind =
+  | "image"
+  | "video"
+  | "audio"
+  | "html"
+  | "code"
+  | "document";
 
 type FileBase64Dto = {
   mime: string;
@@ -113,6 +119,17 @@ export async function copyMedia(
   kind: MediaActionKind,
 ): Promise<CopyMediaResult> {
   const local = mediaLocalPath(path);
+
+  // 代码/文本文件：优先复制文本内容（而非文件引用）
+  if (kind === "code" && local) {
+    try {
+      const text = await invoke<string>("read_file", { path: local });
+      await navigator.clipboard.writeText(text);
+      return "text";
+    } catch {
+      // fall through to file/path 复制
+    }
+  }
 
   if (local) {
     try {

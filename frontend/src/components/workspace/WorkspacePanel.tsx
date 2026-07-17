@@ -1301,15 +1301,33 @@ export default function WorkspacePanel({ onClose }: Props) {
       ) : view === "media" ? (
         <>
           <div className="ws-editor-toolbar">
-            <button
-              type="button"
-              className="ws-tool-btn ws-tool-btn--text"
-              onClick={() => void backToBrowse()}
-              title={t("workspace.backToList")}
-              aria-label={t("workspace.backToList")}
-            >
-              <IconWsArrowLeft width={18} height={18} />
-            </button>
+            <div className="ws-editor-toolbar-lead">
+              <button
+                type="button"
+                className="ws-tool-btn ws-tool-btn--text"
+                onClick={() => void backToBrowse()}
+                title={t("workspace.backToList")}
+                aria-label={t("workspace.backToList")}
+              >
+                <IconWsArrowLeft width={18} height={18} />
+              </button>
+              <div className="ws-editor-head-inline">
+                <FileGlyph name={editorName} isDir={false} />
+                <div className="ws-editor-meta-block">
+                  <h3 className="ws-editor-filename">{editorName}</h3>
+                  <p className="ws-editor-path">
+                    {mediaKind === "video"
+                      ? t("workspace.mediaVideo")
+                      : mediaKind === "audio"
+                        ? t("workspace.mediaAudio")
+                        : mediaKind === "html"
+                          ? t("workspace.mediaHtml")
+                          : t("workspace.mediaImage")}
+                    {mediaMeta ? ` · ${mediaMeta}` : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="ws-editor-actions">
               {mediaKind === "html" && editorPath ? (
                 <button
@@ -1341,23 +1359,6 @@ export default function WorkspacePanel({ onClose }: Props) {
               >
                 <IconWsTrash width={18} height={18} />
               </button>
-            </div>
-          </div>
-
-          <div className="ws-editor-head">
-            <FileGlyph name={editorName} isDir={false} />
-            <div className="ws-editor-meta-block">
-              <h3 className="ws-editor-filename">{editorName}</h3>
-              <p className="ws-editor-path">
-                {mediaKind === "video"
-                  ? t("workspace.mediaVideo")
-                  : mediaKind === "audio"
-                    ? t("workspace.mediaAudio")
-                    : mediaKind === "html"
-                      ? t("workspace.mediaHtml")
-                      : t("workspace.mediaImage")}
-                {mediaMeta ? ` · ${mediaMeta}` : ""}
-              </p>
             </div>
           </div>
 
