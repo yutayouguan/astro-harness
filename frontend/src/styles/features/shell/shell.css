@@ -566,9 +566,20 @@ html[data-tone="teal"] {
 .sidebar-brand-text {
   display: none;
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: -0.02em;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  background: linear-gradient(
+    100deg,
+    #0084fd 0%,
+    #1d57fd 32%,
+    #4130fc 58%,
+    #6020fc 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
