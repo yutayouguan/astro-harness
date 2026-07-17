@@ -17,6 +17,7 @@ const FEATURES: MessageKey[] = [
   "about.feature.memory",
   "about.feature.workspace",
   "about.feature.tools",
+  "about.feature.evolution",
 ];
 
 export default function AboutDialog({ open, onClose }: Props) {

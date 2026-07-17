@@ -25,11 +25,12 @@ export const zh = {
   "about.tagline": "本地 AI 桌面工作站",
   "about.version": "版本 {v}",
   "about.body":
-    "名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。",
+    "名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务；还能在使用中沉淀经验、自我进化。偏好设置保存在本机。",
   "about.feature.chat": "智能对话",
   "about.feature.memory": "记忆召回",
   "about.feature.workspace": "工作区",
   "about.feature.tools": "工具与 Skills",
+  "about.feature.evolution": "自我进化",
   "about.close": "好的",
 
   "page.chat.title": "智能对话",
@@ -1345,11 +1346,12 @@ export const en: Record<MessageKey, string> = {
   "about.tagline": "Local AI desktop workstation",
   "about.version": "Version {v}",
   "about.body":
-    "Named after Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. Preferences are saved on this device.",
+    "Named after Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. It can also learn from experience and evolve itself. Preferences are saved on this device.",
   "about.feature.chat": "Chat",
   "about.feature.memory": "Memory",
   "about.feature.workspace": "Workspace",
   "about.feature.tools": "Tools & Skills",
+  "about.feature.evolution": "Self-evolution",
   "about.close": "OK",
 
   "page.chat.title": "Chat",
