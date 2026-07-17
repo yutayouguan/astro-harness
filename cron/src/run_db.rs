@@ -223,9 +223,7 @@ impl CronRunDb {
     pub fn get(&self, id: &str) -> anyhow::Result<Option<CronRunRow>> {
         let sql = format!("SELECT {SELECT_COLS} FROM cron_runs WHERE id = ?1");
         let mut stmt = self.conn.prepare(&sql)?;
-        let row = stmt
-            .query_row(params![id], row_from_query)
-            .optional()?;
+        let row = stmt.query_row(params![id], row_from_query).optional()?;
         Ok(row)
     }
 
@@ -308,8 +306,13 @@ mod tests {
             .unwrap();
         let long_summary = "x".repeat(MAX_SUMMARY_BYTES + 100);
         let long_output = "y".repeat(MAX_OUTPUT_BYTES + 100);
-        db.finish_success(&id, &long_summary, &long_output, "2026-07-11T11:01:00+08:00")
-            .unwrap();
+        db.finish_success(
+            &id,
+            &long_summary,
+            &long_output,
+            "2026-07-11T11:01:00+08:00",
+        )
+        .unwrap();
         let got = db.get(&id).unwrap().unwrap();
         assert!(got.summary.len() <= MAX_SUMMARY_BYTES);
         assert!(got.output.len() <= MAX_OUTPUT_BYTES);

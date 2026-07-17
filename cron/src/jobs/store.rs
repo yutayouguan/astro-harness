@@ -106,7 +106,11 @@ impl CronStore {
     }
 
     /// 按 id 或 id 前缀更新任务；未找到返回 `Ok(None)`
-    pub fn update_job(&self, id_or_prefix: &str, input: NewCronJob) -> anyhow::Result<Option<CronJob>> {
+    pub fn update_job(
+        &self,
+        id_or_prefix: &str,
+        input: NewCronJob,
+    ) -> anyhow::Result<Option<CronJob>> {
         let schedule = input.schedule.trim();
         let task = input.task.trim();
         if schedule.is_empty() {
@@ -154,9 +158,8 @@ impl CronStore {
     pub fn remove(&self, id_or_prefix: &str) -> anyhow::Result<bool> {
         let mut file = self.load()?;
         let before = file.jobs.len();
-        file.jobs.retain(|j| {
-            j.id != id_or_prefix && !j.id.starts_with(id_or_prefix)
-        });
+        file.jobs
+            .retain(|j| j.id != id_or_prefix && !j.id.starts_with(id_or_prefix));
         if file.jobs.len() == before {
             return Ok(false);
         }
@@ -165,10 +168,13 @@ impl CronStore {
     }
 
     /// 手动执行后更新 `last_run_at`（不推进 `next_run_at`）
-    pub fn touch_last_run(&self, id_or_prefix: &str, fired_at: Option<String>) -> anyhow::Result<bool> {
-        let fired_at = fired_at.unwrap_or_else(|| {
-            Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-        });
+    pub fn touch_last_run(
+        &self,
+        id_or_prefix: &str,
+        fired_at: Option<String>,
+    ) -> anyhow::Result<bool> {
+        let fired_at = fired_at
+            .unwrap_or_else(|| Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
         let mut file = self.load()?;
         let mut found = false;
         for job in &mut file.jobs {
@@ -197,9 +203,8 @@ impl CronStore {
                         if next <= Local::now() {
                             anyhow::bail!("无法启用已过期的单次任务");
                         }
-                        job.next_run_at = Some(
-                            next.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                        );
+                        job.next_run_at =
+                            Some(next.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
                     } else if job.next_run_at.is_none() {
                         job.next_run_at = Some(
                             compute_next_run(&job.schedule, Local::now())?
@@ -341,4 +346,3 @@ impl CronStore {
 pub fn cron_dir() -> PathBuf {
     default_memory_dir().join("cron")
 }
-

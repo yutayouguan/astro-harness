@@ -11,17 +11,17 @@
 //! - `once:` 任务触发后自动禁用且清空 `next_run_at`
 //! - `jobs.json` 通过临时文件原子写入，避免半写损坏
 
+mod dispatch;
 mod model;
 mod schedule;
 mod store;
 mod tick;
-mod dispatch;
 
+pub use dispatch::dispatch_cron_tool;
 pub use model::*;
 pub use schedule::compute_next_run;
 pub use store::{cron_dir, CronStore};
 pub use tick::tick_default;
-pub use dispatch::dispatch_cron_tool;
 
 #[cfg(test)]
 mod tests {
@@ -44,7 +44,13 @@ mod tests {
         let fired = store.claim_due().unwrap();
         assert_eq!(fired.len(), 1);
         assert_eq!(fired[0].task, "提醒喝水");
-        assert!(dir.path().join("output").read_dir().unwrap().next().is_none());
+        assert!(dir
+            .path()
+            .join("output")
+            .read_dir()
+            .unwrap()
+            .next()
+            .is_none());
         let after = store.list().unwrap();
         assert!(after[0].next_run_at.as_ref().unwrap().as_str() > "2000");
     }
@@ -81,7 +87,13 @@ mod tests {
         store.save(&file).unwrap();
         let due = store.claim_due().unwrap();
         assert_eq!(due.len(), 1);
-        assert!(dir.path().join("output").read_dir().unwrap().next().is_none());
+        assert!(dir
+            .path()
+            .join("output")
+            .read_dir()
+            .unwrap()
+            .next()
+            .is_none());
         let after = store.list().unwrap();
         assert!(after[0].next_run_at.as_ref().unwrap().as_str() > "2000");
     }

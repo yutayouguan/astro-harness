@@ -9,6 +9,4 @@ pub mod jobs;
 pub mod run_db;
 
 pub use jobs::*;
-pub use run_db::{
-    cron_db_path, CronRunDb, CronRunFilters, CronRunRow, NewCronRun,
-};
+pub use run_db::{cron_db_path, CronRunDb, CronRunFilters, CronRunRow, NewCronRun};

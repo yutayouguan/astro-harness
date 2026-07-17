@@ -2,10 +2,7 @@
 
 use chrono::{DateTime, Datelike, Duration, Local, Timelike};
 
-pub fn compute_next_run(
-    schedule: &str,
-    after: DateTime<Local>,
-) -> anyhow::Result<DateTime<Local>> {
+pub fn compute_next_run(schedule: &str, after: DateTime<Local>) -> anyhow::Result<DateTime<Local>> {
     let schedule = schedule.trim();
     if let Some(rest) = schedule.strip_prefix("once:") {
         let dt = DateTime::parse_from_rfc3339(rest.trim())
@@ -121,10 +118,7 @@ fn parse_weekday_filter(raw: &str) -> anyhow::Result<Vec<u32>> {
 }
 
 /// 简化五段 cron：`分 时 日 月 周`，字段支持 `*`、数字、逗号列表与区间（如 `1-5`、`1,3,5`）
-fn parse_five_field_cron(
-    expr: &str,
-    after: DateTime<Local>,
-) -> anyhow::Result<DateTime<Local>> {
+fn parse_five_field_cron(expr: &str, after: DateTime<Local>) -> anyhow::Result<DateTime<Local>> {
     let parts: Vec<&str> = expr.split_whitespace().collect();
     if parts.len() != 5 {
         anyhow::bail!(
@@ -237,4 +231,3 @@ fn match_field(field: &CronField, value: u32) -> bool {
         CronField::List(vs) => vs.contains(&value),
     }
 }
-

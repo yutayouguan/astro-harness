@@ -7,4 +7,3 @@ use super::store::CronStore;
 pub fn tick_default() -> anyhow::Result<Vec<CronJob>> {
     CronStore::open_default()?.tick()
 }
-
