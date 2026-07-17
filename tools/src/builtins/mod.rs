@@ -11,7 +11,7 @@ pub mod present;
 pub mod agents;
 
 pub use media::{
-    audio_understand, image_gen, music, music_gen, robotics, tts, video_gen, video_understand,
+    audio_understand, image_gen, music_gen, robotics, tts, video_gen, video_understand,
     vision,
 };
 pub use system::{browser, code_exec, file_ops, terminal, web_extract, web_search};

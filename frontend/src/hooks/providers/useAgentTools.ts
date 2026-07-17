@@ -47,7 +47,6 @@ export type AgentToolId =
   | "video_understand"
   | "tts"
   | "music_gen"
-  | "music"
   | "skills"
   | "memory"
   | "session_search"
@@ -408,18 +407,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "title", type: "string", optional: true },
       { name: "items", type: "array" },
-    ],
-  },
-  {
-    id: "music",
-    titleKey: "agentTools.music.title",
-    descKey: "agentTools.music.desc",
-    Icon: IconMusic,
-    tone: "pink",
-    params: [
-      { name: "query", type: "string", optional: true },
-      { name: "action", type: "string", optional: true },
-      { name: "player", type: "string", optional: true },
     ],
   },
 ];

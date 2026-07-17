@@ -262,8 +262,6 @@ export const zh = {
   "agentTools.multiAgent.desc": "协调多个 AI 模型协同工作",
   "agentTools.taskPlan.title": "任务规划",
   "agentTools.taskPlan.desc": "为复杂任务创建和管理待办列表",
-  "agentTools.music.title": "音乐",
-  "agentTools.music.desc": "播放或停止音乐（汽水音乐 / mpv / Spotify / Apple Music）",
 
   "status.ready": "就绪",
   "status.connecting": "连接中",
@@ -1525,8 +1523,6 @@ export const en: Record<MessageKey, string> = {
   "agentTools.multiAgent.desc": "Coordinate multiple AI models together",
   "agentTools.taskPlan.title": "Task Planning",
   "agentTools.taskPlan.desc": "Create and manage to-do lists for complex tasks",
-  "agentTools.music.title": "Music",
-  "agentTools.music.desc": "Play or stop music via 汽水音乐, mpv, Spotify, or Apple Music",
 
   "status.ready": "Ready",
   "status.connecting": "Connecting",

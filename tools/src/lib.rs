@@ -18,7 +18,7 @@ pub use approval::{classify_dangerous_command, ApprovalAction};
 pub(crate) use core::path_safe;
 pub(crate) use builtins::{
     audio_understand, browser, clarify, code_exec, confirm, context_tools, create_agent, delegate,
-    file_ops, image_gen, memory_tools, multi_agent, music, music_gen, orchestration, present_callout,
+    file_ops, image_gen, memory_tools, multi_agent, music_gen, orchestration, present_callout,
     present_metrics, present_result, present_ui, request_user_location, robotics, scheduled,
     skills_tool, task_plan, team, terminal, tts, video_gen, video_understand, vision, web_extract,
     web_search,
@@ -60,7 +60,6 @@ pub fn register_all(registry: &mut ToolRegistry) {
     vision::register(registry);
     robotics::register(registry);
     tts::register(registry);
-    music::register(registry);
     audio_understand::register(registry);
     music_gen::register(registry);
     // system
