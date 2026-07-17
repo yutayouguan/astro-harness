@@ -100,7 +100,7 @@ export default function ChatRightPanel({
       <aside className="chat-right-panel" aria-label={t("chat.rightPanel.title")}>
         <div className="chat-right-header">
           <h2 className="chat-right-title">
-            <PanelRight size={15} strokeWidth={2.2} aria-hidden />
+            <PanelRight size={17} strokeWidth={1.75} aria-hidden />
             {t("chat.rightPanel.title")}
           </h2>
           <button
@@ -110,7 +110,7 @@ export default function ChatRightPanel({
             title={t("chat.rightPanel.close")}
             aria-label={t("chat.rightPanel.close")}
           >
-            <X size={14} strokeWidth={2.2} aria-hidden />
+            <X size={14} strokeWidth={1.75} aria-hidden />
           </button>
         </div>
         <div className="chat-right-tabs" role="tablist">
@@ -125,7 +125,7 @@ export default function ChatRightPanel({
                 aria-selected={tab === id}
                 onClick={() => onTabChange(id)}
               >
-                <Icon size={14} strokeWidth={2.2} aria-hidden />
+                <Icon size={15} strokeWidth={1.75} aria-hidden />
                 {t(TAB_KEYS[id])}
               </button>
             );

@@ -326,7 +326,7 @@ export default function ChatSessionList({
           className="chat-session-new"
           onClick={onNewSession}
         >
-          <Plus size={15} strokeWidth={2.2} aria-hidden />
+          <Plus size={15} strokeWidth={1.75} aria-hidden />
           {t("chat.newSession")}
         </button>
         <AgentPicker
@@ -383,7 +383,7 @@ export default function ChatSessionList({
                       setMenuSessionId(menuOpen ? null : s.sessionId);
                     }}
                   >
-                    <MoreHorizontal size={16} strokeWidth={2.2} aria-hidden />
+                    <MoreHorizontal size={16} strokeWidth={1.75} aria-hidden />
                   </button>
                   {menuOpen ? (
                     <div className="chat-session-menu" role="menu">
