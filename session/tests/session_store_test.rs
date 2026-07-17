@@ -1194,6 +1194,47 @@ fn archive_filters_and_restores_session() {
 }
 
 #[test]
+fn v15_schema_migrates_to_v16_without_data_loss() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+
+    {
+        let store = SessionStore::open(&path).unwrap();
+        store
+            .create_session("keep", "tauri", None, None, None)
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "keep",
+                role: "user",
+                content: Some("keep me after v16"),
+                ..NewMessage::empty("keep", "user")
+            })
+            .unwrap();
+        store.set_session_title("keep", "History").unwrap();
+    }
+
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute("UPDATE schema_version SET version = 15", []).unwrap();
+    }
+
+    let reopened = SessionStore::open(&path).unwrap();
+    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
+
+    let sessions = reopened
+        .list_sessions(SessionListFilter::Active, 10)
+        .unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].id, "keep");
+    assert_eq!(sessions[0].title.as_deref(), Some("History"));
+
+    let msgs = reopened.get_messages("keep").unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0].content.as_deref(), Some("keep me after v16"));
+}
+
+#[test]
 fn pin_session_sorts_before_unpinned() {
     let (_dir, store) = test_store();
     store.create_session("older", "tauri", None, None, None).unwrap();

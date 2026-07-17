@@ -228,10 +228,13 @@ impl SessionStore {
     pub fn open(path: &Path) -> Result<Self> {
         if path.exists() {
             let version = peek_schema_version(path).unwrap_or(0);
-            // v13→v14 / v14→v15 为 additive ALTER，可就地升级，不必丢历史。
+            // v13→v14 / v14→v15 / v15→v16 为 additive ALTER，可就地升级，不必丢历史。
             let additive_only = (version == 13 && SCHEMA_VERSION >= 14)
-                || (version == 14 && SCHEMA_VERSION == 15)
-                || (version == 13 && SCHEMA_VERSION == 15);
+                || (version == 14 && SCHEMA_VERSION >= 15)
+                || (version == 15 && SCHEMA_VERSION >= 16)
+                || (version == 13 && SCHEMA_VERSION >= 15)
+                || (version == 13 && SCHEMA_VERSION >= 16)
+                || (version == 14 && SCHEMA_VERSION >= 16);
             if version < SCHEMA_VERSION && !additive_only {
                 tracing::warn!(
                     version,
