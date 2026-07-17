@@ -281,43 +281,46 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 /*
- * 内部细节（勾 / 三点 / <> / 横线等）：
- * - 默认与 hover：跟外轮廓同色线稿，空心图标里仍能看见细节
- * - 选中：外轮廓填实后，细节改成浅色透镜镂空
+ * 内部细节（勾 / 三点 / <> / 横线等）染色说明：
+ * - 外轮廓：继承 SVG 上的 stroke={url(#grad)} 表现属性（WebKit 可靠）
+ * - 默认细节：不要再用 CSS var 包一层 url(#grad)（Tauri/WebKit 会丢笔），
+ *   折线用 stroke: inherit；圆点用实色 --nav-grad-bottom
+ * - 选中：外轮廓 fill 渐变；细节改成浅色透镜实色 --nav-icon-cutout
  */
 .nav-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: var(--nav-grad-paint);
+  stroke: inherit;
   stroke-width: 1.75;
 }
 
-.nav-item:not(.active) .nav-icon svg .nav-icon-cutout {
-  /* 默认三点等闭合细节用细填点，保证空心里也能看见 */
-  fill: var(--nav-grad-paint);
-  stroke: none;
-}
-
+/* 默认折线细节：继承父级渐变描边 */
 .nav-item:not(.active) .nav-icon svg path.nav-icon-cutout {
-  /* 折线类细节仍用描边（勾、<>、横线） */
   fill: none;
-  stroke: var(--nav-grad-paint);
+  stroke: inherit;
   stroke-width: 1.75;
 }
 
-.nav-item.active .nav-icon svg .nav-icon-cutout {
-  fill: var(--nav-icon-cutout);
+/* 默认圆点细节：用渐变底部实色填，避免 url() 经 CSS var 失效 */
+.nav-item:not(.active) .nav-icon svg circle.nav-icon-cutout {
+  fill: var(--nav-grad-bottom);
   stroke: none;
 }
 
+/* 选中：折线/圆点都改成浅色透镜 */
 .nav-item.active .nav-icon svg path.nav-icon-cutout {
   fill: none;
   stroke: var(--nav-icon-cutout);
   stroke-width: 2.35;
 }
 
+.nav-item.active .nav-icon svg circle.nav-icon-cutout {
+  fill: var(--nav-icon-cutout);
+  stroke: none;
+}
+
 .nav-icon svg .nav-icon-hole {
   fill: none;
-  stroke: var(--nav-grad-paint);
+  stroke: inherit;
   stroke-width: 1.75;
 }
 
@@ -326,14 +329,14 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   stroke: none;
 }
 
-/* 装饰小圆点：默认线稿；选中仍为渐变实心（不是镂空） */
+/* 装饰小圆点：默认实色；选中跟主渐变底部实色 */
 .nav-icon svg .nav-icon-dot {
-  fill: none;
-  stroke: var(--nav-grad-paint);
+  fill: var(--nav-grad-bottom);
+  stroke: none;
 }
 
 .nav-item.active .nav-icon svg .nav-icon-dot {
-  fill: var(--nav-grad-paint);
+  fill: var(--nav-grad-bottom);
   stroke: none;
 }
 
@@ -347,7 +350,8 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 .nav-item.active .nav-icon svg .nav-icon-fill {
-  fill: var(--nav-grad-paint);
+  /* 继承选中态 svg 的渐变 fill，避免子元素再包一层 url() var */
+  fill: inherit;
   stroke: none;
 }
 
