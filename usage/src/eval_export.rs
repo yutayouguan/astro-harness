@@ -72,10 +72,7 @@ pub fn export_session_eval_jsonl_with_db(
     }
 
     let rows = db.list_trace_events(sid, TRACE_EVENTS_LIMIT)?;
-    let agent_id = rows
-        .first()
-        .map(|r| r.agent_id.clone())
-        .unwrap_or_default();
+    let agent_id = rows.first().map(|r| r.agent_id.clone()).unwrap_or_default();
     let tokens: i64 = rows.iter().map(|r| r.total_tokens).sum();
     let cost_usd: f64 = rows.iter().map(|r| r.cost_usd).sum();
 

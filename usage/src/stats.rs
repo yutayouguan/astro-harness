@@ -299,8 +299,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
-        record_tool_call("workspace", "skills", &json!({ "skill_id": "  " }), None, None)
-            .unwrap();
+        record_tool_call(
+            "workspace",
+            "skills",
+            &json!({ "skill_id": "  " }),
+            None,
+            None,
+        )
+        .unwrap();
         let summary = get_usage_summary(Some("workspace"));
         assert_eq!(summary.tools.get("skills").copied().unwrap_or(0), 1);
         assert!(summary.skills.is_empty());

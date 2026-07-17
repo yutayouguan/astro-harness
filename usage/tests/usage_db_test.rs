@@ -1,10 +1,10 @@
 //! usage.db 事件写入与聚合查询测试。
 
+use std::sync::Mutex;
+use tempfile::TempDir;
 use usage::db::{
     usage_db_path, NewUsageEvent, UsageDb, UsageInsightsQuery, UsagePeriod, USAGE_SCHEMA_VERSION,
 };
-use std::sync::Mutex;
-use tempfile::TempDir;
 
 /// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -180,9 +180,7 @@ fn usage_db_rejects_newer_schema_version() {
         .unwrap();
     }
     let err = usage::UsageDb::new(path).err().expect("expected Err");
-    assert!(err
-        .to_string()
-        .contains("newer than supported"));
+    assert!(err.to_string().contains("newer than supported"));
 }
 
 #[test]
@@ -438,13 +436,7 @@ fn estimate_usage_cost_official_snapshot_and_unknown() {
         cache_write_tokens: 0,
         request_count: 1,
     };
-    let r = estimate_usage_cost(
-        "gpt-4o-mini",
-        &usage,
-        Some("openai"),
-        None,
-        None,
-    );
+    let r = estimate_usage_cost("gpt-4o-mini", &usage, Some("openai"), None, None);
     assert_eq!(r.status, CostStatus::Estimated);
     assert!(r.amount_usd.unwrap() > 0.0);
     let unk = estimate_usage_cost(

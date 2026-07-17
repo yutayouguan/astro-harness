@@ -49,8 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_kind_name_ts ON usage_events(kind, name, ts
 "#;
 
 /// KPI `calls` 计入的 kind 集合（`skill` 除外）
-const CALLS_KIND_SQL: &str =
-    "CASE WHEN kind IN ('tool','mcp','cron','llm') THEN 1 ELSE 0 END";
+const CALLS_KIND_SQL: &str = "CASE WHEN kind IN ('tool','mcp','cron','llm') THEN 1 ELSE 0 END";
 
 /// KPI `cost_usd` 聚合：排除 `cost_status='unknown'`
 const COST_SUM_SQL: &str =
@@ -193,7 +192,10 @@ fn fmt_utc_bound(dt: chrono::DateTime<Utc>) -> String {
 }
 
 /// 时间窗与分桶格式：`[start, end)` UTC RFC3339 + strftime 格式
-fn period_bounds(period: UsagePeriod, as_of: &chrono::DateTime<Utc>) -> (String, String, &'static str) {
+fn period_bounds(
+    period: UsagePeriod,
+    as_of: &chrono::DateTime<Utc>,
+) -> (String, String, &'static str) {
     let y = as_of.year();
     let m = as_of.month();
     match period {
@@ -254,10 +256,7 @@ fn parse_as_of(as_of: Option<&str>) -> anyhow::Result<chrono::DateTime<Utc>> {
 }
 
 /// 返回 period 半开区间 `[start, end)` 的 RFC3339 UTC 字符串（与 query_insights 一致）。
-pub fn period_window(
-    period: UsagePeriod,
-    as_of: Option<&str>,
-) -> anyhow::Result<(String, String)> {
+pub fn period_window(period: UsagePeriod, as_of: Option<&str>) -> anyhow::Result<(String, String)> {
     let as_of_dt = parse_as_of(as_of)?;
     let (start, end, _) = period_bounds(period, &as_of_dt);
     Ok((start, end))
@@ -313,9 +312,7 @@ fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>>
 fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
     let conn = common::open_wal(path)?;
     conn.execute_batch(DDL)?;
-    conn.execute_batch(&format!(
-        "PRAGMA user_version = {USAGE_SCHEMA_VERSION};"
-    ))?;
+    conn.execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
     Ok(conn)
 }
 
@@ -326,9 +323,8 @@ impl common::SqliteStore for UsageDb {
 
     /// `new()` 已在打开时完成迁移；此处幂等校准 `user_version`。
     fn migrate(&self) -> anyhow::Result<()> {
-        self.conn.execute_batch(&format!(
-            "PRAGMA user_version = {USAGE_SCHEMA_VERSION};"
-        ))?;
+        self.conn
+            .execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
         Ok(())
     }
 }
@@ -431,11 +427,7 @@ impl UsageDb {
     }
 
     /// 列出时间窗内 `kind=orchestration` 事件的 `meta_json`（供协作图聚合）
-    pub fn list_orchestration_meta(
-        &self,
-        start: &str,
-        end: &str,
-    ) -> anyhow::Result<Vec<String>> {
+    pub fn list_orchestration_meta(&self, start: &str, end: &str) -> anyhow::Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
             "SELECT meta_json FROM usage_events
              WHERE kind = 'orchestration'
@@ -469,7 +461,11 @@ impl UsageDb {
                 by_agent: self.query_rank_by_agent(&start, &end, agent_id.as_deref())?,
                 by_model: self.query_rank_by_model(&start, &end, agent_id.as_deref())?,
             },
-            unpriced_llm_events: self.query_unpriced_llm_events(&start, &end, agent_id.as_deref())?,
+            unpriced_llm_events: self.query_unpriced_llm_events(
+                &start,
+                &end,
+                agent_id.as_deref(),
+            )?,
         })
     }
 

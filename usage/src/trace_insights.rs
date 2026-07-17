@@ -7,9 +7,9 @@ use chrono::{SecondsFormat, TimeZone, Utc};
 use common::truncate_chars;
 use serde::{Deserialize, Serialize};
 
-use session::SessionStore;
 use crate::db::{period_window, UsageDb, UsagePeriod};
 use home::default_memory_dir;
+use session::SessionStore;
 
 /// 列表默认条数
 pub const TRACE_LIST_LIMIT: usize = 50;
@@ -105,10 +105,16 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
         let (mut events, title) = if let Some(store) = store.as_ref() {
             match spans_from_chat_history(store, &s.session_id, &s.agent_id) {
                 Ok(built) if !built.0.is_empty() => built,
-                _ => (usage_rows_to_events(&usage_rows, &s.agent_id), String::new()),
+                _ => (
+                    usage_rows_to_events(&usage_rows, &s.agent_id),
+                    String::new(),
+                ),
             }
         } else {
-            (usage_rows_to_events(&usage_rows, &s.agent_id), String::new())
+            (
+                usage_rows_to_events(&usage_rows, &s.agent_id),
+                String::new(),
+            )
         };
 
         merge_usage_into_spans(&mut events, &usage_rows);
@@ -138,10 +144,7 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
         });
     }
 
-    Ok(TraceInsights {
-        kpis: kpi,
-        traces,
-    })
+    Ok(TraceInsights { kpis: kpi, traces })
 }
 
 fn usage_rows_to_events(
@@ -302,10 +305,7 @@ fn extract_skill_id(input: Option<&str>) -> Option<String> {
 
 /// 将 usage 中的 llm token/费用按顺序合并到 chat history 的 llm span；
 /// 若 history 无 llm 名，用 usage 的模型名覆盖。
-fn merge_usage_into_spans(
-    events: &mut [TraceEvent],
-    usage_rows: &[crate::db::TraceEventRow],
-) {
+fn merge_usage_into_spans(events: &mut [TraceEvent], usage_rows: &[crate::db::TraceEventRow]) {
     let llm_usage: Vec<_> = usage_rows.iter().filter(|e| e.kind == "llm").collect();
     let mut i = 0usize;
     for ev in events.iter_mut() {
@@ -361,9 +361,9 @@ fn unique_kinds(events: &[TraceEvent]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use session::{NewMessage, SessionStore};
     use crate::db::{NewUsageEvent, UsageDb};
     use serde_json::json;
+    use session::{NewMessage, SessionStore};
     use tempfile::TempDir;
 
     use home::test_env::AstroMemoryDirGuard;

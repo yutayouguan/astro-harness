@@ -311,12 +311,8 @@ fn parse_models_api_response(json: Value) -> Option<PricingCacheFile> {
             CachedModelPricing {
                 prompt,
                 completion,
-                cache_read: pricing
-                    .get("cache_read")
-                    .and_then(parse_price_value),
-                cache_write: pricing
-                    .get("cache_write")
-                    .and_then(parse_price_value),
+                cache_read: pricing.get("cache_read").and_then(parse_price_value),
+                cache_write: pricing.get("cache_write").and_then(parse_price_value),
                 request: pricing.get("request").and_then(parse_price_value),
             },
         );

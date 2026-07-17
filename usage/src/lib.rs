@@ -15,7 +15,7 @@ pub mod trace_insights;
 
 pub use db::{
     period_window, usage_db_path, NewUsageEvent, UsageDb, UsageInsights, UsageInsightsQuery,
-    UsagePeriod, UsageKpis, UsageRankItem, UsageRankings, UsageSeriesPoint, USAGE_SCHEMA_VERSION,
+    UsageKpis, UsagePeriod, UsageRankItem, UsageRankings, UsageSeriesPoint, USAGE_SCHEMA_VERSION,
 };
 pub use eval_export::{
     export_session_eval_jsonl, export_session_eval_jsonl_with_db, write_eval_record_jsonl,
