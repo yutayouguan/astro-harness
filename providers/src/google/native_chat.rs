@@ -310,6 +310,7 @@ pub fn extract_gemini_native_delta(data: &str) -> Option<ChatChunk> {
         tool_call_deltas,
         usage,
         interaction_id: None,
+        thought_signature: None,
     })
 }
 
@@ -382,6 +383,8 @@ mod tests {
                 }]),
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
+                thought_signature: None,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -390,6 +393,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("fc_1".into()),
                 name: Some("get_weather".into()),
+                reasoning: None,
+                thought_signature: None,
             },
         ];
         let (_, contents) = to_gemini_contents(&messages);
@@ -423,6 +428,8 @@ mod tests {
                 ]),
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
+                thought_signature: None,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -431,6 +438,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("a".into()),
                 name: Some("get_weather".into()),
+                reasoning: None,
+                thought_signature: None,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -439,6 +448,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("b".into()),
                 name: Some("get_weather".into()),
+                reasoning: None,
+                thought_signature: None,
             },
         ];
         let (_, contents) = to_gemini_contents(&messages);

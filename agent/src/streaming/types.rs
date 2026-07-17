@@ -14,6 +14,8 @@ pub enum StreamedAssistantContent {
     Text(String),
     /// 推理/思考过程 token（部分 Provider 专用）。
     Reasoning(String),
+    /// Google Interactions：`thought.signature`（无状态多轮回放必需）。
+    ThoughtSignature(String),
     /// 工具调用的增量片段，需经 [`tools::ToolCallAccumulator`] 合并。
     ToolCallDelta(ToolCallDeltaChunk),
     /// 本轮或累计 token 用量，通常在流末尾出现。
@@ -89,6 +91,11 @@ fn chunk_to_contents(chunk: ChatChunk) -> Vec<StreamedAssistantContent> {
     if let Some(reasoning) = chunk.reasoning {
         if !reasoning.is_empty() {
             out.push(StreamedAssistantContent::Reasoning(reasoning));
+        }
+    }
+    if let Some(sig) = chunk.thought_signature {
+        if !sig.is_empty() {
+            out.push(StreamedAssistantContent::ThoughtSignature(sig));
         }
     }
     if let Some(token) = chunk.token {

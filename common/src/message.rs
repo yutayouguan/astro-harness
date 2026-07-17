@@ -39,6 +39,12 @@ pub struct Message {
     /// 结构化媒体附件（工具生成图/音/视频等）；发给 LLM 仍用 `content` 文本。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<MediaAsset>,
+    /// 助手推理文本（与 DB `reasoning` 列对应；运行时 hydrate 填充）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+    /// Google Interactions `thought.signature`（存于 `reasoning_details.google_thought_signature`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought_signature: Option<String>,
 }
 
 /// 消息正文：单段文本，或分段（多模态 text + image_url）。
@@ -147,6 +153,8 @@ impl Message {
             tool_calls: None,
             tool_call_id: None,
             media: Vec::new(),
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -159,6 +167,8 @@ impl Message {
             tool_calls: None,
             tool_call_id: None,
             media: Vec::new(),
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -171,6 +181,8 @@ impl Message {
             tool_calls: None,
             tool_call_id: None,
             media: Vec::new(),
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -183,6 +195,8 @@ impl Message {
             tool_calls: Some(tool_calls),
             tool_call_id: None,
             media: Vec::new(),
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -195,6 +209,8 @@ impl Message {
             tool_calls: None,
             tool_call_id: None,
             media: Vec::new(),
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -207,6 +223,8 @@ impl Message {
             tool_calls: None,
             tool_call_id: Some(tool_call_id.to_string()),
             media: Vec::new(),
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -219,6 +237,8 @@ impl Message {
             tool_calls: None,
             tool_call_id: Some(tool_call_id.to_string()),
             media,
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -264,6 +284,8 @@ impl Message {
                     MediaAsset::data_url(MediaKind::Image, u, mime)
                 })
                 .collect(),
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -341,4 +363,37 @@ impl ToolResult {
         self.is_error = true;
         self
     }
+}
+
+/// `reasoning_details` 中存放 Google Interactions `thought.signature` 的键。
+pub const GOOGLE_THOUGHT_SIGNATURE_KEY: &str = "google_thought_signature";
+
+/// 将 `thought.signature` 合并进 `reasoning_details`（供会话落盘）。
+pub fn merge_google_thought_signature(
+    details: Option<serde_json::Value>,
+    signature: Option<&str>,
+) -> Option<serde_json::Value> {
+    let sig = signature.map(str::trim).filter(|s| !s.is_empty())?;
+    let mut obj = match details {
+        Some(serde_json::Value::Object(m)) => m,
+        _ => serde_json::Map::new(),
+    };
+    obj.insert(
+        GOOGLE_THOUGHT_SIGNATURE_KEY.into(),
+        serde_json::Value::String(sig.to_string()),
+    );
+    Some(serde_json::Value::Object(obj))
+}
+
+/// 从 `reasoning_details` 读出 Google `thought.signature`。
+pub fn google_thought_signature_from_details(
+    details: &Option<serde_json::Value>,
+) -> Option<String> {
+    details
+        .as_ref()?
+        .get(GOOGLE_THOUGHT_SIGNATURE_KEY)?
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }

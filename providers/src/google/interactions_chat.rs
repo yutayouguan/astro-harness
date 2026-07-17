@@ -213,6 +213,9 @@ pub fn messages_to_interactions_input(messages: &[ChatMessage]) -> (Option<Strin
             "assistant" => {
                 if let Some(ref calls) = m.tool_calls {
                     if !calls.is_empty() {
+                        if let Some(thought) = encode_thought_step(m) {
+                            input.push(thought);
+                        }
                         if !m.content.trim().is_empty() {
                             input.push(json!({
                                 "type": "model_output",
@@ -258,6 +261,31 @@ pub fn messages_to_interactions_input(messages: &[ChatMessage]) -> (Option<Strin
     }
 
     (extract_system_instruction(messages), input)
+}
+
+/// 无状态回放：在 `function_call` 前编入 `thought` step（signature ± reasoning 文本）。
+fn encode_thought_step(m: &ChatMessage) -> Option<Value> {
+    let sig = m
+        .thought_signature
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let reasoning = m
+        .reasoning
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if sig.is_none() && reasoning.is_none() {
+        return None;
+    }
+    let mut step = json!({ "type": "thought" });
+    if let Some(s) = sig {
+        step["signature"] = json!(s);
+    }
+    if let Some(text) = reasoning {
+        step["content"] = json!([{ "type": "text", "text": text }]);
+    }
+    Some(step)
 }
 
 /// Gemini 3.x 默认会思考；未显式传 `thinking_level` 时，短 `max_output_tokens`
@@ -589,6 +617,20 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                     interaction_id: state.interaction_id.clone(),
                     ..Default::default()
                 });
+            } else if step_type == "thought" {
+                let signature = step
+                    .and_then(|s| s.get("signature"))
+                    .and_then(|x| x.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+                if let Some(signature) = signature {
+                    out.push(ChatChunk {
+                        thought_signature: Some(signature),
+                        interaction_id: state.interaction_id.clone(),
+                        ..Default::default()
+                    });
+                }
             }
         }
         "step.delta" => {
@@ -620,6 +662,21 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                     if let Some(text) = text {
                         out.push(ChatChunk {
                             reasoning: Some(text.to_string()),
+                            interaction_id: state.interaction_id.clone(),
+                            ..Default::default()
+                        });
+                    }
+                }
+                "thought_signature" => {
+                    let signature = delta
+                        .and_then(|d| d.get("signature"))
+                        .and_then(|t| t.as_str())
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    if let Some(signature) = signature {
+                        out.push(ChatChunk {
+                            thought_signature: Some(signature),
                             interaction_id: state.interaction_id.clone(),
                             ..Default::default()
                         });
@@ -908,6 +965,8 @@ mod tests {
                 }]),
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
+                thought_signature: None,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -916,6 +975,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("fc_1".into()),
                 name: Some("get_weather".into()),
+                reasoning: None,
+                thought_signature: None,
             },
             ChatMessage::text("user", "thanks"),
         ];
@@ -1116,11 +1177,61 @@ mod tests {
             }]),
             tool_call_id: None,
             name: None,
+            reasoning: None,
+            thought_signature: None,
         }];
         let (_, input) = messages_to_interactions_input(&messages);
         assert_eq!(input[0]["type"], "function_call");
         assert_eq!(input[0]["signature"], "sig_paris");
         assert_eq!(input[0]["arguments"]["location"], "Paris");
+    }
+
+    #[test]
+    fn messages_replay_thought_before_function_call() {
+        let messages = vec![ChatMessage {
+            role: "assistant".into(),
+            content: String::new(),
+            parts: None,
+            tool_calls: Some(vec![ChatToolCall {
+                id: "fc_1".into(),
+                name: "image_gen".into(),
+                arguments: json!({ "prompt": "cat" }),
+                signature: Some("fc_sig".into()),
+            }]),
+            tool_call_id: None,
+            name: None,
+            reasoning: Some("plan image".into()),
+            thought_signature: Some("thought_sig".into()),
+        }];
+        let (_, input) = messages_to_interactions_input(&messages);
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[0]["type"], "thought");
+        assert_eq!(input[0]["signature"], "thought_sig");
+        assert_eq!(input[0]["content"][0]["text"], "plan image");
+        assert_eq!(input[1]["type"], "function_call");
+        assert_eq!(input[1]["signature"], "fc_sig");
+    }
+
+    #[test]
+    fn stream_thought_signature_delta() {
+        let mut state = StreamState::default();
+        let chunks = extract_interactions_chat_events(
+            r#"{"event_type":"step.delta","index":0,"delta":{"type":"thought_signature","signature":"EvEFCu4F"}}"#,
+            &mut state,
+        );
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].thought_signature.as_deref(), Some("EvEFCu4F"));
+    }
+
+    #[test]
+    fn stream_thought_step_start_signature() {
+        let mut state = StreamState::default();
+        let chunks = extract_interactions_chat_events(
+            r#"{"event_type":"step.start","index":0,"step":{"type":"thought","signature":"sig_thought"}}"#,
+            &mut state,
+        );
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].thought_signature.as_deref(), Some("sig_thought"));
     }
 
     #[test]
@@ -1140,6 +1251,8 @@ mod tests {
                 }]),
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
+                thought_signature: None,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -1148,6 +1261,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("fc_1".into()),
                 name: Some("get_weather".into()),
+                reasoning: None,
+                thought_signature: None,
             },
         ];
         let mut config = ProviderConfig::default();
@@ -1203,6 +1318,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("a".into()),
                 name: Some("t".into()),
+                reasoning: None,
+                thought_signature: None,
             },
             ChatMessage::text("user", "again"),
             ChatMessage {
@@ -1212,6 +1329,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("b".into()),
                 name: Some("t".into()),
+                reasoning: None,
+                thought_signature: None,
             },
         ];
         let results = trailing_function_results(&messages);

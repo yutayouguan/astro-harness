@@ -439,6 +439,7 @@ async fn run_multi_turn_stream_inner(
 
         let mut full_response = String::new();
         let mut full_reasoning = String::new();
+        let mut thought_signature: Option<String> = None;
         let mut tool_acc = tools::ToolCallAccumulator::new();
         // Google 等会在每个 chunk 带累计 usage：本轮覆盖式取最后一次
         let mut round_usage: Option<Usage> = None;
@@ -513,6 +514,9 @@ async fn run_multi_turn_stream_inner(
                         pause.clear_abort();
                         return;
                     }
+                }
+                Some(Ok(StreamedAssistantContent::ThoughtSignature(sig))) => {
+                    thought_signature = Some(sig);
                 }
                 Some(Ok(StreamedAssistantContent::ToolCallDelta(d))) => {
                     tool_acc.push(&tools::ToolCallDelta {
@@ -611,7 +615,10 @@ async fn run_multi_turn_stream_inner(
             };
             if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
                 let mut agent = session.lock().await;
-                let details = Some(timeline.reasoning_details_snapshot());
+                let details = common::message::merge_google_thought_signature(
+                    Some(timeline.reasoning_details_snapshot()),
+                    thought_signature.as_deref(),
+                );
                 if let Err(err) = agent.record_assistant_message_with_tools(
                     &full_response,
                     None,
@@ -715,7 +722,10 @@ async fn run_multi_turn_stream_inner(
             for c in &calls {
                 timeline.upsert_activity(&c.id, now_ms());
             }
-            let details = Some(timeline.reasoning_details_snapshot());
+            let details = common::message::merge_google_thought_signature(
+                Some(timeline.reasoning_details_snapshot()),
+                thought_signature.as_deref(),
+            );
             if let Err(err) = agent.record_assistant_message_with_tools(
                 &full_response,
                 tc,

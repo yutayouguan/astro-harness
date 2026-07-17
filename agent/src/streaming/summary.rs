@@ -147,6 +147,7 @@ pub(crate) async fn run_max_iterations_summary(
             }
             // 总结轮禁止再调工具：忽略 tool delta
             Some(Ok(StreamedAssistantContent::ToolCallDelta(_))) => {}
+            Some(Ok(StreamedAssistantContent::ThoughtSignature(_))) => {}
             Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
                 round_usage = Some(u);
             }

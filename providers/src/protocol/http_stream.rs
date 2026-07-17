@@ -381,6 +381,7 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
         tool_call_deltas,
         usage,
         interaction_id: None,
+        thought_signature: None,
 })
 }
 

@@ -421,6 +421,7 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::Reasoning(r)) => Some(ChatEvent {
             payload: Some(proto::chat_event::Payload::Reasoning(r)),
         }),
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::ThoughtSignature(_)) => None,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::ToolCallDelta(d)) => {
             Some(ChatEvent {
                 payload: Some(proto::chat_event::Payload::ToolCallDelta(

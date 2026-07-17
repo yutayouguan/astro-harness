@@ -35,6 +35,10 @@ pub struct ChatMessage {
     pub tool_call_id: Option<String>,
     /// tool 角色消息对应的函数名（部分厂商需要）。
     pub name: Option<String>,
+    /// 助手侧推理文本（落盘 `reasoning` 列）；Interactions 无状态回放编 `thought` content。
+    pub reasoning: Option<String>,
+    /// Google Interactions：`thought.signature`（`thought_signature` delta 或 step 下发）。
+    pub thought_signature: Option<String>,
 }
 
 /// OpenAI / Gemini 兼容 content 数组元素（含 audio/video 入模）。
@@ -60,6 +64,8 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
+            thought_signature: None,
         }
     }
 
@@ -73,6 +79,8 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
+            thought_signature: None,
         }
     }
 }
@@ -107,6 +115,8 @@ pub struct ChatChunk {
     pub usage: Option<crate::streaming::Usage>,
     /// Google Interactions：本轮 `interaction.id`（供下一轮 `previous_interaction_id`）。
     pub interaction_id: Option<String>,
+    /// Google Interactions：`thought_signature` delta 或 thought step 上的 signature。
+    pub thought_signature: Option<String>,
 }
 
 /// 生成的图片二进制与 MIME 类型。

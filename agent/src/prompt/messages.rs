@@ -92,6 +92,8 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
             tool_calls,
             tool_call_id: message.tool_call_id.clone(),
             name: tool_name,
+            reasoning: message.reasoning.clone(),
+            thought_signature: message.thought_signature.clone(),
         });
     }
 

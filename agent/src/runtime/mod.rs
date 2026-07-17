@@ -1374,12 +1374,14 @@ impl AgentLoop {
             _ => None,
         };
         let reasoning = reasoning.filter(|r| !r.is_empty());
+        let thought_signature =
+            common::message::google_thought_signature_from_details(&reasoning_details);
         self.sessions.ensure_session(&self.session_id, "tauri")?;
         self.sessions.append_message(NewMessage {
             content: Some(content),
             tool_calls: tool_calls_json,
             reasoning,
-            reasoning_details,
+            reasoning_details: reasoning_details.clone(),
             ..NewMessage::empty(&self.session_id, "assistant")
         })?;
         let msg = match tool_calls {
@@ -1388,6 +1390,7 @@ impl AgentLoop {
         };
         let mut msg = msg;
         msg.reasoning = reasoning.map(str::to_string);
+        msg.thought_signature = thought_signature;
         self.session_messages.push(msg);
         Ok(())
     }

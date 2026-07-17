@@ -57,10 +57,14 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
                 Some(v) => Some(serde_json::from_value(v)?),
                 None => None,
             };
-            match tool_calls {
+            let mut msg = match tool_calls {
                 Some(calls) if !calls.is_empty() => Message::assistant_with_tools(&content, calls),
                 _ => Message::assistant(&content),
-            }
+            };
+            msg.reasoning = m.reasoning.filter(|r| !r.is_empty());
+            msg.thought_signature =
+                common::message::google_thought_signature_from_details(&m.reasoning_details);
+            msg
         }
         "tool" => {
             let mut msg = match m.tool_call_id.as_deref() {
