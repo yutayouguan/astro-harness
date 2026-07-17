@@ -78,4 +78,5 @@ fn info_template_validates_with_optional_image() {
     validate_operations(&ops).unwrap();
     let names = all_component_names(&ops);
     assert!(names.iter().any(|n| n == "Image"));
+    assert!(!names.iter().any(|n| n == "Badge"));
 }

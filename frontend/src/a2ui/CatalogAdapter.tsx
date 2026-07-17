@@ -69,11 +69,29 @@ function CatalogNode({
     case "Text": {
       const text = typeof node.text === "string" ? node.text : "";
       const variant = node.variant ?? "body";
-      if (variant === "h1") return <h1 className="a2ui-text a2ui-h1">{text}</h1>;
-      if (variant === "h2") return <h2 className="a2ui-text a2ui-h2">{text}</h2>;
+      if (variant === "h1")
+        return (
+          <h1 className="a2ui-text a2ui-h1" data-a2ui-id={node.id}>
+            {text}
+          </h1>
+        );
+      if (variant === "h2")
+        return (
+          <h2 className="a2ui-text a2ui-h2" data-a2ui-id={node.id}>
+            {text}
+          </h2>
+        );
       if (variant === "caption")
-        return <p className="a2ui-text a2ui-caption">{text}</p>;
-      return <p className="a2ui-text">{text}</p>;
+        return (
+          <p className="a2ui-text a2ui-caption" data-a2ui-id={node.id}>
+            {text}
+          </p>
+        );
+      return (
+        <p className="a2ui-text" data-a2ui-id={node.id}>
+          {text}
+        </p>
+      );
     }
     case "Icon": {
       const name = typeof node.name === "string" ? node.name : "";
@@ -98,7 +116,7 @@ function CatalogNode({
       );
     case "Row":
       return (
-        <div className="a2ui-row">
+        <div className="a2ui-row" data-a2ui-id={node.id}>
           {(node.children ?? []).map((id) => renderChild(id, ctx, id))}
         </div>
       );
@@ -118,7 +136,10 @@ function CatalogNode({
       if (!src) return null;
       const path = resolveMediaPreviewPath(src, ctx.mediaBaseDir);
       return (
-        <div className="a2ui-image-wrap a2ui-image">
+        <div
+          className="a2ui-image-wrap a2ui-image a2ui-image-hero"
+          data-a2ui-id={node.id}
+        >
           <MediaPreview kind="image" path={path} compact />
         </div>
       );
@@ -222,7 +243,12 @@ function CatalogNode({
       const text = typeof node.text === "string" ? node.text : "";
       const variant = typeof node.variant === "string" ? node.variant : "info";
       return (
-        <span className={`a2ui-badge is-${variant}`}>{text}</span>
+        <span
+          className={`a2ui-badge is-${variant}`}
+          data-a2ui-id={node.id}
+        >
+          {text}
+        </span>
       );
     }
     case "Chip": {

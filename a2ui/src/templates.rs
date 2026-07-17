@@ -270,7 +270,7 @@ pub fn build_info_surface(
     body: &str,
     image_url: Option<&str>,
 ) -> Vec<Value> {
-    let mut children = vec!["title".to_string(), "badge".to_string(), "body".to_string()];
+    let mut children = vec!["title".to_string(), "body".to_string()];
     let mut components = vec![
         json!({ "id": "root", "component": "Card", "child": "col" }),
         json!({
@@ -278,12 +278,6 @@ pub fn build_info_surface(
             "component": "Text",
             "text": title,
             "variant": "h2"
-        }),
-        json!({
-            "id": "badge",
-            "component": "Badge",
-            "text": "Info",
-            "variant": "info"
         }),
         json!({
             "id": "body",

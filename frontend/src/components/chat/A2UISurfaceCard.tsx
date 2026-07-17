@@ -14,19 +14,28 @@ type Props = {
 
 type SurfaceKind = "metrics" | "callout" | "result" | "info";
 
-function detectKind(surface: UiSurface): SurfaceKind {
+function surfaceComponents(surface: UiSurface) {
   const ops = parseOperations(surface.operations);
-  const components = collectComponents(ops);
+  return collectComponents(ops);
+}
+
+function detectKind(surface: UiSurface): SurfaceKind {
+  const components = surfaceComponents(surface);
   const types = new Set(components.map((c) => c.component));
+  const badge = components.find((c) => c.component === "Badge");
   if (types.has("Metric")) return "metrics";
   if (types.has("Callout")) return "callout";
-  if (types.has("Badge")) return "result";
+  if (badge) {
+    const text =
+      typeof badge.text === "string" ? badge.text.trim().toLowerCase() : "";
+    if (text === "info") return "info";
+    return "result";
+  }
   return "info";
 }
 
 function extractTitle(surface: UiSurface): string {
-  const ops = parseOperations(surface.operations);
-  const components = collectComponents(ops);
+  const components = surfaceComponents(surface);
   const titleComp = components.find(
     (c) => c.id === "title" && c.component === "Text",
   );
@@ -34,6 +43,22 @@ function extractTitle(surface: UiSurface): string {
     return titleComp.text;
   }
   return surface.activityType ?? "Surface";
+}
+
+function extractStatusBadge(surface: UiSurface) {
+  const components = surfaceComponents(surface);
+  const badge = components.find((c) => c.component === "Badge");
+  if (!badge || typeof badge.text !== "string" || !badge.text.trim()) {
+    return null;
+  }
+  const text = badge.text.trim().toLowerCase();
+  if (text === "info") return null;
+  const variant =
+    typeof badge.variant === "string" &&
+    ["success", "warn", "danger", "info"].includes(badge.variant)
+      ? badge.variant
+      : "success";
+  return { text: badge.text.trim(), variant };
 }
 
 function KindIcon({ kind }: { kind: SurfaceKind }) {
@@ -57,10 +82,13 @@ export default function A2UISurfaceCard({
   const [open, setOpen] = useState(true);
   const kind = detectKind(surface);
   const title = extractTitle(surface);
+  const statusBadge = extractStatusBadge(surface);
   const disabled = surface.status !== "active";
 
   return (
-    <div className={`msg-activity a2ui-surface-card ${open ? "is-open" : ""}`.trim()}>
+    <div
+      className={`msg-activity a2ui-surface-card is-kind-${kind} ${open ? "is-open" : ""}`.trim()}
+    >
       <div className="msg-activity-body">
         <button
           type="button"
@@ -72,6 +100,13 @@ export default function A2UISurfaceCard({
             <KindIcon kind={kind} />
           </span>
           <span className="msg-activity-title">{title}</span>
+          {statusBadge ? (
+            <span
+              className={`a2ui-badge is-${statusBadge.variant} a2ui-surface-header-badge`}
+            >
+              {statusBadge.text}
+            </span>
+          ) : null}
           <ChevronDown
             size={14}
             strokeWidth={2}

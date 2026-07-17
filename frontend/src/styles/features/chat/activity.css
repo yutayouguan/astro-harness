@@ -201,8 +201,56 @@ html[data-theme="light"] .a2ui-surface {
   margin-top: 6px;
 }
 
+.a2ui-surface-card .msg-activity-toggle .msg-activity-title {
+  flex: 1;
+}
+
+.a2ui-surface-card .msg-activity-chevron {
+  margin-left: 0;
+}
+
+.a2ui-surface-header-badge {
+  flex-shrink: 0;
+  margin-left: 8px;
+  text-transform: capitalize;
+}
+
 .a2ui-surface-card-body .a2ui-surface {
   margin: 0;
+}
+
+.a2ui-surface-card .a2ui-surface-card-body .a2ui-card {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.a2ui-surface-card .a2ui-column {
+  gap: 14px;
+}
+
+.a2ui-surface-card [data-a2ui-id="title"] {
+  display: none;
+}
+
+.a2ui-surface-card.is-kind-info [data-a2ui-id="badge"],
+.a2ui-surface-card.is-kind-result [data-a2ui-id="badge"],
+.a2ui-surface-card.is-kind-result [data-a2ui-id="header"] {
+  display: none;
+}
+
+.a2ui-surface-card.is-kind-info [data-a2ui-id="body"] {
+  font-size: 0.94rem;
+  line-height: 1.62;
+  color: color-mix(in srgb, var(--ink) 84%, transparent);
+}
+
+.a2ui-surface-card.is-kind-info .a2ui-image-hero {
+  margin-top: 2px;
 }
 
 .a2ui-card {
@@ -304,9 +352,11 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 3px 10px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--a2ui-glass-border);
   background: var(--a2ui-glass-fill);
