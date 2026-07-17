@@ -20,7 +20,6 @@ import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
 import BrokenMedia from "../media/BrokenMedia";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
 import HtmlPreview from "../media/HtmlPreview";
-import MediaPreview from "../media/MediaPreview";
 
 /** Markdown 渲染入参 */
 type Props = {
@@ -91,24 +90,12 @@ function MarkdownMedia({
     return <BrokenMedia path={src} />;
   }
 
-  if (kind === "audio" || kind === "video" || kind === "html") {
-    return (
-      <GeneratedMediaCard
-        kind={kind}
-        path={pathForActions}
-        compact
-        className="msg-md-media-card"
-      />
-    );
-  }
-
   return (
-    <MediaPreview
-      kind="image"
+    <GeneratedMediaCard
+      kind={kind}
       path={pathForActions}
-      alt={alt}
       compact
-      className="msg-md-media"
+      className="msg-md-media-card"
     />
   );
 }

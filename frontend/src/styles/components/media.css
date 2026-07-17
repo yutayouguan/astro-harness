@@ -823,7 +823,8 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
 }
 
 .gen-media-card[data-kind="image"] .media-preview-image,
-.gen-media-card[data-kind="video"] .media-preview-video {
+.gen-media-card[data-kind="video"] .media-preview-video,
+.gen-media-card[data-kind="image"] .media-preview-image-btn {
   display: block;
   width: 100%;
   height: auto;
