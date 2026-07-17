@@ -543,9 +543,7 @@ fn persist_provider_models(
     source: &str,
     latency_ms: u64,
 ) -> Result<(), String> {
-    let _guard = MODELS_CACHE_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _guard = MODELS_CACHE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut cache = load_models_cache();
     cache.providers.insert(
         provider.id.clone(),
@@ -598,7 +596,9 @@ fn save_state(state: &ProvidersState) -> Result<(), String> {
 }
 
 /// `resolve_api_key`。
-pub(crate) fn resolve_api_key(p: &ProviderConfig) -> (bool, String, Option<String>, Option<String>) {
+pub(crate) fn resolve_api_key(
+    p: &ProviderConfig,
+) -> (bool, String, Option<String>, Option<String>) {
     if !p.kind.requires_api_key() {
         return (true, "not_required".into(), None, None);
     }
@@ -720,8 +720,8 @@ pub fn add_provider(kind: String) -> Result<ProvidersStateDto, String> {
 /// 保存单个供应商配置。
 #[tauri::command]
 pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto, String> {
-    let kind =
-        ProviderKind::from_str(&provider.kind).ok_or_else(|| format!("未知提供商类型: {}", provider.kind))?;
+    let kind = ProviderKind::from_str(&provider.kind)
+        .ok_or_else(|| format!("未知提供商类型: {}", provider.kind))?;
     validate_http_endpoint(&provider.endpoint)?;
     with_state_mut(|s| {
         let idx = s
@@ -760,11 +760,8 @@ pub fn reorder_providers(ids: Vec<String>) -> Result<ProvidersStateDto, String> 
         if ids.len() != s.providers.len() {
             return Err("排序列表长度不匹配".to_string());
         }
-        let mut by_id: std::collections::HashMap<String, ProviderConfig> = s
-            .providers
-            .drain(..)
-            .map(|p| (p.id.clone(), p))
-            .collect();
+        let mut by_id: std::collections::HashMap<String, ProviderConfig> =
+            s.providers.drain(..).map(|p| (p.id.clone(), p)).collect();
         let mut next = Vec::with_capacity(ids.len());
         for id in ids {
             let p = by_id
@@ -1185,9 +1182,7 @@ fn require_api_key(p: &ProviderConfig) -> Result<String, String> {
             .unwrap_or("API_KEY");
         format!(
             "未找到 API Key（密钥链或环境变量 {hint}）。当前来源: {source}{}",
-            env_name
-                .map(|n| format!(" / {n}"))
-                .unwrap_or_default()
+            env_name.map(|n| format!(" / {n}")).unwrap_or_default()
         )
     })
 }
@@ -1285,9 +1280,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                let msg = body["error"]["message"]
-                    .as_str()
-                    .unwrap_or("未知错误");
+                let msg = body["error"]["message"].as_str().unwrap_or("未知错误");
                 return Err(format!("Google 列表失败 ({status}): {msg}"));
             }
             let models = body["models"]
@@ -1415,12 +1408,47 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
     })
 }
 
+/// 从 models.json 缓存读取某模型的 context_window（与前端展示同源，不做 128K 臆测）。
+pub fn cached_model_context_window(provider_id: &str, model_id: &str) -> Option<u32> {
+    let cache = load_models_cache();
+    let entry = cache.providers.get(provider_id)?;
+    let kind = if entry.kind.is_empty() {
+        "custom"
+    } else {
+        entry.kind.as_str()
+    };
+    for m in &entry.models {
+        match m {
+            crate::model_meta::ModelEntryCompat::Full(info) if info.id == model_id => {
+                return info
+                    .context_window
+                    .and_then(|n| u32::try_from(n).ok())
+                    .filter(|n| *n > 0);
+            }
+            crate::model_meta::ModelEntryCompat::Id(id) if id == model_id => {
+                return crate::model_meta::enrich_from_id(id, kind, None)
+                    .context_window
+                    .and_then(|n| u32::try_from(n).ok())
+                    .filter(|n| *n > 0);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Tauri 命令：get_cached_provider_models。
 #[tauri::command]
-pub async fn get_cached_provider_models(id: String) -> Result<Option<ProviderModelsResult>, String> {
+pub async fn get_cached_provider_models(
+    id: String,
+) -> Result<Option<ProviderModelsResult>, String> {
     let cache = load_models_cache();
     Ok(cache.providers.get(&id).map(|c| {
-        let kind = if c.kind.is_empty() { "custom" } else { c.kind.as_str() };
+        let kind = if c.kind.is_empty() {
+            "custom"
+        } else {
+            c.kind.as_str()
+        };
         ProviderModelsResult {
             models: c
                 .models
@@ -1469,7 +1497,10 @@ async fn probe_one_model(
 
 /// Tauri 命令：test_provider。
 #[tauri::command]
-pub async fn test_provider(id: String, model: Option<String>) -> Result<ProviderTestResult, String> {
+pub async fn test_provider(
+    id: String,
+    model: Option<String>,
+) -> Result<ProviderTestResult, String> {
     let provider = find_provider(&id)?;
     validate_http_endpoint(&provider.endpoint)?;
     let api_key = require_api_key(&provider)?;
@@ -1526,13 +1557,31 @@ mod tests {
 
     #[test]
     fn parses_new_kinds_and_minimax_alias() {
-        assert_eq!(ProviderKind::from_str("openrouter"), Some(ProviderKind::Openrouter));
-        assert_eq!(ProviderKind::from_str("bailian"), Some(ProviderKind::Bailian));
+        assert_eq!(
+            ProviderKind::from_str("openrouter"),
+            Some(ProviderKind::Openrouter)
+        );
+        assert_eq!(
+            ProviderKind::from_str("bailian"),
+            Some(ProviderKind::Bailian)
+        );
         assert_eq!(ProviderKind::from_str("nvidia"), Some(ProviderKind::Nvidia));
-        assert_eq!(ProviderKind::from_str("moonshot"), Some(ProviderKind::Moonshot));
-        assert_eq!(ProviderKind::from_str("volcengine"), Some(ProviderKind::Volcengine));
-        assert_eq!(ProviderKind::from_str("minimax"), Some(ProviderKind::Minimax));
-        assert_eq!(ProviderKind::from_str("minmax"), Some(ProviderKind::Minimax));
+        assert_eq!(
+            ProviderKind::from_str("moonshot"),
+            Some(ProviderKind::Moonshot)
+        );
+        assert_eq!(
+            ProviderKind::from_str("volcengine"),
+            Some(ProviderKind::Volcengine)
+        );
+        assert_eq!(
+            ProviderKind::from_str("minimax"),
+            Some(ProviderKind::Minimax)
+        );
+        assert_eq!(
+            ProviderKind::from_str("minmax"),
+            Some(ProviderKind::Minimax)
+        );
         assert_eq!(ProviderKind::Minimax.as_str(), "minimax");
         assert_eq!(ProviderKind::Bailian.backend_id(), "bailian");
     }
@@ -1557,7 +1606,11 @@ mod tests {
             ProviderKind::Volcengine,
             ProviderKind::Minimax,
         ] {
-            let p = s.providers.iter().find(|p| p.kind == kind).expect("missing kind");
+            let p = s
+                .providers
+                .iter()
+                .find(|p| p.kind == kind)
+                .expect("missing kind");
             assert!(!p.enabled, "{:?} should be disabled", kind);
         }
         assert!(!s.ensure_builtin_kinds()); // idempotent
@@ -1574,7 +1627,11 @@ mod tests {
             ProviderKind::Volcengine,
             ProviderKind::Minimax,
         ] {
-            let p = s.providers.iter().find(|p| p.kind == kind).expect("missing kind");
+            let p = s
+                .providers
+                .iter()
+                .find(|p| p.kind == kind)
+                .expect("missing kind");
             assert!(!p.enabled, "{:?} should be disabled in with_defaults", kind);
         }
     }

@@ -71,7 +71,7 @@ export default function ChatRightPanel({
   turnId = null,
   tokenUsage: _tokenUsage = null,
   contextUsage = null,
-  contextWindow = 128_000,
+  contextWindow = 0,
   onOpenSession,
   onNewSession,
   onNewAgent,

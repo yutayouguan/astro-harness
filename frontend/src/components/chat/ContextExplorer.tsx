@@ -19,6 +19,7 @@ import {
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import {
+  displayContextWindow,
   formatTokenCount,
   usagePercent,
   visibleSegments,
@@ -79,9 +80,9 @@ export default function ContextExplorer({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [expandAll, setExpandAll] = useState(false);
 
-  const win = windowTokens > 0 ? windowTokens : 128_000;
+  const win = displayContextWindow(snapshot, windowTokens);
   const used = snapshot?.totalTokens ?? 0;
-  const pct = usagePercent(used, win);
+  const pct = win > 0 ? usagePercent(used, win) : 0;
   const segs = useMemo(
     () => (snapshot ? visibleSegments(snapshot) : []),
     [snapshot],
@@ -115,7 +116,7 @@ export default function ContextExplorer({
 
   let dashOffset = 0;
   const arcs = segs.map((s) => {
-    const len = Math.max(0, (s.tokens / win) * DONUT_C);
+    const len = win > 0 ? Math.max(0, (s.tokens / win) * DONUT_C) : 0;
     const start = dashOffset;
     dashOffset += len;
     return { id: s.id, len, start };
@@ -139,7 +140,7 @@ export default function ContextExplorer({
             <Database size={16} strokeWidth={2} />
           </span>
           <span className="ctx-explorer-metric-label">{t("chat.contextExplorer.contextSize")}</span>
-          <span className="ctx-explorer-metric-value">{formatTokenCount(win)}</span>
+          <span className="ctx-explorer-metric-value">{win > 0 ? formatTokenCount(win) : "—"}</span>
         </div>
         <div className="ctx-explorer-metric">
           <span className="ctx-explorer-metric-icon" aria-hidden>
@@ -159,7 +160,7 @@ export default function ContextExplorer({
           height={DONUT_SIZE}
           viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
           role="img"
-          aria-label={t("chat.contextUsageFull", { pct: String(pct) })}
+          aria-label={win > 0 ? t("chat.contextUsageFull", { pct: String(pct) }) : t("chat.contextUsage")}
         >
           <g transform={`rotate(-90 ${DONUT_SIZE / 2} ${DONUT_SIZE / 2})`}>
             {arcs.map((arc) => {

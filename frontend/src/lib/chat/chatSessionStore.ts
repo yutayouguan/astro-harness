@@ -3,6 +3,7 @@
  */
 
 import type { ChatMessage, PendingInterrupt } from "../../types";
+import type { ContextUsageSnapshot } from "./contextUsage";
 
 const STORAGE_KEY = "astro.chat.session";
 const CLEARED_KEY = "astro.chat.cleared";
@@ -13,6 +14,8 @@ export type StoredChatSession = {
   messages: ChatMessage[];
   /** 未决 HITL interrupt（重载后仍禁用普通发送） */
   pendingInterrupts?: PendingInterrupt[];
+  /** 最近一次后端 context_usage 快照（真实窗口与分层占用） */
+  contextUsage?: ContextUsageSnapshot;
   updatedAt: number;
 };
 
@@ -78,11 +81,27 @@ export function loadChatSession(): StoredChatSession | null {
   }
 }
 
-/** 保存会话；欢迎页不覆盖「已清除」标记 */
+function peekStoredSession(): StoredChatSession | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredChatSession;
+    if (!parsed || !Array.isArray(parsed.messages)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 保存会话；欢迎页不覆盖「已清除」标记。
+ * `contextUsage`：传入对象则写入；传 `null` 清除；省略则保留上次记录。
+ */
 export function saveChatSession(
   sessionId: string | null,
   messages: ChatMessage[],
   pendingInterrupts: PendingInterrupt[] = [],
+  contextUsage?: ContextUsageSnapshot | null,
 ): void {
   try {
     if (isWelcomeOnly(messages)) {
@@ -93,11 +112,17 @@ export function saveChatSession(
       return;
     }
     clearClearedFlag();
+    const prev = peekStoredSession();
+    const usage =
+      contextUsage === undefined
+        ? prev?.contextUsage
+        : contextUsage ?? undefined;
     const payload: StoredChatSession = {
       sessionId,
       messages: stripHeavyFields(messages),
       pendingInterrupts:
         pendingInterrupts.length > 0 ? pendingInterrupts : undefined,
+      contextUsage: usage,
       updatedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -119,10 +144,11 @@ export function persistAfterEditTruncate(
   sessionId: string | null,
   keptMessages: ChatMessage[],
   pendingInterrupts: PendingInterrupt[] = [],
+  contextUsage?: ContextUsageSnapshot | null,
 ): void {
   if (isWelcomeOnly(keptMessages)) {
     markChatCleared();
     return;
   }
-  saveChatSession(sessionId, keptMessages, pendingInterrupts);
+  saveChatSession(sessionId, keptMessages, pendingInterrupts, contextUsage);
 }

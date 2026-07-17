@@ -535,7 +535,7 @@ export default function ChatView({
   onOpenContext,
   contextUsagePercent = null,
   contextUsage = null,
-  contextWindow = 128_000,
+  contextWindow = 0,
   onRegenerateMessage,
   onEditUserMessage,
   dissolvingIds = [],

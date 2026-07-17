@@ -58,9 +58,10 @@ export function formatTokenCount(n: number): string {
   return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
 }
 
+/** 真实占用百分比；窗口未知时返回 0，满窗为 100（不虚构 128K）。 */
 export function usagePercent(used: number, window: number): number {
   if (window <= 0 || used <= 0) return 0;
-  return Math.min(99, Math.round((used / window) * 100));
+  return Math.min(100, Math.round((used / window) * 100));
 }
 
 export function visibleSegments(snap: ContextUsageSnapshot): ContextUsageSegment[] {
@@ -70,13 +71,25 @@ export function visibleSegments(snap: ContextUsageSnapshot): ContextUsageSegment
     .sort((a, b) => b.tokens - a.tokens);
 }
 
+/**
+ * 解析展示用上下文窗口。
+ * 优先用后端本轮快照（与 occupancy 同源），其次模型元数据；未知返回 0，绝不默认真造 128K。
+ */
 export function resolveContextWindow(
   modelWindow: number | null | undefined,
   snapWindow: number | null | undefined,
 ): number {
-  if (modelWindow && modelWindow > 0) return modelWindow;
   if (snapWindow && snapWindow > 0) return snapWindow;
-  return 128_000;
+  if (modelWindow && modelWindow > 0) return modelWindow;
+  return 0;
+}
+
+/** 展示用窗口：快照自带 > 传入 windowTokens > 0 */
+export function displayContextWindow(
+  snapshot: Pick<ContextUsageSnapshot, "contextWindow"> | null | undefined,
+  windowTokens?: number | null,
+): number {
+  return resolveContextWindow(windowTokens, snapshot?.contextWindow);
 }
 
 export function normalizeContextUsageEvent(payload: {

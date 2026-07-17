@@ -115,7 +115,9 @@ export function useChatSession({
   const [streaming, setStreaming] = useState(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
-  const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(null);
+  const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
+    () => loadChatSession()?.contextUsage ?? null,
+  );
   const [sessionId, setSessionId] = useState<string | null>(
     () => loadChatSession()?.sessionId ?? null,
   );
@@ -234,8 +236,8 @@ export function useChatSession({
   // ── Persist session ───────────────────────────────────────────────────────
   useEffect(() => {
     if (restoringRef.current || streaming) return;
-    saveChatSession(sessionId, messages, sessionPendingInterrupts);
-  }, [messages, sessionId, streaming, sessionPendingInterrupts]);
+    saveChatSession(sessionId, messages, sessionPendingInterrupts, contextUsage);
+  }, [messages, sessionId, streaming, sessionPendingInterrupts, contextUsage]);
 
   useEffect(() => {
     try {

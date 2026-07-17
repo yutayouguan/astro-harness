@@ -68,3 +68,25 @@ test("persistAfterEditTruncate(keep>0) writes kept prefix and clears cleared fla
   assert.equal(stored!.messages.length, 2);
   assert.equal(stored!.messages[0]!.content, "第一轮");
 });
+
+test("saveChatSession records contextUsage and preserves it when omitted", () => {
+  const usage = {
+    contextWindow: 1_048_576,
+    totalTokens: 12_345,
+    segments: [{ id: "conversation", tokens: 12_345 }],
+    updatedAt: 42,
+  };
+  saveChatSession("s3", [msg("u1", "user", "hi"), msg("a1", "assistant", "yo")], [], usage);
+  let stored = loadChatSession();
+  assert.ok(stored?.contextUsage);
+  assert.equal(stored!.contextUsage!.contextWindow, 1_048_576);
+  assert.equal(stored!.contextUsage!.totalTokens, 12_345);
+
+  saveChatSession("s3", [msg("u1", "user", "hi"), msg("a1", "assistant", "yo2"), msg("u2", "user", "again")]);
+  stored = loadChatSession();
+  assert.equal(stored!.contextUsage!.totalTokens, 12_345);
+
+  saveChatSession("s3", [msg("u1", "user", "hi"), msg("a1", "assistant", "yo2")], [], null);
+  stored = loadChatSession();
+  assert.equal(stored!.contextUsage, undefined);
+});

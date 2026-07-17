@@ -1,14 +1,16 @@
 //! 聊天、会话、工作区与通用 Tauri 命令（前端 `invoke` 主入口）。
 
 use proto::astro_service_client::AstroServiceClient;
-use proto::{ChatControlAction, ChatControlRequest, ChatRequest, FileListRequest, ImageRequest, MemoryQuery};
+use proto::{
+    ChatControlAction, ChatControlRequest, ChatRequest, FileListRequest, ImageRequest, MemoryQuery,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
-use crate::grpc::{endpoint_url, default_grpc_address};
+use crate::grpc::{default_grpc_address, endpoint_url};
 use crate::providers_commands::{
-    resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
+    cached_model_context_window, resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
 };
 
 fn open_sessions() -> Result<session::SessionStore, String> {
@@ -54,8 +56,12 @@ fn media_asset_dto(m: proto::MediaAsset) -> MediaAssetDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatStreamEvent {
-    Token { content: String },
-    Reasoning { content: String },
+    Token {
+        content: String,
+    },
+    Reasoning {
+        content: String,
+    },
     ToolCall {
         id: String,
         name: String,
@@ -107,7 +113,9 @@ pub enum ChatStreamEvent {
         interrupts_json: String,
     },
     Done,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -162,21 +170,22 @@ fn history_media_from_json(media: Option<&serde_json::Value>) -> Vec<ChatHistory
     arr.iter()
         .filter_map(|item| {
             let kind = item.get("kind")?.as_str()?;
-            let kind = match kind {
-                "image" | "video" | "audio" | "html" => kind,
-                "file" => {
-                    // 文件类：仅 html 进入内嵌预览
-                    let path = media_ref_path(item.get("reference")?)?;
-                    if path.rsplit('.').next().is_some_and(|e| {
-                        matches!(e.to_ascii_lowercase().as_str(), "html" | "htm")
-                    }) {
-                        "html"
-                    } else {
-                        return None;
+            let kind =
+                match kind {
+                    "image" | "video" | "audio" | "html" => kind,
+                    "file" => {
+                        // 文件类：仅 html 进入内嵌预览
+                        let path = media_ref_path(item.get("reference")?)?;
+                        if path.rsplit('.').next().is_some_and(|e| {
+                            matches!(e.to_ascii_lowercase().as_str(), "html" | "htm")
+                        }) {
+                            "html"
+                        } else {
+                            return None;
+                        }
                     }
-                }
-                _ => return None,
-            };
+                    _ => return None,
+                };
             let path = media_ref_path(item.get("reference")?)?;
             if path.is_empty() {
                 return None;
@@ -316,7 +325,8 @@ fn build_chat_payload(content: &str, attachments: &[ChatAttachmentDto]) -> Built
                 } else if let Some(p) = att.local_path.as_deref().filter(|s| !s.is_empty()) {
                     out.push_str(&format!(
                         "   (图片体积较大，可通过 vision 工具读取)\n   ![{}](<{}>)\n",
-                        md_escape_alt(&att.name), p
+                        md_escape_alt(&att.name),
+                        p
                     ));
                 } else {
                     out.push_str("   (图片已附带，体积较大，仅提供元数据；请结合文件名理解)\n");
@@ -351,7 +361,8 @@ fn build_chat_payload(content: &str, attachments: &[ChatAttachmentDto]) -> Built
             if let Some(p) = att.local_path.as_deref().filter(|s| !s.is_empty()) {
                 out.push_str(&format!(
                     "   (图片体积较大，可通过 vision 工具读取)\n   ![{}](<{}>)\n",
-                    md_escape_alt(&att.name), p
+                    md_escape_alt(&att.name),
+                    p
                 ));
             } else {
                 out.push_str("   (仅元数据：体积较大或类型不支持内联)\n");
@@ -593,7 +604,8 @@ pub async fn clear_pending_agent_icon(kind: Option<String>) -> Result<(), String
                 .ok_or_else(|| format!("未知图标类型: {s}"))?,
         ),
     };
-    home::config::agent_icons::clear_pending_agent_icon(&memory_root(), kind).map_err(|e| e.to_string())
+    home::config::agent_icons::clear_pending_agent_icon(&memory_root(), kind)
+        .map_err(|e| e.to_string())
 }
 
 /// 列出每日记忆日期。
@@ -682,10 +694,7 @@ pub async fn start_chat(
         let store = open_sessions()?;
         if let Ok(Some(meta)) = store.get_session(&sid) {
             if meta.ended_at.is_some() {
-                let reason = meta
-                    .end_reason
-                    .as_deref()
-                    .unwrap_or("ended");
+                let reason = meta.end_reason.as_deref().unwrap_or("ended");
                 return Err(if reason == "compacted" {
                     "会话已压实，无法继续写入；请打开续聊会话".into()
                 } else {
@@ -727,14 +736,15 @@ pub async fn start_chat(
     // 五类辅助任务（标题生成/压缩/智能审批/入梦/回合后 review）已解析目标；
     // 单个任务解析失败时静默跳过，不阻塞主聊天（见 auxiliary_resolver 内部注释）。
     let auxiliary_targets = crate::auxiliary_resolver::build_auxiliary_model_targets(&primary);
-    let context_window = crate::model_meta::enrich_from_id(
-        &primary.model,
-        &primary.backend_id,
-        None,
-    )
-    .context_window
-    .and_then(|n| u32::try_from(n).ok())
-    .unwrap_or(0);
+    // 优先用 models.json 缓存（与前端展示同源）；否则 LiteLLM/enrich；未知为 0（agent 侧再兜底）。
+    let context_window = cached_model_context_window(&primary.provider_id, &primary.model)
+        .or_else(|| {
+            crate::model_meta::enrich_from_id(&primary.model, &primary.backend_id, None)
+                .context_window
+                .and_then(|n| u32::try_from(n).ok())
+                .filter(|n| *n > 0)
+        })
+        .unwrap_or(0);
 
     let app2 = app.clone();
     let sid2 = sid.clone();
@@ -811,12 +821,9 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
 
 /// 提交 interrupt resume（HITL 阻塞闸门）；同回合续跑，无需再调 start_chat。
 #[tauri::command]
-pub async fn interrupt_resume(
-    session_id: String,
-    resume_json: String,
-) -> Result<(), String> {
-    let items: Vec<serde_json::Value> = serde_json::from_str(&resume_json)
-        .map_err(|e| format!("resume_json 无效: {e}"))?;
+pub async fn interrupt_resume(session_id: String, resume_json: String) -> Result<(), String> {
+    let items: Vec<serde_json::Value> =
+        serde_json::from_str(&resume_json).map_err(|e| format!("resume_json 无效: {e}"))?;
     let resume: Vec<proto::InterruptResumeItem> = items
         .iter()
         .map(|item| proto::InterruptResumeItem {
@@ -845,10 +852,7 @@ pub async fn interrupt_resume(
         .await
         .map_err(|e| e.to_string())?;
     client
-        .interrupt_resume(proto::InterruptResumeRequest {
-            session_id,
-            resume,
-        })
+        .interrupt_resume(proto::InterruptResumeRequest { session_id, resume })
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -914,19 +918,11 @@ async fn run_chat_stream(
             image_gen_fallback_model: fallback.map(|t| t.model.clone()).unwrap_or_default(),
             image_gen_fallback_api_key: fallback.map(|t| t.api_key.clone()).unwrap_or_default(),
             image_gen_fallback_base_url: fallback.map(|t| t.base_url.clone()).unwrap_or_default(),
-            image_gen_video_model: primary
-                .map(|t| t.video_model.clone())
-                .unwrap_or_default(),
-            image_gen_music_model: primary
-                .map(|t| t.music_model.clone())
-                .unwrap_or_default(),
+            image_gen_video_model: primary.map(|t| t.video_model.clone()).unwrap_or_default(),
+            image_gen_music_model: primary.map(|t| t.music_model.clone()).unwrap_or_default(),
             image_gen_tts_model: primary.map(|t| t.tts_model.clone()).unwrap_or_default(),
-            image_gen_fallback_tts_model: fallback
-                .map(|t| t.tts_model.clone())
-                .unwrap_or_default(),
-            image_gen_vision_model: primary
-                .map(|t| t.vision_model.clone())
-                .unwrap_or_default(),
+            image_gen_fallback_tts_model: fallback.map(|t| t.tts_model.clone()).unwrap_or_default(),
+            image_gen_vision_model: primary.map(|t| t.vision_model.clone()).unwrap_or_default(),
             image_gen_fallback_vision_model: fallback
                 .map(|t| t.vision_model.clone())
                 .unwrap_or_default(),
@@ -945,17 +941,12 @@ async fn run_chat_stream(
     while let Some(event) = stream.message().await.map_err(|e| e.to_string())? {
         match event.payload {
             Some(proto::chat_event::Payload::Token(token)) => {
-                let _ = app.emit(
-                    event_name,
-                    ChatStreamEvent::Token { content: token },
-                );
+                let _ = app.emit(event_name, ChatStreamEvent::Token { content: token });
             }
             Some(proto::chat_event::Payload::Reasoning(reasoning)) => {
                 let _ = app.emit(
                     event_name,
-                    ChatStreamEvent::Reasoning {
-                        content: reasoning,
-                    },
+                    ChatStreamEvent::Reasoning { content: reasoning },
                 );
             }
             Some(proto::chat_event::Payload::ToolCall(tc)) => {
@@ -1211,10 +1202,7 @@ pub async fn generate_image(
         }
     }
 
-    Err(format!(
-        "图片生成失败：{}",
-        errors.join("；")
-    ))
+    Err(format!("图片生成失败：{}", errors.join("；")))
 }
 
 /// 解析图片尺寸字符串（如 1024x1024）。
@@ -1285,9 +1273,7 @@ pub async fn get_chat_history(
 
     let sid = match session_id.filter(|s| !s.is_empty()) {
         Some(s) => s,
-        None => match store.latest_session_id()
-            .map_err(|e| e.to_string())?
-        {
+        None => match store.latest_session_id().map_err(|e| e.to_string())? {
             Some(s) => s,
             None => {
                 return Ok(ChatHistoryDto {
@@ -1367,11 +1353,7 @@ pub async fn fork_chat_session(
 
 /// 删除当前会话聊天气泡半开区间 `[start, end)`（0-based，仅计 user/assistant）。
 #[tauri::command]
-pub async fn remove_chat_bubbles(
-    session_id: String,
-    start: i32,
-    end: i32,
-) -> Result<(), String> {
+pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Result<(), String> {
     let sid = session_id.trim();
     if sid.is_empty() {
         return Err("session_id 不能为空".into());
@@ -1510,9 +1492,9 @@ pub async fn regenerate_session_title(
 
     async fn complete_one(target: &ResolvedTarget, prompt: &str) -> Result<String, String> {
         let registry = ProviderRegistry::default();
-        let provider = registry.get(&target.backend_id).ok_or_else(|| {
-            format!("不支持的提供商后端: {}", target.backend_id)
-        })?;
+        let provider = registry
+            .get(&target.backend_id)
+            .ok_or_else(|| format!("不支持的提供商后端: {}", target.backend_id))?;
         let config = ProviderConfig {
             api_key: target.api_key.clone(),
             base_url: if target.provider.endpoint.trim().is_empty() {
@@ -1832,15 +1814,11 @@ fn guess_mime(name: &str) -> String {
         "m4a" => "audio/mp4",
         "pdf" => "application/pdf",
         "doc" => "application/msword",
-        "docx" => {
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        }
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "xls" => "application/vnd.ms-excel",
         "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "ppt" => "application/vnd.ms-powerpoint",
-        "pptx" => {
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        }
+        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "zip" => "application/zip",
         _ => "application/octet-stream",
     }
@@ -2110,10 +2088,7 @@ pub async fn rename_path(path: String, new_name: String) -> Result<FileEntryDto,
     if !p.exists() {
         return Err("路径不存在".into());
     }
-    let current_name = p
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
+    let current_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if current_name == new_name {
         return Ok(file_entry_dto(&p, &new_name, p.is_dir()));
     }
@@ -2128,7 +2103,10 @@ pub async fn rename_path(path: String, new_name: String) -> Result<FileEntryDto,
 
 /// 复制选中路径到目标目录。
 #[tauri::command]
-pub async fn copy_paths(sources: Vec<String>, dest_dir: String) -> Result<Vec<FileEntryDto>, String> {
+pub async fn copy_paths(
+    sources: Vec<String>,
+    dest_dir: String,
+) -> Result<Vec<FileEntryDto>, String> {
     let dest_dir = resolve_memory_path(&dest_dir)?;
     if !dest_dir.is_dir() {
         return Err("目标不是目录".into());
@@ -2163,7 +2141,10 @@ pub async fn copy_paths(sources: Vec<String>, dest_dir: String) -> Result<Vec<Fi
 
 /// 移动选中路径到目标目录。
 #[tauri::command]
-pub async fn move_paths(sources: Vec<String>, dest_dir: String) -> Result<Vec<FileEntryDto>, String> {
+pub async fn move_paths(
+    sources: Vec<String>,
+    dest_dir: String,
+) -> Result<Vec<FileEntryDto>, String> {
     let dest_dir = resolve_memory_path(&dest_dir)?;
     if !dest_dir.is_dir() {
         return Err("目标不是目录".into());
@@ -2370,8 +2351,12 @@ fn run_to_dto(r: cron::run_db::CronRunRow) -> CronRunDto {
 }
 
 /// 为定时任务解析 Provider/模型/密钥。
-fn resolve_creds_for_job(job: &cron::CronJob) -> Result<agent::exec::cron::CronExecCredentials, String> {
-    use crate::providers_commands::{find_provider, find_provider_by_backend, resolve_chat_targets};
+fn resolve_creds_for_job(
+    job: &cron::CronJob,
+) -> Result<agent::exec::cron::CronExecCredentials, String> {
+    use crate::providers_commands::{
+        find_provider, find_provider_by_backend, resolve_chat_targets,
+    };
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id).or_else(|_| find_provider_by_backend(id))?
@@ -2395,9 +2380,9 @@ fn resolve_creds_for_job(job: &cron::CronJob) -> Result<agent::exec::cron::CronE
         provider_cfg.kind.backend_id(),
         &model,
     )?;
-    let primary = targets.first().ok_or_else(|| {
-        "未能解析聊天目标链，请检查模型提供商配置".to_string()
-    })?;
+    let primary = targets
+        .first()
+        .ok_or_else(|| "未能解析聊天目标链，请检查模型提供商配置".to_string())?;
 
     Ok(agent::exec::cron::CronExecCredentials {
         provider: primary.backend_id.clone(),
@@ -2464,11 +2449,7 @@ pub async fn extract_cron_job(args: ExtractCronJobArgs) -> Result<ExtractCronJob
     } else {
         Some(provider_cfg.endpoint.trim_end_matches('/').to_string())
     };
-    let client = ProviderClient::from_config(
-        provider_cfg.kind.backend_id(),
-        api_key,
-        base_url,
-    );
+    let client = ProviderClient::from_config(provider_cfg.kind.backend_id(), api_key, base_url);
 
     let extractor = client
         .extractor::<cron::CronJobExtract>(&model)
@@ -2588,10 +2569,7 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
         let body = if row.summary.trim().is_empty() {
             label
         } else {
-            format!(
-                "{label}\n{}",
-                common::truncate_notify(&row.summary, 120)
-            )
+            format!("{label}\n{}", common::truncate_notify(&row.summary, 120))
         };
         common::notify_kind(common::ImportantKind::CronSuccess, body);
     } else {
@@ -2689,7 +2667,10 @@ mod tests {
 
     #[test]
     fn validates_and_trims_session_titles() {
-        assert_eq!(validate_session_title("  New title  ").unwrap(), "New title");
+        assert_eq!(
+            validate_session_title("  New title  ").unwrap(),
+            "New title"
+        );
         assert_eq!(
             validate_session_title(" \n\t ").unwrap_err(),
             "session title cannot be empty"

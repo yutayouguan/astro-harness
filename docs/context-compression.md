@@ -192,9 +192,9 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 ## 运维建议
 
 1. **长工具链桌面 Agent**：依赖窗口比例 + spill，勿把条数阈值调太低。
-2. **仍频繁触顶**：用户主动 `/compact`，或调低自动压实 UI 阈值；关注 `recommendCompact` toast。
+2. **仍频繁触顶**：用户主动 `/compact`；关注 `recommendCompact` toast（仅建议，前端不会自动拆 session）。上下文条/详情只展示后端 `context_usage` 与真实 `context_window`，不按 128K 估算。
 3. **调试**：`RUST_LOG=agent=debug` 查看 `tool context maintenance` / `tool LLM compress` / `gateway pre-maintain` / `mid-run summary` / `thrashing` 日志。
-4. **跨厂商**：`context_window` 由 Tauri 模型元数据注入；未知模型用 128k 估算。
+4. **跨厂商**：`context_window` 由 Tauri 从 models 缓存 / LiteLLM 注入；未知模型 agent 侧缺省 128k，前端未知则显示「—」而非假百分比。
 5. **辅模型**：配置 `AuxiliaryTask::Compaction` 目标；未配置时自动退回 head/tail，不影响主对话。
 
 ---

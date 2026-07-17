@@ -6,6 +6,7 @@ import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import {
+  displayContextWindow,
   formatTokenCount,
   usagePercent,
   visibleSegments,
@@ -82,9 +83,9 @@ export default function ContextUsagePopover({
 
   if (!open || typeof document === "undefined") return null;
 
-  const win = windowTokens > 0 ? windowTokens : 128_000;
+  const win = displayContextWindow(snapshot, windowTokens);
   const used = snapshot?.totalTokens ?? 0;
-  const pct = usagePercent(used, win);
+  const pct = win > 0 ? usagePercent(used, win) : 0;
   const segs = snapshot ? visibleSegments(snapshot) : [];
 
   return createPortal(
@@ -123,10 +124,13 @@ export default function ContextUsagePopover({
       {snapshot ? (
         <div className="ctx-usage-popover-body">
           <p className="ctx-usage-popover-full">
-            {t("chat.contextUsageFull", { pct: String(pct) })}
+            {win > 0
+              ? t("chat.contextUsageFull", { pct: String(pct) })
+              : t("chat.contextUsageEmpty")}
           </p>
           <p className="ctx-usage-popover-tokens">
-            ~{formatTokenCount(used)} / {formatTokenCount(win)}
+            ~{formatTokenCount(used)}
+            {win > 0 ? ` / ${formatTokenCount(win)}` : ""}
           </p>
           <ContextUsageBar snapshot={snapshot} windowTokens={win} />
           <ul className="ctx-usage-legend">

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  displayContextWindow,
   formatTokenCount,
   normalizeContextUsageEvent,
+  resolveContextWindow,
   usagePercent,
   visibleSegments,
   SEGMENT_ORDER,
@@ -15,10 +17,29 @@ test("formatTokenCount", () => {
   assert.equal(formatTokenCount(128_000), "128K");
 });
 
-test("usagePercent caps at 99 for bar label", () => {
+test("usagePercent reports real percent up to 100", () => {
   assert.equal(usagePercent(0, 128_000), 0);
   assert.equal(usagePercent(23_040, 128_000), 18);
-  assert.equal(usagePercent(128_000, 128_000), 99);
+  assert.equal(usagePercent(128_000, 128_000), 100);
+  assert.equal(usagePercent(64_000, 1_000_000), 6);
+  assert.equal(usagePercent(50_000, 0), 0);
+});
+
+test("resolveContextWindow prefers snapshot over model and never invents 128K", () => {
+  assert.equal(resolveContextWindow(128_000, 1_048_576), 1_048_576);
+  assert.equal(resolveContextWindow(1_000_000, null), 1_000_000);
+  assert.equal(resolveContextWindow(null, 200_000), 200_000);
+  assert.equal(resolveContextWindow(null, null), 0);
+  assert.equal(resolveContextWindow(0, 0), 0);
+});
+
+test("displayContextWindow uses snapshot window first", () => {
+  assert.equal(
+    displayContextWindow({ contextWindow: 1_048_576 }, 128_000),
+    1_048_576,
+  );
+  assert.equal(displayContextWindow(null, 200_000), 200_000);
+  assert.equal(displayContextWindow(null, null), 0);
 });
 
 test("visibleSegments drops zeros and sorts by tokens desc", () => {
@@ -41,7 +62,7 @@ test("visibleSegments drops zeros and sorts by tokens desc", () => {
 test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
   assert.deepEqual(
     normalizeContextUsageEvent({
-      context_window: 128_000,
+      context_window: 1_048_576,
       total_tokens: 42,
       updated_at: 1_700_000_000_000,
       recommend_compact: true,
@@ -52,7 +73,7 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
       ],
     }),
     {
-      contextWindow: 128_000,
+      contextWindow: 1_048_576,
       totalTokens: 42,
       updatedAt: 1_700_000_000_000,
       recommendCompact: true,

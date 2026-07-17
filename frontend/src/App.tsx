@@ -124,7 +124,6 @@ export default function App() {
     setNav,
   });
   const {
-    messages,
     send,
     startNewChat,
     startNewAgent,
@@ -235,17 +234,6 @@ export default function App() {
   // ── handleSlashAction (cross-cutting: chat + nav + prefs) ─────────────────
   const handleSlashAction = useCallback(
     (action: SlashAction, _args?: string) => {
-      const contextUsageFallback = (): number => {
-        const chars = messages.reduce(
-          (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
-          0,
-        );
-        return Math.min(
-          99,
-          Math.round((Math.ceil(chars / 4) / Math.max(1, contextWindow)) * 100),
-        );
-      };
-
       switch (action) {
         case "new_chat":
           startNewChat();
@@ -263,22 +251,13 @@ export default function App() {
           void stopStream();
           break;
         case "status": {
-          const ctx =
-            chat.contextUsage && chat.contextUsage.totalTokens > 0
-              ? Math.min(
-                  99,
-                  Math.round(
-                    (chat.contextUsage.totalTokens / Math.max(1, contextWindow)) * 100,
-                  ),
-                )
-              : chat.tokenUsage && chat.tokenUsage.totalTokens > 0
-                ? Math.min(
-                    99,
-                    Math.round(
-                      (chat.tokenUsage.totalTokens / Math.max(1, contextWindow)) * 100,
-                    ),
-                  )
-                : contextUsageFallback();
+          // 只用后端 context_usage 快照；无快照或未知窗口时不编造百分比
+          const ctxLabel =
+            chat.contextUsage && contextWindow > 0
+              ? `${usagePercent(chat.contextUsage.totalTokens, contextWindow)}%`
+              : chat.contextUsage
+                ? `~${chat.contextUsage.totalTokens}`
+                : "—";
           showTransientToast(
             t("chat.slashStatusMsg", {
               session: chat.sessionId ? chat.sessionId.slice(0, 8) : "—",
@@ -287,7 +266,7 @@ export default function App() {
               mode: chatMode,
               thinking: thinkingPrefs.level,
               verbosity: chatDisplayPrefs.verbosity,
-              ctx: String(ctx),
+              ctx: ctxLabel,
             }),
           );
           break;
@@ -448,7 +427,6 @@ export default function App() {
       }
     },
     [
-      messages,
       startNewChat,
       runCompactSession,
       undoLastExchange,
@@ -726,7 +704,7 @@ export default function App() {
                       contextWindow={contextWindow}
                       modelId={activeProvider?.model ?? null}
                       contextUsagePercent={
-                        chat.contextUsage
+                        chat.contextUsage && contextWindow > 0
                           ? usagePercent(chat.contextUsage.totalTokens, contextWindow)
                           : null
                       }
