@@ -9,11 +9,13 @@
 
 .message-list {
   flex: 1;
-  overflow: auto;
-  /* 预留滚动条槽位，避免出现/消失时整栏左右抖动 */
+  /* scroll（非 auto）：始终占住纵向滚动槽，避免自定义 webkit 滚动条出现/消失时左右抖 */
+  overflow-x: hidden;
+  overflow-y: scroll;
   scrollbar-gutter: stable;
-  /* 右侧给锚点 Dock 留空，放大时不贴气泡 */
-  padding: 20px 56px 12px 20px;
+  scrollbar-width: thin;
+  /* 右侧：Dock 留白 56px − 常驻滚动条 4px，内容宽度与原先无滚动条时一致 */
+  padding: 20px 52px 12px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
