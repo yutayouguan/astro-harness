@@ -64,6 +64,14 @@ impl ToolEntry {
     }
 }
 
+/// 内置工具自注册钩子：各工具模块通过 `inventory::submit!` / [`crate::submit_builtin_tool!`] 报名。
+pub struct BuiltinToolRegistrar {
+    /// 向注册表写入本模块工具条目。
+    pub register: fn(&mut ToolRegistry),
+}
+
+inventory::collect!(BuiltinToolRegistrar);
+
 /// 工具注册表：以工具名为键的全局索引。
 ///
 /// 同时维护 toolset 级别的启用映射；MCP 工具（`mcp__` 前缀）的开关在注册阶段

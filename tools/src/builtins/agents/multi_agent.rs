@@ -35,6 +35,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 将角色列表落库为编排并触发后台执行。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     if !home::can_spawn_nested() {

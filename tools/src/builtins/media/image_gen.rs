@@ -166,6 +166,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 依次尝试 primary / fallback 凭据生成图片，返回本地路径与所用模型信息。
 ///
 /// # 错误

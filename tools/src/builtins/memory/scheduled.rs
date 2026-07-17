@@ -98,6 +98,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 将工具名与参数转交给 [`cron::dispatch_cron_tool`]。
 ///
 /// # 参数

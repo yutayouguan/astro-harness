@@ -65,6 +65,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 将可选字符串规范为空串（缺省或仅空白视为空）。
 fn opt_str(v: &Option<String>) -> String {
     v.as_deref().unwrap_or("").trim().to_string()

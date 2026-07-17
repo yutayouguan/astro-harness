@@ -116,6 +116,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 分发 `search_context` / `pin_context`。
 pub fn dispatch(ctx: &ToolContext<'_>, name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
     match name {

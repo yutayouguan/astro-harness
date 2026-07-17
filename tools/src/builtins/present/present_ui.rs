@@ -44,6 +44,8 @@ Examples:\n\
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 校验并返回 `astro_ui` 载荷。
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &Value) -> anyhow::Result<String> {
     let parsed: PresentUiArgs = serde_json::from_value(args.clone())

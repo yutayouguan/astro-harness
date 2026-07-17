@@ -91,6 +91,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 pub fn dispatch_list(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: TeamIdArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("team_list 参数无效: {e}"))?;

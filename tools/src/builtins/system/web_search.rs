@@ -51,6 +51,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 执行网页搜索并返回格式化的结果文本。
 ///
 /// `query` 不能为空；`max_results` 会被 clamp 到 1–10。

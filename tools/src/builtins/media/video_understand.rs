@@ -135,6 +135,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 调用 Google Interactions 视频理解并返回文本（timeline 模式附带 JSON）。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: VideoUnderstandArgs = serde_json::from_value(args.clone())

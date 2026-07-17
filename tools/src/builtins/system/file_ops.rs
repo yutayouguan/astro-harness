@@ -86,6 +86,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 按 `operation` 执行文件系统操作。
 ///
 /// 路径经 `resolve_safe` 解析；`write`/`append`/`mkdir` 会自动创建父目录。

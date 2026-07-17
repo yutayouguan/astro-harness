@@ -65,6 +65,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 请求 TTS，将音频保存到工作区并返回路径。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: TtsArgs = serde_json::from_value(args.clone())

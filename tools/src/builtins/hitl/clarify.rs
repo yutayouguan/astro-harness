@@ -55,6 +55,8 @@ When options are provided, the UI always adds a custom text input as the last ch
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 fn normalize_options(raw: Vec<String>) -> Vec<String> {
     raw.into_iter()
         .map(|o| o.trim().to_string())

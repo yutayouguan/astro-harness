@@ -53,6 +53,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 规范化条目并写入 `.md` + `.json`，同时把 Markdown 正文返回给模型。
 ///
 /// # 错误

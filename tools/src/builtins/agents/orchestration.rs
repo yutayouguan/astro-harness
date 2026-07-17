@@ -64,6 +64,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 创建编排并触发后台执行；立即返回 queued JSON。
 pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     if !home::can_spawn_nested() {

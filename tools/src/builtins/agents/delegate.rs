@@ -127,6 +127,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 同步执行真委派并返回摘要 JSON。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let req = build_run_request(ctx, args)?;

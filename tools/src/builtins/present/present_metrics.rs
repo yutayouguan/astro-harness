@@ -34,6 +34,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: PresentMetricsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("present_metrics 参数无效: {e}"))?;

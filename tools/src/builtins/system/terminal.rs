@@ -37,6 +37,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 在 workspace（或指定子目录）下执行 Shell 命令并返回退出码、stdout、stderr。
 ///
 /// `cwd` 经 `resolve_safe` 校验；命令为空时立即报错。输出经统一截断。

@@ -35,6 +35,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 执行 HTTP GET 请求并返回响应状态、Content-Type 与正文。
 ///
 /// 正文超过 [`MAX_BODY_BYTES`] 时按 UTF-8 字符边界截断；请求超时 30 秒；不跟随重定向。

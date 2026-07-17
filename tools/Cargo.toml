@@ -23,6 +23,7 @@ serde_json = { workspace = true }
 schemars = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+inventory = "0.3"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["clock"] }
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }

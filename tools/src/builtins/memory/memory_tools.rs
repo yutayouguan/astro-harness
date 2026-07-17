@@ -89,6 +89,8 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
+crate::submit_builtin_tool!(register);
+
 /// 将记忆工具调用委托给 `memory::dispatch_memory_tool`。
 ///
 /// 需要可变 `ToolContext` 以访问 `MemoryManager`。
