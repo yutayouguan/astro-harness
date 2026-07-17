@@ -143,14 +143,12 @@ export function IconCron(props: IconProps) {
   );
 }
 
-/** 用量洞察 — 柱状线稿，选中仍为线（无可填闭合面） */
+/** 数据洞察 — 饼图：扇区可填实，外环弧只描边 */
 export function IconInsights(props: IconProps) {
   return (
-    <IconBase {...props} data-nav-fill="outline">
-      <path d="M4 20V10" />
-      <path d="M10 20V4" />
-      <path d="M16 20v-7" />
-      <path d="M22 20V8" />
+    <IconBase {...props}>
+      <path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" />
+      <path className="nav-icon-stroke" d="M21.21 15.89A10 10 0 1 1 8 2.83" />
     </IconBase>
   );
 }
