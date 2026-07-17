@@ -430,47 +430,27 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
 
 .chat-session-row {
   position: relative;
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-}
-
-.chat-session-item {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
+  display: block;
   border: 1px solid color-mix(in srgb, var(--chip-border) 88%, transparent);
   border-radius: 13px;
-  padding: 11px 12px;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.12) 100%),
     color-mix(in srgb, var(--ink) 2.5%, transparent);
-  color: var(--ink);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
   transition:
     border-color 0.14s ease,
     background 0.14s ease,
-    box-shadow 0.14s ease,
-    transform 0.12s ease;
+    box-shadow 0.14s ease;
 }
 
-.chat-session-item:hover {
+.chat-session-row:hover {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 100%),
     color-mix(in srgb, var(--ink) 4%, transparent);
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 16%, var(--chip-border));
 }
 
-.chat-session-item:disabled {
-  opacity: 0.7;
-  cursor: wait;
-}
-
-.chat-session-item.is-active {
+.chat-session-row.is-active {
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 36%, transparent);
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.16) 100%),
@@ -481,20 +461,20 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
     inset 2.5px 0 0 var(--tone-blue, #2563eb);
 }
 
-html[data-theme="dark"] .chat-session-item {
+html[data-theme="dark"] .chat-session-row {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
     color-mix(in srgb, var(--ink) 4%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-html[data-theme="dark"] .chat-session-item:hover {
+html[data-theme="dark"] .chat-session-row:hover {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
     color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
-html[data-theme="dark"] .chat-session-item.is-active {
+html[data-theme="dark"] .chat-session-row.is-active {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 48%, transparent);
@@ -504,24 +484,47 @@ html[data-theme="dark"] .chat-session-item.is-active {
     inset 2.5px 0 0 var(--tone-blue, #60a5fa);
 }
 
+.chat-session-item {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  border-radius: 13px;
+  padding: 11px 40px 11px 12px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: opacity 0.12s ease;
+}
+
+.chat-session-item:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .chat-session-menu-wrap {
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 
 .chat-session-row:hover .chat-session-menu-wrap,
+.chat-session-row.is-menu-open .chat-session-menu-wrap,
 .chat-session-menu-wrap.is-open {
   opacity: 1;
 }
 
 .chat-session-more {
-  width: 32px;
-  height: 100%;
-  min-height: 44px;
+  width: 28px;
+  height: 28px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 9px;
   background: transparent;
   color: var(--ink-soft);
   display: grid;
@@ -533,8 +536,12 @@ html[data-theme="dark"] .chat-session-item.is-active {
 .chat-session-more:hover:not(:disabled),
 .chat-session-menu-wrap.is-open .chat-session-more {
   color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  border-color: var(--chip-border);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--ink) 5%, transparent);
+  border-color: color-mix(in srgb, var(--chip-border) 80%, transparent);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
 }
 
 .chat-session-more:disabled {
@@ -544,20 +551,37 @@ html[data-theme="dark"] .chat-session-item.is-active {
 
 .chat-session-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   right: 0;
   z-index: 40;
-  min-width: 148px;
-  padding: 4px;
+  min-width: 152px;
+  padding: 5px;
   border-radius: 12px;
-  border: 1px solid var(--glass-edge, var(--chip-border));
-  background: color-mix(in srgb, var(--composer-bg, #fff) 96%, #0f172a 4%);
+  border: 1px solid color-mix(in srgb, var(--glass-edge, #fff) 82%, rgba(148, 163, 184, 0.28));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.28) 100%),
+    color-mix(in srgb, var(--composer-bg, #fff) 55%, rgba(255, 255, 255, 0.35));
   box-shadow:
-    0 12px 28px rgba(15, 23, 42, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 14px 32px rgba(15, 23, 42, 0.14),
+    0 2px 8px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+html[data-theme="dark"] .chat-session-menu {
+  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.14) 70%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
+    color-mix(in srgb, rgba(8, 6, 18, 0.72) 80%, transparent);
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.05);
 }
 
 .chat-session-menu button {

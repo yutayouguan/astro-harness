@@ -348,12 +348,15 @@ export default function ChatSessionList({
             const busy = busySessionId === s.sessionId;
             const menuOpen = menuSessionId === s.sessionId;
             return (
-              <li key={s.sessionId} className="chat-session-row">
+              <li
+                key={s.sessionId}
+                className={`chat-session-row ${
+                  s.sessionId === activeSessionId ? "is-active" : ""
+                } ${menuOpen ? "is-menu-open" : ""}`}
+              >
                 <button
                   type="button"
-                  className={`chat-session-item ${
-                    s.sessionId === activeSessionId ? "is-active" : ""
-                  }`}
+                  className="chat-session-item"
                   onClick={() => onOpenSession(s.sessionId)}
                   disabled={busy}
                 >
@@ -383,7 +386,7 @@ export default function ChatSessionList({
                       setMenuSessionId(menuOpen ? null : s.sessionId);
                     }}
                   >
-                    <MoreHorizontal size={16} strokeWidth={1.75} aria-hidden />
+                    <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
                   </button>
                   {menuOpen ? (
                     <div className="chat-session-menu" role="menu">
