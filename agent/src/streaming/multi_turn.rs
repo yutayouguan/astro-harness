@@ -308,11 +308,12 @@ async fn run_multi_turn_stream_inner(
             if agent.occupancy_ratio()
                 >= crate::compression::HARD_STAGE_RECOMMEND_COMPACT_RATIO
             {
-                match agent.maintain_tool_context() {
+                match agent.maintain_tool_context().await {
                     Ok(report) if report.pruned + report.compressed > 0 => {
                         tracing::info!(
                             pruned = report.pruned,
                             compressed = report.compressed,
+                            llm_summarized = report.llm_summarized,
                             occupancy_before = report.occupancy_before,
                             occupancy_after = report.occupancy_after,
                             "gateway pre-maintain applied (≥85%)"
@@ -888,11 +889,12 @@ async fn run_multi_turn_stream_inner(
 
         {
             let mut agent = session.lock().await;
-            match agent.maintain_tool_context() {
+            match agent.maintain_tool_context().await {
                 Ok(report) if report.pruned + report.compressed > 0 => {
                     tracing::info!(
                         pruned = report.pruned,
                         compressed = report.compressed,
+                        llm_summarized = report.llm_summarized,
                         occupancy_before = report.occupancy_before,
                         occupancy_after = report.occupancy_after,
                         stage_ratio = ?report.stage_ratio,

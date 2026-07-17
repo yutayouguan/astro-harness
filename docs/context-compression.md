@@ -6,15 +6,15 @@
 
 | 层级 | 机制 | 触发 | 对象 |
 |------|------|------|------|
-| **Run 内** | `maintain_tool_context` | 窗口占用 Soft/Medium/Hard + 条数兜底 | 单条 tool 结果的 Provider 视图 |
+| **Run 内** | `maintain_tool_context` | 窗口占用 Soft/Medium/Hard + 条数兜底 | 单条 tool：prune / **LLM 摘要** / head-tail 回退 |
 | **Run 内** | mid-run 辅模型摘要 | Hard ≥80%，每用户轮一次 | 中间轮次折叠为 handoff（不拆 session） |
-| **Gateway** | 进 LLM 前预维护 | 占用 ≥85% | 再跑一轮 prune / head-tail + 建议 `/compact` |
+| **Gateway** | 进 LLM 前预维护 | 占用 ≥85% | 再跑一轮 prune / LLM 摘要 / head-tail + 建议 `/compact` |
 | **会话级** | `compact_and_split` + `/compact` | 用户手动或 UI 自动阈值 | 整段对话 → 新 session + 摘要 |
 
 **不变量（全链路）**
 
 - `messages.content` / DB `content`：**永远保留全文**（UI、FTS、审计）
-- `messages.compressed_content`：仅 **发给模型的视图**（可 spill / prune / head-tail）
+- `messages.compressed_content`：仅 **发给模型的视图**（可 spill / prune / LLM 摘要 / head-tail）
 - mid-run handoff：只折叠 **Provider 历史**（`provider_history()`），不改 DB、不拆 session
 - 丢细节可恢复：spill 文件 + `session_search` + `file_ops read`
 
@@ -37,8 +37,9 @@
   │    ├─ Prune（廉价，无 LLM）
   │    │    Soft+：保护区外、>200 字符的 tool → [astro:tool-pruned]
   │    │    Hard 80%+：保护区外所有 tool → prune
-  │    ├─ Head/Tail 压缩（无 LLM）
-  │    │    仍过长 → [astro:compressed-tool-result stage≥N%]
+  │    ├─ 仍需压缩的 tool（多为保护区尾部）
+  │    │    ├─ Agno 式辅模型摘要 → [astro:llm-compressed-tool-result]（每轮最多 6 条）
+  │    │    └─ 失败 / 无 Compaction 目标 / 超额 → head/tail 启发式
   │    └─ thrashing 记录 + 仍 ≥85% → pending recommendCompact
   └─ maybe_apply_mid_run_summary（占用 ≥80%，辅模型 Compaction，每用户轮一次）
 
@@ -86,7 +87,7 @@
 | 产品 | Astro 对应 |
 |------|------------|
 | Claude `/compact`、Hermes autocompact | **`compact_and_split`**（会话级，辅模型摘要） |
-| Agno CompressionManager | **Run 内 head/tail + prune**（`agent/src/compression.rs`） |
+| Agno CompressionManager | **Run 内 LLM 逐条摘要**（失败回退 head/tail + prune） |
 | Cursor `/summarize` | 会话级摘要；Run 内靠 spill + prune 减压 |
 | Hermes 中间轮次摘要 | **mid-run**（不拆 session） |
 
@@ -129,8 +130,9 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 
 | 模块 | 路径 |
 |------|------|
-| 分阶段 + thrashing | `agent/src/compression.rs` |
-| 维护入口 | `AgentLoop::maintain_tool_context` — `agent/src/runtime/mod.rs` |
+| 分阶段 + thrashing + head/tail 回退 | `agent/src/compression.rs` |
+| 维护入口 | `AgentLoop::maintain_tool_context`（async）— `agent/src/runtime/mod.rs` |
+| 逐条 LLM 摘要 | `agent/src/exec/tool_llm_compress.rs` |
 | mid-run 摘要 | `agent/src/exec/mid_run_summary.rs` |
 | 多轮挂钩 | `agent/src/streaming/multi_turn.rs`（Gateway 前 + 工具后） |
 | Spill | `common/src/tool_spill.rs` |
@@ -149,6 +151,8 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 | `PRUNE_MIN_CHARS` | 200 | `common/tool_spill.rs` |
 | `DEFAULT_TOOL_RESULTS_LIMIT` | 12 | `agent/compression.rs` |
 | Soft/Medium/Hard 比例 | 40% / 60% / 80% | `DEFAULT_COMPRESSION_STAGES` |
+| `MAX_LLM_TOOL_COMPRESS_PER_PASS` | 6 | `agent/exec/tool_llm_compress.rs` |
+| `MAX_LLM_INPUT_CHARS` | 24_000 | 同上 |
 | `protect_last_n` | 20 | `AgentConfig` |
 | `MID_RUN_SUMMARY_RATIO` | 80% | `agent/exec/mid_run_summary.rs` |
 | `HARD_STAGE_RECOMMEND_COMPACT_RATIO` / Gateway | 85% | `agent/compression.rs` |
@@ -158,7 +162,7 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 
 ## 与 Agno 课时关系
 
-- Agno `CompressionManager`（逐条 LLM 摘要 tool）→ **后续**可接到 `AuxiliaryTask::Compaction`，替换 head/tail 启发式。
+- Agno `CompressionManager`（逐条 LLM 摘要 tool）→ **已落地**：`tool_llm_compress` + `maintain_tool_context`（无目标 / 失败回退 head/tail）。
 - 会话生命周期压实见 `docs/superpowers/specs/2026-07-14-session-compaction-design.md`。
 - 课时总表：`docs/agno-lessons.md` §五。
 
@@ -168,8 +172,9 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 
 1. **长工具链桌面 Agent**：依赖窗口比例 + spill，勿把条数阈值调太低。
 2. **仍频繁触顶**：用户主动 `/compact`，或调低自动压实 UI 阈值；关注 `recommendCompact` toast。
-3. **调试**：`RUST_LOG=agent=debug` 查看 `tool context maintenance` / `gateway pre-maintain` / `mid-run summary` / `thrashing` 日志。
+3. **调试**：`RUST_LOG=agent=debug` 查看 `tool context maintenance` / `tool LLM compress` / `gateway pre-maintain` / `mid-run summary` / `thrashing` 日志。
 4. **跨厂商**：`context_window` 由 Tauri 模型元数据注入；未知模型用 128k 估算。
+5. **辅模型**：配置 `AuxiliaryTask::Compaction` 目标；未配置时自动退回 head/tail，不影响主对话。
 
 ---
 
@@ -178,3 +183,4 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 - [x] Hard 阶段自动调用辅模型做 **mid-run 中间轮次摘要**（仍不拆 session）
 - [x] `ContextUsage` 事件增加 `recommendCompact` 供前端 toast
 - [x] Gateway 85% 预压安全网（进 LLM 前 `maintain_tool_context`）
+- [x] Agno 式 **逐条 LLM 摘要 tool**（失败回退 head/tail）

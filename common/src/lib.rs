@@ -32,8 +32,8 @@ pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore}
 pub use title::sanitize_title;
 pub use tool_spill::{
     is_externalized_view, make_prune_view, make_spill_view, spill_path_for_prompt,
-    write_tool_spill, DEFAULT_SPILL_THRESHOLD_BYTES, PRUNE_MIN_CHARS, TOOL_PRUNE_MARK,
-    TOOL_SPILL_MARK,
+    write_tool_spill, DEFAULT_SPILL_THRESHOLD_BYTES, PRUNE_MIN_CHARS, TOOL_LLM_COMPRESS_MARK,
+    TOOL_PRUNE_MARK, TOOL_SPILL_MARK,
 };
 
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};

@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 pub const TOOL_SPILL_MARK: &str = "[astro:tool-spill]";
 pub const TOOL_PRUNE_MARK: &str = "[astro:tool-pruned]";
+/// Agno 式逐条 LLM 摘要后的 Provider 视图标记。
+pub const TOOL_LLM_COMPRESS_MARK: &str = "[astro:llm-compressed-tool-result]";
 
 /// 超过该字节数时在记录阶段落盘并改写 provider 视图。
 pub const DEFAULT_SPILL_THRESHOLD_BYTES: usize = 16 * 1024;
@@ -87,7 +89,9 @@ pub fn make_prune_view(tool_name: Option<&str>, spill_rel: Option<&str>) -> Stri
 
 pub fn is_externalized_view(s: &str) -> bool {
     let t = s.trim_start();
-    t.starts_with(TOOL_SPILL_MARK) || t.starts_with(TOOL_PRUNE_MARK)
+    t.starts_with(TOOL_SPILL_MARK)
+        || t.starts_with(TOOL_PRUNE_MARK)
+        || t.starts_with(TOOL_LLM_COMPRESS_MARK)
 }
 
 #[cfg(test)]

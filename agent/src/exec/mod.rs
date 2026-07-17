@@ -5,3 +5,4 @@ pub mod mid_run_summary;
 pub mod multi_agent;
 pub mod orchestration;
 pub mod title_generation;
+pub mod tool_llm_compress;

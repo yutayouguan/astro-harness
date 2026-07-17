@@ -4,10 +4,9 @@
 //! the original tool output, while `compressed_content` is only the provider-facing
 //! view used on subsequent model calls.
 //!
-//! Triggers (either fires):
-//! - count: uncompressed tool results ≥ [`ToolCompressionManager::tool_results_limit`]
-//! - window: estimated session tokens / [`ToolCompressionManager::context_window`]
-//!   reaches a staged occupancy ratio (soft → medium → hard)
+//! Primary path (async, in `AgentLoop::maintain_tool_context`): prune → LLM per-tool
+//! summary via `tool_llm_compress` → head/tail fallback. This module owns the staged
+//! thresholds, thrashing guard, and head/tail heuristic.
 
 use common::message::{Message, Role};
 
@@ -254,6 +253,8 @@ impl CompressionThrashingGuard {
 pub struct ContextMaintenanceResult {
     pub pruned: usize,
     pub compressed: usize,
+    /// 其中通过辅模型 LLM 摘要的条数（含在 `compressed` 内）。
+    pub llm_summarized: usize,
     pub stage_ratio: Option<f32>,
     pub occupancy_before: f32,
     pub occupancy_after: f32,

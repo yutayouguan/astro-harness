@@ -811,10 +811,10 @@ impl AgentLoop {
         }
     }
 
-    /// Run 内 tool 上下文工业级维护：prune → 分阶段 head/tail → thrashing 保护。
+    /// Run 内 tool 上下文工业级维护：prune → Agno 式 LLM 摘要（失败回退 head/tail）→ thrashing。
     ///
     /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
-    pub fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
+    pub async fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
         let mut result = ContextMaintenanceResult::default();
         if !self.compression_guard.allow_run() {
             result.thrashing_disabled = true;
@@ -833,6 +833,15 @@ impl AgentLoop {
         let stored = self.sessions.get_messages(&self.session_id)?;
         let protect_start =
             protect_tail_start_index(stored.len(), self.config.protect_last_n);
+
+        #[derive(Clone)]
+        struct CompressCandidate {
+            msg_id: i64,
+            tool_name: Option<String>,
+            content: String,
+        }
+
+        let mut compress_jobs: Vec<CompressCandidate> = Vec::new();
 
         for (idx, stored_msg) in stored.iter().enumerate() {
             if stored_msg.role != "tool" {
@@ -879,12 +888,62 @@ impl AgentLoop {
             if !needs_compress {
                 continue;
             }
-            let Some(view) =
-                manager.compress_content(stored_msg.tool_name.as_deref(), content, stage)
-            else {
+            // 已短于预算：只标记压缩，避免反复扫描（与启发式一致）。
+            if content.chars().count() <= stage.max_compressed_chars {
+                let Some(view) =
+                    manager.compress_content(stored_msg.tool_name.as_deref(), content, stage)
+                else {
+                    continue;
+                };
+                self.apply_tool_compressed_view(stored_msg, content, &view)?;
+                result.compressed += 1;
+                continue;
+            }
+            compress_jobs.push(CompressCandidate {
+                msg_id: stored_msg.id,
+                tool_name: stored_msg.tool_name.clone(),
+                content: content.to_string(),
+            });
+        }
+
+        let targets = self.auxiliary_targets(common::AuxiliaryTask::Compaction);
+        let llm_budget = crate::exec::tool_llm_compress::MAX_LLM_TOOL_COMPRESS_PER_PASS;
+        for (i, job) in compress_jobs.into_iter().enumerate() {
+            let view = if i < llm_budget && !targets.is_empty() {
+                match crate::exec::tool_llm_compress::summarize_tool_result(
+                    &targets,
+                    job.tool_name.as_deref(),
+                    &job.content,
+                    stage.max_compressed_chars,
+                )
+                .await
+                {
+                    Ok(v) => {
+                        result.llm_summarized += 1;
+                        v
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            tool = ?job.tool_name,
+                            "tool LLM compress failed; falling back to head/tail"
+                        );
+                        manager
+                            .compress_content(job.tool_name.as_deref(), &job.content, stage)
+                            .unwrap_or_else(|| job.content.clone())
+                    }
+                }
+            } else {
+                manager
+                    .compress_content(job.tool_name.as_deref(), &job.content, stage)
+                    .unwrap_or_else(|| job.content.clone())
+            };
+
+            let stored_again = self.sessions.get_messages(&self.session_id)?;
+            let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.msg_id) else {
                 continue;
             };
-            self.apply_tool_compressed_view(stored_msg, content, &view)?;
+            self.apply_tool_compressed_view(stored_msg, &job.content, &view)?;
             result.compressed += 1;
         }
 
@@ -922,8 +981,8 @@ impl AgentLoop {
     }
 
     /// 压缩本 run 中尚未压缩的 tool 结果（兼容旧调用；委托 [`Self::maintain_tool_context`]）。
-    pub fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
-        let report = self.maintain_tool_context()?;
+    pub async fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
+        let report = self.maintain_tool_context().await?;
         Ok(report.pruned + report.compressed)
     }
 
@@ -1327,6 +1386,8 @@ impl AgentLoop {
             Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
             _ => Message::assistant(content),
         };
+        let mut msg = msg;
+        msg.reasoning = reasoning.map(str::to_string);
         self.session_messages.push(msg);
         Ok(())
     }

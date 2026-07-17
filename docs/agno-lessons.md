@@ -124,24 +124,26 @@
 
 ### Astro 现状（压缩）
 - 已有会话级压实（`compact_and_split`）。
-- 本轮已补 run 内 tool 结果压缩（见下「已落地」）；辅助模型压缩路由可后续替换启发式。
+- Run 内已支持 spill / prune / **Agno 式 LLM 逐条摘要**（失败回退 head/tail）；见下「已落地」。
 
-### 可复用设计（建议直接落地）
+### 可复用设计（已落地）
 ```text
 messages 中 tool 结果超阈值
-  → 异步/同步压缩
+  → 异步 LLM 摘要（AuxiliaryTask::Compaction）
   → 发送模型用 compressed_content，DB/UI 仍保留原文
-  → 计入 usage（compression model）
+  → 无辅模型目标或失败时回退 head/tail
 ```
 与现有压实互补：压实管**会话生命周期**，压缩管**单次 run 的 context 预算**。
 
 ### 已落地（本轮）
 - `common::Message.compressed_content` + session schema v14 `messages.compressed_content`
 - `agent::compression::ToolCompressionManager`：条数兜底（≥12）+ 窗口分阶段 Soft/Medium/Hard；`set_context_window` 注入模型窗口
-- **工业级 Run 内维护**：`maintain_tool_context` = spill（≥16KiB）+ prune + head/tail + thrashing 保护；详见 [`docs/context-compression.md`](context-compression.md)
+- **工业级 Run 内维护**：`maintain_tool_context` = spill（≥16KiB）+ prune + **Agno 式 LLM 逐条摘要**（失败回退 head/tail）+ thrashing；详见 [`docs/context-compression.md`](context-compression.md)
+- `agent::exec::tool_llm_compress`：`AuxiliaryTask::Compaction`，标记 `[astro:llm-compressed-tool-result]`
 - `AgentLoop::compress_tool_results_if_needed` 委托 `maintain_tool_context`
 - `to_provider_messages` 对 tool 角色优先发送压缩视图；FTS/UI 仍用原文
 - 会话级 `compact_and_split` + 辅模型 `AuxiliaryTask::Compaction`（整段摘要，拆 session）
+- mid-run 中间轮次摘要 + Gateway 85% + `recommendCompact` toast（见 context-compression 文档）
 
 ---
 
