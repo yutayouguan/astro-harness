@@ -1,12 +1,12 @@
 ---
 name: storyboard-video
-description: Turn a short scene idea into a shot list and generate clips with video_gen (Veo). Use when the user wants 分镜、短剧片段、连续镜头、角色一致视频。
-astro_bundled_rev: 3
+description: Turn a short scene idea into a shot list and generate clips with video_gen (Veo). Use when the user wants 分镜、短剧片段、连续镜头、角色一致视频。单张图/单首歌/配音请用 creative-media。
+astro_bundled_rev: 4
 ---
 
 # 分镜短视频（storyboard-video）
 
-用 Google `video_gen`（Veo）把梗概变成可预览的连续短片素材。本技能**不负责**自动剪辑成片。
+用 Google `video_gen`（Veo）把梗概变成可预览的连续短片素材。本技能**不负责**自动剪辑成片。单镜头试拍、出图、作曲、配音见 **`creative-media`**。
 
 ## 前置
 
@@ -15,7 +15,7 @@ astro_bundled_rev: 3
 
 ## 推荐流水线（默认按此执行）
 
-1. **收集**：主题、段数、画幅（`16:9` / `9:16`）、风格（`cinematic` / `creative`）、`negative_prompt`。
+1. **收集**：主题、段数、画幅（`16:9` / `9:16`）、风格（`cinematic` / `creative`）、`negative_prompt`。关键方向不清时先用 `clarify`；每镜 `prompt` 写充实运镜描述，并为片段设短中文 `title`。
 2. **分镜表**：镜号｜景别｜动作｜对白｜秒数｜备注。高级镜头时长一律 **8**。
 3. **先出图再出视频（默认）**：
    - 用 `image_gen` 生成首帧（及可选尾帧）→ 得到相对路径如 `generated/images/img-….png`
