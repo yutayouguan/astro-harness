@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 15;
+pub const SCHEMA_VERSION: i32 = 16;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     pricing_version TEXT,
     title TEXT,
     archived_at REAL,
+    pinned_at REAL,
     api_call_count INTEGER DEFAULT 0,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
@@ -134,6 +135,10 @@ impl SessionStore {
         if self.table_exists("sessions")? && !self.column_exists("sessions", "archived_at")? {
             self.conn
                 .execute("ALTER TABLE sessions ADD COLUMN archived_at REAL", [])?;
+        }
+        if self.table_exists("sessions")? && !self.column_exists("sessions", "pinned_at")? {
+            self.conn
+                .execute("ALTER TABLE sessions ADD COLUMN pinned_at REAL", [])?;
         }
         Ok(())
     }

@@ -317,6 +317,8 @@ pub fn run() {
             commands::regenerate_session_title,
             commands::archive_session,
             commands::unarchive_session,
+            commands::pin_session,
+            commands::unpin_session,
             commands::delete_session_permanently,
             commands::list_files,
             commands::read_file,

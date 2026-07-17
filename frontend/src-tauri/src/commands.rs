@@ -118,6 +118,7 @@ pub struct RecentSessionDto {
     pub created_at: Option<String>,
     pub end_reason: Option<String>,
     pub archived_at: Option<String>,
+    pub pinned_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1414,12 +1415,17 @@ fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
         .archived_at
         .and_then(|timestamp| chrono::DateTime::from_timestamp(timestamp as i64, 0))
         .map(|dt| dt.to_rfc3339());
+    let pinned_at = s
+        .pinned_at
+        .and_then(|timestamp| chrono::DateTime::from_timestamp(timestamp as i64, 0))
+        .map(|dt| dt.to_rfc3339());
     RecentSessionDto {
         session_id: s.id,
         summary,
         created_at,
         end_reason: s.end_reason,
         archived_at,
+        pinned_at,
     }
 }
 
@@ -1598,6 +1604,22 @@ pub async fn archive_session(session_id: String) -> Result<(), String> {
 pub async fn unarchive_session(session_id: String) -> Result<(), String> {
     open_sessions()?
         .unarchive_session(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 置顶会话。
+#[tauri::command]
+pub async fn pin_session(session_id: String) -> Result<(), String> {
+    open_sessions()?
+        .pin_session(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 取消置顶。
+#[tauri::command]
+pub async fn unpin_session(session_id: String) -> Result<(), String> {
+    open_sessions()?
+        .unpin_session(&session_id)
         .map_err(|e| e.to_string())
 }
 

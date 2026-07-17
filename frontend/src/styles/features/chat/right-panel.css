@@ -163,23 +163,21 @@ html[data-theme="dark"] .chat-right-panel {
 .chat-right-tab.is-active {
   color: var(--tone-blue, #2563eb);
   font-weight: 650;
-  background: color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 42%, transparent);
-}
-
-.chat-right-tab.is-active::after {
-  content: "";
-  position: absolute;
-  left: 16%;
-  right: 16%;
-  bottom: 0;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--tone-blue, #2563eb) 55%, transparent),
-    var(--tone-blue, #2563eb),
-    color-mix(in srgb, var(--tone-blue, #2563eb) 55%, transparent)
-  );
+  /*
+   * 指示线并入按钮背景，避免 WebKit 在玻璃层上切换伪元素时
+   * 短暂保留上一 Tab 的合成帧（底部拖影）。
+   */
+  background:
+    linear-gradient(
+        90deg,
+        transparent 16%,
+        color-mix(in srgb, var(--tone-blue, #2563eb) 55%, transparent) 16%,
+        var(--tone-blue, #2563eb) 50%,
+        color-mix(in srgb, var(--tone-blue, #2563eb) 55%, transparent) 84%,
+        transparent 84%
+      )
+      bottom / 100% 2px no-repeat,
+    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 42%, transparent);
 }
 
 .chat-right-body {
@@ -632,6 +630,12 @@ html[data-theme="dark"] .chat-session-menu {
   color: var(--ink-soft);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   border: 1px solid color-mix(in srgb, var(--chip-border) 85%, transparent);
+}
+
+.chat-session-badge.is-pinned {
+  color: var(--tone-blue, #2563eb);
+  background: color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 70%, transparent);
+  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 22%, transparent);
 }
 
 .chat-session-item strong .chat-session-badge {

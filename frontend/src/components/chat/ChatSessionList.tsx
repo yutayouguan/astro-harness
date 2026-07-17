@@ -17,6 +17,65 @@ import { normalizeAgentId } from "../../types/agent";
 import AgentPicker from "../agents/AgentPicker";
 import ExpandableSearch from "../ui/ExpandableSearch";
 
+type ChatHistoryExportDto = {
+  messages: Array<{
+    role: string;
+    content: string;
+  }>;
+};
+
+function sessionTitle(
+  item: RecentSessionDto,
+  untitled: string,
+): string {
+  const summary = (item.summary ?? "").trim();
+  return summary || untitled;
+}
+
+function isPinned(item: RecentSessionDto): boolean {
+  return Boolean(item.pinnedAt);
+}
+
+function sanitizeExportFilename(title: string, sessionId: string): string {
+  const base = title
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 48);
+  const id = sessionId.slice(0, 8);
+  return `${base || "session"}-${id}.md`;
+}
+
+function utf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+function historyToMarkdown(
+  title: string,
+  sessionId: string,
+  messages: ChatHistoryExportDto["messages"],
+): string {
+  const lines = [
+    `# ${title}`,
+    "",
+    `> session: \`${sessionId}\``,
+    "",
+  ];
+  for (const msg of messages) {
+    const role = msg.role.trim() || "message";
+    const content = (msg.content ?? "").trim();
+    if (!content) continue;
+    lines.push(`## ${role}`, "", content, "");
+  }
+  return `${lines.join("\n").trim()}\n`;
+}
+
 /** 近期会话列表入参 */
 type Props = {
   /** 当前打开的会话（高亮） */
@@ -31,14 +90,6 @@ type Props = {
   /** 删除当前会话后清理本地状态 */
   onClearDeletedCurrentSession?: () => void | Promise<void>;
 };
-
-function sessionTitle(
-  item: RecentSessionDto,
-  untitled: string,
-): string {
-  const summary = (item.summary ?? "").trim();
-  return summary || untitled;
-}
 
 export default function ChatSessionList({
   activeSessionId,
@@ -230,6 +281,66 @@ export default function ChatSessionList({
     [listKind, runSessionAction],
   );
 
+  const handlePinToggle = useCallback(
+    (item: RecentSessionDto) => {
+      const command = isPinned(item) ? "unpin_session" : "pin_session";
+      void runSessionAction(item.sessionId, async () => {
+        await invoke(command, { sessionId: item.sessionId });
+      });
+    },
+    [runSessionAction],
+  );
+
+  const handleExport = useCallback(
+    (item: RecentSessionDto) => {
+      void runSessionAction(item.sessionId, async () => {
+        const history = await invoke<ChatHistoryExportDto>("get_chat_history", {
+          sessionId: item.sessionId,
+          limit: 500,
+        });
+        const untitled = t("chat.rightPanel.untitledSession");
+        const title = sessionTitle(item, untitled);
+        const markdown = historyToMarkdown(
+          title,
+          item.sessionId,
+          history.messages ?? [],
+        );
+        if (!markdown.replace(/^#.*$/m, "").trim()) {
+          throw new Error(t("sessions.exportEmpty"));
+        }
+        await invoke<string>("download_bytes_to_downloads", {
+          filename: sanitizeExportFilename(title, item.sessionId),
+          base64Data: utf8ToBase64(markdown),
+        });
+      });
+    },
+    [runSessionAction, t],
+  );
+
+  const handleBranch = useCallback(
+    (item: RecentSessionDto) => {
+      void runSessionAction(item.sessionId, async () => {
+        const history = await invoke<ChatHistoryExportDto>("get_chat_history", {
+          sessionId: item.sessionId,
+          limit: 500,
+        });
+        const bubbles = (history.messages ?? []).filter((m) => {
+          const role = m.role.trim().toLowerCase();
+          return role === "user" || role === "assistant";
+        });
+        if (bubbles.length === 0) {
+          throw new Error(t("sessions.branchEmpty"));
+        }
+        const newId = await invoke<string>("fork_chat_session", {
+          sourceSessionId: item.sessionId,
+          keepChatBubbles: bubbles.length,
+        });
+        onOpenSession(newId);
+      });
+    },
+    [onOpenSession, runSessionAction, t],
+  );
+
   const handleDelete = useCallback(
     (item: RecentSessionDto) => {
       const untitled = t("chat.rightPanel.untitledSession");
@@ -362,6 +473,11 @@ export default function ChatSessionList({
                 >
                   <strong>
                     {title}
+                    {isPinned(s) ? (
+                      <span className="chat-session-badge is-pinned">
+                        {t("sessions.pinnedBadge")}
+                      </span>
+                    ) : null}
                     {s.endReason === "compacted" ? (
                       <span className="chat-session-badge">
                         {t("chat.sessionCompactedBadge")}
@@ -394,6 +510,14 @@ export default function ChatSessionList({
                         type="button"
                         role="menuitem"
                         disabled={busy}
+                        onClick={() => handlePinToggle(s)}
+                      >
+                        {isPinned(s) ? t("sessions.unpin") : t("sessions.pin")}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy}
                         onClick={() => handleRename(s)}
                       >
                         {t("sessions.rename")}
@@ -405,6 +529,22 @@ export default function ChatSessionList({
                         onClick={() => handleRegenerateTitle(s)}
                       >
                         {t("sessions.regenerateTitle")}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy}
+                        onClick={() => handleExport(s)}
+                      >
+                        {t("sessions.export")}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy}
+                        onClick={() => handleBranch(s)}
+                      >
+                        {t("sessions.branch")}
                       </button>
                       <button
                         type="button"

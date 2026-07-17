@@ -12,7 +12,7 @@ impl SessionStore {
             .query_row(
                 "SELECT id, source, title, started_at, ended_at, end_reason,
                         model, parent_session_id, message_count, tool_call_count,
-                        archived_at
+                        archived_at, pinned_at
                  FROM sessions WHERE id = ?1",
                 params![id],
                 |row| {
@@ -28,6 +28,7 @@ impl SessionStore {
                         message_count: row.get(8)?,
                         tool_call_count: row.get(9)?,
                         archived_at: row.get(10)?,
+                        pinned_at: row.get(11)?,
                     })
                 },
             )
@@ -139,6 +140,26 @@ impl SessionStore {
             params![id],
         )?;
         anyhow::ensure!(changed == 1, "unarchive_session: session not found");
+        Ok(())
+    }
+
+    /// 置顶会话。
+    pub fn pin_session(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET pinned_at = ?1 WHERE id = ?2",
+            params![now_epoch_secs()?, id],
+        )?;
+        anyhow::ensure!(changed == 1, "pin_session: session not found");
+        Ok(())
+    }
+
+    /// 取消置顶。
+    pub fn unpin_session(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET pinned_at = NULL WHERE id = ?1",
+            params![id],
+        )?;
+        anyhow::ensure!(changed == 1, "unpin_session: session not found");
         Ok(())
     }
 

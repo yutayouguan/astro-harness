@@ -452,6 +452,7 @@ export type RecentSessionDto = {
   createdAt: string | null;
   endReason?: string | null;
   archivedAt?: string | null;
+  pinnedAt?: string | null;
 };
 
 /** 产物分类筛选 */

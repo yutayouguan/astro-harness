@@ -1194,6 +1194,28 @@ fn archive_filters_and_restores_session() {
 }
 
 #[test]
+fn pin_session_sorts_before_unpinned() {
+    let (_dir, store) = test_store();
+    store.create_session("older", "tauri", None, None, None).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    store.create_session("newer", "tauri", None, None, None).unwrap();
+
+    let before = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    assert_eq!(before[0].id, "newer");
+
+    store.pin_session("older").unwrap();
+    let pinned = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    assert_eq!(pinned[0].id, "older");
+    assert!(pinned[0].pinned_at.is_some());
+    assert!(pinned[1].pinned_at.is_none());
+
+    store.unpin_session("older").unwrap();
+    let after = store.list_sessions(SessionListFilter::Active, 10).unwrap();
+    assert_eq!(after[0].id, "newer");
+    assert!(after.iter().all(|s| s.pinned_at.is_none()));
+}
+
+#[test]
 fn title_if_empty_never_overwrites_manual_title() {
     let (_dir, store) = test_store();
     store.create_session("s1", "tauri", None, None, None).unwrap();

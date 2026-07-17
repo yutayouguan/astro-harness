@@ -131,6 +131,7 @@ pub struct StoredSession {
     pub message_count: i64,
     pub tool_call_count: i64,
     pub archived_at: Option<f64>,
+    pub pinned_at: Option<f64>,
 }
 
 /// FTS 搜索命中。
@@ -170,6 +171,7 @@ pub struct RecentSession {
     pub ended_at: Option<f64>,
     pub end_reason: Option<String>,
     pub archived_at: Option<f64>,
+    pub pinned_at: Option<f64>,
 }
 
 /// 会话列表筛选条件。
