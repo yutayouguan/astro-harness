@@ -49,6 +49,7 @@ export default function MsgActivity({
   mediaBaseDir,
 }: Props) {
   const { t } = useI18n();
+  const hasBody = activityHasBody(activity);
   const { input, output } = resolveActivityIO(activity);
   const mediaItems = useMemo(() => {
     if (activity.status === "running") return [];
