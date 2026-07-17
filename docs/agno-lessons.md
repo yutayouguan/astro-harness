@@ -118,7 +118,7 @@
 
 ### Agno `CompressionManager`
 - 阈值：未压缩 tool 结果条数，或 token 上限。
-- 对 `role=tool` 消息做 LLM 摘要，写入 `compressed_content`，**保留原文、仅改发送视图**。
+- 对 `role=tool` 消息做 LLM 摘要，写入 `compressed_content`，**保留原文、仅改 Provider 视图**（发给上游 API 的消息；勿称「model 视图」）。
 - 明确保留：数字、日期、实体、ID、URL；去掉套话与排版噪音。
 - 计入 usage（compression model）。
 
@@ -130,10 +130,10 @@
 ```text
 messages 中 tool 结果超阈值
   → 异步 LLM 摘要（AuxiliaryTask::Compaction）
-  → 发送模型用 compressed_content，DB/UI 仍保留原文
+  → Provider 视图用 compressed_content；DB/UI 仍保留原文
   → 无辅模型目标或失败时回退 head/tail
 ```
-与现有压实互补：压实管**会话生命周期**，压缩管**单次 run 的 context 预算**。
+与现有压实互补：压实管**会话生命周期**，压缩管**单次 run 的 context 预算**。术语见 [`docs/context-compression.md`](context-compression.md)「Provider 视图」。
 
 ### 已落地（本轮）
 - `common::Message.compressed_content` + session schema v14 `messages.compressed_content`
