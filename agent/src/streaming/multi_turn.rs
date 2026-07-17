@@ -302,10 +302,48 @@ async fn run_multi_turn_stream_inner(
             return;
         }
 
+        // Gateway 85% 预压安全网（Hermes Session Hygiene）：进 LLM 前再跑一轮廉价维护。
+        {
+            let mut agent = session.lock().await;
+            if agent.occupancy_ratio()
+                >= crate::compression::HARD_STAGE_RECOMMEND_COMPACT_RATIO
+            {
+                match agent.maintain_tool_context() {
+                    Ok(report) if report.pruned + report.compressed > 0 => {
+                        tracing::info!(
+                            pruned = report.pruned,
+                            compressed = report.compressed,
+                            occupancy_before = report.occupancy_before,
+                            occupancy_after = report.occupancy_after,
+                            "gateway pre-maintain applied (≥85%)"
+                        );
+                    }
+                    Ok(report) if report.recommend_session_compact => {
+                        tracing::warn!(
+                            occupancy = report.occupancy_after,
+                            "gateway pre-maintain: still critical; recommend /compact"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!(error = %e, "gateway pre-maintain failed"),
+                }
+            }
+        }
+
+        // Hard 阶段 mid-run 辅模型中间摘要（不拆 session）；每用户轮最多一次。
+        {
+            let mut agent = session.lock().await;
+            match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
+                Ok(true) => tracing::info!("mid-run summary applied before LLM round"),
+                Ok(false) => {}
+                Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
+            }
+        }
+
         let (history, tools) = {
             let mut agent = session.lock().await;
             agent.reload_tools_and_mcp().await;
-            let mut messages = agent.session_messages.clone();
+            let mut messages = agent.provider_history();
             if let Some(ctx) = agent.take_inject_context() {
                 messages.push(common::message::Message::user(&format!(
                     "[astro:hook-context]\n{ctx}"
@@ -342,6 +380,7 @@ async fn run_multi_turn_stream_inner(
                 messages: &history,
                 context_window: agent.context_window(),
                 updated_at_ms: chrono::Utc::now().timestamp_millis(),
+                recommend_compact: agent.should_recommend_compact(),
             });
             drop(agent);
             let _ = emit(&tx, MultiTurnStreamItem::ContextUsage(snap)).await;
@@ -868,6 +907,11 @@ async fn run_multi_turn_stream_inner(
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!(error = %e, "tool context maintenance failed"),
+            }
+            match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
+                Ok(true) => tracing::info!("mid-run summary applied after tool maintenance"),
+                Ok(false) => {}
+                Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
             }
         }
 

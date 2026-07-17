@@ -19,6 +19,8 @@ export type ContextUsageSnapshot = {
   totalTokens: number;
   segments: ContextUsageSegment[];
   updatedAt: number;
+  /** 后端建议执行会话级 /compact（占用临界）；流式中仅 toast，不自动拆分 */
+  recommendCompact?: boolean;
 };
 
 export const SEGMENT_ORDER: ContextUsageSegmentId[] = [
@@ -82,11 +84,16 @@ export function normalizeContextUsageEvent(payload: {
   total_tokens?: number;
   segments?: Array<{ id: string; tokens: number; count?: number | null }>;
   updated_at?: number;
+  recommend_compact?: boolean;
+  recommendCompact?: boolean;
 }): ContextUsageSnapshot {
+  const recommendCompact =
+    payload.recommend_compact === true || payload.recommendCompact === true;
   return {
     contextWindow: payload.context_window ?? 0,
     totalTokens: payload.total_tokens ?? 0,
     updatedAt: payload.updated_at ?? 0,
+    recommendCompact: recommendCompact || undefined,
     segments: (payload.segments ?? []).map((segment) => {
       const normalized: ContextUsageSegment = {
         id: segment.id,

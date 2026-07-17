@@ -151,6 +151,7 @@ export function useChatSession({
   const prevStreamingRef = useRef(false);
   const lastCompactAtRef = useRef(0);
   const lastAutoCompactAttemptRef = useRef(0);
+  const lastRecommendCompactToastAtRef = useRef(0);
   const memoryToastDedupeRef = useRef<{ key: string; at: number } | null>(null);
   const dissolveTimerRef = useRef<number | null>(null);
 
@@ -214,6 +215,7 @@ export function useChatSession({
     pendingKeepChatBubblesRef,
     dissolvingIdsRef,
     dissolveTimerRef,
+    lastRecommendCompactToastAtRef,
     setMessages,
     setSessionId,
     setStreaming,

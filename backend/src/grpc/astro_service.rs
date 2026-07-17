@@ -477,6 +477,7 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                     })
                     .collect(),
                 updated_at: snap.updated_at,
+                recommend_compact: snap.recommend_compact,
             })),
         }),
         MultiTurnStreamItem::RunStarted { thread_id, run_id } => Some(ChatEvent {

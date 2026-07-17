@@ -143,6 +143,8 @@ message ContextUsageEvent {
   uint32 total_tokens = 2;
   repeated ContextUsageSegment segments = 3;
   int64 updated_at = 4;
+  // 建议前端提示会话级 /compact（占用临界）
+  bool recommend_compact = 5;
 }
 
 // Chat 流的单条事件（oneof 互斥）。

@@ -149,6 +149,12 @@ pub struct AgentLoop {
     turn_wrote_disk: bool,
     /// 本轮 tool 上下文维护 thrashing 保护（Claude Code 风格）。
     compression_guard: CompressionThrashingGuard,
+    /// mid-run 交接摘要（仅折叠 Provider 视图；不拆 session）。
+    mid_run_handoff: Option<String>,
+    /// 本轮是否已尝试过 mid-run 摘要（成功或跳过）。
+    mid_run_summary_done: bool,
+    /// 建议前端提示 `/compact`（会话级拆分）。
+    pending_recommend_compact: bool,
 }
 
 impl AgentLoop {
@@ -270,6 +276,9 @@ impl AgentLoop {
             orchestration_spawner,
             turn_wrote_disk: false,
             compression_guard: CompressionThrashingGuard::default(),
+            mid_run_handoff: None,
+            mid_run_summary_done: false,
+            pending_recommend_compact: false,
         })
     }
 
@@ -376,6 +385,60 @@ impl AgentLoop {
         self.tool_rounds = 0;
         self.turn_wrote_disk = false;
         self.compression_guard = CompressionThrashingGuard::default();
+        self.mid_run_handoff = None;
+        self.mid_run_summary_done = false;
+        self.pending_recommend_compact = false;
+    }
+
+    pub fn config_protect_last_n(&self) -> usize {
+        self.config.protect_last_n.max(1)
+    }
+
+    pub fn mid_run_summary_done(&self) -> bool {
+        self.mid_run_summary_done
+    }
+
+    pub fn mid_run_handoff(&self) -> Option<&str> {
+        self.mid_run_handoff.as_deref()
+    }
+
+    pub fn set_mid_run_handoff(&mut self, text: String) {
+        self.mid_run_handoff = Some(text);
+        self.mid_run_summary_done = true;
+    }
+
+    pub fn mark_mid_run_summary_skipped(&mut self) {
+        self.mid_run_summary_done = true;
+    }
+
+    pub fn should_recommend_compact(&self) -> bool {
+        self.pending_recommend_compact
+    }
+
+    pub fn take_recommend_compact(&mut self) -> bool {
+        let v = self.pending_recommend_compact;
+        self.pending_recommend_compact = false;
+        v
+    }
+
+    /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
+    pub fn provider_history(&self) -> Vec<Message> {
+        match self.mid_run_handoff.as_deref() {
+            Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
+                &self.session_messages,
+                handoff,
+                crate::exec::mid_run_summary::PROTECT_FIRST_MESSAGES,
+                self.config_protect_last_n(),
+            ),
+            None => self.session_messages.clone(),
+        }
+    }
+
+    /// 当前会话占用比例（ceil chars/4 ÷ context_window）。
+    pub fn occupancy_ratio(&self) -> f32 {
+        ToolCompressionManager::default()
+            .with_context_window(self.context_window())
+            .occupancy_ratio(&self.session_messages)
     }
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
@@ -831,6 +894,9 @@ impl AgentLoop {
         result.thrashing_disabled = self.compression_guard.disabled;
         result.recommend_session_compact =
             result.occupancy_after >= HARD_STAGE_RECOMMEND_COMPACT_RATIO;
+        if result.recommend_session_compact {
+            self.pending_recommend_compact = true;
+        }
         Ok(result)
     }
 

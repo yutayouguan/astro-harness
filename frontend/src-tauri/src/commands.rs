@@ -89,6 +89,7 @@ pub enum ChatStreamEvent {
         total_tokens: u32,
         segments: Vec<ContextUsageSegmentDto>,
         updated_at: i64,
+        recommend_compact: bool,
     },
     RunStarted {
         thread_id: String,
@@ -1024,6 +1025,7 @@ async fn run_chat_stream(
                             })
                             .collect(),
                         updated_at: cu.updated_at,
+                        recommend_compact: cu.recommend_compact,
                     },
                 );
             }

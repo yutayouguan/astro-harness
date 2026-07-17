@@ -99,6 +99,8 @@ export interface UseSendDeps {
   pendingKeepChatBubblesRef: MutableRefObject<number | null>;
   dissolvingIdsRef: MutableRefObject<string[]>;
   dissolveTimerRef: MutableRefObject<number | null>;
+  /** recommendCompact toast 冷却（ms epoch） */
+  lastRecommendCompactToastAtRef: MutableRefObject<number>;
   // setters
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   setSessionId: Dispatch<SetStateAction<string | null>>;
@@ -168,6 +170,7 @@ export function useSend(deps: UseSendDeps) {
         pendingKeepChatBubblesRef,
         dissolvingIdsRef,
         dissolveTimerRef,
+        lastRecommendCompactToastAtRef,
         setMessages,
         setSessionId,
         setStreaming,
@@ -421,7 +424,16 @@ export function useSend(deps: UseSendDeps) {
               prev.map((m) => (m.id === assistantId ? { ...m, usage } : m)),
             );
           } else if (payload.type === "context_usage") {
-            setContextUsage(normalizeContextUsageEvent(payload));
+            const snap = normalizeContextUsageEvent(payload);
+            setContextUsage(snap);
+            if (snap.recommendCompact) {
+              const now = Date.now();
+              // 流式中只提示，不自动拆 session；60s 冷却避免刷屏
+              if (now - lastRecommendCompactToastAtRef.current >= 60_000) {
+                lastRecommendCompactToastAtRef.current = now;
+                showTransientToast(t("chat.recommendCompact"), { tone: "warning" });
+              }
+            }
           } else if (payload.type === "run_started") {
             const runId = payload.run_id ?? null;
             currentRunIdRef.current = runId;

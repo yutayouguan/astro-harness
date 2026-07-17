@@ -32,6 +32,9 @@ pub struct ContextUsageSnapshot {
     pub total_tokens: u32,
     pub segments: Vec<ContextUsageSegment>,
     pub updated_at: i64,
+    /// 建议用户执行会话级 `/compact`（占用临界或维护后仍高）。
+    #[serde(default)]
+    pub recommend_compact: bool,
 }
 
 impl ContextUsageSnapshot {
@@ -49,6 +52,7 @@ pub struct ContextUsageInput<'a> {
     pub messages: &'a [Message],
     pub context_window: u32,
     pub updated_at_ms: i64,
+    pub recommend_compact: bool,
 }
 
 pub fn estimate_tokens(chars: usize) -> u32 {
@@ -187,6 +191,8 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         total_tokens,
         segments,
         updated_at: input.updated_at_ms,
+        recommend_compact: input.recommend_compact
+            || (window > 0 && total_tokens as f64 / window as f64 >= 0.85),
     }
 }
 
@@ -221,6 +227,7 @@ mod tests {
             messages: &[],
             context_window: 128_000,
             updated_at_ms: 1,
+            recommend_compact: false,
         });
         let tools_seg = snap.segment("tools").unwrap();
         let mcp_seg = snap.segment("mcp").unwrap();
@@ -250,6 +257,7 @@ mod tests {
             messages: &[assistant, tool],
             context_window: 128_000,
             updated_at_ms: 1,
+            recommend_compact: false,
         });
         assert_eq!(snap.segment("subagent").map(|s| s.tokens), Some(10));
         assert_eq!(

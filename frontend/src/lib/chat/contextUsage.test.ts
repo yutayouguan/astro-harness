@@ -44,6 +44,7 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
       context_window: 128_000,
       total_tokens: 42,
       updated_at: 1_700_000_000_000,
+      recommend_compact: true,
       segments: [
         { id: "system", tokens: 10, count: 1 },
         { id: "tools", tokens: 0, count: null },
@@ -54,6 +55,7 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
       contextWindow: 128_000,
       totalTokens: 42,
       updatedAt: 1_700_000_000_000,
+      recommendCompact: true,
       segments: [
         { id: "system", tokens: 10, count: 1 },
         { id: "tools", tokens: 0 },
