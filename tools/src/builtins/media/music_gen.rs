@@ -21,8 +21,11 @@ use crate::schema::schema_for_args;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MusicGenArgs {
-    /// 音乐描述（流派/乐器/BPM/结构等）。
+    /// 音乐描述（流派/乐器/BPM/情绪/结构等）。不含歌词正文时写主题即可。
     pub prompt: String,
+    /// 可选歌词。有则按此演唱（勿省略已写好的歌词）；无则由 Lyria 自写。建议带 `[Verse]`/`[Chorus]` 等分段标签。
+    #[serde(default)]
+    pub lyrics: Option<String>,
     /// `clip`（默认，约 30s）或 `pro`（完整歌曲）。
     #[serde(default)]
     pub model: Option<String>,
@@ -32,6 +35,24 @@ pub struct MusicGenArgs {
     /// `mp3`（默认）或 `wav`（仅 pro）。
     #[serde(default)]
     pub format: Option<String>,
+}
+
+/// 将风格 prompt 与可选歌词合成 Lyria 输入。
+/// 有歌词时追加 `Lyrics:` 段（官方推荐前缀），要求按所给歌词演唱。
+pub fn compose_music_prompt(prompt: &str, lyrics: Option<&str>) -> String {
+    let base = prompt.trim();
+    let Some(lyrics) = lyrics.map(str::trim).filter(|s| !s.is_empty()) else {
+        return base.to_string();
+    };
+    // 已含 Lyrics: 前缀则直接拼接，避免重复标签。
+    let lyrics_block = if lyrics.to_ascii_lowercase().starts_with("lyrics:") {
+        lyrics.to_string()
+    } else {
+        format!("Lyrics:\n{lyrics}")
+    };
+    format!(
+        "{base}\n\nSing the following lyrics exactly (do not rewrite):\n{lyrics_block}"
+    )
 }
 
 pub fn validate_music_gen_args(
@@ -85,7 +106,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "music_gen".to_string(),
         toolset: "music_gen".to_string(),
-        description: "Generate music with Google Lyria 3 (Interactions). model=clip|pro; optional reference_images (≤10); format=mp3|wav (wav requires pro). Google only — not local music playback. Writes generated/audio/.".to_string(),
+        description: "Generate music with Google Lyria 3 (Interactions). prompt=style/mood/instrumentation; optional lyrics (if you already wrote lyrics, MUST pass them here — otherwise Lyria invents its own); model=clip|pro; optional reference_images (≤10); format=mp3|wav (wav requires pro). Google only — not local playback. Writes generated/audio/.".to_string(),
         schema: schema_for_args::<MusicGenArgs>(),
         check_fn: None,
         icon: "music",
@@ -118,9 +139,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         model: model_id.clone(),
         ..ProviderConfig::default()
 };
+    let prompt = compose_music_prompt(parsed.prompt.as_str(), parsed.lyrics.as_deref());
     let req = InteractionMusicRequest {
         model: model_id.clone(),
-        prompt: parsed.prompt.trim().to_string(),
+        prompt,
         images,
         format,
     };
@@ -218,51 +240,72 @@ fn mime_from_name(name: &str) -> &'static str {
 mod tests {
     use super::*;
 
+    fn args(
+        prompt: &str,
+        model: Option<&str>,
+        format: Option<&str>,
+        reference_images: Option<Vec<String>>,
+    ) -> MusicGenArgs {
+        MusicGenArgs {
+            prompt: prompt.into(),
+            lyrics: None,
+            model: model.map(str::to_string),
+            reference_images,
+            format: format.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn compose_prompt_without_lyrics_is_passthrough() {
+        assert_eq!(compose_music_prompt("  lofi beats  ", None), "lofi beats");
+        assert_eq!(
+            compose_music_prompt("jazz", Some("  ")),
+            "jazz"
+        );
+    }
+
+    #[test]
+    fn compose_prompt_with_lyrics_appends_lyrics_block() {
+        let out = compose_music_prompt(
+            "indie folk, female vocal",
+            Some("[Verse]\nhello world\n[Chorus]\nsing along"),
+        );
+        assert!(out.starts_with("indie folk, female vocal"));
+        assert!(out.contains("Sing the following lyrics exactly"));
+        assert!(out.contains("Lyrics:\n[Verse]\nhello world\n[Chorus]\nsing along"));
+    }
+
+    #[test]
+    fn compose_prompt_does_not_double_lyrics_prefix() {
+        let out = compose_music_prompt("pop", Some("Lyrics:\n[Verse]\nhi"));
+        assert!(out.contains("Lyrics:\n[Verse]\nhi"));
+        assert_eq!(out.matches("Lyrics:").count(), 1);
+    }
+
     #[test]
     fn reject_empty_prompt() {
-        let args = MusicGenArgs {
-            prompt: "  ".into(),
-            model: None,
-            reference_images: None,
-            format: None,
-        };
-        assert!(validate_music_gen_args(&args, "").is_err());
+        assert!(validate_music_gen_args(&args("  ", None, None, None), "").is_err());
     }
 
     #[test]
     fn reject_wav_on_clip() {
-        let args = MusicGenArgs {
-            prompt: "lofi".into(),
-            model: Some("clip".into()),
-            reference_images: None,
-            format: Some("wav".into()),
-        };
-        let err = validate_music_gen_args(&args, "").unwrap_err().to_string();
+        let err = validate_music_gen_args(&args("lofi", Some("clip"), Some("wav"), None), "")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("wav") || err.contains("pro"));
     }
 
     #[test]
     fn accept_pro_wav() {
-        let args = MusicGenArgs {
-            prompt: "piano".into(),
-            model: Some("pro".into()),
-            reference_images: None,
-            format: Some("wav".into()),
-        };
-        let (model_id, fmt) = validate_music_gen_args(&args, "").unwrap();
+        let (model_id, fmt) =
+            validate_music_gen_args(&args("piano", Some("pro"), Some("wav"), None), "").unwrap();
         assert_eq!(model_id, "lyria-3-pro-preview");
         assert_eq!(fmt, MusicAudioFormat::Wav);
     }
 
     #[test]
     fn reject_wav_for_configured_model_that_only_contains_pro() {
-        let args = MusicGenArgs {
-            prompt: "piano".into(),
-            model: None,
-            reference_images: None,
-            format: Some("wav".into()),
-        };
-        let err = validate_music_gen_args(&args, "music-production-v1")
+        let err = validate_music_gen_args(&args("piano", None, Some("wav"), None), "music-production-v1")
             .unwrap_err()
             .to_string();
         assert!(err.contains("wav") || err.contains("pro"));
@@ -270,74 +313,48 @@ mod tests {
 
     #[test]
     fn reject_too_many_images() {
-        let args = MusicGenArgs {
-            prompt: "x".into(),
-            model: None,
-            reference_images: Some((0..11).map(|i| format!("a{i}.jpg")).collect()),
-            format: None,
-        };
-        assert!(validate_music_gen_args(&args, "").is_err());
+        let images = Some((0..11).map(|i| format!("a{i}.jpg")).collect());
+        assert!(validate_music_gen_args(&args("x", None, None, images), "").is_err());
     }
 
     #[test]
     fn configured_model_is_used_when_tool_arg_is_missing() {
-        let args = MusicGenArgs {
-            prompt: "piano".into(),
-            model: None,
-            reference_images: None,
-            format: None,
-        };
         let (model, _) =
-            validate_music_gen_args(&args, "lyria-3-pro-preview").unwrap();
+            validate_music_gen_args(&args("piano", None, None, None), "lyria-3-pro-preview")
+                .unwrap();
         assert_eq!(model, "lyria-3-pro-preview");
     }
 
     #[test]
     fn arbitrary_configured_model_is_passed_through() {
-        let args = MusicGenArgs {
-            prompt: "piano".into(),
-            model: None,
-            reference_images: None,
-            format: None,
-        };
         let (model, _) =
-            validate_music_gen_args(&args, "custom-music-model-v7").unwrap();
+            validate_music_gen_args(&args("piano", None, None, None), "custom-music-model-v7")
+                .unwrap();
         assert_eq!(model, "custom-music-model-v7");
     }
 
     #[test]
     fn explicit_invalid_model_is_rejected() {
-        let args = MusicGenArgs {
-            prompt: "piano".into(),
-            model: Some("custom-music-model-v7".into()),
-            reference_images: None,
-            format: None,
-        };
-        assert!(validate_music_gen_args(&args, "").is_err());
+        assert!(validate_music_gen_args(
+            &args("piano", Some("custom-music-model-v7"), None, None),
+            ""
+        )
+        .is_err());
     }
 
     #[test]
     fn explicit_alias_overrides_configured_model() {
-        let args = MusicGenArgs {
-            prompt: "piano".into(),
-            model: Some("clip".into()),
-            reference_images: None,
-            format: None,
-        };
-        let (model, _) =
-            validate_music_gen_args(&args, "lyria-3-pro-preview").unwrap();
+        let (model, _) = validate_music_gen_args(
+            &args("piano", Some("clip"), None, None),
+            "lyria-3-pro-preview",
+        )
+        .unwrap();
         assert_eq!(model, "lyria-3-clip-preview");
     }
 
     #[test]
     fn empty_configuration_falls_back_to_clip() {
-        let args = MusicGenArgs {
-            prompt: "piano".into(),
-            model: None,
-            reference_images: None,
-            format: None,
-        };
-        let (model, _) = validate_music_gen_args(&args, "").unwrap();
+        let (model, _) = validate_music_gen_args(&args("piano", None, None, None), "").unwrap();
         assert_eq!(model, "lyria-3-clip-preview");
     }
 }
