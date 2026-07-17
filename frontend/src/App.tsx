@@ -23,6 +23,7 @@ import SkillsPanel from "./components/settings/SkillsPanel";
 import ToolsPanel from "./components/settings/ToolsPanel";
 import WorkspacePanel from "./components/workspace/WorkspacePanel";
 import {
+  AstroLogoMark,
   IconChat,
   IconCollapse,
   IconExpand,
@@ -507,8 +508,8 @@ export default function App() {
           onContextMenu={sidebar.openSidebarContextMenu}
         >
           <div className="sidebar-brand">
-            <div className="sidebar-logo" data-tone={activeTone}>
-              iC
+            <div className="sidebar-logo" aria-hidden>
+              <AstroLogoMark width={26} height={26} />
             </div>
             <div className="sidebar-brand-text">Astro Agent</div>
             <div className="sidebar-brand-actions">

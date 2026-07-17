@@ -554,59 +554,14 @@ html[data-tone="teal"] {
   border-radius: 11px;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.45), transparent 50%),
-    linear-gradient(145deg, var(--tone, #c084fc), color-mix(in srgb, var(--tone, #6366f1) 70%, #312e81));
-  color: white;
-  font-weight: 700;
-  font-size: 13px;
-  box-shadow: 0 8px 20px var(--tone-glow, rgba(124, 58, 237, 0.35));
+  background: color-mix(in srgb, var(--bg2) 70%, transparent);
   flex-shrink: 0;
 }
 
-.sidebar-logo[data-tone="blue"] {
-  --tone: var(--tone-blue);
-  --tone-glow: var(--tone-blue-glow);
-}
-
-.sidebar-logo[data-tone="green"] {
-  --tone: var(--tone-green);
-  --tone-glow: var(--tone-green-glow);
-}
-
-.sidebar-logo[data-tone="purple"] {
-  --tone: var(--tone-purple);
-  --tone-glow: var(--tone-purple-glow);
-}
-
-.sidebar-logo[data-tone="orange"] {
-  --tone: var(--tone-orange);
-  --tone-glow: var(--tone-orange-glow);
-}
-
-.sidebar-logo[data-tone="pink"] {
-  --tone: var(--tone-pink);
-  --tone-glow: var(--tone-pink-glow);
-}
-
-.sidebar-logo[data-tone="cyan"] {
-  --tone: var(--tone-cyan);
-  --tone-glow: var(--tone-cyan-glow);
-}
-
-.sidebar-logo[data-tone="indigo"] {
-  --tone: var(--tone-indigo);
-  --tone-glow: var(--tone-indigo-glow);
-}
-
-.sidebar-logo[data-tone="amber"] {
-  --tone: var(--tone-amber);
-  --tone-glow: var(--tone-amber-glow);
-}
-
-.sidebar-logo[data-tone="teal"] {
-  --tone: var(--tone-teal);
-  --tone-glow: var(--tone-teal-glow);
+.sidebar-logo svg {
+  display: block;
+  width: 26px;
+  height: 26px;
 }
 
 .sidebar-brand-text {
