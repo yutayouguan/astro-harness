@@ -1,7 +1,66 @@
 /** 侧栏导航图标。 */
-import { useId, type CSSProperties, type SVGProps } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useId,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  type SVGProps,
+} from "react";
 
 type IconProps = SVGProps<SVGSVGElement>;
+
+type PaintedProps = {
+  className?: string;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number | string;
+  children?: ReactNode;
+};
+
+/** 给内部细节补上与外轮廓相同的渐变 stroke/fill 表现属性（WebKit 对 CSS url() 不可靠） */
+function paintDetailChildren(children: ReactNode, paint: string): ReactNode {
+  return Children.map(children, (child) => {
+    if (!isValidElement<PaintedProps>(child)) return child;
+
+    const cls = typeof child.props.className === "string" ? child.props.className : "";
+    const nextChildren =
+      child.props.children != null ? paintDetailChildren(child.props.children, paint) : child.props.children;
+
+    if (cls.includes("nav-icon-cutout") || cls.includes("nav-icon-hole") || cls.includes("nav-icon-stroke")) {
+      return cloneElement(child as ReactElement<PaintedProps>, {
+        fill: "none",
+        stroke: paint,
+        children: nextChildren,
+      });
+    }
+
+    if (cls.includes("nav-icon-dot")) {
+      return cloneElement(child as ReactElement<PaintedProps>, {
+        fill: paint,
+        stroke: "none",
+        children: nextChildren,
+      });
+    }
+
+    if (cls.includes("nav-icon-fill")) {
+      // 默认只描边；选中时由 CSS fill: inherit 填实
+      return cloneElement(child as ReactElement<PaintedProps>, {
+        fill: "none",
+        stroke: paint,
+        children: nextChildren,
+      });
+    }
+
+    if (nextChildren !== child.props.children) {
+      return cloneElement(child as ReactElement<PaintedProps>, { children: nextChildren });
+    }
+
+    return child;
+  });
+}
 
 function IconBase({ children, style, ...props }: IconProps) {
   const rawId = useId();
@@ -28,7 +87,7 @@ function IconBase({ children, style, ...props }: IconProps) {
           <stop offset="100%" stopColor="var(--nav-grad-bottom, currentColor)" />
         </linearGradient>
       </defs>
-      {children}
+      {paintDetailChildren(children, paint)}
     </svg>
   );
 }
@@ -38,9 +97,9 @@ export function IconChat(props: IconProps) {
   return (
     <IconBase {...props}>
       <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-      <circle className="nav-icon-cutout" cx="8" cy="12" r="1" />
-      <circle className="nav-icon-cutout" cx="12" cy="12" r="1" />
-      <circle className="nav-icon-cutout" cx="16" cy="12" r="1" />
+      <path className="nav-icon-cutout" d="M8 12h.01" />
+      <path className="nav-icon-cutout" d="M12 12h.01" />
+      <path className="nav-icon-cutout" d="M16 12h.01" />
     </IconBase>
   );
 }
