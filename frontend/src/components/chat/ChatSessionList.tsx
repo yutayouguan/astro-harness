@@ -7,6 +7,7 @@ import {
   ArchiveRestore,
   Download,
   GitBranch,
+  LoaderCircle,
   MoreVertical,
   Pencil,
   Pin,
@@ -24,6 +25,12 @@ import {
   subscribeSessionsChanged,
   type SessionListKind,
 } from "../../lib/chat/sessionManagement";
+import {
+  clearSessionUnread,
+  isSessionUnread,
+  markSessionUnread,
+  subscribeSessionUnread,
+} from "../../lib/chat/sessionUnread";
 import type { RecentSessionDto } from "../../types";
 import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
@@ -128,6 +135,8 @@ function historyToMarkdown(
 type Props = {
   /** 当前打开的会话（高亮） */
   activeSessionId: string | null;
+  /** 正在流式输出的会话；无流式时为 null */
+  streamingSessionId?: string | null;
   onOpenSession: (sessionId: string) => void;
   /** 新建空白会话 */
   onNewSession: () => void;
@@ -141,6 +150,7 @@ type Props = {
 
 export default function ChatSessionList({
   activeSessionId,
+  streamingSessionId = null,
   onOpenSession,
   onNewSession,
   onNewAgent,
@@ -156,7 +166,9 @@ export default function ChatSessionList({
   const [listKind, setListKind] = useState<SessionListKind>("active");
   const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
+  const [unreadTick, setUnreadTick] = useState(0);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const prevStreamingRef = useRef<string | null>(null);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -242,6 +254,25 @@ export default function ChatSessionList({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [menuSessionId]);
+
+  useEffect(() => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)), []);
+
+  // 流式结束后：若用户已切走该会话，则记为未读
+  useEffect(() => {
+    const prev = prevStreamingRef.current;
+    prevStreamingRef.current = streamingSessionId;
+    if (prev && !streamingSessionId && prev !== activeSessionId) {
+      markSessionUnread(prev);
+      setUnreadTick((n) => n + 1);
+    }
+  }, [streamingSessionId, activeSessionId]);
+
+  // 打开当前会话时清除未读
+  useEffect(() => {
+    if (!activeSessionId) return;
+    clearSessionUnread(activeSessionId);
+    setUnreadTick((n) => n + 1);
+  }, [activeSessionId]);
 
   useAgentsChanged((payload) => {
     setActiveAgentId(normalizeAgentId(payload.active_agent_id));
@@ -506,22 +537,45 @@ export default function ChatSessionList({
             const title = sessionTitle(s, t("chat.rightPanel.untitledSession"));
             const busy = busySessionId === s.sessionId;
             const menuOpen = menuSessionId === s.sessionId;
+            const inProgress = streamingSessionId === s.sessionId;
+            const unread = !inProgress && isSessionUnread(s.sessionId);
+            void unreadTick;
+            const pinned = isPinned(s);
             return (
               <li
                 key={s.sessionId}
                 className={`chat-session-row ${
                   s.sessionId === activeSessionId ? "is-active" : ""
-                } ${menuOpen ? "is-menu-open" : ""}`}
+                } ${menuOpen ? "is-menu-open" : ""} ${
+                  inProgress ? "is-in-progress" : ""
+                } ${unread ? "is-unread" : ""}`}
               >
                 <button
                   type="button"
                   className="chat-session-item"
-                  onClick={() => onOpenSession(s.sessionId)}
+                  onClick={() => {
+                    clearSessionUnread(s.sessionId);
+                    setUnreadTick((n) => n + 1);
+                    onOpenSession(s.sessionId);
+                  }}
                   disabled={busy}
                 >
+                  <span className="chat-session-status" aria-hidden>
+                    {inProgress ? (
+                      <LoaderCircle
+                        className="chat-session-status-spin"
+                        size={14}
+                        strokeWidth={2.2}
+                      />
+                    ) : unread ? (
+                      <span className="chat-session-unread-dot" />
+                    ) : (
+                      <span className="chat-session-status-spacer" />
+                    )}
+                  </span>
                   <strong>
                     {title}
-                    {isPinned(s) ? (
+                    {pinned ? (
                       <span className="chat-session-badge is-pinned">
                         {t("sessions.pinnedBadge")}
                       </span>
@@ -536,6 +590,50 @@ export default function ChatSessionList({
                     {formatSessionRelativeTime(s.createdAt, t)}
                   </span>
                 </button>
+                <div className="chat-session-quick">
+                  <button
+                    type="button"
+                    className={`chat-session-quick-btn ${pinned ? "is-on" : ""}`}
+                    title={pinned ? t("sessions.unpin") : t("sessions.pin")}
+                    aria-label={pinned ? t("sessions.unpin") : t("sessions.pin")}
+                    disabled={busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePinToggle(s);
+                    }}
+                  >
+                    {pinned ? (
+                      <PinOff size={14} strokeWidth={1.75} aria-hidden />
+                    ) : (
+                      <Pin size={14} strokeWidth={1.75} aria-hidden />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-session-quick-btn"
+                    title={
+                      listKind === "archived"
+                        ? t("sessions.unarchive")
+                        : t("sessions.archive")
+                    }
+                    aria-label={
+                      listKind === "archived"
+                        ? t("sessions.unarchive")
+                        : t("sessions.archive")
+                    }
+                    disabled={busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleArchiveToggle(s);
+                    }}
+                  >
+                    {listKind === "archived" ? (
+                      <ArchiveRestore size={14} strokeWidth={1.75} aria-hidden />
+                    ) : (
+                      <Archive size={14} strokeWidth={1.75} aria-hidden />
+                    )}
+                  </button>
+                </div>
                 <div
                   className={`chat-session-menu-wrap ${menuOpen ? "is-open" : ""}`}
                   ref={menuOpen ? menuRef : null}

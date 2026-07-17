@@ -47,6 +47,8 @@ type Props = {
   onClearDeletedCurrentSession?: () => void | Promise<void>;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
+  /** 正在流式输出的会话 id；无流式时为 null */
+  streamingSessionId?: string | null;
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
@@ -77,6 +79,7 @@ export default function ChatRightPanel({
   onClearDeletedCurrentSession,
   onOpenMemory,
   onOpenSkills,
+  streamingSessionId = null,
 }: Props) {
   const { t } = useI18n();
   const tabs: ChatRightTab[] = ["sessions", "context", "agent"];
@@ -176,6 +179,7 @@ export default function ChatRightPanel({
             {tab === "sessions" && (
               <ChatSessionList
                 activeSessionId={sessionId}
+                streamingSessionId={streamingSessionId}
                 onOpenSession={onOpenSession}
                 onNewSession={onNewSession}
                 onNewAgent={onNewAgent}
