@@ -33,11 +33,7 @@ pub fn interactions_url(config: &ProviderConfig) -> String {
 }
 
 fn error_message(v: &Value) -> String {
-    v.pointer("/error/message")
-        .and_then(|m| m.as_str())
-        .or_else(|| v.get("error").and_then(|e| e.as_str()))
-        .unwrap_or("Google interactions 失败")
-        .to_string()
+    crate::http_stream::json_error_message(v, "Google interactions 失败").to_string()
 }
 
 // ── TTS ──────────────────────────────────────────────────────────────────────

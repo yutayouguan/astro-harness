@@ -383,6 +383,19 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
 })
 }
 
+/// 从 JSON 响应体提取 `/error/message` 或顶层 `error` 字符串，用于 Google API 错误格式化。
+/// 返回 `None` 表示响应中没有错误字段（非错误响应或未知格式）。
+pub(crate) fn json_error_option(v: &Value) -> Option<&str> {
+    v.pointer("/error/message")
+        .and_then(|m| m.as_str())
+        .or_else(|| v.get("error").and_then(|e| e.as_str()))
+}
+
+/// [`json_error_option`] 的带默认值版本，等价于 `.unwrap_or(default)`。
+pub(crate) fn json_error_message<'a>(v: &'a Value, default: &'a str) -> &'a str {
+    json_error_option(v).unwrap_or(default)
+}
+
 /// 将 reqwest 字节流解析为 SSE `data:` 行，并用 `extract` 转为 [`ChatChunk`]。
 /// 检查 HTTP 响应状态；非 2xx 时消耗响应体并返回结构化错误，成功时原样返回响应。
 pub(crate) async fn check_response_status(

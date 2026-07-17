@@ -203,11 +203,7 @@ pub fn extract_veo_video_uri(status_body: &Value) -> Result<String> {
     {
         anyhow::bail!("Veo operation 尚未完成");
     }
-    if let Some(msg) = status_body
-        .pointer("/error/message")
-        .and_then(|m| m.as_str())
-        .or_else(|| status_body.get("error").and_then(|e| e.as_str()))
-    {
+    if let Some(msg) = crate::http_stream::json_error_option(status_body) {
         anyhow::bail!("Veo 生成失败: {msg}");
     }
     status_body
@@ -238,11 +234,7 @@ async fn google_api_get_bytes(client: &Client, url: &str, api_key: &str) -> Resu
             .map(|b| b.to_vec());
     }
     let v: Value = response.json().await.unwrap_or(json!({}));
-    let msg = v
-        .pointer("/error/message")
-        .and_then(|m| m.as_str())
-        .unwrap_or("GET 请求失败");
-    anyhow::bail!("GET {status}: {msg}");
+    anyhow::bail!("GET {status}: {}", crate::http_stream::json_error_message(&v, "GET 请求失败"));
 }
 
 /// Google 原生 Veo：`predictLongRunning` 创建、轮询 operation、下载视频字节。
@@ -308,11 +300,10 @@ pub async fn google_native_generate_video(
         .await
         .context("解析 Veo 创建响应失败")?;
     if !create_status.is_success() {
-        let msg = create_body
-            .pointer("/error/message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("Veo predictLongRunning 失败");
-        anyhow::bail!("Veo predict HTTP {create_status}: {msg}");
+        anyhow::bail!(
+            "Veo predict HTTP {create_status}: {}",
+            crate::http_stream::json_error_message(&create_body, "Veo predictLongRunning 失败")
+        );
     }
 
     let op_name = extract_veo_operation_name(&create_body)?;
@@ -336,11 +327,10 @@ pub async fn google_native_generate_video(
         let status = poll.status();
         let poll_body: Value = poll.json().await.context("解析 Veo 轮询响应失败")?;
         if !status.is_success() {
-            let msg = poll_body
-                .pointer("/error/message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("轮询 Veo operation 失败");
-            anyhow::bail!("Veo operation poll HTTP {status}: {msg}");
+            anyhow::bail!(
+                "Veo operation poll HTTP {status}: {}",
+                crate::http_stream::json_error_message(&poll_body, "轮询 Veo operation 失败")
+            );
         }
         let done = poll_body.get("done") == Some(&json!(true))
             || poll_body.pointer("/done").and_then(|d| d.as_bool()) == Some(true);
