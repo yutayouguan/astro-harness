@@ -1,5 +1,6 @@
 /** 聊天消息 Markdown 渲染（用户 / 助手共用）；本地媒体路径与 HTML 代码块可预览。 */
 import {
+  memo,
   useCallback,
   useMemo,
   useState,
@@ -7,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Check, Copy } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "../../i18n/LocaleContext";
 import { liftHtmlMediaTags } from "../../lib/chat/liftHtmlMediaTags";
@@ -268,7 +269,7 @@ function LocalHtmlLink({
   );
 }
 
-export function ChatMarkdown({
+function ChatMarkdownImpl({
   content,
   streaming = false,
   compact = false,
@@ -279,6 +280,42 @@ export function ChatMarkdown({
   const source = useMemo(
     () => liftHtmlMediaTags(content.replace(/\r\n/g, "\n")),
     [content],
+  );
+
+  // 组件映射必须保持引用稳定：react-markdown 以函数引用作为组件类型，
+  // 每次新建会导致 <img> 等节点整棵卸载重挂（图片重载 → 闪烁）。
+  const components = useMemo<Components>(
+    () => ({
+      a: ({ href, children }) => (
+        <LocalHtmlLink href={href}>{children}</LocalHtmlLink>
+      ),
+      img: ({ src, alt }) => (
+        <MarkdownMedia src={src} alt={alt} baseDir={mediaBaseDir} />
+      ),
+      code: ({ className, children, ...props }) => {
+        const text = String(children ?? "");
+        const isBlock =
+          Boolean(className?.includes("language-")) || text.includes("\n");
+        if (isBlock) {
+          const lang =
+            /language-([\w+-]+)/.exec(className ?? "")?.[1]?.toLowerCase() ?? "";
+          if (lang === "html" || lang === "htm") {
+            return (
+              <HtmlCodeBlock className={className}>{children}</HtmlCodeBlock>
+            );
+          }
+          return <CodeBlock className={className}>{children}</CodeBlock>;
+        }
+        return (
+          <code className="msg-md-inline-code" {...props}>
+            {children}
+          </code>
+        );
+      },
+      // pre 由 code block 自行包裹，避免双重 pre
+      pre: ({ children }) => <>{children}</>,
+    }),
+    [mediaBaseDir],
   );
 
   if (plain) {
@@ -300,43 +337,12 @@ export function ChatMarkdown({
         streaming ? "is-streaming-md" : ""
       }`}
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ href, children }) => (
-            <LocalHtmlLink href={href}>{children}</LocalHtmlLink>
-          ),
-          img: ({ src, alt }) => (
-            <MarkdownMedia src={src} alt={alt} baseDir={mediaBaseDir} />
-          ),
-          code: ({ className, children, ...props }) => {
-            const text = String(children ?? "");
-            const isBlock =
-              Boolean(className?.includes("language-")) || text.includes("\n");
-            if (isBlock) {
-              const lang =
-                /language-([\w+-]+)/.exec(className ?? "")?.[1]?.toLowerCase() ??
-                "";
-              if (lang === "html" || lang === "htm") {
-                return (
-                  <HtmlCodeBlock className={className}>{children}</HtmlCodeBlock>
-                );
-              }
-              return <CodeBlock className={className}>{children}</CodeBlock>;
-            }
-            return (
-              <code className="msg-md-inline-code" {...props}>
-                {children}
-              </code>
-            );
-          },
-          // pre 由 code block 自行包裹，避免双重 pre
-          pre: ({ children }) => <>{children}</>,
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {source}
       </ReactMarkdown>
       {caret ? <span className="stream-caret" aria-hidden="true" /> : null}
     </div>
   );
 }
+
+export const ChatMarkdown = memo(ChatMarkdownImpl);
