@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  autoCompactOccupancyRatio,
   formatTokenCount,
   normalizeContextUsageEvent,
-  shouldAutoCompactSession,
   usagePercent,
   visibleSegments,
   SEGMENT_ORDER,
@@ -69,52 +67,4 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
 
 test("SEGMENT_ORDER lists all known segments", () => {
   assert.equal(SEGMENT_ORDER.length, 8);
-});
-
-test("autoCompactOccupancyRatio uses real window not hardcoded 128K", () => {
-  assert.ok(
-    autoCompactOccupancyRatio({
-      contextUsage: { totalTokens: 64_000, contextWindow: 1_000_000 },
-      modelContextWindow: 1_000_000,
-    }) < 0.5,
-  );
-  assert.ok(
-    autoCompactOccupancyRatio({
-      contextUsage: { totalTokens: 600_000, contextWindow: 1_000_000 },
-      modelContextWindow: 1_000_000,
-    }) >= 0.5,
-  );
-  assert.equal(
-    autoCompactOccupancyRatio({
-      tokenUsageTotal: 64_000,
-      modelContextWindow: 1_000_000,
-    }),
-    64_000 / 1_000_000,
-  );
-});
-
-test("shouldAutoCompactSession respects min bubbles and 50% of real window", () => {
-  assert.equal(
-    shouldAutoCompactSession({
-      bubbleCount: 5,
-      contextUsage: { totalTokens: 900_000, contextWindow: 1_000_000 },
-    }),
-    false,
-  );
-  assert.equal(
-    shouldAutoCompactSession({
-      bubbleCount: 6,
-      contextUsage: { totalTokens: 64_000, contextWindow: 1_000_000 },
-      modelContextWindow: 1_000_000,
-    }),
-    false,
-  );
-  assert.equal(
-    shouldAutoCompactSession({
-      bubbleCount: 6,
-      contextUsage: { totalTokens: 500_000, contextWindow: 1_000_000 },
-      modelContextWindow: 1_000_000,
-    }),
-    true,
-  );
 });

@@ -122,7 +122,6 @@ export default function App() {
     showTransientToast,
     nav,
     setNav,
-    modelContextWindow,
   });
   const {
     messages,

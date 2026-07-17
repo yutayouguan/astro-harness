@@ -9,7 +9,7 @@
 | **Run 内** | `maintain_tool_context` | 窗口占用 Soft/Medium/Hard + 条数兜底 | 单条 tool：prune / **LLM 摘要** / head-tail 回退 |
 | **Run 内** | mid-run 辅模型摘要 | Hard ≥80%，每用户轮一次 | 中间轮次折叠为 handoff（不拆 session） |
 | **Gateway** | 进 LLM 前预维护 | 占用 ≥85% | 再跑一轮 prune / LLM 摘要 / head-tail + 建议 `/compact` |
-| **会话级** | `compact_and_split` + `/compact` | 用户手动或 UI 自动阈值 | 整段对话 → 新 session + 摘要 |
+| **会话级** | `compact_and_split` + `/compact` | **仅用户手动**（`/compact` / 菜单）；前端不自动拆 session | 整段对话 → 新 session + 摘要 |
 
 **不变量（全链路）**
 

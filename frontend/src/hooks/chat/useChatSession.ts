@@ -36,10 +36,7 @@ import type {
   PendingInterrupt,
   ProviderDto,
 } from "../../types";
-import {
-  shouldAutoCompactSession,
-  type ContextUsageSnapshot,
-} from "../../lib/chat/contextUsage";
+import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
@@ -90,8 +87,6 @@ export interface UseChatSessionDeps {
   showTransientToast: ShowToastFn;
   nav: NavId;
   setNav: Dispatch<SetStateAction<NavId>>;
-  /** 当前模型 context window；自动压实分母优先用它，避免误按 128K 触发 */
-  modelContextWindow?: number | null;
 }
 
 export function useChatSession({
@@ -104,7 +99,6 @@ export function useChatSession({
   showTransientToast,
   nav,
   setNav,
-  modelContextWindow = null,
 }: UseChatSessionDeps) {
   // ── Core state ────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -154,9 +148,6 @@ export function useChatSession({
   const dissolvingIdsRef = useRef<string[]>([]);
   dissolvingIdsRef.current = dissolvingIds;
   const compactingRef = useRef(false);
-  const prevStreamingRef = useRef(false);
-  const lastCompactAtRef = useRef(0);
-  const lastAutoCompactAttemptRef = useRef(0);
   const lastRecommendCompactToastAtRef = useRef(0);
   const memoryToastDedupeRef = useRef<{ key: string; at: number } | null>(null);
   const dissolveTimerRef = useRef<number | null>(null);
@@ -576,13 +567,11 @@ export function useChatSession({
           setMessages(restored);
           saveChatSession(res.newSessionId, restored, []);
         }
-        lastCompactAtRef.current = Date.now();
         showTransientToast(
           res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
           { tone: res.degraded ? "warning" : "success" },
         );
       } catch (histErr) {
-        lastCompactAtRef.current = Date.now();
         showTransientToast(
           t("chat.compactHistoryFailed", {
             error: histErr instanceof Error ? histErr.message : String(histErr ?? "error"),
@@ -622,55 +611,8 @@ export function useChatSession({
     currentRunIdRef,
   ]);
 
-  const maybeAutoCompact = useCallback(() => {
-    if (streaming || compactingRef.current || isCompacting) return;
-    if (sessionPendingInterrupts.length > 0) return;
-    if (!sessionId) return;
-
-    const now = Date.now();
-    if (now - lastAutoCompactAttemptRef.current < 60_000) return;
-    if (now - lastCompactAtRef.current < 60_000) return;
-
-    const bubbles = messages.filter(
-      (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
-    ).length;
-    const messageChars = messages.reduce(
-      (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
-      0,
-    );
-    if (
-      !shouldAutoCompactSession({
-        bubbleCount: bubbles,
-        contextUsage,
-        tokenUsageTotal: tokenUsage?.totalTokens,
-        messageChars,
-        modelContextWindow,
-      })
-    ) {
-      return;
-    }
-
-    lastAutoCompactAttemptRef.current = now;
-    void runCompactSession();
-  }, [
-    streaming,
-    isCompacting,
-    sessionPendingInterrupts,
-    sessionId,
-    messages,
-    contextUsage,
-    tokenUsage,
-    modelContextWindow,
-    runCompactSession,
-  ]);
-
-  useEffect(() => {
-    const wasStreaming = prevStreamingRef.current;
-    prevStreamingRef.current = streaming;
-    if (wasStreaming && !streaming) {
-      maybeAutoCompact();
-    }
-  }, [streaming, maybeAutoCompact]);
+  // 会话级压实仅由用户手动触发（/compact 或菜单）；前端不做自动压实。
+  // 上下文接近上限时后端发 recommendCompact，仅 toast 建议，见 useSend。
 
   // ── Stream controls ───────────────────────────────────────────────────────
   const pauseStream = useCallback(async () => {
