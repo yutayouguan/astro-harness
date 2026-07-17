@@ -17,9 +17,8 @@ use tokio::process::Command;
 use tracing::{info, warn};
 
 use crate::config::{
-    load_for_active_agent, load_mcp_servers, merge_discovered, persist_discovered, save_mcp_servers,
-    DiscoveredTool,
-    McpServerConfig, McpTransportType,
+    load_for_active_agent, load_mcp_servers, merge_discovered, persist_discovered,
+    save_mcp_servers, DiscoveredTool, McpServerConfig, McpTransportType,
 };
 use crate::names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
@@ -128,14 +127,12 @@ impl McpHub {
     }
 
     /// 按给定配置表重连：保留指纹未变的连接，其余重连或断开。
-    pub async fn reload_with_configs(&mut self, configs: Vec<McpServerConfig>) -> anyhow::Result<()> {
+    pub async fn reload_with_configs(
+        &mut self,
+        configs: Vec<McpServerConfig>,
+    ) -> anyhow::Result<()> {
         self.configs = configs;
-        let enabled: Vec<_> = self
-            .configs
-            .iter()
-            .filter(|c| c.enabled)
-            .cloned()
-            .collect();
+        let enabled: Vec<_> = self.configs.iter().filter(|c| c.enabled).cloned().collect();
 
         let keep_ids: std::collections::HashSet<String> =
             enabled.iter().map(|c| sanitize_server_id(&c.id)).collect();
@@ -201,9 +198,7 @@ impl McpHub {
 
         // 只补丁写回 discovered，与磁盘最新 tools 合并，避免覆盖 UI 开关
         if !discovered_updates.is_empty() {
-            if let Err(e) =
-                persist_discovered(self.agent_id.as_deref(), &discovered_updates)
-            {
+            if let Err(e) = persist_discovered(self.agent_id.as_deref(), &discovered_updates) {
                 warn!(error = %e, "persist MCP discovered failed");
             } else if let Ok(fresh) = load_mcp_servers(self.agent_id.as_deref()) {
                 for cfg in fresh {
@@ -543,9 +538,7 @@ pub fn validate_stdio_command(command: &str) -> anyhow::Result<()> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '+' | '-'))
     {
-        anyhow::bail!(
-            "stdio command 必须是绝对路径，或简单命令名（如 npx / uvx）；当前: {cmd}"
-        );
+        anyhow::bail!("stdio command 必须是绝对路径，或简单命令名（如 npx / uvx）；当前: {cmd}");
     }
     Ok(())
 }
@@ -572,9 +565,7 @@ pub fn toolset_name() -> &'static str {
 }
 
 /// 将 JSON 参数转为 MCP CallTool arguments map
-fn mcp_tool_arguments(
-    args: &Value,
-) -> anyhow::Result<Option<serde_json::Map<String, Value>>> {
+fn mcp_tool_arguments(args: &Value) -> anyhow::Result<Option<serde_json::Map<String, Value>>> {
     match args {
         Value::Null => Ok(None),
         Value::Object(map) => Ok(Some(map.clone())),

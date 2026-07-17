@@ -217,21 +217,15 @@ pub fn load_mcp_servers(agent_id: Option<&str>) -> anyhow::Result<Vec<McpServerC
 }
 
 /// 将服务器列表写回当前 Agent（或全局）的 `mcp.json`。
-pub fn save_mcp_servers(
-    agent_id: Option<&str>,
-    servers: &[McpServerConfig],
-) -> anyhow::Result<()> {
+pub fn save_mcp_servers(agent_id: Option<&str>, servers: &[McpServerConfig]) -> anyhow::Result<()> {
     let _ = ensure_default_workspace_dirs()?;
-    let id = agent_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| {
-            if s == "default" {
-                DEFAULT_AGENT_ID.to_string()
-            } else {
-                s.to_string()
-            }
-        });
+    let id = agent_id.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
+        if s == "default" {
+            DEFAULT_AGENT_ID.to_string()
+        } else {
+            s.to_string()
+        }
+    });
     let path = mcp_path_for_agent(id.as_deref());
     let file = McpFile {
         servers: servers.to_vec(),
@@ -251,10 +245,7 @@ pub fn load_for_active_agent() -> anyhow::Result<Vec<McpServerConfig>> {
 }
 
 /// 合并 discovered：保留已有 tools 开关；新工具默认 true
-pub fn merge_discovered(
-    server: &mut McpServerConfig,
-    discovered: Vec<DiscoveredTool>,
-) {
+pub fn merge_discovered(server: &mut McpServerConfig, discovered: Vec<DiscoveredTool>) {
     for d in &discovered {
         server.tools.entry(d.name.clone()).or_insert(true);
     }
