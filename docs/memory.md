@@ -169,7 +169,8 @@ auxiliary:
 
 ## 单一 `memory` 工具
 
-已废除 `memory_add` / `memory_replace` / `memory_remove`；若仍调用旧名，会返回迁移提示。
+已废除 `memory_add` / `memory_replace` / `memory_remove`；旧名不再注册，调用会得到未知工具错误。
+`target` 仅接受 `memory` / `user`（不再接受 `project`）。
 
 ```json
 {
@@ -264,7 +265,7 @@ auxiliary:
 - [ ] 超限 `memory` 调用报错且含用量（如 `2200/2200`）
 - [ ] 同会话写入后 system prompt 仍为旧 snapshot；新 session 或 `refresh_memory` 后更新
 - [ ] `session_search` 可检索历史消息
-- [ ] 旧工具名 `memory_add` 等返回迁移错误
+- [ ] 旧工具名 `memory_add` 等不再注册，调用报未知工具
 - [ ] 代码与 UI 无禁用品牌字符串（`rg -i hermes` 仅 spec 外链）
 
 ---

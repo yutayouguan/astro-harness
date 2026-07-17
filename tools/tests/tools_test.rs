@@ -48,7 +48,7 @@ async fn register_all_includes_panel_tools() {
 }
 
 #[tokio::test]
-async fn metadata_tools_and_memory_aliases_have_handlers() {
+async fn metadata_tools_have_handlers_without_legacy_memory_aliases() {
     let mut registry = ToolRegistry::new();
     register_all(&mut registry);
     let handlers = builtin_handler_names();
@@ -59,10 +59,10 @@ async fn metadata_tools_and_memory_aliases_have_handlers() {
             entry.name
         );
     }
-    for alias in ["memory_add", "memory_replace", "memory_remove"] {
+    for legacy in ["memory_add", "memory_replace", "memory_remove"] {
         assert!(
-            handlers.binary_search(&alias).is_ok(),
-            "missing compat alias handler: {alias}"
+            handlers.binary_search(&legacy).is_err(),
+            "legacy tool name still has handler: {legacy}"
         );
     }
 }

@@ -74,7 +74,7 @@ pub fn parse_review_llm_output(raw: &str) -> anyhow::Result<ReviewOutput> {
 fn parse_target(raw: &str) -> anyhow::Result<MemoryTarget> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "user" => Ok(MemoryTarget::User),
-        "memory" | "project" => Ok(MemoryTarget::Memory),
+        "memory" => Ok(MemoryTarget::Memory),
         other => anyhow::bail!("未知 review target: {other}"),
     }
 }

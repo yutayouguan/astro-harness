@@ -104,14 +104,14 @@ pub fn dispatch_session_search(
     session::dispatch_session_tool(ctx.sessions, "session_search", args)
 }
 
-/// 本模块统一入口：`memory`（含兼容别名）与 `session_search`。
+/// 本模块统一入口：`memory` 与 `session_search`。
 fn handle(
     ctx: &mut ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
     match name {
-        "memory" | "memory_add" | "memory_replace" | "memory_remove" => dispatch(ctx, name, args),
+        "memory" => dispatch(ctx, name, args),
         "session_search" => dispatch_session_search(ctx, args),
         other => anyhow::bail!("未知记忆工具: {other}"),
     }
@@ -119,6 +119,6 @@ fn handle(
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["memory", "memory_add", "memory_replace", "memory_remove", "session_search"],
+    names: ["memory", "session_search"],
     sync_named: handle,
 }

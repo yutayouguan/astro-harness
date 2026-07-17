@@ -228,12 +228,12 @@ mod inventory_register_tests {
     }
 
     #[test]
-    fn memory_compat_aliases_have_handlers() {
+    fn legacy_memory_tool_names_are_not_registered() {
         let handlers = builtin_handler_names();
-        for alias in ["memory_add", "memory_replace", "memory_remove"] {
+        for legacy in ["memory_add", "memory_replace", "memory_remove"] {
             assert!(
-                handlers.binary_search(&alias).is_ok(),
-                "missing memory compat alias handler: {alias}"
+                handlers.binary_search(&legacy).is_err(),
+                "legacy tool name still has handler: {legacy}"
             );
         }
     }

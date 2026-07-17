@@ -26,7 +26,7 @@ fn handler_table() -> &'static HashMap<&'static str, BuiltinToolHandler> {
     })
 }
 
-/// 当前已注册的内置 handler 名称（含兼容别名；测试 / 观测用）。
+/// 当前已注册的内置 handler 名称（测试 / 观测用）。
 pub fn builtin_handler_names() -> Vec<&'static str> {
     let mut names: Vec<_> = handler_table().keys().copied().collect();
     names.sort_unstable();

@@ -131,7 +131,7 @@ fn build_chat_history_folds_tools_into_activities() {
             reasoning: Some("plan"),
             tool_calls: Some(serde_json::json!([{
                 "id": "c1", "name": "memory",
-                "arguments": {"entry": "e", "target": "project"}
+                "arguments": {"action": "add", "target": "memory", "content": "e"}
             }])),
             ..NewMessage::empty("s1", "assistant")
         })

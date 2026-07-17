@@ -85,7 +85,7 @@ impl ToolEntry {
 pub struct BuiltinToolRegistrar {
     /// 向注册表写入本模块工具条目。
     pub register: fn(&mut ToolRegistry),
-    /// 本模块可分发的工具名（含兼容别名，可多于 metadata）。
+    /// 本模块可分发的工具名（应与 metadata 注册名对齐）。
     pub names: &'static [&'static str],
     /// 统一执行入口（按 `names` 中的 name 查表后调用）。
     pub handler: BuiltinToolHandler,

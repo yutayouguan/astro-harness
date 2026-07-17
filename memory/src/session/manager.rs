@@ -352,13 +352,13 @@ fn truncate_chars(s: &str, max: usize) -> String {
 /// 将工具参数 `target` 字符串解析为 [`MemoryTarget`]。
 ///
 /// - `"user"` → [`MemoryTarget::User`]
-/// - `"memory"` / `"project"` / 缺省 → [`MemoryTarget::Memory`]
+/// - `"memory"` / 缺省 → [`MemoryTarget::Memory`]
 /// - `"daily"` / `"mermaid"` → 错误（日记仅系统入口）
 fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
     match value {
         None => Ok(MemoryTarget::Memory),
         Some("user") => Ok(MemoryTarget::User),
-        Some("memory") | Some("project") => Ok(MemoryTarget::Memory),
+        Some("memory") => Ok(MemoryTarget::Memory),
         Some("daily") | Some("mermaid") => {
             anyhow::bail!("日记请使用系统入口，不支持 memory 工具 target=daily")
         }
@@ -368,8 +368,7 @@ fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
 
 /// 记忆相关 Agent 工具的统一分发入口。
 ///
-/// 支持 `memory`；旧名 `memory_add` / `memory_replace` / `memory_remove`
-/// 返回迁移错误。参数从 `args` JSON 提取，`target` 经 [`parse_memory_target`] 解析。
+/// 仅支持工具名 `memory`。参数从 `args` JSON 提取，`target` 经 [`parse_memory_target`] 解析。
 pub fn dispatch_memory_tool(
     memory: &mut MemoryManager,
     name: &str,
@@ -384,9 +383,6 @@ pub fn dispatch_memory_tool(
             let content = args["content"].as_str();
             let old_text = args["old_text"].as_str();
             memory.handle_memory_op(action, target, content, old_text)
-        }
-        "memory_add" | "memory_replace" | "memory_remove" => {
-            anyhow::bail!("工具已迁移为 memory(action,target)；请使用 action=add|replace|remove")
         }
         _ => anyhow::bail!("未知记忆工具: {name}"),
     }
@@ -463,10 +459,6 @@ memory:
         let err = parse_memory_target(Some("daily")).unwrap_err().to_string();
         assert!(err.contains("日记"));
         assert!(matches!(
-            parse_memory_target(Some("project")).unwrap(),
-            MemoryTarget::Memory
-        ));
-        assert!(matches!(
             parse_memory_target(Some("memory")).unwrap(),
             MemoryTarget::Memory
         ));
@@ -478,6 +470,8 @@ memory:
             parse_memory_target(None).unwrap(),
             MemoryTarget::Memory
         ));
+        let err = parse_memory_target(Some("project")).unwrap_err().to_string();
+        assert!(err.contains("未知的 memory target"));
         let err = parse_memory_target(Some("bogus")).unwrap_err().to_string();
         assert!(err.contains("未知的 memory target"));
     }
@@ -530,7 +524,7 @@ memory:
     }
 
     #[test]
-    fn dispatch_old_memory_tool_names_error() {
+    fn dispatch_rejects_unknown_tool_names() {
         let dir = tempfile::tempdir().unwrap();
         let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
         for name in ["memory_add", "memory_replace", "memory_remove"] {
@@ -538,7 +532,7 @@ memory:
                 .unwrap_err()
                 .to_string();
             assert!(
-                err.contains("已迁移") && err.contains("memory(action,target)"),
+                err.contains("未知记忆工具"),
                 "unexpected for {name}: {err}"
             );
         }

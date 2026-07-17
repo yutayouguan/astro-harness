@@ -191,7 +191,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         return "mcp";
     }
     match name {
-        "memory" | "memory_add" | "memory_replace" | "memory_remove" => "memory",
+        "memory" => "memory",
         "session_search" => "session_search",
         "search_context" => "search_context",
         "pin_context" => "pin_context",
