@@ -170,7 +170,15 @@ export default function ChatSessionList({
   const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [unreadTick, setUnreadTick] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<RecentSessionDto | null>(
+    null,
+  );
+  const [pendingRename, setPendingRename] = useState<{
+    item: RecentSessionDto;
+    draft: string;
+  } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
   const prevStreamingRef = useRef<string | null>(null);
 
   const loadSessions = useCallback(async () => {
@@ -258,6 +266,26 @@ export default function ChatSessionList({
     };
   }, [menuSessionId]);
 
+  useEffect(() => {
+    if (!pendingRename) return;
+    const id = window.setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [pendingRename]);
+
+  useEffect(() => {
+    if (!pendingDelete && !pendingRename) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setPendingDelete(null);
+      setPendingRename(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pendingDelete, pendingRename]);
+
   useEffect(() => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)), []);
 
   // 流式结束 → 标未读；working 中用动画图标。只有用户点击进入会话才清未读。
@@ -297,35 +325,46 @@ export default function ChatSessionList({
         await action();
         dispatchSessionsChanged();
       } catch (e) {
-        setError(
-          t("sessions.actionFailed", {
-            error: e instanceof Error ? e.message : String(e),
-          }),
-        );
+        const message = t("sessions.actionFailed", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+        setError(message);
+        showToast(message);
       } finally {
         setBusySessionId(null);
       }
     },
-    [t],
+    [showToast, t],
   );
 
   const handleRename = useCallback(
     (item: RecentSessionDto) => {
       const untitled = t("chat.rightPanel.untitledSession");
       const current = sessionTitle(item, untitled);
-      const next = window.prompt(t("sessions.renamePrompt"), current);
-      if (next === null) return;
-      const title = next.trim();
-      if (!title) return;
-      void runSessionAction(item.sessionId, async () => {
-        await invoke("rename_session", {
-          sessionId: item.sessionId,
-          title,
-        });
-      });
+      setMenuSessionId(null);
+      setPendingRename({ item, draft: current });
     },
-    [runSessionAction, t],
+    [t],
   );
+
+  const confirmRename = useCallback(() => {
+    if (!pendingRename) return;
+    const title = pendingRename.draft.trim();
+    if (!title) return;
+    const item = pendingRename.item;
+    setPendingRename(null);
+    void runSessionAction(item.sessionId, async () => {
+      await invoke("rename_session", {
+        sessionId: item.sessionId,
+        title,
+      });
+      setItems((prev) =>
+        prev.map((row) =>
+          row.sessionId === item.sessionId ? { ...row, summary: title } : row,
+        ),
+      );
+    });
+  }, [pendingRename, runSessionAction]);
 
   const handleRegenerateTitle = useCallback(
     (item: RecentSessionDto) => {
@@ -419,43 +458,39 @@ export default function ChatSessionList({
     [onOpenSession, runSessionAction, t],
   );
 
-  const handleDelete = useCallback(
-    (item: RecentSessionDto) => {
-      const untitled = t("chat.rightPanel.untitledSession");
-      const title = sessionTitle(item, untitled);
-      const confirmed = window.confirm(
-        t("sessions.deleteConfirm", { title }),
-      );
-      if (!confirmed) {
-        setMenuSessionId(null);
-        return;
+  const handleDelete = useCallback((item: RecentSessionDto) => {
+    setMenuSessionId(null);
+    setPendingDelete(item);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (!pendingDelete) return;
+    const item = pendingDelete;
+    setPendingDelete(null);
+    void runSessionAction(item.sessionId, async () => {
+      if (item.sessionId === activeSessionId) {
+        await onPrepareDeleteCurrentSession?.();
       }
-      void runSessionAction(item.sessionId, async () => {
-        if (item.sessionId === activeSessionId) {
-          await onPrepareDeleteCurrentSession?.();
-        }
-        await deleteManagedSession(
-          item.sessionId,
-          activeSessionId,
-          async () => {
-            await invoke("delete_session_permanently", {
-              sessionId: item.sessionId,
-            });
-          },
-          async () => {
-            await onClearDeletedCurrentSession?.();
-          },
-        );
-      });
-    },
-    [
-      activeSessionId,
-      onPrepareDeleteCurrentSession,
-      onClearDeletedCurrentSession,
-      runSessionAction,
-      t,
-    ],
-  );
+      await deleteManagedSession(
+        item.sessionId,
+        activeSessionId,
+        async () => {
+          await invoke("delete_session_permanently", {
+            sessionId: item.sessionId,
+          });
+        },
+        async () => {
+          await onClearDeletedCurrentSession?.();
+        },
+      );
+    });
+  }, [
+    activeSessionId,
+    onPrepareDeleteCurrentSession,
+    onClearDeletedCurrentSession,
+    pendingDelete,
+    runSessionAction,
+  ]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -748,6 +783,98 @@ export default function ChatSessionList({
           })}
         </ul>
       )}
+      {pendingRename ? (
+        <div
+          className="chat-session-dialog-backdrop"
+          role="presentation"
+          onClick={() => setPendingRename(null)}
+        >
+          <div
+            className="chat-session-dialog"
+            role="dialog"
+            aria-modal
+            aria-labelledby="chat-session-rename-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="chat-session-rename-title">{t("sessions.rename")}</h3>
+            <p className="muted">{t("sessions.renamePrompt")}</p>
+            <input
+              ref={renameInputRef}
+              className="chat-session-dialog-input"
+              value={pendingRename.draft}
+              onChange={(e) =>
+                setPendingRename((prev) =>
+                  prev ? { ...prev, draft: e.target.value } : prev,
+                )
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  confirmRename();
+                }
+              }}
+            />
+            <div className="chat-session-dialog-actions">
+              <button
+                type="button"
+                className="chat-session-dialog-cancel"
+                onClick={() => setPendingRename(null)}
+              >
+                {t("sessions.cancel")}
+              </button>
+              <button
+                type="button"
+                className="chat-session-dialog-ok"
+                disabled={!pendingRename.draft.trim()}
+                onClick={confirmRename}
+              >
+                {t("sessions.renameSave")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {pendingDelete ? (
+        <div
+          className="chat-session-dialog-backdrop"
+          role="presentation"
+          onClick={() => setPendingDelete(null)}
+        >
+          <div
+            className="chat-session-dialog"
+            role="dialog"
+            aria-modal
+            aria-labelledby="chat-session-delete-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="chat-session-delete-title">{t("sessions.deleteTitle")}</h3>
+            <p>
+              {t("sessions.deleteConfirm", {
+                title: sessionTitle(
+                  pendingDelete,
+                  t("chat.rightPanel.untitledSession"),
+                ),
+              })}
+            </p>
+            <div className="chat-session-dialog-actions">
+              <button
+                type="button"
+                className="chat-session-dialog-cancel"
+                onClick={() => setPendingDelete(null)}
+              >
+                {t("sessions.cancel")}
+              </button>
+              <button
+                type="button"
+                className="chat-session-dialog-ok is-danger"
+                onClick={confirmDelete}
+              >
+                {t("sessions.deletePermanently")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {toastHost}
     </div>
   );

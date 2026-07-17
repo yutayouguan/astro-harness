@@ -214,6 +214,130 @@ html[data-theme="dark"] .chat-right-panel {
   gap: 10px;
 }
 
+.chat-session-list .side-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #ef4444 28%, transparent);
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+html[data-theme="dark"] .chat-session-list .side-error {
+  border-color: color-mix(in srgb, #f87171 35%, transparent);
+  background: color-mix(in srgb, #f87171 12%, transparent);
+  color: #fecaca;
+}
+
+.chat-session-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.chat-session-dialog {
+  width: min(400px, 92vw);
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.62)),
+    color-mix(in srgb, var(--glass-panel, #fff) 80%, transparent);
+  box-shadow:
+    0 16px 40px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .chat-session-dialog {
+  border-color: rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    color-mix(in srgb, var(--glass-panel, #1a2238) 80%, #0b1224);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.chat-session-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.chat-session-dialog p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.chat-session-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--chip-border) 85%, transparent);
+  background: color-mix(in srgb, var(--composer-bg, #fff) 88%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.chat-session-dialog-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tone, #64748b) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #64748b) 16%, transparent);
+}
+
+.chat-session-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.chat-session-dialog-cancel,
+.chat-session-dialog-ok {
+  border: 1px solid color-mix(in srgb, var(--chip-border) 80%, transparent);
+  border-radius: 10px;
+  padding: 7px 12px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-session-dialog-ok {
+  background: color-mix(in srgb, var(--tone, #64748b) 16%, transparent);
+  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, transparent);
+}
+
+.chat-session-dialog-ok:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chat-session-dialog-ok.is-danger {
+  color: #b91c1c;
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  border-color: color-mix(in srgb, #ef4444 28%, transparent);
+}
+
+html[data-theme="dark"] .chat-session-dialog-ok.is-danger {
+  color: #fecaca;
+  background: color-mix(in srgb, #f87171 14%, transparent);
+  border-color: color-mix(in srgb, #f87171 32%, transparent);
+}
+
 .chat-session-tabs {
   display: flex;
   gap: 3px;
