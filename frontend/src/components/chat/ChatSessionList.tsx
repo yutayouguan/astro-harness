@@ -259,22 +259,15 @@ export default function ChatSessionList({
 
   useEffect(() => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)), []);
 
-  // 流式结束后：若用户已切走该会话，则记为未读
+  // 流式结束 → 标未读；working 中用动画图标。只有用户点击进入会话才清未读。
   useEffect(() => {
     const prev = prevStreamingRef.current;
     prevStreamingRef.current = streamingSessionId;
-    if (prev && !streamingSessionId && prev !== activeSessionId) {
+    if (prev && !streamingSessionId) {
       markSessionUnread(prev);
       setUnreadTick((n) => n + 1);
     }
-  }, [streamingSessionId, activeSessionId]);
-
-  // 打开当前会话时清除未读
-  useEffect(() => {
-    if (!activeSessionId) return;
-    clearSessionUnread(activeSessionId);
-    setUnreadTick((n) => n + 1);
-  }, [activeSessionId]);
+  }, [streamingSessionId]);
 
   useAgentsChanged((payload) => {
     setActiveAgentId(normalizeAgentId(payload.active_agent_id));
