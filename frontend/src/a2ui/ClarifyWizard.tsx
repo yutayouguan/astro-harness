@@ -244,11 +244,21 @@ export default function ClarifyWizard({
           role="tabpanel"
         >
           {multi ? (
-            <p className="a2ui-clarify-progress">
-              {t("chat.a2ui.clarifyProgress")
-                .replace("{current}", String(safeIndex + 1))
-                .replace("{total}", String(steps.length))}
-            </p>
+            <div className="a2ui-clarify-progress">
+              <span className="a2ui-clarify-progress-label">
+                {t("chat.a2ui.clarifyProgress")
+                  .replace("{current}", String(safeIndex + 1))
+                  .replace("{total}", String(steps.length))}
+              </span>
+              <span className="a2ui-clarify-progress-track" aria-hidden>
+                <span
+                  className="a2ui-clarify-progress-fill"
+                  style={{
+                    width: `${((safeIndex + 1) / steps.length) * 100}%`,
+                  }}
+                />
+              </span>
+            </div>
           ) : null}
           <h3 className="a2ui-clarify-question">{step.question}</h3>
 

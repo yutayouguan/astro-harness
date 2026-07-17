@@ -556,7 +556,7 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-clarify-wizard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
 }
 
@@ -575,26 +575,35 @@ html[data-theme="light"] .a2ui-surface {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   max-width: 100%;
   border: 1px solid var(--a2ui-glass-border);
   background: var(--a2ui-glass-fill);
   color: var(--ink-mute);
   border-radius: 999px;
-  padding: 4px 10px 4px 4px;
+  padding: 4px 12px 4px 4px;
   font: inherit;
   font-size: 0.78rem;
+  font-weight: 550;
   cursor: pointer;
   transition:
-    background 180ms ease,
-    border-color 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
+    background 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.a2ui-clarify-tab:hover:not(:disabled):not(.is-active) {
+  color: var(--ink-soft, var(--ink));
+  border-color: color-mix(in srgb, var(--ink) 20%, var(--a2ui-glass-border));
+  transform: translateY(-1px);
 }
 
 .a2ui-clarify-tab-index {
-  width: 1.35rem;
-  height: 1.35rem;
+  position: relative;
+  width: 1.4rem;
+  height: 1.4rem;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -602,6 +611,9 @@ html[data-theme="light"] .a2ui-surface {
   font-size: 0.72rem;
   font-weight: 700;
   background: color-mix(in srgb, var(--ink) 8%, transparent);
+  transition:
+    background 200ms ease,
+    color 200ms ease;
 }
 
 .a2ui-clarify-tab-label {
@@ -616,6 +628,13 @@ html[data-theme="light"] .a2ui-surface {
   border-color: var(--a2ui-accent-border);
   background: var(--a2ui-accent-fill);
   transform: translateY(-1px);
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--accent, #6366f1) 22%, transparent);
+}
+
+.a2ui-clarify-tab.is-active .a2ui-clarify-tab-index {
+  background: color-mix(in srgb, var(--accent, #6366f1) 60%, transparent);
+  color: #fff;
 }
 
 .a2ui-clarify-tab.is-done:not(.is-active) {
@@ -623,8 +642,21 @@ html[data-theme="light"] .a2ui-surface {
   border-color: color-mix(in srgb, #34d399 40%, transparent);
 }
 
-.a2ui-clarify-tab.is-done .a2ui-clarify-tab-index {
-  background: color-mix(in srgb, #34d399 28%, transparent);
+.a2ui-clarify-tab.is-done:not(.is-active) .a2ui-clarify-tab-index {
+  background: color-mix(in srgb, #34d399 34%, transparent);
+  color: transparent;
+}
+
+.a2ui-clarify-tab.is-done:not(.is-active) .a2ui-clarify-tab-index::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: color-mix(in srgb, #059669 92%, #fff);
 }
 
 .a2ui-clarify-stack {
@@ -634,7 +666,7 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-clarify-layer {
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1px solid var(--a2ui-glass-border);
   background: var(--a2ui-glass-bg);
   box-shadow: var(--a2ui-glass-shadow);
@@ -664,11 +696,25 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-clarify-layer.is-front {
   position: relative;
   z-index: 2;
-  padding: 14px 14px 12px;
+  padding: 16px 16px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 13px;
   transform-origin: 50% 80%;
+}
+
+/* 顶部一道高光，强化玻璃质感 */
+.a2ui-clarify-layer.is-front::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, #fff 12%, transparent) 0%,
+    transparent 38%
+  );
 }
 
 .a2ui-clarify-layer.is-front.is-exit {
@@ -702,51 +748,127 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-clarify-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
-  font-size: 0.75rem;
+}
+
+.a2ui-clarify-progress-label {
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  font-weight: 600;
   color: var(--ink-mute);
   letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.a2ui-clarify-progress-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.a2ui-clarify-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent, #6366f1) 70%, transparent),
+    var(--accent, #6366f1)
+  );
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent, #6366f1) 45%, transparent);
+  transition: width 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .a2ui-clarify-question {
   margin: 0;
-  font-size: 1.02rem;
-  font-weight: 650;
-  line-height: 1.4;
+  font-size: 1.06rem;
+  font-weight: 680;
+  line-height: 1.42;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
 .a2ui-clarify-options {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
 }
 
 .a2ui-clarify-option {
   appearance: none;
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--a2ui-glass-border);
   background: var(--a2ui-glass-fill);
   color: var(--ink);
   border-radius: 12px;
-  padding: 9px 12px;
+  padding: 11px 40px 11px 15px;
   font: inherit;
   font-size: 0.9rem;
+  line-height: 1.45;
   cursor: pointer;
   text-align: left;
   transition:
     border-color 160ms ease,
     background 160ms ease,
-    transform 160ms ease;
+    box-shadow 160ms ease,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 左侧强调条 */
+.a2ui-clarify-option::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent, #6366f1);
+  transform: scaleY(0);
+  transform-origin: 50% 50%;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 选中态右侧对勾 */
+.a2ui-clarify-option::after {
+  content: "✓";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.6);
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--accent, #6366f1);
+  opacity: 0;
+  transition:
+    opacity 160ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .a2ui-clarify-option:hover:not(:disabled) {
   border-color: var(--a2ui-accent-border);
   transform: translateY(-1px);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent, #6366f1) 14%, transparent);
 }
 
 .a2ui-clarify-option.is-selected {
   border-color: var(--a2ui-accent-border);
   background: var(--a2ui-accent-fill);
+}
+
+.a2ui-clarify-option.is-selected::before {
+  transform: scaleY(1);
+}
+
+.a2ui-clarify-option.is-selected::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
 }
 
 .a2ui-clarify-option:disabled {
@@ -762,23 +884,26 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-clarify-custom.is-inline-option {
-  flex: 1 1 12rem;
-  min-width: min(100%, 12rem);
-  padding: 8px 10px;
+  padding: 9px 13px;
   border-radius: 12px;
   border: 1px solid var(--a2ui-glass-border);
   background: var(--a2ui-glass-fill);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .a2ui-clarify-custom.is-inline-option:focus-within {
   border-color: var(--a2ui-accent-border);
   background: var(--a2ui-accent-fill);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 14%, transparent);
 }
 
 .a2ui-clarify-custom-label {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 650;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-mute);
 }
@@ -793,12 +918,29 @@ html[data-theme="light"] .a2ui-surface {
   padding: 9px 12px;
   font: inherit;
   font-size: 0.9rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.a2ui-clarify-custom-input:focus-visible {
+  outline: none;
+  border-color: var(--a2ui-accent-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 14%, transparent);
+}
+
+.a2ui-clarify-custom-input::placeholder {
+  color: color-mix(in srgb, var(--ink-mute) 82%, transparent);
 }
 
 .a2ui-clarify-custom.is-inline-option .a2ui-clarify-custom-input {
   border: none;
   background: transparent;
   padding: 2px 0 0;
+}
+
+.a2ui-clarify-custom.is-inline-option .a2ui-clarify-custom-input:focus-visible {
+  box-shadow: none;
 }
 
 .a2ui-clarify-custom-submit {
@@ -809,12 +951,37 @@ html[data-theme="light"] .a2ui-surface {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 2px;
+  margin-top: 4px;
+}
+
+.a2ui-clarify-nav .a2ui-button {
+  min-width: 5.5rem;
+  padding: 8px 16px;
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.a2ui-clarify-nav .a2ui-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ink) 20%, var(--a2ui-glass-border));
+}
+
+.a2ui-clarify-nav .a2ui-button.is-primary:hover:not(:disabled) {
+  border-color: var(--a2ui-accent-border);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent, #6366f1) 24%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .a2ui-clarify-tab,
-  .a2ui-clarify-option {
+  .a2ui-clarify-option,
+  .a2ui-clarify-option::before,
+  .a2ui-clarify-option::after,
+  .a2ui-clarify-progress-fill,
+  .a2ui-clarify-nav .a2ui-button {
     transition: none;
   }
   .a2ui-clarify-layer.is-front.is-exit,
