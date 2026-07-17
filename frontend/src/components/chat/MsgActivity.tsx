@@ -1,4 +1,4 @@
-/** 单条聊天活动卡：kind 图标 + 可折叠 IO；生成媒体以精美卡片始终露出。 */
+/** 单条聊天活动卡：kind 图标 + 可折叠 IO / 生成媒体。 */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, ChevronDown, Webhook } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -49,7 +49,6 @@ export default function MsgActivity({
   mediaBaseDir,
 }: Props) {
   const { t } = useI18n();
-  const hasBody = activityHasBody(activity);
   const { input, output } = resolveActivityIO(activity);
   const mediaItems = useMemo(() => {
     if (activity.status === "running") return [];
@@ -70,13 +69,15 @@ export default function MsgActivity({
         })),
     [mediaItems, mediaBaseDir],
   );
-  const [open, setOpen] = useState(() => defaultOpen && hasBody);
+  const hasMedia = previewMedia.length > 0;
+  const canToggle = hasBody || hasMedia;
+  const [open, setOpen] = useState(() => defaultOpen && canToggle);
   const running = activity.status === "running";
   const liveSec = useLiveElapsedSec(running, activity.at ?? null);
 
   useEffect(() => {
-    if (hasBody) setOpen(defaultOpen);
-  }, [defaultOpen, hasBody]);
+    if (canToggle) setOpen(defaultOpen);
+  }, [defaultOpen, canToggle]);
 
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
@@ -109,7 +110,7 @@ export default function MsgActivity({
       data-kind={activity.kind}
     >
       <div className="msg-activity-body">
-        {hasBody ? (
+        {canToggle ? (
           <button
             type="button"
             className="msg-activity-toggle"
@@ -128,38 +129,41 @@ export default function MsgActivity({
         ) : (
           <div className="msg-activity-summary">{summary}</div>
         )}
-        {/* 生成媒体始终露出，不随 Input/Output 折叠 */}
-        {previewMedia.length > 0 ? (
-          <div className="msg-activity-media">
-            {previewMedia.map((m) => (
-              <GeneratedMediaCard
-                key={`${m.kind}:${m.path}`}
-                kind={m.kind}
-                path={m.path}
-                compact
-              />
-            ))}
-          </div>
-        ) : null}
-        {open && (input || output) ? (
-          <div className="msg-activity-io">
-            {input ? (
-              <div className="msg-activity-io-block">
-                <span className="msg-activity-io-label">
-                  {t("chat.activityInput")}
-                </span>
-                <pre className="msg-activity-detail">{input}</pre>
+        {open && (hasMedia || input || output) ? (
+          <>
+            {hasMedia ? (
+              <div className="msg-activity-media">
+                {previewMedia.map((m) => (
+                  <GeneratedMediaCard
+                    key={`${m.kind}:${m.path}`}
+                    kind={m.kind}
+                    path={m.path}
+                    compact
+                  />
+                ))}
               </div>
             ) : null}
-            {output ? (
-              <div className="msg-activity-io-block">
-                <span className="msg-activity-io-label">
-                  {t("chat.activityOutput")}
-                </span>
-                <pre className="msg-activity-detail">{output}</pre>
+            {input || output ? (
+              <div className="msg-activity-io">
+                {input ? (
+                  <div className="msg-activity-io-block">
+                    <span className="msg-activity-io-label">
+                      {t("chat.activityInput")}
+                    </span>
+                    <pre className="msg-activity-detail">{input}</pre>
+                  </div>
+                ) : null}
+                {output ? (
+                  <div className="msg-activity-io-block">
+                    <span className="msg-activity-io-label">
+                      {t("chat.activityOutput")}
+                    </span>
+                    <pre className="msg-activity-detail">{output}</pre>
+                  </div>
+                ) : null}
               </div>
             ) : null}
-          </div>
+          </>
         ) : null}
         {showTimestamp && activity.at ? (
           <span className="msg-activity-time">
