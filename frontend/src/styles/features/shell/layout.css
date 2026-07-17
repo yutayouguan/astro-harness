@@ -17,30 +17,45 @@
   pointer-events: none;
   transform: translateY(var(--nav-indicator-y, 0));
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--tone-soft, transparent) 60%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone, transparent) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(12px) saturate(1.15);
-  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  /* 选中态以晶莹玻璃球为主视觉，指示器只做柔光衬底 */
+  background: radial-gradient(
+    ellipse 80% 70% at 50% 50%,
+    color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 28%, transparent),
+    transparent 72%
+  );
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .sidebar.is-icons .sidebar-nav-indicator {
   left: 50%;
-  width: 42px;
-  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  top: 2px;
+  border-radius: 50%;
   transform: translate(-50%, var(--nav-indicator-y, 0));
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 42%, transparent),
+    transparent 70%
+  );
 }
 
 html[data-theme="dark"] .sidebar-nav-indicator {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--tone-soft) 48%, rgba(8, 6, 18, 0.4));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: radial-gradient(
+    ellipse 80% 70% at 50% 50%,
+    color-mix(in srgb, var(--tone-glow, var(--tone)) 36%, transparent),
+    transparent 72%
+  );
+}
+
+html[data-theme="dark"] .sidebar.is-icons .sidebar-nav-indicator {
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--tone-glow, var(--tone)) 48%, transparent),
+    transparent 70%
+  );
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -113,22 +128,13 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   display: inline;
 }
 
+/* 晶莹球已足够标识选中，labels 模式不再叠左侧圆点 */
 .sidebar.is-labels .nav-item.active::before {
-  content: "";
-  display: block;
-  position: absolute;
-  left: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--tone, var(--pink));
-  box-shadow: 0 0 8px var(--tone-glow, rgba(244, 114, 182, 0.9));
+  display: none;
 }
 
 .sidebar.is-labels .nav-item.active {
-  padding-left: 16px;
+  padding-left: 12px;
 }
 
 .nav-item[data-tone="blue"] {
@@ -195,7 +201,14 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   place-items: center;
   /* 默认不上色：中性描边 */
   color: var(--ink-mute, var(--ink-soft));
-  transition: color 0.15s ease, opacity 0.15s ease;
+  transition:
+    color 0.18s ease,
+    opacity 0.18s ease,
+    width 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .nav-badge {
@@ -214,28 +227,119 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   background: color-mix(in srgb, var(--tone, var(--tone-green, #16a34a)) 88%, #000);
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--glass-fill, #fff) 80%, transparent);
   pointer-events: none;
+  z-index: 3;
 }
 
+/*
+ * 选中：晶莹透亮玻璃球（对齐参考图导航选中态）
+ * — 顶侧高光 / 底侧色调内发光 / 半透明色相 / 白色 glyph
+ */
 .nav-item.active .nav-icon {
-  color: var(--tone, var(--accent));
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #fff;
   opacity: 1;
-  /* 内部镂空用高对比色，避免填实后只剩一个色块 */
-  --nav-icon-cutout: #fff;
+  isolation: isolate;
+  /* 镂空透出球心色，而非平面对比色 */
+  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 42%, #0a1a14);
+  background:
+    radial-gradient(
+      circle at 30% 22%,
+      rgba(255, 255, 255, 0.92) 0%,
+      rgba(255, 255, 255, 0.35) 16%,
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 72% 82%,
+      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 48% 46%,
+      color-mix(in srgb, var(--tone, var(--accent)) 82%, transparent) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 48%, rgba(4, 18, 12, 0.42)) 100%
+    );
+  border: 1px solid color-mix(in srgb, #fff 48%, var(--tone, var(--accent)));
+  box-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.16),
+    0 6px 16px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 58%, transparent),
+    0 0 22px color-mix(in srgb, var(--tone, var(--accent)) 32%, transparent),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.62),
+    inset 0 -5px 12px color-mix(in srgb, var(--tone, var(--accent)) 48%, rgba(0, 0, 0, 0.38)),
+    inset 0 0 0 1px color-mix(in srgb, #fff 20%, transparent);
+  backdrop-filter: blur(10px) saturate(1.5);
+  -webkit-backdrop-filter: blur(10px) saturate(1.5);
+}
+
+/* 镜面高光点 */
+.nav-item.active .nav-icon::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  width: 9px;
+  height: 5px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.15));
+  filter: blur(0.4px);
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 2;
+}
+
+html[data-theme="light"] .nav-item.active .nav-icon {
+  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 38%, #fff);
+  background:
+    radial-gradient(
+      circle at 30% 22%,
+      rgba(255, 255, 255, 0.98) 0%,
+      rgba(255, 255, 255, 0.48) 18%,
+      transparent 44%
+    ),
+    radial-gradient(
+      circle at 72% 82%,
+      color-mix(in srgb, var(--tone, var(--accent)) 55%, #fff) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      circle at 48% 46%,
+      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 58%, transparent) 100%
+    );
+  border-color: color-mix(in srgb, #fff 62%, var(--tone, var(--accent)));
+  box-shadow:
+    0 2px 4px color-mix(in srgb, var(--tone, var(--accent)) 18%, rgba(15, 23, 42, 0.08)),
+    0 8px 18px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 42%, transparent),
+    0 0 16px color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.88),
+    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 28%, rgba(15, 23, 42, 0.08)),
+    inset 0 0 0 1px color-mix(in srgb, #fff 55%, transparent);
 }
 
 html[data-theme="dark"] .nav-item.active .nav-icon {
-  --nav-icon-cutout: color-mix(in srgb, var(--tone-soft) 30%, #0b1220);
+  --nav-icon-cutout: color-mix(in srgb, var(--tone, var(--accent)) 48%, #04140e);
+}
+
+.nav-item.active .nav-badge {
+  top: -3px;
+  right: -4px;
 }
 
 .nav-icon svg {
   display: block;
-  transition: fill 0.15s ease, stroke 0.15s ease;
+  position: relative;
+  z-index: 1;
+  transition: fill 0.15s ease, stroke 0.15s ease, width 0.2s ease, height 0.2s ease;
 }
 
-/* 选中：主体填充上色 */
+/* 选中：球内白色实心 glyph */
 .nav-item.active .nav-icon svg {
+  width: 14px;
+  height: 14px;
   fill: currentColor;
   stroke: currentColor;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.22));
 }
 
 /* 复杂线稿：浅填充，保留描边细节 */
@@ -258,6 +362,13 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   stroke: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .nav-icon,
+  .nav-icon svg {
+    transition: none;
+  }
+}
+
 .nav-label {
   font-size: 13.5px;
   font-weight: 500;
@@ -271,31 +382,110 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 .page-title-icon {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  color: var(--tone, var(--accent));
-  background: var(--badge-bg);
-  border: 1px solid var(--badge-border);
-  box-shadow: var(--badge-shadow);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  position: relative;
+  isolation: isolate;
+  color: #fff;
+  background:
+    radial-gradient(
+      circle at 30% 22%,
+      rgba(255, 255, 255, 0.92) 0%,
+      rgba(255, 255, 255, 0.35) 16%,
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 72% 82%,
+      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 48% 46%,
+      color-mix(in srgb, var(--tone, var(--accent)) 82%, transparent) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 48%, rgba(4, 18, 12, 0.42)) 100%
+    );
+  border: 1px solid color-mix(in srgb, #fff 48%, var(--tone, var(--accent)));
+  box-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.14),
+    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 48%, transparent),
+    0 0 16px color-mix(in srgb, var(--tone, var(--accent)) 26%, transparent),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.62),
+    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 42%, rgba(0, 0, 0, 0.32)),
+    inset 0 0 0 1px color-mix(in srgb, #fff 20%, transparent);
+  backdrop-filter: blur(10px) saturate(1.45);
+  -webkit-backdrop-filter: blur(10px) saturate(1.45);
+}
+
+.page-title-icon::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  width: 9px;
+  height: 5px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.15));
+  filter: blur(0.4px);
+  opacity: 0.88;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.page-title-icon svg {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  stroke: currentColor;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+.page-title-icon svg .nav-icon-cutout {
+  fill: none;
+  stroke: color-mix(in srgb, var(--tone, var(--accent)) 42%, #0a1a14);
+  stroke-width: 2.25;
+}
+
+.page-title-icon svg .nav-icon-hole {
+  fill: color-mix(in srgb, var(--tone, var(--accent)) 42%, #0a1a14);
+  stroke: none;
+}
+
+html[data-theme="light"] .page-title-icon {
+  background:
+    radial-gradient(
+      circle at 30% 22%,
+      rgba(255, 255, 255, 0.98) 0%,
+      rgba(255, 255, 255, 0.48) 18%,
+      transparent 44%
+    ),
+    radial-gradient(
+      circle at 72% 82%,
+      color-mix(in srgb, var(--tone, var(--accent)) 55%, #fff) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      circle at 48% 46%,
+      color-mix(in srgb, var(--tone, var(--accent)) 78%, #fff) 0%,
+      color-mix(in srgb, var(--tone, var(--accent)) 58%, transparent) 100%
+    );
+  border-color: color-mix(in srgb, #fff 62%, var(--tone, var(--accent)));
+  box-shadow:
+    0 2px 4px color-mix(in srgb, var(--tone, var(--accent)) 16%, rgba(15, 23, 42, 0.06)),
+    0 6px 14px color-mix(in srgb, var(--tone-glow, var(--tone, transparent)) 36%, transparent),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.88),
+    inset 0 -4px 10px color-mix(in srgb, var(--tone, var(--accent)) 24%, rgba(15, 23, 42, 0.06)),
+    inset 0 0 0 1px color-mix(in srgb, #fff 55%, transparent);
+  color: #fff;
 }
 
 html[data-theme="dark"] .page-title-icon {
-  background:
-    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.12) 0%, transparent 55%),
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--tone-soft, transparent) 75%, rgba(8, 6, 18, 0.55));
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 28%, rgba(255, 255, 255, 0.1));
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.35),
-    0 0 12px color-mix(in srgb, var(--tone-glow, transparent) 35%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  color: var(--tone, var(--accent));
+  color: #fff;
 }
 
 .page-title-icon[data-tone="blue"] {
