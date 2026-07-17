@@ -62,9 +62,57 @@ config.yaml (learning.*)
 - delete/patch/update：canonical 路径必须落在 Agent skills 根下  
 - Curator 输出仅为建议文案  
 
-## Phase 2
+## Phase 2（离线进化，未实现）
 
 离线进化：轨迹 → 变体评测 → 门禁 → 人工 PR。另开规格与 crate，不阻塞 P1。
+
+### 模型角色（不复用 `auxiliary.*`）
+
+离线进化对模型的依赖比运行时闭环**更重且分角色**，不能简单套用现有「便宜辅助模型」：
+
+| 角色 | 职责 | 模型倾向 |
+|------|------|----------|
+| **reflection（反思/变异）** | 读执行 trace，诊断「为什么失败」，提出针对性改写 | **强推理模型**，进化质量的关键 |
+| **judge（评测）** | 对候选变体判分 / 对比；能自动判分时可省略 | 中等模型或规则；仅在 LLM-as-judge 时用 |
+| **target（目标运行）** | 被优化的 Skill/prompt 实际运行 | **生产主模型**（须与线上一致，评测才有意义） |
+
+与现有 `auxiliary.*`（`background_review` / `dreaming` / `compaction` 等）的区别：
+
+- `auxiliary` = **在线、便宜、低风险旁路**，默认 `auto`（跟随会话主模型）。  
+- `evolution` = **离线、批量、可接受慢与贵**（对标上游 ~$2–10 / run），reflection 若用便宜模型会拖低质量。  
+- 产物是**候选 + PR**，绝不直接改线上。
+
+因此 Phase 2 **单列** `evolution.*` 配置，不挤进 `auxiliary` 的五类；可复用 `AuxiliaryRoute` 的 `{provider, model}` 结构体，但语义与默认值独立。
+
+### 配置草案（`config.yaml`，Phase 2）
+
+```yaml
+evolution:
+  enabled: false                # 离线进化总开关（默认关）
+  reflection:
+    provider: auto              # 建议显式指向强模型，不用 auto
+    model: auto
+  judge:
+    provider: auto              # 留空 / auto 表示尽量走自动判分
+    model: auto
+  gates:
+    run_tests: true             # 候选须通过测试
+    max_skill_bytes: 15360      # Skill 体积上限（~15KB）
+    require_pr: true            # 只开 PR，禁止直接落库
+```
+
+### 门禁（对齐上游）
+
+1. 测试全过  
+2. 体积上限（Skill ≤ ~15KB）  
+3. 语义不漂移（保持原始意图）  
+4. 人工 PR 审核，永不直接 commit  
+
+### 明确边界
+
+- 独立 crate / 流水线，默认 `enabled=false`，不改变运行时默认行为。  
+- 目标运行必须用生产主模型；reflection/judge 由 `evolution.*` 指定。  
+- 命名同样禁止 `hermes` 字样。
 
 ## 验收
 
