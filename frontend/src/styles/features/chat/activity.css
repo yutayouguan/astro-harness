@@ -282,42 +282,23 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-card.is-media {
-  --gmc-tone: #34d399;
+  --gmc-tone: var(--tone-green, #16a34a);
   position: relative;
   max-width: min(100%, 440px);
   overflow: hidden;
   isolation: isolate;
-  border-color: color-mix(in srgb, var(--gmc-tone) 28%, var(--a2ui-glass-border));
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--gmc-tone) 14%, transparent) 0%,
-      color-mix(in srgb, #fff 5%, transparent) 42%,
-      transparent 100%
-    ),
-    var(--a2ui-glass-bg);
+  border-color: var(--a2ui-glass-border, var(--glass-edge));
+  background: var(--a2ui-glass-bg, var(--panel, var(--bg)));
+  box-shadow: var(--a2ui-glass-shadow, none);
   animation: gen-media-card-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .a2ui-card.is-media:has(.a2ui-media-video) {
-  --gmc-tone: #fb7185;
+  --gmc-tone: #e11d48;
 }
 
 .a2ui-card.is-media:has(.a2ui-media-image) {
-  --gmc-tone: #60a5fa;
-}
-
-.a2ui-card.is-media::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--gmc-tone) 90%, #fff),
-    color-mix(in srgb, var(--gmc-tone) 35%, transparent)
-  );
-  pointer-events: none;
+  --gmc-tone: var(--tone, #2563eb);
 }
 
 .a2ui-card.is-media [data-a2ui-id="header"] {
@@ -333,13 +314,8 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-card.is-media .a2ui-media-slot {
   border-radius: 12px;
   overflow: hidden;
-  background:
-    radial-gradient(
-      ellipse 80% 120% at 12% 50%,
-      color-mix(in srgb, var(--gmc-tone) 18%, transparent),
-      transparent 55%
-    ),
-    color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
 }
 
 .a2ui-card.is-media .a2ui-media-preview.media-preview,
@@ -352,12 +328,11 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-card.is-media .media-preview-audio {
-  padding: 12px;
+  padding: 10px 12px 0;
 }
 
-.a2ui-card.is-media .media-toolbar {
-  opacity: 0.92;
-  pointer-events: auto;
+.a2ui-card.is-media .media-preview[data-kind="audio"] .media-toolbar {
+  margin: 0 8px 8px 0;
 }
 
 .a2ui-column {
