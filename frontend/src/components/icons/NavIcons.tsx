@@ -128,15 +128,16 @@ export function IconWorkspace(props: IconProps) {
   );
 }
 
-/** 文件空间 — 默认空心+折角/横线；选中填实后内部细节变透镜镂空 */
+/** 文件空间 — 默认空心文档+折角/横线；选中填实后内部细节变透镜镂空 */
 export function IconFileSpace(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-      <path className="nav-icon-cutout" d="M15 2v5h5" />
-      <path className="nav-icon-cutout" d="M8 12h8" />
-      <path className="nav-icon-cutout" d="M8 16h5" />
+      {/* lucide file-text：外轮廓是文档，折角与文字线同为 cutout */}
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path className="nav-icon-cutout" d="M14 2v4a2 2 0 0 0 2 2h4" />
       <path className="nav-icon-cutout" d="M10 9H8" />
+      <path className="nav-icon-cutout" d="M16 13H8" />
+      <path className="nav-icon-cutout" d="M16 17H8" />
     </IconBase>
   );
 }
