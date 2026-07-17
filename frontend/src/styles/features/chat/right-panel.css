@@ -512,8 +512,9 @@ html[data-theme="dark"] .chat-session-row.is-active {
   color: var(--ink);
   cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   transition: opacity 0.12s ease;
 }
 
