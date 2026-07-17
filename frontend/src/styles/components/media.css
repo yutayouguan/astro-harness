@@ -897,8 +897,8 @@ html[data-theme="dark"] .html-preview-bar {
   margin: 0;
 }
 
-/* 卡片头部已有下载/复制，隐藏预览栏内重复的工具栏（保留「用系统应用打开」） */
-.gen-media-card .gen-media-card-preview.html-preview .html-preview-bar .media-toolbar {
+/* 卡片头部已有下载/复制/系统打开，隐藏预览自带的整条标题栏 */
+.gen-media-card .gen-media-card-preview.html-preview .html-preview-bar {
   display: none;
 }
 
