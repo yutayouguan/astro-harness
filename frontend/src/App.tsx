@@ -586,10 +586,13 @@ export default function App() {
                 <div className="page-title-icon" data-tone={activeTone} aria-hidden>
                   <ActiveIcon width={15} height={15} />
                 </div>
-                <div>
+                <div className="page-title-text">
                   <h1 className="content-title" data-tone={activeTone}>
                     {t(meta.titleKey)}
                   </h1>
+                  <span className="content-sub-sep" aria-hidden>
+                    ·
+                  </span>
                   <p className="content-sub">{t(meta.subKey)}</p>
                 </div>
               </div>

@@ -252,6 +252,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   z-index: 1;
   width: 18px;
   height: 18px;
+  /* 默认 / hover：仅渐变线稿，不加粗填实 */
   fill: none;
   stroke-width: 1.6;
 }
@@ -259,25 +260,24 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 /* 明确禁止非选中态填实 */
 .nav-item:not(.active) .nav-icon svg,
 .nav-item:hover:not(.active) .nav-icon svg {
-  fill: none !important;
+  fill: none;
 }
 
 .nav-item:not(.active) .nav-icon svg .nav-icon-fill,
 .nav-item:not(.active) .nav-icon svg .nav-icon-hole {
-  fill: none !important;
+  fill: none;
 }
 
-/*
- * 选中填实：用渐变两端实色 mix，避免 CSS var(url(#grad)) 在 WebKit 失效
- * （工具/技能/趋势等无圈剪影依赖这条才能美化填实）
- */
+/* 仅选中：tone 渐变填实 + 内部镂空 */
 .nav-item.active .nav-icon svg,
 .nav-item.active .nav-icon svg[data-nav-fill="soft"] {
-  fill: color-mix(in srgb, var(--nav-grad-top) 55%, var(--nav-grad-bottom));
+  fill: var(--nav-grad-paint);
+  fill-opacity: 1;
 }
 
+/* 柱状图等纯线稿：选中也不填实 */
 .nav-item.active .nav-icon svg[data-nav-fill="outline"] {
-  fill: none !important;
+  fill: none;
 }
 
 /*
@@ -364,6 +364,15 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   min-width: 0;
 }
 
+/* B：标题 · 副标题同一行 */
+.page-title-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .page-title-icon {
   width: 30px;
   height: 30px;
@@ -393,33 +402,34 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   z-index: 1;
   width: 16px;
   height: 16px;
-  fill: color-mix(in srgb, var(--nav-grad-top) 55%, var(--nav-grad-bottom));
+  fill: var(--nav-grad-paint);
 }
 
 .page-title-icon svg[data-nav-fill="outline"] {
   fill: none;
 }
 
+/* 与侧栏 active 一致：亮色透镜镂空 */
 .page-title-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: var(--nav-grad-bottom);
-  stroke-width: 1.75;
+  stroke: var(--nav-grad-top);
+  stroke-width: 2.35;
 }
 
 .page-title-icon svg path.nav-icon-cutout {
   fill: none !important;
-  stroke: var(--nav-grad-bottom) !important;
-  stroke-width: 1.75;
+  stroke: var(--nav-grad-top) !important;
+  stroke-width: 2.35;
 }
 
 .page-title-icon svg circle.nav-icon-cutout {
-  fill: var(--nav-grad-bottom) !important;
+  fill: var(--nav-grad-top) !important;
   stroke: none !important;
 }
 
 .page-title-icon svg .nav-icon-hole {
-  fill: none !important;
-  stroke: var(--nav-grad-bottom) !important;
+  fill: var(--nav-grad-top) !important;
+  stroke: none !important;
 }
 
 .page-title-icon svg .nav-icon-stroke {
@@ -572,7 +582,7 @@ html[data-theme="light"] .page-title-icon {
 
 .content-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
@@ -656,13 +666,30 @@ html[data-theme="light"] .page-title-icon {
 
 .content-title {
   margin: 0;
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.03em;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.content-sub-sep {
+  color: var(--ink-mute);
+  opacity: 0.55;
+  font-size: 15px;
+  line-height: 1.2;
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .content-sub {
-  margin: 6px 0 0;
+  margin: 0;
   font-size: 13px;
+  font-weight: 500;
   color: var(--ink-mute);
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
