@@ -194,6 +194,8 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   --nav-icon-depth: #6e6e7a;
   --nav-icon-cutout: var(--sidebar-bg, var(--glass-fill, #fff));
   color: var(--nav-grad-bottom);
+  /* 阴影放在容器上，避免干扰 SVG 内部 destination-out 镂空 */
+  filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
   transition:
     opacity 0.18s ease,
     filter 0.18s ease;
@@ -261,8 +263,6 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   /* 默认 / hover：仅渐变线稿，不加粗填实 */
   fill: none;
   stroke-width: 1.6;
-  filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
-  transition: filter 0.18s ease;
 }
 
 /* 明确禁止非选中态填实 */
@@ -283,17 +283,27 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   fill-opacity: 1;
 }
 
-/* 内部细节：默认跟线稿同色；选中后改为底色镂空 */
+/* 柱状图等纯线稿：选中也不填实 */
+.nav-item.active .nav-icon svg[data-nav-fill="outline"] {
+  fill: none;
+}
+
+/* 内部细节：默认跟线稿同色描边 */
 .nav-icon svg .nav-icon-cutout {
   fill: none;
   stroke: var(--nav-grad-paint);
   stroke-width: 1.9;
 }
 
+/*
+ * 选中真镂空：用 destination-out 把内部细节从填实轮廓中抠掉，
+ * 透出下方指示器底板（透镜效果），不再用“底色描边”假镂空。
+ */
 .nav-item.active .nav-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: var(--nav-icon-cutout);
-  stroke-width: 2.25;
+  stroke: #000;
+  stroke-width: 2.4;
+  mix-blend-mode: destination-out;
 }
 
 .nav-icon svg .nav-icon-hole {
@@ -302,11 +312,12 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 .nav-item.active .nav-icon svg .nav-icon-hole {
-  fill: var(--nav-icon-cutout);
+  fill: #000;
   stroke: none;
+  mix-blend-mode: destination-out;
 }
 
-/* 小圆点：默认跟线稿；选中后用渐变实心 */
+/* 装饰小圆点：默认线稿；选中仍为渐变实心（不是镂空） */
 .nav-icon svg .nav-icon-dot {
   fill: none;
   stroke: var(--nav-grad-paint);
@@ -315,6 +326,12 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .nav-item.active .nav-icon svg .nav-icon-dot {
   fill: var(--nav-grad-paint);
   stroke: none;
+  mix-blend-mode: normal;
+}
+
+/* 仅描边、永不填实（如原子轨道） */
+.nav-icon svg .nav-icon-stroke {
+  fill: none !important;
 }
 
 .nav-icon svg .nav-icon-fill {
@@ -324,6 +341,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .nav-item.active .nav-icon svg .nav-icon-fill {
   fill: var(--nav-grad-paint);
   stroke: none;
+  mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -362,6 +380,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   background: color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone, transparent) 18%, transparent);
   box-shadow: none;
+  filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
 }
 
 .page-title-icon::before {
@@ -374,7 +393,6 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   width: 16px;
   height: 16px;
   fill: var(--nav-grad-paint);
-  filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
 }
 
 .page-title-icon svg[data-nav-fill="outline"] {
@@ -383,19 +401,26 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 
 .page-title-icon svg .nav-icon-cutout {
   fill: none;
-  stroke: var(--nav-icon-cutout);
-  stroke-width: 2.25;
+  stroke: #000;
+  stroke-width: 2.4;
+  mix-blend-mode: destination-out;
 }
 
 .page-title-icon svg .nav-icon-hole {
-  fill: var(--nav-icon-cutout);
+  fill: #000;
   stroke: none;
+  mix-blend-mode: destination-out;
+}
+
+.page-title-icon svg .nav-icon-stroke {
+  fill: none !important;
 }
 
 .page-title-icon svg .nav-icon-dot,
 .page-title-icon svg .nav-icon-fill {
   fill: var(--nav-grad-paint);
   stroke: none;
+  mix-blend-mode: normal;
 }
 
 html[data-theme="dark"] .page-title-icon {

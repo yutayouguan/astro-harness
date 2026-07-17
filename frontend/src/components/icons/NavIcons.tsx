@@ -33,7 +33,7 @@ function IconBase({ children, style, ...props }: IconProps) {
   );
 }
 
-/** 智能对话 — lucide message-circle-more（三点用 cutout，选中填实后仍可见） */
+/** 智能对话 — 气泡填实；三点选中后镂空透出 */
 export function IconChat(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -45,45 +45,44 @@ export function IconChat(props: IconProps) {
   );
 }
 
-/** 记忆空间 — 带环行星（中间圆可填，光环保持描边） */
+/** 记忆空间 — 行星本体可填；光环始终只描边 */
 export function IconMemory(props: IconProps) {
   return (
     <IconBase {...props}>
       <circle className="nav-icon-fill" cx="12" cy="12" r="6.5" />
       <path
-        fill="none"
+        className="nav-icon-stroke"
         d="M18.816 13.58c2.292 2.138 3.546 4 3.092 4.9-.745 1.46-5.783-.259-11.255-3.838-5.47-3.579-9.304-7.664-8.56-9.123.464-.91 2.926-.444 5.803.805"
       />
     </IconBase>
   );
 }
 
-/** 工作空间 — 代码文件夹（Agent 工作区文件树 / 编辑） */
+/** 工作空间 — 文件夹填实；<> 选中后镂空 */
 export function IconWorkspace(props: IconProps) {
   return (
     <IconBase {...props}>
-      {/* 先画文件夹，再画 <>，填充后中间仍可见 */}
       <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" />
-      <path className="nav-icon-cutout" fill="none" d="M10 10.5 8 13l2 2.5" />
-      <path className="nav-icon-cutout" fill="none" d="M14 10.5 16 13l-2 2.5" />
+      <path className="nav-icon-cutout" d="M10 10.5 8 13l2 2.5" />
+      <path className="nav-icon-cutout" d="M14 10.5 16 13l-2 2.5" />
     </IconBase>
   );
 }
 
-/** 文件空间 */
+/** 文件空间 — 文件夹填实；折角与内部横线选中后镂空 */
 export function IconFileSpace(props: IconProps) {
   return (
     <IconBase {...props}>
       <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+      <path className="nav-icon-cutout" d="M15 2v5h5" />
       <path className="nav-icon-cutout" d="M8 12h8" />
       <path className="nav-icon-cutout" d="M8 16h5" />
       <path className="nav-icon-cutout" d="M10 9H8" />
-      <path d="M15 2v5h5" />
     </IconBase>
   );
 }
 
-/** 我的工具 */
+/** 我的工具 — 单一扳手剪影，选中整块填实，无内部镂空 */
 export function IconTools(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -92,7 +91,7 @@ export function IconTools(props: IconProps) {
   );
 }
 
-/** 我的技能 */
+/** 我的技能 — 星形剪影，选中整块填实，无内部镂空 */
 export function IconSkills(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -121,33 +120,33 @@ export function IconShield(props: IconProps) {
   );
 }
 
-/** 液态玻璃 / 装饰 */
+/** 液态玻璃 / 装饰 — 主星可填；小圆点为装饰实心 */
 export function IconSparkles(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594zM20 2v4m2-2h-4" />
-      <circle className="nav-icon-dot" cx="4" cy="20" r="2" stroke="none" />
+      <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+      <path className="nav-icon-stroke" d="M20 2v4m2-2h-4" />
+      <circle className="nav-icon-dot" cx="4" cy="20" r="2" />
     </IconBase>
   );
 }
 
-
-/** 定时任务 / 闹钟勾选 */
+/** 定时任务 — 表盘填实；顶部耳与勾选选中后镂空透出 */
 export function IconCron(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M9 3.2 7.2 5.6" />
-      <path d="M15 3.2 16.8 5.6" />
       <circle cx="12" cy="13" r="8" />
+      <path className="nav-icon-stroke" d="M9 3.2 7.2 5.6" />
+      <path className="nav-icon-stroke" d="M15 3.2 16.8 5.6" />
       <path className="nav-icon-cutout" d="m9.2 13.1 1.9 1.9 3.8-4" />
     </IconBase>
   );
 }
 
-/** 用量洞察 / 柱状图 */
+/** 用量洞察 — 柱状线稿，选中仍为线（无可填闭合面） */
 export function IconInsights(props: IconProps) {
   return (
-    <IconBase {...props}>
+    <IconBase {...props} data-nav-fill="outline">
       <path d="M4 20V10" />
       <path d="M10 20V4" />
       <path d="M16 20v-7" />
@@ -156,7 +155,7 @@ export function IconInsights(props: IconProps) {
   );
 }
 
-/** 模型提供商 */
+/** 模型提供商 — 闪电剪影，选中整块填实 */
 export function IconProviders(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -165,7 +164,7 @@ export function IconProviders(props: IconProps) {
   );
 }
 
-/** 偏好设置 */
+/** 偏好设置 — 齿轮填实；中心圆孔选中后镂空 */
 export function IconSettings(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -201,13 +200,19 @@ export function IconMonitor(props: IconProps) {
   );
 }
 
-/** 关于 Astro / 阿童木 */
+/** 关于 Astro / 阿童木 — 核可填；轨道始终只描边 */
 export function IconAtom(props: IconProps) {
   return (
     <IconBase {...props}>
-      <circle cx="12" cy="12" r="1" />
-      <path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5" />
-      <path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5" />
+      <circle className="nav-icon-fill" cx="12" cy="12" r="1.5" />
+      <path
+        className="nav-icon-stroke"
+        d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5"
+      />
+      <path
+        className="nav-icon-stroke"
+        d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5"
+      />
     </IconBase>
   );
 }
