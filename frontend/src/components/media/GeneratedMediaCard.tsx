@@ -46,7 +46,7 @@ export default function GeneratedMediaCard({
         : kind === "html"
           ? t("media.kind.html")
           : t("media.kind.image");
-  const caption = label?.trim() || kindLabel;
+  const customLabel = label?.trim();
 
   return (
     <article
@@ -54,12 +54,14 @@ export default function GeneratedMediaCard({
       data-kind={kind}
     >
       <header className="gen-media-card-head">
-        <span className="gen-media-card-glyph" aria-hidden>
+        <span className="gen-media-card-glyph" role="img" aria-label={kindLabel}>
           <KindGlyph kind={kind} />
         </span>
         <div className="gen-media-card-titles">
           <h3 className="gen-media-card-title">{title}</h3>
-          <p className="gen-media-card-caption">{caption}</p>
+          {customLabel ? (
+            <p className="gen-media-card-caption">{customLabel}</p>
+          ) : null}
         </div>
         <MediaToolbar
           path={path}
