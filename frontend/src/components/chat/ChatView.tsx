@@ -1479,7 +1479,7 @@ export default function ChatView({
                                   streaming={isStreamingBubble}
                                   compact={displayPrefs.verbosity === "compact"}
                                   plain={Boolean(m.error)}
-                                  caret={isStreamingBubble}
+                                  caret={false}
                                   mediaBaseDir={mediaBaseDir}
                                 />
                                 {isStreamingBubble ? <MsgStreamLoader /> : null}
