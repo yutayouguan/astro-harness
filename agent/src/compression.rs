@@ -12,8 +12,9 @@ use common::message::{Message, Role};
 
 use crate::prompt::context_usage::estimate_tokens;
 
-pub const DEFAULT_TOOL_RESULTS_LIMIT: usize = 3;
+pub const DEFAULT_TOOL_RESULTS_LIMIT: usize = 12;
 /// 默认 token 阈值（ceil(chars/4) 估算）；与 Agno `compress_token_limit` 对齐为可选第二触发器。
+/// 桌面 Agent 常单轮数十次工具调用：优先靠本阈值控窗口，条数阈值仅作兜底。
 pub const DEFAULT_COMPRESS_TOKEN_LIMIT: usize = 16_000;
 const DEFAULT_MAX_COMPRESSED_CHARS: usize = 1800;
 const HEAD_CHARS: usize = 1100;
@@ -23,6 +24,9 @@ const TAIL_CHARS: usize = 500;
 pub struct ToolCompressionManager {
     pub enabled: bool,
     /// 未压缩 tool 结果条数阈值；`0` 表示关闭条数触发。
+    ///
+    /// 默认 12：比 Agno 的 3 更宽松，避免「一轮几十次工具」时频繁压短结果；
+    /// 真正控窗口主要靠 [`Self::compress_token_limit`]。
     pub tool_results_limit: usize,
     /// 会话消息估算 token 阈值；`None` 表示关闭 token 触发。
     pub compress_token_limit: Option<usize>,
