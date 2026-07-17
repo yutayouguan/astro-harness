@@ -13,6 +13,7 @@ mod app_icon;
 mod dreaming_commands;
 mod env_hydrate;
 mod evolution_commands;
+mod evolution_run_commands;
 mod icon_commands;
 mod fs_ops;
 mod grpc;
@@ -413,6 +414,10 @@ pub fn run() {
             evolution_commands::set_evolution_route,
             evolution_commands::reset_evolution_route,
             evolution_commands::set_evolution_gates,
+            evolution_run_commands::run_evolution,
+            evolution_run_commands::list_evolution_proposals,
+            evolution_run_commands::approve_evolution_proposal,
+            evolution_run_commands::reject_evolution_proposal,
             icon_commands::get_app_icon,
             icon_commands::set_app_icon,
         ])

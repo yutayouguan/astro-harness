@@ -17,6 +17,7 @@ members = [
     "tools",
     "mcp",
     "hooks",
+    "evolution",
     "frontend/src-tauri",
     "a2ui",
 ]

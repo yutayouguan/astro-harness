@@ -44,6 +44,7 @@ tools = { path = "../../tools" }
 mcp = { path = "../../mcp" }
 providers = { path = "../../providers" }
 skills = { path = "../../skills" }
+evolution = { path = "../../evolution" }
 chrono = { version = "0.4", features = ["clock"] }
 url = "2"
 keyring = "3"

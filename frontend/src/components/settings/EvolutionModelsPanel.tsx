@@ -2,13 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
+  Check,
   Dna,
+  FilePlus2,
   Gavel,
+  Pencil,
+  Play,
   RefreshCw,
   Sparkles,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { useEvolutionSettings } from "../../hooks/settings/useEvolutionSettings";
+import { useEvolutionProposals } from "../../hooks/settings/useEvolutionProposals";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -72,6 +78,15 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const { t } = useI18n();
   const { loading, error, settings, setEnabled, setRoute, resetRoute, setGates, reload } =
     useEvolutionSettings(active);
+  const {
+    running,
+    error: evoError,
+    lastReport,
+    proposals,
+    run: runEvolution,
+    approve,
+    reject,
+  } = useEvolutionProposals(active);
   const [providersState, setProvidersState] = useState<ProvidersStateDto | null>(null);
   const [providersError, setProvidersError] = useState<string | null>(null);
   const [editingRoute, setEditingRoute] = useState<EvolutionRouteId | null>(null);
@@ -420,6 +435,90 @@ export default function EvolutionModelsPanel({ active }: Props) {
             />
           </div>
         </article>
+      </section>
+
+      <section className="prefs-card aux-list-card">
+        <div className="aux-list-head">
+          <div>
+            <h2 className="prefs-card-title">{t("evo.proposalsTitle")}</h2>
+            <p className="prefs-card-sub">{t("evo.proposalsSub")}</p>
+          </div>
+          <div className="aux-list-head-actions">
+            <button
+              type="button"
+              className="aux-action"
+              onClick={() => void runEvolution()}
+              disabled={running || !settings?.enabled}
+            >
+              <Play size={15} />
+              {running ? t("evo.running") : t("evo.run")}
+            </button>
+          </div>
+        </div>
+
+        {!settings?.enabled && (
+          <p className="aux-muted">{t("evo.disabledHint")}</p>
+        )}
+        {evoError && (
+          <div className="aux-error">
+            <AlertTriangle size={16} />
+            {evoError}
+          </div>
+        )}
+        {lastReport && (
+          <p className="aux-muted">
+            {t("evo.runSummary")
+              .replace("{generated}", String(lastReport.generated))
+              .replace("{gated}", String(lastReport.gatedOut))
+              .replace("{proposals}", String(lastReport.proposals.length))}
+          </p>
+        )}
+
+        {proposals.length === 0 ? (
+          <p className="aux-muted">{t("evo.noProposals")}</p>
+        ) : (
+          <div className="aux-task-list">
+            {proposals.map((p) => (
+              <article className="aux-task-row" key={p.id}>
+                <div className="aux-task-icon">
+                  {p.kind === "new_skill" ? <FilePlus2 size={18} /> : <Pencil size={18} />}
+                </div>
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{p.skillId}</h3>
+                    <span className="aux-route-pill">
+                      {p.kind === "new_skill" ? t("evo.kindNew") : t("evo.kindPatch")}
+                    </span>
+                  </div>
+                  {p.rationale && <p>{p.rationale}</p>}
+                  <pre className="evo-proposal-diff">
+                    {p.kind === "new_skill"
+                      ? (p.content ?? "").slice(0, 1200)
+                      : `- ${(p.oldString ?? "").slice(0, 400)}\n+ ${(p.newString ?? "").slice(0, 400)}`}
+                  </pre>
+                </div>
+                <div className="aux-task-actions">
+                  <button
+                    type="button"
+                    className="aux-action aux-action-ghost"
+                    onClick={() => void reject(p.id)}
+                  >
+                    <Trash2 size={15} />
+                    {t("evo.reject")}
+                  </button>
+                  <button
+                    type="button"
+                    className="aux-action"
+                    onClick={() => void approve(p.id)}
+                  >
+                    <Check size={15} />
+                    {t("evo.approve")}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <p className="aux-muted evo-phase-note">{t("evo.phaseNote")}</p>

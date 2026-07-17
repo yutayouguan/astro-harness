@@ -45,7 +45,10 @@ export type ChatActivity = {
   /** 调用耗时（秒），完成态写入 */
   durationSec?: number;
   /** 结构化媒体（优先于从 output 文本 regex 解析） */
-  media?: Array<{ kind: "image" | "video" | "audio" | "html"; path: string }>;
+  media?: Array<{
+    kind: "image" | "video" | "audio" | "html" | "code";
+    path: string;
+  }>;
 };
 
 /** A2UI surface 生命周期 */
@@ -257,6 +260,28 @@ export type EvolutionSettingsDto = {
   gates: EvolutionGatesDto;
   activeProviderId: string | null;
   activeModel: string;
+};
+
+/** 单条进化提案（待审） */
+export type EvolutionProposalDto = {
+  id: string;
+  kind: "new_skill" | "patch";
+  skillId: string;
+  description: string | null;
+  content: string | null;
+  oldString: string | null;
+  newString: string | null;
+  rationale: string;
+  createdAt: string;
+};
+
+/** 运行一次进化的结果 */
+export type EvolutionRunReport = {
+  ok: boolean;
+  generated: number;
+  gatedOut: number;
+  proposals: EvolutionProposalDto[];
+  error: string | null;
 };
 
 /** 应用图标变体 id（对齐 `app_icon::VARIANTS`） */

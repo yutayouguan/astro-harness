@@ -172,6 +172,84 @@ pub fn resolve_auxiliary_targets(
     resolve_for_config(kind, &aux, primary)
 }
 
+/// 将单条路由（`auto` / 显式 UI Provider ID）解析为 preferred/fallback。
+///
+/// 与辅助任务同规则：`auto`/查不到/禁用/无凭据 → 退回 `primary`；显式且有效时
+/// preferred=显式、fallback=primary（同 provider 不同 model 也挂 fallback）。
+/// 供离线进化 `reflection` / `judge` 路由复用。
+fn resolve_route_for(
+    route: &AuxiliaryRoute,
+    primary: &common::ChatTarget,
+) -> Result<AuxiliaryTargets, String> {
+    let primary_provider = providers_commands::find_provider(&primary.provider_id)
+        .ok()
+        .ok_or_else(|| format!("primary provider not found: {}", primary.provider_id))?;
+    let primary_resolved = resolved_from_ui_provider(
+        primary_provider,
+        primary.model.clone(),
+        primary.api_key.clone(),
+    );
+
+    if is_auto_route(route) {
+        return Ok(AuxiliaryTargets {
+            preferred: primary_resolved,
+            fallback: None,
+        });
+    }
+
+    let explicit = providers_commands::find_provider(route.provider.trim())
+        .ok()
+        .filter(|p| p.enabled);
+    let Some(p) = explicit else {
+        return Ok(AuxiliaryTargets {
+            preferred: primary_resolved,
+            fallback: None,
+        });
+    };
+
+    let (has_key, _src, _env, key) = resolve_api_key(&p);
+    let api_key = key.unwrap_or_default();
+    let allow_empty_key = p.kind.backend_id() == "ollama";
+    if !has_key && !allow_empty_key {
+        return Ok(AuxiliaryTargets {
+            preferred: primary_resolved,
+            fallback: None,
+        });
+    }
+
+    let model = {
+        let m = route.model.trim();
+        if m.is_empty() || m.eq_ignore_ascii_case("auto") {
+            p.model.clone()
+        } else {
+            m.to_string()
+        }
+    };
+    let explicit_id = p.id.clone();
+    let explicit_resolved = resolved_from_ui_provider(p, model, api_key);
+    let same_target = explicit_id == primary_resolved.provider.id
+        && explicit_resolved.model == primary_resolved.model;
+    let fallback = if same_target {
+        None
+    } else {
+        Some(primary_resolved)
+    };
+    Ok(AuxiliaryTargets {
+        preferred: explicit_resolved,
+        fallback,
+    })
+}
+
+/// 将离线进化路由（`reflection` / `judge`）解析为 preferred/fallback。
+pub fn resolve_evolution_targets(
+    kind: memory::EvolutionRouteKind,
+    primary: &common::ChatTarget,
+) -> Result<AuxiliaryTargets, String> {
+    let cfg = memory::load_evolution_config(&home::default_memory_dir());
+    let route = cfg.route(kind).clone();
+    resolve_route_for(&route, primary)
+}
+
 fn to_common_task(kind: AuxiliaryKind) -> common::AuxiliaryTask {
     match kind {
         AuxiliaryKind::TitleGeneration => common::AuxiliaryTask::TitleGeneration,

@@ -6,7 +6,7 @@ Astro 将「可复用工作流」固化为 **Skills（程序性记忆）**，将
 |----|------|------|
 | **运行时闭环** | 本期已落地 | Agent 用 `skills` / `memory` 建改；回合后复杂任务 nudge；`curate` 修剪建议 |
 | **记忆 review** | 已有 | 回合后 `auxiliary.background_review` 精炼 MEMORY/USER（见 [`memory.md`](./memory.md)） |
-| **离线进化** | Phase 2（未实现） | 基于执行轨迹的遗传式优化（评测 → 门禁 → 人工 PR），不阻塞日常使用 |
+| **离线进化** | Phase 2（Rust 内置极简版已落地） | 读轨迹→反思模型提技能候选→门禁→应用内待审批；完整 GEPA 遗传搜索仍为后续 |
 
 设计规格：[`docs/superpowers/specs/2026-07-17-agent-learning-loop-design.md`](./superpowers/specs/2026-07-17-agent-learning-loop-design.md)。
 
@@ -85,7 +85,14 @@ learning:
 
 离线遗传优化：读取执行轨迹 → 生成 Skill/提示变体 → 测试与体积门禁 → 人工审 PR。独立流水线，不改变运行时默认行为。
 
-**当前已落地「配置层」**（引擎仍未实现）：模型服务页新增「离线进化」子 Tab，可设置 `evolution.enabled`、`reflection` / `judge` 两条模型路由、以及门禁（run_tests / require_pr / max_skill_bytes）。配置写入 `config.yaml` 的 `evolution:` 段。
+**已落地（Rust 内置极简引擎）**：模型服务页「离线进化」子 Tab 可配置 `evolution.enabled`、`reflection` / `judge` 路由与门禁（run_tests / require_pr / max_skill_bytes，写入 `config.yaml` 的 `evolution:` 段），并新增：
+
+- **运行进化**：读 `learning/decisions.jsonl`（工具失败等）+ 已启用技能索引 → `reflection` 模型产出技能候选（新建 / patch）→ 门禁过滤 → 存待审提案（`~/.astro/learning/evolution/proposals/`）。
+- **应用内审批**：提案在子 Tab 内以 diff 展示，**批准**才写入 Agent skills 目录，**绝不自动应用**（`require_pr` 语义）。
+
+实现：crate [`evolution`](../evolution)（candidate/reflect/gates/proposal）+ Tauri `evolution_run_commands`（run/list/approve/reject）+ `EvolutionModelsPanel`。
+
+**仍为后续**：完整 GEPA/Pareto 遗传搜索、`judge` 参与打分、`run_tests` 实跑（技能多为 Markdown，暂仅当存在 `scripts/test.*` 时由调用方执行）、git 分支/PR 自动化。
 
 模型角色（不复用在线 `auxiliary.*`）：
 

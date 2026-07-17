@@ -62,9 +62,17 @@ config.yaml (learning.*)
 - delete/patch/update：canonical 路径必须落在 Agent skills 根下  
 - Curator 输出仅为建议文案  
 
-## Phase 2（离线进化，未实现）
+## Phase 2（离线进化，Rust 内置极简版已落地）
 
-离线进化：轨迹 → 变体评测 → 门禁 → 人工 PR。另开规格与 crate，不阻塞 P1。
+离线进化：轨迹 → 变体评测 → 门禁 → 人工审。已落地为 Rust 内置极简引擎（单轮反思 + 应用内审批），非完整 GEPA 遗传搜索。
+
+落地位置：
+- crate [`evolution`](../../../evolution)：`candidate`（候选类型）、`reflect`（提示词 + `parse_candidates`）、`gates`（体积/patch 结构门禁）、`proposal`（提案队列 + 审批应用到 agent skills）
+- Tauri [`evolution_run_commands.rs`](../../../frontend/src-tauri/src/evolution_run_commands.rs)：`run_evolution` / `list_evolution_proposals` / `approve_evolution_proposal` / `reject_evolution_proposal`；`reflection`/`judge` 目标经 [`auxiliary_resolver::resolve_evolution_targets`](../../../frontend/src-tauri/src/auxiliary_resolver.rs) 解析
+- UI：`EvolutionModelsPanel` 增「运行进化」+ 提案 diff 审批
+- 数据：读 `learning/decisions.jsonl` + 已启用技能索引；提案存 `learning/evolution/proposals/{id}.json`；批准写入 `agent skills` 目录
+
+仍为后续：完整 GEPA/Pareto 遗传搜索、`judge` 打分、`run_tests` 实跑、git 分支/PR 自动化、会话逐字 transcript 富化。
 
 ### 模型角色（不复用 `auxiliary.*`）
 
