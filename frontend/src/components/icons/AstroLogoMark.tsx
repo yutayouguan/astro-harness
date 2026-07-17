@@ -3,7 +3,11 @@ import { useId, type SVGProps } from "react";
 
 type Props = SVGProps<SVGSVGElement>;
 
-/** 品牌主标（青→紫渐变 A），适合 16–34px 状态位展示。 */
+/**
+ * 品牌主标（渐变 A），适合 16–34px 状态位展示。
+ * 渐变色读取 CSS 变量 --astro-mark-c0/c1/c2（默认蓝→紫）；
+ * 侧栏用 --tone 驱动这三个变量，使 logo 随当前 Tab 主题色变化。
+ */
 export function AstroLogoMark({ width = 24, height = 24, ...props }: Props) {
   const uid = useId().replace(/:/g, "");
   const gradId = `astroMarkGrad-${uid}`;
@@ -27,14 +31,9 @@ export function AstroLogoMark({ width = 24, height = 24, ...props }: Props) {
           x2="620"
           y2="240"
         >
-          <stop offset="0%" stopColor="#0084fd" />
-          <stop offset="24%" stopColor="#0083fd" />
-          <stop offset="39%" stopColor="#1d57fd" />
-          <stop offset="56%" stopColor="#4130fc" />
-          <stop offset="63%" stopColor="#5f1efc" />
-          <stop offset="69%" stopColor="#611ffc" />
-          <stop offset="74%" stopColor="#4b2dfc" />
-          <stop offset="100%" stopColor="#6020fc" />
+          <stop offset="0%" style={{ stopColor: "var(--astro-mark-c0, #0084fd)" }} />
+          <stop offset="46%" style={{ stopColor: "var(--astro-mark-c1, #1d57fd)" }} />
+          <stop offset="100%" style={{ stopColor: "var(--astro-mark-c2, #6020fc)" }} />
         </linearGradient>
       </defs>
       <path

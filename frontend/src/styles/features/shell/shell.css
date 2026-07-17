@@ -555,6 +555,9 @@ html[data-tone="teal"] {
   place-items: center;
   background: transparent;
   flex-shrink: 0;
+  --astro-mark-c0: color-mix(in srgb, var(--tone, #2563eb) 82%, #0b1020 18%);
+  --astro-mark-c1: var(--tone, #2563eb);
+  --astro-mark-c2: color-mix(in srgb, var(--tone, #2563eb) 60%, #ffffff 40%);
 }
 
 .sidebar-logo svg {
