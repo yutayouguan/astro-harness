@@ -9,6 +9,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import AnimatedSwitch from "./components/ui/AnimatedSwitch";
+import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ChatView from "./components/chat/ChatView";
 import CronPanel from "./components/schedule/CronPanel";
@@ -101,6 +102,7 @@ export default function App() {
   const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
 
   // ── Extracted hooks ───────────────────────────────────────────────────────
@@ -177,14 +179,29 @@ export default function App() {
     return () => { cancelled = true; };
   }, [activeProvider?.id, activeProvider?.model]);
 
-  // ── macOS open-preferences listener ──────────────────────────────────────
+  // ── macOS open-preferences / open-about listener ─────────────────────────
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
-    let unlisten: (() => void) | undefined;
-    void listen("open-preferences", () => { setNav("settings"); })
-      .then((fn) => { unlisten = fn; })
+    let unlistenPrefs: (() => void) | undefined;
+    let unlistenAbout: (() => void) | undefined;
+    void listen("open-preferences", () => {
+      setNav("settings");
+    })
+      .then((fn) => {
+        unlistenPrefs = fn;
+      })
       .catch(() => {});
-    return () => { unlisten?.(); };
+    void listen("open-about", () => {
+      setAboutOpen(true);
+    })
+      .then((fn) => {
+        unlistenAbout = fn;
+      })
+      .catch(() => {});
+    return () => {
+      unlistenPrefs?.();
+      unlistenAbout?.();
+    };
   }, []);
 
   // ── Nav tone + underlay ───────────────────────────────────────────────────
@@ -800,6 +817,7 @@ export default function App() {
         </section>
       </div>
       {toastHost}
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }

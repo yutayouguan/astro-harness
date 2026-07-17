@@ -33,10 +33,7 @@ use std::sync::Mutex;
 
 use menu_locale::AppLocale;
 use tauri::{
-    menu::{
-        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
-        WINDOW_SUBMENU_ID,
-    },
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID},
     window::Color,
     AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder,
 };
@@ -47,8 +44,12 @@ const BG: Color = Color(0xdb, 0xea, 0xfe, 0xff);
 
 /// 原生菜单「偏好设置」项 id。
 const MENU_PREFERENCES_ID: &str = "preferences";
+/// 原生菜单「关于」项 id（打开应用内 About 对话框）。
+const MENU_ABOUT_ID: &str = "about";
 /// 前端监听的「打开偏好设置」事件名。
 const EVENT_OPEN_PREFERENCES: &str = "open-preferences";
+/// 前端监听的「打开关于」事件名。
+const EVENT_OPEN_ABOUT: &str = "open-about";
 
 /// 为 true 时允许窗口真正关闭（退出流程）；否则关窗只隐藏到托盘。
 static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
@@ -62,13 +63,7 @@ pub fn request_app_exit<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// 安装应用菜单（关于、偏好设置、窗口与帮助），文案随 [`AppLocale`]。
 fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri::Result<()> {
     let s = locale.strings();
-    let pkg = app.package_info();
-    let about = AboutMetadata {
-        name: Some(s.about_title.into()),
-        version: Some(pkg.version.to_string()),
-        credits: Some(s.about_credits.into()),
-        ..Default::default()
-    };
+    let about = MenuItem::with_id(app, MENU_ABOUT_ID, s.about, true, None::<&str>)?;
 
     let preferences = MenuItem::with_id(
         app,
@@ -99,7 +94,7 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>, locale: AppLocale) ->
         true,
         &[
             #[cfg(not(target_os = "macos"))]
-            &PredefinedMenuItem::about(app, Some(s.about), Some(about))?,
+            &about,
             #[cfg(not(target_os = "macos"))]
             &PredefinedMenuItem::separator(app)?,
             #[cfg(not(target_os = "macos"))]
@@ -116,7 +111,7 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>, locale: AppLocale) ->
                 "Astro",
                 true,
                 &[
-                    &PredefinedMenuItem::about(app, Some(s.about), Some(about))?,
+                    &about,
                     &PredefinedMenuItem::separator(app)?,
                     &preferences,
                     &PredefinedMenuItem::separator(app)?,
@@ -273,6 +268,9 @@ pub fn run() {
         .on_menu_event(|app, event| {
             if event.id() == MENU_PREFERENCES_ID {
                 let _ = app.emit(EVENT_OPEN_PREFERENCES, ());
+                tray::show_main_window(app);
+            } else if event.id() == MENU_ABOUT_ID {
+                let _ = app.emit(EVENT_OPEN_ABOUT, ());
                 tray::show_main_window(app);
             }
         })

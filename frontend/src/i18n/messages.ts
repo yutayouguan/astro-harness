@@ -22,6 +22,16 @@ export const zh = {
   "dialog.unsavedTitle": "有未保存的更改",
   "dialog.deleteTitle": "确认删除",
 
+  "about.tagline": "本地 AI 桌面工作站",
+  "about.version": "版本 {v}",
+  "about.body":
+    "名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。",
+  "about.feature.chat": "智能对话",
+  "about.feature.memory": "记忆召回",
+  "about.feature.workspace": "工作区",
+  "about.feature.tools": "工具与 Skills",
+  "about.close": "好的",
+
   "page.chat.title": "智能对话",
   "page.chat.sub": "与 Astro Agent 对话，自动召回记忆并调用工具",
   "page.memory.title": "记忆",
@@ -1331,6 +1341,16 @@ export const en: Record<MessageKey, string> = {
   "dialog.save": "Save",
   "dialog.unsavedTitle": "Unsaved changes",
   "dialog.deleteTitle": "Confirm delete",
+
+  "about.tagline": "Local AI desktop workstation",
+  "about.version": "Version {v}",
+  "about.body":
+    "Named after Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. Preferences are saved on this device.",
+  "about.feature.chat": "Chat",
+  "about.feature.memory": "Memory",
+  "about.feature.workspace": "Workspace",
+  "about.feature.tools": "Tools & Skills",
+  "about.close": "OK",
 
   "page.chat.title": "Chat",
   "page.chat.sub": "Talk with Astro Agent — memory recall and tools included",
