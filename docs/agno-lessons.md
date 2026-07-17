@@ -8,6 +8,8 @@
 1. 多模态 / 多 Provider / 统一工具 / Agent 生命周期 / hooks / tracing / session / skills
 2. 上下文管理 / 记忆 / 学习 / 知识库 / DB / MCP
 
+**实现级笔记**（Session / Memory / State、分层开关、Always·Agentic·Propose）：[`docs/agno/`](./agno/README.md)。
+
 ---
 
 ## 一、多模态与多 Provider
@@ -149,9 +151,12 @@ messages 中 tool 结果超阈值
 
 ## 六、记忆管理（Memory）
 
+> **实现级详解**（分层开关、Always / Agentic / Propose 写入模式、Session/State 对照）：见 [`docs/agno/session-memory-state.md`](./agno/session-memory-state.md)。
+
 ### Agno
 - `MemoryManager` + 优化策略（summarize / prune）。
 - 偏「库表事实」+ 检索进 context。
+- **读/写正交开关**：`add_memories_to_context`（读）× `update_memory_on_run` / `enable_agentic_memory`（写）。
 
 ### Astro（已强）
 - 文件精炼记忆：`MEMORY.md` / `USER.md` + daily notes，字符上限 + Frozen Snapshot 注入。
@@ -163,7 +168,7 @@ messages 中 tool 结果超阈值
 ### 可借鉴（轻量）
 - 把 MEMORY/USER/daily 抽象成 **MemoryStore 协议**（list / search / propose_write / apply）。
 - Agno 的「策略对象」（summarize / prune）挂到入梦/review，而非替换 Markdown 产品形态。
-- **不必**为对齐 Agno 改成纯 DB 记忆；Astro 的审批流是差异化优势。
+- **分层开关 + 写入模式显式化**（详见 [`agno/session-memory-state.md`](./agno/session-memory-state.md) §5–§8）；**不必**改成纯 DB 记忆。
 
 ### 已落地（本轮）
 - `memory::protocol::{MemoryOps, FileMemoryOps, MemoryWriteIntent}`：list/search/propose_write/apply
@@ -173,6 +178,8 @@ messages 中 tool 结果超阈值
 ---
 
 ## 七、学习管理（Learning）— 概念层最值得复用
+
+> 写入模式三角（Always / Agentic / Propose）与 Agno Session/State 对照的完整说明：[`docs/agno/session-memory-state.md`](./agno/session-memory-state.md)。
 
 ### Agno `LearningMachine`
 多 Store 协同：
