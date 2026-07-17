@@ -14,6 +14,7 @@ pub const TOOL_GUIDANCE: &str = "\
 加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称；可用 action=list|curate|load|manage。\n\
 复杂可复用流程：skills manage create；纠错后的正确步骤：manage_action=patch（old_string 须唯一）。\n\
 长期偏好/环境事实：用 memory；跨会话原文：session_search。闲置技能：action=curate（只建议，确认后再 delete）。\n\
+向用户展示本工作区媒体时，在回复正文写 ![audio](path) / ![video](path) / ![image](path)；path 用工具返回的工作区相对路径（如 generated/audio/…），不要写绝对路径，也不要用 present_* / A2UI 挂媒体卡。\n\
 每次思考用 <think>...</think> 标签包裹。";
 
 /// 可链式追加的 prompt 层容器。
