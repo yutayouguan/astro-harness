@@ -1,6 +1,6 @@
 use a2ui::templates::{
-    build_clarify_surface, build_confirm_surface, build_generated_media_surface,
-    build_info_surface, build_location_request_surface, media_title_from_path, ClarifyStep,
+    build_clarify_surface, build_confirm_surface, build_info_surface,
+    build_location_request_surface, ClarifyStep,
 };
 use a2ui::{validate_operations, ASTRO_CATALOG_ID};
 use serde_json::Value;
@@ -145,32 +145,4 @@ fn info_template_validates_with_optional_image() {
     let names = all_component_names(&ops);
     assert!(names.iter().any(|n| n == "Image"));
     assert!(!names.iter().any(|n| n == "Badge"));
-}
-
-#[test]
-fn generated_media_audio_template_validates() {
-    let ops = build_generated_media_surface(
-        "surf-media-1",
-        "audio",
-        "采菌子歌",
-        "generated/audio/采菌子歌-20260717-194651-d81f0b2b.mp3",
-        Some("音乐已生成"),
-    );
-    validate_operations(&ops).unwrap();
-    let names = all_component_names(&ops);
-    assert!(names.iter().any(|n| n == "Audio"));
-    assert!(names.iter().any(|n| n == "Badge"));
-    assert!(names.iter().any(|n| n == "Avatar"));
-}
-
-#[test]
-fn media_title_strips_stamp_suffix() {
-    assert_eq!(
-        media_title_from_path("generated/audio/采菌子歌-20260717-194651-d81f0b2b.mp3"),
-        "采菌子歌"
-    );
-    assert_eq!(
-        media_title_from_path("generated/audio/music-20260717-194651-d81f0b2b.mp3"),
-        "音乐"
-    );
 }
