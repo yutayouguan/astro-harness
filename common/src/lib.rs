@@ -19,4 +19,4 @@ pub use media::{
 pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
 pub use title::sanitize_title;
 
-pub use text::{truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
+pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};

@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use common::truncate_utf8;
 use serde::{Deserialize, Serialize};
 
 use crate::db::OrchestrationDb;
@@ -186,15 +187,4 @@ fn build_graph_from_usage(
         .collect();
 
     Ok(CollaborationGraph { nodes, edges })
-}
-
-fn truncate_utf8(s: &str, max_bytes: usize) -> String {
-    if s.len() <= max_bytes {
-        return s.to_string();
-    }
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    s[..end].to_string()
 }

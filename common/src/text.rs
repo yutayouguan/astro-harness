@@ -15,6 +15,16 @@ pub fn truncate_utf8(s: &str, max_bytes: usize) -> String {
     s[..end].to_string()
 }
 
+/// 按字符数截断字符串；超限时追加省略号。
+pub fn truncate_chars(s: &str, max_chars: usize) -> String {
+    let mut chars = s.chars();
+    let mut out: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_some() {
+        out.push('…');
+    }
+    out
+}
+
 /// 超限时追加 `[truncated]` 提示，便于模型分段续读或改用 file_ops。
 pub fn truncate_tool_result(s: &str, max_bytes: usize) -> String {
     if s.len() <= max_bytes {
@@ -44,6 +54,14 @@ mod tests {
         let out = truncate_utf8(s, 5);
         assert_eq!(out, "你");
         assert!(!out.contains('\u{FFFD}'));
+    }
+
+    #[test]
+    fn chars_append_ellipsis_only_when_truncated() {
+        assert_eq!(truncate_chars("你好世界", 2), "你好…");
+        assert_eq!(truncate_chars("你好", 2), "你好");
+        assert_eq!(truncate_chars("", 0), "");
+        assert_eq!(truncate_chars("a", 0), "…");
     }
 
     #[test]

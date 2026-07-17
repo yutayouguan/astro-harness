@@ -75,23 +75,15 @@ pub fn openai_tools_to_interactions(tools: &[Value]) -> Vec<Value> {
         .collect()
 }
 
-/// 从 data URL / http(s) 拼 Interactions image content 块。
+/// 从 data URL / http(s) 拼 Interactions media content 块。
 fn media_content_from_url(kind: &str, url: &str, mime_hint: &str) -> Value {
     let url = url.trim();
-    if let Some(rest) = url.strip_prefix("data:") {
-        if let Some((meta, b64)) = rest.split_once(',') {
-            let mime = meta
-                .split(';')
-                .next()
-                .unwrap_or(mime_hint)
-                .trim()
-                .to_string();
-            return json!({
-                "type": kind,
-                "mime_type": mime,
-                "data": b64,
-            });
-        }
+    if let Some((mime, b64)) = crate::http_stream::parse_data_url(url) {
+        return json!({
+            "type": kind,
+            "mime_type": if mime.is_empty() { mime_hint.to_string() } else { mime },
+            "data": b64,
+        });
     }
     json!({
         "type": kind,
@@ -602,21 +594,7 @@ pub async fn interactions_chat_stream(
         .await
         .with_context(|| format!("连接 Google Interactions 失败: {url}"))?;
 
-    let status = response.status();
-    if !status.is_success() {
-        let text = response.text().await.unwrap_or_default();
-        let msg = serde_json::from_str::<Value>(&text)
-            .ok()
-            .and_then(|v| {
-                v.pointer("/error/message")
-                    .and_then(|m| m.as_str())
-                    .map(str::to_string)
-                    .or_else(|| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-            })
-            .unwrap_or(text);
-        return Err(anyhow!("上游 HTTP {status}: {msg}"));
-    }
-
+    let response = crate::http_stream::check_response_status(response).await?;
     let byte_stream = response.bytes_stream();
     let stream = futures::stream::unfold(
         (byte_stream, String::new(), false, StreamState::default()),

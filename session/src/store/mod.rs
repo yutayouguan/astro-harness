@@ -296,11 +296,6 @@ impl SqliteStore for SessionStore {
     }
 }
 
-/// 删除 SQLite 主库及其 WAL/SHM 旁路文件。
-fn delete_sqlite_files(path: &Path) {
-    common::delete_sqlite_files(path);
-}
-
 /// 读取已有库的 schema 版本；无法读取时视为 0。
 fn peek_schema_version(path: &Path) -> Result<i32> {
     let conn = Connection::open(path)?;
@@ -325,7 +320,7 @@ fn peek_schema_version(path: &Path) -> Result<i32> {
 /// 删除旁路旧 `sessions.db`（不再导入）。
 fn discard_sidecar_sessions_db(sessions_dir: &Path) {
     let base = sessions_dir.join("sessions.db");
-    delete_sqlite_files(&base);
+    common::delete_sqlite_files(&base);
 }
 
 pub(crate) fn is_unique_constraint(err: &rusqlite::Error) -> bool {
@@ -343,14 +338,7 @@ pub(crate) fn escape_fts5_query(query: &str) -> String {
     format!("\"{escaped}\"")
 }
 
-pub(crate) fn truncate_chars(s: &str, max_chars: usize) -> String {
-    let count = s.chars().count();
-    if count <= max_chars {
-        return s.to_string();
-    }
-    let truncated: String = s.chars().take(max_chars).collect();
-    format!("{truncated}…")
-}
+pub(crate) use common::truncate_chars;
 
 pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<ChatActivityStored> {
     let Some(Value::Array(arr)) = tool_calls else {

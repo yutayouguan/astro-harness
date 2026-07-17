@@ -7,6 +7,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use common::truncate_chars;
+
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
@@ -149,7 +151,7 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
                 .iter()
                 .take(limit)
                 .map(|h| {
-                    let preview = truncate(&h.snippet, 400);
+                    let preview = truncate_chars(&h.snippet, 400);
                     format!(
                         "- [{}] session={} id={}\n  {}",
                         h.role, h.session_id, h.id, preview
@@ -166,10 +168,10 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
         let user_hits = search_entries(ctx.memory.user.live_entries(), query, limit);
         let mut lines = Vec::new();
         for e in &mem_hits {
-            lines.push(format!("- [MEMORY] {}", truncate(e, 400)));
+            lines.push(format!("- [MEMORY] {}", truncate_chars(e, 400)));
         }
         for e in &user_hits {
-            lines.push(format!("- [USER] {}", truncate(e, 400)));
+            lines.push(format!("- [USER] {}", truncate_chars(e, 400)));
         }
         if lines.is_empty() {
             sections.push("## memory\n（无匹配）".to_string());
@@ -332,17 +334,6 @@ fn search_entries(entries: &[String], query: &str, limit: usize) -> Vec<String> 
         .take(limit)
         .cloned()
         .collect()
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    let n = s.chars().count();
-    if n <= max {
-        s.to_string()
-    } else {
-        let mut out: String = s.chars().take(max).collect();
-        out.push('…');
-        out
-    }
 }
 
 #[cfg(test)]

@@ -310,10 +310,6 @@ fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>>
     Ok(out)
 }
 
-fn delete_usage_db_files(path: &Path) {
-    common::delete_sqlite_files(path);
-}
-
 fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
     let conn = common::open_wal(path)?;
     conn.execute_batch(DDL)?;
@@ -328,10 +324,10 @@ impl common::SqliteStore for UsageDb {
         &self.path
     }
 
-    /// `new()` 已在打开时完成迁移；此处幂等校准 `user_version` 并确保 WAL。
+    /// `new()` 已在打开时完成迁移；此处幂等校准 `user_version`。
     fn migrate(&self) -> anyhow::Result<()> {
         self.conn.execute_batch(&format!(
-            "PRAGMA journal_mode=WAL; PRAGMA user_version = {USAGE_SCHEMA_VERSION};"
+            "PRAGMA user_version = {USAGE_SCHEMA_VERSION};"
         ))?;
         Ok(())
     }
@@ -340,9 +336,6 @@ impl common::SqliteStore for UsageDb {
 impl UsageDb {
     /// 打开或创建数据库；v3→v4 非破坏性迁移，仅 version<3 或新库时重建
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
         let exists = path.exists();
         let version = if exists {
             let conn = Connection::open(&path)?;
@@ -352,7 +345,7 @@ impl UsageDb {
         };
 
         if !exists || version == 0 {
-            delete_usage_db_files(&path);
+            common::delete_sqlite_files(&path);
             let conn = open_and_init(&path)?;
             return Ok(Self { conn, path });
         }
@@ -365,7 +358,7 @@ impl UsageDb {
 
         if version < 3 {
             tracing::warn!(version, "usage.db too old; rebuilding");
-            delete_usage_db_files(&path);
+            common::delete_sqlite_files(&path);
             let conn = open_and_init(&path)?;
             return Ok(Self { conn, path });
         }

@@ -130,11 +130,9 @@ fn part_to_gemini(p: &ChatContentPart) -> Value {
 }
 
 fn gemini_inline_or_file(url: &str, default_mime: &str) -> Value {
-    if let Some(rest) = url.strip_prefix("data:") {
-        if let Some((meta, data)) = rest.split_once(',') {
-            let mime = meta.split(';').next().unwrap_or(default_mime);
-            return json!({ "inlineData": { "mimeType": mime, "data": data } });
-        }
+    if let Some((mime, data)) = crate::http_stream::parse_data_url(url) {
+        let mime = if mime.is_empty() { default_mime.to_string() } else { mime };
+        return json!({ "inlineData": { "mimeType": mime, "data": data } });
     }
     json!({ "fileData": { "fileUri": url, "mimeType": default_mime } })
 }

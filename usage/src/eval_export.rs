@@ -7,6 +7,7 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+use common::truncate_chars;
 use serde::{Deserialize, Serialize};
 use session::SessionStore;
 
@@ -129,15 +130,6 @@ fn load_session_previews(session_id: &str) -> (String, Vec<EvalMessagePreview>) 
         })
         .collect();
     (title, previews)
-}
-
-fn truncate_chars(s: &str, max: usize) -> String {
-    let n = s.chars().count();
-    if n <= max {
-        s.to_string()
-    } else {
-        format!("{}…", s.chars().take(max).collect::<String>())
-    }
 }
 
 /// 写单条 eval 记录为 JSONL（单测 / 无 DB 路径）。

@@ -11,7 +11,7 @@
 //! - 时间戳为 ISO UTC（RFC3339，秒精度，与 usage period_window 一致）
 
 use chrono::{SecondsFormat, Utc};
-use common::SqliteStore;
+use common::{truncate_utf8, SqliteStore};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -172,18 +172,6 @@ pub fn orchestration_db_path() -> PathBuf {
 /// 当前 UTC 时间 RFC3339（秒精度，与 `usage_db::period_window` / `fmt_utc_bound` 一致）
 fn now_rfc3339() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
-}
-
-/// 按 UTF-8 字符边界截断字符串至 `max_bytes`
-fn truncate_utf8(s: &str, max_bytes: usize) -> String {
-    if s.len() <= max_bytes {
-        return s.to_string();
-    }
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    s[..end].to_string()
 }
 
 fn orchestration_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<OrchestrationRow> {

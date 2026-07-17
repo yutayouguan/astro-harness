@@ -9,7 +9,7 @@
 //! - 运行中记录以 `status = 'running'` 标识；同一 job 可并发查询是否在跑
 //! - 使用 WAL 模式；`id` 为主键 UUID
 
-use common::SqliteStore;
+use common::{truncate_utf8, SqliteStore};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -111,18 +111,6 @@ pub fn cron_db_path(cron_root: &Path) -> PathBuf {
     cron_root.join("cron.db")
 }
 
-/// 按 UTF-8 字符边界截断字符串至 `max_bytes`
-fn truncate_utf8(s: &str, max_bytes: usize) -> String {
-    if s.len() <= max_bytes {
-        return s.to_string();
-    }
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    s[..end].to_string()
-}
-
 /// 从查询行映射为 [`CronRunRow`]
 fn row_from_query(r: &rusqlite::Row<'_>) -> rusqlite::Result<CronRunRow> {
     Ok(CronRunRow {
@@ -158,7 +146,6 @@ impl CronRunDb {
     /// 打开默认 `~/.astro/cron/cron.db`
     pub fn open_default() -> anyhow::Result<Self> {
         let root = crate::cron_dir();
-        std::fs::create_dir_all(&root)?;
         Self::new(cron_db_path(&root))
     }
 

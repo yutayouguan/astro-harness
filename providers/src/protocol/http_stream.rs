@@ -384,25 +384,32 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
 }
 
 /// 将 reqwest 字节流解析为 SSE `data:` 行，并用 `extract` 转为 [`ChatChunk`]。
+/// 检查 HTTP 响应状态；非 2xx 时消耗响应体并返回结构化错误，成功时原样返回响应。
+pub(crate) async fn check_response_status(
+    response: reqwest::Response,
+) -> Result<reqwest::Response> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+    let body = response.text().await.unwrap_or_default();
+    let msg = serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|v| {
+            v.pointer("/error/message")
+                .and_then(|m| m.as_str())
+                .map(str::to_string)
+                .or_else(|| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+        })
+        .unwrap_or(body);
+    Err(anyhow!("上游 HTTP {status}: {msg}"))
+}
+
 pub(crate) async fn sse_chat_stream(
     response: reqwest::Response,
     extract: Arc<dyn Fn(&str) -> Option<ChatChunk> + Send + Sync>,
 ) -> Result<ChatStream> {
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        let msg = serde_json::from_str::<Value>(&body)
-            .ok()
-            .and_then(|v| {
-                v.pointer("/error/message")
-                    .and_then(|m| m.as_str())
-                    .map(str::to_string)
-                    .or_else(|| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-            })
-            .unwrap_or(body);
-        return Err(anyhow!("上游 HTTP {status}: {msg}"));
-    }
-
+    let response = check_response_status(response).await?;
     let byte_stream = response.bytes_stream();
     let stream = futures::stream::unfold(
         (byte_stream, String::new(), false, extract),
@@ -779,7 +786,7 @@ fn anthropic_user_content(m: &ChatMessage) -> Value {
     }
 }
 
-fn parse_data_url(url: &str) -> Option<(String, String)> {
+pub(crate) fn parse_data_url(url: &str) -> Option<(String, String)> {
     let rest = url.strip_prefix("data:")?;
     let (meta, data) = rest.split_once(";base64,")?;
     let media_type = meta.trim();

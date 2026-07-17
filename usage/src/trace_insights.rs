@@ -4,6 +4,7 @@
 //! user → tool/skill/mcp → llm 调用链（含 input/output），再合并 `usage.db` 的 token/费用。
 
 use chrono::{SecondsFormat, TimeZone, Utc};
+use common::truncate_chars;
 use serde::{Deserialize, Serialize};
 
 use session::SessionStore;
@@ -345,15 +346,6 @@ fn nonempty_truncated(s: &str) -> Option<String> {
     } else {
         Some(truncate_chars(t, IO_TRUNCATE_CHARS))
     }
-}
-
-fn truncate_chars(s: &str, max_chars: usize) -> String {
-    let count = s.chars().count();
-    if count <= max_chars {
-        return s.to_string();
-    }
-    let truncated: String = s.chars().take(max_chars).collect();
-    format!("{truncated}…")
 }
 
 fn unique_kinds(events: &[TraceEvent]) -> Vec<String> {

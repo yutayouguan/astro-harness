@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
-use common::ChatTarget;
+use common::{truncate_chars, ChatTarget};
 use futures::StreamExt;
 use home::{default_memory_dir, AgentRuntimeConfig};
 use orchestration::{
@@ -438,14 +438,6 @@ async fn run_provider_loop(
         anyhow::bail!("模型未返回有效回复");
     }
     Ok((last_response, total_usage))
-}
-
-fn truncate_chars(s: &str, max_chars: usize) -> String {
-    let mut out: String = s.chars().take(max_chars).collect();
-    if s.chars().count() > max_chars {
-        out.push('…');
-    }
-    out
 }
 
 /// 编排路径检测 confirm/clarify 的 `astro_hitl` 载荷。

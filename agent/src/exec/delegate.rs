@@ -5,6 +5,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use common::truncate_chars;
 use futures::StreamExt;
 use home::default_memory_dir;
 use delegate::{
@@ -560,14 +561,6 @@ fn fire_subagent_start(creds: &DelegateRunRequest, task: &DelegateTaskSpec, role
             ..Default::default()
         },
     );
-}
-
-fn truncate_chars(s: &str, max_chars: usize) -> String {
-    let mut out: String = s.chars().take(max_chars).collect();
-    if s.chars().count() > max_chars {
-        out.push('…');
-    }
-    out
 }
 
 /// 供 `multi_agent::Orchestrator` 使用的薄封装。
