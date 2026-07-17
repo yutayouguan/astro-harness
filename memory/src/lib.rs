@@ -7,6 +7,7 @@ pub mod agent;
 pub mod config;
 pub mod dreaming;
 pub mod pending;
+pub mod protocol;
 pub mod review;
 pub mod session;
 
@@ -23,6 +24,9 @@ pub use config::{
 pub use pending::{
     approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,
     pending_dir, reject as reject_pending_memory, PendingMemoryWrite,
+};
+pub use protocol::{
+    open_memory_ops_for_test, FileMemoryOps, MemoryOps, MemoryOpsResult, MemoryWriteIntent,
 };
 pub use review::{
     apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,

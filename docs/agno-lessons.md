@@ -159,6 +159,11 @@ messages 中 tool 结果超阈值
 - Agno 的「策略对象」（summarize / prune）挂到入梦/review，而非替换 Markdown 产品形态。
 - **不必**为对齐 Agno 改成纯 DB 记忆；Astro 的审批流是差异化优势。
 
+### 已落地（本轮）
+- `memory::protocol::{MemoryOps, FileMemoryOps, MemoryWriteIntent}`：list/search/propose_write/apply
+- `propose_or_apply` 尊重 `write_approval`（Propose → pending；否则直接 apply）
+- 产品形态（Markdown / 入梦 / 审批）不变
+
 ---
 
 ## 七、学习管理（Learning）— 概念层最值得复用
