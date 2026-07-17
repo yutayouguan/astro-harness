@@ -105,6 +105,10 @@ cargo build -p astro-agent --release --target x86_64-apple-darwin
 - 首次使用 Release 前，在仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**。
 - 推送到 GitHub 后，在 Actions 页点 **Run workflow** 即可试跑。
 
+## 托盘常驻
+
+关闭主窗口会**隐藏到系统托盘**，内嵌 backend / cron 继续运行。左键点托盘图标可恢复窗口；托盘菜单「退出 Astro」或 macOS「Astro → 退出」才会真正结束进程。
+
 ## gRPC 后端（默认内嵌）
 
 `tauri dev` / 打包后的 `.app` **默认在同进程启动 gRPC backend**（含 cron），无需另开终端。双击 APP 即可聊天。

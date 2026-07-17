@@ -21,9 +21,10 @@ mod model_meta;
 mod providers_commands;
 mod session_events;
 mod skills_commands;
+mod tray;
 
 use tauri::{
-    AppHandle, Emitter, Manager, WebviewWindowBuilder,
+    AppHandle, Emitter, RunEvent, WebviewWindowBuilder,
     menu::{
         AboutMetadata, HELP_SUBMENU_ID, Menu, MenuItem, PredefinedMenuItem, Submenu,
         WINDOW_SUBMENU_ID,
@@ -234,10 +235,14 @@ pub fn run() {
         .on_menu_event(|app, event| {
             if event.id() == MENU_PREFERENCES_ID {
                 let _ = app.emit(EVENT_OPEN_PREFERENCES, ());
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.unminimize();
-                    let _ = win.set_focus();
-                }
+                tray::show_main_window(app);
+            }
+        })
+        // 关窗 → 进托盘，不退出进程（内嵌 backend / cron 继续跑）。
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -399,6 +404,10 @@ pub fn run() {
                 tracing::warn!("app menu install failed: {err}");
             }
 
+            if let Err(err) = tray::install_tray(app.handle()) {
+                tracing::warn!("system tray install failed: {err}");
+            }
+
             let config = app
                 .config()
                 .app
@@ -421,6 +430,16 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // macOS：点 Dock 图标时若窗口已关进托盘，重新显示。
+            if let RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } = event
+            {
+                tray::show_main_window(app);
+            }
+        });
 }
