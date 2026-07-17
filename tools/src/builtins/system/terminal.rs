@@ -1,7 +1,8 @@
 //! 终端工具：在 Agent 工作区内执行 Shell 命令。
 //!
 //! 通过 `sh -c` 运行命令，默认工作目录为 workspace；可选 `cwd` 指定
-//! workspace 内的相对子目录。超时 60 秒。
+//! workspace 内的相对子目录。默认超时 60 秒，可用 `timeout_secs` 调整（上限 900s），
+//! 便于构建 / 测试 / 装依赖等长任务。
 //!
 //! **注意**：仅默认 cwd 落在 workspace，命令本身可访问整机路径；stdout/stderr
 //! 有 64KiB 截断以防撑爆上下文。
@@ -21,14 +22,23 @@ pub struct TerminalArgs {
     /// 可选：相对于 workspace 的工作子目录。
     #[serde(default)]
     pub cwd: Option<String>,
+    /// 可选：超时秒数（默认 60，钳制到 1..=900）；用于构建 / 测试等长任务。
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }
+
+/// `timeout_secs` 上限，防止命令永久挂起占用执行器。
+const MAX_TIMEOUT_SECS: u64 = 900;
+
+/// 默认超时（未显式指定 `timeout_secs` 时）。
+const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
 /// 向注册表注册 `terminal` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "terminal".to_string(),
         toolset: "terminal".to_string(),
-        description: "Run a shell command. Default cwd is project_root when set (e.g. delegated git worktree), else the agent memory workspace (not a jail—commands can still touch paths outside it). Timeout 60s. stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
+        description: "Run a shell command. Default cwd is project_root when set (e.g. delegated git worktree), else the agent memory workspace (not a jail—commands can still touch paths outside it). Default timeout 60s, override with timeout_secs (max 900s) for builds/tests/installs. stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
             .to_string(),
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,
@@ -78,10 +88,14 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .stderr(Stdio::piped())
         .spawn()?;
 
-    let timeout = Duration::from_secs(60);
+    let timeout_secs = parsed
+        .timeout_secs
+        .unwrap_or(DEFAULT_TIMEOUT_SECS)
+        .clamp(1, MAX_TIMEOUT_SECS);
+    let timeout = Duration::from_secs(timeout_secs);
     let output = tokio::time::timeout(timeout, child.wait_with_output())
         .await
-        .map_err(|_| anyhow::anyhow!("命令超时（60s）"))??;
+        .map_err(|_| anyhow::anyhow!("命令超时（{timeout_secs}s）"))??;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

@@ -1,4 +1,4 @@
-//! 文件操作工具：在工作区内读写、列举、删除文件与目录。
+//! 文件操作工具：在工作区内读写、列举、搜索、改写、移动、复制、删除文件与目录。
 //!
 //! 所有路径均相对于 Agent 工作区，经 [`crate::path_safe::resolve_safe`] 校验，
 //! 禁止访问 workspace 之外的文件系统。
@@ -41,7 +41,7 @@ const MAX_SEARCH_FILES_SCANNED: usize = 2000;
 pub struct FileOpsArgs {
     /// 相对于工作区的路径。
     pub path: String,
-    /// 操作类型：`read` | `write` | `append` | `list` | `delete` | `mkdir` | `search` | `patch`。
+    /// 操作类型：`read` | `write` | `append` | `list` | `delete` | `mkdir` | `search` | `patch` | `move` | `copy`。
     pub operation: String,
     /// `write` / `append` 时写入的内容；`write` 必填，`append` 可省略则报错。
     #[serde(default)]
@@ -49,12 +49,18 @@ pub struct FileOpsArgs {
     /// `search` 时的查询串（文件名或文件内容子串，大小写不敏感）。也可用 `content` 代替。
     #[serde(default)]
     pub query: Option<String>,
-    /// `patch`：要替换的原文（须在文件中唯一出现）。
+    /// `patch`：要替换的原文（默认须在文件中唯一出现，除非 `replace_all=true`）。
     #[serde(default)]
     pub old_string: Option<String>,
     /// `patch`：替换后的新文本。
     #[serde(default)]
     pub new_string: Option<String>,
+    /// `patch`：为 `true` 时替换全部匹配（至少 1 处）；默认仅当唯一匹配时替换。
+    #[serde(default)]
+    pub replace_all: Option<bool>,
+    /// `move` / `copy` 的目标路径（相对于工作区）。
+    #[serde(default)]
+    pub dest: Option<String>,
     /// `read` 时从该字节偏移开始读（默认 0）；用于大文件分段续读。
     #[serde(default)]
     pub offset: Option<u64>,
@@ -62,7 +68,20 @@ pub struct FileOpsArgs {
     /// `search` 时表示最多返回命中数（默认/上限 [`MAX_SEARCH_HITS`]）。
     #[serde(default)]
     pub limit: Option<usize>,
+    /// `read`：起始行（1 起，含）；配合 `end_line` 按行读取而非按字节。
+    #[serde(default)]
+    pub start_line: Option<usize>,
+    /// `read`：结束行（1 起，含）；缺省时读到文件末尾（仍受字节上限约束）。
+    #[serde(default)]
+    pub end_line: Option<usize>,
+    /// `search`：为 `true` 时把 `query` 当正则（大小写不敏感）而非子串。
+    #[serde(default)]
+    pub regex: Option<bool>,
+    /// `search` / `list`：仅匹配这些扩展名（逗号分隔，如 `"rs,toml"`，不含点）。
+    #[serde(default)]
+    pub ext: Option<String>,
     /// `delete` 目录时：为 `true` 才整树删除；默认仅删空目录。
+    /// `list` 时：为 `true` 则递归列出目录树。
     #[serde(default)]
     pub recursive: Option<bool>,
 }
@@ -72,11 +91,12 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "file_ops".to_string(),
         toolset: "file_ops".to_string(),
-        description: "Read, write, append, list, mkdir, delete, search, or patch files under project_root when set (delegated worktree), else the agent memory workspace. \
-             read returns at most 64KiB UTF-8 (use offset/limit to continue). \
-             list caps at 500 entries / 64KiB and marks dirs with '/'. \
-             search finds filenames or text content under path (query required; case-insensitive; caps hits/bytes). \
-             patch does unique old_string→new_string replace (fails if 0 or >1 matches). \
+        description: "Read, write, append, list, mkdir, delete, search, patch, move, or copy files under project_root when set (delegated worktree), else the agent memory workspace. \
+             read returns at most 64KiB UTF-8 (use offset/limit to continue, or start_line/end_line for line ranges). \
+             list caps at 500 entries / 64KiB, marks dirs with '/', recursive=true walks the tree; ext filters by extension (e.g. 'rs,toml'). \
+             search finds filenames or text content under path (query required; case-insensitive; regex=true for regex; ext to filter; caps hits/bytes). \
+             patch replaces old_string→new_string (unique match by default; replace_all=true replaces every match). \
+             move/copy need dest; move renames files or dirs, copy duplicates files or dir trees. \
              delete refuses workspace root; directories need recursive=true to remove trees."
             .to_string(),
         schema: schema_for_args::<FileOpsArgs>(),
@@ -116,8 +136,8 @@ fn maybe_html_sidecar(text: String, rel: &str) -> String {
 
 /// 按 `operation` 执行文件系统操作。
 ///
-/// 路径经 `resolve_safe` 解析；`write`/`append`/`mkdir` 会自动创建父目录。
-/// `read` / `list` 有字节或条目上限。
+/// 路径经 `resolve_safe` 解析；`write`/`append`/`mkdir`/`move`/`copy` 会自动创建父目录。
+/// `read` / `list` / `search` 有字节或条目上限。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: FileOpsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("file_ops 参数无效: {e}"))?;
@@ -127,7 +147,13 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
     let rel = display_rel(root, &full);
 
     match op.as_str() {
-        "read" => read_file_capped(&full, parsed.offset.unwrap_or(0), parsed.limit),
+        "read" => {
+            if parsed.start_line.is_some() || parsed.end_line.is_some() {
+                read_lines_range(&full, &rel, parsed.start_line, parsed.end_line)
+            } else {
+                read_file_capped(&full, parsed.offset.unwrap_or(0), parsed.limit)
+            }
+        }
         "write" => {
             let content = parsed
                 .content
@@ -154,9 +180,9 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .append(true)
                 .open(&full)?;
             f.write_all(content.as_bytes())?;
-            Ok(format!("已追加 {rel}"))
+            Ok(maybe_html_sidecar(format!("已追加 {rel}"), &rel))
         }
-        "list" => list_dir_capped(&full, root),
+        "list" => list_dir_capped(&full, root, parsed.recursive.unwrap_or(false), ext_filter(&parsed.ext)),
         "search" => {
             let query = parsed
                 .query
@@ -169,7 +195,8 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .limit
                 .unwrap_or(MAX_SEARCH_HITS)
                 .clamp(1, MAX_SEARCH_HITS);
-            search_under(&full, root, query, max_hits)
+            let matcher = build_matcher(query, parsed.regex.unwrap_or(false))?;
+            search_under(&full, root, query, &matcher, max_hits, ext_filter(&parsed.ext))
         }
         "patch" => {
             let old = parsed
@@ -181,7 +208,28 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("patch 需要 new_string"))?;
             reaffirm_within(&full, root)?;
-            patch_file_unique(&full, &rel, old, new)
+            patch_file(&full, &rel, old, new, parsed.replace_all.unwrap_or(false))
+                .map(|msg| maybe_html_sidecar(msg, &rel))
+        }
+        "move" | "rename" | "mv" => {
+            let dest_rel = parsed
+                .dest
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("move 需要 dest 参数"))?;
+            let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
+            move_path(&full, &dest_full, root)
+        }
+        "copy" | "cp" => {
+            let dest_rel = parsed
+                .dest
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("copy 需要 dest 参数"))?;
+            let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
+            copy_path(&full, &dest_full, root)
         }
         "delete" => delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false)),
         "mkdir" => {
@@ -189,6 +237,64 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             Ok(format!("已创建目录 {rel}"))
         }
         other => anyhow::bail!("未知 operation: {other}"),
+    }
+}
+
+/// 把逗号分隔的扩展名列表解析为小写去点集合；空则返回 `None`（不过滤）。
+fn ext_filter(raw: &Option<String>) -> Option<Vec<String>> {
+    let raw = raw.as_deref()?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let exts: Vec<String> = raw
+        .split(',')
+        .map(|s| s.trim().trim_start_matches('.').to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if exts.is_empty() {
+        None
+    } else {
+        Some(exts)
+    }
+}
+
+/// 判断路径扩展名是否落在过滤集合内；无过滤时恒为 `true`。
+fn ext_matches(path: &Path, filter: &Option<Vec<String>>) -> bool {
+    match filter {
+        None => true,
+        Some(exts) => path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| exts.iter().any(|x| x == &e.to_lowercase()))
+            .unwrap_or(false),
+    }
+}
+
+/// 内容匹配器：正则或大小写不敏感子串。
+enum Matcher {
+    Substr(String),
+    Regex(regex::Regex),
+}
+
+impl Matcher {
+    fn is_match(&self, haystack: &str) -> bool {
+        match self {
+            Matcher::Substr(needle) => haystack.to_lowercase().contains(needle),
+            Matcher::Regex(re) => re.is_match(haystack),
+        }
+    }
+}
+
+/// 构造匹配器；`use_regex=true` 时编译大小写不敏感正则。
+fn build_matcher(query: &str, use_regex: bool) -> anyhow::Result<Matcher> {
+    if use_regex {
+        let re = regex::RegexBuilder::new(query)
+            .case_insensitive(true)
+            .build()
+            .map_err(|e| anyhow::anyhow!("search 正则无效: {e}"))?;
+        Ok(Matcher::Regex(re))
+    } else {
+        Ok(Matcher::Substr(query.to_lowercase()))
     }
 }
 
@@ -251,9 +357,22 @@ fn decode_utf8_prefix(buf: &[u8]) -> anyhow::Result<String> {
         Err(e) => {
             let valid_up_to = e.valid_up_to();
             if valid_up_to > 0 && e.error_len().is_none() {
+                // 末尾多字节序列不完整：裁掉，下次续读补齐
                 Ok(std::str::from_utf8(&buf[..valid_up_to])
                     .expect("valid_up_to is char boundary")
                     .to_string())
+            } else if valid_up_to == 0 && e.error_len().is_none() {
+                // 整个窗口只装下一个被截断的多字节字符：这不是二进制，而是窗口/偏移问题
+                let first = buf.first().copied().unwrap_or(0);
+                if first & 0b1100_0000 == 0b1000_0000 {
+                    anyhow::bail!(
+                        "read 的 offset 落在多字节字符中间（首字节为 UTF-8 续接字节）。请把 offset 对齐到字符边界，通常直接用上次返回的续读 offset。"
+                    )
+                } else {
+                    anyhow::bail!(
+                        "limit 太小，无法容纳当前位置的单个多字节字符，请增大 limit（至少 4 字节）后重试。"
+                    )
+                }
             } else {
                 anyhow::bail!(
                     "文件不是有效 UTF-8 文本（已读 {} 字节处非法）。二进制请勿用 file_ops read 整段灌入上下文。",
@@ -264,7 +383,95 @@ fn decode_utf8_prefix(buf: &[u8]) -> anyhow::Result<String> {
     }
 }
 
-fn list_dir_capped(full: &Path, workspace: &Path) -> anyhow::Result<String> {
+/// 按行范围读取（1 起，`start_line`/`end_line` 含端点）。
+///
+/// 仅支持 UTF-8 文本；输出总量仍受 [`MAX_READ_BYTES`] 约束，超出时截断并提示。
+fn read_lines_range(
+    path: &Path,
+    rel: &str,
+    start_line: Option<usize>,
+    end_line: Option<usize>,
+) -> anyhow::Result<String> {
+    let start = start_line.unwrap_or(1).max(1);
+    if let (Some(s), Some(e)) = (start_line, end_line) {
+        if e < s {
+            anyhow::bail!("read 的 end_line({e}) 不能小于 start_line({s})");
+        }
+    }
+    let end = end_line.unwrap_or(usize::MAX).max(start);
+
+    let meta = std::fs::metadata(path)?;
+    // 行模式需整读文件；给一个宽松上限，避免对超大文件误用
+    const MAX_LINE_MODE_FILE: u64 = 8 * 1024 * 1024;
+    if meta.len() > MAX_LINE_MODE_FILE {
+        anyhow::bail!(
+            "文件过大（{} 字节 > 8MiB），行范围读取不可用。请改用 offset/limit 字节分段读取: {rel}",
+            meta.len()
+        );
+    }
+    let raw = std::fs::read(path)?;
+    let text = std::str::from_utf8(&raw)
+        .map_err(|_| anyhow::anyhow!("read 行范围仅支持 UTF-8 文本文件: {rel}"))?;
+
+    let total_lines = text.lines().count();
+    let mut out = String::new();
+    let mut emitted = 0usize;
+    let mut capped = false;
+    for (idx, line) in text.lines().enumerate() {
+        let ln = idx + 1;
+        if ln < start {
+            continue;
+        }
+        if ln > end {
+            break;
+        }
+        let piece = if out.is_empty() {
+            line.to_string()
+        } else {
+            format!("\n{line}")
+        };
+        if out.len() + piece.len() > MAX_READ_BYTES {
+            capped = true;
+            break;
+        }
+        out.push_str(&piece);
+        emitted += 1;
+    }
+
+    if start > total_lines {
+        anyhow::bail!("start_line({start}) 超出文件总行数({total_lines})");
+    }
+
+    let last = start + emitted.saturating_sub(1);
+    let header = format!("[lines {start}..{last} of {total_lines}]\n");
+    if capped {
+        Ok(format!(
+            "{header}{out}\n\n[truncated] line range exceeded {MAX_READ_BYTES} bytes; \
+             continue with start_line={}.",
+            last + 1
+        ))
+    } else {
+        Ok(format!("{header}{out}"))
+    }
+}
+
+/// 递归遍历时跳过的噪音目录（与 search 保持一致）。
+const NOISE_DIRS: &[&str] = &[
+    "node_modules",
+    ".git",
+    "target",
+    ".astro",
+    "dist",
+    "build",
+    ".venv",
+];
+
+fn list_dir_capped(
+    full: &Path,
+    workspace: &Path,
+    recursive: bool,
+    ext: Option<Vec<String>>,
+) -> anyhow::Result<String> {
     let dir = if full.is_dir() {
         full.to_path_buf()
     } else {
@@ -272,14 +479,18 @@ fn list_dir_capped(full: &Path, workspace: &Path) -> anyhow::Result<String> {
     };
 
     let mut names: Vec<String> = Vec::new();
-    for entry in std::fs::read_dir(&dir)? {
-        let entry = entry?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-        if is_dir {
-            names.push(format!("{name}/"));
-        } else {
-            names.push(name);
+    if recursive {
+        collect_tree(&dir, &dir, &ext, &mut names);
+    } else {
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            let name = entry.file_name().to_string_lossy().to_string();
+            if is_dir {
+                names.push(format!("{name}/"));
+            } else if ext_matches(&entry.path(), &ext) {
+                names.push(name);
+            }
         }
     }
     names.sort();
@@ -306,19 +517,58 @@ fn list_dir_capped(full: &Path, workspace: &Path) -> anyhow::Result<String> {
     Ok(out)
 }
 
+/// 递归收集目录树内的相对路径（目录带尾 `/`），跳过噪音目录与 symlink。
+fn collect_tree(dir: &Path, base: &Path, ext: &Option<Vec<String>>, out: &mut Vec<String>) {
+    if out.len() >= MAX_LIST_ENTRIES {
+        return;
+    }
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        if out.len() >= MAX_LIST_ENTRIES {
+            return;
+        }
+        let path = entry.path();
+        let Ok(ft) = entry.file_type() else { continue };
+        if ft.is_symlink() {
+            continue;
+        }
+        let rel = path
+            .strip_prefix(base)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
+        if ft.is_dir() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if NOISE_DIRS.contains(&name.as_str()) {
+                continue;
+            }
+            out.push(format!("{rel}/"));
+            collect_tree(&path, base, ext, out);
+        } else if ft.is_file() && ext_matches(&path, ext) {
+            out.push(rel);
+        }
+    }
+}
+
 /// 在 `start`（文件或目录）下搜索文件名 / 文本内容。
 fn search_under(
     start: &Path,
     workspace: &Path,
     query: &str,
+    matcher: &Matcher,
     max_hits: usize,
+    ext: Option<Vec<String>>,
 ) -> anyhow::Result<String> {
-    let needle = query.to_lowercase();
     let root = if start.is_dir() {
         start.to_path_buf()
     } else if start.is_file() {
         // 单文件：只扫这一份
-        return search_one_file(start, workspace, &needle)
+        return search_one_file(start, workspace, matcher, &ext)
             .map(|hit| hit.unwrap_or_else(|| format!("未找到匹配「{query}」")));
     } else {
         anyhow::bail!("路径不存在: {}", display_rel(workspace, start));
@@ -355,10 +605,7 @@ fn search_under(
             if ft.is_dir() {
                 // 跳过常见噪音目录
                 let name = entry.file_name().to_string_lossy().to_string();
-                if matches!(
-                    name.as_str(),
-                    "node_modules" | ".git" | "target" | ".astro" | "dist" | "build" | ".venv"
-                ) {
+                if NOISE_DIRS.contains(&name.as_str()) {
                     continue;
                 }
                 stack.push(path);
@@ -368,7 +615,7 @@ fn search_under(
                 continue;
             }
             scanned += 1;
-            if let Some(hit) = search_one_file(&path, workspace, &needle)? {
+            if let Some(hit) = search_one_file(&path, workspace, matcher, &ext)? {
                 hits.push(hit);
             }
         }
@@ -396,8 +643,14 @@ fn search_under(
     Ok(out)
 }
 
-/// 精准替换：`old` 必须在文件中恰好出现一次。
-fn patch_file_unique(path: &Path, rel: &str, old: &str, new: &str) -> anyhow::Result<String> {
+/// 替换文件文本：默认要求 `old` 唯一出现；`replace_all=true` 时替换全部匹配。
+fn patch_file(
+    path: &Path,
+    rel: &str,
+    old: &str,
+    new: &str,
+    replace_all: bool,
+) -> anyhow::Result<String> {
     if old.is_empty() {
         anyhow::bail!("patch 的 old_string 不能为空");
     }
@@ -405,15 +658,22 @@ fn patch_file_unique(path: &Path, rel: &str, old: &str, new: &str) -> anyhow::Re
     let text = std::str::from_utf8(&raw)
         .map_err(|_| anyhow::anyhow!("patch 仅支持 UTF-8 文本文件: {rel}"))?;
     let matches = text.matches(old).count();
+    if matches == 0 {
+        anyhow::bail!("patch 未找到 old_string（0 处匹配）: {rel}");
+    }
+    if replace_all {
+        let updated = text.replace(old, new);
+        std::fs::write(path, updated.as_bytes())?;
+        return Ok(format!("已 patch {rel}（{matches} 处替换）"));
+    }
     match matches {
-        0 => anyhow::bail!("patch 未找到 old_string（0 处匹配）: {rel}"),
         1 => {
             let updated = text.replacen(old, new, 1);
             std::fs::write(path, updated.as_bytes())?;
             Ok(format!("已 patch {rel}（1 处替换）"))
         }
         n => anyhow::bail!(
-            "patch 的 old_string 不唯一（{n} 处匹配），请提供更长/更独特的上下文: {rel}"
+            "patch 的 old_string 不唯一（{n} 处匹配），请提供更长/更独特的上下文，或设置 replace_all=true: {rel}"
         ),
     }
 }
@@ -421,15 +681,19 @@ fn patch_file_unique(path: &Path, rel: &str, old: &str, new: &str) -> anyhow::Re
 fn search_one_file(
     path: &Path,
     workspace: &Path,
-    needle_lower: &str,
+    matcher: &Matcher,
+    ext: &Option<Vec<String>>,
 ) -> anyhow::Result<Option<String>> {
+    if !ext_matches(path, ext) {
+        return Ok(None);
+    }
     let rel = display_rel(workspace, path);
     let name_hit = path
         .file_name()
         .and_then(|n| n.to_str())
-        .map(|n| n.to_lowercase().contains(needle_lower))
+        .map(|n| matcher.is_match(n))
         .unwrap_or(false)
-        || rel.to_lowercase().contains(needle_lower);
+        || matcher.is_match(&rel);
 
     let meta = match std::fs::metadata(path) {
         Ok(m) => m,
@@ -473,7 +737,7 @@ fn search_one_file(
 
     let mut line_hits: Vec<String> = Vec::new();
     for (idx, line) in text.lines().enumerate() {
-        if line.to_lowercase().contains(needle_lower) {
+        if matcher.is_match(line) {
             let trimmed = line.trim();
             let snippet = if trimmed.chars().count() > 160 {
                 let s: String = trimmed.chars().take(160).collect();
@@ -541,6 +805,77 @@ fn delete_path(
         std::fs::remove_file(full)?;
     }
     Ok(format!("已删除 {rel}"))
+}
+
+/// 移动 / 重命名：源须存在，目标不得已存在；自动创建目标父目录。
+fn move_path(src: &Path, dest: &Path, workspace: &Path) -> anyhow::Result<String> {
+    let src_rel = display_rel(workspace, src);
+    let dest_rel = display_rel(workspace, dest);
+    if !src.exists() {
+        anyhow::bail!("move 源路径不存在: {src_rel}");
+    }
+    if dest.exists() {
+        anyhow::bail!("move 目标已存在: {dest_rel}（请先删除或换目标）");
+    }
+    reaffirm_within(dest, workspace)?;
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match std::fs::rename(src, dest) {
+        Ok(()) => {}
+        Err(_) => {
+            // 跨设备等 rename 失败：退回 复制 + 删除
+            copy_tree(src, dest)?;
+            if src.is_dir() {
+                std::fs::remove_dir_all(src)?;
+            } else {
+                std::fs::remove_file(src)?;
+            }
+        }
+    }
+    Ok(format!("已移动 {src_rel} → {dest_rel}"))
+}
+
+/// 复制文件或目录树：目标不得已存在；自动创建目标父目录。
+fn copy_path(src: &Path, dest: &Path, workspace: &Path) -> anyhow::Result<String> {
+    let src_rel = display_rel(workspace, src);
+    let dest_rel = display_rel(workspace, dest);
+    if !src.exists() {
+        anyhow::bail!("copy 源路径不存在: {src_rel}");
+    }
+    if dest.exists() {
+        anyhow::bail!("copy 目标已存在: {dest_rel}（请先删除或换目标）");
+    }
+    reaffirm_within(dest, workspace)?;
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    copy_tree(src, dest)?;
+    Ok(format!("已复制 {src_rel} → {dest_rel}"))
+}
+
+/// 递归复制 `src` 到 `dest`（文件或目录），跳过 symlink（仅复制其目标已解析路径不适用，直接跳过链接）。
+fn copy_tree(src: &Path, dest: &Path) -> anyhow::Result<()> {
+    let meta = std::fs::symlink_metadata(src)?;
+    if meta.file_type().is_symlink() {
+        anyhow::bail!("暂不支持复制符号链接: {}", src.display());
+    }
+    if meta.is_dir() {
+        std::fs::create_dir_all(dest)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let child_src = entry.path();
+            let child_dest = dest.join(entry.file_name());
+            let ft = entry.file_type()?;
+            if ft.is_symlink() {
+                continue;
+            }
+            copy_tree(&child_src, &child_dest)?;
+        }
+    } else {
+        std::fs::copy(src, dest)?;
+    }
+    Ok(())
 }
 
 /// 写操作前再次确认：若最终路径是 symlink，目标必须仍在 workspace 内（防 TOCTOU）。
@@ -652,7 +987,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("adir")).unwrap();
         fs::write(dir.path().join("a.txt"), "x").unwrap();
-        let small = list_dir_capped(dir.path(), dir.path()).unwrap();
+        let small = list_dir_capped(dir.path(), dir.path(), false, None).unwrap();
         assert!(small.contains("adir/"));
         assert!(small.contains("a.txt"));
         assert!(!small.contains("[truncated]"));
@@ -660,7 +995,7 @@ mod tests {
         for i in 0..(MAX_LIST_ENTRIES + 10) {
             fs::write(dir.path().join(format!("f{i:04}.txt")), "x").unwrap();
         }
-        let out = list_dir_capped(dir.path(), dir.path()).unwrap();
+        let out = list_dir_capped(dir.path(), dir.path(), false, None).unwrap();
         assert!(out.contains("[truncated]"));
         assert!(out.contains("entries"));
     }
@@ -695,20 +1030,50 @@ mod tests {
         fs::write(dir.path().join("readme.md"), "no hit here\n").unwrap();
         fs::write(dir.path().join("todo_notes.txt"), "filename only\n").unwrap();
 
-        let out = search_under(dir.path(), dir.path(), "todo_marker", 20).unwrap();
+        let sub = build_matcher("todo_marker", false).unwrap();
+        let out = search_under(dir.path(), dir.path(), "todo_marker", &sub, 20, None).unwrap();
         assert!(out.contains("src/hello.rs") || out.contains("src\\hello.rs"));
         assert!(out.contains("L1:"));
 
-        let by_name = search_under(dir.path(), dir.path(), "todo_notes", 20).unwrap();
+        let name_m = build_matcher("todo_notes", false).unwrap();
+        let by_name = search_under(dir.path(), dir.path(), "todo_notes", &name_m, 20, None).unwrap();
         assert!(by_name.contains("todo_notes.txt"));
         assert!(by_name.contains("filename match"));
+    }
+
+    #[test]
+    fn search_regex_and_ext_filter() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.rs"), "fn add(a: i32) {}\n").unwrap();
+        fs::write(dir.path().join("b.txt"), "fn add(a: i32) {}\n").unwrap();
+
+        // 正则匹配函数定义
+        let re = build_matcher(r"fn\s+add", true).unwrap();
+        let out = search_under(dir.path(), dir.path(), "fn add", &re, 20, None).unwrap();
+        assert!(out.contains("a.rs"));
+        assert!(out.contains("b.txt"));
+
+        // 只搜 rs 扩展
+        let re2 = build_matcher(r"fn\s+add", true).unwrap();
+        let only_rs = search_under(
+            dir.path(),
+            dir.path(),
+            "fn add",
+            &re2,
+            20,
+            Some(vec!["rs".into()]),
+        )
+        .unwrap();
+        assert!(only_rs.contains("a.rs"));
+        assert!(!only_rs.contains("b.txt"));
     }
 
     #[test]
     fn search_empty_query_path_missing_handled_by_dispatch_contract() {
         let dir = TempDir::new().unwrap();
         let missing = dir.path().join("nope");
-        let err = search_under(&missing, dir.path(), "x", 10).unwrap_err();
+        let m = build_matcher("x", false).unwrap();
+        let err = search_under(&missing, dir.path(), "x", &m, 10, None).unwrap_err();
         assert!(err.to_string().contains("不存在"));
     }
 
@@ -716,7 +1081,7 @@ mod tests {
     fn patch_unique_replace_succeeds() {
         let dir = TempDir::new().unwrap();
         let p = write_ws_file(&dir, "a.rs", b"fn foo() {}\nfn bar() {}\n");
-        let out = patch_file_unique(&p, "a.rs", "fn foo() {}", "fn foo() { 1 }").unwrap();
+        let out = patch_file(&p, "a.rs", "fn foo() {}", "fn foo() { 1 }", false).unwrap();
         assert!(out.contains("1 处替换"));
         let body = fs::read_to_string(&p).unwrap();
         assert_eq!(body, "fn foo() { 1 }\nfn bar() {}\n");
@@ -726,7 +1091,7 @@ mod tests {
     fn patch_zero_matches_fails() {
         let dir = TempDir::new().unwrap();
         let p = write_ws_file(&dir, "a.txt", b"hello\n");
-        let err = patch_file_unique(&p, "a.txt", "missing", "x").unwrap_err();
+        let err = patch_file(&p, "a.txt", "missing", "x", false).unwrap_err();
         assert!(err.to_string().contains("0 处匹配"));
     }
 
@@ -734,8 +1099,70 @@ mod tests {
     fn patch_multiple_matches_fails() {
         let dir = TempDir::new().unwrap();
         let p = write_ws_file(&dir, "a.txt", b"aa aa aa\n");
-        let err = patch_file_unique(&p, "a.txt", "aa", "bb").unwrap_err();
+        let err = patch_file(&p, "a.txt", "aa", "bb", false).unwrap_err();
         assert!(err.to_string().contains("不唯一"));
         assert_eq!(fs::read_to_string(&p).unwrap(), "aa aa aa\n");
+    }
+
+    #[test]
+    fn patch_replace_all_replaces_every_match() {
+        let dir = TempDir::new().unwrap();
+        let p = write_ws_file(&dir, "a.txt", b"aa aa aa\n");
+        let out = patch_file(&p, "a.txt", "aa", "bb", true).unwrap();
+        assert!(out.contains("3 处替换"));
+        assert_eq!(fs::read_to_string(&p).unwrap(), "bb bb bb\n");
+    }
+
+    #[test]
+    fn read_line_range_returns_slice_with_header() {
+        let dir = TempDir::new().unwrap();
+        let p = write_ws_file(&dir, "code.rs", b"l1\nl2\nl3\nl4\nl5\n");
+        let out = read_lines_range(&p, "code.rs", Some(2), Some(4)).unwrap();
+        assert!(out.contains("[lines 2..4 of 5]"));
+        assert!(out.contains("l2\nl3\nl4"));
+        assert!(!out.contains("l1"));
+        assert!(!out.contains("l5"));
+    }
+
+    #[test]
+    fn read_small_limit_reports_limit_not_binary() {
+        let dir = TempDir::new().unwrap();
+        // 首字符为 3 字节中文，limit=2 无法容纳
+        let p = write_ws_file(&dir, "zh.txt", "你好".as_bytes());
+        let err = read_file_capped(&p, 0, Some(2)).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("limit"), "should mention limit: {msg}");
+        assert!(!msg.contains("不是有效 UTF-8"), "must not falsely claim binary: {msg}");
+    }
+
+    #[test]
+    fn move_and_copy_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let src = write_ws_file(&dir, "src.txt", b"hello");
+        let moved = dir.path().join("sub/moved.txt");
+        move_path(&src, &moved, dir.path()).unwrap();
+        assert!(!src.exists());
+        assert_eq!(fs::read_to_string(&moved).unwrap(), "hello");
+
+        let copied = dir.path().join("copy.txt");
+        copy_path(&moved, &copied, dir.path()).unwrap();
+        assert!(moved.exists());
+        assert_eq!(fs::read_to_string(&copied).unwrap(), "hello");
+
+        // 目标已存在应报错
+        let err = copy_path(&moved, &copied, dir.path()).unwrap_err();
+        assert!(err.to_string().contains("已存在"));
+    }
+
+    #[test]
+    fn list_recursive_walks_tree() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("a/b")).unwrap();
+        fs::write(dir.path().join("a/b/deep.rs"), "x").unwrap();
+        fs::write(dir.path().join("top.txt"), "x").unwrap();
+        let out = list_dir_capped(dir.path(), dir.path(), true, None).unwrap();
+        assert!(out.contains("a/") || out.contains("a\\"));
+        assert!(out.contains("deep.rs"));
+        assert!(out.contains("top.txt"));
     }
 }
