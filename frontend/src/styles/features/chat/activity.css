@@ -996,25 +996,21 @@ html[data-theme="dark"] .msg-activity-detail {
   position: relative;
   display: inline-block;
   max-width: 100%;
-  color: color-mix(in srgb, var(--tone, #60a5fa) 42%, var(--ink));
-  overflow: hidden;
-}
-
-.msg-activity.is-running .msg-activity-title::before {
-  content: "";
-  position: absolute;
-  inset: -20% -40%;
-  background: linear-gradient(
+  background-image: linear-gradient(
     105deg,
-    transparent 42%,
-    color-mix(in srgb, #fff 55%, transparent) 50%,
-    transparent 58%
+    color-mix(in srgb, var(--tone, #60a5fa) 42%, var(--ink)) 0%,
+    color-mix(in srgb, var(--tone, #60a5fa) 42%, var(--ink)) 42%,
+    color-mix(in srgb, #fff 88%, var(--tone, #60a5fa)) 50%,
+    color-mix(in srgb, var(--tone, #60a5fa) 42%, var(--ink)) 58%,
+    color-mix(in srgb, var(--tone, #60a5fa) 42%, var(--ink)) 100%
   );
   background-size: 220% 100%;
   background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
   animation: msg-text-sheen 2s linear infinite;
-  pointer-events: none;
-  mix-blend-mode: soft-light;
 }
 
 .msg-activity.is-running .msg-activity-kind-icon {
@@ -1121,25 +1117,21 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
 .msg-reasoning.is-active .msg-reasoning-label {
   position: relative;
   display: inline-block;
-  color: color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft));
-  overflow: hidden;
-}
-
-.msg-reasoning.is-active .msg-reasoning-label::before {
-  content: "";
-  position: absolute;
-  inset: -20% -40%;
-  background: linear-gradient(
+  background-image: linear-gradient(
     105deg,
-    transparent 42%,
-    color-mix(in srgb, #fff 58%, transparent) 50%,
-    transparent 58%
+    color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft)) 0%,
+    color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft)) 42%,
+    color-mix(in srgb, #fff 88%, var(--tone, #60a5fa)) 50%,
+    color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft)) 58%,
+    color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft)) 100%
   );
   background-size: 220% 100%;
   background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
   animation: msg-text-sheen 2.2s linear infinite;
-  pointer-events: none;
-  mix-blend-mode: soft-light;
 }
 
 .msg-reasoning.is-active .msg-reasoning-icon {
@@ -1154,14 +1146,21 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   .msg-reasoning.is-active .msg-reasoning-icon,
   .msg-activity.is-running .msg-activity-kind-icon,
   .msg-activity.is-running .msg-activity-title::after,
-  .msg-reasoning.is-active .msg-reasoning-label::before,
-  .msg-activity.is-running .msg-activity-title::before {
+  .msg-reasoning.is-active .msg-reasoning-label,
+  .msg-activity.is-running .msg-activity-title {
     animation: none !important;
   }
 
-  .msg-reasoning.is-active .msg-reasoning-label::before,
-  .msg-activity.is-running .msg-activity-title::before {
-    display: none;
+  .msg-activity.is-running .msg-activity-title {
+    background-image: none;
+    -webkit-text-fill-color: color-mix(in srgb, var(--tone, #60a5fa) 42%, var(--ink));
+    color: color-mix(in srgb, var(--tone, #60a5fa) 42%, var(--ink));
+  }
+
+  .msg-reasoning.is-active .msg-reasoning-label {
+    background-image: none;
+    -webkit-text-fill-color: color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft));
+    color: color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft));
   }
 
   .msg-reasoning.is-active .msg-reasoning-icon,
