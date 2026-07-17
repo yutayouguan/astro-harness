@@ -197,26 +197,32 @@ pub async fn tick_and_execute() {
                     let body = if row.summary.trim().is_empty() {
                         label
                     } else {
-                        format!("{label}\n{}", truncate_for_notify(&row.summary, 120))
+                        format!(
+                            "{label}\n{}",
+                            common::truncate_notify(&row.summary, 120)
+                        )
                     };
-                    common::notify_important("定时任务完成", body);
+                    common::notify_kind(common::ImportantKind::CronSuccess, body);
                 } else {
                     let detail = row
                         .error
                         .as_deref()
                         .map(str::trim)
                         .filter(|s| !s.is_empty())
-                        .map(|s| truncate_for_notify(s, 120))
+                        .map(|s| common::truncate_notify(s, 120))
                         .or_else(|| {
                             let s = row.summary.trim();
                             if s.is_empty() {
                                 None
                             } else {
-                                Some(truncate_for_notify(s, 120))
+                                Some(common::truncate_notify(s, 120))
                             }
                         })
                         .unwrap_or_else(|| row.status.clone());
-                    common::notify_important("定时任务失败", format!("{label}\n{detail}"));
+                    common::notify_kind(
+                        common::ImportantKind::CronFailure,
+                        format!("{label}\n{detail}"),
+                    );
                 }
             }
             Err(err) => {
@@ -227,9 +233,12 @@ pub async fn tick_and_execute() {
                     error = %err,
                     "cron job execution failed"
                 );
-                common::notify_important(
-                    "定时任务失败",
-                    format!("{label}\n{}", truncate_for_notify(&err.to_string(), 120)),
+                common::notify_kind(
+                    common::ImportantKind::CronFailure,
+                    format!(
+                        "{label}\n{}",
+                        common::truncate_notify(&err.to_string(), 120)
+                    ),
                 );
             }
         }
@@ -241,17 +250,7 @@ fn cron_notify_label(job: &CronJob) -> String {
     if !title.is_empty() {
         return title.to_string();
     }
-    truncate_for_notify(job.task.trim(), 48)
-}
-
-fn truncate_for_notify(s: &str, max_chars: usize) -> String {
-    let mut it = s.chars();
-    let head: String = it.by_ref().take(max_chars).collect();
-    if it.next().is_some() {
-        format!("{head}…")
-    } else {
-        head
-    }
+    common::truncate_notify(job.task.trim(), 48)
 }
 
 #[cfg(test)]

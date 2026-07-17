@@ -48,7 +48,7 @@ pub fn install_tray<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri:
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_SHOW_ID => show_main_window(app),
-            TRAY_QUIT_ID => app.exit(0),
+            TRAY_QUIT_ID => crate::request_app_exit(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

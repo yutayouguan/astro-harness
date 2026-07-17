@@ -14,11 +14,14 @@ pub use session_events::{
 
 use std::time::Duration;
 
+use anyhow::Context;
 use crate::grpc::AstroServiceImpl;
 use cron::cron_dir;
 use home::{default_memory_dir, init_logging, logs_dir};
 use memory::ensure_workspace;
 use proto::astro_service_server::AstroServiceServer;
+use tokio::sync::oneshot;
+use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
 
 /// 启动日志后进入 [`serve`]（独立 `cargo run -p backend` 入口）。
@@ -27,27 +30,31 @@ use tonic::transport::Server;
 /// 日志初始化失败，或 [`serve`] 失败。
 pub async fn run() -> anyhow::Result<()> {
     init_logging("agent")?;
-    serve().await
+    serve(None).await
 }
 
 /// 供 Tauri 同进程内嵌：不做 `init_logging`（壳侧已初始化）。
 ///
+/// `ready` 在 **TCP bind 成功** 后发送一次；bind 失败则 channel 关闭且函数返回错误，
+/// 调用方勿把「端口上已有其它进程在听」当成内嵌就绪。
+///
 /// # 错误
 /// 同 [`serve`]。
-pub async fn run_embedded() -> anyhow::Result<()> {
-    serve().await
+pub async fn run_embedded(ready: Option<oneshot::Sender<()>>) -> anyhow::Result<()> {
+    serve(ready).await
 }
 
 /// 工作区、cron ticker 与 gRPC 服务（默认 `127.0.0.1:50051`）。
 ///
-/// 地址可由环境变量 `ASTRO_GRPC_ADDR` 覆盖。
+/// 地址可由环境变量 `ASTRO_GRPC_ADDR` 覆盖。先 `TcpListener::bind`，成功后再通知 `ready`。
 ///
 /// # 错误
-/// 地址解析失败、工作区初始化失败，或 tonic 监听/服务异常退出（含端口占用）。
-pub async fn serve() -> anyhow::Result<()> {
-    let addr = std::env::var("ASTRO_GRPC_ADDR")
+/// 地址解析失败、工作区初始化失败、端口占用 / bind 失败，或 tonic 服务异常退出。
+pub async fn serve(ready: Option<oneshot::Sender<()>>) -> anyhow::Result<()> {
+    let addr: std::net::SocketAddr = std::env::var("ASTRO_GRPC_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:50051".to_string())
-        .parse()?;
+        .parse()
+        .context("parse ASTRO_GRPC_ADDR")?;
     let memory_dir = default_memory_dir();
     let report = ensure_workspace(&memory_dir)?;
     if !report.created_files.is_empty() {
@@ -57,6 +64,14 @@ pub async fn serve() -> anyhow::Result<()> {
         );
     }
     let service = AstroServiceImpl::new(memory_dir.clone());
+
+    // 先占端口：失败则 ready 不会触发，避免壳误连占用端口的其它进程。
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .with_context(|| format!("bind gRPC {addr}"))?;
+    if let Some(tx) = ready {
+        let _ = tx.send(());
+    }
 
     // 后台 cron ticker：每 30s claim_due + execute_job
     tokio::spawn(async move {
@@ -76,8 +91,9 @@ pub async fn serve() -> anyhow::Result<()> {
 
     Server::builder()
         .add_service(AstroServiceServer::new(service))
-        .serve(addr)
-        .await?;
+        .serve_with_incoming(TcpListenerStream::new(listener))
+        .await
+        .context("gRPC serve")?;
 
     Ok(())
 }

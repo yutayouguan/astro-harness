@@ -461,17 +461,15 @@ pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
 
     if last_error.is_none() {
         if diaries_processed > 0 || new_memories > 0 {
-            common::notify_important(
-                "入梦完成",
-                format!(
-                    "处理 {diaries_processed} 篇日记，写入 {new_memories} 条记忆"
-                ),
+            common::notify_kind(
+                common::ImportantKind::DreamSuccess,
+                common::dream_success_body(diaries_processed, new_memories),
             );
         }
     } else if let Some(err) = &last_error {
-        common::notify_important(
-            "入梦失败",
-            err.chars().take(120).collect::<String>(),
+        common::notify_kind(
+            common::ImportantKind::DreamFailure,
+            common::truncate_notify(err, 120),
         );
     }
 

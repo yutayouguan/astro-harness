@@ -1,7 +1,5 @@
 //! 桌面壳与可选独立 / 内嵌 backend 之间的 gRPC 地址约定。
 
-use std::time::Duration;
-
 /// 默认监听地址；可由环境变量 `ASTRO_GRPC_ADDR` 覆盖。
 pub fn default_grpc_address() -> String {
     std::env::var("ASTRO_GRPC_ADDR").unwrap_or_else(|_| "127.0.0.1:50051".into())
@@ -30,19 +28,38 @@ pub fn embed_backend_enabled() -> bool {
     }
 }
 
-/// 短轮询直到 gRPC 地址可 TCP 连通，或超时。
-///
-/// 用于内嵌 server 刚 spawn 时减少首连闪错；失败不视为 fatal。
-pub async fn wait_grpc_ready(timeout: Duration) -> bool {
-    let addr = default_grpc_address();
-    let deadline = tokio::time::Instant::now() + timeout;
-    loop {
-        if tokio::net::TcpStream::connect(&addr).await.is_ok() {
-            return true;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_url_adds_http() {
+        assert_eq!(
+            endpoint_url("127.0.0.1:50051"),
+            "http://127.0.0.1:50051"
+        );
+        assert_eq!(
+            endpoint_url("http://127.0.0.1:50051"),
+            "http://127.0.0.1:50051"
+        );
+    }
+
+    #[test]
+    fn embed_flag_parses_off_values() {
+        // 不依赖真实环境：直接测解析逻辑副本
+        fn enabled(raw: Option<&str>) -> bool {
+            match raw {
+                Some(v) => {
+                    let v = v.trim().to_ascii_lowercase();
+                    !(v.is_empty() || v == "0" || v == "false" || v == "no" || v == "off")
+                }
+                None => true,
+            }
         }
-        if tokio::time::Instant::now() >= deadline {
-            return false;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(enabled(None));
+        assert!(enabled(Some("1")));
+        assert!(!enabled(Some("0")));
+        assert!(!enabled(Some("false")));
+        assert!(!enabled(Some("OFF")));
     }
 }

@@ -18,7 +18,7 @@ pub fn show<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
     }
 }
 
-/// 启动时请求权限，并把 `common::notify_important` 接到系统通知。
+/// 启动时请求权限，并把 `common::notify_important` 接到系统通知（主线程 show）。
 pub fn install<R: Runtime>(app: &AppHandle<R>) {
     match app.notification().permission_state() {
         Ok(PermissionState::Granted) => {}
@@ -34,6 +34,13 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
 
     let app = app.clone();
     common::set_important_notify_handler(Arc::new(move |notice| {
-        show(&app, &notice.title, &notice.body);
+        let app2 = app.clone();
+        let title = notice.title;
+        let body = notice.body;
+        if let Err(err) = app.run_on_main_thread(move || {
+            show(&app2, &title, &body);
+        }) {
+            tracing::warn!(error = %err, "schedule notification on main thread failed");
+        }
     }));
 }

@@ -29,6 +29,20 @@ impl AppLocale {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_locale() {
+        assert_eq!(AppLocale::parse("en"), AppLocale::En);
+        assert_eq!(AppLocale::parse("EN"), AppLocale::En);
+        assert_eq!(AppLocale::parse("zh"), AppLocale::Zh);
+        assert_eq!(AppLocale::parse("zh-CN"), AppLocale::Zh);
+        assert_eq!(AppLocale::parse(""), AppLocale::Zh);
+    }
+}
+
 /// 菜单栏与托盘用到的本地化字符串（`'static`，便于预置项传 `Some`）。
 #[derive(Debug, Clone, Copy)]
 pub struct MenuStrings {

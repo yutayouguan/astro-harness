@@ -2541,7 +2541,10 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
     let row = match agent::exec::cron::execute_job(&job, creds, "manual").await {
         Ok(row) => row,
         Err(err) => {
-            common::notify_important("定时任务失败", format!("{label}\n{err}"));
+            common::notify_kind(
+                common::ImportantKind::CronFailure,
+                format!("{label}\n{err}"),
+            );
             return Err(err.to_string());
         }
     };
@@ -2550,26 +2553,32 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
         let body = if row.summary.trim().is_empty() {
             label
         } else {
-            format!("{label}\n{}", row.summary.chars().take(120).collect::<String>())
+            format!(
+                "{label}\n{}",
+                common::truncate_notify(&row.summary, 120)
+            )
         };
-        common::notify_important("定时任务完成", body);
+        common::notify_kind(common::ImportantKind::CronSuccess, body);
     } else {
         let detail = row
             .error
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .map(|s| s.chars().take(120).collect::<String>())
+            .map(|s| common::truncate_notify(s, 120))
             .or_else(|| {
                 let s = row.summary.trim();
                 if s.is_empty() {
                     None
                 } else {
-                    Some(s.chars().take(120).collect())
+                    Some(common::truncate_notify(s, 120))
                 }
             })
             .unwrap_or_else(|| row.status.clone());
-        common::notify_important("定时任务失败", format!("{label}\n{detail}"));
+        common::notify_kind(
+            common::ImportantKind::CronFailure,
+            format!("{label}\n{detail}"),
+        );
     }
     Ok(run_to_dto(row))
 }

@@ -25,6 +25,7 @@ mod session_events;
 mod skills_commands;
 mod tray;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use menu_locale::AppLocale;
@@ -45,6 +46,15 @@ const BG: Color = Color(0xdb, 0xea, 0xfe, 0xff);
 const MENU_PREFERENCES_ID: &str = "preferences";
 /// 前端监听的「打开偏好设置」事件名。
 const EVENT_OPEN_PREFERENCES: &str = "open-preferences";
+
+/// 为 true 时允许窗口真正关闭（退出流程）；否则关窗只隐藏到托盘。
+static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
+
+/// 真正退出应用（托盘 / 菜单「退出」）。
+pub fn request_app_exit<R: tauri::Runtime>(app: &AppHandle<R>) {
+    ALLOW_EXIT.store(true, Ordering::SeqCst);
+    app.exit(0);
+}
 
 /// 安装应用菜单（关于、偏好设置、窗口与帮助），文案随 [`AppLocale`]。
 fn install_app_menu<R: tauri::Runtime>(
@@ -169,12 +179,18 @@ fn install_app_menu<R: tauri::Runtime>(
 #[tauri::command]
 fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
     let next = AppLocale::parse(&locale);
+    common::set_notify_locale(match next {
+        AppLocale::En => "en",
+        AppLocale::Zh => "zh",
+    });
     if let Some(state) = app.try_state::<Mutex<AppLocale>>() {
         let mut cur = state.lock().map_err(|e| e.to_string())?;
         if *cur == next {
             return Ok(());
         }
         *cur = next;
+    } else {
+        app.manage(Mutex::new(next));
     }
     install_app_menu(&app, next).map_err(|e| e.to_string())?;
     tray::apply_tray_locale(&app, next).map_err(|e| e.to_string())?;
@@ -261,11 +277,13 @@ pub fn run() {
                 tray::show_main_window(app);
             }
         })
-        // 关窗 → 进托盘，不退出进程（内嵌 backend / cron 继续跑）。
+        // 关窗 → 进托盘；真正退出见 [`request_app_exit`] / ExitRequested。
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if !ALLOW_EXIT.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -398,23 +416,37 @@ pub fn run() {
             }
 
             // 默认同进程内嵌 gRPC；ASTRO_EMBED_BACKEND=0 时连外部 backend。
+            // bind 成功才视为就绪，避免端口被占用时误连其它进程。
             if grpc::embed_backend_enabled() {
+                let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(err) = backend::run_embedded().await {
+                    if let Err(err) = backend::run_embedded(Some(ready_tx)).await {
                         tracing::error!(
                             error = %err,
                             "embedded backend exited (port in use? set ASTRO_EMBED_BACKEND=0 to use external backend)"
                         );
                     }
                 });
-                // 短等 listen 就绪，减少 session bridge / 首聊闪错。
-                tauri::async_runtime::block_on(async {
-                    if !grpc::wait_grpc_ready(std::time::Duration::from_secs(5)).await {
-                        tracing::warn!(
-                            "embedded backend not ready within 5s; session bridge will keep retrying"
+                match tauri::async_runtime::block_on(async {
+                    tokio::time::timeout(std::time::Duration::from_secs(5), ready_rx).await
+                }) {
+                    Ok(Ok(())) => {
+                        tracing::info!(
+                            "embedded gRPC listening on {}",
+                            grpc::default_grpc_address()
                         );
                     }
-                });
+                    Ok(Err(_)) => {
+                        tracing::error!(
+                            "embedded backend failed before listen; chat may be unavailable (port in use?)"
+                        );
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            "embedded backend bind not confirmed within 5s; session bridge will keep retrying"
+                        );
+                    }
+                }
             } else {
                 tracing::info!(
                     "ASTRO_EMBED_BACKEND disabled; expecting external backend at {}",
@@ -460,14 +492,18 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
+        .run(|app, event| match event {
+            // 菜单「退出」等会走 ExitRequested：允许后续关窗真正销毁。
+            RunEvent::ExitRequested { .. } => {
+                ALLOW_EXIT.store(true, Ordering::SeqCst);
+            }
             // macOS：点 Dock 图标时若窗口已关进托盘，重新显示。
-            if let RunEvent::Reopen {
+            RunEvent::Reopen {
                 has_visible_windows: false,
                 ..
-            } = event
-            {
+            } => {
                 tray::show_main_window(app);
             }
+            _ => {}
         });
 }

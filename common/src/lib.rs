@@ -17,7 +17,10 @@ pub use media::{
     append_media_sidecar, extract_tool_media, parse_generated_labels, MediaAsset, MediaKind,
     MediaRef,
 };
-pub use notify::{notify_important, set_important_notify_handler, ImportantNotice};
+pub use notify::{
+    dream_success_body, notify_important, notify_kind, set_important_notify_handler,
+    set_notify_locale, truncate_notify, ImportantKind, ImportantNotice,
+};
 pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
 pub use title::sanitize_title;
 
