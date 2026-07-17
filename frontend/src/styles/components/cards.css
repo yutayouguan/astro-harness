@@ -49,10 +49,10 @@
 
 .tool-card:hover,
 .empty-mode-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--card-tone) 42%, rgba(255, 255, 255, 0.5));
   box-shadow:
-    0 14px 28px color-mix(in srgb, var(--card-tone) 14%, transparent),
+    0 6px 14px color-mix(in srgb, var(--card-tone) 10%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
@@ -71,6 +71,6 @@ html[data-theme="dark"] .tool-card:hover,
 html[data-theme="dark"] .empty-mode-card:hover {
   border-color: color-mix(in srgb, var(--card-tone) 48%, rgba(255, 255, 255, 0.14));
   box-shadow:
-    0 16px 32px color-mix(in srgb, var(--card-tone) 16%, rgba(0, 0, 0, 0.4)),
+    0 8px 18px color-mix(in srgb, var(--card-tone) 12%, rgba(0, 0, 0, 0.32)),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
