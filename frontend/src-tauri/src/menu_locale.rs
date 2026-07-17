@@ -46,8 +46,6 @@ mod tests {
 /// 菜单栏与托盘用到的本地化字符串（`'static`，便于预置项传 `Some`）。
 #[derive(Debug, Clone, Copy)]
 pub struct MenuStrings {
-    pub about_title: &'static str,
-    pub about_credits: &'static str,
     pub preferences: &'static str,
     pub submenu_file: &'static str,
     pub submenu_edit: &'static str,
