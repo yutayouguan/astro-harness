@@ -903,17 +903,21 @@ impl AgentLoop {
         else {
             return;
         };
-        let Ok(loaded) = skills::load_skill_by_name(skill_id) else {
-            return;
+        // 优先复用 skills 工具刚加载过的结果，避免二次扫描 + 读盘。
+        let astro_tools = match skills::recent_astro_tools(skill_id) {
+            Some(tools) => tools,
+            None => match skills::load_skill_by_name(skill_id) {
+                Ok(loaded) => loaded.metadata.astro_tools,
+                Err(_) => return,
+            },
         };
-        if !loaded.metadata.astro_tools.is_empty() {
+        if !astro_tools.is_empty() {
             tracing::info!(
-                skill = %loaded.metadata.name,
-                toolsets = ?loaded.metadata.astro_tools,
+                skill = %skill_id,
+                toolsets = ?astro_tools,
                 "skill activated toolsets (additive)"
             );
-            self.tool_registry
-                .activate_skill_toolsets(&loaded.metadata.astro_tools);
+            self.tool_registry.activate_skill_toolsets(&astro_tools);
         }
     }
 

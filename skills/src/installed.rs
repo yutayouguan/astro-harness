@@ -4,6 +4,8 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
+    time::{Duration, Instant},
 };
 
 use anyhow::{bail, Context, Result};
@@ -505,6 +507,30 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// 最近一次成功加载的技能记忆（仅供同一次 skills 工具调用内的 additive toolset
+/// 激活复用，避免紧接着再次扫描 + 读盘）。窗口极短，不影响 enable/disable 正确性。
+struct RecentLoad {
+    name: String,
+    astro_tools: Vec<String>,
+    at: Instant,
+}
+
+static RECENT_LOAD: Mutex<Option<RecentLoad>> = Mutex::new(None);
+
+/// 最近一次成功加载 `name` 的 `astro_tools`（若在 [`RECENT_LOAD_TTL`] 内）。
+///
+/// 用于 skills 工具执行后立即做 toolset 激活时复用，省去二次磁盘加载。
+pub fn recent_astro_tools(name: &str) -> Option<Vec<String>> {
+    const RECENT_LOAD_TTL: Duration = Duration::from_secs(5);
+    let guard = RECENT_LOAD.lock().ok()?;
+    let recent = guard.as_ref()?;
+    if recent.name == name && recent.at.elapsed() < RECENT_LOAD_TTL {
+        Some(recent.astro_tools.clone())
+    } else {
+        None
+    }
+}
+
 /// 按名称加载已启用技能的 SKILL.md 全文
 pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
     let installed = list_installed()
@@ -519,7 +545,7 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
     let content = fs::read_to_string(&installed.path)
         .with_context(|| format!("读取 {}", installed.path))?;
 
-    Ok(LoadedSkill {
+    let loaded = LoadedSkill {
         metadata: {
             let mut meta = parse_skill_frontmatter_full(&content);
             if meta.name.is_empty() {
@@ -532,7 +558,17 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
         },
         path: std::path::PathBuf::from(&installed.path),
         content,
-    })
+    };
+
+    if let Ok(mut guard) = RECENT_LOAD.lock() {
+        *guard = Some(RecentLoad {
+            name: name.to_string(),
+            astro_tools: loaded.metadata.astro_tools.clone(),
+            at: Instant::now(),
+        });
+    }
+
+    Ok(loaded)
 }
 
 const MAX_SKILL_FILE_PREVIEW_BYTES: u64 = 512 * 1024;
@@ -994,5 +1030,30 @@ mod tests {
         let inline = "---\nname: t2\ndescription: d\nastro_tools: [web_search, browser]\n---\n";
         let m2 = parse_skill_frontmatter_full(inline);
         assert_eq!(m2.astro_tools, vec!["web_search", "browser"]);
+    }
+
+    #[test]
+    fn recent_astro_tools_reused_after_load() {
+        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let dir = tempdir().unwrap();
+        let skill_dir = dir.path().join("skills/recent-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: recent-skill\ndescription: d\nastro_tools: [terminal, web_search]\n---\nbody\n",
+        )
+        .unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        std::env::remove_var("ASTRO_WORKSPACE");
+        fs::write(dir.path().join("active-agent.json"), r#"{"id":"workspace"}"#).unwrap();
+
+        assert!(recent_astro_tools("recent-skill").is_none());
+        let loaded = load_skill_by_name("recent-skill").unwrap();
+        assert_eq!(loaded.metadata.astro_tools, vec!["terminal", "web_search"]);
+        assert_eq!(
+            recent_astro_tools("recent-skill"),
+            Some(vec!["terminal".to_string(), "web_search".to_string()])
+        );
+        assert!(recent_astro_tools("other-skill").is_none());
     }
 }

@@ -179,6 +179,7 @@ pub struct UsageInsightsQuery {
 /// 用量事件 SQLite 访问层
 pub struct UsageDb {
     conn: Connection,
+    path: PathBuf,
 }
 
 /// 默认数据库路径：`{ASTRO_MEMORY_DIR|~/.astro}/usage.db`
@@ -330,6 +331,20 @@ fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
     Ok(conn)
 }
 
+impl crate::sqlite_store::SqliteStore for UsageDb {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// `new()` 已在打开时完成迁移；此处幂等校准 `user_version` 并确保 WAL。
+    fn migrate(&self) -> anyhow::Result<()> {
+        self.conn.execute_batch(&format!(
+            "PRAGMA journal_mode=WAL; PRAGMA user_version = {USAGE_SCHEMA_VERSION};"
+        ))?;
+        Ok(())
+    }
+}
+
 impl UsageDb {
     /// 打开或创建数据库；v3→v4 非破坏性迁移，仅 version<3 或新库时重建
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
@@ -347,7 +362,7 @@ impl UsageDb {
         if !exists || version == 0 {
             delete_usage_db_files(&path);
             let conn = open_and_init(&path)?;
-            return Ok(Self { conn });
+            return Ok(Self { conn, path });
         }
 
         if version > USAGE_SCHEMA_VERSION {
@@ -360,7 +375,7 @@ impl UsageDb {
             tracing::warn!(version, "usage.db too old; rebuilding");
             delete_usage_db_files(&path);
             let conn = open_and_init(&path)?;
-            return Ok(Self { conn });
+            return Ok(Self { conn, path });
         }
 
         let conn = Connection::open(&path)?;
@@ -379,12 +394,17 @@ impl UsageDb {
             }
             conn.execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
         }
-        Ok(Self { conn })
+        Ok(Self { conn, path })
     }
 
     /// 打开默认 `~/.astro/usage.db`
     pub fn open_default() -> anyhow::Result<Self> {
         Self::new(usage_db_path())
+    }
+
+    /// 数据库文件路径（供 [`SqliteStore`] 等对齐接口使用）
+    pub fn db_path(&self) -> &Path {
+        &self.path
     }
 
     /// 插入一条用量事件，返回新 id
@@ -788,6 +808,21 @@ impl UsageDb {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn usage_db_impls_sqlite_store() {
+        use crate::sqlite_store::SqliteStore;
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("usage.db");
+        let db = UsageDb::new(path.clone()).unwrap();
+        assert_eq!(SqliteStore::path(&db), path.as_path());
+        db.migrate().unwrap();
+        let ver: i32 = db
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(ver, USAGE_SCHEMA_VERSION);
+    }
 
     #[test]
     fn period_bounds_month_half_open() {
