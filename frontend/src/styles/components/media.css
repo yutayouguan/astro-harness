@@ -692,6 +692,7 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
   --gmc-tone: var(--tone, #2563eb);
   position: relative;
   margin: 0;
+  width: 100%;
   max-width: min(100%, 440px);
   border-radius: 16px;
   overflow: hidden;
@@ -798,11 +799,37 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
 .gen-media-card .gen-media-card-preview.media-preview,
 .gen-media-card .gen-media-card-preview.media-preview.is-compact {
   max-width: 100%;
+  width: 100%;
   margin: 0;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   background: color-mix(in srgb, var(--ink) 3.5%, transparent);
   box-shadow: none;
   border-radius: 12px;
+}
+
+/* 图 / 视频：贴边铺满卡片宽，按比例增高，去掉灰底 letterbox */
+.gen-media-card[data-kind="image"] .gen-media-card-body,
+.gen-media-card[data-kind="video"] .gen-media-card-body {
+  padding: 0;
+}
+
+.gen-media-card[data-kind="image"] .gen-media-card-preview.media-preview,
+.gen-media-card[data-kind="video"] .gen-media-card-preview.media-preview,
+.gen-media-card[data-kind="image"] .gen-media-card-preview.media-preview.is-compact,
+.gen-media-card[data-kind="video"] .gen-media-card-preview.media-preview.is-compact {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.gen-media-card[data-kind="image"] .media-preview-image,
+.gen-media-card[data-kind="video"] .media-preview-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: unset;
+  background: transparent;
 }
 
 .gen-media-card[data-kind="audio"] .gen-media-card-preview.media-preview {
@@ -848,6 +875,12 @@ html[data-theme="dark"] .gen-media-card-glyph {
 html[data-theme="dark"] .gen-media-card .gen-media-card-preview.media-preview {
   border-color: color-mix(in srgb, #fff 10%, transparent);
   background: color-mix(in srgb, #fff 4%, transparent);
+}
+
+html[data-theme="dark"] .gen-media-card[data-kind="image"] .gen-media-card-preview.media-preview,
+html[data-theme="dark"] .gen-media-card[data-kind="video"] .gen-media-card-preview.media-preview {
+  border: none;
+  background: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
