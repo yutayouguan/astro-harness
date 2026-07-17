@@ -296,6 +296,8 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "manage_action", type: "string", optional: true },
       { name: "content", type: "string", optional: true },
       { name: "description", type: "string", optional: true },
+      { name: "old_string", type: "string", optional: true },
+      { name: "new_string", type: "string", optional: true },
       { name: "input", type: "object", optional: true },
     ],
   },

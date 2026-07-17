@@ -155,6 +155,8 @@ pub struct AgentLoop {
     mid_run_summary_done: bool,
     /// 建议前端提示 `/compact`（会话级拆分）。
     pending_recommend_compact: bool,
+    /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
+    pending_learning_nudge: Option<String>,
 }
 
 impl AgentLoop {
@@ -279,6 +281,7 @@ impl AgentLoop {
             mid_run_handoff: None,
             mid_run_summary_done: false,
             pending_recommend_compact: false,
+            pending_learning_nudge: None,
         })
     }
 
@@ -381,13 +384,44 @@ impl AgentLoop {
     }
 
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
+    ///
+    /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
     pub fn begin_user_turn(&mut self) {
+        let prev_rounds = self.tool_rounds;
         self.tool_rounds = 0;
         self.turn_wrote_disk = false;
         self.compression_guard = CompressionThrashingGuard::default();
         self.mid_run_handoff = None;
         self.mid_run_summary_done = false;
         self.pending_recommend_compact = false;
+        self.pending_learning_nudge =
+            Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
+    }
+
+    /// 根据上一轮工具次数与 DecisionLog 计算本轮是否注入学习提示。
+    fn compute_learning_nudge(base: &std::path::Path, prev_tool_rounds: usize) -> Option<String> {
+        let cfg = memory::load_learning_config(base);
+        if !cfg.nudge_enabled {
+            return None;
+        }
+        if prev_tool_rounds < cfg.complex_task_tool_threshold {
+            return None;
+        }
+        let mut text = format!(
+            "上一轮使用了 {prev_tool_rounds} 次工具（≥ {}）。若流程可复用：用 `skills` manage create 或 patch 固化；若是长期偏好/事实：用 `memory` 写入。闲置技能可用 action=curate 查看建议（勿自动删除）。",
+            cfg.complex_task_tool_threshold
+        );
+        if let Ok(recent) = memory::list_recent_decisions(base, 8) {
+            if recent
+                .iter()
+                .any(|e| e.kind == memory::DecisionKind::ToolFailure)
+            {
+                text.push_str(
+                    " 近期有工具失败记录：若已找到正确路径，请用 skills manage patch 写回对应 Skill。",
+                );
+            }
+        }
+        Some(text)
     }
 
     pub fn config_protect_last_n(&self) -> usize {
@@ -1015,6 +1049,11 @@ impl AgentLoop {
                 // 固定上下文优先于本轮 FTS 召回
                 dyn_ctx.items.insert(0, pinned);
             }
+            if let Some(ref nudge) = self.pending_learning_nudge {
+                dyn_ctx
+                    .items
+                    .insert(0, format!("# 学习提示\n{nudge}"));
+            }
             dyn_ctx
         };
         (static_ctx, dynamic_ctx, skill_pairs)
@@ -1038,7 +1077,7 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let guidance = "# 工具使用\n使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称。\n每次思考用 <think>...</think> 标签包裹。";
+        let guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
         let timestamp = format!("# 当前时间\n{now}");
         let mut budget =
@@ -1606,6 +1645,7 @@ impl AgentLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::sync::{Arc, Mutex};
 
     use tempfile::TempDir;
@@ -1719,6 +1759,22 @@ mod tests {
         // 未配置的任务仍回退主 ChatTarget，不受其它任务配置影响。
         let dreaming = agent.auxiliary_targets(common::AuxiliaryTask::Dreaming);
         assert_eq!(dreaming, vec![t("p0", "openai", "gpt-5.6")]);
+    }
+
+    #[test]
+    fn learning_nudge_arms_only_when_threshold_met() {
+        let dir = TempDir::new().unwrap();
+        assert!(AgentLoop::compute_learning_nudge(dir.path(), 2).is_none());
+        let n = AgentLoop::compute_learning_nudge(dir.path(), 5).expect("nudge");
+        assert!(n.contains("skills"));
+        assert!(n.contains("memory"));
+
+        fs::write(
+            dir.path().join("config.yaml"),
+            "learning:\n  nudge_enabled: false\n",
+        )
+        .unwrap();
+        assert!(AgentLoop::compute_learning_nudge(dir.path(), 9).is_none());
     }
 }
 

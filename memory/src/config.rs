@@ -87,6 +87,38 @@ impl Default for AuxiliaryRoute {
     }
 }
 
+fn default_unused_days() -> u32 {
+    30
+}
+
+fn default_complex_threshold() -> usize {
+    5
+}
+
+/// 运行时学习闭环配置（`config.yaml` 的 `learning:` 段）。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct LearningConfig {
+    /// 复杂任务后是否在下一轮注入 nudge。
+    #[serde(default = "default_true")]
+    pub nudge_enabled: bool,
+    /// 上一轮工具次数 ≥ 该值视为复杂任务。
+    #[serde(default = "default_complex_threshold")]
+    pub complex_task_tool_threshold: usize,
+    /// `skills curate` 闲置天数阈值。
+    #[serde(default = "default_unused_days")]
+    pub unused_skill_days: u32,
+}
+
+impl Default for LearningConfig {
+    fn default() -> Self {
+        Self {
+            nudge_enabled: true,
+            complex_task_tool_threshold: 5,
+            unused_skill_days: 30,
+        }
+    }
+}
+
 /// 辅助模型配置（`config.yaml` 的 `auxiliary:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 pub struct AuxiliaryConfig {
@@ -158,6 +190,8 @@ struct FileConfig {
     memory: Option<MemoryConfig>,
     #[serde(default)]
     auxiliary: Option<AuxiliaryConfig>,
+    #[serde(default)]
+    learning: Option<LearningConfig>,
 }
 
 fn read_file_config(base: &Path) -> FileConfig {
@@ -197,6 +231,11 @@ pub fn load_memory_config(base: &Path) -> MemoryConfig {
 /// 从 `{base}/config.yaml` 加载辅助模型配置。
 pub fn load_auxiliary_config(base: &Path) -> AuxiliaryConfig {
     read_file_config(base).auxiliary.unwrap_or_default()
+}
+
+/// 从 `{base}/config.yaml` 加载学习闭环配置。
+pub fn load_learning_config(base: &Path) -> LearningConfig {
+    read_file_config(base).learning.unwrap_or_default()
 }
 
 fn config_yaml_path(base: &Path) -> std::path::PathBuf {
@@ -375,6 +414,11 @@ mod tests {
         assert_eq!(cfg.daily_prompt_max_chars, 1024);
         let aux = load_auxiliary_config(dir.path());
         assert_eq!(aux, AuxiliaryConfig::default());
+        let learning = load_learning_config(dir.path());
+        assert_eq!(learning, LearningConfig::default());
+        assert!(learning.nudge_enabled);
+        assert_eq!(learning.complex_task_tool_threshold, 5);
+        assert_eq!(learning.unused_skill_days, 30);
     }
 
     #[test]
@@ -388,6 +432,25 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         set_auto_refresh_on_update(dir.path(), false).unwrap();
         assert!(!load_memory_config(dir.path()).auto_refresh_on_update);
+    }
+
+    #[test]
+    fn learning_yaml_overrides() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+learning:
+  nudge_enabled: false
+  complex_task_tool_threshold: 8
+  unused_skill_days: 14
+"#,
+        )
+        .unwrap();
+        let cfg = load_learning_config(dir.path());
+        assert!(!cfg.nudge_enabled);
+        assert_eq!(cfg.complex_task_tool_threshold, 8);
+        assert_eq!(cfg.unused_skill_days, 14);
     }
 
     #[test]

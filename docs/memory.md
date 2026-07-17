@@ -4,6 +4,8 @@ Astro 将长期记忆与用户档案维护为**有界精炼条目**（`MEMORY.md
 
 设计规格见 [`docs/superpowers/specs/2026-07-14-memory-hermes-alignment-design.md`](./superpowers/specs/2026-07-14-memory-hermes-alignment-design.md)。
 
+**学习闭环（Skills + nudge）：** 可复用工作流沉淀见 [`docs/learning-loop.md`](./learning-loop.md)；记忆本页只管 MEMORY/USER / review / 入梦。
+
 ---
 
 ## 配置文件
@@ -32,6 +34,17 @@ memory:
 | `daily_prompt_max_chars` | `1024` | 每轮可读盘的今日日记截断上限；**不属于**长期记忆 |
 
 P2 辅助模型与回合后 review 见下文「辅助模型 / background review」。
+
+### 学习闭环（Skills）
+
+与 MEMORY 分开：可复用工作流见 [`learning-loop.md`](./learning-loop.md)。`config.yaml` 的 `learning:` 段控制复杂任务 nudge 与 `skills curate` 闲置天数。
+
+```yaml
+learning:
+  nudge_enabled: true
+  complex_task_tool_threshold: 5
+  unused_skill_days: 30
+```
 
 ### 辅助模型 / background review
 

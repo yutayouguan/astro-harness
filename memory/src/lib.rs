@@ -18,9 +18,10 @@ pub(crate) mod test_env;
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::workspace;
 pub use config::{
-    load_auxiliary_config, load_memory_config, resolve_auxiliary, set_background_review_enabled,
-    set_auto_refresh_on_update, set_auxiliary_route, set_write_approval,
-    reset_all_auxiliary_routes, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute, MemoryConfig,
+    load_auxiliary_config, load_learning_config, load_memory_config, resolve_auxiliary,
+    set_background_review_enabled, set_auto_refresh_on_update, set_auxiliary_route, set_write_approval,
+    reset_all_auxiliary_routes, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute, LearningConfig,
+    MemoryConfig,
 };
 pub use pending::{
     approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,

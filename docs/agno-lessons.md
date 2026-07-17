@@ -202,8 +202,8 @@ messages 中 tool 结果超阈值
 | UserProfile | `USER.md` | 无字段 schema |
 | UserMemory | `MEMORY.md` + daily | 无 entity 图 |
 | SessionContext | session + compact | — |
-| LearnedKnowledge | skills / 无 | 无「学到即入库」 |
-| DecisionLog | usage/trace 旁路 | 无一等决策日志 |
+| LearnedKnowledge | skills + 运行时 manage/patch/curate | 部分：见 [`learning-loop.md`](./learning-loop.md)；无离线遗传进化 |
+| DecisionLog | usage/trace 旁路 | 已有 `~/.astro/learning/decisions.jsonl`；可强化 skill patch nudge |
 | EntityMemory | — | **缺** |
 
 ### 可借鉴优先级
@@ -216,7 +216,8 @@ messages 中 tool 结果超阈值
 - `memory::decision_log::{DecisionEntry, DecisionKind, append_decision, list_recent}`
 - JSONL：`~/.astro/learning/decisions.jsonl`
 - 挂点：pending `reject` → `MemoryRejected`；工具执行失败 → `ToolFailure`
-- **未做**：EntityMemory / Always 模式 / LearnedKnowledge 入库
+- **运行时学习闭环（P1）：** Skills `patch` / `curate`、skill-usage、learning nudge — 见 [`learning-loop.md`](./learning-loop.md)
+- **未做**：EntityMemory / Always 模式 / 离线遗传进化 / Done 后自动写 Skill
 
 ---
 

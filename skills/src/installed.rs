@@ -567,6 +567,7 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
             at: Instant::now(),
         });
     }
+    crate::usage::record_skill_load(name);
 
     Ok(loaded)
 }

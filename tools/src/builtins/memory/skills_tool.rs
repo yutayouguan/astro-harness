@@ -1,4 +1,4 @@
-//! Skills 工具：list / view(load) / manage（create、update、delete）。
+//! Skills 工具：list / view(load) / curate / manage（create、update、patch、delete）。
 //!
 //! 加载逻辑委托 [`skills::load_skill_by_name`]；列表用 [`skills::list_enabled_for_prompt`]；
 //! manage 写入当前 Agent 的 `workspace/skills/`（[`skills::install::agent_skills_dir`]）。
@@ -16,13 +16,13 @@ use crate::schema::schema_for_args;
 /// `skills` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SkillsArgs {
-    /// 动作：`load` / `view`（默认，加载 SKILL.md）、`list`、`manage`。
+    /// 动作：`load` / `view`（默认）、`list`、`curate`、`manage`。
     #[serde(default)]
     pub action: Option<String>,
-    /// Skill 名称 / id。`load`/`view`/`manage` 必填；`list` 可省略。
+    /// Skill 名称 / id。`load`/`view`/`manage` 必填；`list`/`curate` 可省略。
     #[serde(default)]
     pub skill_id: Option<String>,
-    /// `manage` 子操作：`create` | `update` | `delete`。
+    /// `manage` 子操作：`create` | `update` | `patch` | `delete`。
     #[serde(default)]
     pub manage_action: Option<String>,
     /// `manage` create/update：SKILL.md 正文（可含 YAML frontmatter）。
@@ -31,6 +31,12 @@ pub struct SkillsArgs {
     /// `manage` create：描述（写入 frontmatter；若 content 已含 frontmatter 可省略）。
     #[serde(default)]
     pub description: Option<String>,
+    /// `manage` patch：要替换的原文（须在 SKILL.md 中唯一出现）。
+    #[serde(default)]
+    pub old_string: Option<String>,
+    /// `manage` patch：替换后的新文本。
+    #[serde(default)]
+    pub new_string: Option<String>,
     /// 可选结构化输入，附在 `load`/`view` 返回文本的「调用输入」小节。
     #[serde(default)]
     pub input: Option<serde_json::Value>,
@@ -41,8 +47,11 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "skills".to_string(),
         toolset: "skills".to_string(),
-        description: "Skills hub: action=list (enabled name+description), load|view (default: SKILL.md + root/scripts), \
-             or manage with manage_action=create|update|delete under the agent skills directory. \
+        description: "Skills hub: action=list|curate|load|view|manage. \
+             list = enabled name+description; curate = usage + idle suggestions (never auto-deletes); \
+             load|view (default) = SKILL.md + root/scripts; \
+             manage with manage_action=create|update|patch|delete under the agent skills directory \
+             (patch = unique old_string→new_string). \
              Call with name=\"skills\" and skill_id=skill name — never use the skill name as the tool name. \
              Body capped at 64KiB."
             .to_string(),
@@ -175,11 +184,57 @@ fn load_skill(skill_id: &str, input: Option<serde_json::Value>) -> anyhow::Resul
     ))
 }
 
+fn resolve_agent_skill_md(skill_id: &str, skills_dir: &Path) -> anyhow::Result<PathBuf> {
+    let dest = skills_dir.join(skill_id);
+    let skill_md = if dest.join("SKILL.md").is_file() {
+        dest.join("SKILL.md")
+    } else {
+        anyhow::bail!(
+            "未找到 Agent skills 下的 SKILL.md: {}（patch/update 仅可改 Agent 目录）",
+            home::display_user_path(&dest)
+        );
+    };
+    let agent_root = skills_dir
+        .canonicalize()
+        .unwrap_or_else(|_| skills_dir.to_path_buf());
+    let parent = skill_md
+        .parent()
+        .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
+        .unwrap_or_else(|| dest.clone());
+    if !parent.starts_with(&agent_root) {
+        anyhow::bail!("路径越界：拒绝修改 Agent skills 之外的文件");
+    }
+    Ok(skill_md)
+}
+
+fn patch_skill_md(path: &Path, rel_label: &str, old: &str, new: &str) -> anyhow::Result<String> {
+    if old.is_empty() {
+        anyhow::bail!("patch 的 old_string 不能为空");
+    }
+    let raw = fs::read(path)?;
+    let text = std::str::from_utf8(&raw)
+        .map_err(|_| anyhow::anyhow!("patch 仅支持 UTF-8: {rel_label}"))?;
+    let matches = text.matches(old).count();
+    match matches {
+        0 => anyhow::bail!("patch 未找到 old_string（0 处匹配）: {rel_label}"),
+        1 => {
+            let updated = text.replacen(old, new, 1);
+            fs::write(path, updated.as_bytes())?;
+            Ok(format!("已 patch 技能 `{rel_label}`（1 处替换）"))
+        }
+        n => anyhow::bail!(
+            "patch 的 old_string 不唯一（{n} 处匹配），请提供更长上下文: {rel_label}"
+        ),
+    }
+}
+
 fn manage_skill(
     skill_id: &str,
     manage_action: &str,
     content: Option<&str>,
     description: Option<&str>,
+    old_string: Option<&str>,
+    new_string: Option<&str>,
 ) -> anyhow::Result<String> {
     validate_skill_id(skill_id)?;
     let op = manage_action.trim().to_lowercase();
@@ -189,7 +244,7 @@ fn manage_skill(
     match op.as_str() {
         "create" => {
             if dest.exists() {
-                anyhow::bail!("技能已存在: {skill_id}（用 manage_action=update 修改）");
+                anyhow::bail!("技能已存在: {skill_id}（用 manage_action=update 或 patch 修改）");
             }
             let body = content
                 .map(str::trim)
@@ -217,7 +272,6 @@ fn manage_skill(
             let skill_md = if dest.join("SKILL.md").is_file() {
                 dest.join("SKILL.md")
             } else {
-                // 允许更新已安装但不在 agent 目录的技能：仅当目标可写到 agent 副本
                 let loaded = skills::load_skill_by_name(skill_id).ok();
                 if let Some(loaded) = loaded {
                     loaded.path
@@ -227,7 +281,6 @@ fn manage_skill(
                     anyhow::bail!("未找到可更新的技能目录: {skill_id}");
                 }
             };
-            // 安全：只允许写 agent skills 目录下的文件
             let agent_root = skills_dir
                 .canonicalize()
                 .unwrap_or_else(|_| skills_dir.clone());
@@ -236,7 +289,6 @@ fn manage_skill(
                 .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
                 .unwrap_or_else(|| dest.clone());
             if !parent.starts_with(&agent_root) {
-                // 非 agent 目录：复制到 agent skills 再写
                 fs::create_dir_all(&dest)?;
                 let target = dest.join("SKILL.md");
                 fs::write(&target, body.as_bytes())?;
@@ -254,6 +306,15 @@ fn manage_skill(
                 "已更新技能 `{skill_id}`\n路径: {}",
                 home::display_user_path(&skill_md)
             ))
+        }
+        "patch" => {
+            let old = old_string
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("manage patch 需要 old_string"))?;
+            let new = new_string
+                .ok_or_else(|| anyhow::anyhow!("manage patch 需要 new_string"))?;
+            let skill_md = resolve_agent_skill_md(skill_id, &skills_dir)?;
+            patch_skill_md(&skill_md, skill_id, old, new)
         }
         "delete" => {
             if !dest.exists() {
@@ -279,14 +340,13 @@ fn manage_skill(
             let _ = skills::set_enabled(skill_id, false);
             Ok(format!("已删除技能 `{skill_id}`"))
         }
-        other => anyhow::bail!("未知 manage_action: {other}（支持 create|update|delete）"),
+        other => {
+            anyhow::bail!("未知 manage_action: {other}（支持 create|update|patch|delete）")
+        }
     }
 }
 
 /// 按 `action` 分发 skills 操作。
-///
-/// # 错误
-/// 参数无效、`skill_id` 为空（非 list），或 Skill 不存在 / 读写失败。
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: SkillsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("skills 参数无效: {e}"))?;
@@ -300,6 +360,10 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
 
     match action.as_str() {
         "list" => Ok(list_skills()),
+        "curate" => {
+            let days = memory::load_learning_config(&home::default_memory_dir()).unused_skill_days;
+            Ok(skills::curate_report(days))
+        }
         "load" | "view" => {
             let skill_id = parsed
                 .skill_id
@@ -322,16 +386,20 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| {
-                    anyhow::anyhow!("skills manage 需要 manage_action（create|update|delete）")
+                    anyhow::anyhow!(
+                        "skills manage 需要 manage_action（create|update|patch|delete）"
+                    )
                 })?;
             manage_skill(
                 skill_id,
                 manage_action,
                 parsed.content.as_deref(),
                 parsed.description.as_deref(),
+                parsed.old_string.as_deref(),
+                parsed.new_string.as_deref(),
             )
         }
-        other => anyhow::bail!("未知 action: {other}（支持 list|load|view|manage）"),
+        other => anyhow::bail!("未知 action: {other}（支持 list|curate|load|view|manage）"),
     }
 }
 
@@ -374,34 +442,100 @@ mod tests {
     fn manage_create_update_delete_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
-        // agent workspace skills
         let create = manage_skill(
             "demo-tool-skill",
             "create",
             Some("# Hello\n\nDo the thing."),
             Some("A demo skill"),
+            None,
+            None,
         )
         .unwrap();
         assert!(create.contains("已创建"));
         let skills_dir = skills::install::agent_skills_dir(None).unwrap();
         let md = skills_dir.join("demo-tool-skill/SKILL.md");
         assert!(md.is_file());
-        let body = fs::read_to_string(&md).unwrap();
-        assert!(body.contains("name: demo-tool-skill"));
-        assert!(body.contains("Do the thing"));
 
         manage_skill(
             "demo-tool-skill",
             "update",
             Some("---\nname: demo-tool-skill\ndescription: updated\n---\n\n# Updated\n"),
             None,
+            None,
+            None,
         )
         .unwrap();
-        let body2 = fs::read_to_string(&md).unwrap();
-        assert!(body2.contains("# Updated"));
+        assert!(fs::read_to_string(&md).unwrap().contains("# Updated"));
 
-        let del = manage_skill("demo-tool-skill", "delete", None, None).unwrap();
+        let del = manage_skill("demo-tool-skill", "delete", None, None, None, None).unwrap();
         assert!(del.contains("已删除"));
         assert!(!skills_dir.join("demo-tool-skill").exists());
+    }
+
+    #[test]
+    fn manage_patch_unique_and_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        manage_skill(
+            "patch-demo",
+            "create",
+            Some("# A\n\nstep one\n\nstep two\n"),
+            Some("patch demo"),
+            None,
+            None,
+        )
+        .unwrap();
+        let out = manage_skill(
+            "patch-demo",
+            "patch",
+            None,
+            None,
+            Some("step one"),
+            Some("step ONE"),
+        )
+        .unwrap();
+        assert!(out.contains("1 处替换"));
+        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let body = fs::read_to_string(skills_dir.join("patch-demo/SKILL.md")).unwrap();
+        assert!(body.contains("step ONE"));
+        assert!(!body.contains("step one"));
+
+        let err0 = manage_skill(
+            "patch-demo",
+            "patch",
+            None,
+            None,
+            Some("missing-marker"),
+            Some("x"),
+        )
+        .unwrap_err();
+        assert!(err0.to_string().contains("0 处匹配"));
+
+        // make duplicate
+        fs::write(
+            skills_dir.join("patch-demo/SKILL.md"),
+            "xx xx xx\n",
+        )
+        .unwrap();
+        let err_n = manage_skill(
+            "patch-demo",
+            "patch",
+            None,
+            None,
+            Some("xx"),
+            Some("yy"),
+        )
+        .unwrap_err();
+        assert!(err_n.to_string().contains("不唯一"));
+    }
+
+    #[test]
+    fn patch_skill_md_unit() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("SKILL.md");
+        fs::write(&p, "hello world\n").unwrap();
+        patch_skill_md(&p, "t", "hello", "hi").unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "hi world\n");
+        assert!(patch_skill_md(&p, "t", "nope", "x").is_err());
     }
 }

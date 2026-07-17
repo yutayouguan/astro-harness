@@ -7,6 +7,15 @@ use chrono::Local;
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 
+/// 工具调用与学习闭环固定指引（注入 system prompt）。
+pub const TOOL_GUIDANCE: &str = "\
+# 工具使用\n\
+使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n\
+加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称；可用 action=list|curate|load|manage。\n\
+复杂可复用流程：skills manage create；纠错后的正确步骤：manage_action=patch（old_string 须唯一）。\n\
+长期偏好/环境事实：用 memory；跨会话原文：session_search。闲置技能：action=curate（只建议，确认后再 delete）。\n\
+每次思考用 <think>...</think> 标签包裹。";
+
 /// 可链式追加的 prompt 层容器。
 pub struct PromptBuilder {
     /// 已接纳的各层 Markdown 片段，顺序即最终呈现顺序。
@@ -47,11 +56,9 @@ impl PromptBuilder {
         self
     }
 
-    /// 追加工具调用格式与思考标签的使用说明（固定文案）。
+    /// 追加工具调用格式与学习闭环说明（固定文案）。
     pub fn with_tool_guidance(mut self) -> Self {
-        self.layers.push(
-            "# 工具使用\n使用 <tool_call>{\"name\":\"...\",\"arguments\":{...}}</tool_call> 格式调用工具。\n加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称。\n每次思考用 <think>...</think> 标签包裹。".to_string(),
-        );
+        self.layers.push(TOOL_GUIDANCE.to_string());
         self
     }
 

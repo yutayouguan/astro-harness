@@ -22,6 +22,7 @@ pub mod seed;
 pub mod skill;
 pub mod store;
 pub mod update;
+pub mod usage;
 
 pub use backups::{list_skill_backups, reveal_skill_backup, SkillBackupEntry};
 pub use install::{install_from_ref, InstallOriginHint};
@@ -53,3 +54,4 @@ pub use check::{
 pub use registry::SkillRegistry;
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use store::{fetch_detail, search};
+pub use usage::{curate_report, curate_report_at, last_loaded_at, record_skill_load, skill_usage_path};
