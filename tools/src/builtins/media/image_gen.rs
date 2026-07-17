@@ -24,7 +24,7 @@ const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 /// `image_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageGenArgs {
-    /// 详细画面提示词（不可为空）。须写充实描述，勿只用短句摘要：主体与动作、场景/背景、构图与景别、光影与色彩、材质质感、艺术风格/媒介、氛围情绪。若思考过程已写好详细描述，必须原样传入本字段。宽高比与分辨率用 `aspect_ratio` / `image_size`，勿只写进本 prompt。
+    /// 详细画面提示词（不可为空）。须写充实描述，勿只用短句摘要：主体与动作、场景/背景、构图与景别、光影与色彩、材质质感、艺术风格/媒介、氛围情绪。关键视觉方向不明确且无法从上下文合理推断时，先用 `clarify` 询问用户；用户明确要求自由发挥时无需追问。若思考过程已写好详细描述，必须原样传入本字段。宽高比与分辨率用 `aspect_ratio` / `image_size`，勿只写进本 prompt。
     pub prompt: String,
     /// 宽高比（用户要 16:9 / 9:16 / 1:1 等时必须传此字段，勿只写进 prompt）。常用：`1:1` / `16:9` / `9:16` / `4:3` / `3:4`。
     #[serde(default)]
@@ -154,7 +154,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate or edit images via Gemini Interactions (Nano Banana). prompt MUST be a rich, detailed image description (subject/action, setting, composition, lighting, colors, materials, art style/medium, mood)—NOT a short summary; if you already drafted a detailed prompt in thinking, pass it verbatim. REQUIRED: if the user asks for aspect ratio (e.g. 16:9) or resolution (e.g. 2K), you MUST set aspect_ratio and/or image_size fields — do NOT only put them in prompt text. image_size values: 0.5K|1K|2K|4K. Also supports reference_images (≤14), previous_interaction_id, google_search/image_search, thinking_level, video_uri/video. OpenAI fallback is prompt-only. Writes generated/images/."
+        description: "Generate or edit images via Gemini Interactions (Nano Banana). BEFORE calling: if key visual direction (especially subject, style/medium, composition, or mood) is unclear and cannot be reasonably inferred from context, use `clarify` to ask the user, preferably with concise options. Do not ask when the user explicitly delegates creative choices (e.g. \"you decide\" / \"surprise me\"). prompt MUST be a rich, detailed image description (subject/action, setting, composition, lighting, colors, materials, art style/medium, mood)—NOT a short summary; if you already drafted a detailed prompt in thinking, pass it verbatim. REQUIRED: if the user asks for aspect ratio (e.g. 16:9) or resolution (e.g. 2K), you MUST set aspect_ratio and/or image_size fields — do NOT only put them in prompt text. image_size values: 0.5K|1K|2K|4K. Also supports reference_images (≤14), previous_interaction_id, google_search/image_search, thinking_level, video_uri/video. OpenAI fallback is prompt-only. Writes generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
