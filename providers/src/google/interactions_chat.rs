@@ -533,7 +533,9 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                         });
                     }
                 }
-                "arguments" => {
+                // 线上 Interactions SSE：`type=arguments_delta` + `arguments` 字符串增量。
+                // 文档示例仍写 `type=arguments` + `partial_arguments`；两者都认。
+                "arguments" | "arguments_delta" => {
                     state.saw_function_call = true;
                     // 参数增量归到当前 function_call 槽位；顶层 index 缺失或与
                     // function_call step 的 index 不一致时也不会拆散 name/arguments。
@@ -876,6 +878,38 @@ mod tests {
         );
         assert_eq!(done[0].finish_reason.as_deref(), Some("tool_calls"));
         assert_eq!(done[0].interaction_id.as_deref(), Some("ix_1"));
+    }
+
+    #[test]
+    fn stream_arguments_delta_wire_format() {
+        // 真实线上 SSE（Api-Revision 2026-05-20）：
+        // step.start 带空 arguments:{}；参数在 step.delta type=arguments_delta
+        // 的 `arguments` 字段里，而不是文档示例的 type=arguments/partial_arguments。
+        let mut state = StreamState::default();
+        let start = extract_interactions_chat_events(
+            r#"{"index":0,"step":{"id":"sf9vftls","type":"function_call","name":"image_gen","arguments":{}},"event_type":"step.start"}"#,
+            &mut state,
+        );
+        assert_eq!(start[0].tool_call_deltas[0].name.as_deref(), Some("image_gen"));
+        assert!(start[0].tool_call_deltas[0].arguments.is_none());
+        let name_slot = start[0].tool_call_deltas[0].index;
+
+        let args = extract_interactions_chat_events(
+            r#"{"index":0,"delta":{"arguments":"{\"prompt\":\"a cat\"}","type":"arguments_delta"},"event_type":"step.delta"}"#,
+            &mut state,
+        );
+        assert_eq!(args[0].tool_call_deltas[0].index, name_slot);
+        assert_eq!(
+            args[0].tool_call_deltas[0].arguments.as_deref(),
+            Some(r#"{"prompt":"a cat"}"#)
+        );
+
+        let done = extract_interactions_chat_events(
+            r#"{"interaction":{"id":"ix_wire","status":"requires_action","usage":{"total_input_tokens":10,"total_output_tokens":5}},"event_type":"interaction.completed"}"#,
+            &mut state,
+        );
+        assert_eq!(done[0].finish_reason.as_deref(), Some("tool_calls"));
+        assert_eq!(done[0].interaction_id.as_deref(), Some("ix_wire"));
     }
 
     #[test]
