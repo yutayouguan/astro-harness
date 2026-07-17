@@ -199,6 +199,12 @@ messages 中 tool 结果超阈值
 3. **EntityMemory（可选）**：`(type, name, facts[], sources[])`，先 FTS、后向量。
 4. Always 全自动写库对桌面助手风险高，默认 **Propose / Agentic** 更贴 Astro。
 
+### 已落地（本轮）
+- `memory::decision_log::{DecisionEntry, DecisionKind, append_decision, list_recent}`
+- JSONL：`~/.astro/learning/decisions.jsonl`
+- 挂点：pending `reject` → `MemoryRejected`；工具执行失败 → `ToolFailure`
+- **未做**：EntityMemory / Always 模式 / LearnedKnowledge 入库
+
 ---
 
 ## 八、知识库（Knowledge / RAG）

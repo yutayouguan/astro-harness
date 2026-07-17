@@ -222,10 +222,23 @@ async fn execute_tools_serial_inner(
             )
         } else {
             let mut agent = session.lock().await;
+            let memory_dir = agent.memory_dir().to_path_buf();
+            let session_id = agent.session_id().to_string();
             tokio::task::block_in_place(|| {
                 agent.handle_tool_call(&call.name, &call.arguments)
             })
-            .unwrap_or_else(|e| format!("工具错误: {e}"))
+            .unwrap_or_else(|e| {
+                memory::try_append_decision(
+                    &memory_dir,
+                    memory::DecisionEntry::new(
+                        memory::DecisionKind::ToolFailure,
+                        format!("{e}"),
+                    )
+                    .with_tool(call.name.clone())
+                    .with_session(session_id),
+                );
+                format!("工具错误: {e}")
+            })
         };
 
         // confirm/clarify：astro_hitl → 同回合 park

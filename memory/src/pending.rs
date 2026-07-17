@@ -185,7 +185,29 @@ pub fn reject(base: &Path, id: &str) -> anyhow::Result<()> {
     if !path.is_file() {
         anyhow::bail!("pending 写入不存在: {id}");
     }
+    // 先读摘要再删，便于 DecisionLog
+    let summary = fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<PendingMemoryWrite>(&raw).ok())
+        .map(|item| {
+            let target = match item.target {
+                MemoryTarget::Memory => "memory",
+                MemoryTarget::User => "user",
+            };
+            format!(
+                "rejected memory {} {} for agent {}",
+                item.action, target, item.agent_id
+            )
+        })
+        .unwrap_or_else(|| format!("rejected pending {id}"));
     fs::remove_file(&path)?;
+    crate::decision_log::try_append_decision(
+        base,
+        crate::decision_log::DecisionEntry::new(
+            crate::decision_log::DecisionKind::MemoryRejected,
+            summary,
+        ),
+    );
     Ok(())
 }
 

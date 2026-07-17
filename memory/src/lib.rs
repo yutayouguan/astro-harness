@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod config;
+pub mod decision_log;
 pub mod dreaming;
 pub mod pending;
 pub mod protocol;
@@ -25,8 +26,9 @@ pub use pending::{
     approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,
     pending_dir, reject as reject_pending_memory, PendingMemoryWrite,
 };
-pub use protocol::{
-    open_memory_ops_for_test, FileMemoryOps, MemoryOps, MemoryOpsResult, MemoryWriteIntent,
+pub use decision_log::{
+    append_decision, decisions_path, list_recent as list_recent_decisions, try_append_decision,
+    DecisionEntry, DecisionKind,
 };
 pub use review::{
     apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,
