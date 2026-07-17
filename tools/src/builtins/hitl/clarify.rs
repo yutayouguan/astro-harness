@@ -22,7 +22,7 @@ pub struct ClarifyQuestion {
     pub id: Option<String>,
     /// 向用户提出的问题。
     pub question: String,
-    /// 可选选项列表。
+    /// 预设选项；留空则前端仅展示自由输入框。
     #[serde(default)]
     pub options: Vec<String>,
 }
@@ -43,8 +43,9 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "clarify".to_string(),
         toolset: "clarify".to_string(),
-        description: "Ask clarifying question(s) with choices before proceeding. \
-Use `questions` (1+ steps) for a stacked wizard."
+        description: "Ask clarifying question(s) before proceeding. \
+Use `questions` (1+ steps). Each step may include `options`; empty options show a free-text field. \
+When options are provided, the UI always adds a custom text input as the last choice."
             .to_string(),
         schema: schema_for_args::<ClarifyArgs>(),
         check_fn: None,
@@ -54,17 +55,11 @@ Use `questions` (1+ steps) for a stacked wizard."
     });
 }
 
-fn normalize_options(raw: Vec<String>, fallback: &str) -> Vec<String> {
-    let options: Vec<String> = raw
-        .into_iter()
+fn normalize_options(raw: Vec<String>) -> Vec<String> {
+    raw.into_iter()
         .map(|o| o.trim().to_string())
         .filter(|o| !o.is_empty())
-        .collect();
-    if options.is_empty() {
-        vec![fallback.into()]
-    } else {
-        options
-    }
+        .collect()
 }
 
 /// 构建 HITL clarify 载荷（A2UI operations + response schema）。
@@ -90,7 +85,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
             Some(a2ui::templates::ClarifyStep {
                 id,
                 question: question.to_string(),
-                options: normalize_options(q.options.clone(), "继续"),
+                options: normalize_options(q.options.clone()),
             })
         })
         .collect();

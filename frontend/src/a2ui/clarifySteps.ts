@@ -3,6 +3,7 @@
 export type ClarifyWizardStep = {
   id: string;
   question: string;
+  /** 预设选项；为空时仅展示自由输入框。 */
   options: string[];
 };
 
@@ -37,8 +38,13 @@ export function parseClarifySteps(raw: unknown): ClarifyWizardStep[] {
       return {
         id,
         question,
-        options: options.length ? options : ["继续"],
+        options,
       } satisfies ClarifyWizardStep;
     })
     .filter((s): s is ClarifyWizardStep => s != null);
+}
+
+export function isPresetAnswer(step: ClarifyWizardStep, value: string | undefined): boolean {
+  if (!value) return false;
+  return step.options.includes(value);
 }

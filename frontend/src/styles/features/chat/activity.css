@@ -664,6 +664,57 @@ html[data-theme="light"] .a2ui-surface {
   opacity: 0.6;
 }
 
+.a2ui-clarify-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.a2ui-clarify-custom.is-inline-option {
+  flex: 1 1 12rem;
+  min-width: min(100%, 12rem);
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--a2ui-glass-border);
+  background: var(--a2ui-glass-fill);
+}
+
+.a2ui-clarify-custom.is-inline-option:focus-within {
+  border-color: var(--a2ui-accent-border);
+  background: var(--a2ui-accent-fill);
+}
+
+.a2ui-clarify-custom-label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.a2ui-clarify-custom-input {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--a2ui-glass-border);
+  background: var(--a2ui-glass-fill);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.a2ui-clarify-custom.is-inline-option .a2ui-clarify-custom-input {
+  border: none;
+  background: transparent;
+  padding: 2px 0 0;
+}
+
+.a2ui-clarify-custom-submit {
+  align-self: flex-start;
+}
+
 .a2ui-clarify-nav {
   display: flex;
   justify-content: space-between;

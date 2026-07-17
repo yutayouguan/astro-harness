@@ -127,6 +127,71 @@ async fn clarify_emits_valid_a2ui_hitl() {
 }
 
 #[tokio::test]
+async fn clarify_free_text_step_allows_empty_options() {
+    let dir = TempDir::new().unwrap();
+    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let mut ctx = ToolContext {
+        memory: &mut memory,
+        sessions: &sessions,
+        memory_dir: dir.path().to_path_buf(),
+        workspace_dir: workspace,
+        project_root: None,
+        image_gen_targets: &targets,
+        providers: &providers,
+        session_id: "test".into(),
+        turn_id: None,
+        chat_api_key: String::new(),
+        chat_base_url: String::new(),
+        chat_provider: String::new(),
+        chat_model: String::new(),
+        chat_targets: vec![],
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
+        hook_bus: None,
+    };
+
+    let raw = tools::dispatch_tool(
+        |_| true,
+        &mut ctx,
+        "clarify",
+        &serde_json::json!({
+            "questions": [
+                {
+                    "id": "idea",
+                    "question": "你想怎么做？",
+                    "options": []
+                }
+            ]
+        }),
+    )
+    .await
+    .unwrap();
+
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(v["astro_hitl"], true);
+    let ops = v["operations"].as_array().expect("operations array");
+    a2ui::validate_operations(ops).unwrap();
+    let step_options = ops
+        .iter()
+        .find_map(|op| {
+            op.pointer("/updateComponents/components")
+                .and_then(|c| c.as_array())
+                .and_then(|arr| {
+                    arr.iter()
+                        .find(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
+                })
+                .and_then(|w| w.get("steps"))
+                .and_then(|s| s.as_array())
+                .and_then(|steps| steps.first())
+                .and_then(|step| step.get("options"))
+                .and_then(|o| o.as_array())
+        })
+        .expect("wizard step options");
+    assert!(step_options.is_empty());
+}
+
+#[tokio::test]
 async fn clarify_multi_emits_wizard_hitl() {
     let dir = TempDir::new().unwrap();
     let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);

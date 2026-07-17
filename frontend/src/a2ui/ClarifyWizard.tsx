@@ -1,8 +1,9 @@
-/** 多题澄清叠层向导：Tab + 选完自动跳下一题 + 卡片切换动画。 */
+/** 多题澄清叠层向导：Tab + 选项/自由输入 + 卡片切换动画。 */
 
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../i18n/LocaleContext";
 import {
+  isPresetAnswer,
   parseClarifySteps,
   type ClarifyWizardStep,
 } from "./clarifySteps";
@@ -26,12 +27,15 @@ export default function ClarifyWizard({
   const { t } = useI18n();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [customDrafts, setCustomDrafts] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<Phase>("idle");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
 
   const safeIndex = Math.min(Math.max(index, 0), Math.max(steps.length - 1, 0));
   const step = steps[safeIndex];
   const isLast = safeIndex >= steps.length - 1;
+  const multi = steps.length > 1;
+  const isSingle = !multi;
 
   const goTo = useCallback(
     (next: number) => {
@@ -85,26 +89,104 @@ export default function ClarifyWizard({
     [onAction, steps],
   );
 
-  const pick = useCallback(
-    (value: string) => {
-      if (disabled || !step || phase === "exit") return;
-      const nextAnswers = { ...answers, [step.id]: value };
-      setAnswers(nextAnswers);
-      if (isLast) {
+  const advanceWithAnswer = useCallback(
+    (nextAnswers: Record<string, string>) => {
+      if (isSingle) {
         submitAll(nextAnswers);
         return;
       }
-      goTo(safeIndex + 1);
+      if (!isLast) {
+        goTo(safeIndex + 1);
+      }
     },
-    [answers, disabled, goTo, isLast, phase, safeIndex, step, submitAll],
+    [goTo, isLast, isSingle, safeIndex, submitAll],
+  );
+
+  const pickPreset = useCallback(
+    (value: string) => {
+      if (disabled || !step || phase === "exit") return;
+      setCustomDrafts((prev) => {
+        const next = { ...prev };
+        delete next[step.id];
+        return next;
+      });
+      const nextAnswers = { ...answers, [step.id]: value };
+      setAnswers(nextAnswers);
+      advanceWithAnswer(nextAnswers);
+    },
+    [advanceWithAnswer, answers, disabled, phase, step],
+  );
+
+  const confirmCustom = useCallback(
+    (draft?: string) => {
+      if (disabled || !step || phase === "exit") return;
+      const raw = draft ?? customDrafts[step.id] ?? "";
+      const value = raw.trim();
+      if (!value) return;
+      const nextAnswers = { ...answers, [step.id]: value };
+      setAnswers(nextAnswers);
+      setCustomDrafts((prev) => ({ ...prev, [step.id]: value }));
+      advanceWithAnswer(nextAnswers);
+    },
+    [advanceWithAnswer, answers, customDrafts, disabled, phase, step],
   );
 
   if (!steps.length || !step) return null;
 
-  const multi = steps.length > 1;
+  const hasPresets = step.options.length > 0;
+  const saved = answers[step.id];
+  const presetSelected = isPresetAnswer(step, saved) ? saved : undefined;
+  const customValue =
+    customDrafts[step.id] ??
+    (saved && !isPresetAnswer(step, saved) ? saved : "");
+
   const backPeek = multi
     ? steps.slice(safeIndex + 1, safeIndex + 3).map((_, i) => i + 1)
     : [];
+
+  const customInput = (
+    <label
+      className={`a2ui-clarify-custom ${hasPresets ? "is-inline-option" : "is-standalone"}`}
+    >
+      {hasPresets ? (
+        <span className="a2ui-clarify-custom-label">{t("chat.a2ui.clarifyCustom")}</span>
+      ) : null}
+      <input
+        type="text"
+        className="a2ui-clarify-custom-input"
+        disabled={disabled || phase === "exit"}
+        placeholder={t("chat.a2ui.clarifyCustomPlaceholder")}
+        value={customValue}
+        onChange={(e) => {
+          const v = e.target.value;
+          setCustomDrafts((prev) => ({ ...prev, [step.id]: v }));
+          if (presetSelected) {
+            setAnswers((prev) => {
+              const next = { ...prev };
+              delete next[step.id];
+              return next;
+            });
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            confirmCustom();
+          }
+        }}
+      />
+      {!hasPresets || isSingle ? (
+        <button
+          type="button"
+          className="a2ui-button is-primary a2ui-clarify-custom-submit"
+          disabled={disabled || !customValue.trim() || phase === "exit"}
+          onClick={() => confirmCustom()}
+        >
+          {isSingle ? t("chat.a2ui.clarifySubmit") : t("chat.a2ui.clarifyNext")}
+        </button>
+      ) : null}
+    </label>
+  );
 
   return (
     <div
@@ -114,7 +196,7 @@ export default function ClarifyWizard({
       {multi ? (
         <div className="a2ui-clarify-tabs" role="tablist" aria-label={t("chat.a2ui.clarifyTabs")}>
           {steps.map((s, i) => {
-            const answered = Boolean(answers[s.id]);
+            const answered = Boolean(answers[s.id]?.trim());
             const active = i === safeIndex;
             return (
               <button
@@ -169,22 +251,29 @@ export default function ClarifyWizard({
             </p>
           ) : null}
           <h3 className="a2ui-clarify-question">{step.question}</h3>
-          <div className="a2ui-clarify-options">
-            {step.options.map((opt) => {
-              const selected = answers[step.id] === opt;
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  className={`a2ui-clarify-option ${selected ? "is-selected" : ""}`}
-                  disabled={disabled || phase === "exit"}
-                  onClick={() => pick(opt)}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
+
+          {hasPresets ? (
+            <div className="a2ui-clarify-options">
+              {step.options.map((opt) => {
+                const selected = presetSelected === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`a2ui-clarify-option ${selected ? "is-selected" : ""}`}
+                    disabled={disabled || phase === "exit"}
+                    onClick={() => pickPreset(opt)}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+              {customInput}
+            </div>
+          ) : (
+            customInput
+          )}
+
           {multi ? (
             <div className="a2ui-clarify-nav">
               <button
@@ -200,7 +289,7 @@ export default function ClarifyWizard({
                   type="button"
                   className="a2ui-button is-primary"
                   disabled={
-                    disabled || !answers[step.id] || phase === "exit"
+                    disabled || !answers[step.id]?.trim() || phase === "exit"
                   }
                   onClick={() => goTo(safeIndex + 1)}
                 >
@@ -212,7 +301,7 @@ export default function ClarifyWizard({
                   className="a2ui-button is-primary"
                   disabled={
                     disabled ||
-                    steps.some((s) => !answers[s.id]) ||
+                    steps.some((s) => !answers[s.id]?.trim()) ||
                     phase === "exit"
                   }
                   onClick={() => submitAll(answers)}
