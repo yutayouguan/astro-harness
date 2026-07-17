@@ -92,11 +92,7 @@ impl GatewayHookRegistry {
             .lock()
             .map(|g| g.clone())
             .unwrap_or_default();
-        let handlers = self
-            .handlers
-            .lock()
-            .map(|g| g.clone())
-            .unwrap_or_default();
+        let handlers = self.handlers.lock().map(|g| g.clone()).unwrap_or_default();
         for d in discovered {
             if !d.manifest.events.iter().any(|e| e == event || e == "*") {
                 continue;

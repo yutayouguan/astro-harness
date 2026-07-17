@@ -3,8 +3,8 @@
 use std::sync::{Arc, Mutex};
 
 use crate::names::{
-    ON_SESSION_END, ON_SESSION_FINALIZE, ON_SESSION_RESET, ON_SESSION_START, POST_APPROVAL_RESPONSE,
-    POST_API_REQUEST, POST_LLM_CALL, POST_TOOL_CALL, PRE_APPROVAL_REQUEST, PRE_API_REQUEST,
+    ON_SESSION_END, ON_SESSION_FINALIZE, ON_SESSION_RESET, ON_SESSION_START, POST_API_REQUEST,
+    POST_APPROVAL_RESPONSE, POST_LLM_CALL, POST_TOOL_CALL, PRE_API_REQUEST, PRE_APPROVAL_REQUEST,
     PRE_GATEWAY_DISPATCH, PRE_LLM_CALL, PRE_TOOL_CALL, PRE_VERIFY, SUBAGENT_START, SUBAGENT_STOP,
     TRANSFORM_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT, TRANSFORM_TOOL_RESULT,
 };
@@ -125,10 +125,7 @@ pub fn install_ui_timeline(
 }
 
 /// 测试用：记录触发过的钩子名。
-pub fn install_recording(
-    bus: &PluginHookBus,
-    log: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
-) {
+pub fn install_recording(bus: &PluginHookBus, log: std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
     for &name in UI_HOOK_NAMES {
         let log = std::sync::Arc::clone(&log);
         let hook_name = name.to_string();

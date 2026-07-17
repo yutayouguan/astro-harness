@@ -80,11 +80,7 @@ pub(crate) fn env_from_payload(event: &str, payload: &HookPayload) -> Vec<(Strin
     env
 }
 
-async fn run_shell(
-    cmd: &str,
-    env: &[(String, String)],
-    timeout: Duration,
-) -> anyhow::Result<()> {
+async fn run_shell(cmd: &str, env: &[(String, String)], timeout: Duration) -> anyhow::Result<()> {
     let mut child = Command::new("sh");
     child
         .arg("-c")
@@ -128,8 +124,12 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert!(env.iter().any(|(k, v)| k == "ASTRO_HOOK_TURN" && v == "turn-abc"));
-        assert!(env.iter().any(|(k, v)| k == "ASTRO_HOOK_SESSION" && v == "s1"));
+        assert!(env
+            .iter()
+            .any(|(k, v)| k == "ASTRO_HOOK_TURN" && v == "turn-abc"));
+        assert!(env
+            .iter()
+            .any(|(k, v)| k == "ASTRO_HOOK_SESSION" && v == "s1"));
     }
 
     #[test]

@@ -48,14 +48,14 @@ impl PluginHookBus {
             Err(_) => return HookOutcome::Continue,
         };
         for cb in callbacks {
-            let outcome = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cb(payload)))
-            {
-                Ok(o) => o,
-                Err(_) => {
-                    warn!(hook = name, "plugin hook panicked; ignoring");
-                    HookOutcome::Continue
-                }
-            };
+            let outcome =
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cb(payload))) {
+                    Ok(o) => o,
+                    Err(_) => {
+                        warn!(hook = name, "plugin hook panicked; ignoring");
+                        HookOutcome::Continue
+                    }
+                };
             match &outcome {
                 HookOutcome::Continue | HookOutcome::Allow => continue,
                 _ => return outcome,
@@ -113,7 +113,9 @@ mod tests {
     fn inject_context_short_circuits() {
         let bus = PluginHookBus::new();
         bus.register(PRE_LLM_CALL, |_| HookOutcome::InjectContext("extra".into()));
-        bus.register(PRE_LLM_CALL, |_| HookOutcome::InjectContext("ignored".into()));
+        bus.register(PRE_LLM_CALL, |_| {
+            HookOutcome::InjectContext("ignored".into())
+        });
         let out = bus.fire(PRE_LLM_CALL, &HookPayload::default());
         assert!(matches!(out, HookOutcome::InjectContext(ref s) if s == "extra"));
     }
@@ -129,8 +131,12 @@ mod tests {
     #[test]
     fn transform_replace_text_short_circuits() {
         let bus = PluginHookBus::new();
-        bus.register(TRANSFORM_TOOL_RESULT, |_| HookOutcome::ReplaceText("a".into()));
-        bus.register(TRANSFORM_TOOL_RESULT, |_| HookOutcome::ReplaceText("b".into()));
+        bus.register(TRANSFORM_TOOL_RESULT, |_| {
+            HookOutcome::ReplaceText("a".into())
+        });
+        bus.register(TRANSFORM_TOOL_RESULT, |_| {
+            HookOutcome::ReplaceText("b".into())
+        });
         let out = bus.fire(TRANSFORM_TOOL_RESULT, &HookPayload::default());
         assert!(matches!(out, HookOutcome::ReplaceText(ref s) if s == "a"));
     }
