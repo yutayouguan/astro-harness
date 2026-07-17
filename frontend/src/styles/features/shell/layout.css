@@ -381,14 +381,14 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   place-items: center;
   flex-shrink: 0;
   position: relative;
-  /* 与侧栏一致：渐变图标，无晶莹球 */
+  /* 与侧栏选中态一致：渐变图标，无底板背景 */
   --nav-grad-top: color-mix(in srgb, var(--tone, #c084fc) 28%, #fff);
   --nav-grad-bottom: color-mix(in srgb, var(--tone, #a78bfa) 82%, #6d28d9);
   --nav-icon-depth: color-mix(in srgb, var(--tone, #7c3aed) 70%, #2e1065);
   --nav-icon-cutout: color-mix(in srgb, #fff 78%, var(--tone-soft, transparent));
   color: var(--nav-grad-bottom);
-  background: color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone, transparent) 18%, transparent);
+  background: transparent;
+  border: none;
   box-shadow: none;
   filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
 }
