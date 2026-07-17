@@ -1,8 +1,8 @@
+use serde_json::json;
 use session::{
     dispatch_session_tool, format_recalled_context, record_message, NewMessage, ScrolledMessage,
     SessionStore,
 };
-use serde_json::json;
 use tempfile::TempDir;
 
 #[test]

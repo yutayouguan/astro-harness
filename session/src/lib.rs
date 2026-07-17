@@ -12,6 +12,7 @@ pub use format::format_recalled_context;
 pub use message_db::{build_conversation_context, ScrolledMessage};
 pub use store::{
     BillingDelta, ChatActivityStored, ChatHistoryMessage, NewMessage, RecentSession, SearchHit,
-    SessionBillingRow, SessionListFilter, SessionStore, StoredMessage, StoredSession, SCHEMA_VERSION,
+    SessionBillingRow, SessionListFilter, SessionStore, StoredMessage, StoredSession,
+    SCHEMA_VERSION,
 };
 pub use tools::{dispatch_session_tool, record_message};

@@ -3,7 +3,10 @@
 use anyhow::Result;
 use rusqlite::{params, OptionalExtension};
 
-use super::{is_unique_constraint, now_epoch_secs, truncate_chars, BillingDelta, SessionBillingRow, SessionStore, StoredSession};
+use super::{
+    is_unique_constraint, now_epoch_secs, truncate_chars, BillingDelta, SessionBillingRow,
+    SessionStore, StoredSession,
+};
 
 impl SessionStore {
     /// 按 id 读取会话元数据。
@@ -99,8 +102,10 @@ impl SessionStore {
     pub fn set_session_title(&self, id: &str, title: &str) -> Result<()> {
         let trimmed = title.trim();
         if trimmed.is_empty() {
-            self.conn
-                .execute("UPDATE sessions SET title = NULL WHERE id = ?1", params![id])?;
+            self.conn.execute(
+                "UPDATE sessions SET title = NULL WHERE id = ?1",
+                params![id],
+            )?;
             return Ok(());
         }
 
@@ -204,7 +209,10 @@ impl SessionStore {
         )?;
         tx.execute("DELETE FROM messages WHERE session_id = ?1", params![id])?;
         let changed = tx.execute("DELETE FROM sessions WHERE id = ?1", params![id])?;
-        anyhow::ensure!(changed == 1, "delete_session_permanently: session not found");
+        anyhow::ensure!(
+            changed == 1,
+            "delete_session_permanently: session not found"
+        );
         tx.commit()?;
         Ok(())
     }
@@ -242,11 +250,7 @@ impl SessionStore {
     /// 累加会话账单列；`cost_status=unknown` 的 delta 不抬高 `estimated_cost_usd`。
     pub fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
         let skip_cost = d.cost_status.as_deref() == Some("unknown");
-        let cost_add = if skip_cost {
-            0.0
-        } else {
-            d.estimated_cost_usd
-        };
+        let cost_add = if skip_cost { 0.0 } else { d.estimated_cost_usd };
         self.conn.execute(
             "UPDATE sessions SET
                 input_tokens = COALESCE(input_tokens, 0) + ?1,

@@ -293,11 +293,9 @@ impl SessionStore {
         }
         let version: Option<i32> = self
             .conn
-            .query_row(
-                "SELECT version FROM schema_version LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .optional()?;
         Ok(version.unwrap_or(0))
     }
