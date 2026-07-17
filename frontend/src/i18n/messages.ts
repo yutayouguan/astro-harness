@@ -285,10 +285,8 @@ export const zh = {
   "agentTools.memory.desc": "存储并召回持久知识",
   "agentTools.sessionSearch.title": "会话搜索",
   "agentTools.sessionSearch.desc": "搜索历史会话内容",
-  "agentTools.clarify.title": "澄清提问",
-  "agentTools.clarify.desc": "在需要时向用户发起澄清",
-  "agentTools.confirm.title": "确认授权",
-  "agentTools.confirm.desc": "危险操作前请求用户批准或拒绝",
+  "agentTools.ask.title": "向用户提问 / 确认",
+  "agentTools.ask.desc": "需求不清时提问，敏感操作前请求批准",
   "agentTools.requestUserLocation.title": "请求定位",
   "agentTools.requestUserLocation.desc": "征得用户授权后获取位置或城市，用于天气与附近查询",
   "agentTools.presentUi.title": "信息卡片",
@@ -949,7 +947,7 @@ export const zh = {
 
   "prefs.app.aboutTitle": "关于Astro",
   "prefs.app.about":
-    "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。",
+    "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务；还能在使用中沉淀经验、自我进化。偏好设置保存在本机。",
 
   "prefs.lang.title": "界面语言",
   "prefs.lang.sub": "切换中文 / English，选择会保存在本机",
@@ -1606,10 +1604,8 @@ export const en: Record<MessageKey, string> = {
   "agentTools.memory.desc": "Store and recall persistent knowledge",
   "agentTools.sessionSearch.title": "Session Search",
   "agentTools.sessionSearch.desc": "Search past conversation content",
-  "agentTools.clarify.title": "Clarifying Questions",
-  "agentTools.clarify.desc": "Ask the user for clarification when needed",
-  "agentTools.confirm.title": "Confirm / Authorize",
-  "agentTools.confirm.desc": "Ask the user to approve or deny before a risky action",
+  "agentTools.ask.title": "Ask / Confirm",
+  "agentTools.ask.desc": "Ask when unclear; request approval before sensitive actions",
   "agentTools.requestUserLocation.title": "Request Location",
   "agentTools.requestUserLocation.desc":
     "Ask permission for GPS or a city name before local weather/nearby queries",
@@ -2270,7 +2266,7 @@ export const en: Record<MessageKey, string> = {
 
   "prefs.app.aboutTitle": "About Astro",
   "prefs.app.about":
-    "Astro (阿童木) is a local AI desktop workstation, named after the classic anime Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. Preferences are saved on this device.",
+    "Astro (阿童木) is a local AI desktop workstation, named after the classic anime Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. It can also learn from experience and evolve itself. Preferences are saved on this device.",
 
   "prefs.lang.title": "Language",
   "prefs.lang.sub": "Switch Chinese / English — saved locally",

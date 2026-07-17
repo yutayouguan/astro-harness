@@ -1,5 +1,4 @@
 //! 人机确认与澄清（HITL）。
 
-pub mod clarify;
-pub mod confirm;
+pub mod ask;
 pub mod request_user_location;

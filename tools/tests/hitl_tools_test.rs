@@ -1,4 +1,4 @@
-//! confirm / clarify / request_user_location HITL 工具输出须通过 A2UI catalog 校验。
+//! ask（question/confirm）/ request_user_location HITL 工具输出须通过 A2UI catalog 校验。
 
 use tempfile::TempDir;
 use tools::{register_all, ToolContext, ToolRegistry};
@@ -50,8 +50,9 @@ async fn confirm_emits_valid_a2ui_hitl() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "confirm",
+        "ask",
         &serde_json::json!({
+            "mode": "confirm",
             "title": "Delete file?",
             "body": "report.pdf will be removed"
         }),
@@ -94,7 +95,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "clarify",
+        "ask",
         &serde_json::json!({
             "questions": [
                 {
@@ -154,7 +155,7 @@ async fn clarify_free_text_step_allows_empty_options() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "clarify",
+        "ask",
         &serde_json::json!({
             "questions": [
                 {
@@ -220,7 +221,7 @@ async fn clarify_multi_emits_wizard_hitl() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "clarify",
+        "ask",
         &serde_json::json!({
             "title": "开干前确认",
             "questions": [
@@ -353,7 +354,7 @@ async fn present_ui_emits_valid_astro_ui() {
 }
 
 #[tokio::test]
-async fn register_all_includes_confirm() {
+async fn register_all_includes_ask() {
     let mut registry = ToolRegistry::new();
     register_all(&mut registry);
     let names: Vec<_> = registry
@@ -361,8 +362,9 @@ async fn register_all_includes_confirm() {
         .iter()
         .map(|t| t.name.as_str())
         .collect();
-    assert!(names.contains(&"confirm"));
-    assert!(names.contains(&"clarify"));
+    assert!(names.contains(&"ask"));
+    assert!(!names.contains(&"confirm"));
+    assert!(!names.contains(&"clarify"));
     assert!(names.contains(&"request_user_location"));
     assert!(names.contains(&"present_ui"));
 }

@@ -7,7 +7,6 @@ import {
   IconBrowser,
   IconClarify,
   IconCodeExec,
-  IconConfirm,
   IconDelegate,
   IconEye,
   IconFileOps,
@@ -50,8 +49,7 @@ export type AgentToolId =
   | "skills"
   | "memory"
   | "session_search"
-  | "clarify"
-  | "confirm"
+  | "ask"
   | "request_user_location"
   | "present_ui"
   | "delegate"
@@ -323,22 +321,16 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "clarify",
-    titleKey: "agentTools.clarify.title",
-    descKey: "agentTools.clarify.desc",
+    id: "ask",
+    titleKey: "agentTools.ask.title",
+    descKey: "agentTools.ask.desc",
     Icon: IconClarify,
     tone: "red",
-    params: [{ name: "question", type: "string" }],
-  },
-  {
-    id: "confirm",
-    titleKey: "agentTools.confirm.title",
-    descKey: "agentTools.confirm.desc",
-    Icon: IconConfirm,
-    tone: "amber",
     params: [
-      { name: "title", type: "string" },
-      { name: "body", type: "string" },
+      { name: "mode", type: "string", optional: true },
+      { name: "questions", type: "array", optional: true },
+      { name: "title", type: "string", optional: true },
+      { name: "body", type: "string", optional: true },
     ],
   },
   {

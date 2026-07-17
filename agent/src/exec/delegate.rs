@@ -377,8 +377,7 @@ fn apply_nested_agent_tool_strips_with_role(
         "session_search",
         "create_agent",
         "multi_agent",
-        "clarify",
-        "confirm",
+        "ask",
         "request_user_location",
     ] {
         registry.unregister(name);
@@ -660,8 +659,7 @@ mod strip_tests {
             .collect();
         assert!(!names.contains(&"delegate"));
         assert!(!names.contains(&"orchestration_run"));
-        assert!(!names.contains(&"clarify"));
-        assert!(!names.contains(&"confirm"));
+        assert!(!names.contains(&"ask"));
         assert!(!names.contains(&"request_user_location"));
         assert!(!names.contains(&"create_agent"));
         assert!(!names.contains(&"memory"));
@@ -687,7 +685,7 @@ mod strip_tests {
         assert!(names.contains(&"delegate"));
         assert!(names.contains(&"orchestration_run"));
         assert!(!names.contains(&"memory"));
-        assert!(!names.contains(&"clarify"));
+        assert!(!names.contains(&"ask"));
         assert!(!names.contains(&"request_user_location"));
     }
 

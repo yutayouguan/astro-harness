@@ -11,7 +11,7 @@ pub mod present;
 pub mod system;
 
 pub use agents::{create_agent, delegate, multi_agent, orchestration, team};
-pub use hitl::{clarify, confirm, request_user_location};
+pub use hitl::{ask, request_user_location};
 pub use media::{
     audio_understand, image_gen, music_gen, robotics, tts, video_gen, video_understand, vision,
 };
