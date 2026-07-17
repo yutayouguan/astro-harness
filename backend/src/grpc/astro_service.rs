@@ -890,11 +890,22 @@ impl AstroService for AstroServiceImpl {
                     cleanup().await;
                     return;
                 }
-                TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
+                TurnResult::ToolCalls(_) => {
                     let _ = tx
                         .send(Ok(ChatEvent {
                             payload: Some(proto::chat_event::Payload::Error(
                                 "当前 gRPC Chat 尚未支持该轮次结果".to_string(),
+                            )),
+                        }))
+                        .await;
+                    cleanup().await;
+                    return;
+                }
+                TurnResult::Interrupted => {
+                    let _ = tx
+                        .send(Ok(ChatEvent {
+                            payload: Some(proto::chat_event::Payload::Error(
+                                "上一轮对话已中断，请重新发送消息".to_string(),
                             )),
                         }))
                         .await;

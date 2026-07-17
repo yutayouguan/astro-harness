@@ -1558,9 +1558,8 @@ impl AgentLoop {
         image_data_urls: &[String],
         _task_id: &str,
     ) -> anyhow::Result<TurnResult> {
-        if self.cancel.is_cancelled() {
-            return Ok(TurnResult::Interrupted);
-        }
+        // 新一轮用户输入：清除上一轮 stop/cancel 遗留的协作取消标记。
+        self.cancel.reset();
         if self.is_budget_exhausted() {
             return Ok(TurnResult::BudgetExhausted);
         }

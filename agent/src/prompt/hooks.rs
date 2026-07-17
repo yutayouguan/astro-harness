@@ -23,6 +23,11 @@ impl CancelSignal {
         self.inner.store(true, Ordering::SeqCst);
     }
 
+    /// 清除取消标记，供新一轮用户输入开始前复位。
+    pub fn reset(&self) {
+        self.inner.store(false, Ordering::SeqCst);
+    }
+
     pub fn is_cancelled(&self) -> bool {
         self.inner.load(Ordering::SeqCst)
     }

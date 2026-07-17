@@ -206,3 +206,13 @@ async fn test_set_fallback_models_keeps_primary() {
     assert_eq!(aux[0].backend_id, "claude"); // preferred = primary
     assert_eq!(aux[1].backend_id, "openai");
 }
+
+#[tokio::test]
+async fn run_turn_clears_prior_cancel_signal() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    agent.cancel_signal().cancel();
+    let result = agent.run_turn("重试", "task-retry").await.unwrap();
+    assert!(matches!(result, TurnResult::Continue { .. }));
+    assert!(!agent.cancel_signal().is_cancelled());
+}
