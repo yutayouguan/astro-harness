@@ -46,7 +46,11 @@ pub struct MediaAsset {
 }
 
 impl MediaAsset {
-    pub fn workspace(kind: MediaKind, path: impl Into<String>, mime_type: impl Into<String>) -> Self {
+    pub fn workspace(
+        kind: MediaKind,
+        path: impl Into<String>,
+        mime_type: impl Into<String>,
+    ) -> Self {
         Self {
             kind,
             mime_type: mime_type.into(),
@@ -139,9 +143,7 @@ pub fn parse_generated_labels(text: &str) -> Vec<MediaAsset> {
         if let Some(path) = extract_labeled_path(line) {
             if seen.insert(path.clone()) {
                 let mime = guess_mime(kind, &path);
-                out.push(
-                    MediaAsset::workspace(kind, path, mime).with_label(label),
-                );
+                out.push(MediaAsset::workspace(kind, path, mime).with_label(label));
             }
         }
     }
@@ -190,21 +192,20 @@ mod tests {
 
     #[test]
     fn sidecar_roundtrip() {
-        let media = vec![MediaAsset::workspace(
-            MediaKind::Image,
-            "generated/images/a.png",
-            "image/png",
-        )
-        .with_label("图片已生成")];
-        let text = append_media_sidecar("图片已生成：generated/images/a.png\nprovider=google", &media);
+        let media =
+            vec![
+                MediaAsset::workspace(MediaKind::Image, "generated/images/a.png", "image/png")
+                    .with_label("图片已生成"),
+            ];
+        let text = append_media_sidecar(
+            "图片已生成：generated/images/a.png\nprovider=google",
+            &media,
+        );
         let (plain, parsed) = extract_tool_media(&text);
         assert!(plain.contains("图片已生成：generated/images/a.png"));
         assert!(!plain.contains(SIDECAR_PREFIX));
         assert_eq!(parsed.len(), 1);
-        assert_eq!(
-            parsed[0].workspace_path(),
-            Some("generated/images/a.png")
-        );
+        assert_eq!(parsed[0].workspace_path(), Some("generated/images/a.png"));
     }
 
     #[test]

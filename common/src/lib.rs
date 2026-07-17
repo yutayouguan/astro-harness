@@ -19,11 +19,11 @@ pub use chat_target::*;
 pub use grpc_addr::{
     grpc_bind_address, resolve_grpc_address, runtime_grpc_address, set_runtime_grpc_address,
 };
-pub use model_spec::{ModelRole, ModelSpec};
 pub use media::{
     append_media_sidecar, extract_tool_media, parse_generated_labels, MediaAsset, MediaKind,
     MediaRef,
 };
+pub use model_spec::{ModelRole, ModelSpec};
 pub use notify::{
     dream_success_body, notify_important, notify_kind, set_important_notify_handler,
     set_notify_locale, truncate_notify, ImportantKind, ImportantNotice,

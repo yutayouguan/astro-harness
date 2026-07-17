@@ -293,10 +293,9 @@ impl Message {
     pub fn content_str(&self) -> &str {
         match &self.content {
             MessageContent::Text(s) => s,
-            MessageContent::Parts(parts) => parts
-                .iter()
-                .find_map(|p| p.text.as_deref())
-                .unwrap_or(""),
+            MessageContent::Parts(parts) => {
+                parts.iter().find_map(|p| p.text.as_deref()).unwrap_or("")
+            }
         }
     }
 
@@ -344,7 +343,11 @@ pub struct ToolResult {
 }
 
 impl ToolResult {
-    pub fn text(tool_call_id: impl Into<String>, name: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn text(
+        tool_call_id: impl Into<String>,
+        name: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             tool_call_id: tool_call_id.into(),
             name: name.into(),

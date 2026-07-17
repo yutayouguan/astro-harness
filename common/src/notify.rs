@@ -112,7 +112,10 @@ mod tests {
         set_notify_locale("zh");
         assert_eq!(ImportantKind::CronSuccess.title(), "定时任务完成");
         set_notify_locale("en");
-        assert_eq!(ImportantKind::CronSuccess.title(), "Scheduled task finished");
+        assert_eq!(
+            ImportantKind::CronSuccess.title(),
+            "Scheduled task finished"
+        );
         set_notify_locale("zh");
     }
 }

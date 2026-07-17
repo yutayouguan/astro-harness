@@ -12,11 +12,9 @@ use rusqlite::Connection;
 pub fn open_wal(path: impl AsRef<Path>) -> anyhow::Result<Connection> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("create {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
-    let conn = Connection::open(path)
-        .with_context(|| format!("open sqlite {}", path.display()))?;
+    let conn = Connection::open(path).with_context(|| format!("open sqlite {}", path.display()))?;
     conn.execute_batch("PRAGMA journal_mode=WAL;")?;
     Ok(conn)
 }

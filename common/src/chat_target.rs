@@ -38,7 +38,9 @@ where
         if fr.provider_id.is_empty() || !seen.insert(fr.provider_id.clone()) {
             continue;
         }
-        let Some(mut t) = lookup(&fr.provider_id) else { continue };
+        let Some(mut t) = lookup(&fr.provider_id) else {
+            continue;
+        };
         if let Some(m) = fr.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
             t.model = m.to_string();
         }
@@ -77,13 +79,34 @@ mod tests {
             t("p4", "ollama", "llama"), // 第 4 个后备应被截断
         ];
         let refs = vec![
-            FallbackRef { provider_id: "p1".into(), model: Some("opus-x".into()) },
-            FallbackRef { provider_id: "missing".into(), model: None },
-            FallbackRef { provider_id: "p1".into(), model: None }, // dup
-            FallbackRef { provider_id: "p0".into(), model: None }, // self
-            FallbackRef { provider_id: "p2".into(), model: None },
-            FallbackRef { provider_id: "p3".into(), model: None },
-            FallbackRef { provider_id: "p4".into(), model: None },
+            FallbackRef {
+                provider_id: "p1".into(),
+                model: Some("opus-x".into()),
+            },
+            FallbackRef {
+                provider_id: "missing".into(),
+                model: None,
+            },
+            FallbackRef {
+                provider_id: "p1".into(),
+                model: None,
+            }, // dup
+            FallbackRef {
+                provider_id: "p0".into(),
+                model: None,
+            }, // self
+            FallbackRef {
+                provider_id: "p2".into(),
+                model: None,
+            },
+            FallbackRef {
+                provider_id: "p3".into(),
+                model: None,
+            },
+            FallbackRef {
+                provider_id: "p4".into(),
+                model: None,
+            },
         ];
         let lookup = |id: &str| catalog.iter().find(|c| c.provider_id == id).cloned();
         let chain = expand_chat_targets(&primary, &refs, lookup);

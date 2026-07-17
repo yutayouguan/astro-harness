@@ -37,7 +37,11 @@ pub fn sanitize_title(raw: &str, max_chars: usize) -> String {
     if max_chars == 0 {
         return String::new();
     }
-    s.chars().take(max_chars).collect::<String>().trim().to_string()
+    s.chars()
+        .take(max_chars)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 fn strip_wrapping<'a>(s: &'a str, marker: &str) -> Option<&'a str> {
@@ -45,7 +49,14 @@ fn strip_wrapping<'a>(s: &'a str, marker: &str) -> Option<&'a str> {
 }
 
 fn strip_quote_wrappers(s: &str) -> String {
-    let pairs = [('「', '」'), ('『', '』'), ('"', '"'), ('“', '”'), ('\'', '\''), ('‘', '’')];
+    let pairs = [
+        ('「', '」'),
+        ('『', '』'),
+        ('"', '"'),
+        ('“', '”'),
+        ('\'', '\''),
+        ('‘', '’'),
+    ];
     for (open, close) in pairs {
         let mut chars = s.chars();
         if chars.next() == Some(open) {
