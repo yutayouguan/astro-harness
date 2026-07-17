@@ -393,7 +393,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   z-index: 1;
   width: 16px;
   height: 16px;
-  /* 不覆盖 fill：沿用 IconBase 的 fill={url(#grad)}，避免 CSS url var 失效 */
+  fill: color-mix(in srgb, var(--nav-grad-top) 55%, var(--nav-grad-bottom));
 }
 
 .page-title-icon svg[data-nav-fill="outline"] {
