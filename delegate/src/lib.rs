@@ -7,11 +7,9 @@ pub mod git_worktree;
 pub mod spawn;
 
 pub use async_reg::{
-    async_delegate_cancel, async_delegate_collect, async_delegate_status, resume_incomplete_async_delegates,
-    start_delegate_async, AsyncDelegateRecord, AsyncDelegateRegistry, AsyncDelegateStatus,
-    DelegateAsyncSpawner,
+    async_delegate_cancel, async_delegate_collect, async_delegate_status,
+    resume_incomplete_async_delegates, start_delegate_async, AsyncDelegateRecord,
+    AsyncDelegateRegistry, AsyncDelegateStatus, DelegateAsyncSpawner,
 };
-pub use git_worktree::{
-    create_task_worktree, find_git_root, resolve_project_root, WorktreeHandle,
-};
+pub use git_worktree::{create_task_worktree, find_git_root, resolve_project_root, WorktreeHandle};
 pub use spawn::{DelegateRole, DelegateRunRequest, DelegateRunner, DelegateTaskSpec};

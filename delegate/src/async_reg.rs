@@ -51,11 +51,7 @@ impl AsyncDelegateRegistry {
         REG.get_or_init(AsyncDelegateRegistry::default)
     }
 
-    pub fn insert_running(
-        &self,
-        parent_session_id: &str,
-        parent_agent_id: &str,
-    ) -> String {
+    pub fn insert_running(&self, parent_session_id: &str, parent_agent_id: &str) -> String {
         let id = Uuid::new_v4().to_string();
         let rec = AsyncDelegateRecord {
             id: id.clone(),
@@ -91,7 +87,9 @@ impl AsyncDelegateRegistry {
             .get_mut(id)
             .ok_or_else(|| format!("unknown task_id: {id}"))?;
         match rec.status {
-            AsyncDelegateStatus::Done | AsyncDelegateStatus::Failed | AsyncDelegateStatus::Cancelled => {
+            AsyncDelegateStatus::Done
+            | AsyncDelegateStatus::Failed
+            | AsyncDelegateStatus::Cancelled => {
                 // already finished
             }
             AsyncDelegateStatus::Running => {
@@ -233,11 +231,13 @@ pub fn list_persisted_running() -> Vec<(String, DelegateRunRequest)> {
 }
 
 /// 异步 spawn：`(task_id, DelegateRunRequest)`。
-pub type DelegateAsyncSpawner =
-    Arc<dyn Fn(String, DelegateRunRequest) + Send + Sync + 'static>;
+pub type DelegateAsyncSpawner = Arc<dyn Fn(String, DelegateRunRequest) + Send + Sync + 'static>;
 
 /// 创建 running 记录并触发后台执行；立即返回 `task_id`。
-pub fn start_delegate_async(req: DelegateRunRequest, spawner: &DelegateAsyncSpawner) -> anyhow::Result<String> {
+pub fn start_delegate_async(
+    req: DelegateRunRequest,
+    spawner: &DelegateAsyncSpawner,
+) -> anyhow::Result<String> {
     let reg = AsyncDelegateRegistry::global();
     let task_id = reg.insert_running(&req.parent_session_id, &req.parent_agent_id);
     let _ = save_request_file(&task_id, &req);
@@ -354,4 +354,3 @@ mod tests {
         );
     }
 }
-
