@@ -254,7 +254,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   height: 18px;
   /* 默认 / hover：仅渐变线稿，不加粗填实 */
   fill: none;
-  stroke-width: 1.6;
+  stroke-width: 1.45;
 }
 
 /* 明确禁止非选中态填实 */
@@ -288,7 +288,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .nav-icon svg .nav-icon-cutout,
 .nav-icon svg .nav-icon-hole,
 .nav-icon svg .nav-icon-stroke {
-  stroke-width: 1.75;
+  stroke-width: 1.5;
 }
 
 .nav-item:not(.active) .nav-icon svg .nav-icon-cutout,
@@ -314,7 +314,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .nav-item.active .nav-icon svg path.nav-icon-cutout {
   fill: none !important;
   stroke: var(--nav-grad-top) !important;
-  stroke-width: 2.35;
+  stroke-width: 1.9;
 }
 
 .nav-item.active .nav-icon svg circle.nav-icon-cutout {
