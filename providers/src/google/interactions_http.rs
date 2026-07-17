@@ -32,6 +32,15 @@ pub fn interactions_url(config: &ProviderConfig) -> String {
     }
 }
 
+/// 统一 Interactions POST：`content-type` + `x-goog-api-key` + `Api-Revision`。
+fn interactions_post(client: &Client, url: &str, api_key: &str) -> reqwest::RequestBuilder {
+    client
+        .post(url)
+        .header("content-type", "application/json")
+        .header("x-goog-api-key", api_key)
+        .header("Api-Revision", API_REVISION)
+}
+
 fn error_message(v: &Value) -> String {
     crate::http_stream::json_error_message(v, "Google interactions 失败").to_string()
 }
@@ -132,7 +141,7 @@ pub fn parse_interaction_tts_response(v: &Value) -> Result<InteractionTtsResult>
 /// 支持：
 /// - 完整事件对象：`{ "event_type": "step.delta", "delta": { "type": "audio", "data": "…" } }`
 /// - 已剥离的 `delta` 对象：`{ "type": "audio", "data": "…" }`
-/// - `interaction.start` / 顶层 `id` 用于 interaction_id
+/// - `interaction.created` / `/interaction/id` / 顶层 `id` 用于 interaction_id
 pub fn parse_tts_stream_events(events: &[Value]) -> Result<InteractionTtsResult> {
     let mut pcm = Vec::new();
     let mut interaction_id = String::new();
@@ -250,10 +259,7 @@ async fn tts_unary_once(
     url: &str,
     body: &Value,
 ) -> Result<InteractionTtsResult> {
-    let response = client
-        .post(url)
-        .header("content-type", "application/json")
-        .header("x-goog-api-key", config.api_key.trim())
+    let response = interactions_post(client, url, config.api_key.trim())
         .json(body)
         .send()
         .await
@@ -278,11 +284,7 @@ async fn tts_stream_once(
     url: &str,
     body: &Value,
 ) -> Result<InteractionTtsResult> {
-    let response = client
-        .post(url)
-        .header("content-type", "application/json")
-        .header("x-goog-api-key", config.api_key.trim())
-        .header("Api-Revision", API_REVISION)
+    let response = interactions_post(client, url, config.api_key.trim())
         .json(body)
         .send()
         .await
@@ -562,10 +564,7 @@ pub async fn google_interactions_image(
     let url = interactions_url(config);
     let body = build_interaction_image_body(model, req);
 
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .header("x-goog-api-key", config.api_key.trim())
+    let response = interactions_post(client, &url, config.api_key.trim())
         .json(&body)
         .send()
         .await
@@ -739,10 +738,7 @@ pub async fn google_interactions_vision(
     };
     let url = interactions_url(config);
     let body = build_interaction_vision_body(model, prompt, images, mode);
-    let response = client
-        .post(&url)
-        .header("x-goog-api-key", &config.api_key)
-        .header("content-type", "application/json")
+    let response = interactions_post(client, &url, config.api_key.trim())
         .json(&body)
         .send()
         .await
@@ -944,10 +940,7 @@ pub async fn google_interactions_video(
     }
     let url = interactions_url(config);
     let body = build_interaction_video_body(model, prompt, video, mode);
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .header("x-goog-api-key", config.api_key.trim())
+    let response = interactions_post(client, &url, config.api_key.trim())
         .json(&body)
         .send()
         .await
@@ -1095,6 +1088,7 @@ pub fn build_interaction_audio_body(
     });
     if mode == AudioUnderstandMode::Transcribe {
         body["response_format"] = json!({
+            "type": "text",
             "mime_type": "application/json",
             "schema": audio_transcribe_json_schema()
         });
@@ -1150,10 +1144,7 @@ pub async fn google_interactions_audio(
     };
     let url = interactions_url(config);
     let body = build_interaction_audio_body(&model, prompt, media, mode);
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .header("x-goog-api-key", config.api_key.trim())
+    let response = interactions_post(client, &url, config.api_key.trim())
         .json(&body)
         .send()
         .await
@@ -1376,10 +1367,7 @@ pub async fn google_interactions_music(
 
     let url = interactions_url(config);
     let body = build_interaction_music_body(req);
-    let response = client
-        .post(&url)
-        .header("content-type", "application/json")
-        .header("x-goog-api-key", config.api_key.trim())
+    let response = interactions_post(client, &url, config.api_key.trim())
         .json(&body)
         .send()
         .await
@@ -1953,6 +1941,7 @@ mod audio_understand_tests {
         assert_eq!(input[1]["type"], "video");
         assert_eq!(input[1]["uri"], "https://www.youtube.com/watch?v=ku-N-eS1lgM");
         assert_eq!(input[1]["mime_type"], "video/mp4");
+        assert_eq!(body["response_format"]["type"], "text");
         assert_eq!(body["response_format"]["mime_type"], "application/json");
         let props = &body["response_format"]["schema"]["properties"];
         assert!(props.get("summary").is_some());

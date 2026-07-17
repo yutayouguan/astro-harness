@@ -161,19 +161,49 @@ pub fn trailing_function_results(messages: &[ChatMessage]) -> Vec<Value> {
     out
 }
 
+/// 取消息列表尾部连续的 `user` 角色 → Interactions `user_input` 步骤。
+///
+/// 有状态多轮（`previous_interaction_id`）时只提交本轮新用户输入，
+/// 由服务端保留 thought / signature。
+pub fn trailing_user_inputs(messages: &[ChatMessage]) -> Vec<Value> {
+    let mut out = Vec::new();
+    for m in messages.iter().rev() {
+        if m.role == "user" {
+            out.push(json!({
+                "type": "user_input",
+                "content": user_content_parts(m),
+            }));
+        } else {
+            break;
+        }
+    }
+    out.reverse();
+    out
+}
+
+/// 从消息历史抽出 `system_instruction`（多条 system 用空行拼接）。
+pub fn extract_system_instruction(messages: &[ChatMessage]) -> Option<String> {
+    let parts: Vec<String> = messages
+        .iter()
+        .filter(|m| m.role == "system")
+        .map(|m| m.content.trim())
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n\n"))
+    }
+}
+
 /// 将内部消息历史编成 Interactions `input` 步骤数组，并抽出 `system_instruction`。
 pub fn messages_to_interactions_input(messages: &[ChatMessage]) -> (Option<String>, Vec<Value>) {
-    let mut system_parts: Vec<String> = Vec::new();
     let mut input: Vec<Value> = Vec::new();
 
     for m in messages {
         match m.role.as_str() {
-            "system" => {
-                let t = m.content.trim();
-                if !t.is_empty() {
-                    system_parts.push(t.to_string());
-                }
-            }
+            "system" => {}
             "user" => {
                 input.push(json!({
                     "type": "user_input",
@@ -218,12 +248,7 @@ pub fn messages_to_interactions_input(messages: &[ChatMessage]) -> (Option<Strin
         }
     }
 
-    let system = if system_parts.is_empty() {
-        None
-    } else {
-        Some(system_parts.join("\n\n"))
-    };
-    (system, input)
+    (extract_system_instruction(messages), input)
 }
 
 /// Gemini 3.x 默认会思考；未显式传 `thinking_level` 时，短 `max_output_tokens`
@@ -251,8 +276,12 @@ fn normalize_google_model(model: &str) -> &str {
 
 /// 拼装 Interactions 聊天请求体（默认 store=true + `stream=true`）。
 ///
-/// 若 `previous_interaction_id` 有值且历史尾部有 `tool` 结果，则只提交增量
-/// `function_result`（服务端保留 thought/signature）；否则回退为全量历史。
+/// 若配置了 `previous_interaction_id`：
+/// - 尾部是 `tool` 结果 → 只提交增量 `function_result`（服务端保留 thought/signature）
+/// - 尾部是 `user` → 只提交增量 `user_input`
+/// - 否则回退全量历史（不带 previous_interaction_id）
+///
+/// `system_instruction` / `tools` / `generation_config` 为 interaction-scoped，有状态续写时仍重传。
 pub fn build_interactions_chat_body(
     messages: &[ChatMessage],
     tools: &[Value],
@@ -264,18 +293,23 @@ pub fn build_interactions_chat_body(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    let (system, input, use_prev) = if let Some(_prev_id) = prev {
+    let system = extract_system_instruction(messages);
+    let (input, use_prev) = if prev.is_some() {
         let results = trailing_function_results(messages);
-        if results.is_empty() {
-            // 无 tool 结果时无法安全续写，回退全量历史（不带 previous_interaction_id）
-            let (sys, input) = messages_to_interactions_input(messages);
-            (sys, input, false)
+        if !results.is_empty() {
+            (results, true)
         } else {
-            (None, results, true)
+            let users = trailing_user_inputs(messages);
+            if !users.is_empty() {
+                (users, true)
+            } else {
+                let (_, input) = messages_to_interactions_input(messages);
+                (input, false)
+            }
         }
     } else {
-        let (sys, input) = messages_to_interactions_input(messages);
-        (sys, input, false)
+        let (_, input) = messages_to_interactions_input(messages);
+        (input, false)
     };
 
     let mut body = json!({
@@ -317,32 +351,74 @@ fn parse_usage(v: &Value) -> Option<Usage> {
     if u.is_null() {
         return None;
     }
+    // 线上 Interactions：`total_input_tokens` / `total_output_tokens` /
+    // `total_thought_tokens` / `total_cached_tokens`；兼容旧 prompt_/input_ 命名。
     let prompt = u
-        .get("prompt_tokens")
+        .get("total_input_tokens")
+        .or_else(|| u.get("prompt_tokens"))
         .or_else(|| u.get("input_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
     let output = u
-        .get("completion_tokens")
+        .get("total_output_tokens")
+        .or_else(|| u.get("completion_tokens"))
         .or_else(|| u.get("output_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
     let reasoning = u
-        .get("reasoning_tokens")
+        .get("total_thought_tokens")
+        .or_else(|| u.get("reasoning_tokens"))
         .or_else(|| u.pointer("/completion_tokens_details/reasoning_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
-    if prompt == 0 && output == 0 && reasoning == 0 {
+    let cache_read = u
+        .get("total_cached_tokens")
+        .or_else(|| u.get("cached_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    if prompt == 0 && output == 0 && reasoning == 0 && cache_read == 0 {
         return None;
     }
     Some(Usage {
         input_tokens: prompt,
         output_tokens: output,
-        cache_read_tokens: 0,
+        cache_read_tokens: cache_read,
         cache_write_tokens: 0,
         reasoning_tokens: reasoning,
         request_count: 1,
     })
+}
+
+/// 根据 interaction.status / saw_function_call 映射 finish_reason。
+fn interaction_finish_reason(v: &Value, saw_function_call: bool) -> String {
+    let status = v
+        .pointer("/interaction/status")
+        .or_else(|| v.get("status"))
+        .and_then(|s| s.as_str())
+        .unwrap_or("");
+    match status {
+        "requires_action" => "tool_calls".into(),
+        "failed" | "cancelled" => {
+            let msg = v
+                .pointer("/interaction/error/message")
+                .or_else(|| v.pointer("/error/message"))
+                .and_then(|m| m.as_str())
+                .unwrap_or(if status == "cancelled" {
+                    "Interactions 已取消"
+                } else {
+                    "Interactions 失败"
+                });
+            format!("error:{msg}")
+        }
+        "incomplete" => "incomplete".into(),
+        _ => {
+            if saw_function_call {
+                "tool_calls".into()
+            } else {
+                "stop".into()
+            }
+        }
+    }
 }
 
 fn extract_interaction_id(v: &Value) -> Option<String> {
@@ -567,20 +643,22 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
         "interaction.requires_action" => {
             state.saw_function_call = true;
             out.push(ChatChunk {
-                finish_reason: Some("tool_calls".into()),
+                finish_reason: Some(interaction_finish_reason(v, true)),
                 usage: parse_usage(v),
                 interaction_id: state.interaction_id.clone(),
                 ..Default::default()
             });
         }
         "interaction.completed" => {
-            let finish = if state.saw_function_call {
-                "tool_calls"
-            } else {
-                "stop"
-            };
+            let status = v
+                .pointer("/interaction/status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            if status == "requires_action" {
+                state.saw_function_call = true;
+            }
             out.push(ChatChunk {
-                finish_reason: Some(finish.into()),
+                finish_reason: Some(interaction_finish_reason(v, state.saw_function_call)),
                 usage: parse_usage(v),
                 interaction_id: state.interaction_id.clone(),
                 ..Default::default()
@@ -905,11 +983,16 @@ mod tests {
         );
 
         let done = extract_interactions_chat_events(
-            r#"{"interaction":{"id":"ix_wire","status":"requires_action","usage":{"total_input_tokens":10,"total_output_tokens":5}},"event_type":"interaction.completed"}"#,
+            r#"{"interaction":{"id":"ix_wire","status":"requires_action","usage":{"total_input_tokens":10,"total_output_tokens":5,"total_thought_tokens":3,"total_cached_tokens":2}},"event_type":"interaction.completed"}"#,
             &mut state,
         );
         assert_eq!(done[0].finish_reason.as_deref(), Some("tool_calls"));
         assert_eq!(done[0].interaction_id.as_deref(), Some("ix_wire"));
+        let usage = done[0].usage.as_ref().expect("usage from total_* fields");
+        assert_eq!(usage.input_tokens, 10);
+        assert_eq!(usage.output_tokens, 5);
+        assert_eq!(usage.reasoning_tokens, 3);
+        assert_eq!(usage.cache_read_tokens, 2);
     }
 
     #[test]
@@ -1000,6 +1083,7 @@ mod tests {
     #[test]
     fn build_body_with_previous_interaction_sends_only_tool_results() {
         let messages = vec![
+            ChatMessage::text("system", "Be helpful."),
             ChatMessage::text("user", "weather?"),
             ChatMessage {
                 role: "assistant".into(),
@@ -1031,7 +1115,38 @@ mod tests {
         assert_eq!(input.len(), 1);
         assert_eq!(input[0]["type"], "function_result");
         assert_eq!(input[0]["call_id"], "fc_1");
-        assert!(body.get("system_instruction").is_none());
+        // interaction-scoped：有状态 tool 续写仍重传 system
+        assert_eq!(body["system_instruction"], "Be helpful.");
+    }
+
+    #[test]
+    fn build_body_with_previous_interaction_sends_only_trailing_user() {
+        let messages = vec![
+            ChatMessage::text("system", "Be concise."),
+            ChatMessage::text("user", "hi"),
+            ChatMessage::text("assistant", "hello"),
+            ChatMessage::text("user", "what about Paris?"),
+        ];
+        let mut config = ProviderConfig::default();
+        config.model = "gemini-3.5-flash".into();
+        config.previous_interaction_id = Some("ix_prev".into());
+        let body = build_interactions_chat_body(&messages, &[], &config);
+        assert_eq!(body["previous_interaction_id"], "ix_prev");
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "user_input");
+        assert_eq!(input[0]["content"][0]["text"], "what about Paris?");
+        assert_eq!(body["system_instruction"], "Be concise.");
+    }
+
+    #[test]
+    fn interaction_completed_failed_status_is_error() {
+        let mut state = StreamState::default();
+        let chunks = extract_interactions_chat_events(
+            r#"{"event_type":"interaction.completed","interaction":{"id":"ix","status":"failed","error":{"message":"quota"}}}"#,
+            &mut state,
+        );
+        assert_eq!(chunks[0].finish_reason.as_deref(), Some("error:quota"));
     }
 
     #[test]
