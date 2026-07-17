@@ -11,6 +11,7 @@ import {
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { Eye, FileCode2 } from "lucide-react";
 import { useTheme } from "../../hooks/app/useTheme";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useFileSelection } from "../../hooks/ui/useFileSelection";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -30,7 +31,6 @@ import { ChatMarkdown } from "../chat/ChatMarkdown";
 import MediaPreview from "../media/MediaPreview";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
-import FileSpaceConfirm from "../filespace/FileSpaceConfirm";
 import WorkspaceBatchBar from "./WorkspaceBatchBar";
 import WorkspaceEditor from "./WorkspaceEditor";
 import { EmptyIllustration } from "../../illustrations";
@@ -183,6 +183,7 @@ function FileGlyph({ name, isDir }: { name: string; isDir: boolean }) {
 
 export default function WorkspacePanel({ onClose }: Props) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const { resolved: theme } = useTheme();
   const [root, setRoot] = useState("");
   const [workspaceRoot, setWorkspaceRoot] = useState("");
@@ -212,7 +213,6 @@ export default function WorkspacePanel({ onClose }: Props) {
   const [menuKind, setMenuKind] = useState<MenuKind>("entries");
   const [menuPaths, setMenuPaths] = useState<string[]>([]);
   const [pendingCut, setPendingCut] = useState<string[] | null>(null);
-  const [trashConfirm, setTrashConfirm] = useState<FileEntryDto[] | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [mdMode, setMdMode] = useState<MdMode>(() => readWorkspaceMdMode());
@@ -326,7 +326,15 @@ export default function WorkspacePanel({ onClose }: Props) {
 
   const switchAgent = async (agentId: string) => {
     if (agentId === activeAgentId) return;
-    if (dirty && !window.confirm(t("workspace.unsavedConfirm"))) return;
+    if (
+      dirty &&
+      !(await confirm({
+        title: t("dialog.unsavedTitle"),
+        message: t("workspace.unsavedConfirm"),
+      }))
+    ) {
+      return;
+    }
     setLoadingList(true);
     setError(null);
     try {
@@ -454,9 +462,13 @@ export default function WorkspacePanel({ onClose }: Props) {
     await load(parent);
   };
 
-  const backToBrowse = () => {
-    if (view === "editor" && dirty && !window.confirm(t("workspace.unsavedConfirm"))) {
-      return;
+  const backToBrowse = async () => {
+    if (view === "editor" && dirty) {
+      const ok = await confirm({
+        title: t("dialog.unsavedTitle"),
+        message: t("workspace.unsavedConfirm"),
+      });
+      if (!ok) return;
     }
     setView("browse");
     setEditorPath(null);
@@ -544,13 +556,15 @@ export default function WorkspacePanel({ onClose }: Props) {
       cancelRename();
       return;
     }
-    if (
-      dirty &&
-      editorPath === renamingPath &&
-      !window.confirm(t("workspace.renameUnsavedConfirm"))
-    ) {
-      cancelRename();
-      return;
+    if (dirty && editorPath === renamingPath) {
+      const ok = await confirm({
+        title: t("dialog.unsavedTitle"),
+        message: t("workspace.renameUnsavedConfirm"),
+      });
+      if (!ok) {
+        cancelRename();
+        return;
+      }
     }
     renameBusyRef.current = true;
     try {
@@ -578,6 +592,7 @@ export default function WorkspacePanel({ onClose }: Props) {
     dirty,
     editorPath,
     t,
+    confirm,
     cancelRename,
     load,
     root,
@@ -723,7 +738,6 @@ export default function WorkspacePanel({ onClose }: Props) {
         );
       } else if (fails.length && !trashed.length) {
         showToast(fails[0] ?? "trash failed", { error: true });
-        setTrashConfirm(null);
         return;
       } else {
         showToast(t("workspace.toast.trashed"), { tone: "success" });
@@ -739,31 +753,38 @@ export default function WorkspacePanel({ onClose }: Props) {
         cancelRename();
       }
       selection.clear();
-      setTrashConfirm(null);
       closeMenu();
       await load(root);
     } catch (e) {
       showToast(String(e), { error: true });
-      setTrashConfirm(null);
     } finally {
       setDeleting(false);
     }
   };
 
   const requestTrash = useCallback(
-    (targets: FileEntryDto[]) => {
+    async (targets: FileEntryDto[]) => {
       if (!targets.length) return;
-      if (
-        dirty &&
-        editorPath &&
-        targets.some((e) => e.path === editorPath) &&
-        !window.confirm(t("workspace.deleteUnsavedConfirm"))
-      ) {
-        return;
+      if (dirty && editorPath && targets.some((e) => e.path === editorPath)) {
+        const okUnsaved = await confirm({
+          title: t("dialog.unsavedTitle"),
+          message: t("workspace.deleteUnsavedConfirm"),
+        });
+        if (!okUnsaved) return;
       }
-      setTrashConfirm(targets);
+      const okTrash = await confirm({
+        title: t("workspace.confirm.trashTitle"),
+        message:
+          targets.length === 1
+            ? t("workspace.confirm.trashOne", { name: targets[0].name })
+            : t("workspace.confirm.trashMany", { n: String(targets.length) }),
+        confirmLabel: t("workspace.confirm.ok"),
+        variant: "danger",
+      });
+      if (!okTrash) return;
+      await runTrash(targets);
     },
-    [dirty, editorPath, t],
+    [dirty, editorPath, t, confirm, runTrash],
   );
 
   const dispatchAction = async (action: FileMenuAction, targets: FileEntryDto[]) => {
@@ -1276,21 +1297,6 @@ export default function WorkspacePanel({ onClose }: Props) {
               onClose={closeMenu}
             />
           )}
-          {trashConfirm && (
-            <FileSpaceConfirm
-              title={t("workspace.confirm.trashTitle")}
-              message={
-                trashConfirm.length === 1
-                  ? t("workspace.confirm.trashOne", { name: trashConfirm[0].name })
-                  : t("workspace.confirm.trashMany", {
-                      n: String(trashConfirm.length),
-                    })
-              }
-              confirmLabel={t("workspace.confirm.ok")}
-              onCancel={() => setTrashConfirm(null)}
-              onConfirm={() => void runTrash(trashConfirm)}
-            />
-          )}
         </>
       ) : view === "media" ? (
         <>
@@ -1298,7 +1304,7 @@ export default function WorkspacePanel({ onClose }: Props) {
             <button
               type="button"
               className="ws-tool-btn ws-tool-btn--text"
-              onClick={backToBrowse}
+              onClick={() => void backToBrowse()}
               title={t("workspace.backToList")}
               aria-label={t("workspace.backToList")}
             >
@@ -1381,21 +1387,6 @@ export default function WorkspacePanel({ onClose }: Props) {
               )}
             </div>
           </div>
-          {trashConfirm && (
-            <FileSpaceConfirm
-              title={t("workspace.confirm.trashTitle")}
-              message={
-                trashConfirm.length === 1
-                  ? t("workspace.confirm.trashOne", { name: trashConfirm[0].name })
-                  : t("workspace.confirm.trashMany", {
-                      n: String(trashConfirm.length),
-                    })
-              }
-              confirmLabel={t("workspace.confirm.ok")}
-              onCancel={() => setTrashConfirm(null)}
-              onConfirm={() => void runTrash(trashConfirm)}
-            />
-          )}
         </>
       ) : (
         <>
@@ -1403,7 +1394,7 @@ export default function WorkspacePanel({ onClose }: Props) {
             <button
               type="button"
               className="ws-tool-btn ws-tool-btn--text"
-              onClick={backToBrowse}
+              onClick={() => void backToBrowse()}
               title={t("workspace.backToList")}
               aria-label={t("workspace.backToList")}
             >
@@ -1498,21 +1489,6 @@ export default function WorkspacePanel({ onClose }: Props) {
               />
             )}
           </div>
-          {trashConfirm && (
-            <FileSpaceConfirm
-              title={t("workspace.confirm.trashTitle")}
-              message={
-                trashConfirm.length === 1
-                  ? t("workspace.confirm.trashOne", { name: trashConfirm[0].name })
-                  : t("workspace.confirm.trashMany", {
-                      n: String(trashConfirm.length),
-                    })
-              }
-              confirmLabel={t("workspace.confirm.ok")}
-              onCancel={() => setTrashConfirm(null)}
-              onConfirm={() => void runTrash(trashConfirm)}
-            />
-          )}
         </>
       )}
       </AnimatedSwitch>

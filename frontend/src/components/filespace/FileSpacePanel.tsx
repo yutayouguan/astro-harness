@@ -11,6 +11,7 @@ import {
   Palette,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -38,7 +39,6 @@ import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileSpaceBatchBar from "./FileSpaceBatchBar";
-import FileSpaceConfirm from "./FileSpaceConfirm";
 import FileSpaceViewer from "./FileSpaceViewer";
 import { EmptyIllustration } from "../../illustrations";
 import { useFileSelection } from "../../hooks/ui/useFileSelection";
@@ -164,6 +164,7 @@ export default function FileSpacePanel({
   onAttachFiles,
 }: Props) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentId, setAgentId] = useState("workspace");
   const [category, setCategory] = useState<ArtifactCategory>("all");
@@ -179,7 +180,6 @@ export default function FileSpacePanel({
   const [selected, setSelected] = useState<ArtifactDto | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [menuFiles, setMenuFiles] = useState<ArtifactDto[]>([]);
-  const [trashConfirm, setTrashConfirm] = useState<ArtifactDto[] | null>(null);
   const { showToast, toastHost } = useTransientToast();
   const debounceRef = useRef<number | null>(null);
   const loadGen = useRef(0);
@@ -449,7 +449,6 @@ export default function FileSpacePanel({
           );
         } else if (fails.length && !trashed.length) {
           showToast(fails[0] ?? "trash failed", { error: true });
-          setTrashConfirm(null);
           return;
         } else {
           showToast(t("filespace.toast.trashed"), { tone: "success" });
@@ -466,12 +465,10 @@ export default function FileSpacePanel({
       selection.clear();
       setSelected(null);
       setMenuFiles([]);
-      setTrashConfirm(null);
       setMenu(null);
       await load();
     } catch (e) {
       showToast(String(e), { error: true });
-      setTrashConfirm(null);
     }
   };
 
@@ -506,7 +503,17 @@ export default function FileSpacePanel({
         if (files.every((f) => f.missing)) {
           await runRemoveIndex(files);
         } else {
-          setTrashConfirm(files);
+          const ok = await confirm({
+            title: t("filespace.confirm.trashTitle"),
+            message:
+              files.length === 1
+                ? t("filespace.confirm.trashOne", { name: files[0].name })
+                : t("filespace.confirm.trashMany", { n: String(files.length) }),
+            confirmLabel: t("filespace.confirm.ok"),
+            variant: "danger",
+          });
+          if (!ok) break;
+          await runTrash(files);
         }
         break;
       case "removeIndex":
@@ -894,23 +901,6 @@ export default function FileSpacePanel({
                   setMenu(null);
                   setMenuFiles([]);
                 }}
-              />
-            )}
-            {trashConfirm && (
-              <FileSpaceConfirm
-                title={t("filespace.confirm.trashTitle")}
-                message={
-                  trashConfirm.length === 1
-                    ? t("filespace.confirm.trashOne", {
-                        name: trashConfirm[0].name,
-                      })
-                    : t("filespace.confirm.trashMany", {
-                        n: String(trashConfirm.length),
-                      })
-                }
-                confirmLabel={t("filespace.confirm.ok")}
-                onCancel={() => setTrashConfirm(null)}
-                onConfirm={() => void runTrash(trashConfirm)}
               />
             )}
           </div>

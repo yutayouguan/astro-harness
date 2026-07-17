@@ -43,6 +43,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatRightTab } from "../../components/chat/ChatRightPanel";
 import { useChatStreamBuffers } from "./useChatStreamBuffers";
 import { useSend } from "./useSend";
+import { useConfirm } from "../ui/DialogContext";
 
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
 type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
@@ -142,6 +143,7 @@ export function useChatSession({
     }
   });
   const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("sessions");
+  const confirm = useConfirm();
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const unlistenRef = useRef<(() => void) | null>(null);
@@ -1059,20 +1061,23 @@ export function useChatSession({
     clearLocalChatSurface();
   }, [sessionId, clearLocalChatSurface]);
 
-  const confirmIfStreaming = useCallback(() => {
+  const confirmIfStreaming = useCallback(async () => {
     if (!streaming) return true;
-    return window.confirm(t("chat.newSessionStreamingConfirm"));
-  }, [streaming, t]);
+    return confirm({
+      title: t("chat.newSession"),
+      message: t("chat.newSessionStreamingConfirm"),
+    });
+  }, [streaming, t, confirm]);
 
-  const startNewChat = useCallback(() => {
-    if (!confirmIfStreaming()) return;
+  const startNewChat = useCallback(async () => {
+    if (!(await confirmIfStreaming())) return;
     resetChatSurface();
     setInput("");
     setEmptyMode("chat");
   }, [confirmIfStreaming, resetChatSurface]);
 
-  const startNewAgent = useCallback(() => {
-    if (!confirmIfStreaming()) return;
+  const startNewAgent = useCallback(async () => {
+    if (!(await confirmIfStreaming())) return;
     resetChatSurface();
     setEmptyMode("agent");
     setInput(templateForLocale(locale));
@@ -1161,7 +1166,7 @@ export function useChatSession({
       }
 
       if (mode === "new") {
-        if (!confirmIfStreaming()) return;
+        if (!(await confirmIfStreaming())) return;
         resetChatSurface();
         setInput("");
         setEmptyMode("chat");

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Eye, FileCode2, Save } from "lucide-react";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTheme } from "../../hooks/app/useTheme";
 import { filespaceViewerKind } from "../../lib/filespace/filespaceViewerKind";
@@ -49,6 +50,7 @@ export default function FileSpaceViewer({
   onOpenExternally,
 }: Props) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const { resolved: theme } = useTheme();
   const kind = filespaceViewerKind({ name, missing, mime, category });
 
@@ -127,7 +129,11 @@ export default function FileSpaceViewer({
         const ok = await flushSave();
         if (!ok) {
           // 选中已由 Panel 切换；写盘失败时提示，确认后丢弃未保存内容
-          window.confirm(t("workspace.unsavedConfirm"));
+          await confirm({
+            title: t("dialog.unsavedTitle"),
+            message: t("workspace.unsavedConfirm"),
+            confirmLabel: t("dialog.confirm"),
+          });
         }
       }
       clearTimer();

@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ThemeProvider } from "./hooks/app/useTheme";
+import { DialogProvider } from "./hooks/ui/DialogContext";
 import { installContextMenuGuard } from "./lib/ui/contextMenuGuard";
 import "./styles/index.css";
 
@@ -66,7 +67,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <RootErrorBoundary>
       <ThemeProvider>
         <LocaleProvider>
-          <App />
+          <DialogProvider>
+            <App />
+          </DialogProvider>
         </LocaleProvider>
       </ThemeProvider>
     </RootErrorBoundary>

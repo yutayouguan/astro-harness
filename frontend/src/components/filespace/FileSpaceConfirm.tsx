@@ -1,4 +1,5 @@
-/** 文件空间危险操作确认。 */
+/** 文件空间危险操作确认（AppDialog 薄封装，兼容旧 Props API）。 */
+import AppDialog from "../ui/AppDialog";
 import { useI18n } from "../../i18n/LocaleContext";
 
 /** 文件空间危险操作确认入参 */
@@ -19,25 +20,15 @@ export default function FileSpaceConfirm({
 }: Props) {
   const { t } = useI18n();
   return (
-    <div className="fs-confirm-backdrop" role="presentation" onClick={onCancel}>
-      <div
-        className="fs-confirm"
-        role="dialog"
-        aria-modal
-        aria-labelledby="fs-confirm-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="fs-confirm-title">{title}</h3>
-        <p>{message}</p>
-        <div className="fs-confirm-actions">
-          <button type="button" className="fs-confirm-cancel" onClick={onCancel}>
-            {t("filespace.confirm.cancel")}
-          </button>
-          <button type="button" className="fs-confirm-ok" onClick={onConfirm}>
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+    <AppDialog
+      open
+      title={title}
+      message={message}
+      variant="danger"
+      confirmLabel={confirmLabel}
+      cancelLabel={t("filespace.confirm.cancel")}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }

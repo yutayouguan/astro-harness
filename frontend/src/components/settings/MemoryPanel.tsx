@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
@@ -178,6 +179,7 @@ function IconSave(props: { width?: number; height?: number }) {
 
 export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const { t, locale } = useI18n();
+  const confirm = useConfirm();
   const [view, setView] = useState<MemoryView>("diary");
   const [, setMemoryDir] = useState("");
   const [workspaceDir, setWorkspaceDir] = useState("");
@@ -590,14 +592,17 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     void refreshMemorySettings();
   }, [view, refreshPendingWrites, refreshMemorySettings]);
 
-  const confirmIfDirty = () => {
+  const confirmIfDirty = async () => {
     if (!dirty) return true;
-    return window.confirm(t("memory.unsavedConfirm"));
+    return await confirm({
+      title: t("dialog.unsavedTitle"),
+      message: t("memory.unsavedConfirm"),
+    });
   };
 
-  const switchView = (next: MemoryView) => {
+  const switchView = async (next: MemoryView) => {
     if (next === view) return;
-    if (!confirmIfDirty()) return;
+    if (!(await confirmIfDirty())) return;
     setView(next);
     setSaveMsg(null);
     setError(null);
@@ -630,7 +635,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
   const switchFilterAgent = async (agentId: string, forDate?: string) => {
     if (agentId === filterAgentId && forDate == null) return;
-    if (!confirmIfDirty()) return;
+    if (!(await confirmIfDirty())) return;
     const date = forDate ?? dailyDate;
     const gen = ++filterSwitchGen.current;
     setFilterAgentId(agentId);
@@ -689,7 +694,15 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
   const switchDailyDate = async (date: string) => {
     if (date === dailyDate && filterAgentId !== ALL_AGENTS) return;
-    if (diaryDirty && !window.confirm(t("memory.unsavedConfirm"))) return;
+    if (
+      diaryDirty &&
+      !(await confirm({
+        title: t("dialog.unsavedTitle"),
+        message: t("memory.unsavedConfirm"),
+      }))
+    ) {
+      return;
+    }
     setSaveMsg(null);
     setError(null);
 
@@ -869,7 +882,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                 <button
                   type="button"
                   className={`mem-view-tab mem-view-tab--${item.id} ${view === item.id ? "active" : ""}`}
-                  onClick={() => switchView(item.id)}
+                  onClick={() => void switchView(item.id)}
                 >
                   <item.Icon />
                   <span>{item.label}</span>
@@ -881,7 +894,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
           <button
             type="button"
             className={`mem-view-tab mem-view-tab--pending ${view === "pending" ? "active" : ""}`}
-            onClick={() => switchView("pending")}
+            onClick={() => void switchView("pending")}
           >
             <IconPending />
             <span>
@@ -1251,8 +1264,16 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                         type="button"
                         role="tab"
                         className={`memory-file-tab ${archiveId === f.id ? "active" : ""}`}
-                        onClick={() => {
-                          if (archiveDirty && !window.confirm(t("memory.unsavedConfirm"))) return;
+                        onClick={async () => {
+                          if (
+                            archiveDirty &&
+                            !(await confirm({
+                              title: t("dialog.unsavedTitle"),
+                              message: t("memory.unsavedConfirm"),
+                            }))
+                          ) {
+                            return;
+                          }
                           setArchiveId(f.id);
                           void loadArchive(workspaceDir, f.id);
                         }}

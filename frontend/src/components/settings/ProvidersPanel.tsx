@@ -41,6 +41,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
 import { SelectMenu } from "../ui/SelectMenu";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
@@ -316,6 +317,7 @@ function IconLayers(props: SVGProps<SVGSVGElement>) {
 
 export default function ProvidersPanel({ active, onStateChange }: Props) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const addKindOptions = useMemo(
     () => ADD_KINDS.map((k) => ({ value: k, label: t(kindLabelKey(k)), icon: <ProviderBrandIcon kind={k} /> })),
     [t],
@@ -822,9 +824,13 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       setError("请在桌面应用中删除提供商");
       return;
     }
-    if (!window.confirm(`${t("providers.delete")} — ${selected.display_name}?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: t("dialog.deleteTitle"),
+      message: `${t("providers.delete")} — ${selected.display_name}?`,
+      confirmLabel: t("providers.delete"),
+      variant: "danger",
+    });
+    if (!ok) return;
     const deletingId = selected.id;
     setError(null);
     try {

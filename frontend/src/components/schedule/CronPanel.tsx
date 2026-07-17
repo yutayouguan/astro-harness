@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
@@ -367,6 +368,7 @@ export default function CronPanel({
   activeProviderId,
 }: Props) {
   const { t, locale } = useI18n();
+  const confirm = useConfirm();
   const [jobs, setJobs] = useState<CronJobDto[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentId, setAgentId] = useState("workspace");
@@ -715,7 +717,13 @@ export default function CronPanel({
 
   const removeJob = async (job: CronJobDto) => {
     if (!isTauri()) return;
-    if (!window.confirm(t("cron.removeConfirm"))) return;
+    const ok = await confirm({
+      title: t("dialog.deleteTitle"),
+      message: t("cron.removeConfirm"),
+      confirmLabel: t("cron.remove"),
+      variant: "danger",
+    });
+    if (!ok) return;
     setBusyId(job.id);
     closeMenu();
     setError(null);

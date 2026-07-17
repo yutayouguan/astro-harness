@@ -36,6 +36,7 @@
 @import "./features/skills/file-viewer.css";
 @import "./features/skills/dialogs.css";
 @import "./components/toast.css";
+@import "./components/dialog.css";
 
 /* Shared overlays and utilities */
 @import "./features/providers.css";
