@@ -622,7 +622,7 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
       var(--gmc-tone, #2563eb) 18%,
       var(--glass-edge, rgba(15, 23, 42, 0.08))
     );
-  background: #fff;
+  background: transparent;
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.04),
     0 10px 26px color-mix(in srgb, var(--gmc-tone, #2563eb) 10%, transparent);
@@ -642,16 +642,14 @@ html[data-theme="dark"] .glass-audio-seek input[type="range"] {
   padding: 8px 10px 8px 14px;
   font-size: 12px;
   color: var(--ink-soft, #64748b);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, #fff 70%, transparent),
-      transparent
-    ),
-    color-mix(in srgb, var(--glass, #f8fafc) 82%, transparent);
-  border-bottom: 1px solid var(--glass-edge, rgba(15, 23, 42, 0.06));
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #fff 32%, transparent),
+    color-mix(in srgb, #fff 12%, transparent)
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
 }
 
 /* 标签前置 macOS 风格红黄绿窗控点，营造「浏览器窗口」质感 */
@@ -739,9 +737,11 @@ html[data-theme="dark"] .html-preview {
 
 html[data-theme="dark"] .html-preview-bar {
   color: var(--ink-soft);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
-    rgba(20, 16, 34, 0.72);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.03)
+  );
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -1127,4 +1127,49 @@ html[data-theme="dark"] .gen-media-card[data-kind="video"] .gen-media-card-previ
   color: var(--ink-soft, #64748b);
   background: color-mix(in srgb, var(--tone-soft, transparent) 40%, var(--glass, transparent));
   border: 1px dashed color-mix(in srgb, var(--ink-soft) 22%, transparent);
+}
+
+/* 代码/文本文件卡片：CodeMirror 只读，限高滚动 */
+.code-file-card {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+}
+
+.code-file-card .code-file-card-cm {
+  max-height: 420px;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.code-file-card.is-compact .code-file-card-cm {
+  max-height: 320px;
+}
+
+.code-file-card .cm-editor {
+  background: transparent;
+}
+
+.code-file-card .cm-editor.cm-focused {
+  outline: none;
+}
+
+.code-file-card .cm-scroller {
+  overflow: auto;
+}
+
+html[data-theme="dark"] .code-file-card {
+  border-color: color-mix(in srgb, #fff 10%, transparent);
+  background: color-mix(in srgb, #fff 4%, transparent);
+}
+
+/* 卡片内 code 预览铺满宽度 */
+.gen-media-card .gen-media-card-preview.code-file-card {
+  border-radius: 12px;
+}
+
+.gen-media-card[data-kind="code"] .gen-media-card-body {
+  padding: 0 10px 10px;
 }
