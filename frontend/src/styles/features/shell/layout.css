@@ -252,7 +252,6 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   z-index: 1;
   width: 18px;
   height: 18px;
-  /* 默认 / hover：仅渐变线稿，不加粗填实 */
   fill: none;
   stroke-width: 1.6;
 }
@@ -260,24 +259,25 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 /* 明确禁止非选中态填实 */
 .nav-item:not(.active) .nav-icon svg,
 .nav-item:hover:not(.active) .nav-icon svg {
-  fill: none;
+  fill: none !important;
 }
 
 .nav-item:not(.active) .nav-icon svg .nav-icon-fill,
 .nav-item:not(.active) .nav-icon svg .nav-icon-hole {
-  fill: none;
+  fill: none !important;
 }
 
-/* 仅选中：tone 渐变填实 + 内部镂空 */
+/*
+ * 选中填实：用渐变两端实色 mix，避免 CSS var(url(#grad)) 在 WebKit 失效
+ * （工具/技能/趋势等无圈剪影依赖这条才能美化填实）
+ */
 .nav-item.active .nav-icon svg,
 .nav-item.active .nav-icon svg[data-nav-fill="soft"] {
-  fill: var(--nav-grad-paint);
-  fill-opacity: 1;
+  fill: color-mix(in srgb, var(--nav-grad-top) 55%, var(--nav-grad-bottom));
 }
 
-/* 柱状图等纯线稿：选中也不填实 */
 .nav-item.active .nav-icon svg[data-nav-fill="outline"] {
-  fill: none;
+  fill: none !important;
 }
 
 /*
@@ -393,7 +393,7 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   z-index: 1;
   width: 16px;
   height: 16px;
-  fill: var(--nav-grad-paint);
+  /* 不覆盖 fill：沿用 IconBase 的 fill={url(#grad)}，避免 CSS url var 失效 */
 }
 
 .page-title-icon svg[data-nav-fill="outline"] {
