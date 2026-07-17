@@ -9,7 +9,10 @@ import {
 } from "../../lib/chat/resolveActivityIO";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { parseGeneratedMedia } from "../../lib/media/parseGeneratedMedia";
-import { resolveMediaPreviewPath } from "../../lib/media/resolveMediaSrc";
+import {
+  looksLikeRelativeLocalPath,
+  resolveMediaPreviewPath,
+} from "../../lib/media/resolveMediaSrc";
 import type { ChatActivity, ChatActivityKind } from "../../types";
 import McpIcon from "../icons/McpIcon";
 import MediaPreview from "../media/MediaPreview";
@@ -53,6 +56,20 @@ export default function MsgActivity({
     if (activity.media && activity.media.length > 0) return activity.media;
     return parseGeneratedMedia(output);
   }, [activity.status, activity.media, output]);
+  // 相对路径需等 workspace 根；否则首屏会用不可加载 path 挂载预览
+  const previewMedia = useMemo(
+    () =>
+      mediaItems
+        .filter(
+          (m) =>
+            !looksLikeRelativeLocalPath(m.path) || Boolean(mediaBaseDir?.trim()),
+        )
+        .map((m) => ({
+          ...m,
+          path: resolveMediaPreviewPath(m.path, mediaBaseDir),
+        })),
+    [mediaItems, mediaBaseDir],
+  );
   const [open, setOpen] = useState(
     () => (defaultOpen && hasBody) || mediaItems.length > 0,
   );
@@ -123,13 +140,13 @@ export default function MsgActivity({
         )}
         {open ? (
           <>
-            {mediaItems.length > 0 ? (
+            {previewMedia.length > 0 ? (
               <div className="msg-activity-media">
-                {mediaItems.map((m) => (
+                {previewMedia.map((m) => (
                   <MediaPreview
                     key={`${m.kind}:${m.path}`}
                     kind={m.kind}
-                    path={resolveMediaPreviewPath(m.path, mediaBaseDir)}
+                    path={m.path}
                     compact
                   />
                 ))}

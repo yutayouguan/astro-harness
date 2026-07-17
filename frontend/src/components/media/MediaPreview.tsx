@@ -1,5 +1,5 @@
 /** 图 / 视频 / 音频内嵌预览（本地路径经 resolveMediaSrc）；悬停提供引用 / 放大 / 下载 / 复制 */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GeneratedMediaKind } from "../../lib/media/parseGeneratedMedia";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
@@ -28,8 +28,13 @@ export default function MediaPreview({
   compact,
 }: MediaPreviewProps) {
   const src = useMemo(() => resolveMediaSrc(path), [path]);
-  const [broken, setBroken] = useState(!src && kind !== "html");
+  // path/src 可能随后端或 mediaBaseDir 异步变为可加载 URL；勿把首屏失败粘成永久 Broken
+  const [loadError, setLoadError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [src]);
 
   const openExternally = () => {
     void invoke("open_path_externally", { path }).catch(() => {});
@@ -46,7 +51,8 @@ export default function MediaPreview({
     );
   }
 
-  if (broken || !src) {
+  const broken = !src || loadError;
+  if (broken) {
     return (
       <BrokenMedia
         path={path}
@@ -67,7 +73,7 @@ export default function MediaPreview({
           controls
           playsInline
           preload="metadata"
-          onError={() => setBroken(true)}
+          onError={() => setLoadError(true)}
         />
         <MediaToolbar path={path} kind="video" compact={compact} />
       </div>
@@ -82,7 +88,7 @@ export default function MediaPreview({
           src={src}
           controls
           preload="metadata"
-          onError={() => setBroken(true)}
+          onError={() => setLoadError(true)}
         />
         <MediaToolbar path={path} kind="audio" compact={compact} />
       </div>
@@ -101,7 +107,7 @@ export default function MediaPreview({
           className="media-preview-image"
           src={src}
           alt={alt ?? ""}
-          onError={() => setBroken(true)}
+          onError={() => setLoadError(true)}
         />
       </button>
       <MediaToolbar path={path} kind="image" compact={compact} alt={alt} />
