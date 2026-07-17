@@ -156,3 +156,107 @@ cargo test -p providers google::interactions_chat
 - 无状态须原样回传 thought / function_call：[02-get-started.md](./02-get-started.md) §1.4.5
 
 官方文档示例字段名可能滞后于线上；**实现以本文与抓包为准，并兼容文档旧字段**。
+
+---
+
+## 9 数据库落库形态与跨模型切换
+
+Astro 的会话历史统一写入 `messages` 表；不会按 Provider 拆成 Google 表 / DeepSeek 表。跨模型切换时，两者共享同一套 `role` / `content` / `tool_calls` / `reasoning` / `reasoning_details` 等列，差别只在部分 JSON 字段是否存在。
+
+### 9.1 共用列
+
+| 列 | 含义 |
+| --- | --- |
+| `role` | `user` / `assistant` / `tool` |
+| `content` | 可见正文；纯工具调用的 assistant 可为空 |
+| `tool_calls` | assistant 发起的工具调用 JSON |
+| `tool_call_id` / `tool_name` | tool 结果关联字段 |
+| `reasoning` | 流式累积的思考文本（若 Provider 下发） |
+| `reasoning_details` | Astro 时间线、surface，以及 Google thought signature 等结构化 JSON |
+| `reasoning_content` | 兼容列；当前主路径基本不写，通常为 `NULL` |
+| `media_json` | 结构化媒体附件（如图片生成结果） |
+
+### 9.2 Google 工具调用行
+
+Google Interactions 工具调用的 assistant 行会额外保留：
+
+- `tool_calls[].signature`：`function_call.signature`，无状态回放必须原样回传。
+- `reasoning_details.google_thought_signature`：`thought.signature`，用于全量历史回放时重建 `thought` step。
+
+示例：
+
+```json
+{
+  "role": "assistant",
+  "content": "",
+  "reasoning": "用户要生成一张猫的图片…",
+  "tool_calls": [
+    {
+      "id": "sf9vftls",
+      "name": "image_gen",
+      "arguments": { "prompt": "a cat" },
+      "signature": "Eq0CCqoCARFNMg9…"
+    }
+  ],
+  "reasoning_details": {
+    "astro_timeline_v1": [
+      { "type": "reasoning", "text": "用户要生成一张猫的图片…", "at": 1721 },
+      { "type": "activity", "id": "sf9vftls", "at": 1722 }
+    ],
+    "google_thought_signature": "EvEFCu4F…"
+  }
+}
+```
+
+对应 tool 行仍是通用形态：
+
+```json
+{
+  "role": "tool",
+  "tool_call_id": "sf9vftls",
+  "tool_name": "image_gen",
+  "content": "…生成结果…",
+  "media_json": "[{\"kind\":\"image\",…}]"
+}
+```
+
+### 9.3 DeepSeek 工具调用行
+
+DeepSeek / OpenAI 兼容路径使用标准工具调用字段，不写 Google 专用 signature：
+
+```json
+{
+  "role": "assistant",
+  "content": "",
+  "reasoning": "需要调用 image_gen…",
+  "tool_calls": [
+    {
+      "id": "call_abc123",
+      "name": "image_gen",
+      "arguments": { "prompt": "a cat" }
+    }
+  ],
+  "reasoning_details": {
+    "astro_timeline_v1": [
+      { "type": "reasoning", "text": "需要调用 image_gen…", "at": 1721 },
+      { "type": "activity", "id": "call_abc123", "at": 1722 }
+    ]
+  }
+}
+```
+
+要点：
+
+- DeepSeek 行通常没有 `tool_calls[].signature`。
+- DeepSeek 行通常没有 `reasoning_details.google_thought_signature`。
+- `reasoning` / `astro_timeline_v1` 是 Astro 通用字段，DeepSeek thinking 模型也可以写入。
+
+### 9.4 跨模型切换行为
+
+| 切换 | 行为 |
+| --- | --- |
+| Google → DeepSeek | DeepSeek 请求体只编码标准 `tool_calls`，不会带 Google 的 `signature` / `google_thought_signature`。 |
+| DeepSeek → Google | 没有 `previous_interaction_id` 时走全量历史回放；Google 旧行上的 signature / thought signature 可用于重建 Interactions steps。 |
+| 同会话混用 | 数据库中会交替出现两类行；它们共享同一张 `messages` 表。 |
+
+注意：工具确认卡（HITL）仍在等待、或流式响应尚未结束时，不建议中途切模型；应先完成当前工具轮，避免悬挂 `tool_calls`。

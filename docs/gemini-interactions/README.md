@@ -32,6 +32,7 @@
 | [Deep Research 智能体](./11-deep-research.md) | [deep-research](https://ai.google.dev/gemini-api/docs/deep-research?hl=zh-cn) |
 | [灵活推理 (Flex)](./12-flex-inference.md) | [flex-inference](https://ai.google.dev/gemini-api/docs/flex-inference?hl=zh-cn) |
 | [优先推理 (Priority)](./13-priority-inference.md) | [priority-inference](https://ai.google.dev/gemini-api/docs/priority-inference?hl=zh-cn) |
+| [Astro 实现备注](./14-astro-implementation-notes.md) | 本仓库线上 wire / 修复约定（非官方镜像） |
 
 ## 1.3 与本仓库的关系
 
