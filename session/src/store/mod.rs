@@ -1,9 +1,9 @@
 //! 单库会话存储（schema v15）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
-mod schema;
-mod sessions;
 mod messages;
+mod schema;
 mod search;
+mod sessions;
 
 use anyhow::{anyhow, Context, Result};
 use common::SqliteStore;
@@ -280,15 +280,12 @@ impl SessionStore {
     pub fn schema_version(&self) -> Result<i32> {
         let version: Option<i32> = self
             .conn
-            .query_row(
-                "SELECT version FROM schema_version LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .optional()?;
         version.ok_or_else(|| anyhow!("schema_version table is empty"))
     }
-
 }
 
 impl SqliteStore for SessionStore {
@@ -313,11 +310,9 @@ fn peek_schema_version(path: &Path) -> Result<i32> {
         return Ok(0);
     }
     let version: Option<i32> = conn
-        .query_row(
-            "SELECT version FROM schema_version LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+            row.get(0)
+        })
         .optional()?;
     Ok(version.unwrap_or(0))
 }
@@ -373,11 +368,7 @@ pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<Chat
             let input = tc
                 .get("arguments")
                 .cloned()
-                .or_else(|| {
-                    tc.get("function")
-                        .and_then(|f| f.get("arguments"))
-                        .cloned()
-                })
+                .or_else(|| tc.get("function").and_then(|f| f.get("arguments")).cloned())
                 .map(|args| match args {
                     Value::String(s) => s,
                     other => other.to_string(),
@@ -393,6 +384,88 @@ pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<Chat
             })
         })
         .collect()
+}
+
+/// 将同轮连续 assistant 气泡合并为一条（工具循环落盘会产生多条）。
+pub(crate) fn coalesce_consecutive_assistants(
+    messages: Vec<ChatHistoryMessage>,
+) -> Vec<ChatHistoryMessage> {
+    let mut out: Vec<ChatHistoryMessage> = Vec::with_capacity(messages.len());
+    for m in messages {
+        if m.role != "assistant" {
+            out.push(m);
+            continue;
+        }
+        let Some(prev) = out.last_mut().filter(|p| p.role == "assistant") else {
+            out.push(m);
+            continue;
+        };
+        let contents = [prev.content.as_str(), m.content.as_str()]
+            .into_iter()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+        prev.content = contents.join("\n\n");
+        merge_history_activities(&mut prev.activities, m.activities);
+        let prev_seg_len = prev
+            .segments
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        let next_seg_len = m
+            .segments
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        if next_seg_len >= prev_seg_len && next_seg_len > 0 {
+            prev.segments = m.segments;
+        }
+        let prev_surf_len = prev
+            .ui_surfaces
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        let next_surf_len = m
+            .ui_surfaces
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        if next_surf_len >= prev_surf_len && next_surf_len > 0 {
+            prev.ui_surfaces = m.ui_surfaces;
+        }
+        if let Some(r) = m.reasoning.filter(|s| !s.trim().is_empty()) {
+            prev.reasoning = Some(r);
+        }
+    }
+    out
+}
+
+fn merge_history_activities(dest: &mut Vec<ChatActivityStored>, incoming: Vec<ChatActivityStored>) {
+    for act in incoming {
+        if let Some(prev) = dest.iter_mut().find(|a| a.id == act.id) {
+            if act.output.is_some() {
+                prev.output = act.output;
+            }
+            if act.input.is_some() {
+                prev.input = act.input;
+            }
+            if act.media.is_some() {
+                prev.media = act.media;
+            }
+            if act.status.is_some() {
+                prev.status = act.status;
+            }
+            if prev.title == "tool" && act.title != "tool" {
+                prev.title = act.title;
+            }
+        } else {
+            dest.push(act);
+        }
+    }
 }
 
 pub(crate) fn attach_tool_output(
@@ -418,11 +491,7 @@ pub(crate) fn attach_tool_output(
         }
     }
     // 无匹配 skeleton：按顺序挂到第一个尚无 output 的 activity，或追加。
-    if let Some(act) = assistant
-        .activities
-        .iter_mut()
-        .find(|a| a.output.is_none())
-    {
+    if let Some(act) = assistant.activities.iter_mut().find(|a| a.output.is_none()) {
         if let Some(cid) = call_id {
             act.id = cid.to_string();
         }
@@ -446,4 +515,3 @@ pub(crate) fn attach_tool_output(
         media,
     });
 }
-

@@ -1,13 +1,13 @@
 //! 消息检索、聊天历史与 FTS。
 
+use super::{
+    activities_from_tool_calls, attach_tool_output, coalesce_consecutive_assistants,
+    escape_fts5_query, truncate_chars, ChatHistoryMessage, RecentSession, SearchHit, SessionStore,
+};
 use anyhow::Result;
-use std::collections::HashSet;
 use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
-use super::{
-    activities_from_tool_calls, attach_tool_output, escape_fts5_query, truncate_chars,
-    ChatHistoryMessage, RecentSession, SearchHit, SessionStore,
-};
+use std::collections::HashSet;
 
 impl SessionStore {
     /// 跨会话消息 FTS：优先 `messages_fts`，再合并 `messages_fts_trigram`（CJK / 子串）。
@@ -102,7 +102,8 @@ impl SessionStore {
                         .as_deref()
                         .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
                         .filter(|v| matches!(v, Value::Array(a) if !a.is_empty()));
-                    if let Some(assistant) = out.iter_mut().rev().find(|msg| msg.role == "assistant")
+                    if let Some(assistant) =
+                        out.iter_mut().rev().find(|msg| msg.role == "assistant")
                     {
                         attach_tool_output(
                             assistant,
@@ -116,6 +117,9 @@ impl SessionStore {
                 _ => {}
             }
         }
+
+        // 同轮工具循环会落多条 assistant；UI 期望合并为一条气泡。
+        out = coalesce_consecutive_assistants(out);
 
         if out.len() > limit {
             let skip = out.len() - limit;
@@ -215,18 +219,15 @@ impl SessionStore {
              ORDER BY id ASC",
         )?;
         let rows = stmt
-            .query_map(
-                params![session_id, around_message_id, window_size],
-                |row| {
-                    let id: i64 = row.get(0)?;
-                    Ok(crate::message_db::ScrolledMessage {
-                        id,
-                        role: row.get(1)?,
-                        content: row.get(2)?,
-                        is_anchor: id == around_message_id,
-                    })
-                },
-            )?
+            .query_map(params![session_id, around_message_id, window_size], |row| {
+                let id: i64 = row.get(0)?;
+                Ok(crate::message_db::ScrolledMessage {
+                    id,
+                    role: row.get(1)?,
+                    content: row.get(2)?,
+                    is_anchor: id == around_message_id,
+                })
+            })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
@@ -438,5 +439,4 @@ impl SessionStore {
         }
         Ok(parts.join(" | "))
     }
-
 }

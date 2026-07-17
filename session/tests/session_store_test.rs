@@ -34,7 +34,9 @@ fn session_store_impls_sqlite_store() {
 fn append_and_reload_tool_calls_and_reasoning() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.create_session("s1", "test", None, None, None).unwrap();
+    store
+        .create_session("s1", "test", None, None, None)
+        .unwrap();
     store
         .append_message(session::store::NewMessage {
             session_id: "s1",
@@ -93,7 +95,9 @@ fn append_and_reload_tool_calls_and_reasoning() {
 fn search_messages_hits_tool_name_and_cjk() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -114,7 +118,9 @@ fn search_messages_hits_tool_name_and_cjk() {
 fn build_chat_history_folds_tools_into_activities() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -167,7 +173,9 @@ fn build_chat_history_folds_tools_into_activities() {
 fn build_chat_history_restores_tool_media_json() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -215,7 +223,9 @@ fn build_chat_history_restores_tool_media_json() {
 fn build_chat_history_restores_timeline() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             session_id: "s1",
@@ -273,7 +283,146 @@ fn build_chat_history_restores_timeline() {
     assert_eq!(surfaces[0]["messageId"], "a2ui-surface-c1");
     // tool 合并不应清掉 timeline
     assert_eq!(ui[1].activities.len(), 1);
-    assert_eq!(ui[1].activities[0].output.as_deref(), Some("Presented info card"));
+    assert_eq!(
+        ui[1].activities[0].output.as_deref(),
+        Some("Presented info card")
+    );
+}
+
+#[test]
+fn build_chat_history_coalesces_consecutive_assistants() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "user",
+            content: Some("做首歌"),
+            ..NewMessage::empty("s1", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "assistant",
+            content: Some("先生成"),
+            tool_calls: Some(serde_json::json!([{
+                "id": "c1", "name": "music_gen", "arguments": {}
+            }])),
+            reasoning_details: Some(serde_json::json!({
+                "astro_timeline_v1": [
+                    {"type": "reasoning", "id": "r1", "text": "t1", "at": 1},
+                    {"type": "activity", "id": "c1", "at": 2}
+                ]
+            })),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "tool",
+            content: Some("audio ok"),
+            tool_call_id: Some("c1"),
+            tool_name: Some("music_gen"),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "assistant",
+            content: Some("生成成功"),
+            tool_calls: Some(serde_json::json!([{
+                "id": "c2", "name": "present_result", "arguments": {}
+            }])),
+            reasoning_details: Some(serde_json::json!({
+                "astro_timeline_v1": [
+                    {"type": "reasoning", "id": "r1", "text": "t1", "at": 1},
+                    {"type": "activity", "id": "c1", "at": 2},
+                    {"type": "activity", "id": "c2", "at": 3},
+                    {"type": "surface", "id": "surf-1", "at": 4}
+                ],
+                "astro_surfaces_v1": [{
+                    "messageId": "surf-1",
+                    "activityType": "a2ui-surface",
+                    "operations": [],
+                    "status": "active"
+                }]
+            })),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "tool",
+            content: Some("Presented info card"),
+            tool_call_id: Some("c2"),
+            tool_name: Some("present_result"),
+            ..NewMessage::empty("s1", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "assistant",
+            content: Some("搞定"),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+
+    let ui = store.build_chat_history("s1", 200).unwrap();
+    assert_eq!(ui.len(), 2);
+    assert_eq!(ui[0].role, "user");
+    assert_eq!(ui[1].role, "assistant");
+    assert_eq!(ui[1].content, "先生成\n\n生成成功\n\n搞定");
+    assert_eq!(ui[1].activities.len(), 2);
+    let segs = ui[1].segments.as_ref().unwrap().as_array().unwrap();
+    assert_eq!(segs.len(), 4);
+    let surfaces = ui[1].ui_surfaces.as_ref().unwrap().as_array().unwrap();
+    assert_eq!(surfaces.len(), 1);
+}
+
+#[test]
+fn patch_last_assistant_reasoning_details_merges_surfaces() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "s1",
+            role: "assistant",
+            content: Some("calling"),
+            reasoning_details: Some(serde_json::json!({
+                "astro_timeline_v1": [{"type": "activity", "id": "c1", "at": 1}],
+                "google_thought_signature": "sig"
+            })),
+            ..NewMessage::empty("s1", "assistant")
+        })
+        .unwrap();
+    store
+        .patch_last_assistant_reasoning_details(
+            "s1",
+            &serde_json::json!({
+                "astro_timeline_v1": [
+                    {"type": "activity", "id": "c1", "at": 1},
+                    {"type": "surface", "id": "surf", "at": 2}
+                ],
+                "astro_surfaces_v1": [{"messageId": "surf"}]
+            }),
+        )
+        .unwrap();
+    let msgs = store.get_messages("s1").unwrap();
+    let details = msgs[0].reasoning_details.as_ref().unwrap();
+    assert_eq!(details["google_thought_signature"], "sig");
+    assert_eq!(details["astro_surfaces_v1"][0]["messageId"], "surf");
+    assert_eq!(details["astro_timeline_v1"].as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -376,12 +525,11 @@ fn v13_state_db_migrates_and_discards_sidecar_sessions_db() {
         !store.get_messages("old").unwrap().is_empty(),
         "state.db history must be preserved"
     );
-    assert_eq!(
-        store.get_session("old").unwrap().unwrap().archived_at,
-        None
-    );
+    assert_eq!(store.get_session("old").unwrap().unwrap().archived_at, None);
 
-    store.create_session("fresh", "test", None, None, None).unwrap();
+    store
+        .create_session("fresh", "test", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             session_id: "fresh",
@@ -437,7 +585,9 @@ fn open_repairs_legacy_fts_triggers_on_v11_db() {
     let path = dir.path().join("state.db");
     {
         let store = SessionStore::open(&path).unwrap();
-        store.create_session("s1", "test", None, None, None).unwrap();
+        store
+            .create_session("s1", "test", None, None, None)
+            .unwrap();
         store
             .append_message(NewMessage {
                 content: Some("hello"),
@@ -483,7 +633,9 @@ fn open_repairs_broken_fts_delete_command_triggers() {
     let path = dir.path().join("state.db");
     {
         let store = SessionStore::open(&path).unwrap();
-        store.create_session("s1", "test", None, None, None).unwrap();
+        store
+            .create_session("s1", "test", None, None, None)
+            .unwrap();
         store
             .append_message(NewMessage {
                 content: Some("keep"),
@@ -816,7 +968,10 @@ fn schema_v13_to_v14_preserves_chat_and_adds_compressed_content() {
         .unwrap();
     let msgs = store.get_messages("s1").unwrap();
     assert_eq!(msgs[0].content.as_deref(), Some("original tool output"));
-    assert_eq!(msgs[0].compressed_content.as_deref(), Some("compressed view"));
+    assert_eq!(
+        msgs[0].compressed_content.as_deref(),
+        Some("compressed view")
+    );
 }
 
 /// 半迁移库：schema_version 已是 14，但 messages 缺 compressed_content（合并分支 stamp 竞态）。
@@ -870,8 +1025,6 @@ fn stamped_v14_without_compressed_content_self_heals() {
     assert!(msgs[0].compressed_content.is_none());
 }
 
-
-
 #[test]
 fn fork_session_copies_bubbles_and_trailing_tools() {
     let dir = TempDir::new().unwrap();
@@ -915,7 +1068,7 @@ fn fork_session_copies_bubbles_and_trailing_tools() {
         .unwrap();
 
     // keep 2 bubbles = user + assistant(+trailing tools until next non-tool)
-    // After first assistant with tools, we include tool rows then stop before next assistant? 
+    // After first assistant with tools, we include tool rows then stop before next assistant?
     // Looking at impl: when bubble count hits keep, it includes following tool rows only.
     // So keep=2: u1, a1(+tool). Not a1b.
     store.fork_session("src", "dst", 2).unwrap();
@@ -1070,7 +1223,9 @@ fn end_session_sets_ended_at_and_reason() {
 fn append_message_rejects_ended_session() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.create_session("s1", "test", None, None, None).unwrap();
+    store
+        .create_session("s1", "test", None, None, None)
+        .unwrap();
     store.end_session("s1", "compacted").unwrap();
     let err = store
         .append_message(NewMessage {
@@ -1156,7 +1311,9 @@ fn compact_and_split_ends_old_and_seeds_new_with_summary_and_tail() {
 fn compact_and_split_keep_zero_is_summary_only() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-    store.create_session("old", "test", None, None, None).unwrap();
+    store
+        .create_session("old", "test", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             content: Some("u1"),
@@ -1173,8 +1330,12 @@ fn compact_and_split_keep_zero_is_summary_only() {
 #[test]
 fn archive_filters_and_restores_session() {
     let (_dir, store) = test_store();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
-    store.create_session("s2", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
+    store
+        .create_session("s2", "tauri", None, None, None)
+        .unwrap();
 
     store.archive_session("s1").unwrap();
 
@@ -1182,13 +1343,18 @@ fn archive_filters_and_restores_session() {
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].id, "s2");
 
-    let archived = store.list_sessions(SessionListFilter::Archived, 10).unwrap();
+    let archived = store
+        .list_sessions(SessionListFilter::Archived, 10)
+        .unwrap();
     assert_eq!(archived.len(), 1);
     assert_eq!(archived[0].id, "s1");
 
     store.unarchive_session("s1").unwrap();
     assert_eq!(
-        store.list_sessions(SessionListFilter::Archived, 10).unwrap().len(),
+        store
+            .list_sessions(SessionListFilter::Archived, 10)
+            .unwrap()
+            .len(),
         0
     );
 }
@@ -1216,7 +1382,8 @@ fn v15_schema_migrates_to_v16_without_data_loss() {
 
     {
         let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute("UPDATE schema_version SET version = 15", []).unwrap();
+        conn.execute("UPDATE schema_version SET version = 15", [])
+            .unwrap();
     }
 
     let reopened = SessionStore::open(&path).unwrap();
@@ -1237,9 +1404,13 @@ fn v15_schema_migrates_to_v16_without_data_loss() {
 #[test]
 fn pin_session_sorts_before_unpinned() {
     let (_dir, store) = test_store();
-    store.create_session("older", "tauri", None, None, None).unwrap();
+    store
+        .create_session("older", "tauri", None, None, None)
+        .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(20));
-    store.create_session("newer", "tauri", None, None, None).unwrap();
+    store
+        .create_session("newer", "tauri", None, None, None)
+        .unwrap();
 
     let before = store.list_sessions(SessionListFilter::Active, 10).unwrap();
     assert_eq!(before[0].id, "newer");
@@ -1259,7 +1430,9 @@ fn pin_session_sorts_before_unpinned() {
 #[test]
 fn title_if_empty_never_overwrites_manual_title() {
     let (_dir, store) = test_store();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
 
     assert!(store.set_session_title_if_empty("s1", "Auto").unwrap());
     store.set_session_title("s1", "Manual").unwrap();
@@ -1274,8 +1447,12 @@ fn title_if_empty_never_overwrites_manual_title() {
 #[test]
 fn title_if_empty_suffixes_duplicate_generated_title() {
     let (_dir, store) = test_store();
-    store.create_session("session-alpha", "tauri", None, None, None).unwrap();
-    store.create_session("session-beta", "tauri", None, None, None).unwrap();
+    store
+        .create_session("session-alpha", "tauri", None, None, None)
+        .unwrap();
+    store
+        .create_session("session-beta", "tauri", None, None, None)
+        .unwrap();
 
     assert!(store
         .set_session_title_if_empty("session-alpha", "Shared title")
@@ -1307,7 +1484,9 @@ fn title_if_empty_suffixes_duplicate_generated_title() {
 #[test]
 fn permanent_delete_removes_messages_and_fts() {
     let (_dir, store) = test_store();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             content: Some("unique-delete-token"),
@@ -1318,7 +1497,10 @@ fn permanent_delete_removes_messages_and_fts() {
     store.delete_session_permanently("s1").unwrap();
 
     assert!(store.get_session("s1").unwrap().is_none());
-    assert!(store.search_messages("unique-delete-token", None, None, 10).unwrap().is_empty());
+    assert!(store
+        .search_messages("unique-delete-token", None, None, 10)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -1351,7 +1533,9 @@ fn permanent_delete_detaches_child_branches_before_removing_parent() {
 #[test]
 fn first_turn_text_returns_first_non_empty_user_and_assistant() {
     let (_dir, store) = test_store();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             content: Some("   "),
@@ -1385,7 +1569,9 @@ fn first_turn_text_returns_first_non_empty_user_and_assistant() {
 
     let first = store.first_turn_text("s1").unwrap();
     assert_eq!(
-        first.as_ref().map(|(user, assistant)| (user.as_str(), assistant.as_str())),
+        first
+            .as_ref()
+            .map(|(user, assistant)| (user.as_str(), assistant.as_str())),
         Some(("hello", "world"))
     );
 }
@@ -1393,7 +1579,9 @@ fn first_turn_text_returns_first_non_empty_user_and_assistant() {
 #[test]
 fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
     let (_dir, store) = test_store();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     for (role, content) in [
         ("assistant", "orphan assistant"),
         ("user", "superseded user"),
@@ -1410,7 +1598,9 @@ fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
 
     let first = store.first_turn_text("s1").unwrap();
     assert_eq!(
-        first.as_ref().map(|(user, assistant)| (user.as_str(), assistant.as_str())),
+        first
+            .as_ref()
+            .map(|(user, assistant)| (user.as_str(), assistant.as_str())),
         Some(("paired user", "paired assistant"))
     );
 }
@@ -1418,7 +1608,9 @@ fn first_turn_text_returns_earliest_completed_user_assistant_pair() {
 #[test]
 fn first_turn_text_returns_none_without_assistant() {
     let (_dir, store) = test_store();
-    store.create_session("s1", "tauri", None, None, None).unwrap();
+    store
+        .create_session("s1", "tauri", None, None, None)
+        .unwrap();
     store
         .append_message(NewMessage {
             content: Some("user only"),
@@ -1432,7 +1624,9 @@ fn first_turn_text_returns_none_without_assistant() {
 #[test]
 fn append_and_reload_media_json() {
     let (_dir, store) = test_store();
-    store.create_session("s1", "test", None, None, None).unwrap();
+    store
+        .create_session("s1", "test", None, None, None)
+        .unwrap();
     let media = r#"[{"kind":"image","mime_type":"image/png","reference":{"data_url":"data:image/png;base64,abc"}}]"#;
     store
         .append_message(NewMessage {

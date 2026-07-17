@@ -1,7 +1,7 @@
 //! 富消息读写。
 
 use anyhow::Result;
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 
 use super::{json_from_db, json_to_db, now_epoch_secs, NewMessage, SessionStore, StoredMessage};
@@ -158,6 +158,46 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 回写本会话最近一条 assistant 的 `reasoning_details`（保留其它键，覆盖 timeline/surfaces）。
+    ///
+    /// 工具循环在 assistant 落盘之后才会 `upsert_surface`；若不回写，历史恢复会丢 A2UI 卡片。
+    pub fn patch_last_assistant_reasoning_details(
+        &self,
+        session_id: &str,
+        details: &Value,
+    ) -> Result<()> {
+        let existing: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT reasoning_details FROM messages
+             WHERE session_id = ?1 AND role = 'assistant'
+             ORDER BY id DESC LIMIT 1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let mut obj = match existing.as_deref().map(serde_json::from_str::<Value>) {
+            Some(Ok(Value::Object(m))) => m,
+            _ => serde_json::Map::new(),
+        };
+        if let Value::Object(patch) = details {
+            for (k, v) in patch {
+                obj.insert(k.clone(), v.clone());
+            }
+        }
+        let json = serde_json::to_string(&Value::Object(obj))?;
+        self.conn.execute(
+            "UPDATE messages SET reasoning_details = ?1
+             WHERE id = (
+               SELECT id FROM messages
+               WHERE session_id = ?2 AND role = 'assistant'
+               ORDER BY id DESC LIMIT 1
+             )",
+            params![json, session_id],
+        )?;
+        Ok(())
+    }
+
     /// 将源会话消息复制到新会话（含 tool 行），截止到第 `keep_chat_bubbles` 个 user/assistant 气泡。
     ///
     /// 新会话写入 `parent_session_id = source_id`，便于谱系追溯。`keep_chat_bubbles == 0` 时仅创建空会话。
@@ -176,13 +216,7 @@ impl SessionStore {
 
         let parent = self.get_session(source_id)?;
         let model = parent.as_ref().and_then(|p| p.model.clone());
-        self.create_session(
-            new_id,
-            "tauri",
-            model.as_deref(),
-            None,
-            Some(source_id),
-        )?;
+        self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))?;
 
         if keep_chat_bubbles == 0 {
             return Ok(());
@@ -245,7 +279,10 @@ impl SessionStore {
         )?;
         tx.commit()?;
 
-        if let Some(title) = parent.and_then(|p| p.title).filter(|t| !t.trim().is_empty()) {
+        if let Some(title) = parent
+            .and_then(|p| p.title)
+            .filter(|t| !t.trim().is_empty())
+        {
             let branched = format!("{title} · branch");
             let _ = self.set_session_title(new_id, &branched);
         }
@@ -322,12 +359,7 @@ impl SessionStore {
     ///
     /// 被删 assistant 之后的连续 `tool` 行一并删除。`start >= end` 时为 no-op。
     /// 用于 UI 中部「删除消息」与 DB 对齐。
-    pub fn remove_chat_bubbles(
-        &self,
-        session_id: &str,
-        start: usize,
-        end: usize,
-    ) -> Result<()> {
+    pub fn remove_chat_bubbles(&self, session_id: &str, start: usize, end: usize) -> Result<()> {
         if self.get_session(session_id)?.is_none() {
             anyhow::bail!("remove_chat_bubbles: session not found");
         }
@@ -391,13 +423,7 @@ impl SessionStore {
 
         let model = parent.model.clone();
         let source = parent.source.clone();
-        self.create_session(
-            new_id,
-            &source,
-            model.as_deref(),
-            None,
-            Some(old_id),
-        )?;
+        self.create_session(new_id, &source, model.as_deref(), None, Some(old_id))?;
 
         self.append_message(NewMessage {
             content: Some(summary_text),
@@ -571,11 +597,7 @@ fn end_inclusive_for_bubbles(messages: &[StoredMessage], keep: usize) -> Option<
 }
 
 /// 收集气泡半开区间 `[start, end)` 内的消息 id（含区间内 assistant 后的连续 tool）。
-fn message_ids_in_bubble_range(
-    messages: &[StoredMessage],
-    start: usize,
-    end: usize,
-) -> Vec<i64> {
+fn message_ids_in_bubble_range(messages: &[StoredMessage], start: usize, end: usize) -> Vec<i64> {
     if start >= end || messages.is_empty() {
         return Vec::new();
     }
