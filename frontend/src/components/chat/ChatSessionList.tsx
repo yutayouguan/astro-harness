@@ -2,8 +2,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { MoreHorizontal, Plus } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Download,
+  GitBranch,
+  MoreVertical,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import {
   deleteManagedSession,
@@ -34,6 +47,41 @@ function sessionTitle(
 
 function isPinned(item: RecentSessionDto): boolean {
   return Boolean(item.pinnedAt);
+}
+
+/** RFC3339 / ISO → 相对时间（1 分钟前 / 2 小时前 …） */
+function formatSessionRelativeTime(
+  iso: string | null | undefined,
+  t: (key: MessageKey, vars?: Record<string, string>) => string,
+): string {
+  if (!iso) return t("time.justNow");
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return t("time.justNow");
+  const diff = Math.max(0, Date.now() - ms);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const week = 7 * day;
+  const month = 30 * day;
+  const year = 365 * day;
+
+  if (diff < minute) return t("time.justNow");
+  if (diff < hour) {
+    return t("time.minutesAgo", { n: String(Math.floor(diff / minute)) });
+  }
+  if (diff < day) {
+    return t("time.hoursAgo", { n: String(Math.floor(diff / hour)) });
+  }
+  if (diff < week) {
+    return t("time.daysAgo", { n: String(Math.floor(diff / day)) });
+  }
+  if (diff < month) {
+    return t("time.weeksAgo", { n: String(Math.floor(diff / week)) });
+  }
+  if (diff < year) {
+    return t("time.monthsAgo", { n: String(Math.floor(diff / month)) });
+  }
+  return t("time.yearsAgo", { n: String(Math.max(1, Math.floor(diff / year))) });
 }
 
 function sanitizeExportFilename(title: string, sessionId: string): string {
@@ -484,7 +532,9 @@ export default function ChatSessionList({
                       </span>
                     ) : null}
                   </strong>
-                  <span>{s.sessionId.slice(0, 8)}</span>
+                  <span className="chat-session-time">
+                    {formatSessionRelativeTime(s.createdAt, t)}
+                  </span>
                 </button>
                 <div
                   className={`chat-session-menu-wrap ${menuOpen ? "is-open" : ""}`}
@@ -502,7 +552,7 @@ export default function ChatSessionList({
                       setMenuSessionId(menuOpen ? null : s.sessionId);
                     }}
                   >
-                    <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden />
+                    <MoreVertical size={15} strokeWidth={1.75} aria-hidden />
                   </button>
                   {menuOpen ? (
                     <div className="chat-session-menu" role="menu">
@@ -512,6 +562,11 @@ export default function ChatSessionList({
                         disabled={busy}
                         onClick={() => handlePinToggle(s)}
                       >
+                        {isPinned(s) ? (
+                          <PinOff size={14} strokeWidth={1.75} aria-hidden />
+                        ) : (
+                          <Pin size={14} strokeWidth={1.75} aria-hidden />
+                        )}
                         {isPinned(s) ? t("sessions.unpin") : t("sessions.pin")}
                       </button>
                       <button
@@ -520,6 +575,7 @@ export default function ChatSessionList({
                         disabled={busy}
                         onClick={() => handleRename(s)}
                       >
+                        <Pencil size={14} strokeWidth={1.75} aria-hidden />
                         {t("sessions.rename")}
                       </button>
                       <button
@@ -528,6 +584,7 @@ export default function ChatSessionList({
                         disabled={busy}
                         onClick={() => handleRegenerateTitle(s)}
                       >
+                        <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
                         {t("sessions.regenerateTitle")}
                       </button>
                       <button
@@ -536,6 +593,7 @@ export default function ChatSessionList({
                         disabled={busy}
                         onClick={() => handleExport(s)}
                       >
+                        <Download size={14} strokeWidth={1.75} aria-hidden />
                         {t("sessions.export")}
                       </button>
                       <button
@@ -544,6 +602,7 @@ export default function ChatSessionList({
                         disabled={busy}
                         onClick={() => handleBranch(s)}
                       >
+                        <GitBranch size={14} strokeWidth={1.75} aria-hidden />
                         {t("sessions.branch")}
                       </button>
                       <button
@@ -552,6 +611,11 @@ export default function ChatSessionList({
                         disabled={busy}
                         onClick={() => handleArchiveToggle(s)}
                       >
+                        {listKind === "archived" ? (
+                          <ArchiveRestore size={14} strokeWidth={1.75} aria-hidden />
+                        ) : (
+                          <Archive size={14} strokeWidth={1.75} aria-hidden />
+                        )}
                         {listKind === "archived"
                           ? t("sessions.unarchive")
                           : t("sessions.archive")}
@@ -563,6 +627,7 @@ export default function ChatSessionList({
                         disabled={busy}
                         onClick={() => handleDelete(s)}
                       >
+                        <Trash2 size={14} strokeWidth={1.75} aria-hidden />
                         {t("sessions.deletePermanently")}
                       </button>
                     </div>

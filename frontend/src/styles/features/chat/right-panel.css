@@ -476,8 +476,7 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 72%, transparent);
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--tone-blue, #2563eb) 10%, rgba(15, 23, 42, 0.04)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    inset 2.5px 0 0 var(--tone-blue, #2563eb);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 html[data-theme="dark"] .chat-session-row {
@@ -499,8 +498,7 @@ html[data-theme="dark"] .chat-session-row.is-active {
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 48%, transparent);
   box-shadow:
     0 6px 18px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 2.5px 0 0 var(--tone-blue, #60a5fa);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .chat-session-item {
@@ -604,6 +602,9 @@ html[data-theme="dark"] .chat-session-menu {
 }
 
 .chat-session-menu button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -614,8 +615,17 @@ html[data-theme="dark"] .chat-session-menu {
   cursor: pointer;
 }
 
+.chat-session-menu button svg {
+  flex-shrink: 0;
+  opacity: 0.78;
+}
+
 .chat-session-menu button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.chat-session-menu button:hover:not(:disabled) svg {
+  opacity: 1;
 }
 
 .chat-session-menu button:disabled {
@@ -627,6 +637,10 @@ html[data-theme="dark"] .chat-session-menu {
   color: color-mix(in srgb, #dc2626 82%, var(--ink));
 }
 
+.chat-session-menu button.is-danger svg {
+  opacity: 0.9;
+}
+
 .chat-session-item strong {
   font-size: 13px;
   font-weight: 650;
@@ -634,7 +648,7 @@ html[data-theme="dark"] .chat-session-menu {
   line-height: 1.35;
 }
 
-.chat-session-item span {
+.chat-session-item .chat-session-time {
   font-size: 11.5px;
   color: var(--ink-mute);
   letter-spacing: 0.01em;
@@ -659,7 +673,7 @@ html[data-theme="dark"] .chat-session-menu {
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 22%, transparent);
 }
 
-.chat-session-item strong .chat-session-badge {
+.chat-session-item strong .chat-session-badge:not(.is-pinned) {
   color: var(--ink-soft);
   font-size: 11px;
 }
