@@ -184,6 +184,84 @@ impl AuxiliaryConfig {
     }
 }
 
+fn default_max_skill_bytes() -> usize {
+    15_360
+}
+
+/// 离线进化门禁（`config.yaml` 的 `evolution.gates` 段）。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct EvolutionGates {
+    /// 候选变体须通过测试。
+    #[serde(default = "default_true")]
+    pub run_tests: bool,
+    /// Skill 体积上限（字节，默认 ~15KB）。
+    #[serde(default = "default_max_skill_bytes")]
+    pub max_skill_bytes: usize,
+    /// 只允许开 PR，禁止直接落库。
+    #[serde(default = "default_true")]
+    pub require_pr: bool,
+}
+
+impl Default for EvolutionGates {
+    fn default() -> Self {
+        Self {
+            run_tests: true,
+            max_skill_bytes: 15_360,
+            require_pr: true,
+        }
+    }
+}
+
+/// 离线进化配置（`config.yaml` 的 `evolution:` 段）。
+///
+/// 与 `auxiliary`（在线便宜辅助）分离：进化为离线批量、可接受慢与贵；
+/// `reflection` 应显式指向强模型，`judge` 可省或走中等模型。
+/// 引擎（GEPA/DSPy 流水线）本身为 Phase 2，未实现；此处只承载配置。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+pub struct EvolutionConfig {
+    /// 离线进化总开关（默认关）。
+    #[serde(default)]
+    pub enabled: bool,
+    /// 反思/变异路由：读 trace 诊断失败、提出改写。建议强模型。
+    #[serde(default)]
+    pub reflection: AuxiliaryRoute,
+    /// 评测路由：对候选判分（可省或中等模型）。
+    #[serde(default)]
+    pub judge: AuxiliaryRoute,
+    /// 门禁。
+    #[serde(default)]
+    pub gates: EvolutionGates,
+}
+
+/// 进化路由用途。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvolutionRouteKind {
+    /// 反思/变异。
+    Reflection,
+    /// 评测。
+    Judge,
+}
+
+impl EvolutionRouteKind {
+    pub const ALL: [Self; 2] = [Self::Reflection, Self::Judge];
+
+    pub const fn config_key(self) -> &'static str {
+        match self {
+            Self::Reflection => "reflection",
+            Self::Judge => "judge",
+        }
+    }
+}
+
+impl EvolutionConfig {
+    pub fn route(&self, kind: EvolutionRouteKind) -> &AuxiliaryRoute {
+        match kind {
+            EvolutionRouteKind::Reflection => &self.reflection,
+            EvolutionRouteKind::Judge => &self.judge,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Default)]
 struct FileConfig {
     #[serde(default)]
@@ -192,6 +270,8 @@ struct FileConfig {
     auxiliary: Option<AuxiliaryConfig>,
     #[serde(default)]
     learning: Option<LearningConfig>,
+    #[serde(default)]
+    evolution: Option<EvolutionConfig>,
 }
 
 fn read_file_config(base: &Path) -> FileConfig {
@@ -236,6 +316,11 @@ pub fn load_auxiliary_config(base: &Path) -> AuxiliaryConfig {
 /// 从 `{base}/config.yaml` 加载学习闭环配置。
 pub fn load_learning_config(base: &Path) -> LearningConfig {
     read_file_config(base).learning.unwrap_or_default()
+}
+
+/// 从 `{base}/config.yaml` 加载离线进化配置。
+pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
+    read_file_config(base).evolution.unwrap_or_default()
 }
 
 fn config_yaml_path(base: &Path) -> std::path::PathBuf {
@@ -378,6 +463,64 @@ pub fn reset_all_auxiliary_routes(base: &Path) -> anyhow::Result<AuxiliaryConfig
     Ok(load_auxiliary_config(base))
 }
 
+/// 设置嵌套无符号整数键（如 `evolution.gates.max_skill_bytes`）。
+fn set_nested_usize(base: &Path, parents: &[&str], key: &str, value: usize) -> anyhow::Result<()> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, parents)?;
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Number(serde_yaml::Number::from(value as u64)),
+    );
+    save_yaml_root(base, &root)
+}
+
+/// 设置 `evolution.enabled` 并返回最新配置。
+pub fn set_evolution_enabled(base: &Path, enabled: bool) -> anyhow::Result<EvolutionConfig> {
+    set_nested_bool(base, &["evolution"], "enabled", enabled)?;
+    Ok(load_evolution_config(base))
+}
+
+/// 设置单个进化路由（`reflection` / `judge`）并返回最新配置。
+pub fn set_evolution_route(
+    base: &Path,
+    kind: EvolutionRouteKind,
+    route: AuxiliaryRoute,
+) -> anyhow::Result<EvolutionConfig> {
+    set_nested_route(base, &["evolution"], kind.config_key(), &route)?;
+    Ok(load_evolution_config(base))
+}
+
+/// 将两条进化路由重置为 `auto/auto` 并返回最新配置。
+pub fn reset_all_evolution_routes(base: &Path) -> anyhow::Result<EvolutionConfig> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, &["evolution"])?;
+    let default_route = AuxiliaryRoute::default();
+    for kind in EvolutionRouteKind::ALL {
+        map.insert(
+            serde_yaml::Value::String(kind.config_key().to_string()),
+            route_to_value(&default_route),
+        );
+    }
+    save_yaml_root(base, &root)?;
+    Ok(load_evolution_config(base))
+}
+
+/// 设置进化门禁并返回最新配置。
+pub fn set_evolution_gates(
+    base: &Path,
+    gates: &EvolutionGates,
+) -> anyhow::Result<EvolutionConfig> {
+    set_nested_bool(base, &["evolution", "gates"], "run_tests", gates.run_tests)?;
+    set_nested_bool(base, &["evolution", "gates"], "require_pr", gates.require_pr)?;
+    set_nested_usize(
+        base,
+        &["evolution", "gates"],
+        "max_skill_bytes",
+        gates.max_skill_bytes,
+    )?;
+    Ok(load_evolution_config(base))
+}
+
 /// 将辅助路由解析为具体 `(provider, model)`。
 ///
 /// `provider`/`model` 为 `auto`（忽略大小写）或空白时，回退到会话主模型。
@@ -438,6 +581,65 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         set_auto_refresh_on_update(dir.path(), false).unwrap();
         assert!(!load_memory_config(dir.path()).auto_refresh_on_update);
+    }
+
+    #[test]
+    fn evolution_defaults_and_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = load_evolution_config(dir.path());
+        assert_eq!(cfg, EvolutionConfig::default());
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.reflection, AuxiliaryRoute::default());
+        assert_eq!(cfg.judge, AuxiliaryRoute::default());
+        assert!(cfg.gates.run_tests);
+        assert!(cfg.gates.require_pr);
+        assert_eq!(cfg.gates.max_skill_bytes, 15_360);
+    }
+
+    #[test]
+    fn evolution_set_enabled_route_and_gates_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("config.yaml"), "hooks:\n  enabled: true\n").unwrap();
+
+        let cfg = set_evolution_enabled(dir.path(), true).unwrap();
+        assert!(cfg.enabled);
+
+        set_evolution_route(
+            dir.path(),
+            EvolutionRouteKind::Reflection,
+            AuxiliaryRoute {
+                provider: "prov-strong".into(),
+                model: "big".into(),
+            },
+        )
+        .unwrap();
+        let cfg = load_evolution_config(dir.path());
+        assert_eq!(cfg.reflection.provider, "prov-strong");
+        assert_eq!(cfg.reflection.model, "big");
+        assert_eq!(cfg.judge, AuxiliaryRoute::default());
+
+        let cfg = set_evolution_gates(
+            dir.path(),
+            &EvolutionGates {
+                run_tests: false,
+                max_skill_bytes: 8192,
+                require_pr: false,
+            },
+        )
+        .unwrap();
+        assert!(!cfg.gates.run_tests);
+        assert!(!cfg.gates.require_pr);
+        assert_eq!(cfg.gates.max_skill_bytes, 8192);
+
+        // 保留无关键
+        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        assert!(text.contains("enabled: true"));
+
+        let cfg = reset_all_evolution_routes(dir.path()).unwrap();
+        assert_eq!(cfg.reflection, AuxiliaryRoute::default());
+        assert_eq!(cfg.judge, AuxiliaryRoute::default());
+        // gates 不受重置路由影响
+        assert!(!cfg.gates.run_tests);
     }
 
     #[test]

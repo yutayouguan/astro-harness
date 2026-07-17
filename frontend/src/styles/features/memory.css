@@ -332,6 +332,26 @@ html[data-theme="dark"] .aux-error {
   font-size: 12px;
 }
 
+.aux-number-input {
+  width: 120px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.14));
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--ink-soft, inherit);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.aux-number-input:focus {
+  outline: none;
+  border-color: var(--accent, #5b8cff);
+}
+
+.evo-phase-note {
+  margin: 4px 2px 0;
+}
+
 .aux-task-list {
   display: flex;
   flex-direction: column;

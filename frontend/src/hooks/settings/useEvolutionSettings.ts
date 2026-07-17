@@ -1,0 +1,98 @@
+import { useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import type { EvolutionRouteId, EvolutionSettingsDto } from "../../types";
+
+type UseEvolutionSettings = {
+  loading: boolean;
+  error: string | null;
+  settings: EvolutionSettingsDto | null;
+  setEnabled(enabled: boolean): Promise<void>;
+  setRoute(route: EvolutionRouteId, provider: string, model: string): Promise<void>;
+  resetRoute(route: EvolutionRouteId): Promise<void>;
+  setGates(runTests: boolean, maxSkillBytes: number, requirePr: boolean): Promise<void>;
+  reload(): Promise<void>;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+export function useEvolutionSettings(active = true): UseEvolutionSettings {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<EvolutionSettingsDto | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!active) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await invoke<EvolutionSettingsDto>("get_evolution_settings");
+      setSettings(next);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [active]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const setEnabled = useCallback(async (enabled: boolean) => {
+    setError(null);
+    try {
+      const next = await invoke<EvolutionSettingsDto>("set_evolution_enabled", { enabled });
+      setSettings(next);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, []);
+
+  const setRoute = useCallback(
+    async (route: EvolutionRouteId, provider: string, model: string) => {
+      setError(null);
+      try {
+        const next = await invoke<EvolutionSettingsDto>("set_evolution_route", {
+          route,
+          provider,
+          model,
+        });
+        setSettings(next);
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    },
+    [],
+  );
+
+  const resetRoute = useCallback(async (route: EvolutionRouteId) => {
+    setError(null);
+    try {
+      const next = await invoke<EvolutionSettingsDto>("reset_evolution_route", { route });
+      setSettings(next);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, []);
+
+  const setGates = useCallback(
+    async (runTests: boolean, maxSkillBytes: number, requirePr: boolean) => {
+      setError(null);
+      try {
+        const next = await invoke<EvolutionSettingsDto>("set_evolution_gates", {
+          runTests,
+          maxSkillBytes,
+          requirePr,
+        });
+        setSettings(next);
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    },
+    [],
+  );
+
+  return { loading, error, settings, setEnabled, setRoute, resetRoute, setGates, reload };
+}

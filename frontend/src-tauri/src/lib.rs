@@ -11,6 +11,7 @@ mod compaction_commands;
 mod config_commands;
 mod dreaming_commands;
 mod env_hydrate;
+mod evolution_commands;
 mod fs_ops;
 mod grpc;
 mod ip_location;
@@ -407,6 +408,11 @@ pub fn run() {
             auxiliary_commands::set_auxiliary_route,
             auxiliary_commands::reset_auxiliary_route,
             auxiliary_commands::reset_all_auxiliary_routes,
+            evolution_commands::get_evolution_settings,
+            evolution_commands::set_evolution_enabled,
+            evolution_commands::set_evolution_route,
+            evolution_commands::reset_evolution_route,
+            evolution_commands::set_evolution_gates,
         ])
         .setup(|app| {
             if let Err(err) = memory::ensure_default_workspace() {

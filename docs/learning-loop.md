@@ -81,6 +81,18 @@ learning:
 
 ---
 
-## Phase 2（占位）
+## Phase 2（离线进化）
 
 离线遗传优化：读取执行轨迹 → 生成 Skill/提示变体 → 测试与体积门禁 → 人工审 PR。独立流水线，不改变运行时默认行为。
+
+**当前已落地「配置层」**（引擎仍未实现）：模型服务页新增「离线进化」子 Tab，可设置 `evolution.enabled`、`reflection` / `judge` 两条模型路由、以及门禁（run_tests / require_pr / max_skill_bytes）。配置写入 `config.yaml` 的 `evolution:` 段。
+
+模型角色（不复用在线 `auxiliary.*`）：
+
+| 角色 | 职责 | 模型倾向 |
+|------|------|----------|
+| reflection | 读 trace 诊断失败并提出改写 | 强推理模型 |
+| judge | 对候选判分 | 可省或中等模型 |
+| target | 被优化对象实际运行 | 生产主模型 |
+
+详见规格 [`specs/2026-07-17-agent-learning-loop-design.md`](./superpowers/specs/2026-07-17-agent-learning-loop-design.md)。

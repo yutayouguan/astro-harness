@@ -11,6 +11,7 @@ import {
 import {
   Box,
   Brain,
+  Dna,
   Eye,
   EyeOff,
   Globe,
@@ -44,6 +45,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
 import AuxiliaryModelsPanel from "./AuxiliaryModelsPanel";
+import EvolutionModelsPanel from "./EvolutionModelsPanel";
 import { formatContextWindow } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
@@ -134,7 +136,7 @@ type Draft = {
 
 type DetailTab = "chat" | "media";
 
-type PageTab = "providers" | "auxiliary";
+type PageTab = "providers" | "auxiliary" | "evolution";
 
 const MEDIA_MODEL_DEFAULTS: Record<
   string,
@@ -1298,10 +1300,22 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           <Brain size={14} strokeWidth={2.2} aria-hidden />
           {t("providers.tabAuxiliary")}
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pageTab === "evolution"}
+          className={`providers-page-tab ${pageTab === "evolution" ? "is-active" : ""}`}
+          onClick={() => setPageTab("evolution")}
+        >
+          <Dna size={14} strokeWidth={2.2} aria-hidden />
+          {t("providers.tabEvolution")}
+        </button>
       </div>
 
       {pageTab === "auxiliary" ? (
         <AuxiliaryModelsPanel active={active} embedded />
+      ) : pageTab === "evolution" ? (
+        <EvolutionModelsPanel active={active} />
       ) : (
       <div className="providers-layout">
         <aside className="providers-pane providers-pane-list">

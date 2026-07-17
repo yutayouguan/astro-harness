@@ -231,6 +231,34 @@ export type AuxiliarySettingsDto = {
   activeModel: string;
 };
 
+/** 离线进化路由 id（对齐 `memory::EvolutionRouteKind`） */
+export type EvolutionRouteId = "reflection" | "judge";
+
+/** 单条进化路由展示态（Tauri `get_evolution_settings`） */
+export type EvolutionRouteDto = {
+  id: EvolutionRouteId;
+  provider: string;
+  model: string;
+  displayLabel: string;
+  unavailable: boolean;
+};
+
+/** 进化门禁展示态 */
+export type EvolutionGatesDto = {
+  runTests: boolean;
+  maxSkillBytes: number;
+  requirePr: boolean;
+};
+
+/** 离线进化设置全量（enabled + reflection/judge 路由 + gates） */
+export type EvolutionSettingsDto = {
+  enabled: boolean;
+  routes: EvolutionRouteDto[];
+  gates: EvolutionGatesDto;
+  activeProviderId: string | null;
+  activeModel: string;
+};
+
 /** 拉取模型列表结果 */
 export type ProviderModelsResult = {
   models: ModelInfo[];
