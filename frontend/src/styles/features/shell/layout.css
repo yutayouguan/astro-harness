@@ -281,15 +281,13 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 /*
- * 内部细节染色：
- * - 默认：由 IconBase 给 cutout/hole 写上 stroke={url(#grad)} 表现属性（与外轮廓同一套，WebKit 可靠）
- * - CSS 默认态只调粗细，不再改 stroke/fill，避免盖掉表现属性
- * - 选中：才用浅色实色 --nav-icon-cutout 覆盖成透镜镂空
+ * 内部细节染色（与工作空间 <> 同一策略）：
+ * - 默认：强制实色 --nav-grad-bottom（不要用近白镂空色，空心时会隐形）
+ * - 选中：用偏亮的 tone 实色做透镜，仍保持对比度
  */
 .nav-icon svg .nav-icon-cutout,
 .nav-icon svg .nav-icon-hole,
 .nav-icon svg .nav-icon-stroke {
-  /* 保留 IconBase 写入的 stroke 表现属性 */
   stroke-width: 1.75;
 }
 
@@ -300,21 +298,33 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   fill: none;
 }
 
-/* 选中：折线细节改成浅色透镜描边 */
+.nav-item:not(.active) .nav-icon svg path.nav-icon-cutout,
+.nav-item:not(.active) .nav-icon svg .nav-icon-hole,
+.nav-item:not(.active) .nav-icon svg .nav-icon-stroke {
+  stroke: var(--nav-grad-bottom) !important;
+  fill: none !important;
+}
+
+.nav-item:not(.active) .nav-icon svg circle.nav-icon-cutout {
+  fill: var(--nav-grad-bottom) !important;
+  stroke: none !important;
+}
+
+/* 选中：亮色透镜，但仍带 tone，避免在空心时变成纯白隐形 */
 .nav-item.active .nav-icon svg path.nav-icon-cutout {
-  fill: none;
-  stroke: var(--nav-icon-cutout);
+  fill: none !important;
+  stroke: var(--nav-grad-top) !important;
   stroke-width: 2.35;
 }
 
 .nav-item.active .nav-icon svg circle.nav-icon-cutout {
-  fill: var(--nav-icon-cutout);
-  stroke: none;
+  fill: var(--nav-grad-top) !important;
+  stroke: none !important;
 }
 
 .nav-item.active .nav-icon svg .nav-icon-hole {
-  fill: var(--nav-icon-cutout);
-  stroke: none;
+  fill: var(--nav-grad-top) !important;
+  stroke: none !important;
 }
 
 .nav-icon svg .nav-icon-stroke {
@@ -391,19 +401,25 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 }
 
 .page-title-icon svg .nav-icon-cutout {
-  fill: var(--nav-icon-cutout);
-  stroke: none;
+  fill: none;
+  stroke: var(--nav-grad-bottom);
+  stroke-width: 1.75;
 }
 
 .page-title-icon svg path.nav-icon-cutout {
-  fill: none;
-  stroke: var(--nav-icon-cutout);
-  stroke-width: 2.35;
+  fill: none !important;
+  stroke: var(--nav-grad-bottom) !important;
+  stroke-width: 1.75;
+}
+
+.page-title-icon svg circle.nav-icon-cutout {
+  fill: var(--nav-grad-bottom) !important;
+  stroke: none !important;
 }
 
 .page-title-icon svg .nav-icon-hole {
-  fill: var(--nav-icon-cutout);
-  stroke: none;
+  fill: none !important;
+  stroke: var(--nav-grad-bottom) !important;
 }
 
 .page-title-icon svg .nav-icon-stroke {
