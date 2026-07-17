@@ -6,31 +6,69 @@
 //!
 //! Triggers (either fires):
 //! - count: uncompressed tool results ≥ [`ToolCompressionManager::tool_results_limit`]
-//! - token: estimated session tokens ≥ [`ToolCompressionManager::compress_token_limit`]
+//! - window: estimated session tokens / [`ToolCompressionManager::context_window`]
+//!   reaches a staged occupancy ratio (soft → medium → hard)
 
 use common::message::{Message, Role};
 
-use crate::prompt::context_usage::estimate_tokens;
+use crate::prompt::context_usage::{estimate_tokens, DEFAULT_CONTEXT_WINDOW};
 
 pub const DEFAULT_TOOL_RESULTS_LIMIT: usize = 12;
-/// 默认 token 阈值（ceil(chars/4) 估算）；与 Agno `compress_token_limit` 对齐为可选第二触发器。
-/// 桌面 Agent 常单轮数十次工具调用：优先靠本阈值控窗口，条数阈值仅作兜底。
-pub const DEFAULT_COMPRESS_TOKEN_LIMIT: usize = 16_000;
-const DEFAULT_MAX_COMPRESSED_CHARS: usize = 1800;
-const HEAD_CHARS: usize = 1100;
-const TAIL_CHARS: usize = 500;
+
+/// Soft / Medium / Hard：按上下文占用比例选择截断强度。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CompressionStage {
+    /// 占用 ≥ 该比例时进入本阶段（取最高匹配阶段）。
+    pub min_ratio: f32,
+    pub max_compressed_chars: usize,
+    pub head_chars: usize,
+    pub tail_chars: usize,
+}
+
+/// 默认三阶段（相对模型上下文窗口）：
+/// - Soft 40%：轻压，多留事实
+/// - Medium 60%：标准头尾
+/// - Hard 80%：强压，保住窗口
+pub const DEFAULT_COMPRESSION_STAGES: [CompressionStage; 3] = [
+    CompressionStage {
+        min_ratio: 0.40,
+        max_compressed_chars: 2_400,
+        head_chars: 1_600,
+        tail_chars: 600,
+    },
+    CompressionStage {
+        min_ratio: 0.60,
+        max_compressed_chars: 1_800,
+        head_chars: 1_100,
+        tail_chars: 500,
+    },
+    CompressionStage {
+        min_ratio: 0.80,
+        max_compressed_chars: 900,
+        head_chars: 600,
+        tail_chars: 200,
+    },
+];
+
+/// 条数兜底触发时用的轻压参数（尚未摸到 Soft 占用）。
+const COUNT_FALLBACK_STAGE: CompressionStage = CompressionStage {
+    min_ratio: 0.0,
+    max_compressed_chars: 2_400,
+    head_chars: 1_600,
+    tail_chars: 600,
+};
 
 #[derive(Debug, Clone)]
 pub struct ToolCompressionManager {
     pub enabled: bool,
     /// 未压缩 tool 结果条数阈值；`0` 表示关闭条数触发。
     ///
-    /// 默认 12：比 Agno 的 3 更宽松，避免「一轮几十次工具」时频繁压短结果；
-    /// 真正控窗口主要靠 [`Self::compress_token_limit`]。
+    /// 默认 12：桌面长工具链下的兜底；主路径是按窗口占用分阶段压缩。
     pub tool_results_limit: usize,
-    /// 会话消息估算 token 阈值；`None` 表示关闭 token 触发。
-    pub compress_token_limit: Option<usize>,
-    pub max_compressed_chars: usize,
+    /// 模型上下文窗口（token）；`0` 时回退 [`DEFAULT_CONTEXT_WINDOW`]。
+    pub context_window: u32,
+    /// 按占用比例排序的阶段表（升序 `min_ratio`）。
+    pub stages: Vec<CompressionStage>,
 }
 
 impl Default for ToolCompressionManager {
@@ -38,57 +76,100 @@ impl Default for ToolCompressionManager {
         Self {
             enabled: true,
             tool_results_limit: DEFAULT_TOOL_RESULTS_LIMIT,
-            compress_token_limit: Some(DEFAULT_COMPRESS_TOKEN_LIMIT),
-            max_compressed_chars: DEFAULT_MAX_COMPRESSED_CHARS,
+            context_window: DEFAULT_CONTEXT_WINDOW,
+            stages: DEFAULT_COMPRESSION_STAGES.to_vec(),
         }
     }
 }
 
 impl ToolCompressionManager {
-    /// 是否应压缩：有未压缩 tool 结果，且（条数超限 **或** token 超限）。
-    pub fn should_compress(&self, messages: &[Message]) -> bool {
-        if !self.enabled {
-            return false;
-        }
-        let uncompressed = uncompressed_tool_result_count(messages);
-        if uncompressed == 0 {
-            return false;
-        }
-        if self.tool_results_limit > 0 && uncompressed >= self.tool_results_limit {
-            return true;
-        }
-        if let Some(limit) = self.compress_token_limit {
-            if limit > 0 && estimate_messages_tokens(messages) as usize >= limit {
-                return true;
-            }
-        }
-        false
+    pub fn with_context_window(mut self, window: u32) -> Self {
+        self.context_window = if window == 0 {
+            DEFAULT_CONTEXT_WINDOW
+        } else {
+            window
+        };
+        self
     }
 
-    pub fn compress_content(&self, tool_name: Option<&str>, content: &str) -> Option<String> {
+    pub fn with_count_disabled(mut self) -> Self {
+        self.tool_results_limit = 0;
+        self
+    }
+
+    pub fn effective_context_window(&self) -> u32 {
+        if self.context_window == 0 {
+            DEFAULT_CONTEXT_WINDOW
+        } else {
+            self.context_window
+        }
+    }
+
+    /// 当前消息估算占用比例（0.0–∞，通常 < 1.0）。
+    pub fn occupancy_ratio(&self, messages: &[Message]) -> f32 {
+        let window = self.effective_context_window().max(1) as f32;
+        estimate_messages_tokens(messages) as f32 / window
+    }
+
+    /// 按占用选择最高匹配阶段；未达 Soft 则 `None`。
+    pub fn active_stage(&self, messages: &[Message]) -> Option<CompressionStage> {
+        let ratio = self.occupancy_ratio(messages);
+        self.stages
+            .iter()
+            .rev()
+            .find(|s| ratio >= s.min_ratio)
+            .copied()
+    }
+
+    /// 本次应使用的截断参数：优先窗口阶段，否则条数兜底用 Soft 级。
+    pub fn stage_for_compress(&self, messages: &[Message]) -> Option<CompressionStage> {
+        if let Some(stage) = self.active_stage(messages) {
+            return Some(stage);
+        }
+        let uncompressed = uncompressed_tool_result_count(messages);
+        if self.tool_results_limit > 0 && uncompressed >= self.tool_results_limit {
+            return Some(COUNT_FALLBACK_STAGE);
+        }
+        None
+    }
+
+    /// 是否应压缩：有未压缩 tool，且（条数超限 **或** 已进入任一窗口阶段）。
+    pub fn should_compress(&self, messages: &[Message]) -> bool {
+        self.enabled && self.stage_for_compress(messages).is_some()
+    }
+
+    pub fn compress_content(
+        &self,
+        tool_name: Option<&str>,
+        content: &str,
+        stage: CompressionStage,
+    ) -> Option<String> {
         let trimmed = content.trim();
         if trimmed.is_empty() {
             return None;
         }
 
         let char_count = trimmed.chars().count();
-        if char_count <= self.max_compressed_chars {
+        if char_count <= stage.max_compressed_chars {
             // Still mark it as compressed when the threshold fires, so the same tool
             // row is not repeatedly reconsidered in later rounds.
             return Some(trimmed.to_string());
         }
 
-        let head: String = trimmed.chars().take(HEAD_CHARS).collect();
-        let tail_vec: Vec<char> = trimmed.chars().rev().take(TAIL_CHARS).collect();
+        let head_n = stage.head_chars.min(stage.max_compressed_chars);
+        let tail_n = stage.tail_chars.min(stage.max_compressed_chars.saturating_sub(head_n));
+        let head: String = trimmed.chars().take(head_n).collect();
+        let tail_vec: Vec<char> = trimmed.chars().rev().take(tail_n).collect();
         let tail: String = tail_vec.into_iter().rev().collect();
-        let removed = char_count.saturating_sub(HEAD_CHARS + TAIL_CHARS);
+        let removed = char_count.saturating_sub(head_n + tail_n);
         let name = tool_name
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .unwrap_or("unknown");
+        let pct = (stage.min_ratio * 100.0).round() as i32;
 
         Some(format!(
-            "[astro:compressed-tool-result]\nTool: {name}\nOriginal chars: {char_count}; removed middle chars: {removed}.\nPreserved head/tail because the full result is stored in session history.\n\n{head}\n\n...[compressed middle omitted]...\n\n{tail}"
+            "[astro:compressed-tool-result stage≥{pct}%]\nTool: {name}\nOriginal chars: {char_count}; removed middle chars: {removed}.\nPreserved head/tail because the full result is stored in session history.\n\n{head}\n\n...[compressed middle omitted]...\n\n{tail}"
         ))
     }
 }
@@ -142,7 +223,6 @@ mod tests {
         almost.pop();
         assert!(!mgr.should_compress(&almost));
 
-        // once marked compressed, they no longer count toward the limit
         let mut marked = vec![
             Message::tool("a"),
             Message::tool("b"),
@@ -155,30 +235,46 @@ mod tests {
     }
 
     #[test]
-    fn token_threshold_triggers_with_few_tools() {
-        let mgr = ToolCompressionManager {
-            enabled: true,
-            tool_results_limit: 99, // count alone won't fire
-            compress_token_limit: Some(100),
-            max_compressed_chars: DEFAULT_MAX_COMPRESSED_CHARS,
-        };
-        // ~800 chars → ~200 tokens
-        let big = "x".repeat(800);
-        let messages = vec![Message::tool(&big), Message::user("hi")];
-        assert!(mgr.should_compress(&messages));
+    fn window_stage_triggers_relative_to_context_window() {
+        // 小窗口：少量内容即可摸到 Soft 40%
+        let mgr = ToolCompressionManager::default()
+            .with_context_window(1_000)
+            .with_count_disabled();
+        // ~800 chars → ~200 tokens → 20% of 1000 — below soft
+        let mid = "x".repeat(800);
+        let below = vec![Message::tool(&mid)];
+        assert!(mgr.occupancy_ratio(&below) < 0.40);
+        assert!(!mgr.should_compress(&below));
+
+        // ~2000 chars → ~500 tokens → 50% of 1000 — soft
+        let big = "x".repeat(2_000);
+        let above = vec![Message::tool(&big)];
+        assert!(mgr.occupancy_ratio(&above) >= 0.40);
+        assert_eq!(
+            mgr.active_stage(&above).map(|s| s.min_ratio),
+            Some(0.40)
+        );
+        assert!(mgr.should_compress(&above));
     }
 
     #[test]
-    fn token_threshold_disabled_skips_token_path() {
-        let mgr = ToolCompressionManager {
-            enabled: true,
-            tool_results_limit: 99,
-            compress_token_limit: None,
-            max_compressed_chars: DEFAULT_MAX_COMPRESSED_CHARS,
-        };
-        let big = "x".repeat(80_000);
-        let messages = vec![Message::tool(&big)];
-        assert!(!mgr.should_compress(&messages));
+    fn hard_stage_when_occupancy_high() {
+        let mgr = ToolCompressionManager::default()
+            .with_context_window(1_000)
+            .with_count_disabled();
+        // ~3600 chars → ~900 tokens → 90%
+        let huge = "x".repeat(3_600);
+        let messages = vec![Message::tool(&huge)];
+        assert_eq!(
+            mgr.active_stage(&messages).map(|s| s.min_ratio),
+            Some(0.80)
+        );
+        let stage = mgr.stage_for_compress(&messages).unwrap();
+        let out = mgr
+            .compress_content(Some("search"), &huge, stage)
+            .unwrap();
+        assert!(out.contains("stage≥80%"));
+        assert!(out.len() < huge.len());
     }
 
     #[test]
@@ -187,10 +283,7 @@ mod tests {
         for m in &mut messages {
             m.compressed_content = Some("done".into());
         }
-        let mgr = ToolCompressionManager {
-            compress_token_limit: Some(1),
-            ..ToolCompressionManager::default()
-        };
+        let mgr = ToolCompressionManager::default().with_context_window(100);
         assert!(!mgr.should_compress(&messages));
     }
 
@@ -212,7 +305,7 @@ mod tests {
             "middle filler ".repeat(400)
         );
         let compressed = mgr
-            .compress_content(Some("search"), &content)
+            .compress_content(Some("search"), &content, DEFAULT_COMPRESSION_STAGES[1])
             .expect("compressed");
         assert!(compressed.len() < content.len());
         assert!(compressed.contains("id=abc123"));

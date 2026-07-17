@@ -340,7 +340,7 @@ async fn run_multi_turn_stream_inner(
                 recall_chars,
                 tools: &tools,
                 messages: &history,
-                context_window: 0, // 前端用模型窗口覆盖
+                context_window: agent.context_window(),
                 updated_at_ms: chrono::Utc::now().timestamp_millis(),
             });
             drop(agent);

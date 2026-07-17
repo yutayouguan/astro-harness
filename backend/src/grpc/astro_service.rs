@@ -758,6 +758,9 @@ impl AstroService for AstroServiceImpl {
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
             // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 AgentLoop 内回退主模型。
             agent.set_auxiliary_targets(auxiliary_targets);
+            if req.context_window > 0 {
+                agent.set_context_window(req.context_window);
+            }
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }

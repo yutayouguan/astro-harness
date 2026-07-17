@@ -115,6 +115,8 @@ pub struct AgentLoop {
     chat_base_url: String,
     chat_provider: String,
     chat_model: String,
+    /// 当前主模型上下文窗口（token）；压缩阶段按占用比例选用。`0` = 用默认 128k。
+    context_window: u32,
     /// 含 primary 的聊天 fallback 链（供工具/委派下传）。
     chat_targets: Vec<common::ChatTarget>,
     /// 主模型声明（Agno 风格 `model=`）；与 `chat_targets` 同步，不含 API key。
@@ -248,6 +250,7 @@ impl AgentLoop {
             chat_base_url: String::new(),
             chat_provider: String::new(),
             chat_model: String::new(),
+            context_window: crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW,
             chat_targets: Vec::new(),
             model_spec: None,
             auxiliary_targets: std::collections::HashMap::new(),
@@ -720,31 +723,65 @@ impl AgentLoop {
         context_ratio > 0.5
     }
 
+    /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
+    pub fn set_context_window(&mut self, window: u32) {
+        self.context_window = if window == 0 {
+            crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW
+        } else {
+            window
+        };
+    }
+
+    pub fn context_window(&self) -> u32 {
+        if self.context_window == 0 {
+            crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW
+        } else {
+            self.context_window
+        }
+    }
+
     /// 压缩本 run 中尚未压缩的 tool 结果，并写回 DB 的 `compressed_content`。
     ///
-    /// 触发：未压缩 tool 条数 ≥ 阈值，**或**会话估算 token ≥ `compress_token_limit`。
-    /// 原始 tool content 始终保留；provider 发送视图由 `prompt::messages` 决定。
+    /// 触发：未压缩 tool 条数 ≥ 阈值，**或**会话占用达到窗口 Soft/Medium/Hard 阶段。
+    /// 截断强度随阶段加深；原始 content 始终保留。
     pub fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
-        let manager = ToolCompressionManager::default();
-        if !manager.should_compress(&self.session_messages) {
+        let manager =
+            ToolCompressionManager::default().with_context_window(self.context_window());
+        let Some(stage) = manager.stage_for_compress(&self.session_messages) else {
             return Ok(0);
-        }
+        };
 
         let stored = self.sessions.get_messages(&self.session_id)?;
         let candidates: Vec<_> = stored
             .iter()
             .filter(|m| {
-                m.role == "tool"
-                    && m.compressed_content.is_none()
-                    && m.content
-                        .as_deref()
-                        .map(|s| !s.trim().is_empty())
-                        .unwrap_or(false)
+                if m.role != "tool" {
+                    return false;
+                }
+                let Some(content) = m.content.as_deref() else {
+                    return false;
+                };
+                if content.trim().is_empty() {
+                    return false;
+                }
+                match m.compressed_content.as_deref() {
+                    None => true,
+                    // 占用升到更硬阶段时，对仍偏长的压缩视图用原文重压
+                    Some(c) => c.chars().count() > stage.max_compressed_chars,
+                }
             })
             .collect();
         if candidates.is_empty() {
             return Ok(0);
         }
+
+        tracing::debug!(
+            stage_ratio = stage.min_ratio,
+            window = manager.effective_context_window(),
+            occupancy = manager.occupancy_ratio(&self.session_messages),
+            candidates = candidates.len(),
+            "tool compression stage selected"
+        );
 
         let mut compressed = 0usize;
         for stored_msg in candidates {
@@ -752,7 +789,7 @@ impl AgentLoop {
                 continue;
             };
             let Some(new_content) =
-                manager.compress_content(stored_msg.tool_name.as_deref(), content)
+                manager.compress_content(stored_msg.tool_name.as_deref(), content, stage)
             else {
                 continue;
             };
@@ -760,7 +797,6 @@ impl AgentLoop {
                 .update_message_compressed_content(stored_msg.id, Some(&new_content))?;
             if let Some(runtime_msg) = self.session_messages.iter_mut().find(|m| {
                 m.role == Role::Tool
-                    && m.compressed_content.is_none()
                     && match (&m.tool_call_id, &stored_msg.tool_call_id) {
                         (Some(a), Some(b)) => a == b,
                         (None, None) => m.content_str() == content,

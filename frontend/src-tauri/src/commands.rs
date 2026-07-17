@@ -725,6 +725,14 @@ pub async fn start_chat(
     // 五类辅助任务（标题生成/压缩/智能审批/入梦/回合后 review）已解析目标；
     // 单个任务解析失败时静默跳过，不阻塞主聊天（见 auxiliary_resolver 内部注释）。
     let auxiliary_targets = crate::auxiliary_resolver::build_auxiliary_model_targets(&primary);
+    let context_window = crate::model_meta::enrich_from_id(
+        &primary.model,
+        &primary.backend_id,
+        None,
+    )
+    .context_window
+    .and_then(|n| u32::try_from(n).ok())
+    .unwrap_or(0);
 
     let app2 = app.clone();
     let sid2 = sid.clone();
@@ -749,6 +757,7 @@ pub async fn start_chat(
             thinking_enabled,
             &reasoning_effort,
             &resume_json,
+            context_window,
         )
         .await;
 
@@ -875,6 +884,7 @@ async fn run_chat_stream(
     thinking_enabled: bool,
     reasoning_effort: &str,
     resume_json: &str,
+    context_window: u32,
 ) -> Result<(), String> {
     let endpoint = endpoint_url(grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
@@ -924,6 +934,7 @@ async fn run_chat_stream(
             chat_fallbacks: chat_fallbacks.to_vec(),
             images: images.to_vec(),
             auxiliary_targets: auxiliary_targets.to_vec(),
+            context_window,
         })
         .await
         .map_err(|e| e.to_string())?

@@ -92,6 +92,8 @@ message ChatRequest {
   string image_gen_music_model = 27;
   // 五类辅助任务已解析目标（每类最多 preferred + fallback 两项）；由 Tauri 端解析后下传
   repeated AuxiliaryModelTarget auxiliary_targets = 28;
+  // 主模型上下文窗口（token）；0 = 后端用默认 128k；用于分阶段 tool 压缩
+  uint32 context_window = 29;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。
