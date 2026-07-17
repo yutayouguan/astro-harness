@@ -1,16 +1,44 @@
-//! 工具统一分发：按名称路由到各内置实现，并处理启用检查与调用记账。
+//! 工具统一分发：按名称从自注册 handler 表查找并执行。
 //!
 //! 所有 Agent 侧的工具执行均经 [`dispatch_tool`] 入口，确保禁用工具、
-//! 调用统计与错误格式保持一致。
+//! 调用统计与错误格式保持一致。中央 match 已移除；内置路由由
+//! [`crate::registry::BuiltinToolRegistrar`] inventory 构建。
+
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use crate::context::ToolContext;
+use crate::registry::{BuiltinToolHandler, BuiltinToolRegistrar};
+
+/// 从 inventory 构建的内置工具 name → handler 表（启动时检测重名）。
+fn handler_table() -> &'static HashMap<&'static str, BuiltinToolHandler> {
+    static TABLE: OnceLock<HashMap<&'static str, BuiltinToolHandler>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut map = HashMap::new();
+        for hook in inventory::iter::<BuiltinToolRegistrar> {
+            for &name in hook.names {
+                if map.insert(name, hook.handler).is_some() {
+                    panic!("duplicate builtin tool handler name: {name}");
+                }
+            }
+        }
+        map
+    })
+}
+
+/// 当前已注册的内置 handler 名称（含兼容别名；测试 / 观测用）。
+pub fn builtin_handler_names() -> Vec<&'static str> {
+    let mut names: Vec<_> = handler_table().keys().copied().collect();
+    names.sort_unstable();
+    names
+}
 
 /// 按工具名将调用路由到对应内置实现。
 ///
 /// # 流程
 /// 1. 通过 `registry_allows` 闭包检查 toolset 是否启用，禁用时立即返回错误。
 /// 2. 调用 `home::record_tool_call` 写审计日志，并 `record_usage_tool_call` 累加用量。
-/// 3. 按 `name` 匹配具体模块的 `dispatch` 函数。
+/// 3. 从自注册 handler 表按 `name` 查找并 `await`；未命中时尝试 Skill soft-alias。
 ///
 /// # 参数
 /// - `registry_allows`：通常传入 `registry.is_tool_allowed`，用于读取 `tools-enabled.json` 状态。
@@ -18,7 +46,6 @@ use crate::context::ToolContext;
 ///
 /// # 约束
 /// - 未知工具名返回 `未知工具` 错误；MCP 工具不由本函数处理。
-/// - 部分工具为同步实现，部分为 `async`；调用方需 `await` 本函数。
 pub async fn dispatch_tool(
     registry_allows: impl Fn(&str) -> bool,
     ctx: &mut ToolContext<'_>,
@@ -41,65 +68,25 @@ pub async fn dispatch_tool(
         ctx.turn_id.as_deref(),
     );
 
-    match name {
-        "memory" | "memory_add" | "memory_replace" | "memory_remove" => {
-            crate::memory_tools::dispatch(ctx, name, args)
-        }
-        "session_search" => crate::memory_tools::dispatch_session_search(ctx, args),
-        "search_context" | "pin_context" => crate::context_tools::dispatch(ctx, name, args),
-        "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable" | "scheduled" => {
-            crate::scheduled::dispatch(name, args)
-        }
-        "image_gen" => crate::image_gen::dispatch(ctx, args).await,
-        "video_gen" => crate::video_gen::dispatch(ctx, args).await,
-        "video_understand" => crate::video_understand::dispatch(ctx, args).await,
-        "file_ops" => crate::file_ops::dispatch(ctx, args),
-        "terminal" => crate::terminal::dispatch(ctx, args).await,
-        "web_search" => crate::web_search::dispatch(ctx, args).await,
-        "web_extract" => crate::web_extract::dispatch(ctx, args).await,
-        "code_exec" => crate::code_exec::dispatch(ctx, args).await,
-        "vision" => crate::vision::dispatch(ctx, args).await,
-        "robotics" => crate::robotics::dispatch(ctx, args).await,
-        "tts" => crate::tts::dispatch(ctx, args).await,
-        "audio_understand" => crate::audio_understand::dispatch(ctx, args).await,
-        "music_gen" => crate::music_gen::dispatch(ctx, args).await,
-        "skills" => crate::skills_tool::dispatch(ctx, args),
-        "clarify" => crate::clarify::dispatch(ctx, args),
-        "confirm" => crate::confirm::dispatch(ctx, args),
-        "request_user_location" => crate::request_user_location::dispatch(ctx, args),
-        "present_ui" => crate::present_ui::dispatch(ctx, args),
-        "present_metrics" => crate::present_metrics::dispatch(ctx, args),
-        "present_callout" => crate::present_callout::dispatch(ctx, args),
-        "present_result" => crate::present_result::dispatch(ctx, args),
-        "delegate" => crate::delegate::dispatch(ctx, args),
-        "delegate_async" => crate::delegate::dispatch_async(ctx, args),
-        "delegate_status" => crate::delegate::dispatch_status(args),
-        "delegate_collect" => crate::delegate::dispatch_collect(args).await,
-        "delegate_cancel" => crate::delegate::dispatch_cancel(args),
-        "multi_agent" => crate::multi_agent::dispatch(ctx, args),
-        "orchestration_run" => crate::orchestration::dispatch_run(ctx, args),
-        "orchestration_status" => crate::orchestration::dispatch_status(args),
-        "team_list" => crate::team::dispatch_list(ctx, args),
-        "team_create" => crate::team::dispatch_create(ctx, args),
-        "team_run" => crate::team::dispatch_run(ctx, args),
-        "create_agent" => crate::create_agent::dispatch(ctx, args),
-        "task_plan" => crate::task_plan::dispatch(ctx, args),
-        "browser" => crate::browser::dispatch(ctx, args).await,
-        other => {
-            // Soft-alias：模型常把 Skill 名当成工具名；若命中已启用 Skill，改走 skills 工具。
-            if home::is_tool_call_allowed("skills")
-                && skills::list_installed()
-                    .into_iter()
-                    .any(|s| s.name == other && s.enabled)
-            {
-                let rewritten = serde_json::json!({
-                    "action": "load",
-                    "skill_id": other,
-                    "input": args,
-                });
-                return crate::skills_tool::dispatch(ctx, &rewritten);
-            }
-            anyhow::bail!("未知工具: {other}")
+    if let Some(handler) = handler_table().get(name) {
+        return handler(ctx, name, args).await;
+    }
+
+    // Soft-alias：模型常把 Skill 名当成工具名；若命中已启用 Skill，改走 skills 工具。
+    if home::is_tool_call_allowed("skills")
+        && skills::list_installed()
+            .into_iter()
+            .any(|s| s.name == name && s.enabled)
+    {
+        let rewritten = serde_json::json!({
+            "action": "load",
+            "skill_id": name,
+            "input": args,
+        });
+        if let Some(handler) = handler_table().get("skills") {
+            return handler(ctx, "skills", &rewritten).await;
         }
     }
+
+    anyhow::bail!("未知工具: {name}")
 }

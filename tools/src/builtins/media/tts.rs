@@ -65,7 +65,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["tts"],
+    async_ctx: dispatch,
+}
 
 /// 请求 TTS，将音频保存到工作区并返回路径。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {

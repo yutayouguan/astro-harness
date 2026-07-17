@@ -44,7 +44,11 @@ Examples:\n\
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["present_ui"],
+    sync_ctx: dispatch,
+}
 
 /// 校验并返回 `astro_ui` 载荷。
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &Value) -> anyhow::Result<String> {

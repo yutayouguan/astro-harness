@@ -80,7 +80,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["video_gen"],
+    async_ctx: dispatch,
+}
 
 /// 调用 Google 视频接口并落盘。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {

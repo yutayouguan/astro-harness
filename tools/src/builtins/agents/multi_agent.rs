@@ -35,7 +35,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["multi_agent"],
+    sync_ctx: dispatch,
+}
 
 /// 将角色列表落库为编排并触发后台执行。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {

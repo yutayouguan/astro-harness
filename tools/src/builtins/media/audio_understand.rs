@@ -57,7 +57,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["audio_understand"],
+    async_ctx: dispatch,
+}
 
 /// 解析音频并调用理解模型，返回描述文本或结构化转写 JSON。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {

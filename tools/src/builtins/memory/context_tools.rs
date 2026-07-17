@@ -116,8 +116,6 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
-
 /// 分发 `search_context` / `pin_context`。
 pub fn dispatch(ctx: &ToolContext<'_>, name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
     match name {
@@ -125,6 +123,12 @@ pub fn dispatch(ctx: &ToolContext<'_>, name: &str, args: &serde_json::Value) -> 
         "pin_context" => dispatch_pin(ctx, args),
         other => anyhow::bail!("未知上下文工具: {other}"),
     }
+}
+
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["search_context", "pin_context"],
+    sync_named: dispatch,
 }
 
 fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {

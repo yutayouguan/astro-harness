@@ -98,8 +98,6 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
-
 /// 将工具名与参数转交给 [`cron::dispatch_cron_tool`]。
 ///
 /// # 参数
@@ -107,4 +105,18 @@ crate::submit_builtin_tool!(register);
 /// - `args`：JSON 参数对象
 pub fn dispatch(name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
     cron::dispatch_cron_tool(name, args)
+}
+
+fn handle(
+    _ctx: &mut crate::context::ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    dispatch(name, args)
+}
+
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["cron_add", "cron_list", "cron_remove", "cron_enable", "cron_disable", "scheduled"],
+    sync_named: handle,
 }

@@ -51,7 +51,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["web_search"],
+    async_ctx: dispatch,
+}
 
 /// 执行网页搜索并返回格式化的结果文本。
 ///

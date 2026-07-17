@@ -86,7 +86,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["file_ops"],
+    sync_ctx: dispatch,
+}
 
 /// 按 `operation` 执行文件系统操作。
 ///

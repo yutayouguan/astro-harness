@@ -34,7 +34,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["code_exec"],
+    async_ctx: dispatch,
+}
 
 /// 按语言选择解释器执行代码，返回 exit code 与输出。
 ///

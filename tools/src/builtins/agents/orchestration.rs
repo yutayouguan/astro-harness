@@ -64,8 +64,6 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
-
 /// 创建编排并触发后台执行；立即返回 queued JSON。
 pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     if !home::can_spawn_nested() {
@@ -193,6 +191,25 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
         "steps": step_json,
     })
     .to_string())
+}
+
+/// 本模块统一入口：`orchestration_run` / `orchestration_status`。
+fn handle(
+    ctx: &mut ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    match name {
+        "orchestration_run" => dispatch_run(ctx, args),
+        "orchestration_status" => dispatch_status(args),
+        other => anyhow::bail!("未知编排工具: {other}"),
+    }
+}
+
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["orchestration_run", "orchestration_status"],
+    sync_named: handle,
 }
 
 #[cfg(test)]

@@ -91,8 +91,6 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
-
 pub fn dispatch_list(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: TeamIdArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("team_list 参数无效: {e}"))?;
@@ -447,6 +445,26 @@ fn member_context(
         ctx.push('\n');
     }
     ctx
+}
+
+/// 本模块统一入口：`team_list` / `team_create` / `team_run`。
+fn handle(
+    ctx: &mut ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    match name {
+        "team_list" => dispatch_list(ctx, args),
+        "team_create" => dispatch_create(ctx, args),
+        "team_run" => dispatch_run(ctx, args),
+        other => anyhow::bail!("未知团队工具: {other}"),
+    }
+}
+
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["team_list", "team_create", "team_run"],
+    sync_named: handle,
 }
 
 #[cfg(test)]

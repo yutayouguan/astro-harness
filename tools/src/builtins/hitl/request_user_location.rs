@@ -37,7 +37,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["request_user_location"],
+    sync_ctx: dispatch,
+}
 
 /// 构建 HITL 定位请求载荷（A2UI operations + response schema）。
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {

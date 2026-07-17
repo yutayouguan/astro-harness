@@ -166,7 +166,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["image_gen"],
+    async_ctx: dispatch,
+}
 
 /// 依次尝试 primary / fallback 凭据生成图片，返回本地路径与所用模型信息。
 ///

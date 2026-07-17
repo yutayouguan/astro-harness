@@ -29,7 +29,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["present_callout"],
+    sync_ctx: dispatch,
+}
 
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: PresentCalloutArgs = serde_json::from_value(args.clone())

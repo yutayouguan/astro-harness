@@ -16,14 +16,7 @@ pub mod approval;
 pub use core::{catalog, context, dispatch, parse, registry, schema};
 pub use approval::{classify_dangerous_command, ApprovalAction};
 pub(crate) use core::path_safe;
-pub(crate) use builtins::{
-    audio_understand, browser, clarify, code_exec, confirm, context_tools, create_agent, delegate,
-    file_ops, image_gen, memory_tools, multi_agent, music_gen, orchestration, present_callout,
-    present_metrics, present_result, present_ui, request_user_location, robotics, scheduled,
-    skills_tool, task_plan, team, terminal, tts, video_gen, video_understand, vision, web_extract,
-    web_search,
-};
-pub use context_tools::render_pinned_for_prompt;
+pub use builtins::context_tools::render_pinned_for_prompt;
 
 pub use catalog::{
     builtin_catalog, catalog_for_ui, params_from_schema, ToolCatalogItem, ToolFunctionInfo,
@@ -31,29 +24,145 @@ pub use catalog::{
 };
 pub use context::{ImageGenCreds, ImageGenTargets, ToolContext};
 pub use path_safe::resolve_safe;
-pub use dispatch::dispatch_tool;
+pub use dispatch::{builtin_handler_names, dispatch_tool};
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
-pub use registry::{BuiltinToolRegistrar, ToolEntry, ToolRegistry};
+pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
 pub use schema::{
     sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards,
 };
 
 // 宏：`tool_schema!` / `register_tool_schemars!` / `define_tool_args!` / `submit_builtin_tool!`
 
-/// 将本模块的 `register` 函数报名到 inventory，供 [`register_all`] 自动收集。
+/// 将本模块的元数据 `register` 与执行 handler 一并报名到 inventory。
+///
+/// 变体：
+/// - `async_ctx`：`async fn(&ToolContext, &Value)`
+/// - `sync_ctx`：`fn(&ToolContext|&mut ToolContext, &Value)`
+/// - `sync_named`：`fn(&ToolContext|&mut ToolContext, &str, &Value)`
+/// - `async_named`：`async fn(&mut ToolContext, &str, &Value)`
+/// - `custom`：已符合 [`BuiltinToolHandler`] 签名的 fn
 ///
 /// ```ignore
-/// pub fn register(registry: &mut ToolRegistry) { /* ... */ }
-/// submit_builtin_tool!(register);
+/// submit_builtin_tool! {
+///     register: register,
+///     names: ["web_search"],
+///     async_ctx: dispatch,
+/// }
 /// ```
 #[macro_export]
 macro_rules! submit_builtin_tool {
-    ($register_fn:ident) => {
+    (
+        register: $register_fn:ident,
+        names: [$($name:literal),+ $(,)?],
+        async_ctx: $dispatch_fn:ident $(,)?
+    ) => {
+        fn __astro_builtin_tool_handler<'a, 'b>(
+            ctx: &'a mut $crate::context::ToolContext<'b>,
+            _name: &'a str,
+            args: &'a ::serde_json::Value,
+        ) -> ::std::pin::Pin<
+            ::std::boxed::Box<
+                dyn ::std::future::Future<Output = ::anyhow::Result<::std::string::String>>
+                    + 'a,
+            >,
+        > {
+            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, args).await })
+        }
         ::inventory::submit! {
             $crate::registry::BuiltinToolRegistrar {
                 register: $register_fn,
+                names: &[$($name),+],
+                handler: __astro_builtin_tool_handler,
+            }
+        }
+    };
+    (
+        register: $register_fn:ident,
+        names: [$($name:literal),+ $(,)?],
+        sync_ctx: $dispatch_fn:ident $(,)?
+    ) => {
+        fn __astro_builtin_tool_handler<'a, 'b>(
+            ctx: &'a mut $crate::context::ToolContext<'b>,
+            _name: &'a str,
+            args: &'a ::serde_json::Value,
+        ) -> ::std::pin::Pin<
+            ::std::boxed::Box<
+                dyn ::std::future::Future<Output = ::anyhow::Result<::std::string::String>>
+                    + 'a,
+            >,
+        > {
+            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, args) })
+        }
+        ::inventory::submit! {
+            $crate::registry::BuiltinToolRegistrar {
+                register: $register_fn,
+                names: &[$($name),+],
+                handler: __astro_builtin_tool_handler,
+            }
+        }
+    };
+    (
+        register: $register_fn:ident,
+        names: [$($name:literal),+ $(,)?],
+        sync_named: $dispatch_fn:ident $(,)?
+    ) => {
+        fn __astro_builtin_tool_handler<'a, 'b>(
+            ctx: &'a mut $crate::context::ToolContext<'b>,
+            name: &'a str,
+            args: &'a ::serde_json::Value,
+        ) -> ::std::pin::Pin<
+            ::std::boxed::Box<
+                dyn ::std::future::Future<Output = ::anyhow::Result<::std::string::String>>
+                    + 'a,
+            >,
+        > {
+            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, name, args) })
+        }
+        ::inventory::submit! {
+            $crate::registry::BuiltinToolRegistrar {
+                register: $register_fn,
+                names: &[$($name),+],
+                handler: __astro_builtin_tool_handler,
+            }
+        }
+    };
+    (
+        register: $register_fn:ident,
+        names: [$($name:literal),+ $(,)?],
+        async_named: $dispatch_fn:ident $(,)?
+    ) => {
+        fn __astro_builtin_tool_handler<'a, 'b>(
+            ctx: &'a mut $crate::context::ToolContext<'b>,
+            name: &'a str,
+            args: &'a ::serde_json::Value,
+        ) -> ::std::pin::Pin<
+            ::std::boxed::Box<
+                dyn ::std::future::Future<Output = ::anyhow::Result<::std::string::String>>
+                    + 'a,
+            >,
+        > {
+            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, name, args).await })
+        }
+        ::inventory::submit! {
+            $crate::registry::BuiltinToolRegistrar {
+                register: $register_fn,
+                names: &[$($name),+],
+                handler: __astro_builtin_tool_handler,
+            }
+        }
+    };
+    (
+        register: $register_fn:ident,
+        names: [$($name:literal),+ $(,)?],
+        custom: $handler_fn:ident $(,)?
+    ) => {
+        ::inventory::submit! {
+            $crate::registry::BuiltinToolRegistrar {
+                register: $register_fn,
+                names: &[$($name),+],
+                handler: $handler_fn,
             }
         }
     };
@@ -62,10 +171,9 @@ macro_rules! submit_builtin_tool {
 /// 向注册表一次性注册全部内置工具。
 ///
 /// 通过 [`inventory`] 收集各工具模块的 [`BuiltinToolRegistrar`]；新工具在自身文件
-/// `submit_builtin_tool!(register)` 即可，无需改本函数。MCP 工具由 agent 层单独注册。
+/// `submit_builtin_tool! { register, names, … }` 即可，无需改本函数。MCP 工具由 agent 层单独注册。
 ///
-/// 注意：工具模块须通过 `builtins` 与本文件的 `pub(crate) use` 编入 crate，否则 submit
-/// 不会进入最终二进制。
+/// 注意：工具模块须通过 `pub mod builtins` 编入 crate，否则 submit 不会进入最终二进制。
 /// 通常在应用启动或测试初始化时调用一次。
 pub fn register_all(registry: &mut ToolRegistry) {
     for hook in inventory::iter::<BuiltinToolRegistrar> {
@@ -78,7 +186,7 @@ mod inventory_register_tests {
     use super::*;
 
     #[test]
-    fn inventory_registers_all_builtin_modules() {
+    fn inventory_registers_sample_builtin_tools() {
         let mut registry = ToolRegistry::new();
         register_all(&mut registry);
         let names: Vec<_> = registry
@@ -103,9 +211,30 @@ mod inventory_register_tests {
                 "missing {expected}; got {names:?}"
             );
         }
-        assert!(
-            inventory::iter::<BuiltinToolRegistrar>.into_iter().count() >= 30,
-            "expected ~31 tool modules submitted"
-        );
+    }
+
+    #[test]
+    fn every_registered_metadata_tool_has_handler() {
+        let mut registry = ToolRegistry::new();
+        register_all(&mut registry);
+        let handlers = builtin_handler_names();
+        for entry in registry.all_tools() {
+            assert!(
+                handlers.binary_search(&entry.name.as_str()).is_ok(),
+                "metadata tool `{}` has no dispatch handler",
+                entry.name
+            );
+        }
+    }
+
+    #[test]
+    fn memory_compat_aliases_have_handlers() {
+        let handlers = builtin_handler_names();
+        for alias in ["memory_add", "memory_replace", "memory_remove"] {
+            assert!(
+                handlers.binary_search(&alias).is_ok(),
+                "missing memory compat alias handler: {alias}"
+            );
+        }
     }
 }

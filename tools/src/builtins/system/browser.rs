@@ -35,7 +35,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["browser"],
+    async_ctx: dispatch,
+}
 
 /// 执行 HTTP GET 请求并返回响应状态、Content-Type 与正文。
 ///

@@ -53,7 +53,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["task_plan"],
+    sync_ctx: dispatch,
+}
 
 /// 规范化条目并写入 `.md` + `.json`，同时把 Markdown 正文返回给模型。
 ///

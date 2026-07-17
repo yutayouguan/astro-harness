@@ -62,7 +62,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["skills"],
+    sync_ctx: dispatch,
+}
 
 /// Skill 根目录：`SKILL.md` 所在目录。
 fn skill_root(skill_md: &Path) -> PathBuf {

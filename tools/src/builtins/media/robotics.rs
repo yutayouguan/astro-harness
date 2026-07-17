@@ -47,7 +47,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["robotics"],
+    async_ctx: dispatch,
+}
 
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &Value) -> anyhow::Result<String> {
     let parsed: RoboticsArgs = serde_json::from_value(args.clone())

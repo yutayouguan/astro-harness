@@ -6,6 +6,21 @@
 //! 工具列表，供 `schemas_for_api` 下发给模型。
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+
+use crate::context::ToolContext;
+
+/// 内置工具统一异步 handler：可包 sync/async、`&mut ToolContext`、按 name 路由。
+///
+/// 不要求 `Send`：`ToolContext`（含 `SessionStore`/`RefCell`）本身非 `Send`，
+/// handler future 会捕获 `&mut ToolContext`。
+pub type BuiltinToolHandler =
+    for<'a, 'b> fn(
+        &'a mut ToolContext<'b>,
+        &'a str,
+        &'a serde_json::Value,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + 'a>>;
 
 /// 单个可注册工具的完整元数据条目。
 ///
@@ -65,9 +80,15 @@ impl ToolEntry {
 }
 
 /// 内置工具自注册钩子：各工具模块通过 `inventory::submit!` / [`crate::submit_builtin_tool!`] 报名。
+///
+/// 同时携带元数据 `register`、可分发名称列表与统一 [`BuiltinToolHandler`]。
 pub struct BuiltinToolRegistrar {
     /// 向注册表写入本模块工具条目。
     pub register: fn(&mut ToolRegistry),
+    /// 本模块可分发的工具名（含兼容别名，可多于 metadata）。
+    pub names: &'static [&'static str],
+    /// 统一执行入口（按 `names` 中的 name 查表后调用）。
+    pub handler: BuiltinToolHandler,
 }
 
 inventory::collect!(BuiltinToolRegistrar);

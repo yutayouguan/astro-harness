@@ -1622,12 +1622,12 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   }
   
   .tool-card.agent-tool-card:hover {
-    transform: translateY(-3px);
+    transform: translateY(-1px);
     border-color: color-mix(in srgb, var(--tone) 42%, var(--glass-border));
     box-shadow:
-      0 14px 28px color-mix(in srgb, var(--tone) 16%, transparent),
+      0 6px 14px color-mix(in srgb, var(--tone) 10%, transparent),
       var(--glass-rim);
-}
+  }
 
 .agent-tool-head {
   display: flex;

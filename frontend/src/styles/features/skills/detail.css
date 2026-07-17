@@ -387,7 +387,7 @@ html[data-theme="dark"] .tool-card.skill-card {
 html[data-theme="dark"] .tool-card.skill-card:hover {
   border-color: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1));
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.48),
+    0 8px 18px rgba(0, 0, 0, 0.34),
     0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent) inset,
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }

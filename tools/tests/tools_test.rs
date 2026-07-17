@@ -2,7 +2,7 @@
 
 use std::path::Path;
 use tempfile::TempDir;
-use tools::{register_all, ToolContext, ToolRegistry};
+use tools::{builtin_handler_names, register_all, ToolContext, ToolRegistry};
 
 #[tokio::test]
 async fn register_all_includes_panel_tools() {
@@ -44,6 +44,26 @@ async fn register_all_includes_panel_tools() {
         "task_plan",
     ] {
         assert!(names.contains(&expected), "missing {expected}");
+    }
+}
+
+#[tokio::test]
+async fn metadata_tools_and_memory_aliases_have_handlers() {
+    let mut registry = ToolRegistry::new();
+    register_all(&mut registry);
+    let handlers = builtin_handler_names();
+    for entry in registry.all_tools() {
+        assert!(
+            handlers.binary_search(&entry.name.as_str()).is_ok(),
+            "metadata tool `{}` missing handler",
+            entry.name
+        );
+    }
+    for alias in ["memory_add", "memory_replace", "memory_remove"] {
+        assert!(
+            handlers.binary_search(&alias).is_ok(),
+            "missing compat alias handler: {alias}"
+        );
     }
 }
 

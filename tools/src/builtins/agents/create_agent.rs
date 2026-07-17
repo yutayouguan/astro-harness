@@ -65,7 +65,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["create_agent"],
+    sync_ctx: dispatch,
+}
 
 /// 将可选字符串规范为空串（缺省或仅空白视为空）。
 fn opt_str(v: &Option<String>) -> String {

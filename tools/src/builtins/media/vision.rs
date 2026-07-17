@@ -47,7 +47,11 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["vision"],
+    async_ctx: dispatch,
+}
 
 /// 读取图片并调用视觉模型，返回描述/问答文本。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {

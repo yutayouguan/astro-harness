@@ -89,8 +89,6 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-crate::submit_builtin_tool!(register);
-
 /// 将记忆工具调用委托给 `memory::dispatch_memory_tool`。
 ///
 /// 需要可变 `ToolContext` 以访问 `MemoryManager`。
@@ -104,4 +102,23 @@ pub fn dispatch_session_search(
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
     session::dispatch_session_tool(ctx.sessions, "session_search", args)
+}
+
+/// 本模块统一入口：`memory`（含兼容别名）与 `session_search`。
+fn handle(
+    ctx: &mut ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    match name {
+        "memory" | "memory_add" | "memory_replace" | "memory_remove" => dispatch(ctx, name, args),
+        "session_search" => dispatch_session_search(ctx, args),
+        other => anyhow::bail!("未知记忆工具: {other}"),
+    }
+}
+
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["memory", "memory_add", "memory_replace", "memory_remove", "session_search"],
+    sync_named: handle,
 }
