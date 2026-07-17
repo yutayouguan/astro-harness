@@ -284,7 +284,7 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-card.is-media {
   --gmc-tone: var(--tone, #2563eb);
   position: relative;
-  max-width: min(100%, 440px);
+  max-width: 100%;
   overflow: hidden;
   isolation: isolate;
   border-color: color-mix(in srgb, var(--tone, #2563eb) 24%, var(--a2ui-glass-border, var(--glass-edge)));
