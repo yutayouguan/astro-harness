@@ -137,7 +137,7 @@ messages 中 tool 结果超阈值
 
 ### 已落地（本轮）
 - `common::Message.compressed_content` + session schema v14 `messages.compressed_content`
-- `agent::compression::ToolCompressionManager`：未压缩 tool 条数 ≥ 3 时触发
+- `agent::compression::ToolCompressionManager`：条数阈值（默认 ≥ 3）**或** token 阈值（默认估算 ≥ 16k，`ceil(chars/4)`）
 - `AgentLoop::compress_tool_results_if_needed` 接入 `multi_turn`
 - `to_provider_messages` 对 tool 角色优先发送压缩视图；FTS/UI 仍用原文
 - 当前压缩实现为确定性启发式（头/尾保留）；后续可接 auxiliary compaction 模型

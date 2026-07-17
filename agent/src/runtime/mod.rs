@@ -722,6 +722,7 @@ impl AgentLoop {
 
     /// 压缩本 run 中尚未压缩的 tool 结果，并写回 DB 的 `compressed_content`。
     ///
+    /// 触发：未压缩 tool 条数 ≥ 阈值，**或**会话估算 token ≥ `compress_token_limit`。
     /// 原始 tool content 始终保留；provider 发送视图由 `prompt::messages` 决定。
     pub fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
         let manager = ToolCompressionManager::default();
@@ -741,7 +742,7 @@ impl AgentLoop {
                         .unwrap_or(false)
             })
             .collect();
-        if candidates.len() < manager.tool_results_limit {
+        if candidates.is_empty() {
             return Ok(0);
         }
 
