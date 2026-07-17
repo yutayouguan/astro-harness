@@ -802,7 +802,7 @@ mod tests {
 
     #[test]
     fn usage_db_impls_sqlite_store() {
-        use crate::sqlite_store::SqliteStore;
+        use common::SqliteStore;
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("usage.db");
         let db = UsageDb::new(path.clone()).unwrap();

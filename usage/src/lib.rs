@@ -5,12 +5,11 @@
 //! - [`pricing`]：路由感知费用估算
 //! - [`trace_insights`]：按 session 聚合调用链（可读 `session` 库）
 //! - [`eval_export`]：session trace → eval JSONL
-//! - [`sqlite_store`]：兼容 re-export（实现见 [`common::sqlite`]）
+//! - SQLite 打开协议见 [`common::sqlite`]
 
 pub mod db;
 pub mod eval_export;
 pub mod pricing;
-pub mod sqlite_store;
 pub mod stats;
 pub mod trace_insights;
 
@@ -25,7 +24,6 @@ pub use eval_export::{
 pub use pricing::{
     estimate_usage_cost, resolve_billing_route, BillingRoute, CostResult, CostStatus, UsageTokens,
 };
-pub use sqlite_store::{open_wal, ExampleSqliteStore, SqliteStore};
 pub use stats::{
     get_usage_summary, load_usage_stats, record_tool_call, save_usage_stats, AgentUsageStats,
     AgentUsageSummary,

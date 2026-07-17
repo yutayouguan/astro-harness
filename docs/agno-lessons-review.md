@@ -12,7 +12,7 @@
 | agent --lib context_source / hitl | pass |
 | agent --lib（全量） | 见下方复跑 |
 | memory decision_log / protocol | pass |
-| usage eval_export / sqlite_store | pass |
+| usage eval_export / common::sqlite | pass |
 | artifacts content_db | pass |
 | tools skill_override | pass |
 | skills parse_astro_tools | pass |
