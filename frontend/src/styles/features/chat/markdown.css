@@ -1593,6 +1593,16 @@ html[data-theme="light"] .send-btn--round {
   transform: rotate(-90deg);
 }
 
+/* 发送按钮背景跟随当前 Tab 主题色（停止按钮保持中性） */
+.send-btn--round:not(.send-btn--stop),
+.composer--stacked .send-btn:not(.send-btn--stop),
+html[data-theme="light"] .send-btn--round:not(.send-btn--stop),
+html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
+  background: var(--tone, #2563eb);
+  color: #fff;
+  border-color: color-mix(in srgb, #fff 24%, transparent);
+}
+
 .send-btn {
   width: 44px;
   height: 44px;
