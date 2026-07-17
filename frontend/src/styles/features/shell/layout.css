@@ -260,6 +260,8 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
   height: 18px;
   /* 默认与 hover 保持渐变线稿，只有选中态填实。 */
   fill: none;
+  /* 默认线稿更纤细，不加粗 */
+  stroke-width: 1.6;
   /* 轻微下沉阴影，模拟参考图的软立体层，避免玻璃球高光 */
   filter: drop-shadow(0 1.5px 0 var(--nav-icon-depth));
   transition: filter 0.18s ease;
@@ -276,6 +278,11 @@ html[data-theme="dark"] .nav-item.active .nav-icon {
 .nav-icon svg .nav-icon-cutout {
   fill: none;
   stroke: var(--nav-grad-paint);
+  stroke-width: 1.9;
+}
+
+/* 选中填实后内部线条略加粗，保证镂空清晰。 */
+.nav-item.active .nav-icon svg .nav-icon-cutout {
   stroke-width: 2.25;
 }
 
