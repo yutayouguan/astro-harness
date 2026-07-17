@@ -551,10 +551,9 @@ html[data-tone="teal"] {
 .sidebar-logo {
   width: 34px;
   height: 34px;
-  border-radius: 11px;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--bg2) 70%, transparent);
+  background: transparent;
   flex-shrink: 0;
 }
 
