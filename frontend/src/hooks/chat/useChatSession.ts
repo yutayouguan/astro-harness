@@ -36,7 +36,10 @@ import type {
   PendingInterrupt,
   ProviderDto,
 } from "../../types";
-import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
+import {
+  shouldAutoCompactSession,
+  type ContextUsageSnapshot,
+} from "../../lib/chat/contextUsage";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
@@ -87,6 +90,8 @@ export interface UseChatSessionDeps {
   showTransientToast: ShowToastFn;
   nav: NavId;
   setNav: Dispatch<SetStateAction<NavId>>;
+  /** 当前模型 context window；自动压实分母优先用它，避免误按 128K 触发 */
+  modelContextWindow?: number | null;
 }
 
 export function useChatSession({
@@ -99,6 +104,7 @@ export function useChatSession({
   showTransientToast,
   nav,
   setNav,
+  modelContextWindow = null,
 }: UseChatSessionDeps) {
   // ── Core state ────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -621,26 +627,28 @@ export function useChatSession({
     if (sessionPendingInterrupts.length > 0) return;
     if (!sessionId) return;
 
-    const bubbles = messages.filter(
-      (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
-    ).length;
-    if (bubbles < 6) return;
-
     const now = Date.now();
     if (now - lastAutoCompactAttemptRef.current < 60_000) return;
     if (now - lastCompactAtRef.current < 60_000) return;
 
-    let ratio: number;
-    if (tokenUsage && tokenUsage.totalTokens > 0) {
-      ratio = tokenUsage.totalTokens / 128_000;
-    } else {
-      const chars = messages.reduce(
-        (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
-        0,
-      );
-      ratio = Math.ceil(chars / 4) / 128_000;
+    const bubbles = messages.filter(
+      (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
+    ).length;
+    const messageChars = messages.reduce(
+      (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
+      0,
+    );
+    if (
+      !shouldAutoCompactSession({
+        bubbleCount: bubbles,
+        contextUsage,
+        tokenUsageTotal: tokenUsage?.totalTokens,
+        messageChars,
+        modelContextWindow,
+      })
+    ) {
+      return;
     }
-    if (ratio < 0.5) return;
 
     lastAutoCompactAttemptRef.current = now;
     void runCompactSession();
@@ -650,7 +658,9 @@ export function useChatSession({
     sessionPendingInterrupts,
     sessionId,
     messages,
+    contextUsage,
     tokenUsage,
+    modelContextWindow,
     runCompactSession,
   ]);
 

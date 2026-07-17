@@ -79,6 +79,49 @@ export function resolveContextWindow(
   return 128_000;
 }
 
+/** 自动会话压实：占用 ≥ 该比例时触发（相对真实 context window）。 */
+export const AUTO_COMPACT_THRESHOLD = 0.5;
+export const AUTO_COMPACT_MIN_BUBBLES = 6;
+
+/**
+ * 估算当前上下文占用比例（0–∞）。
+ * 优先用分层 context_usage；否则回退到本轮 usage / 字符粗估。
+ * 分母始终为模型或快照上报的真实窗口（缺省才 128K）。
+ */
+export function autoCompactOccupancyRatio(opts: {
+  contextUsage?: Pick<ContextUsageSnapshot, "totalTokens" | "contextWindow"> | null;
+  tokenUsageTotal?: number | null;
+  messageChars?: number;
+  modelContextWindow?: number | null;
+}): number {
+  const window = resolveContextWindow(
+    opts.modelContextWindow,
+    opts.contextUsage?.contextWindow,
+  );
+  if (window <= 0) return 0;
+
+  if (opts.contextUsage && opts.contextUsage.totalTokens > 0) {
+    return opts.contextUsage.totalTokens / window;
+  }
+  if (opts.tokenUsageTotal != null && opts.tokenUsageTotal > 0) {
+    return opts.tokenUsageTotal / window;
+  }
+  const chars = opts.messageChars ?? 0;
+  if (chars <= 0) return 0;
+  return Math.ceil(chars / 4) / window;
+}
+
+export function shouldAutoCompactSession(opts: {
+  bubbleCount: number;
+  contextUsage?: Pick<ContextUsageSnapshot, "totalTokens" | "contextWindow"> | null;
+  tokenUsageTotal?: number | null;
+  messageChars?: number;
+  modelContextWindow?: number | null;
+}): boolean {
+  if (opts.bubbleCount < AUTO_COMPACT_MIN_BUBBLES) return false;
+  return autoCompactOccupancyRatio(opts) >= AUTO_COMPACT_THRESHOLD;
+}
+
 export function normalizeContextUsageEvent(payload: {
   context_window?: number;
   total_tokens?: number;

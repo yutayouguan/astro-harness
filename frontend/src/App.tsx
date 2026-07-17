@@ -122,6 +122,7 @@ export default function App() {
     showTransientToast,
     nav,
     setNav,
+    modelContextWindow,
   });
   const {
     messages,
@@ -240,7 +241,10 @@ export default function App() {
           (n, m) => n + (m.content?.length ?? 0) + (m.reasoning?.length ?? 0),
           0,
         );
-        return Math.min(99, Math.round((Math.ceil(chars / 4) / 128_000) * 100));
+        return Math.min(
+          99,
+          Math.round((Math.ceil(chars / 4) / Math.max(1, contextWindow)) * 100),
+        );
       };
 
       switch (action) {
@@ -261,9 +265,21 @@ export default function App() {
           break;
         case "status": {
           const ctx =
-            chat.tokenUsage && chat.tokenUsage.totalTokens > 0
-              ? Math.min(99, Math.round((chat.tokenUsage.totalTokens / 128_000) * 100))
-              : contextUsageFallback();
+            chat.contextUsage && chat.contextUsage.totalTokens > 0
+              ? Math.min(
+                  99,
+                  Math.round(
+                    (chat.contextUsage.totalTokens / Math.max(1, contextWindow)) * 100,
+                  ),
+                )
+              : chat.tokenUsage && chat.tokenUsage.totalTokens > 0
+                ? Math.min(
+                    99,
+                    Math.round(
+                      (chat.tokenUsage.totalTokens / Math.max(1, contextWindow)) * 100,
+                    ),
+                  )
+                : contextUsageFallback();
           showTransientToast(
             t("chat.slashStatusMsg", {
               session: chat.sessionId ? chat.sessionId.slice(0, 8) : "—",
@@ -440,7 +456,9 @@ export default function App() {
       retryLastAssistant,
       stopStream,
       chat.tokenUsage,
+      chat.contextUsage,
       chat.sessionId,
+      contextWindow,
       activeProvider,
       chatMode,
       thinkingPrefs.level,
