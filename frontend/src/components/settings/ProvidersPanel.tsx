@@ -10,7 +10,7 @@ import {
 } from "react";
 import {
   Box,
-  Atom,
+  Brain,
   Eye,
   EyeOff,
   Globe,
@@ -1295,7 +1295,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           className={`providers-page-tab ${pageTab === "auxiliary" ? "is-active" : ""}`}
           onClick={() => setPageTab("auxiliary")}
         >
-          <Bot size={14} strokeWidth={2.2} aria-hidden />
+          <Brain size={14} strokeWidth={2.2} aria-hidden />
           {t("providers.tabAuxiliary")}
         </button>
       </div>
