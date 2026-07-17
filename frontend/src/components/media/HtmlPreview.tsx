@@ -1,7 +1,7 @@
 /** 沙箱 HTML 预览：srcDoc + allow-scripts（无 same-origin / top-nav） */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExternalLink } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n/LocaleContext";
 import BrokenMedia from "./BrokenMedia";
 import MediaToolbar from "./MediaToolbar";
@@ -16,6 +16,38 @@ type Props = {
 };
 
 const SANDBOX = "allow-scripts";
+
+/** 取文件所在目录（POSIX / Windows 均可） */
+function dirnameOf(p: string): string {
+  const norm = p.replace(/\\/g, "/");
+  const idx = norm.lastIndexOf("/");
+  return idx > 0 ? norm.slice(0, idx) : idx === 0 ? "/" : "";
+}
+
+/**
+ * srcDoc 的基准 URL 是 about:srcdoc，相对资源（图片/CSS/JS）无从解析。
+ * 注入指向文件所在目录的 <base href>（Tauri asset URL），让相对引用可加载。
+ */
+function withBaseHref(html: string, path: string): string {
+  if (/<base\b/i.test(html)) return html;
+  const dir = dirnameOf(path);
+  if (!dir) return html;
+  let baseUrl: string;
+  try {
+    baseUrl = convertFileSrc(dir);
+  } catch {
+    return html;
+  }
+  if (!baseUrl.endsWith("/")) baseUrl += "/";
+  const tag = `<base href="${baseUrl}">`;
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
+  }
+  if (/<html[^>]*>/i.test(html)) {
+    return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${tag}</head>`);
+  }
+  return `${tag}${html}`;
+}
 
 export default function HtmlPreview({
   path,
@@ -60,6 +92,11 @@ export default function HtmlPreview({
     void invoke("open_path_externally", { path }).catch(() => {});
   };
 
+  const srcDoc = useMemo(
+    () => (doc != null && path ? withBaseHref(doc, path) : doc),
+    [doc, path],
+  );
+
   if (error || doc == null) {
     return (
       <BrokenMedia
@@ -96,7 +133,7 @@ export default function HtmlPreview({
         className="html-preview-frame"
         title={t("media.htmlPreview")}
         sandbox={SANDBOX}
-        srcDoc={doc}
+        srcDoc={srcDoc ?? undefined}
         referrerPolicy="no-referrer"
       />
     </div>
