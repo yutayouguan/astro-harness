@@ -6,6 +6,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+use crate::menu_locale::AppLocale;
+
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
 const TRAY_QUIT_ID: &str = "tray-quit";
@@ -19,14 +21,20 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// 安装托盘图标与菜单。
-pub fn install_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "显示 Astro", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "退出 Astro", true, None::<&str>)?;
-    let menu = Menu::with_items(
-        app,
-        &[&show, &PredefinedMenuItem::separator(app)?, &quit],
-    )?;
+fn build_tray_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    locale: AppLocale,
+) -> tauri::Result<Menu<R>> {
+    let s = locale.strings();
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, s.tray_show, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, s.tray_quit, true, None::<&str>)?;
+    Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])
+}
+
+/// 安装托盘图标与菜单（按语言）。
+pub fn install_tray<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri::Result<()> {
+    let s = locale.strings();
+    let menu = build_tray_menu(app, locale)?;
 
     let icon = app
         .default_window_icon()
@@ -35,7 +43,7 @@ pub fn install_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
-        .tooltip("Astro Agent")
+        .tooltip(s.tray_tooltip)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -56,4 +64,17 @@ pub fn install_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .build(app)?;
 
     Ok(())
+}
+
+/// 语言切换时更新托盘菜单与 tooltip（保留同一 tray id）。
+pub fn apply_tray_locale<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri::Result<()> {
+    let s = locale.strings();
+    let menu = build_tray_menu(app, locale)?;
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        tray.set_menu(Some(menu))?;
+        tray.set_tooltip(Some(s.tray_tooltip))?;
+        Ok(())
+    } else {
+        install_tray(app, locale)
+    }
 }

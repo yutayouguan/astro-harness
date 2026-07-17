@@ -109,6 +109,8 @@ cargo build -p astro-agent --release --target x86_64-apple-darwin
 
 关闭主窗口会**隐藏到系统托盘**，内嵌 backend / cron 继续运行。左键点托盘图标可恢复窗口；托盘菜单「退出 Astro」或 macOS「Astro → 退出」才会真正结束进程。
 
+偏好设置中的界面语言（中文 / English）会同步到**原生菜单栏与托盘**文案。
+
 定时任务（含后台 due 触发与手动「立即执行」）以及入梦完成/失败时，会弹出**系统通知**（需授予通知权限）。
 
 ## gRPC 后端（默认内嵌）

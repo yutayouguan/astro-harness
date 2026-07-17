@@ -17,6 +17,7 @@ mod ip_location;
 mod keystore;
 mod litellm_meta;
 mod memory_commands;
+mod menu_locale;
 mod model_meta;
 mod notify;
 mod providers_commands;
@@ -24,8 +25,11 @@ mod session_events;
 mod skills_commands;
 mod tray;
 
+use std::sync::Mutex;
+
+use menu_locale::AppLocale;
 use tauri::{
-    AppHandle, Emitter, RunEvent, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder,
     menu::{
         AboutMetadata, HELP_SUBMENU_ID, Menu, MenuItem, PredefinedMenuItem, Submenu,
         WINDOW_SUBMENU_ID,
@@ -37,28 +41,29 @@ use tauri::{
 /// 与 light/blue underlay 一致；勿用全透明，否则 zoom 不同步时会露白边（tauri#13898）。
 const BG: Color = Color(0xdb, 0xea, 0xfe, 0xff);
 
-/// 与偏好设置「关于Astro」卡片一致的应用介绍（macOS 关于面板 credits）。
-const ABOUT_CREDITS: &str = "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。";
-
 /// 原生菜单「偏好设置」项 id。
 const MENU_PREFERENCES_ID: &str = "preferences";
 /// 前端监听的「打开偏好设置」事件名。
 const EVENT_OPEN_PREFERENCES: &str = "open-preferences";
 
-/// 安装应用菜单（关于、偏好设置、窗口与帮助）。
-fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+/// 安装应用菜单（关于、偏好设置、窗口与帮助），文案随 [`AppLocale`]。
+fn install_app_menu<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    locale: AppLocale,
+) -> tauri::Result<()> {
+    let s = locale.strings();
     let pkg = app.package_info();
     let about = AboutMetadata {
-        name: Some("关于Astro".into()),
+        name: Some(s.about_title.into()),
         version: Some(pkg.version.to_string()),
-        credits: Some(ABOUT_CREDITS.into()),
+        credits: Some(s.about_credits.into()),
         ..Default::default()
     };
 
     let preferences = MenuItem::with_id(
         app,
         MENU_PREFERENCES_ID,
-        "偏好设置...",
+        s.preferences,
         true,
         Some("CmdOrCtrl+,"),
     )?;
@@ -66,25 +71,25 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> 
     let window_menu = Submenu::with_id_and_items(
         app,
         WINDOW_SUBMENU_ID,
-        "Window",
+        s.submenu_window,
         true,
         &[
-            &PredefinedMenuItem::minimize(app, None)?,
-            &PredefinedMenuItem::maximize(app, None)?,
+            &PredefinedMenuItem::minimize(app, Some(s.minimize))?,
+            &PredefinedMenuItem::maximize(app, Some(s.maximize))?,
             #[cfg(target_os = "macos")]
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &PredefinedMenuItem::close_window(app, Some(s.close_window))?,
         ],
     )?;
 
     let help_menu = Submenu::with_id_and_items(
         app,
         HELP_SUBMENU_ID,
-        "Help",
+        s.submenu_help,
         true,
         &[
             #[cfg(not(target_os = "macos"))]
-            &PredefinedMenuItem::about(app, None, Some(about))?,
+            &PredefinedMenuItem::about(app, Some(s.about), Some(about))?,
             #[cfg(not(target_os = "macos"))]
             &PredefinedMenuItem::separator(app)?,
             #[cfg(not(target_os = "macos"))]
@@ -101,16 +106,16 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> 
                 "Astro",
                 true,
                 &[
-                    &PredefinedMenuItem::about(app, None, Some(about))?,
+                    &PredefinedMenuItem::about(app, Some(s.about), Some(about))?,
                     &PredefinedMenuItem::separator(app)?,
                     &preferences,
                     &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::services(app, None)?,
+                    &PredefinedMenuItem::services(app, Some(s.services))?,
                     &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::hide(app, None)?,
-                    &PredefinedMenuItem::hide_others(app, None)?,
+                    &PredefinedMenuItem::hide(app, Some(s.hide))?,
+                    &PredefinedMenuItem::hide_others(app, Some(s.hide_others))?,
                     &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::quit(app, None)?,
+                    &PredefinedMenuItem::quit(app, Some(s.quit))?,
                 ],
             )?,
             #[cfg(not(any(
@@ -122,34 +127,34 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> 
             )))]
             &Submenu::with_items(
                 app,
-                "File",
+                s.submenu_file,
                 true,
                 &[
-                    &PredefinedMenuItem::close_window(app, None)?,
+                    &PredefinedMenuItem::close_window(app, Some(s.close_window))?,
                     #[cfg(not(target_os = "macos"))]
-                    &PredefinedMenuItem::quit(app, None)?,
+                    &PredefinedMenuItem::quit(app, Some(s.quit))?,
                 ],
             )?,
             &Submenu::with_items(
                 app,
-                "Edit",
+                s.submenu_edit,
                 true,
                 &[
-                    &PredefinedMenuItem::undo(app, None)?,
-                    &PredefinedMenuItem::redo(app, None)?,
+                    &PredefinedMenuItem::undo(app, Some(s.undo))?,
+                    &PredefinedMenuItem::redo(app, Some(s.redo))?,
                     &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::cut(app, None)?,
-                    &PredefinedMenuItem::copy(app, None)?,
-                    &PredefinedMenuItem::paste(app, None)?,
-                    &PredefinedMenuItem::select_all(app, None)?,
+                    &PredefinedMenuItem::cut(app, Some(s.cut))?,
+                    &PredefinedMenuItem::copy(app, Some(s.copy))?,
+                    &PredefinedMenuItem::paste(app, Some(s.paste))?,
+                    &PredefinedMenuItem::select_all(app, Some(s.select_all))?,
                 ],
             )?,
             #[cfg(target_os = "macos")]
             &Submenu::with_items(
                 app,
-                "View",
+                s.submenu_view,
                 true,
-                &[&PredefinedMenuItem::fullscreen(app, None)?],
+                &[&PredefinedMenuItem::fullscreen(app, Some(s.fullscreen))?],
             )?,
             &window_menu,
             &help_menu,
@@ -157,6 +162,22 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> 
     )?;
 
     app.set_menu(menu)?;
+    Ok(())
+}
+
+/// 前端语言切换时重建菜单栏与托盘文案。
+#[tauri::command]
+fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
+    let next = AppLocale::parse(&locale);
+    if let Some(state) = app.try_state::<Mutex<AppLocale>>() {
+        let mut cur = state.lock().map_err(|e| e.to_string())?;
+        if *cur == next {
+            return Ok(());
+        }
+        *cur = next;
+    }
+    install_app_menu(&app, next).map_err(|e| e.to_string())?;
+    tray::apply_tray_locale(&app, next).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -248,6 +269,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            set_app_menu_locale,
             commands::start_chat,
             commands::chat_control,
             commands::interrupt_resume,
@@ -402,11 +424,13 @@ pub fn run() {
 
             session_events::start_bridge(app.handle());
 
-            if let Err(err) = install_app_menu(app.handle()) {
+            app.manage(Mutex::new(AppLocale::Zh));
+
+            if let Err(err) = install_app_menu(app.handle(), AppLocale::Zh) {
                 tracing::warn!("app menu install failed: {err}");
             }
 
-            if let Err(err) = tray::install_tray(app.handle()) {
+            if let Err(err) = tray::install_tray(app.handle(), AppLocale::Zh) {
                 tracing::warn!("system tray install failed: {err}");
             }
 
