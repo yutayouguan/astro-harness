@@ -1588,6 +1588,11 @@ html[data-theme="light"] .send-btn--round {
     inset 0 1px 0 rgba(255, 255, 255, 0.26);
 }
 
+/* 发送图标默认朝上（停止按钮的方块不旋转） */
+.send-btn--round:not(.send-btn--stop) svg {
+  transform: rotate(-90deg);
+}
+
 .send-btn {
   width: 44px;
   height: 44px;
