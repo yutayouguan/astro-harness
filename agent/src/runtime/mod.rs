@@ -664,10 +664,18 @@ impl AgentLoop {
                 &daily,
             )
         };
-        let dynamic_ctx = DynamicContext::from_recalled(
-            self.config.dynamic_max_items,
-            &self.last_recalled_context,
-        );
+        let dynamic_ctx = {
+            let mut dyn_ctx = DynamicContext::from_recalled(
+                self.config.dynamic_max_items,
+                &self.last_recalled_context,
+            );
+            let pinned = tools::render_pinned_for_prompt(&self.memory.workspace_dir);
+            if !pinned.trim().is_empty() {
+                // 固定上下文优先于本轮 FTS 召回
+                dyn_ctx.items.insert(0, pinned);
+            }
+            dyn_ctx
+        };
         (static_ctx, dynamic_ctx, skill_pairs)
     }
 

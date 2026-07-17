@@ -109,7 +109,7 @@
 - `build_system_prompt` 按 static → skills → guidance → timestamp → dynamic 共享字符预算
 - `AgentConfig.context_budget_chars`（默认 200_000）
 - hooks `InjectContext` / `queue_inject_context` 仍走消息侧 `[astro:hook-context]`（不进 system，避免双重注入）
-- **未做**：`search_context` / `pin_context` agentic 工具
+- `search_context` / `pin_context`：按需检索 session FTS + MEMORY/USER + Knowledge；固定片段写入 `{workspace}/pinned-context.json` 并编入 Dynamic 层
 
 ---
 

@@ -15,7 +15,7 @@ pub use media::{
     vision,
 };
 pub use system::{browser, code_exec, file_ops, terminal, web_search};
-pub use memory::{memory_tools, scheduled, skills_tool, task_plan};
+pub use memory::{context_tools, memory_tools, scheduled, skills_tool, task_plan};
 pub use hitl::{clarify, confirm, request_user_location};
 pub use present::{
     present_callout, present_metrics, present_result, present_shared, present_ui,

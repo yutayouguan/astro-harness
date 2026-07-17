@@ -5014,6 +5014,7 @@ version = "0.1.0"
 dependencies = [
  "a2ui",
  "anyhow",
+ "artifacts",
  "async-trait",
  "base64 0.22.1",
  "chrono",

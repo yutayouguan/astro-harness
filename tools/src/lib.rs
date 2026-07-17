@@ -17,11 +17,12 @@ pub use core::{catalog, context, dispatch, parse, registry, schema};
 pub use approval::{classify_dangerous_command, ApprovalAction};
 pub(crate) use core::path_safe;
 pub(crate) use builtins::{
-    audio_understand, browser, clarify, code_exec, confirm, create_agent, delegate, file_ops,
-    image_gen, memory_tools, multi_agent, music, music_gen, orchestration, present_callout,
+    audio_understand, browser, clarify, code_exec, confirm, context_tools, create_agent, delegate,
+    file_ops, image_gen, memory_tools, multi_agent, music, music_gen, orchestration, present_callout,
     present_metrics, present_result, present_ui, request_user_location, robotics, scheduled,
     skills_tool, task_plan, team, terminal, tts, video_gen, video_understand, vision, web_search,
 };
+pub use context_tools::render_pinned_for_prompt;
 
 pub use catalog::{
     builtin_catalog, catalog_for_ui, params_from_schema, ToolCatalogItem, ToolFunctionInfo,
@@ -47,6 +48,7 @@ pub use schema::{
 pub fn register_all(registry: &mut ToolRegistry) {
     // memory
     memory_tools::register(registry);
+    context_tools::register(registry);
     scheduled::register(registry);
     skills_tool::register(registry);
     task_plan::register(registry);

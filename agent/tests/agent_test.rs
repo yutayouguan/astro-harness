@@ -124,4 +124,6 @@ async fn test_memory_tools_registered() {
         .collect();
     assert!(names.contains(&"memory"));
     assert!(names.contains(&"session_search"));
+    assert!(names.contains(&"search_context"));
+    assert!(names.contains(&"pin_context"));
 }

@@ -31,6 +31,8 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "skills",
     "memory",
     "session_search",
+    "search_context",
+    "pin_context",
     "clarify",
     "confirm",
     "request_user_location",
@@ -191,6 +193,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
     match name {
         "memory" | "memory_add" | "memory_replace" | "memory_remove" => "memory",
         "session_search" => "session_search",
+        "search_context" => "search_context",
+        "pin_context" => "pin_context",
         "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
         | "scheduled" => "scheduled",
         "image_gen" => "image_gen",

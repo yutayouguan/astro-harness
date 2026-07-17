@@ -22,6 +22,11 @@ impl ContextBudget {
         self.remaining
     }
 
+    /// 把先前扣掉的字符数还回预算（用于预留分隔符后本层实际为空的回滚）。
+    pub fn refund(&mut self, n: usize) {
+        self.remaining = self.remaining.saturating_add(n);
+    }
+
     /// 从预算中取出尽可能多的字符；预算耗尽时返回空串。
     pub fn take_chars(&mut self, s: &str) -> String {
         if self.remaining == 0 || s.is_empty() {
@@ -97,24 +102,30 @@ impl ContextSource for DynamicContext {
 const LAYER_SEP: &str = "\n\n---\n\n";
 
 /// 按优先级组装 system prompt；预算优先留给靠前的源。
+///
+/// 在已有层上追加时，先预留 [`LAYER_SEP`] 再 `contribute`，避免极限预算下
+/// 内容已扣费却接不上分隔符、或分隔符挤占后续层的不精确行为。
 pub fn assemble_from_sources(
     budget: &mut ContextBudget,
     sources: &[&dyn ContextSource],
 ) -> String {
+    let sep_cost = LAYER_SEP.chars().count();
     let mut layers = Vec::new();
     for src in sources {
-        let chunk = src.contribute(budget);
-        if chunk.is_empty() {
-            continue;
-        }
         if !layers.is_empty() {
-            let sep_cost = LAYER_SEP.chars().count();
-            if budget.remaining() < sep_cost {
-                // 已贡献的 chunk 无法再接分隔符时仍保留本层（预算已在 contribute 扣过）
-                layers.push(chunk);
+            // 需要分隔符 + 至少 1 个内容字符，否则本层及之后都放不下
+            if budget.remaining() < sep_cost + 1 {
                 break;
             }
             let _ = budget.take_chars(LAYER_SEP);
+        }
+        let chunk = src.contribute(budget);
+        if chunk.is_empty() {
+            // 预留了分隔符却没有内容：把分隔符预算还回去（语义上本层未加入）
+            if !layers.is_empty() {
+                budget.refund(sep_cost);
+            }
+            continue;
         }
         layers.push(chunk);
     }
@@ -208,6 +219,30 @@ mod tests {
         let out = assemble_from_sources(&mut budget, &[&static_ctx, &dynamic]);
         assert!(out.contains("AAAA"));
         assert!(!out.contains("BBBB_DYNAMIC"));
+        assert_eq!(budget.remaining(), 0);
+    }
+
+    #[test]
+    fn separator_reserved_before_next_layer() {
+        // 第一层 4 字；sep=7；第二层至少还要 1 字 → 预算 4+7=11 时第二层应被丢弃
+        let a = RenderedSource::new("a", "AAAA");
+        let b = RenderedSource::new("b", "BBBB");
+        let mut budget = ContextBudget::new(4 + LAYER_SEP.chars().count());
+        let out = assemble_from_sources(&mut budget, &[&a, &b]);
+        assert_eq!(out, "AAAA");
+        assert!(!out.contains("BBBB"));
+        // 预留 sep 后 contribute 为空会 refund，或不足 sep+1 则直接 break
+        assert!(budget.remaining() < LAYER_SEP.chars().count() + 1);
+    }
+
+    #[test]
+    fn empty_middle_layer_does_not_consume_sep() {
+        let a = RenderedSource::new("a", "AAAA");
+        let empty = RenderedSource::new("empty", "   ");
+        let b = RenderedSource::new("b", "BBBB");
+        let mut budget = ContextBudget::new(4 + LAYER_SEP.chars().count() + 4);
+        let out = assemble_from_sources(&mut budget, &[&a, &empty, &b]);
+        assert_eq!(out, format!("AAAA{LAYER_SEP}BBBB"));
         assert_eq!(budget.remaining(), 0);
     }
 }
