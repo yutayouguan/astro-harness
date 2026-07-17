@@ -8,13 +8,13 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+use super::veo_http::google_native_base;
 use crate::http_stream::merge_additional_params;
 use crate::streaming::Usage;
 use crate::tool_format::openai_tools_to_gemini_native;
 use crate::trait_::{
     ChatChunk, ChatContentPart, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
 };
-use super::veo_http::google_native_base;
 
 /// 构造 streamGenerateContent SSE 接入点（API key 作 query 参数）。
 fn stream_generate_content_url(config: &ProviderConfig, model: &str) -> String {
@@ -131,7 +131,11 @@ fn part_to_gemini(p: &ChatContentPart) -> Value {
 
 fn gemini_inline_or_file(url: &str, default_mime: &str) -> Value {
     if let Some((mime, data)) = crate::http_stream::parse_data_url(url) {
-        let mime = if mime.is_empty() { default_mime.to_string() } else { mime };
+        let mime = if mime.is_empty() {
+            default_mime.to_string()
+        } else {
+            mime
+        };
         return json!({ "inlineData": { "mimeType": mime, "data": data } });
     }
     json!({ "fileData": { "fileUri": url, "mimeType": default_mime } })
@@ -501,10 +505,19 @@ mod tests {
 
     #[test]
     fn extract_error_chunk() {
-        let data = r#"{"error":{"code":400,"message":"Invalid request","status":"INVALID_ARGUMENT"}}"#;
+        let data =
+            r#"{"error":{"code":400,"message":"Invalid request","status":"INVALID_ARGUMENT"}}"#;
         let chunk = extract_gemini_native_delta(data).unwrap();
-        assert!(chunk.finish_reason.as_deref().unwrap().starts_with("error:"));
-        assert!(chunk.finish_reason.as_deref().unwrap().contains("Invalid request"));
+        assert!(chunk
+            .finish_reason
+            .as_deref()
+            .unwrap()
+            .starts_with("error:"));
+        assert!(chunk
+            .finish_reason
+            .as_deref()
+            .unwrap()
+            .contains("Invalid request"));
     }
 
     #[test]
@@ -524,7 +537,10 @@ mod tests {
         let config = ProviderConfig::default();
         let body = build_gemini_native_chat_body(&messages, &tools, &config);
         assert!(body.get("system_instruction").is_some());
-        assert_eq!(body["system_instruction"]["parts"][0]["text"], "Be concise.");
+        assert_eq!(
+            body["system_instruction"]["parts"][0]["text"],
+            "Be concise."
+        );
         let tool_arr = body["tools"].as_array().unwrap();
         assert!(!tool_arr.is_empty());
         assert!(tool_arr[0].get("function_declarations").is_some());

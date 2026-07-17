@@ -10,8 +10,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::veo_http::{google_native_base, pcm_to_wav};
 use super::defaults::DEFAULT_MODEL;
+use super::veo_http::{google_native_base, pcm_to_wav};
 use crate::trait_::{GeneratedImage, ProviderConfig};
 
 const API_REVISION: &str = "2026-05-20";
@@ -78,7 +78,12 @@ pub fn build_interaction_tts_body(req: &InteractionTtsRequest) -> Value {
         .speech_config
         .iter()
         .map(|c| {
-            if let Some(speaker) = c.speaker.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(speaker) = c
+                .speaker
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
                 json!({ "speaker": speaker, "voice": c.voice })
             } else {
                 json!({ "voice": c.voice })
@@ -171,10 +176,7 @@ pub fn parse_tts_stream_events(events: &[Value]) -> Result<InteractionTtsResult>
             continue;
         };
 
-        let dtype = delta
-            .get("type")
-            .and_then(|t| t.as_str())
-            .unwrap_or("");
+        let dtype = delta.get("type").and_then(|t| t.as_str()).unwrap_or("");
         if dtype != "audio" {
             continue;
         }
@@ -270,10 +272,7 @@ async fn tts_unary_once(
         .await
         .context("解析 Google interactions TTS 响应失败")?;
     if !status.is_success() {
-        anyhow::bail!(
-            "Google interactions HTTP {status}: {}",
-            error_message(&v)
-        );
+        anyhow::bail!("Google interactions HTTP {status}: {}", error_message(&v));
     }
     parse_interaction_tts_response(&v)
 }
@@ -292,10 +291,7 @@ async fn tts_stream_once(
     let status = response.status();
     if !status.is_success() {
         let v: Value = response.json().await.unwrap_or(json!({}));
-        anyhow::bail!(
-            "Google interactions HTTP {status}: {}",
-            error_message(&v)
-        );
+        anyhow::bail!("Google interactions HTTP {status}: {}", error_message(&v));
     }
 
     let mut buf = String::new();
@@ -438,7 +434,11 @@ pub fn build_interaction_image_body(model: &str, req: &InteractionImageRequest) 
         "input": input,
         "response_format": response_format,
     });
-    if let Some(id) = req.previous_interaction_id.as_deref().filter(|s| !s.is_empty()) {
+    if let Some(id) = req
+        .previous_interaction_id
+        .as_deref()
+        .filter(|s| !s.is_empty())
+    {
         body["previous_interaction_id"] = json!(id);
     }
     if req.google_search {
@@ -533,9 +533,7 @@ pub fn parse_interaction_image_response(v: &Value) -> Result<InteractionImageRes
         }
     }
 
-    let image = last_image.ok_or_else(|| {
-        anyhow!("未返回图片数据（可能被安全策略拦截）")
-    })?;
+    let image = last_image.ok_or_else(|| anyhow!("未返回图片数据（可能被安全策略拦截）"))?;
     Ok(InteractionImageResult {
         image,
         interaction_id,
@@ -576,10 +574,7 @@ pub async fn google_interactions_image(
         .await
         .context("解析 Google Interactions 出图响应失败")?;
     if !status.is_success() {
-        anyhow::bail!(
-            "Google interactions HTTP {status}: {}",
-            error_message(&v)
-        );
+        anyhow::bail!("Google interactions HTTP {status}: {}", error_message(&v));
     }
     parse_interaction_image_response(&v)
 }
@@ -589,14 +584,8 @@ pub use crate::protocol::vision::VisionMode;
 
 #[derive(Debug, Clone)]
 pub enum VisionImagePart {
-    Inline {
-        mime_type: String,
-        data_b64: String,
-    },
-    Uri {
-        mime_type: String,
-        uri: String,
-    },
+    Inline { mime_type: String, data_b64: String },
+    Uri { mime_type: String, uri: String },
 }
 
 pub fn default_vision_prompt(mode: VisionMode) -> &'static str {
@@ -649,7 +638,10 @@ pub fn build_interaction_vision_body(
     let mut input = vec![json!({"type": "text", "text": prompt})];
     for img in images {
         match img {
-            VisionImagePart::Inline { mime_type, data_b64 } => {
+            VisionImagePart::Inline {
+                mime_type,
+                data_b64,
+            } => {
                 input.push(json!({
                     "type": "image",
                     "data": data_b64,
@@ -843,7 +835,10 @@ pub fn build_interaction_video_body(
     mode: VideoUnderstandMode,
 ) -> Value {
     let video_part = match video {
-        VideoInputPart::Inline { mime_type, data_b64 } => json!({
+        VideoInputPart::Inline {
+            mime_type,
+            data_b64,
+        } => json!({
             "type": "video",
             "data": data_b64,
             "mime_type": mime_type,
@@ -894,10 +889,7 @@ pub fn parse_interaction_video_text(v: &Value) -> Result<String> {
                         parts.push(t.to_string());
                     }
                 }
-            } else if let Some(t) = step
-                .pointer("/content/0/text")
-                .and_then(|t| t.as_str())
-            {
+            } else if let Some(t) = step.pointer("/content/0/text").and_then(|t| t.as_str()) {
                 parts.push(t.to_string());
             }
         }
@@ -913,9 +905,7 @@ pub fn try_parse_timeline_events(text: &str) -> Result<Value> {
     let trimmed = text.trim();
     // 允许 markdown fence
     let json_str = if let Some(rest) = trimmed.strip_prefix("```") {
-        let rest = rest
-            .trim_start_matches("json")
-            .trim_start_matches('\n');
+        let rest = rest.trim_start_matches("json").trim_start_matches('\n');
         rest.strip_suffix("```").unwrap_or(rest).trim()
     } else {
         trimmed
@@ -951,10 +941,7 @@ pub async fn google_interactions_video(
         .await
         .context("解析 Google interactions video 响应失败")?;
     if !status.is_success() {
-        anyhow::bail!(
-            "Google interactions HTTP {status}: {}",
-            error_message(&v)
-        );
+        anyhow::bail!("Google interactions HTTP {status}: {}", error_message(&v));
     }
     parse_interaction_video_text(&v)
 }
@@ -979,7 +966,9 @@ impl AudioUnderstandMode {
         match s.trim().to_ascii_lowercase().as_str() {
             "" | "describe" => Ok(Self::Describe),
             "transcribe" => Ok(Self::Transcribe),
-            other => anyhow::bail!("audio_understand mode 无效: {other}（支持 describe|transcribe）"),
+            other => {
+                anyhow::bail!("audio_understand mode 无效: {other}（支持 describe|transcribe）")
+            }
         }
     }
 }
@@ -1155,10 +1144,7 @@ pub async fn google_interactions_audio(
         .await
         .context("解析 Google interactions 音频理解响应失败")?;
     if !status.is_success() {
-        anyhow::bail!(
-            "Google interactions HTTP {status}: {}",
-            error_message(&v)
-        );
+        anyhow::bail!("Google interactions HTTP {status}: {}", error_message(&v));
     }
     parse_interaction_audio_text(&v)
 }
@@ -1412,8 +1398,13 @@ mod tests {
         let body = build_interaction_tts_body(&req);
         assert_eq!(body["model"], "gemini-3.1-flash-tts-preview");
         assert_eq!(body["response_format"]["type"], "audio");
-        assert_eq!(body["generation_config"]["speech_config"][0]["voice"], "Kore");
-        assert!(body["generation_config"]["speech_config"][0].get("speaker").is_none());
+        assert_eq!(
+            body["generation_config"]["speech_config"][0]["voice"],
+            "Kore"
+        );
+        assert!(body["generation_config"]["speech_config"][0]
+            .get("speaker")
+            .is_none());
         assert!(body.get("stream").is_none());
     }
 
@@ -1436,7 +1427,9 @@ mod tests {
         };
         let body = build_interaction_tts_body(&req);
         assert_eq!(body["stream"], true);
-        let sc = body["generation_config"]["speech_config"].as_array().unwrap();
+        let sc = body["generation_config"]["speech_config"]
+            .as_array()
+            .unwrap();
         assert_eq!(sc.len(), 2);
         assert_eq!(sc[0]["speaker"], "Joe");
         assert_eq!(sc[1]["voice"], "Puck");
@@ -1502,9 +1495,7 @@ mod tests {
     fn interactions_url_strips_openai_suffix() {
         let cfg = ProviderConfig {
             api_key: "k".into(),
-            base_url: Some(
-                "https://generativelanguage.googleapis.com/v1beta/openai".into(),
-            ),
+            base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai".into()),
             model: String::new(),
             ..ProviderConfig::default()
         };
@@ -1679,8 +1670,14 @@ mod tests {
 
     #[test]
     fn resolve_lyria_model_and_extension() {
-        assert_eq!(resolve_lyria_model_id("clip").unwrap(), "lyria-3-clip-preview");
-        assert_eq!(resolve_lyria_model_id("pro").unwrap(), "lyria-3-pro-preview");
+        assert_eq!(
+            resolve_lyria_model_id("clip").unwrap(),
+            "lyria-3-clip-preview"
+        );
+        assert_eq!(
+            resolve_lyria_model_id("pro").unwrap(),
+            "lyria-3-pro-preview"
+        );
         assert_eq!(
             resolve_lyria_model_id("lyria-3-pro-preview").unwrap(),
             "lyria-3-pro-preview"
@@ -1758,7 +1755,8 @@ mod vision_tests {
             }],
             VisionMode::Segment,
         );
-        let props = &body["response_format"]["schema"]["properties"]["boxes"]["items"]["properties"];
+        let props =
+            &body["response_format"]["schema"]["properties"]["boxes"]["items"]["properties"];
         assert!(props.get("mask").is_some());
         assert_eq!(body["generation_config"]["thinking_level"], "minimal");
     }
@@ -1834,9 +1832,7 @@ mod video_understand_tests {
         // 与 TTS/出图一致的扁平 response_format 风格，匹配官方结构化输出格式
         assert_eq!(body["response_format"]["type"], "text");
         assert_eq!(body["response_format"]["mime_type"], "application/json");
-        let schema = body
-            .pointer("/response_format/schema")
-            .expect("schema");
+        let schema = body.pointer("/response_format/schema").expect("schema");
         assert!(schema.pointer("/properties/events").is_some());
     }
 
@@ -1939,14 +1935,21 @@ mod audio_understand_tests {
         );
         let input = body["input"].as_array().unwrap();
         assert_eq!(input[1]["type"], "video");
-        assert_eq!(input[1]["uri"], "https://www.youtube.com/watch?v=ku-N-eS1lgM");
+        assert_eq!(
+            input[1]["uri"],
+            "https://www.youtube.com/watch?v=ku-N-eS1lgM"
+        );
         assert_eq!(input[1]["mime_type"], "video/mp4");
         assert_eq!(body["response_format"]["type"], "text");
         assert_eq!(body["response_format"]["mime_type"], "application/json");
         let props = &body["response_format"]["schema"]["properties"];
         assert!(props.get("summary").is_some());
-        assert!(props["segments"]["items"]["properties"].get("emotion").is_some());
-        assert!(props["segments"]["items"]["properties"].get("speaker").is_some());
+        assert!(props["segments"]["items"]["properties"]
+            .get("emotion")
+            .is_some());
+        assert!(props["segments"]["items"]["properties"]
+            .get("speaker")
+            .is_some());
     }
 
     #[test]

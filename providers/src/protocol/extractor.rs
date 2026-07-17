@@ -150,7 +150,11 @@ where
     T: DeserializeOwned + Serialize + JsonSchema + Send + Sync,
 {
     /// 创建构建器。
-    pub fn new(provider: impl Into<String>, model: impl Into<String>, config: ProviderConfig) -> Self {
+    pub fn new(
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        config: ProviderConfig,
+    ) -> Self {
         Self {
             provider: provider.into(),
             model: model.into(),
@@ -225,9 +229,7 @@ where
             serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string());
 
         let mut system = String::new();
-        system.push_str(
-            "你是结构化数据抽取器。只通过 submit 工具提交结果，不要输出解释性散文。\n",
-        );
+        system.push_str("你是结构化数据抽取器。只通过 submit 工具提交结果，不要输出解释性散文。\n");
         system.push_str(
             "必须输出且仅输出一次：\n<tool_call>{\"name\":\"submit\",\"arguments\":{...}}</tool_call>\n",
         );
@@ -295,6 +297,9 @@ mod unit_tests {
     #[test]
     fn submit_xml_ok() {
         let raw = "<tool_call>{\"name\":\"submit\",\"arguments\":{\"ok\":true}}</tool_call>";
-        assert_eq!(parse_submit_payload::<Tiny>(raw).unwrap(), Tiny { ok: true });
+        assert_eq!(
+            parse_submit_payload::<Tiny>(raw).unwrap(),
+            Tiny { ok: true }
+        );
     }
 }

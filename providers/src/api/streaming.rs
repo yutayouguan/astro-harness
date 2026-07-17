@@ -37,17 +37,26 @@ impl Usage {
         self.output_tokens
     }
     pub fn total_tokens(&self) -> u32 {
-        self.prompt_tokens().saturating_add(self.completion_tokens())
+        self.prompt_tokens()
+            .saturating_add(self.completion_tokens())
     }
     /// 将另一份用量累加到当前值（饱和加法）；空 other 不累加 request_count。
     pub fn add_assign(&mut self, other: Usage) {
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
-        self.cache_read_tokens = self.cache_read_tokens.saturating_add(other.cache_read_tokens);
-        self.cache_write_tokens = self.cache_write_tokens.saturating_add(other.cache_write_tokens);
+        self.cache_read_tokens = self
+            .cache_read_tokens
+            .saturating_add(other.cache_read_tokens);
+        self.cache_write_tokens = self
+            .cache_write_tokens
+            .saturating_add(other.cache_write_tokens);
         self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
         if !other.is_empty() {
-            let n = if other.request_count == 0 { 1 } else { other.request_count };
+            let n = if other.request_count == 0 {
+                1
+            } else {
+                other.request_count
+            };
             self.request_count = self.request_count.saturating_add(n);
         }
     }

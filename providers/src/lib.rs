@@ -33,9 +33,9 @@ pub use extractor::{parse_submit_payload, ExtractionError, Extractor, ExtractorB
 pub use http_stream::merge_additional_params;
 pub use profile::{ApiMode, ProviderProfile, PROFILES};
 pub use streaming::{PauseControl, Usage};
+pub use tool_format::{openai_tools_to_anthropic, openai_tools_to_gemini_native};
 pub use trait_::{
     AiProvider, AuthKind, ChatChunk, ChatMessage, ChatProvider, ChatStream, ChatToolCall,
     GeneratedImage, ImageGenProvider, ProviderConfig, ToolCallDeltaChunk, VerifyProvider,
     VerifyResult,
 };
-pub use tool_format::{openai_tools_to_anthropic, openai_tools_to_gemini_native};

@@ -234,7 +234,10 @@ async fn google_api_get_bytes(client: &Client, url: &str, api_key: &str) -> Resu
             .map(|b| b.to_vec());
     }
     let v: Value = response.json().await.unwrap_or(json!({}));
-    anyhow::bail!("GET {status}: {}", crate::http_stream::json_error_message(&v, "GET 请求失败"));
+    anyhow::bail!(
+        "GET {status}: {}",
+        crate::http_stream::json_error_message(&v, "GET 请求失败")
+    );
 }
 
 /// Google 原生 Veo：`predictLongRunning` 创建、轮询 operation、下载视频字节。
@@ -295,10 +298,7 @@ pub async fn google_native_generate_video(
         .await
         .with_context(|| format!("Veo predictLongRunning 失败: {predict_url}"))?;
     let create_status = create_resp.status();
-    let create_body: Value = create_resp
-        .json()
-        .await
-        .context("解析 Veo 创建响应失败")?;
+    let create_body: Value = create_resp.json().await.context("解析 Veo 创建响应失败")?;
     if !create_status.is_success() {
         anyhow::bail!(
             "Veo predict HTTP {create_status}: {}",
@@ -396,9 +396,7 @@ mod tests {
     fn google_v1beta_root_strips_openai_suffix() {
         let cfg = ProviderConfig {
             api_key: "k".into(),
-            base_url: Some(
-                "https://generativelanguage.googleapis.com/v1beta/openai".into(),
-            ),
+            base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai".into()),
             model: String::new(),
             ..ProviderConfig::default()
         };

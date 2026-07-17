@@ -13,8 +13,8 @@ use reqwest::{Client, Response};
 use serde_json::{json, Value};
 use std::time::Duration;
 
-use crate::http_stream::merge_additional_params;
 use super::interactions_http::interactions_url;
+use crate::http_stream::merge_additional_params;
 use crate::streaming::Usage;
 use crate::trait_::{
     ChatChunk, ChatContentPart, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
@@ -42,8 +42,7 @@ async fn send_interactions_chat_request(
         {
             Ok(response) => return Ok(response),
             Err(error)
-                if attempt < MAX_CONNECT_ATTEMPTS
-                    && (error.is_connect() || error.is_timeout()) =>
+                if attempt < MAX_CONNECT_ATTEMPTS && (error.is_connect() || error.is_timeout()) =>
             {
                 last_error = Some(error);
                 tokio::time::sleep(Duration::from_millis(250 * attempt as u64)).await;
@@ -305,10 +304,7 @@ fn thinking_level(config: &ProviderConfig) -> &'static str {
 
 /// ListModels 返回的 id 常带 `models/` 前缀；Interactions 接受两者，但统一去掉更稳妥。
 fn normalize_google_model(model: &str) -> &str {
-    model
-        .trim()
-        .strip_prefix("models/")
-        .unwrap_or(model.trim())
+    model.trim().strip_prefix("models/").unwrap_or(model.trim())
 }
 
 /// 拼装 Interactions 聊天请求体（默认 store=true + `stream=true`）。
@@ -382,9 +378,7 @@ pub fn build_interactions_chat_body(
 }
 
 fn parse_usage(v: &Value) -> Option<Usage> {
-    let u = v
-        .pointer("/interaction/usage")
-        .or_else(|| v.get("usage"))?;
+    let u = v.pointer("/interaction/usage").or_else(|| v.get("usage"))?;
     if u.is_null() {
         return None;
     }
@@ -1047,7 +1041,10 @@ mod tests {
             r#"{"index":0,"step":{"id":"sf9vftls","type":"function_call","name":"image_gen","arguments":{},"signature":"sig_wire"},"event_type":"step.start"}"#,
             &mut state,
         );
-        assert_eq!(start[0].tool_call_deltas[0].name.as_deref(), Some("image_gen"));
+        assert_eq!(
+            start[0].tool_call_deltas[0].name.as_deref(),
+            Some("image_gen")
+        );
         assert_eq!(
             start[0].tool_call_deltas[0].signature.as_deref(),
             Some("sig_wire")
@@ -1094,7 +1091,10 @@ mod tests {
             &mut state,
         );
         let name_slot = start[0].tool_call_deltas[0].index;
-        assert_eq!(start[0].tool_call_deltas[0].name.as_deref(), Some("image_gen"));
+        assert_eq!(
+            start[0].tool_call_deltas[0].name.as_deref(),
+            Some("image_gen")
+        );
 
         // arguments 增量不带顶层 index
         let args = extract_interactions_chat_events(

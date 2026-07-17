@@ -5,15 +5,15 @@
 
 pub mod profile_backed;
 
+pub mod azure;
+pub mod bailian;
 pub mod claude;
 pub mod deepseek;
+pub mod mimo;
 pub mod minimax;
-pub mod openrouter;
-pub mod bailian;
-pub mod nvidia;
 pub mod moonshot;
+pub mod nvidia;
+pub mod ollama;
+pub mod openrouter;
 pub mod volcengine;
 pub mod zhipu;
-pub mod azure;
-pub mod mimo;
-pub mod ollama;

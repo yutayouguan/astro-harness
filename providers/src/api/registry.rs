@@ -34,18 +34,15 @@ impl ProviderRegistry {
 
     /// 按名称获取供应商；支持 `minmax`→`minimax`、`anthropic`→`claude` 别名。
     pub fn get(&self, name: &str) -> Option<Arc<dyn AiProvider>> {
-        self.providers
-            .get(name)
-            .cloned()
-            .or_else(|| {
-                if name == "minmax" {
-                    self.providers.get("minimax").cloned()
-                } else if name == "anthropic" {
-                    self.providers.get("claude").cloned()
-                } else {
-                    None
-                }
-            })
+        self.providers.get(name).cloned().or_else(|| {
+            if name == "minmax" {
+                self.providers.get("minimax").cloned()
+            } else if name == "anthropic" {
+                self.providers.get("claude").cloned()
+            } else {
+                None
+            }
+        })
     }
 
     /// 列出所有已注册供应商 id。
@@ -54,12 +51,7 @@ impl ProviderRegistry {
     }
 
     /// 连通性探测；未知 provider 时仍按 openai 兼容协议用 `verify::probe` 兜底（如 custom）。
-    pub async fn verify(
-        &self,
-        name: &str,
-        model: &str,
-        config: &ProviderConfig,
-    ) -> VerifyResult {
+    pub async fn verify(&self, name: &str, model: &str, config: &ProviderConfig) -> VerifyResult {
         if let Some(provider) = self.get(name) {
             return provider.verify(model, config).await;
         }

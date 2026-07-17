@@ -59,16 +59,9 @@ impl ProviderClient {
     }
 
     /// 构造结构化抽取器（Rig `client.extractor::<T>(model)` 风格）。
-    pub fn extractor<T>(
-        &self,
-        model: impl Into<String>,
-    ) -> crate::extractor::ExtractorBuilder<T>
+    pub fn extractor<T>(&self, model: impl Into<String>) -> crate::extractor::ExtractorBuilder<T>
     where
-        T: serde::de::DeserializeOwned
-            + serde::Serialize
-            + schemars::JsonSchema
-            + Send
-            + Sync,
+        T: serde::de::DeserializeOwned + serde::Serialize + schemars::JsonSchema + Send + Sync,
     {
         let config = crate::trait_::ProviderConfig {
             api_key: self.api_key.clone(),

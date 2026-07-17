@@ -71,12 +71,7 @@ pub fn parse_openai_usage(v: &Value) -> Option<Usage> {
         .and_then(|d| d.get("reasoning_tokens"))
         .and_then(|x| x.as_u64())
         .unwrap_or(0) as u32;
-    if input == 0
-        && output == 0
-        && cache_read == 0
-        && cache_write == 0
-        && reasoning == 0
-    {
+    if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 && reasoning == 0 {
         return None;
     }
     Some(Usage {
@@ -152,9 +147,7 @@ pub async fn chat_stream_for_provider(
         ApiMode::ChatCompletions => {
             openai_compatible_chat_stream(client, id, messages, tools, config).await
         }
-        ApiMode::AnthropicMessages => {
-            anthropic_chat_stream(client, messages, tools, config).await
-        }
+        ApiMode::AnthropicMessages => anthropic_chat_stream(client, messages, tools, config).await,
         ApiMode::Interactions => {
             crate::google::interactions_chat::interactions_chat_stream(
                 client, messages, tools, config,
@@ -166,10 +159,8 @@ pub async fn chat_stream_for_provider(
                 .await
         }
         ApiMode::GeminiNative => {
-            crate::google::native_chat::gemini_native_chat_stream(
-                client, messages, tools, config,
-            )
-            .await
+            crate::google::native_chat::gemini_native_chat_stream(client, messages, tools, config)
+                .await
         }
     }
 }
@@ -291,10 +282,7 @@ fn parse_openai_tool_call_deltas(choice: &Value) -> Vec<ToolCallDeltaChunk> {
     };
     arr.iter()
         .map(|tc| {
-            let index = tc
-                .get("index")
-                .and_then(|i| i.as_u64())
-                .unwrap_or(0) as u32;
+            let index = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
             ToolCallDeltaChunk {
                 index,
                 id: tc.get("id").and_then(|s| s.as_str()).map(str::to_string),
@@ -382,7 +370,7 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
         usage,
         interaction_id: None,
         thought_signature: None,
-})
+    })
 }
 
 /// 从 JSON 响应体提取 `/error/message` 或顶层 `error` 字符串，用于 Google API 错误格式化。
@@ -457,7 +445,10 @@ pub(crate) async fn sse_chat_stream(
                                     .unwrap()
                                     .trim_start_matches("error:")
                                     .to_string();
-                                return Some((Err(anyhow!(msg)), (byte_stream, buf, true, extract)));
+                                return Some((
+                                    Err(anyhow!(msg)),
+                                    (byte_stream, buf, true, extract),
+                                ));
                             }
                             return Some((Ok(chunk), (byte_stream, buf, false, extract)));
                         }
@@ -480,7 +471,10 @@ pub(crate) async fn sse_chat_stream(
                                 let data = data.trim();
                                 if data != "[DONE]" {
                                     if let Some(chunk) = extract(data) {
-                                        return Some((Ok(chunk), (byte_stream, buf, true, extract)));
+                                        return Some((
+                                            Ok(chunk),
+                                            (byte_stream, buf, true, extract),
+                                        ));
                                     }
                                 }
                             }
@@ -500,14 +494,7 @@ fn supports_stream_include_usage(provider: &str) -> bool {
     // 部分兼容网关会拒 stream_options；仅对确认支持的上游开启
     matches!(
         provider,
-        "openai"
-            | "azure"
-            | "deepseek"
-            | "openrouter"
-            | "nvidia"
-            | "moonshot"
-            | "mimo"
-            | "ollama"
+        "openai" | "azure" | "deepseek" | "openrouter" | "nvidia" | "moonshot" | "mimo" | "ollama"
     )
 }
 
@@ -629,14 +616,8 @@ fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
                 .and_then(|s| s.as_str())
                 .map(str::to_string);
             let usage = v.get("usage").and_then(|u| {
-                let out = u
-                    .get("output_tokens")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or(0) as u32;
-                let input = u
-                    .get("input_tokens")
-                    .and_then(|x| x.as_u64())
-                    .unwrap_or(0) as u32;
+                let out = u.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                let input = u.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
                 if out == 0 && input == 0 {
                     None
                 } else {
@@ -1000,9 +981,8 @@ mod tests {
 
     #[test]
     fn gemini_openai_base_not_suffixed_with_v1() {
-        let base = openai_compatible_base(
-            "https://generativelanguage.googleapis.com/v1beta/openai",
-        );
+        let base =
+            openai_compatible_base("https://generativelanguage.googleapis.com/v1beta/openai");
         assert_eq!(
             base,
             "https://generativelanguage.googleapis.com/v1beta/openai"

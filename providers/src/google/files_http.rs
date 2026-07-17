@@ -159,7 +159,10 @@ pub async fn google_files_upload_and_wait(
         .await
         .context("Files API upload finalize 失败")?;
     let status = uploaded.status();
-    let v: Value = uploaded.json().await.context("解析 Files upload 响应失败")?;
+    let v: Value = uploaded
+        .json()
+        .await
+        .context("解析 Files upload 响应失败")?;
     if !status.is_success() {
         anyhow::bail!(
             "Files API upload HTTP {status}: {}",
@@ -272,7 +275,11 @@ mod tests {
             "mimeType": "video/mp4"
         });
         match parse_file_status(&v).unwrap() {
-            FileState::Active { uri, name, mime_type } => {
+            FileState::Active {
+                uri,
+                name,
+                mime_type,
+            } => {
                 assert!(uri.contains("files/abc"));
                 assert_eq!(name, "files/abc");
                 assert_eq!(mime_type, "video/mp4");

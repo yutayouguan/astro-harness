@@ -91,7 +91,8 @@ pub fn default_robotics_prompt(
                     .to_string()
             }
         }
-        RoboticsMode::Detect => "Return bounding boxes as a JSON array with labels. Never return masks \
+        RoboticsMode::Detect => {
+            "Return bounding boxes as a JSON array with labels. Never return masks \
              or code fencing. Limit to 25 objects. Include as many objects as you \
              can identify.\n\
              If an object is present multiple times, name them according to their \
@@ -99,15 +100,18 @@ pub fn default_robotics_prompt(
              The format should be as follows: [{\"box_2d\": [ymin, xmin, ymax, xmax], \
              \"label\": <label for the object>}] normalized to 0-1000. The values in \
              box_2d must only be integers."
-            .to_string(),
-        RoboticsMode::Trajectory => "Place a point on the primary object to move, then up to 15 points for the \
+                .to_string()
+        }
+        RoboticsMode::Trajectory => {
+            "Place a point on the primary object to move, then up to 15 points for the \
              trajectory to the target location described by the scene or task.\n\
              The points should be labeled by order of the trajectory, from '0' \
              (start) to <n> (final point).\n\
              The answer should follow the json format:\n\
              [{\"point\": [y, x], \"label\": <label>}, ...].\n\
              The points are in [y, x] format normalized to 0-1000."
-            .to_string(),
+                .to_string()
+        }
         RoboticsMode::Plan => {
             let mut s = "Explain how to complete the task visible in the image step by step. \
                  Point to each object that you refer to. Each point should be in the format:\n\
@@ -167,10 +171,7 @@ pub fn parse_generate_content_text(v: &Value) -> Result<String> {
     let mut parts = Vec::new();
     if let Some(cands) = v.get("candidates").and_then(|c| c.as_array()) {
         for cand in cands {
-            if let Some(ps) = cand
-                .pointer("/content/parts")
-                .and_then(|p| p.as_array())
-            {
+            if let Some(ps) = cand.pointer("/content/parts").and_then(|p| p.as_array()) {
                 for p in ps {
                     if let Some(t) = p.get("text").and_then(|t| t.as_str()) {
                         parts.push(t.to_string());
@@ -248,10 +249,7 @@ mod tests {
 
     #[test]
     fn default_model_is_robotics_er_16() {
-        assert_eq!(
-            default_robotics_model(),
-            "gemini-robotics-er-1.6-preview"
-        );
+        assert_eq!(default_robotics_model(), "gemini-robotics-er-1.6-preview");
     }
 
     #[test]
@@ -285,9 +283,7 @@ mod tests {
     fn url_uses_v1beta_generate_content() {
         let cfg = ProviderConfig {
             api_key: "k".into(),
-            base_url: Some(
-                "https://generativelanguage.googleapis.com/v1beta/openai".into(),
-            ),
+            base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai".into()),
             ..ProviderConfig::default()
         };
         let url = robotics_generate_content_url(&cfg, "gemini-robotics-er-1.6-preview");
@@ -327,7 +323,8 @@ mod tests {
     #[test]
     fn plan_prompt_includes_robot_api_when_provided() {
         let api = "def move(x,y,high): ...";
-        let p = default_robotics_prompt(RoboticsMode::Plan, None, Some(api), Some("pick blue block"));
+        let p =
+            default_robotics_prompt(RoboticsMode::Plan, None, Some(api), Some("pick blue block"));
         assert!(p.contains("move"));
         assert!(p.contains("function"));
         assert!(p.contains("pick blue block"));
