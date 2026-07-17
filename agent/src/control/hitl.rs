@@ -276,11 +276,16 @@ pub fn is_interactive_tool(name: &str) -> bool {
 }
 
 /// 工具名是否需独占 `&mut MemoryManager`（整批强制串行）。
+///
+/// 优先查注册表 [`tools::ToolRegistry::any_exclusive_access`]；本函数保留为
+/// 无 registry 场景的回落硬编码表（已 deprecated）。
+#[deprecated(note = "use ToolEntry.exclusive_access / ToolRegistry::any_exclusive_access")]
 pub fn is_exclusive_tool(name: &str) -> bool {
     matches!(
         name,
         "memory"
             | "session_search"
+            | "pin_context"
             | "create_agent"
             | "delegate"
     )
@@ -452,15 +457,13 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn delegate_is_exclusive() {
         assert!(is_exclusive_tool("delegate"));
         assert!(!is_exclusive_tool("web_search"));
-        #[allow(deprecated)]
-        {
-            assert!(is_interactive_tool("confirm"));
-            assert!(is_interactive_tool("clarify"));
-            assert!(is_interactive_tool("request_user_location"));
-            assert!(!is_interactive_tool("terminal"));
-        }
+        assert!(is_interactive_tool("confirm"));
+        assert!(is_interactive_tool("clarify"));
+        assert!(is_interactive_tool("request_user_location"));
+        assert!(!is_interactive_tool("terminal"));
     }
 }

@@ -28,6 +28,8 @@ pub struct ToolEntry {
     pub needs_confirmation: bool,
     /// 对齐 Agno `stop_after_tool_call`：本工具执行完后结束 run，不再发起下一轮 LLM。
     pub stop_after_tool_call: bool,
+    /// 需独占 `&mut MemoryManager` / 会话可变状态：同批工具强制串行。
+    pub exclusive_access: bool,
 }
 
 impl ToolEntry {
@@ -42,6 +44,7 @@ impl ToolEntry {
             icon: "wrench",
             needs_confirmation: false,
             stop_after_tool_call: false,
+            exclusive_access: false,
         }
     }
 
@@ -52,6 +55,11 @@ impl ToolEntry {
 
     pub fn stop_after(mut self) -> Self {
         self.stop_after_tool_call = true;
+        self
+    }
+
+    pub fn exclusive(mut self) -> Self {
+        self.exclusive_access = true;
         self
     }
 }
@@ -172,6 +180,13 @@ impl ToolRegistry {
         names
             .iter()
             .any(|n| self.get(n).map(|e| e.stop_after_tool_call).unwrap_or(false))
+    }
+
+    /// 任一工具标记 `exclusive_access`（未注册时回落 false）。
+    pub fn any_exclusive_access(&self, names: &[&str]) -> bool {
+        names
+            .iter()
+            .any(|n| self.get(n).map(|e| e.exclusive_access).unwrap_or(false))
     }
 
     /// 返回所有已注册工具条目的引用（不过滤启用状态与 `check_fn`）。
@@ -360,6 +375,16 @@ mod tests {
         reg.activate_skill_toolsets(&["memory".into()]);
         assert!(reg.is_tool_allowed("memory"));
         assert_eq!(reg.skill_override_toolsets(), vec!["memory".to_string()]);
+    }
+
+    #[test]
+    fn registered_builtins_mark_exclusive_tools() {
+        let mut reg = ToolRegistry::new();
+        crate::register_all(&mut reg);
+        assert!(reg.any_exclusive_access(&["memory", "delegate", "pin_context"]));
+        assert!(!reg.any_exclusive_access(&["web_search"]));
+        assert!(reg.get("create_agent").unwrap().exclusive_access);
+        assert!(reg.get("session_search").unwrap().exclusive_access);
     }
 }
 

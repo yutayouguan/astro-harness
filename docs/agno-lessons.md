@@ -330,7 +330,8 @@ Astro 已有可复用积木，但还没有 Agno 式一等 Team 抽象：
   - `coordinate`：对全部成员发起 delegate，Leader 继续合成
   - `route`：单成员直出（多成员时需 `member_id`），`respond_directly=true`
   - `broadcast`：对全部成员并行 delegate
-  - `tasks`：可持久化，但本轮 `team_run` 拒绝执行
+  - `tasks`：串行执行共享任务板；可选 `tasks: string[]`（按成员 round-robin），缺省则每成员一步；前序结果写入 Shared Task Board 传给后续
+- `ToolEntry.exclusive_access` + `ToolRegistry::any_exclusive_access` 替代硬编码 `is_exclusive_tool`（后者 deprecated）
 - 成员执行仍走现有 delegate runtime；成员 `agent_id` 会写入定义，但本轮执行层先按角色/说明作为临时子 Agent 跑
 
 ---

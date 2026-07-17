@@ -29,7 +29,7 @@
 | R4 | 低 | `SqliteStore` 仅 Example，未挂真实 UsageDb/KnowledgeDb | `UsageDb` 存 `path` + `impl SqliteStore`；`KnowledgeDb` 已有 `path()` + open 时 migrate | **已修**（本轮） |
 | R6 | 信息 | EntityMemory / Always / embedding / Postgres | 文档「不必 / P4」 | **不做** |
 | R7 | 信息 | `search_context` / `pin_context` | `context_tools` + pinned 注入 Dynamic | **已修**（本轮） |
-| R8 | 信息 | Team `tasks`、`is_exclusive_tool` 名称表 | 文档已声明 | **记债** |
+| R8 | 信息 | Team `tasks`、`is_exclusive_tool` 名称表 | `tasks` 串行共享任务板；`exclusive_access` 进 ToolEntry | **已修**（本轮） |
 | R10 | 低 | `assemble_from_sources` 分隔符在 contribute 之后扣预算，极限预算下分隔符与层切分略不精确 | 先预留 sep（+1）再 contribute，空层 refund | **已修**（本轮） |
 | R11 | 信息 | `skills` 加载后再次 `load_skill_by_name` 解析 `astro_tools`（双读磁盘） | `recent_astro_tools` 5s 窗口复用；激活路径优先命中 | **已修**（本轮） |
 
@@ -50,3 +50,4 @@
 7. R11：`skills::recent_astro_tools` + `activate_skill_toolsets_from_args` 复用刚加载结果，避免双读磁盘。
 8. R10：`assemble_from_sources` 先预留分隔符再 contribute，空层 refund。
 9. R7：`search_context` / `pin_context` 工具；pinned 写入 workspace 并注入 Dynamic。
+10. R8：`team_run` tasks 串行共享任务板；`ToolEntry.exclusive_access` 替代硬编码表。

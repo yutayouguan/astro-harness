@@ -18,7 +18,7 @@ use providers::streaming::{PauseControl, Usage};
 use providers::trait_::{AiProvider, ProviderConfig};
 use tokio::sync::{mpsc, Mutex};
 
-use crate::control::hitl::{is_exclusive_tool, HitlGate};
+use crate::control::hitl::HitlGate;
 use crate::runtime::AgentLoop;
 use crate::runtime::usage::apply_llm_usage_dual_write;
 use super::run_state::{RunPhase, RunState};
@@ -703,10 +703,10 @@ async fn run_multi_turn_stream_inner(
             let agent = session.lock().await;
             let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
             agent.tool_registry().any_needs_confirmation(&names)
-                || calls.iter().any(|c| {
-                    is_exclusive_tool(&c.name)
-                        || terminal_needs_approval(&c.name, &c.arguments)
-                })
+                || agent.tool_registry().any_exclusive_access(&names)
+                || calls
+                    .iter()
+                    .any(|c| terminal_needs_approval(&c.name, &c.arguments))
         };
 
         let outcomes = if force_serial || hitl_gate.is_none() {

@@ -44,6 +44,9 @@ pub struct TeamRunArgs {
     pub member_id: Option<String>,
     #[serde(default)]
     pub context: Option<String>,
+    /// `tasks` 模式：显式任务列表；缺省则按成员顺序各承担一步 goal。
+    #[serde(default)]
+    pub tasks: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -66,7 +69,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "team_create".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Create or replace a persisted Team definition. Modes: coordinate, route, broadcast, tasks (tasks is stored but not executable yet)."
+        description: "Create or replace a persisted Team definition. Modes: coordinate, route, broadcast, tasks."
             .to_string(),
         schema: schema_for_args::<TeamCreateArgs>(),
         check_fn: None,
@@ -76,7 +79,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "team_run".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Run a persisted Team using coordinate, route, or broadcast. Uses the existing delegate runtime; route requires member_id when the team has multiple members."
+        description: "Run a persisted Team using coordinate, route, broadcast, or tasks. Uses the existing delegate runtime; route requires member_id when the team has multiple members; tasks runs members serially with a shared task board."
             .to_string(),
         schema: schema_for_args::<TeamRunArgs>(),
         check_fn: None,
@@ -169,8 +172,9 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         .map(orchestration::TeamMode::parse)
         .transpose()?
         .unwrap_or(team.mode);
+
     if mode == orchestration::TeamMode::Tasks {
-        anyhow::bail!("team_run 暂未实现 tasks 模式；请使用 coordinate/route/broadcast");
+        return run_tasks_mode(ctx, &team, &parsed, goal);
     }
 
     let members = select_members(&team, mode, parsed.member_id.as_deref())?;
@@ -226,6 +230,140 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     .to_string())
 }
 
+/// `tasks`：按任务列表串行委派；共享任务板把前序结果传给后续成员。
+fn run_tasks_mode(
+    ctx: &ToolContext<'_>,
+    team: &orchestration::TeamDefinition,
+    parsed: &TeamRunArgs,
+    goal: &str,
+) -> anyhow::Result<String> {
+    let work = build_task_work(team, parsed.tasks.as_ref(), parsed.member_id.as_deref())?;
+    let runner = ctx
+        .delegate_runner
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("no delegate runner configured"))?;
+
+    let mut board: Vec<serde_json::Value> = Vec::new();
+    let mut step_results = Vec::new();
+
+    for (idx, item) in work.iter().enumerate() {
+        let board_text = if board.is_empty() {
+            "(empty — you are the first step)".to_string()
+        } else {
+            board
+                .iter()
+                .enumerate()
+                .map(|(i, v)| format!("### Step {}\n{}", i + 1, v))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        };
+        let mut ctx_body = member_context(team, item.member, parsed.context.as_deref());
+        ctx_body.push_str("\n## Shared Task Board\n");
+        ctx_body.push_str(&board_text);
+        ctx_body.push('\n');
+        ctx_body.push_str(&format!(
+            "\n## Current Task ({}/{})\n{}\n",
+            idx + 1,
+            work.len(),
+            item.task
+        ));
+
+        let req = delegate::DelegateRunRequest {
+            parent_agent_id: ctx.memory.agent_id.clone(),
+            parent_session_id: ctx.session_id.clone(),
+            provider: ctx.chat_provider.clone(),
+            model: ctx.chat_model.clone(),
+            api_key: ctx.chat_api_key.clone(),
+            base_url: ctx.chat_base_url.clone(),
+            chat_targets: ctx.chat_targets.clone(),
+            max_concurrent: 1,
+            tasks: vec![delegate::DelegateTaskSpec {
+                goal: format!(
+                    "You are a member of Team \"{}\" running in Tasks mode.\n\nMember role: {}\nMember id: {}\n\nOverall goal:\n{}\n\nFocus on the Current Task below; use the Shared Task Board for prior results.",
+                    team.name, item.member.role, item.member.id, goal
+                ),
+                context: ctx_body,
+                role: delegate::DelegateRole::Leaf,
+                toolsets: item.member.toolsets.clone(),
+                max_iterations: None,
+            }],
+            caller_depth: home::current_spawn_depth(),
+            max_spawn_depth: home::effective_max_spawn_depth(),
+            project_root: ctx.project_root.clone(),
+            hook_bus: ctx.hook_bus.clone(),
+        };
+        let raw = runner(req)?;
+        let parsed_result = serde_json::from_str::<serde_json::Value>(&raw)
+            .unwrap_or(serde_json::Value::String(raw.clone()));
+        board.push(serde_json::json!({
+            "member_id": item.member.id,
+            "role": item.member.role,
+            "task": item.task,
+            "result": &parsed_result,
+        }));
+        step_results.push(serde_json::json!({
+            "step": idx + 1,
+            "member_id": item.member.id,
+            "role": item.member.role,
+            "task": item.task,
+            "result": parsed_result,
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "team_id": team.id,
+        "team_name": team.name,
+        "mode": orchestration::TeamMode::Tasks,
+        "respond_directly": false,
+        "steps": step_results,
+        "shared_board": board,
+    })
+    .to_string())
+}
+
+struct TaskWorkItem<'a> {
+    member: &'a orchestration::TeamMember,
+    task: String,
+}
+
+fn build_task_work<'a>(
+    team: &'a orchestration::TeamDefinition,
+    tasks: Option<&Vec<String>>,
+    member_id: Option<&str>,
+) -> anyhow::Result<Vec<TaskWorkItem<'a>>> {
+    let members = select_members(team, orchestration::TeamMode::Tasks, member_id)?;
+    if members.is_empty() {
+        anyhow::bail!("tasks 模式需要至少一个成员");
+    }
+    let explicit: Vec<String> = tasks
+        .map(|v| {
+            v.iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if explicit.is_empty() {
+        // 缺省：每个成员一步，任务=按角色推进整体目标
+        return Ok(members
+            .into_iter()
+            .map(|m| TaskWorkItem {
+                task: format!("From your role ({}), advance the overall goal.", m.role),
+                member: m,
+            })
+            .collect());
+    }
+
+    // 显式任务：按成员顺序循环分配
+    let mut out = Vec::with_capacity(explicit.len());
+    for (i, task) in explicit.into_iter().enumerate() {
+        let member = members[i % members.len()];
+        out.push(TaskWorkItem { member, task });
+    }
+    Ok(out)
+}
+
 fn select_members<'a>(
     team: &'a orchestration::TeamDefinition,
     mode: orchestration::TeamMode,
@@ -248,7 +386,10 @@ fn select_members<'a>(
         orchestration::TeamMode::Coordinate | orchestration::TeamMode::Broadcast => {
             Ok(team.members.iter().collect())
         }
-        orchestration::TeamMode::Tasks => anyhow::bail!("tasks mode is not executable"),
+        orchestration::TeamMode::Tasks => {
+            // tasks：未指定 member_id 时全体按序参与；指定则仅该成员循环执行任务
+            Ok(team.members.iter().collect())
+        }
     }
 }
 
@@ -336,5 +477,35 @@ mod tests {
         let team = sample_team();
         let selected = select_members(&team, orchestration::TeamMode::Broadcast, None).unwrap();
         assert_eq!(selected.len(), 2);
+    }
+
+    #[test]
+    fn tasks_default_one_step_per_member() {
+        let team = sample_team();
+        let work = build_task_work(&team, None, None).unwrap();
+        assert_eq!(work.len(), 2);
+        assert_eq!(work[0].member.id, "a");
+        assert_eq!(work[1].member.id, "b");
+    }
+
+    #[test]
+    fn tasks_explicit_round_robin() {
+        let team = sample_team();
+        let tasks = vec!["t1".into(), "t2".into(), "t3".into()];
+        let work = build_task_work(&team, Some(&tasks), None).unwrap();
+        assert_eq!(work.len(), 3);
+        assert_eq!(work[0].member.id, "a");
+        assert_eq!(work[1].member.id, "b");
+        assert_eq!(work[2].member.id, "a");
+        assert_eq!(work[2].task, "t3");
+    }
+
+    #[test]
+    fn tasks_member_id_restricts_assignee() {
+        let team = sample_team();
+        let tasks = vec!["only-b".into()];
+        let work = build_task_work(&team, Some(&tasks), Some("b")).unwrap();
+        assert_eq!(work.len(), 1);
+        assert_eq!(work[0].member.id, "b");
     }
 }

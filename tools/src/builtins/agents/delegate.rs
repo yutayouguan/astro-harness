@@ -81,7 +81,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",
-            ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().exclusive()
     });
     registry.register(ToolEntry {
         name: "delegate_async".to_string(),
