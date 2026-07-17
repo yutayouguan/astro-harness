@@ -21,6 +21,8 @@ pub struct ParsedToolCall {
     pub arguments: Value,
     /// `arguments` JSON 解析失败时为 `true`（`arguments` 内含 `_parse_error` 与 `_raw`）。
     pub args_parse_error: bool,
+    /// Google Interactions：`function_call.signature`；无则 `None`。
+    pub signature: Option<String>,
 }
 
 impl ParsedToolCall {
@@ -31,6 +33,7 @@ impl ParsedToolCall {
             name: name.into(),
             arguments,
             args_parse_error: false,
+            signature: None,
         }
     }
 
@@ -41,6 +44,7 @@ impl ParsedToolCall {
             name: name.into(),
             arguments,
             args_parse_error: false,
+            signature: None,
         }
     }
 }
@@ -83,6 +87,8 @@ pub struct ToolCallDelta {
     pub name: Option<String>,
     /// 参数 JSON 字符串片段；可能分多次下发，需拼接或覆盖。
     pub arguments: Option<String>,
+    /// Google Interactions：`function_call.signature`（通常随首包下发）。
+    pub signature: Option<String>,
 }
 
 /// 累积 OpenAI 风格 `delta.tool_calls` 片段，直至流结束调用 [`finish`](Self::finish)。
@@ -101,6 +107,8 @@ struct AccSlot {
     name: String,
     /// 已拼接或覆盖的参数 JSON 字符串。
     arguments: String,
+    /// Google Interactions signature。
+    signature: Option<String>,
 }
 
 impl ToolCallAccumulator {
@@ -120,6 +128,9 @@ impl ToolCallAccumulator {
         }
         if let Some(name) = delta.name.as_deref().filter(|s| !s.is_empty()) {
             slot.name.push_str(name);
+        }
+        if let Some(sig) = delta.signature.as_deref().filter(|s| !s.is_empty()) {
+            slot.signature = Some(sig.to_string());
         }
         if let Some(args) = delta.arguments.as_deref() {
             // Google / Ollama 常下发完整 JSON；若当前槽已是完整 JSON 且新片段也是，则覆盖
@@ -157,10 +168,16 @@ impl ToolCallAccumulator {
                 };
                 let trimmed = s.arguments.trim();
                 if trimmed.is_empty() {
-                    return ParsedToolCall::with_id(id, s.name, serde_json::json!({}));
+                    let mut call = ParsedToolCall::with_id(id, s.name, serde_json::json!({}));
+                    call.signature = s.signature;
+                    return call;
                 }
                 match serde_json::from_str::<Value>(trimmed) {
-                    Ok(arguments) => ParsedToolCall::with_id(id, s.name, arguments),
+                    Ok(arguments) => {
+                        let mut call = ParsedToolCall::with_id(id, s.name, arguments);
+                        call.signature = s.signature;
+                        call
+                    }
                     Err(err) => ParsedToolCall {
                         id,
                         name: s.name,
@@ -169,6 +186,7 @@ impl ToolCallAccumulator {
                             "_raw": trimmed,
                         }),
                         args_parse_error: true,
+                        signature: s.signature,
                     },
                 }
             })
@@ -202,13 +220,15 @@ pub fn resolve_tool_calls(
     extract_tool_calls(assistant_text)
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn parses_tool_call_xml() {
-        let text = r#"思考一下
+    fn extracts_xml_tool_call() {
+        let text = r#"
+before
 <tool_call>{"name":"file_ops","arguments":{"path":"a.txt","operation":"read"}}</tool_call>
 "#;
         let calls = extract_tool_calls(text);
@@ -225,12 +245,14 @@ mod tests {
             id: Some("call_1".into()),
             name: Some("file_ops".into()),
             arguments: Some("{\"path\":".into()),
+            signature: None,
         });
         acc.push(&ToolCallDelta {
             index: 0,
             id: None,
             name: None,
             arguments: Some("\"a.txt\",\"operation\":\"read\"}".into()),
+            signature: None,
         });
         let calls = acc.finish();
         assert_eq!(calls.len(), 1);
@@ -248,6 +270,7 @@ mod tests {
             id: Some("x".into()),
             name: Some("file_ops".into()),
             arguments: Some("{\"path\":".into()),
+            signature: None,
         });
         let calls = acc.finish();
         assert!(calls[0].args_parse_error);
@@ -262,15 +285,31 @@ mod tests {
             id: Some("g".into()),
             name: Some("file_ops".into()),
             arguments: Some("{\"path\":\"a\"}".into()),
+            signature: None,
         });
         acc.push(&ToolCallDelta {
             index: 0,
             id: None,
             name: None,
-            arguments: Some("{\"path\":\"b\",\"operation\":\"read\"}".into()),
+            arguments: Some("{\"path\":\"b\"}".into()),
+            signature: None,
         });
         let calls = acc.finish();
         assert_eq!(calls[0].arguments["path"], "b");
-        assert_eq!(calls[0].arguments["operation"], "read");
+        assert!(calls[0].signature.is_none());
+    }
+
+    #[test]
+    fn accumulates_signature_from_delta() {
+        let mut acc = ToolCallAccumulator::new();
+        acc.push(&ToolCallDelta {
+            index: 0,
+            id: Some("fc_1".into()),
+            name: Some("image_gen".into()),
+            arguments: Some("{\"prompt\":\"cat\"}".into()),
+            signature: Some("sig_abc".into()),
+        });
+        let calls = acc.finish();
+        assert_eq!(calls[0].signature.as_deref(), Some("sig_abc"));
     }
 }

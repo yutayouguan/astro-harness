@@ -388,6 +388,7 @@ async fn run_provider_loop(
                         id: c.id.clone(),
                         name: c.name.clone(),
                         arguments: c.arguments.clone(),
+                        signature: None,
                     })
                     .collect(),
             )

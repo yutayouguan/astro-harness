@@ -44,6 +44,7 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
                     id: c.id.clone(),
                     name: c.name.clone(),
                     arguments: c.arguments.clone(),
+                    signature: c.signature.clone(),
                 })
                 .collect()
         });
@@ -256,6 +257,7 @@ mod tests {
                     id: "c1".into(),
                     name: "a".into(),
                     arguments: json!({}),
+                                    signature: None,
                 }],
             ),
             Message::tool("orphan"),
@@ -277,11 +279,13 @@ mod tests {
                         id: "c1".into(),
                         name: "a".into(),
                         arguments: json!({}),
+                                            signature: None,
                     },
                     ToolCall {
                         id: "c2".into(),
                         name: "b".into(),
                         arguments: json!({}),
+                                            signature: None,
                     },
                 ],
             ),
@@ -302,6 +306,7 @@ mod tests {
                 id: "c1".into(),
                 name: "search".into(),
                 arguments: json!({}),
+                            signature: None,
             }],
         );
         let mut tool = Message::tool_with_id("c1", "original long result");

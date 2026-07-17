@@ -91,6 +91,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
                         id: Some("call_1".into()),
                         name: Some("echo".into()),
                         arguments: Some(r#"{"text":"hi"}"#.into()),
+                                            signature: None,
                     }],
                     finish_reason: Some("tool_calls".into()),
                     usage: Some(Usage::from_parts(10, 5)),
@@ -220,6 +221,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
                         id: Some("call_persist".into()),
                         name: Some("echo".into()),
                         arguments: Some(r#"{"text":"hi"}"#.into()),
+                                            signature: None,
                     }],
                     finish_reason: Some("tool_calls".into()),
                     usage: Some(Usage::from_parts(10, 5)),
@@ -487,6 +489,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
                     arguments: Some(
                         r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
                     ),
+                                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -787,12 +790,14 @@ async fn tool_call_delta_and_memory_path() {
                         id: Some("c1".into()),
                         name: Some("memory".into()),
                         arguments: Some(r#"{"action":"add","content":""#.into()),
+                        signature: None,
                     },
                     ToolCallDeltaChunk {
                         index: 0,
                         id: None,
                         name: None,
                         arguments: Some(r#"hello from test","target":"memory"}"#.into()),
+                        signature: None,
                     },
                 ],
                 finish_reason: Some("tool_calls".into()),
@@ -879,6 +884,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
                     arguments: Some(
                         r#"{"title":"Delete?","body":"Really delete the file?"}"#.into(),
                     ),
+                                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -1008,6 +1014,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
                     id: Some("call_term_allow".into()),
                     name: Some("terminal".into()),
                     arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
+                                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -1151,6 +1158,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
                     id: Some("call_term_deny".into()),
                     name: Some("terminal".into()),
                     arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
+                                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 ..Default::default()
@@ -1270,6 +1278,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
                     id: Some("call_b".into()),
                     name: Some("echo".into()),
                     arguments: Some(r#"{"text":"x"}"#.into()),
+                                    signature: None,
                 }],
                 finish_reason: Some("tool_calls".into()),
                 usage: Some(Usage::from_parts(5, 2)),

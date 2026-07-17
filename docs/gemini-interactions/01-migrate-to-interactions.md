@@ -1725,70 +1725,65 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta2/interactions" \
 # Response stream
 // Interaction created
 event: interaction.created
-data: {"type": "interaction.created", "interaction": {"id": "int_xyz", "status": "created"}}
+data: {"event_type": "interaction.created", "interaction": {"id": "int_xyz", "status": "in_progress", "object": "interaction", "model": "gemini-3.5-flash"}}
 
-event: interaction.in_progress
-data: {"type": "interaction.in_progress", "interaction": {"id": "int_xyz", "status": "in_progress"}}
+event: interaction.status_update
+data: {"event_type": "interaction.status_update", "interaction_id": "int_xyz", "status": "in_progress"}
 
-// ── Step 0: Thought ──────────────────────────────────
+// ── Function Call（线上 wire：arguments 经 arguments_delta 下发；step 可带 signature）──
 event: step.start
-data: {"type": "step.start", "index": 0, "step": {"type": "thought"}}
+data: {"event_type": "step.start", "index": 0, "step": {"type": "function_call", "id": "fc_1", "name": "get_weather", "arguments": {}, "signature": "…"}}
 
 event: step.delta
-data: {"type": "step.delta", "index": 0, "delta": {"type": "thought", "text": "The user wants weather data for Boston. I'll call the get_weather tool."}}
+data: {"event_type": "step.delta", "index": 0, "delta": {"type": "arguments_delta", "arguments": "{\"location\": \"Boston, MA\"}"}}
 
 event: step.stop
-data: {"type": "step.stop", "index": 0, "status": "done"}
+data: {"event_type": "step.stop", "index": 0}
 
-// ── Step 1: Function Call (arguments streamed) ───────
-event: step.start
-data: {"type": "step.start", "index": 1, "step": {"type": "function_call", "id": "fc_1", "name": "get_weather"}}
-
-event: step.delta
-data: {"type": "step.delta", "index": 1, "delta": {"type": "arguments", "partial_arguments": "{\"location\": \"Boston, MA\"}"}}
-
-event: step.stop
-data: {"type": "step.stop", "index": 1, "status": "waiting"}
-
-// The interaction pauses — the model needs the tool result before continuing.
-event: interaction.requires_action
-data: {"type": "interaction.requires_action", "interaction": {"id": "int_xyz", "status": "requires_action"}}
+// 工具调用暂停：线上为 interaction.completed + status=requires_action（偶见独立 requires_action 事件）
+event: interaction.completed
+data: {"event_type": "interaction.completed", "interaction": {"id": "int_xyz", "status": "requires_action", "usage": {"total_input_tokens": 66, "total_output_tokens": 16, "total_thought_tokens": 51, "total_cached_tokens": 0, "total_tokens": 133}}}
 
 // ── (Client submits the tool result) ──────────────────
-// The client calls interactions.create with the function_result as input
-// and the previous interaction's ID, then resumes consuming the stream.
+// 客户端以 previous_interaction_id + function_result 续写，再消费后续流。
 
-event: interaction.in_progress
-data: {"type": "interaction.in_progress", "interaction": {"id": "int_xyz", "status": "in_progress"}}
+event: interaction.status_update
+data: {"event_type": "interaction.status_update", "interaction_id": "int_xyz", "status": "in_progress"}
 
-// ── Step 2: Function Result (echoed back, no deltas) ─
+// ── Function Result (echoed back, no deltas) ─
 event: step.start
-data: {"type": "step.start", "index": 2, "step": {"type": "function_result", "call_id": "fc_1", "name": "get_weather", "result": [{"type": "text", "text": "52°F, rain"}]}}
+data: {"event_type": "step.start", "index": 1, "step": {"type": "function_result", "call_id": "fc_1", "name": "get_weather", "result": [{"type": "text", "text": "52°F, rain"}]}}
 
 event: step.stop
-data: {"type": "step.stop", "index": 2, "status": "done"}
+data: {"event_type": "step.stop", "index": 1}
 
-// ── Step 3: Thought ──────────────────────────────────
+// ── Thought（可选）──────────────────────────────────
 event: step.start
-data: {"type": "step.start", "index": 3, "step": {"type": "thought"}}
+data: {"event_type": "step.start", "index": 2, "step": {"type": "thought"}}
 
 event: step.delta
-data: {"type": "step.delta", "index": 3, "delta": {"type": "thought", "text": "Got weather data. Composing the final response."}}
+data: {"event_type": "step.delta", "index": 2, "delta": {"type": "thought", "text": "Got weather data. Composing the final response."}}
 
 event: step.stop
-data: {"type": "step.stop", "index": 3, "status": "done"}
+data: {"event_type": "step.stop", "index": 2}
 
-// ── Step 4: Model Output (text streamed) ─────────────
+// ── Model Output (text streamed) ─────────────
 event: step.start
-data: {"type": "step.start", "index": 4, "step": {"type": "model_output"}}
+data: {"event_type": "step.start", "index": 3, "step": {"type": "model_output"}}
 
 event: step.delta
-data: {"type": "step.delta", "index": 4, "delta": {"type": "text", "text": "It's currently 52°F and rainy in Boston."}}
+data: {"event_type": "step.delta", "index": 3, "delta": {"type": "text", "text": "It's currently 52°F and rainy in Boston."}}
 
 event: step.stop
-data: {"type": "step.stop", "index": 4, "status": "done"}
+data: {"event_type": "step.stop", "index": 3}
 
 // ── Interaction complete ─────────────────────────────
 event: interaction.completed
-data: {"type": "interaction.completed", "interaction": {"id": "int_xyz", "status": "completed", "usage": {"prompt_tokens": 256, "completion_tokens": 128, "total_tokens": 384}}}
+data: {"event_type": "interaction.completed", "interaction": {"id": "int_xyz", "status": "completed", "usage": {"total_input_tokens": 256, "total_output_tokens": 128, "total_tokens": 384}}}
+
+event: done
+data: [DONE]
 ```
+
+> **Wire 说明（2026-05-20 Api-Revision）**：参数增量字段为 `delta.type=arguments_delta` + `delta.arguments`（文档旧示例写 `type=arguments` / `partial_arguments`，实现需两者兼容）。用量字段为 `total_input_tokens` / `total_output_tokens` / `total_thought_tokens` / `total_cached_tokens`。`function_call` 的 `signature` 在无状态回放或丢弃 `previous_interaction_id` 时必须原样回传。
+

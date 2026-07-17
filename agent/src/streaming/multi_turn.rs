@@ -480,6 +480,7 @@ async fn run_multi_turn_stream_inner(
                         id: d.id.clone(),
                         name: d.name.clone(),
                         arguments: d.arguments.clone(),
+                        signature: d.signature.clone(),
                     });
                     if !emit(
                         &tx,
@@ -666,6 +667,7 @@ async fn run_multi_turn_stream_inner(
                             id: c.id.clone(),
                             name: c.name.clone(),
                             arguments: c.arguments.clone(),
+                            signature: c.signature.clone(),
                         })
                         .collect(),
                 )

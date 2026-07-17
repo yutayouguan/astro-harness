@@ -249,6 +249,7 @@ pub fn extract_gemini_native_delta(data: &str) -> Option<ChatChunk> {
                     id: Some(id),
                     name: Some(name),
                     arguments: Some(args.to_string()),
+                    signature: None,
                 });
             } else if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
                 if !text.is_empty() {
@@ -377,6 +378,7 @@ mod tests {
                     id: "fc_1".into(),
                     name: "get_weather".into(),
                     arguments: json!({ "location": "Boston" }),
+                    signature: None,
                 }]),
                 tool_call_id: None,
                 name: None,
@@ -410,11 +412,13 @@ mod tests {
                         id: "a".into(),
                         name: "get_weather".into(),
                         arguments: json!({ "city": "A" }),
+                        signature: None,
                     },
                     ChatToolCall {
                         id: "b".into(),
                         name: "get_weather".into(),
                         arguments: json!({ "city": "B" }),
+                        signature: None,
                     },
                 ]),
                 tool_call_id: None,

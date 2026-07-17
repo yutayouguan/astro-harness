@@ -1373,6 +1373,8 @@ curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
 
 将工具与流式传输搭配使用时，模型会在流中生成一系列 `step.delta` 事件作为函数调用。可以使用 `arguments` 将工具实参作为部分实参进行流式传输。您必须先汇总这些增量，以重建完整的工具调用，然后才能执行它们。
 
+> **实现备注（线上 SSE，Api-Revision 2026-05-20）**：实际 wire 常为 `delta.type = "arguments_delta"` 且字段为 `delta.arguments`（字符串增量）；SDK 示例里的 `type=arguments` / `partial_arguments` 仍应兼容。`step.start` 上的 `function_call` 常带空 `arguments: {}` 与非空 `signature`；工具暂停结束事件多为 `interaction.completed` + `status=requires_action`。用量字段为 `total_*_tokens`。
+
 ### 1.12.1 Python
 
 ```python

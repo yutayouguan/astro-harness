@@ -237,6 +237,7 @@ mod tests {
                 id: "c1".into(),
                 name: "delegate".into(),
                 arguments: serde_json::json!({}),
+                signature: None,
             }],
         );
         let tool = Message::tool_with_id("c1", &"x".repeat(40));

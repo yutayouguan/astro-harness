@@ -16,6 +16,8 @@ pub struct ChatToolCall {
     pub name: String,
     /// 已解析的 JSON 对象；序列化到上游时会再 stringify。
     pub arguments: serde_json::Value,
+    /// Google Interactions：`function_call.signature`（Gemini 3 严格模式回放必需）。
+    pub signature: Option<String>,
 }
 
 /// 单条聊天消息，兼容多轮对话与工具调用。
@@ -86,6 +88,8 @@ pub struct ToolCallDeltaChunk {
     pub name: Option<String>,
     /// 参数字符串增量（JSON 片段）。
     pub arguments: Option<String>,
+    /// Google Interactions：`function_call.signature`（通常随 step.start 一次性下发）。
+    pub signature: Option<String>,
 }
 
 /// 流式聊天响应分片。

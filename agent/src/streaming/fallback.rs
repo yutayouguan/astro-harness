@@ -253,6 +253,7 @@ mod tests {
                 id: Some("c1".into()),
                 name: Some("t".into()),
                 arguments: None,
+                signature: None,
             }],
             ..Default::default()
         })]));

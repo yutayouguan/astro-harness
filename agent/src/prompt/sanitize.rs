@@ -77,11 +77,13 @@ mod tests {
                         id: "c1".into(),
                         name: "a".into(),
                         arguments: json!({}),
+                                            signature: None,
                     },
                     ToolCall {
                         id: "c2".into(),
                         name: "b".into(),
                         arguments: json!({}),
+                                            signature: None,
                     },
                 ],
             ),
@@ -103,6 +105,7 @@ mod tests {
                 id: "c1".into(),
                 name: "a".into(),
                 arguments: json!({}),
+                            signature: None,
             }],
         )];
         sanitize_tool_pairs(&mut msgs);
@@ -119,6 +122,7 @@ mod tests {
                     id: "c1".into(),
                     name: "a".into(),
                     arguments: json!({}),
+                                    signature: None,
                 }],
             ),
             Message::tool_with_id("c1", "ok"),

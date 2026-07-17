@@ -220,12 +220,21 @@ pub fn messages_to_interactions_input(messages: &[ChatMessage]) -> (Option<Strin
                             }));
                         }
                         for c in calls {
-                            input.push(json!({
+                            let mut fc = json!({
                                 "type": "function_call",
                                 "id": c.id,
                                 "name": c.name,
                                 "arguments": c.arguments,
-                            }));
+                            });
+                            if let Some(sig) = c
+                                .signature
+                                .as_deref()
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                            {
+                                fc["signature"] = json!(sig);
+                            }
+                            input.push(fc);
                         }
                         continue;
                     }
@@ -559,6 +568,12 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                     .and_then(|x| x.as_str())
                     .filter(|s| !s.is_empty())
                     .map(str::to_string);
+                let signature = step
+                    .and_then(|s| s.get("signature"))
+                    .and_then(|x| x.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
                 // 完整 arguments（非流式增量时可能直接出现在 step 上）；跳过空对象
                 let arguments = step
                     .and_then(|s| s.get("arguments"))
@@ -569,6 +584,7 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                         id,
                         name,
                         arguments,
+                        signature,
                     }],
                     interaction_id: state.interaction_id.clone(),
                     ..Default::default()
@@ -631,6 +647,7 @@ fn extract_interactions_chat_value(v: &Value, state: &mut StreamState) -> Vec<Ch
                                 id: None,
                                 name: None,
                                 arguments: Some(arguments),
+                                signature: None,
                             }],
                             interaction_id: state.interaction_id.clone(),
                             ..Default::default()
@@ -887,6 +904,7 @@ mod tests {
                     id: "fc_1".into(),
                     name: "get_weather".into(),
                     arguments: json!({ "location": "Boston" }),
+                    signature: None,
                 }]),
                 tool_call_id: None,
                 name: None,
@@ -965,10 +983,14 @@ mod tests {
         // 的 `arguments` 字段里，而不是文档示例的 type=arguments/partial_arguments。
         let mut state = StreamState::default();
         let start = extract_interactions_chat_events(
-            r#"{"index":0,"step":{"id":"sf9vftls","type":"function_call","name":"image_gen","arguments":{}},"event_type":"step.start"}"#,
+            r#"{"index":0,"step":{"id":"sf9vftls","type":"function_call","name":"image_gen","arguments":{},"signature":"sig_wire"},"event_type":"step.start"}"#,
             &mut state,
         );
         assert_eq!(start[0].tool_call_deltas[0].name.as_deref(), Some("image_gen"));
+        assert_eq!(
+            start[0].tool_call_deltas[0].signature.as_deref(),
+            Some("sig_wire")
+        );
         assert!(start[0].tool_call_deltas[0].arguments.is_none());
         let name_slot = start[0].tool_call_deltas[0].index;
 
@@ -1081,6 +1103,27 @@ mod tests {
     }
 
     #[test]
+    fn messages_replay_function_call_signature() {
+        let messages = vec![ChatMessage {
+            role: "assistant".into(),
+            content: String::new(),
+            parts: None,
+            tool_calls: Some(vec![ChatToolCall {
+                id: "fc_1".into(),
+                name: "get_weather".into(),
+                arguments: json!({ "location": "Paris" }),
+                signature: Some("sig_paris".into()),
+            }]),
+            tool_call_id: None,
+            name: None,
+        }];
+        let (_, input) = messages_to_interactions_input(&messages);
+        assert_eq!(input[0]["type"], "function_call");
+        assert_eq!(input[0]["signature"], "sig_paris");
+        assert_eq!(input[0]["arguments"]["location"], "Paris");
+    }
+
+    #[test]
     fn build_body_with_previous_interaction_sends_only_tool_results() {
         let messages = vec![
             ChatMessage::text("system", "Be helpful."),
@@ -1093,6 +1136,7 @@ mod tests {
                     id: "fc_1".into(),
                     name: "get_weather".into(),
                     arguments: json!({ "location": "Boston" }),
+                    signature: None,
                 }]),
                 tool_call_id: None,
                 name: None,

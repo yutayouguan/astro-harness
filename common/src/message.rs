@@ -300,6 +300,9 @@ pub struct ToolCall {
     pub name: String,
     /// JSON 参数。
     pub arguments: serde_json::Value,
+    /// Google Interactions / Gemini 3：`function_call.signature`，无状态回放时必须原样回传。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
 }
 
 /// 一次工具执行结果（工具侧）。

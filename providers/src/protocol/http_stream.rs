@@ -307,6 +307,7 @@ fn parse_openai_tool_call_deltas(choice: &Value) -> Vec<ToolCallDeltaChunk> {
                     .pointer("/function/arguments")
                     .and_then(|s| s.as_str())
                     .map(str::to_string),
+                signature: None,
             }
         })
         .collect()
@@ -586,6 +587,7 @@ fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
                         .and_then(|s| s.as_str())
                         .map(str::to_string),
                     arguments: None,
+                    signature: None,
                 }],
                 ..Default::default()
             })
@@ -605,6 +607,7 @@ fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
                         id: None,
                         name: None,
                         arguments: partial,
+                        signature: None,
                     }],
                     ..Default::default()
                 });
