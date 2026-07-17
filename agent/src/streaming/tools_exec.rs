@@ -405,6 +405,17 @@ fn run_tool_on_snapshot(
         };
         tools::dispatch_tool(|_| true, &mut ctx, name, args)
             .await
-            .unwrap_or_else(|e| format!("工具错误: {e}"))
+            .unwrap_or_else(|e| {
+                memory::try_append_decision(
+                    &snap.memory_dir,
+                    memory::DecisionEntry::new(
+                        memory::DecisionKind::ToolFailure,
+                        format!("{e}"),
+                    )
+                    .with_tool(name.to_string())
+                    .with_session(snap.session_id.clone()),
+                );
+                format!("工具错误: {e}")
+            })
     })
 }
