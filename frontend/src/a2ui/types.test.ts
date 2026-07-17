@@ -7,7 +7,15 @@ test("catalog id is v2", () => {
 });
 
 test("allowlist includes extension components", () => {
-  for (const name of ["Badge", "Chip", "Metric", "Avatar", "Callout", "Spacer"]) {
+  for (const name of [
+    "Badge",
+    "Chip",
+    "Metric",
+    "Avatar",
+    "Callout",
+    "Spacer",
+    "ClarifyWizard",
+  ]) {
     assert.equal(ALLOWED_COMPONENTS.has(name), true, name);
   }
 });

@@ -1,6 +1,6 @@
 use a2ui::templates::{
     build_clarify_surface, build_confirm_surface, build_info_surface,
-    build_location_request_surface,
+    build_location_request_surface, build_multi_clarify_surface, ClarifyStep,
 };
 use a2ui::{validate_operations, ASTRO_CATALOG_ID};
 use serde_json::Value;
@@ -54,6 +54,49 @@ fn clarify_template_validates() {
     let names = all_component_names(&ops);
     assert!(names.iter().any(|n| n == "ChoicePicker"));
     assert!(names.iter().any(|n| n == "Button"));
+}
+
+#[test]
+fn multi_clarify_template_validates() {
+    let steps = [
+        ClarifyStep {
+            id: "style".into(),
+            question: "风格偏好？".into(),
+            options: vec!["民谣".into(), "电子".into()],
+        },
+        ClarifyStep {
+            id: "lyrics".into(),
+            question: "歌词？".into(),
+            options: vec!["你写".into(), "纯音乐".into()],
+        },
+        ClarifyStep {
+            id: "mood".into(),
+            question: "氛围？".into(),
+            options: vec!["欢快洗脑".into(), "优美自然".into()],
+        },
+    ];
+    let ops = build_multi_clarify_surface("surf-clarify-multi", "开干前确认", &steps);
+    validate_operations(&ops).unwrap();
+    assert_eq!(catalog_ids(&ops), vec![ASTRO_CATALOG_ID]);
+    let names = all_component_names(&ops);
+    assert!(names.iter().any(|n| n == "ClarifyWizard"));
+    let wizard = ops
+        .iter()
+        .find_map(|op| {
+            op.pointer("/updateComponents/components")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| {
+                    arr.iter()
+                        .find(|c| c.get("component").and_then(|n| n.as_str()) == Some("ClarifyWizard"))
+                })
+        })
+        .expect("wizard component");
+    let step_count = wizard
+        .get("steps")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    assert_eq!(step_count, 3);
 }
 
 #[test]

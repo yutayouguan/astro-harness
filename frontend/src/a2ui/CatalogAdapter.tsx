@@ -12,6 +12,8 @@ import {
 import type { ReactNode } from "react";
 import MediaPreview from "../components/media/MediaPreview";
 import { resolveMediaPreviewPath } from "../lib/media/resolveMediaSrc";
+import ClarifyWizard from "./ClarifyWizard";
+import { parseClarifySteps } from "./clarifySteps";
 import { mergeActionContext, missingRequiredFields } from "./formState";
 import type { A2uiComponent } from "./types";
 import { isKnownComponent } from "./validate";
@@ -320,6 +322,17 @@ function CatalogNode({
       const size =
         node.size === "sm" || node.size === "lg" ? node.size : "md";
       return <div className={`a2ui-spacer-${size}`} />;
+    }
+    case "ClarifyWizard": {
+      const steps = parseClarifySteps(node.steps);
+      if (!steps.length) return null;
+      return (
+        <ClarifyWizard
+          steps={steps}
+          disabled={ctx.disabled}
+          onAction={ctx.onAction}
+        />
+      );
     }
     default:
       return null;

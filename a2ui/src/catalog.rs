@@ -21,4 +21,6 @@ pub const ALLOWED_COMPONENTS: &[&str] = &[
     "Avatar",
     "Callout",
     "Spacer",
+    // multi-step clarify (stacked tabs)
+    "ClarifyWizard",
 ];

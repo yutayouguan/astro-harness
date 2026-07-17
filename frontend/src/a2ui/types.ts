@@ -66,4 +66,5 @@ export const ALLOWED_COMPONENTS = new Set([
   "Avatar",
   "Callout",
   "Spacer",
+  "ClarifyWizard",
 ]);

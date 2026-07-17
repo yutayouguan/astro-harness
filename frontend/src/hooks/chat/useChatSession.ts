@@ -1045,9 +1045,21 @@ export function useChatSession({
       } else if (name === "deny") {
         payload = isLocationHitl ? { denied: true } : { approved: false };
       } else if (name === "choose") {
-        const value = context.value;
-        if (typeof value !== "string" || !value.trim()) return;
-        payload = { value };
+        const answers = context.answers;
+        if (answers && typeof answers === "object" && !Array.isArray(answers)) {
+          const value =
+            typeof context.value === "string" && context.value.trim()
+              ? context.value.trim()
+              : Object.values(answers as Record<string, unknown>)
+                  .filter((v) => typeof v === "string" && v.trim())
+                  .join("；");
+          if (!value) return;
+          payload = { answers, value };
+        } else {
+          const value = context.value;
+          if (typeof value !== "string" || !value.trim()) return;
+          payload = { value };
+        }
       } else {
         payload = { ...context };
       }

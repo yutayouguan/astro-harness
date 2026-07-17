@@ -90,6 +90,15 @@ pub fn build_confirm_surface(surface_id: &str, title: &str, body: &str) -> Vec<V
     ]
 }
 
+/// One step in a multi-question clarify wizard.
+#[derive(Debug, Clone)]
+pub struct ClarifyStep {
+    /// Stable answer key (also used as tab id).
+    pub id: String,
+    pub question: String,
+    pub options: Vec<String>,
+}
+
 /// Build A2UI operations for a clarify (choose among options) HITL surface.
 pub fn build_clarify_surface(
     surface_id: &str,
@@ -146,6 +155,68 @@ pub fn build_clarify_surface(
                         "id": "submit_label",
                         "component": "Text",
                         "text": "Submit"
+                    }
+                ]
+            }
+        }),
+    ]
+}
+
+/// Multi-question clarify: stacked tab wizard (`ClarifyWizard`).
+///
+/// Frontend renders tabs + layered cards with transition animation.
+/// Submit emits `choose` with `{ answers: { stepId: option }, value: summary }`.
+pub fn build_multi_clarify_surface(
+    surface_id: &str,
+    title: &str,
+    steps: &[ClarifyStep],
+) -> Vec<Value> {
+    let steps_json: Vec<Value> = steps
+        .iter()
+        .map(|s| {
+            json!({
+                "id": s.id,
+                "question": s.question,
+                "options": s.options,
+            })
+        })
+        .collect();
+
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": {
+                "surfaceId": surface_id,
+                "catalogId": ASTRO_CATALOG_ID
+            }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": {
+                "surfaceId": surface_id,
+                "components": [
+                    { "id": "root", "component": "Card", "child": "col" },
+                    {
+                        "id": "col",
+                        "component": "Column",
+                        "children": ["badge", "title", "wizard"]
+                    },
+                    {
+                        "id": "badge",
+                        "component": "Badge",
+                        "text": "Clarify",
+                        "variant": "info"
+                    },
+                    {
+                        "id": "title",
+                        "component": "Text",
+                        "text": title,
+                        "variant": "h2"
+                    },
+                    {
+                        "id": "wizard",
+                        "component": "ClarifyWizard",
+                        "steps": steps_json
                     }
                 ]
             }
