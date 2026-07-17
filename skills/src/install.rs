@@ -10,7 +10,9 @@ use serde::Deserialize;
 
 use crate::digest::skill_content_digest;
 use crate::models::SkillOriginRecord;
-use crate::origins::{find_origin, infer_folder, infer_store, upsert_origin, fill_origin_remote_baseline};
+use crate::origins::{
+    fill_origin_remote_baseline, find_origin, infer_folder, infer_store, upsert_origin,
+};
 
 /// SkillHub 公开文件 API（无需 CLI / login）。
 const SKILLHUB_API: &str = "https://api.skillhub.cn";
@@ -127,10 +129,7 @@ fn parse_skills_sh_path(path: &str) -> Result<(String, Option<String>)> {
 }
 
 /// 将商店 `install_ref` 解析为 `npx` 参数。SkillHub HTTP 引用应走 `is_skillhub_http_ref`。
-pub(crate) fn build_install_args(
-    install_ref: &str,
-    _install_dir: &Path,
-) -> Result<Vec<String>> {
+pub(crate) fn build_install_args(install_ref: &str, _install_dir: &Path) -> Result<Vec<String>> {
     let install_ref = install_ref.trim();
     if install_ref.is_empty() {
         return Err(anyhow!("安装引用为空"));
@@ -368,10 +367,7 @@ pub async fn record_after_install(
     let normalized_agent = normalize_agent_id(agent_id);
     let existing = find_origin(Some(&normalized_agent), &folder)?;
     let now = chrono::Utc::now().timestamp();
-    let installed_at = existing
-        .as_ref()
-        .map(|r| r.installed_at)
-        .unwrap_or(now);
+    let installed_at = existing.as_ref().map(|r| r.installed_at).unwrap_or(now);
     let is_update = existing.is_some();
 
     let content_digest = match agent_skills_dir(agent_id) {
@@ -449,8 +445,7 @@ mod tests {
 
     #[test]
     fn resolves_owner_repo() {
-        let args =
-            build_install_args("vercel-labs/agent-skills", Path::new("/tmp/x")).unwrap();
+        let args = build_install_args("vercel-labs/agent-skills", Path::new("/tmp/x")).unwrap();
         assert_eq!(
             args,
             vec![
@@ -492,8 +487,7 @@ mod tests {
 
     #[test]
     fn resolves_skills_sh_url() {
-        let args =
-            build_install_args("https://skills.sh/owner/repo", Path::new("/tmp/x")).unwrap();
+        let args = build_install_args("https://skills.sh/owner/repo", Path::new("/tmp/x")).unwrap();
         assert_eq!(
             args,
             vec![
@@ -550,7 +544,9 @@ mod tests {
 
     #[test]
     fn skillhub_prefix_is_native_http_not_broken_cli_registry() {
-        assert!(is_skillhub_http_ref("skillhub:user_ec205dbb/web-tools-guide"));
+        assert!(is_skillhub_http_ref(
+            "skillhub:user_ec205dbb/web-tools-guide"
+        ));
         assert!(is_skillhub_http_ref(
             "https://api.skillhub.cn/user_ec205dbb/web-tools-guide"
         ));

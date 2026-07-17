@@ -63,8 +63,9 @@ fn map_skillhub(s: SkillHubSkill) -> StoreSkill {
     // 勿用 homepage（api.skillhub.cn/...）：那不是可安装引用，会导致 CLI 安装必失败。
     let install_ref = match s.upstream_url.filter(|u| !u.trim().is_empty()) {
         Some(url) if url.contains("github.com/") => url,
-        Some(url) if url.contains("clawhub") => clawhub_install_ref(&url)
-            .unwrap_or_else(|| format!("skillhub:{owner}/{slug}")),
+        Some(url) if url.contains("clawhub") => {
+            clawhub_install_ref(&url).unwrap_or_else(|| format!("skillhub:{owner}/{slug}"))
+        }
         _ => format!("skillhub:{owner}/{slug}"),
     };
     StoreSkill {
@@ -165,10 +166,7 @@ async fn fetch_skills_sh(query: &str, limit: usize, page: usize) -> Result<Vec<S
     let client = http_client()?;
     let resp = client
         .get(SKILLS_SH_URL)
-        .header(
-            "User-Agent",
-            "Astro/0.1 (+skills catalog crawler)",
-        )
+        .header("User-Agent", "Astro/0.1 (+skills catalog crawler)")
         .send()
         .await
         .context("GET skills.sh")?;
@@ -217,10 +215,7 @@ fn map_clawhub(s: ClawHubListSkill) -> StoreSkill {
         .filter(|d| !d.is_empty())
         .or(s.description)
         .unwrap_or_default();
-    let installs = s
-        .stats
-        .as_ref()
-        .and_then(|st| st.downloads.or(st.installs));
+    let installs = s.stats.as_ref().and_then(|st| st.downloads.or(st.installs));
     let _ = (s.topics, s.updated_at);
     StoreSkill {
         id: format!("clawhub:{slug}"),
@@ -303,7 +298,11 @@ async fn fetch_clawhub_search(query: &str, limit: usize, page: usize) -> Result<
         return Err(anyhow!("ClawHub search HTTP {}", resp.status()));
     }
     let body: ClawHubSearchResponse = resp.json().await.context("parse ClawHub search JSON")?;
-    let all: Vec<StoreSkill> = body.results.into_iter().map(map_clawhub_search_hit).collect();
+    let all: Vec<StoreSkill> = body
+        .results
+        .into_iter()
+        .map(map_clawhub_search_hit)
+        .collect();
     let start = (page - 1).saturating_mul(limit);
     Ok(all.into_iter().skip(start).take(limit).collect())
 }
@@ -359,7 +358,10 @@ async fn fetch_clawhub(query: &str, limit: usize, page: usize) -> Result<Vec<Sto
     Ok(collected.into_iter().skip(start).take(limit).collect())
 }
 
-fn merge_store_lists(lists: impl IntoIterator<Item = Vec<StoreSkill>>, limit: usize) -> Vec<StoreSkill> {
+fn merge_store_lists(
+    lists: impl IntoIterator<Item = Vec<StoreSkill>>,
+    limit: usize,
+) -> Vec<StoreSkill> {
     let mut merged = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for list in lists {
@@ -470,7 +472,8 @@ fn store_skill_slug(skill: &StoreSkill) -> String {
             .unwrap_or(after_owner)
             .to_string();
     }
-    skill.id
+    skill
+        .id
         .rsplit('/')
         .next()
         .unwrap_or(&skill.name)
@@ -863,7 +866,10 @@ mod tests {
         assert_eq!(stats.downloads, Some(182494));
         assert_eq!(stats.installs, Some(3459));
         assert_eq!(stats.stars, Some(129));
-        assert_eq!(body.latest_version.unwrap().version.as_deref(), Some("1.0.2"));
+        assert_eq!(
+            body.latest_version.unwrap().version.as_deref(),
+            Some("1.0.2")
+        );
         assert_eq!(body.owner.unwrap().handle.as_deref(), Some("user_x"));
     }
 }

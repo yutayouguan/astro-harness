@@ -163,8 +163,7 @@ fn run_npx_seed(base: &Path, source: &str, name: &str) -> Result<()> {
 }
 
 /// 仓库内置 Skill（编译期嵌入 `skills/bundled/`）。
-const BUNDLED_STORYBOARD_VIDEO_MD: &str =
-    include_str!("../bundled/storyboard-video/SKILL.md");
+const BUNDLED_STORYBOARD_VIDEO_MD: &str = include_str!("../bundled/storyboard-video/SKILL.md");
 const BUNDLED_CREATE_AGENT_MD: &str = include_str!("../bundled/create-agent/SKILL.md");
 const BUNDLED_AIHOT_MD: &str = include_str!("../bundled/aihot/SKILL.md");
 const BUNDLED_CREATIVE_MEDIA_MD: &str = include_str!("../bundled/creative-media/SKILL.md");
@@ -324,11 +323,7 @@ mod tests {
         let r1 = seed_bundled_into(dir.path());
         assert!(r1.installed.contains(&"storyboard-video".to_string()));
         assert!(is_public_skill_installed(dir.path(), "storyboard-video"));
-        let body = fs::read_to_string(
-            dir.path()
-                .join("skills/storyboard-video/SKILL.md"),
-        )
-        .unwrap();
+        let body = fs::read_to_string(dir.path().join("skills/storyboard-video/SKILL.md")).unwrap();
         assert!(body.contains("storyboard-video"));
         assert!(body.contains("astro_bundled_rev:"));
         let r2 = seed_bundled_into(dir.path());
@@ -381,10 +376,7 @@ mod tests {
 
     #[test]
     fn build_seed_npx_args_includes_skill_and_yes() {
-        let args = build_seed_npx_args(
-            "https://github.com/obra/superpowers",
-            "brainstorming",
-        );
+        let args = build_seed_npx_args("https://github.com/obra/superpowers", "brainstorming");
         assert_eq!(
             args,
             vec![
@@ -421,13 +413,14 @@ mod tests {
         fs::create_dir_all(&existing).unwrap();
         fs::write(existing.join("SKILL.md"), "---\nname: find-skills\n---\n").unwrap();
 
-        let report = seed_with_installer(dir.path(), &DEFAULT_PUBLIC_SKILLS[..2], &|_source, name| {
-            // 模拟 npx：写入 .agents/skills/<name>
-            let src = dir.path().join(".agents/skills").join(name);
-            fs::create_dir_all(&src).unwrap();
-            fs::write(src.join("SKILL.md"), format!("---\nname: {name}\n---\n")).unwrap();
-            Ok(())
-        });
+        let report =
+            seed_with_installer(dir.path(), &DEFAULT_PUBLIC_SKILLS[..2], &|_source, name| {
+                // 模拟 npx：写入 .agents/skills/<name>
+                let src = dir.path().join(".agents/skills").join(name);
+                fs::create_dir_all(&src).unwrap();
+                fs::write(src.join("SKILL.md"), format!("---\nname: {name}\n---\n")).unwrap();
+                Ok(())
+            });
 
         assert_eq!(report.skipped, vec!["find-skills".to_string()]);
         assert_eq!(report.installed, vec!["skill-creator".to_string()]);

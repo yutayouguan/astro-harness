@@ -48,8 +48,7 @@ pub fn load_origins() -> Result<SkillOriginsFile> {
             records: Vec::new(),
         });
     }
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     if text.trim().is_empty() {
         return Ok(SkillOriginsFile {
             version: 1,
@@ -74,9 +73,11 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
 pub fn upsert_origin(record: SkillOriginRecord) -> Result<()> {
     let key = origin_key(record.agent_id.as_deref(), &record.folder);
     let mut file = load_origins()?;
-    if let Some(existing) = file.records.iter_mut().find(|r| {
-        origin_key(r.agent_id.as_deref(), &r.folder) == key
-    }) {
+    if let Some(existing) = file
+        .records
+        .iter_mut()
+        .find(|r| origin_key(r.agent_id.as_deref(), &r.folder) == key)
+    {
         *existing = record;
     } else {
         file.records.push(record);
@@ -85,10 +86,7 @@ pub fn upsert_origin(record: SkillOriginRecord) -> Result<()> {
 }
 
 /// 按 Agent 与文件夹名查找来源记录。
-pub fn find_origin(
-    agent_id: Option<&str>,
-    folder: &str,
-) -> Result<Option<SkillOriginRecord>> {
+pub fn find_origin(agent_id: Option<&str>, folder: &str) -> Result<Option<SkillOriginRecord>> {
     let key = origin_key(agent_id, folder);
     let file = load_origins()?;
     Ok(file
@@ -216,10 +214,7 @@ pub fn origin_with_remote_baseline(
 }
 
 /// 安装成功后 best-effort 拉取远端元数据并写回 origin baseline；fetch 失败不报错。
-pub async fn fill_origin_remote_baseline(
-    agent_id: Option<&str>,
-    folder: &str,
-) -> Result<()> {
+pub async fn fill_origin_remote_baseline(agent_id: Option<&str>, folder: &str) -> Result<()> {
     let Some(origin) = find_origin(agent_id, folder)? else {
         return Ok(());
     };

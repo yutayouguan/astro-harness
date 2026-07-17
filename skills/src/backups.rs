@@ -67,7 +67,9 @@ pub fn list_skill_backups(agent_id: Option<&str>) -> Result<Vec<SkillBackupEntry
 
     let mut entries = Vec::new();
 
-    for agent_entry in fs::read_dir(&root).with_context(|| format!("read_dir {}", root.display()))? {
+    for agent_entry in
+        fs::read_dir(&root).with_context(|| format!("read_dir {}", root.display()))?
+    {
         let agent_entry = agent_entry?;
         let agent_path = agent_entry.path();
         if !agent_path.is_dir() {
@@ -81,8 +83,8 @@ pub fn list_skill_backups(agent_id: Option<&str>) -> Result<Vec<SkillBackupEntry
             continue;
         }
 
-        for folder_entry in
-            fs::read_dir(&agent_path).with_context(|| format!("read_dir {}", agent_path.display()))?
+        for folder_entry in fs::read_dir(&agent_path)
+            .with_context(|| format!("read_dir {}", agent_path.display()))?
         {
             let folder_entry = folder_entry?;
             let folder_path = folder_entry.path();
@@ -114,11 +116,8 @@ pub fn list_skill_backups(agent_id: Option<&str>) -> Result<Vec<SkillBackupEntry
     entries.sort_by(|a, b| {
         let ta = a.timestamp.parse::<i64>().unwrap_or(0);
         let tb = b.timestamp.parse::<i64>().unwrap_or(0);
-        tb.cmp(&ta).then_with(|| {
-            b.created_at
-                .unwrap_or(0)
-                .cmp(&a.created_at.unwrap_or(0))
-        })
+        tb.cmp(&ta)
+            .then_with(|| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)))
     });
 
     Ok(entries)

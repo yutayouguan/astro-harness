@@ -25,21 +25,16 @@ pub mod update;
 pub mod usage;
 
 pub use backups::{list_skill_backups, reveal_skill_backup, SkillBackupEntry};
+pub use check::{
+    check_origin_against_detail, check_updates_for_agent, classify_update_status,
+    filter_outdated_folders, origin_to_store_skill,
+};
 pub use install::{install_from_ref, InstallOriginHint};
-pub use update::{
-    backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,
-    update_outdated_skills,
-};
-pub use seed::{
-    is_public_skill_installed, seed_bundled_into, seed_default_public_skills, SeedReport,
-    BUNDLED_SKILLS, DEFAULT_PUBLIC_SKILLS,
-};
 pub use installed::{
     link_skill_to_agent, list_enabled_for_prompt, list_installed, list_installed_for_agent,
     list_skill_files, list_skill_files_ex, load_skill_by_name, open_skill_file_externally,
     open_skill_folder, parse_skill_frontmatter_full, read_skill_file, read_skill_file_ex,
-    recent_astro_tools,
-    reveal_skill_file, set_enabled, set_enabled_for_agent,
+    recent_astro_tools, reveal_skill_file, set_enabled, set_enabled_for_agent,
 };
 pub use models::{
     InstalledSkill, SkillBundle, SkillFileEntry, SkillStoreFilter, SkillUpdateCheckResult,
@@ -47,11 +42,17 @@ pub use models::{
     UpdateSkillOpts,
 };
 pub use preview::preview_skill_update;
-pub use check::{
-    check_origin_against_detail, check_updates_for_agent, classify_update_status,
-    filter_outdated_folders, origin_to_store_skill,
-};
 pub use registry::SkillRegistry;
+pub use seed::{
+    is_public_skill_installed, seed_bundled_into, seed_default_public_skills, SeedReport,
+    BUNDLED_SKILLS, DEFAULT_PUBLIC_SKILLS,
+};
 pub use skill::{LoadedSkill, SkillMetadata};
 pub use store::{fetch_detail, search};
-pub use usage::{curate_report, curate_report_at, last_loaded_at, record_skill_load, skill_usage_path};
+pub use update::{
+    backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,
+    update_outdated_skills,
+};
+pub use usage::{
+    curate_report, curate_report_at, last_loaded_at, record_skill_load, skill_usage_path,
+};

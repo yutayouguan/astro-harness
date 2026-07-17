@@ -55,11 +55,7 @@ pub fn check_origin_against_detail(
     origin: &SkillOriginRecord,
     detail: &StoreSkillDetail,
 ) -> SkillUpdateCheckResult {
-    let status = classify_update_status(
-        origin,
-        detail.version.as_deref(),
-        detail.updated_at,
-    );
+    let status = classify_update_status(origin, detail.version.as_deref(), detail.updated_at);
     SkillUpdateCheckResult {
         folder: origin.folder.clone(),
         status,
@@ -314,10 +310,7 @@ mod tests {
                 message: String::new(),
             },
         ];
-        assert_eq!(
-            filter_outdated_folders(&results),
-            vec!["a".to_string()]
-        );
+        assert_eq!(filter_outdated_folders(&results), vec!["a".to_string()]);
     }
 
     #[test]

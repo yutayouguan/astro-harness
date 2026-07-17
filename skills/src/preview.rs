@@ -130,7 +130,10 @@ mod tests {
         let preview = preview_skill_update(Some("workspace"), "demo-skill").unwrap();
         assert!(preview.has_baseline_digest);
         assert!(preview.has_local_changes);
-        assert_eq!(preview.baseline_digest.as_deref(), Some("stale-baseline-digest"));
+        assert_eq!(
+            preview.baseline_digest.as_deref(),
+            Some("stale-baseline-digest")
+        );
         assert_eq!(preview.current_digest.as_deref(), Some(current.as_str()));
         assert_ne!(preview.baseline_digest, preview.current_digest);
     }

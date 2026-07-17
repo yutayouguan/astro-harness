@@ -30,16 +30,13 @@ fn memory_dir() -> PathBuf {
 
 /// 规范化 Agent id：空→None，`default`→`workspace`。
 fn normalize_agent_id(agent_id: Option<&str>) -> Option<String> {
-    agent_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| {
-            if s == "default" {
-                "workspace".to_string()
-            } else {
-                s.to_string()
-            }
-        })
+    agent_id.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
+        if s == "default" {
+            "workspace".to_string()
+        } else {
+            s.to_string()
+        }
+    })
 }
 
 /// Agent 工作区目录（`workspace` 或 `workspace-{id}`）。
@@ -58,11 +55,7 @@ fn active_agent_id() -> Option<String> {
     fs::read_to_string(base.join("active-agent.json"))
         .ok()
         .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-        .and_then(|v| {
-            v.get("id")
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string())
-        })
+        .and_then(|v| v.get("id").and_then(|x| x.as_str()).map(|s| s.to_string()))
 }
 
 /// 启用状态文件路径（按 Agent 或全局）。
@@ -372,14 +365,7 @@ fn scan_machine(agent_id: Option<&str>) -> Vec<InstalledSkill> {
     let roots = machine_skill_roots();
     let mut state = HashMap::new();
     let mut dirty = false;
-    let mut out = scan_roots(
-        &roots,
-        agent_id,
-        "machine",
-        &mut state,
-        &mut dirty,
-        false,
-    );
+    let mut out = scan_roots(&roots, agent_id, "machine", &mut state, &mut dirty, false);
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     out
 }
@@ -441,8 +427,7 @@ pub fn link_skill_to_agent(agent_id: Option<&str>, id: &str, linked: bool) -> Re
         .with_context(|| format!("无效技能路径: {}", skill.path))?;
 
     let dest_root = agent_workspace(&id_norm).join("skills");
-    fs::create_dir_all(&dest_root)
-        .with_context(|| format!("create {}", dest_root.display()))?;
+    fs::create_dir_all(&dest_root).with_context(|| format!("create {}", dest_root.display()))?;
     let dest = dest_root.join(&skill.name);
 
     if linked {
@@ -450,10 +435,7 @@ pub fn link_skill_to_agent(agent_id: Option<&str>, id: &str, linked: bool) -> Re
             if same_path(&dest, &skill_dir) {
                 return Ok(());
             }
-            bail!(
-                "目标已存在且不是该技能的链接: {}",
-                dest.display()
-            );
+            bail!("目标已存在且不是该技能的链接: {}", dest.display());
         }
         create_skill_link(&skill_dir, &dest)?;
     } else if dest.exists() {
@@ -542,8 +524,8 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
         anyhow::bail!("技能已禁用: {name}");
     }
 
-    let content = fs::read_to_string(&installed.path)
-        .with_context(|| format!("读取 {}", installed.path))?;
+    let content =
+        fs::read_to_string(&installed.path).with_context(|| format!("读取 {}", installed.path))?;
 
     let loaded = LoadedSkill {
         metadata: {
@@ -623,13 +605,80 @@ fn skill_file_category(rel: &str) -> &'static str {
 
 fn is_probably_text_file(path: &Path) -> bool {
     const TEXT_EXT: &[&str] = &[
-        "md", "txt", "json", "yaml", "yml", "toml", "xml", "html", "htm", "css", "scss",
-        "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "rb", "go", "rs", "java", "kt", "swift",
-        "c", "cc", "cpp", "h", "hpp", "cs", "php", "sh", "bash", "zsh", "fish", "ps1", "bat",
-        "cmd", "sql", "graphql", "vue", "svelte", "astro", "ini", "cfg", "conf", "env",
-        "gitignore", "dockerignore", "editorconfig", "csv", "tsv", "log", "r", "lua", "pl",
-        "pm", "scala", "dart", "zig", "nim", "ex", "exs", "erl", "hs", "clj", "lisp", "el",
-        "makefile", "dockerfile", "cmake", "gradle", "properties", "plist",
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "toml",
+        "xml",
+        "html",
+        "htm",
+        "css",
+        "scss",
+        "js",
+        "jsx",
+        "ts",
+        "tsx",
+        "mjs",
+        "cjs",
+        "py",
+        "rb",
+        "go",
+        "rs",
+        "java",
+        "kt",
+        "swift",
+        "c",
+        "cc",
+        "cpp",
+        "h",
+        "hpp",
+        "cs",
+        "php",
+        "sh",
+        "bash",
+        "zsh",
+        "fish",
+        "ps1",
+        "bat",
+        "cmd",
+        "sql",
+        "graphql",
+        "vue",
+        "svelte",
+        "astro",
+        "ini",
+        "cfg",
+        "conf",
+        "env",
+        "gitignore",
+        "dockerignore",
+        "editorconfig",
+        "csv",
+        "tsv",
+        "log",
+        "r",
+        "lua",
+        "pl",
+        "pm",
+        "scala",
+        "dart",
+        "zig",
+        "nim",
+        "ex",
+        "exs",
+        "erl",
+        "hs",
+        "clj",
+        "lisp",
+        "el",
+        "makefile",
+        "dockerfile",
+        "cmake",
+        "gradle",
+        "properties",
+        "plist",
     ];
     let name = path
         .file_name()
@@ -712,10 +761,7 @@ pub fn list_skill_files(name: &str) -> Result<crate::models::SkillBundle> {
 }
 
 /// 同上，可选 skill id（本机与 Astro 重名时用）。
-pub fn list_skill_files_ex(
-    name: &str,
-    id: Option<&str>,
-) -> Result<crate::models::SkillBundle> {
+pub fn list_skill_files_ex(name: &str, id: Option<&str>) -> Result<crate::models::SkillBundle> {
     let installed = find_installed_for_preview(name, id)?;
     let root = skill_root_of(&installed)?;
     let mut files = Vec::new();
@@ -739,11 +785,7 @@ pub fn read_skill_file(name: &str, relative_path: &str) -> Result<String> {
 }
 
 /// 同上，可选 skill id。
-pub fn read_skill_file_ex(
-    name: &str,
-    relative_path: &str,
-    id: Option<&str>,
-) -> Result<String> {
+pub fn read_skill_file_ex(name: &str, relative_path: &str, id: Option<&str>) -> Result<String> {
     let installed = find_installed_for_preview(name, id)?;
     let root = skill_root_of(&installed)?.canonicalize()?;
     let rel = relative_path.trim().trim_start_matches('/');
@@ -871,21 +913,13 @@ pub fn open_skill_folder(name: &str, id: Option<&str>) -> Result<()> {
 }
 
 /// 在文件管理器中选中/显示技能内某个文件（或根目录）。
-pub fn reveal_skill_file(
-    name: &str,
-    relative_path: &str,
-    id: Option<&str>,
-) -> Result<()> {
+pub fn reveal_skill_file(name: &str, relative_path: &str, id: Option<&str>) -> Result<()> {
     let path = resolve_skill_abs_path(name, Some(relative_path), id)?;
     reveal_path_in_file_manager(&path)
 }
 
 /// 用系统默认应用打开技能内某个文件。
-pub fn open_skill_file_externally(
-    name: &str,
-    relative_path: &str,
-    id: Option<&str>,
-) -> Result<()> {
+pub fn open_skill_file_externally(name: &str, relative_path: &str, id: Option<&str>) -> Result<()> {
     let path = resolve_skill_abs_path(name, Some(relative_path), id)?;
     open_path_with_system(&path)
 }
@@ -981,18 +1015,22 @@ mod tests {
 
         let bundle = list_skill_files("bundle-skill").unwrap();
         assert_eq!(bundle.name, "bundle-skill");
-        assert!(bundle.files.iter().any(|f| f.relative_path == "SKILL.md"
-            && f.category == "overview"
-            && f.is_text));
-        assert!(bundle.files.iter().any(|f| f.relative_path == "scripts/run.py"
-            && f.category == "scripts"));
+        assert!(bundle
+            .files
+            .iter()
+            .any(|f| f.relative_path == "SKILL.md" && f.category == "overview" && f.is_text));
+        assert!(bundle
+            .files
+            .iter()
+            .any(|f| f.relative_path == "scripts/run.py" && f.category == "scripts"));
         assert!(bundle
             .files
             .iter()
             .any(|f| f.relative_path == "references/notes.md" && f.category == "references"));
-        assert!(bundle.files.iter().any(|f| f.relative_path == "logo.png"
-            && f.category == "other"
-            && !f.is_text));
+        assert!(bundle
+            .files
+            .iter()
+            .any(|f| f.relative_path == "logo.png" && f.category == "other" && !f.is_text));
 
         let md = read_skill_file("bundle-skill", "SKILL.md").unwrap();
         assert!(md.contains("# Body"));
@@ -1023,7 +1061,8 @@ mod tests {
 
     #[test]
     fn parse_astro_tools_list_and_inline() {
-        let block = "---\nname: t\ndescription: d\nastro_tools:\n  - terminal\n  - file_ops\n---\nbody\n";
+        let block =
+            "---\nname: t\ndescription: d\nastro_tools:\n  - terminal\n  - file_ops\n---\nbody\n";
         let m = parse_skill_frontmatter_full(block);
         assert_eq!(m.name, "t");
         assert_eq!(m.astro_tools, vec!["terminal", "file_ops"]);
@@ -1046,7 +1085,11 @@ mod tests {
         .unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
         std::env::remove_var("ASTRO_WORKSPACE");
-        fs::write(dir.path().join("active-agent.json"), r#"{"id":"workspace"}"#).unwrap();
+        fs::write(
+            dir.path().join("active-agent.json"),
+            r#"{"id":"workspace"}"#,
+        )
+        .unwrap();
 
         assert!(recent_astro_tools("recent-skill").is_none());
         let loaded = load_skill_by_name("recent-skill").unwrap();

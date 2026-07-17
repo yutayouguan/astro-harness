@@ -49,8 +49,9 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
         if src_path.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
-            fs::copy(&src_path, &dst_path)
-                .with_context(|| format!("copy {} -> {}", src_path.display(), dst_path.display()))?;
+            fs::copy(&src_path, &dst_path).with_context(|| {
+                format!("copy {} -> {}", src_path.display(), dst_path.display())
+            })?;
         }
     }
     Ok(())
@@ -113,10 +114,7 @@ pub async fn update_installed_skill_ex(
 /// 按 folder 查找来源并重新安装；无 origin 时返回「无法追溯」错误。
 ///
 /// 兼容旧入口：强制更新并在有本地改动时先备份。
-pub async fn update_installed_skill(
-    agent_id: Option<&str>,
-    folder: &str,
-) -> Result<String> {
+pub async fn update_installed_skill(agent_id: Option<&str>, folder: &str) -> Result<String> {
     update_installed_skill_ex(
         agent_id,
         folder,
@@ -187,9 +185,7 @@ async fn update_folders_serial(
 }
 
 /// 串行更新当前 Agent 下所有有来源记录的技能；单条失败写入结果 Vec，不中断。
-pub async fn update_all_with_origin(
-    agent_id: Option<&str>,
-) -> Result<Vec<SkillUpdateItemResult>> {
+pub async fn update_all_with_origin(agent_id: Option<&str>) -> Result<Vec<SkillUpdateItemResult>> {
     let target = normalize_agent_id(agent_id);
     let file = load_origins()?;
     let folders: Vec<String> = file
@@ -203,9 +199,7 @@ pub async fn update_all_with_origin(
 }
 
 /// 先检查更新状态，仅对 Outdated 技能串行重装。
-pub async fn update_outdated_skills(
-    agent_id: Option<&str>,
-) -> Result<Vec<SkillUpdateItemResult>> {
+pub async fn update_outdated_skills(agent_id: Option<&str>) -> Result<Vec<SkillUpdateItemResult>> {
     let check_results = check_updates_for_agent(agent_id).await?;
     let folders = filter_outdated_folders(&check_results);
     update_folders_serial(agent_id, folders, false).await

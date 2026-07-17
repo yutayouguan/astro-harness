@@ -65,8 +65,7 @@ pub fn record_skill_load(name: &str) {
 /// 供测试：写入指定 base。
 pub fn record_skill_load_at(base: &Path, name: &str, at: DateTime<Utc>) -> anyhow::Result<()> {
     let mut data = load_file(base);
-    data.last_loaded
-        .insert(name.to_string(), at.to_rfc3339());
+    data.last_loaded.insert(name.to_string(), at.to_rfc3339());
     save_file(base, &data)
 }
 
@@ -92,13 +91,11 @@ pub fn curate_report_at(base: &Path, unused_skill_days: u32) -> String {
     }
     let data = load_file(base);
     let cutoff = Utc::now() - Duration::days(unused_skill_days as i64);
-    let mut lines = vec![
-        format!(
-            "技能策展（启用 {} 个；闲置阈值 {} 天；只建议，不自动删除）:",
-            enabled.len(),
-            unused_skill_days
-        ),
-    ];
+    let mut lines = vec![format!(
+        "技能策展（启用 {} 个；闲置阈值 {} 天；只建议，不自动删除）:",
+        enabled.len(),
+        unused_skill_days
+    )];
     let mut stale = Vec::new();
     for (name, desc) in &enabled {
         let last = data
