@@ -98,7 +98,7 @@ export default function App() {
     },
     [setThinkingLevel],
   );
-  const [nav, setNav] = useState<NavId>("skills");
+  const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
   const [chatExpanded, setChatExpanded] = useState(false);
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
