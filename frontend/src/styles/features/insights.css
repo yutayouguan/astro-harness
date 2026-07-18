@@ -13,11 +13,11 @@
   --tone: var(--tone-amber);
   --tone-soft: var(--tone-amber-soft);
   --tone-glow: var(--tone-amber-glow);
-  /* 图表主色：冷灰蓝，强调色留给选中/告警 */
-  --insights-series: color-mix(in srgb, var(--ink) 62%, #64748b);
-  --insights-series-soft: color-mix(in srgb, var(--insights-series) 22%, transparent);
-  --insights-warn: #b45309;
-  --insights-warn-soft: rgba(180, 83, 9, 0.1);
+  /* 图表/排行跟随 Tab 主题色（本页为 amber） */
+  --insights-series: var(--tone);
+  --insights-series-soft: var(--tone-soft);
+  --insights-warn: color-mix(in srgb, var(--tone) 72%, #7c2d12);
+  --insights-warn-soft: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 .insights-panel > .panel-agent-toolbar {
@@ -191,8 +191,8 @@
   width: 22px;
   height: 22px;
   border-radius: 8px;
-  color: var(--insights-series);
-  background: var(--insights-series-soft);
+  color: var(--tone);
+  background: var(--tone-soft);
 }
 
 .insights-kpi--primary .insights-kpi-icon {
@@ -273,7 +273,7 @@
 }
 
 .insights-chart-heading-label > svg {
-  color: var(--insights-series);
+  color: var(--tone);
 }
 
 .insights-chart-total {
@@ -282,8 +282,8 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--insights-series) 12%, transparent);
+  color: var(--tone);
+  background: var(--tone-soft);
   font-variant-numeric: tabular-nums;
 }
 
@@ -301,7 +301,7 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--insights-series) 4%, transparent),
+      color-mix(in srgb, var(--tone) 6%, transparent),
       transparent 42%
     ),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
@@ -346,10 +346,10 @@
   border-radius: 7px 7px 3px 3px;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--insights-series) 55%, #94a3b8),
-    var(--insights-series)
+    color-mix(in srgb, var(--tone) 72%, white),
+    var(--tone)
   );
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--insights-series) 22%, transparent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 28%, transparent);
   transition: height 0.2s ease;
 }
 
@@ -523,13 +523,13 @@
 
 .insights-hbar-item.rank-1 .insights-hbar-rank {
   color: #fff;
-  background: color-mix(in srgb, var(--insights-series) 88%, #0f172a);
+  background: var(--tone);
 }
 
 .insights-hbar-item.rank-2 .insights-hbar-rank,
 .insights-hbar-item.rank-3 .insights-hbar-rank {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--insights-series) 22%, transparent);
+  color: var(--tone);
+  background: var(--tone-soft);
 }
 
 .insights-hbar-item.rank-1 .insights-hbar-label {
@@ -543,7 +543,7 @@
 .insights-hbar-track {
   height: 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--insights-series) 10%, transparent);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
   overflow: hidden;
 }
 
@@ -552,8 +552,8 @@
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--insights-series) 55%, transparent),
-    var(--insights-series)
+    color-mix(in srgb, var(--tone) 55%, transparent),
+    var(--tone)
   );
   min-width: 2px;
 }
@@ -561,7 +561,7 @@
 .insights-hbar-item.rank-1 .insights-hbar-fill {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--tone) 55%, var(--insights-series)),
+    color-mix(in srgb, var(--tone) 70%, white),
     var(--tone)
   );
 }
@@ -708,8 +708,8 @@ html.dark .insights-kpi--primary {
 
 html[data-theme="dark"] .insights-unpriced,
 html.dark .insights-unpriced {
-  --insights-warn: #fbbf24;
-  --insights-warn-soft: rgba(251, 191, 36, 0.12);
+  --insights-warn: color-mix(in srgb, var(--tone) 55%, #fbbf24);
+  --insights-warn-soft: color-mix(in srgb, var(--tone) 16%, transparent);
 }
 
 /* —— Collaboration layout —— */
@@ -1251,7 +1251,7 @@ html.dark .insights-collab-label {
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ink-mute);
+  color: var(--tone);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
@@ -1261,8 +1261,8 @@ html.dark .insights-collab-label {
 }
 
 .insights-more-btn:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 .insights-more-btn:focus-visible {
