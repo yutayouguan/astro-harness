@@ -1749,11 +1749,11 @@ html[data-theme="dark"] .chat-welcome-mark-glow {
 }
 
 html[data-theme="dark"] .chat-welcome-illust {
-  opacity: 0.82;
+  opacity: 0.92;
 }
 
-html[data-theme="dark"] .chat-welcome-illust svg {
-  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--tone-blue) 10%, transparent));
+html[data-theme="dark"] .chat-welcome-logo {
+  filter: drop-shadow(0 4px 14px color-mix(in srgb, var(--tone-blue) 18%, transparent));
 }
 
 html[data-theme="dark"] .chat-welcome-wordmark-astro {
@@ -1786,8 +1786,8 @@ html[data-theme="dark"] .chat-welcome-wordmark-astro {
 
 .chat-welcome-mark {
   position: relative;
-  width: min(148px, 36vw);
-  aspect-ratio: 4 / 3;
+  width: 88px;
+  height: 88px;
   margin-inline: auto;
   display: grid;
   place-items: center;
@@ -1796,49 +1796,33 @@ html[data-theme="dark"] .chat-welcome-wordmark-astro {
 
 .chat-welcome-mark-glow {
   position: absolute;
-  inset: 6%;
+  inset: -8%;
   border-radius: 50%;
   background:
     radial-gradient(
       circle at 50% 45%,
-      color-mix(in srgb, var(--tone-blue) 22%, transparent),
+      color-mix(in srgb, var(--tone-blue) 28%, transparent),
       transparent 70%
     );
-  filter: blur(10px);
-  opacity: 0.75;
+  filter: blur(12px);
+  opacity: 0.7;
   pointer-events: none;
 }
 
 .chat-welcome-illust {
   position: relative;
   z-index: 1;
-  width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  color: var(--tone-blue, #2563eb);
   line-height: 0;
-  opacity: 0.95;
 }
 
-.chat-welcome-empty.astro-empty {
-  padding: 0;
-  width: 100%;
-  max-width: 100%;
-}
-
-.chat-welcome-empty.astro-empty--lg .astro-empty-art,
-.chat-welcome-empty .astro-empty-art {
-  width: 100%;
-  max-width: none;
-}
-
-.chat-welcome-illust svg {
-  width: 100%;
-  height: auto;
+.chat-welcome-logo {
   display: block;
-  margin-inline: auto;
-  filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--tone-blue, #2563eb) 16%, transparent));
+  width: 72px;
+  height: 72px;
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--tone-blue, #2563eb) 22%, transparent));
 }
 
 .chat-welcome-wordmark {

@@ -2,7 +2,7 @@
 import type { ComponentType, SVGProps } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import { EmptyIllustration } from "../../illustrations";
+import { AstroLogoMark } from "../icons/AstroLogoMark";
 import {
   SolidBolt,
   SolidChat,
@@ -79,10 +79,10 @@ export function ChatWelcome({ onPickCard }: Props) {
           <div className="chat-welcome-mark">
             <span className="chat-welcome-mark-glow" />
             <div className="chat-welcome-illust">
-              <EmptyIllustration
-                scene="chat"
-                size="lg"
-                className="chat-welcome-empty"
+              <AstroLogoMark
+                className="chat-welcome-logo"
+                width={72}
+                height={72}
               />
             </div>
           </div>

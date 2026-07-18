@@ -32,3 +32,14 @@ Rules:
 - Quick actions (pin / archive / more) stay on the right; do not move status there.
 
 Source: `ChatSessionList.tsx`, `right-panel.css` (`.chat-session-status*`).
+
+### Chat welcome — brand mark
+
+Empty-session hero uses the product logo, not an empty-state illustration.
+
+- Component: `AstroLogoMark` at 72×72 inside `.chat-welcome-mark` (88×88 slot)
+- Soft radial glow behind the mark; gentle float animation
+- Wordmark “Astro Agent” sits under the mark; greeting title remains the primary text
+- Do not put cards or secondary chrome in the brand stack
+
+Source: `ChatWelcome.tsx`, `markdown.css` (`.chat-welcome-mark*`, `.chat-welcome-logo`).
