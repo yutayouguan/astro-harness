@@ -1077,8 +1077,7 @@ html.dark .insights-collab-label {
   overscroll-behavior: contain;
 }
 
-.insights-trace-list-panel .insights-collab-list > li,
-.insights-turn-group {
+.insights-trace-list-panel .insights-collab-list > li {
   flex-shrink: 0;
 }
 
