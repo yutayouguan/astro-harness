@@ -1660,53 +1660,145 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
 
 .chat-welcome-hero {
   position: absolute;
-  inset: 0 12% auto;
-  height: 180px;
+  inset: -12px 8% auto;
+  height: 220px;
   pointer-events: none;
   z-index: 0;
+  overflow: visible;
 }
 
 .chat-welcome-orb {
   position: absolute;
   left: 50%;
   top: 42%;
-  width: 160px;
-  height: 160px;
+  width: 180px;
+  height: 180px;
   translate: -50% -50%;
   border-radius: 50%;
   background:
     radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.42), transparent 42%),
-    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 32%, transparent), transparent 68%);
-  filter: blur(12px);
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 34%, transparent), transparent 68%);
+  background-size: 130% 130%, 120% 120%;
+  background-position: 30% 28%, 50% 50%;
+  filter: blur(14px);
   opacity: 0.55;
-  animation: welcome-orb-breathe 6.5s ease-in-out infinite;
+  will-change: transform, background-position;
+  animation:
+    welcome-orb-drift 14s ease-in-out infinite,
+    welcome-orb-wash 10s ease-in-out infinite;
 }
 
 .chat-welcome-orb--soft {
-  width: 200px;
-  height: 110px;
-  top: 68%;
+  width: 230px;
+  height: 130px;
+  top: 66%;
   background:
-    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 24%, transparent), transparent 70%);
-  filter: blur(18px);
-  opacity: 0.32;
-  animation-delay: -2.2s;
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--tone-purple) 26%, transparent), transparent 70%);
+  background-size: 140% 140%;
+  background-position: 50% 50%;
+  filter: blur(20px);
+  opacity: 0.34;
+  animation:
+    welcome-orb-drift-alt 18s ease-in-out infinite,
+    welcome-orb-wash-soft 12s ease-in-out infinite;
+  animation-delay: -3.2s, -1.4s;
 }
 
 .chat-welcome-orb--spark {
-  width: 72px;
-  height: 72px;
-  top: 28%;
+  width: 88px;
+  height: 88px;
+  top: 26%;
   left: 50%;
   translate: -50% -50%;
   background:
-    radial-gradient(circle, color-mix(in srgb, var(--tone-cyan) 26%, transparent), transparent 70%);
+    radial-gradient(circle, color-mix(in srgb, var(--tone-cyan) 28%, transparent), transparent 70%);
+  background-size: 140% 140%;
+  background-position: 50% 50%;
   filter: blur(12px);
-  opacity: 0.34;
-  animation-delay: -4s;
+  opacity: 0.36;
+  animation:
+    welcome-orb-drift-spark 11s ease-in-out infinite,
+    welcome-orb-wash-spark 8s ease-in-out infinite;
+  animation-delay: -5.5s, -2.8s;
 }
 
-/* 只做呼吸缩放，不改 opacity，避免暗色主题被动画顶成过亮 */
+/* 缓慢漂移 + 光晕中心位移；不改 opacity，避免暗色主题过亮 */
+@keyframes welcome-orb-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(22px, -14px) scale(1.08);
+  }
+  55% {
+    transform: translate(-18px, 10px) scale(0.96);
+  }
+  80% {
+    transform: translate(10px, 16px) scale(1.04);
+  }
+}
+
+@keyframes welcome-orb-drift-alt {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  30% {
+    transform: translate(-26px, 8px) scale(1.1);
+  }
+  60% {
+    transform: translate(20px, -12px) scale(0.94);
+  }
+  85% {
+    transform: translate(-8px, -18px) scale(1.05);
+  }
+}
+
+@keyframes welcome-orb-drift-spark {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(16px, 12px) scale(1.18);
+  }
+  70% {
+    transform: translate(-20px, -8px) scale(0.9);
+  }
+}
+
+@keyframes welcome-orb-wash {
+  0%,
+  100% {
+    background-position: 30% 28%, 48% 52%;
+  }
+  50% {
+    background-position: 68% 42%, 58% 40%;
+  }
+}
+
+@keyframes welcome-orb-wash-soft {
+  0%,
+  100% {
+    background-position: 42% 55%;
+  }
+  50% {
+    background-position: 62% 40%;
+  }
+}
+
+@keyframes welcome-orb-wash-spark {
+  0%,
+  100% {
+    background-position: 40% 45%;
+  }
+  50% {
+    background-position: 65% 55%;
+  }
+}
+
+/* 兼容 agent guide 等仍引用 breathe 的场景 */
 @keyframes welcome-orb-breathe {
   0%,
   100% {
@@ -1794,9 +1886,12 @@ html[data-theme="dark"] .chat-welcome-logo {
       color-mix(in srgb, var(--tone-blue) 28%, transparent),
       transparent 70%
     );
+  background-size: 130% 130%;
+  background-position: 50% 45%;
   filter: blur(12px);
   opacity: 0.7;
   pointer-events: none;
+  animation: welcome-mark-glow-pulse 9s ease-in-out infinite;
 }
 
 .chat-welcome-illust {
@@ -1915,6 +2010,18 @@ html[data-theme="dark"] .chat-welcome-title {
   }
   50% {
     transform: translateY(-3px);
+  }
+}
+
+@keyframes welcome-mark-glow-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    background-position: 46% 42%;
+  }
+  50% {
+    transform: scale(1.08);
+    background-position: 58% 52%;
   }
 }
 
@@ -2882,6 +2989,7 @@ html[data-theme="dark"] .chat-agent-icon-plus {
 @media (prefers-reduced-motion: reduce) {
   .chat-welcome-orb,
   .chat-welcome-mark,
+  .chat-welcome-mark-glow,
   .chat-welcome-copy,
   .chat-welcome-card,
   .composer-typed-caret,
