@@ -261,6 +261,32 @@ export type EvolutionSearchDto = {
   crossover: boolean;
 };
 
+/** 自动触发参数 */
+export type EvolutionAutoDto = {
+  enabled: boolean;
+  cooldownSecs: number;
+  minNewDecisions: number;
+  maxRunsPerDay: number;
+};
+
+/** 自动触发运行时状态（护栏水位） */
+export type EvolutionAutoStatusDto = {
+  enabled: boolean;
+  cooldownSecs: number;
+  minNewDecisions: number;
+  maxRunsPerDay: number;
+  state: {
+    lastRunAt?: string | null;
+    lastDecisionId?: string | null;
+    runsToday: number;
+    runsTodayDate?: string | null;
+  };
+  newDecisions: number;
+  wouldRun: boolean;
+  skipReason: string | null;
+  skipMessage: string | null;
+};
+
 /** 进化历史聚合 + 近期事件（Tauri `evolution_history`） */
 export type EvolutionHistoryDto = {
   summary: {
@@ -315,6 +341,7 @@ export type EvolutionSettingsDto = {
   routes: EvolutionRouteDto[];
   gates: EvolutionGatesDto;
   search: EvolutionSearchDto;
+  auto: EvolutionAutoDto;
   activeProviderId: string | null;
   activeModel: string;
 };

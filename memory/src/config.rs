@@ -284,6 +284,49 @@ fn default_dspy_timeout() -> u64 {
     600
 }
 
+fn default_auto_cooldown_secs() -> u64 {
+    3_600
+}
+
+fn default_auto_min_new_decisions() -> usize {
+    3
+}
+
+fn default_auto_max_runs_per_day() -> u32 {
+    3
+}
+
+/// 自动触发进化（`config.yaml` 的 `evolution.auto` 段）。
+///
+/// 默认关闭；开启后在 Chat Done 时尝试跑一次便宜的单轮 reflect，
+/// 产物只入待审提案，绝不自动写入技能。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct EvolutionAuto {
+    /// 是否启用自动触发（仍需 `evolution.enabled`）。
+    #[serde(default)]
+    pub enabled: bool,
+    /// 两次自动运行的最小间隔（秒）。
+    #[serde(default = "default_auto_cooldown_secs")]
+    pub cooldown_secs: u64,
+    /// 距上次成功触发后，至少新增多少条 DecisionLog 才再跑。
+    #[serde(default = "default_auto_min_new_decisions")]
+    pub min_new_decisions: usize,
+    /// 每个 UTC 自然日最多自动运行次数。
+    #[serde(default = "default_auto_max_runs_per_day")]
+    pub max_runs_per_day: u32,
+}
+
+impl Default for EvolutionAuto {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cooldown_secs: 3_600,
+            min_new_decisions: 3,
+            max_runs_per_day: 3,
+        }
+    }
+}
+
 /// 外部 Python DSPy 引擎对接配置（`config.yaml` 的 `evolution.dspy` 段）。
 ///
 /// 默认关闭；需用户自备 Python + 依赖（见 `evolution-dspy/`）。
@@ -314,7 +357,7 @@ impl Default for EvolutionDspy {
     }
 }
 
-/// 引擎（GEPA/DSPy 流水线）本身为 Phase 2，未实现；此处只承载配置。
+/// 离线进化配置（`config.yaml` 的 `evolution:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 pub struct EvolutionConfig {
     /// 离线进化总开关（默认关）。
@@ -335,6 +378,9 @@ pub struct EvolutionConfig {
     /// 外部 Python DSPy 对接。
     #[serde(default)]
     pub dspy: EvolutionDspy,
+    /// 自动触发（默认关 + 成本护栏）。
+    #[serde(default)]
+    pub auto: EvolutionAuto,
 }
 
 /// 进化路由用途。
@@ -720,6 +766,30 @@ pub fn set_evolution_search(
     Ok(load_evolution_config(base))
 }
 
+/// 设置自动触发参数并返回最新配置。
+pub fn set_evolution_auto(base: &Path, auto: &EvolutionAuto) -> anyhow::Result<EvolutionConfig> {
+    set_nested_bool(base, &["evolution", "auto"], "enabled", auto.enabled)?;
+    set_nested_usize(
+        base,
+        &["evolution", "auto"],
+        "cooldown_secs",
+        auto.cooldown_secs as usize,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "auto"],
+        "min_new_decisions",
+        auto.min_new_decisions,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "auto"],
+        "max_runs_per_day",
+        auto.max_runs_per_day as usize,
+    )?;
+    Ok(load_evolution_config(base))
+}
+
 /// 设置进化门禁并返回最新配置。
 pub fn set_evolution_gates(
     base: &Path,
@@ -821,6 +891,29 @@ mod tests {
         assert!(cfg.search.crossover);
         assert!(!cfg.dspy.enabled);
         assert_eq!(cfg.dspy.timeout_secs, 600);
+        assert!(!cfg.auto.enabled);
+        assert_eq!(cfg.auto.cooldown_secs, 3_600);
+        assert_eq!(cfg.auto.min_new_decisions, 3);
+        assert_eq!(cfg.auto.max_runs_per_day, 3);
+    }
+
+    #[test]
+    fn evolution_set_auto_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = set_evolution_auto(
+            dir.path(),
+            &EvolutionAuto {
+                enabled: true,
+                cooldown_secs: 7200,
+                min_new_decisions: 5,
+                max_runs_per_day: 2,
+            },
+        )
+        .unwrap();
+        assert!(cfg.auto.enabled);
+        assert_eq!(cfg.auto.cooldown_secs, 7200);
+        assert_eq!(cfg.auto.min_new_decisions, 5);
+        assert_eq!(cfg.auto.max_runs_per_day, 2);
     }
 
     #[test]

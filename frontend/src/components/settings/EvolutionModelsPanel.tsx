@@ -11,6 +11,7 @@ import {
   Play,
   RefreshCw,
   Sparkles,
+  Timer,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { useEvolutionProposals } from "../../hooks/settings/useEvolutionProposal
 import { useEvalExamples } from "../../hooks/settings/useEvalExamples";
 import { useDspy } from "../../hooks/settings/useDspy";
 import { useEvolutionHistory } from "../../hooks/settings/useEvolutionHistory";
+import { useEvolutionAuto } from "../../hooks/settings/useEvolutionAuto";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -89,6 +91,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     resetRoute,
     setGates,
     setSearch,
+    setAuto,
     reload,
   } = useEvolutionSettings(active);
   const {
@@ -127,6 +130,14 @@ export default function EvolutionModelsPanel({ active }: Props) {
   } = useDspy(active);
   const [dspySkill, setDspySkill] = useState("");
   const { history, reload: reloadHistory } = useEvolutionHistory(active);
+  const {
+    status: autoStatus,
+    error: autoStatusError,
+    reload: reloadAutoStatus,
+  } = useEvolutionAuto(active);
+  const [cooldownDraft, setCooldownDraft] = useState("");
+  const [minDecDraft, setMinDecDraft] = useState("");
+  const [maxRunsDraft, setMaxRunsDraft] = useState("");
 
   const submitEval = () => {
     if (!evalTask.trim()) return;
@@ -169,8 +180,37 @@ export default function EvolutionModelsPanel({ active }: Props) {
       setJudgeDraft(String(settings.gates.minJudgeScore));
       setGenDraft(String(settings.search.generations));
       setVarDraft(String(settings.search.variants));
+      setCooldownDraft(String(settings.auto.cooldownSecs));
+      setMinDecDraft(String(settings.auto.minNewDecisions));
+      setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
     }
   }, [settings]);
+
+  const commitAutoNums = useCallback(() => {
+    if (!settings) return;
+    const cd = Number.parseInt(cooldownDraft, 10);
+    const md = Number.parseInt(minDecDraft, 10);
+    const mr = Number.parseInt(maxRunsDraft, 10);
+    const cooldown =
+      Number.isFinite(cd) && cd >= 60 && cd <= 86400 ? cd : settings.auto.cooldownSecs;
+    const minDec =
+      Number.isFinite(md) && md >= 1 && md <= 50 ? md : settings.auto.minNewDecisions;
+    const maxRuns =
+      Number.isFinite(mr) && mr >= 1 && mr <= 24 ? mr : settings.auto.maxRunsPerDay;
+    if (
+      cooldown !== settings.auto.cooldownSecs ||
+      minDec !== settings.auto.minNewDecisions ||
+      maxRuns !== settings.auto.maxRunsPerDay
+    ) {
+      void setAuto(settings.auto.enabled, cooldown, minDec, maxRuns).then(() =>
+        reloadAutoStatus(),
+      );
+    } else {
+      setCooldownDraft(String(settings.auto.cooldownSecs));
+      setMinDecDraft(String(settings.auto.minNewDecisions));
+      setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
+    }
+  }, [settings, cooldownDraft, minDecDraft, maxRunsDraft, setAuto, reloadAutoStatus]);
 
   const commitSearch = useCallback(() => {
     if (!settings) return;
@@ -559,6 +599,131 @@ export default function EvolutionModelsPanel({ active }: Props) {
             />
           </div>
         </article>
+      </section>
+
+      <section className="prefs-card aux-list-card">
+        <div className="aux-list-head">
+          <div>
+            <h2 className="prefs-card-title">{t("evo.autoTitle")}</h2>
+            <p className="prefs-card-sub">{t("evo.autoSub")}</p>
+          </div>
+          <div className="aux-list-head-actions">
+            <button
+              type="button"
+              className="aux-action aux-action-ghost"
+              onClick={() => void reloadAutoStatus()}
+            >
+              <RefreshCw size={15} />
+              {t("aux.refresh")}
+            </button>
+          </div>
+        </div>
+
+        <article className="aux-task-row">
+          <div className="aux-task-icon">
+            <Timer size={18} />
+          </div>
+          <div className="aux-task-main">
+            <div className="aux-task-titleline">
+              <h3>{t("evo.autoEnabled")}</h3>
+            </div>
+            <p>{t("evo.autoEnabledDesc")}</p>
+          </div>
+          <div className="aux-task-actions">
+            <button
+              type="button"
+              role="switch"
+              className="tool-toggle"
+              aria-checked={settings?.auto.enabled ?? false}
+              aria-label={t("evo.autoEnabled")}
+              onClick={() =>
+                settings &&
+                void setAuto(
+                  !settings.auto.enabled,
+                  settings.auto.cooldownSecs,
+                  settings.auto.minNewDecisions,
+                  settings.auto.maxRunsPerDay,
+                ).then(() => reloadAutoStatus())
+              }
+              disabled={loading || !settings || !settings.enabled}
+            >
+              <span className="tool-toggle-thumb" />
+            </button>
+          </div>
+        </article>
+
+        {!settings?.enabled && (
+          <p className="aux-muted">{t("evo.autoNeedMaster")}</p>
+        )}
+
+        <div className="evo-search-cfg">
+          <label>
+            {t("evo.autoCooldown")}
+            <input
+              type="number"
+              className="aux-number-input"
+              min={60}
+              max={86400}
+              step={60}
+              value={cooldownDraft}
+              onChange={(e) => setCooldownDraft(e.target.value)}
+              onBlur={commitAutoNums}
+              disabled={!settings}
+              aria-label={t("evo.autoCooldown")}
+            />
+          </label>
+          <label>
+            {t("evo.autoMinDecisions")}
+            <input
+              type="number"
+              className="aux-number-input"
+              min={1}
+              max={50}
+              value={minDecDraft}
+              onChange={(e) => setMinDecDraft(e.target.value)}
+              onBlur={commitAutoNums}
+              disabled={!settings}
+              aria-label={t("evo.autoMinDecisions")}
+            />
+          </label>
+          <label>
+            {t("evo.autoMaxRuns")}
+            <input
+              type="number"
+              className="aux-number-input"
+              min={1}
+              max={24}
+              value={maxRunsDraft}
+              onChange={(e) => setMaxRunsDraft(e.target.value)}
+              onBlur={commitAutoNums}
+              disabled={!settings}
+              aria-label={t("evo.autoMaxRuns")}
+            />
+          </label>
+        </div>
+        <p className="aux-muted">{t("evo.autoCostHint")}</p>
+
+        {autoStatusError && (
+          <div className="aux-error">
+            <AlertTriangle size={16} />
+            {autoStatusError}
+          </div>
+        )}
+        {autoStatus && (
+          <p className="aux-muted">
+            {t("evo.autoStatusLine")
+              .replace("{runs}", String(autoStatus.state.runsToday ?? 0))
+              .replace("{max}", String(autoStatus.maxRunsPerDay))
+              .replace("{new}", String(autoStatus.newDecisions))
+              .replace("{need}", String(autoStatus.minNewDecisions))
+              .replace(
+                "{gate}",
+                autoStatus.wouldRun
+                  ? t("evo.autoWouldRun")
+                  : (autoStatus.skipMessage ?? t("evo.autoSkipped")),
+              )}
+          </p>
+        )}
       </section>
 
       <section className="prefs-card aux-list-card">

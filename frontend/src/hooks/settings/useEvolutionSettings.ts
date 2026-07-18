@@ -16,6 +16,12 @@ type UseEvolutionSettings = {
     minJudgeScore: number,
   ): Promise<void>;
   setSearch(generations: number, variants: number, crossover: boolean): Promise<void>;
+  setAuto(
+    enabled: boolean,
+    cooldownSecs: number,
+    minNewDecisions: number,
+    maxRunsPerDay: number,
+  ): Promise<void>;
   reload(): Promise<void>;
 };
 
@@ -123,6 +129,29 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
     [],
   );
 
+  const setAuto = useCallback(
+    async (
+      enabled: boolean,
+      cooldownSecs: number,
+      minNewDecisions: number,
+      maxRunsPerDay: number,
+    ) => {
+      setError(null);
+      try {
+        const next = await invoke<EvolutionSettingsDto>("set_evolution_auto", {
+          enabled,
+          cooldownSecs,
+          minNewDecisions,
+          maxRunsPerDay,
+        });
+        setSettings(next);
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    },
+    [],
+  );
+
   return {
     loading,
     error,
@@ -132,6 +161,7 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
     resetRoute,
     setGates,
     setSearch,
+    setAuto,
     reload,
   };
 }

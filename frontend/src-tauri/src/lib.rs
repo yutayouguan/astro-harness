@@ -420,6 +420,7 @@ pub fn run() {
             evolution_commands::reset_evolution_route,
             evolution_commands::set_evolution_gates,
             evolution_commands::set_evolution_search,
+            evolution_commands::set_evolution_auto,
             evolution_run_commands::run_evolution,
             evolution_run_commands::run_evolution_search,
             evolution_run_commands::list_evolution_proposals,
@@ -433,6 +434,8 @@ pub fn run() {
             evolution_run_commands::setup_evolution_dspy,
             evolution_run_commands::run_evolution_dspy,
             evolution_run_commands::evolution_history,
+            evolution_run_commands::evolution_auto_status,
+            evolution_run_commands::maybe_run_evolution_auto,
             icon_commands::get_app_icon,
             icon_commands::set_app_icon,
         ])

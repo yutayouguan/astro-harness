@@ -14,14 +14,18 @@ use std::time::Duration;
 use std::collections::HashSet;
 
 use evolution::{
-    apply_patch_unique, approve_proposal, approve_proposal_checked, build_eval_judge_prompt,
-    build_judge_user_prompt, build_mutation_prompt, build_reflection_user_prompt,
-    candidate_new_markdown, check_candidate, examples_for_skill, list_examples, list_proposals,
+    apply_patch_unique, approve_proposal, approve_proposal_checked, build_auto_status,
+    build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
+    build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
+    examples_for_skill, list_examples, list_proposals, load_auto_state, mark_auto_run,
     parse_candidates, parse_eval_score, parse_judge_output, parse_variants, pareto_front,
-    reject_proposal, save_proposals, select_front_capped, build_crossover_prompt, CandidateKind,
-    EvalExample, ReflectionInput, ScoredVariant, SkillCandidate, CROSSOVER_SYSTEM_PROMPT,
-    EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    reject_proposal, save_auto_state, save_proposals, select_front_capped, AutoGate, AutoStatus,
+    CandidateKind, EvalExample, ReflectionInput, ScoredVariant, SkillCandidate,
+    CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
+    REFLECTION_SYSTEM_PROMPT,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
@@ -236,9 +240,8 @@ fn build_transcripts(
     out
 }
 
-/// 运行一次离线进化（生成待审提案）。
-#[tauri::command]
-pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String> {
+/// 运行一次离线进化（生成待审提案）。`mode` 写入历史（`reflect` / `auto`）。
+async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunReport, String> {
     let base = default_memory_dir();
     let cfg = memory::load_evolution_config(&base);
     if !cfg.enabled {
@@ -313,12 +316,13 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
     let proposals: Vec<EvolutionProposalDto> =
         passed.into_iter().map(EvolutionProposalDto::from).collect();
 
-    evolution::record_run(&base, "reflect", generated, gated_out, judged_out, proposals.len());
+    evolution::record_run(&base, mode, generated, gated_out, judged_out, proposals.len());
     let _ = app.emit(
         "evolution-updated",
         serde_json::json!({
             "generated": generated,
             "proposals": proposals.len(),
+            "mode": mode,
         }),
     );
 
@@ -330,6 +334,149 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
         proposals,
         error: None,
     })
+}
+
+/// 运行一次离线进化（生成待审提案）。
+#[tauri::command]
+pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String> {
+    run_evolution_core(&app, "reflect").await
+}
+
+fn auto_inflight() -> &'static AtomicBool {
+    static FLAG: OnceLock<AtomicBool> = OnceLock::new();
+    FLAG.get_or_init(|| AtomicBool::new(false))
+}
+
+/// 自动触发结果（含跳过原因；不抛错以免打断 Chat Done）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvolutionAutoRunDto {
+    pub ran: bool,
+    pub skipped: bool,
+    pub skip_reason: Option<String>,
+    pub skip_message: Option<String>,
+    pub report: Option<EvolutionRunReport>,
+    pub error: Option<String>,
+}
+
+/// 读取自动触发状态快照（配置 + 护栏水位）。
+#[tauri::command]
+pub async fn evolution_auto_status() -> Result<AutoStatus, String> {
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base);
+    let state = load_auto_state(&base);
+    let decisions = memory::list_recent_decisions(&base, 50).unwrap_or_default();
+    Ok(build_auto_status(
+        cfg.enabled,
+        &cfg.auto,
+        &state,
+        &decisions,
+    ))
+}
+
+/// Chat Done / 手动探测：护栏通过则跑一次单轮 reflect，产物只入待审。
+///
+/// 进程内互斥：已有自动运行在途时直接跳过。失败也会记水位/冷却，避免热重试烧钱。
+#[tauri::command]
+pub async fn maybe_run_evolution_auto(app: AppHandle) -> Result<EvolutionAutoRunDto, String> {
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base);
+    let mut state = load_auto_state(&base);
+    let decisions = memory::list_recent_decisions(&base, 50).unwrap_or_default();
+    let gate = evolution::evaluate_auto_gate(
+        cfg.enabled,
+        &cfg.auto,
+        &state,
+        &decisions,
+        chrono::Utc::now(),
+    );
+    match gate {
+        AutoGate::Skip(reason) => {
+            return Ok(EvolutionAutoRunDto {
+                ran: false,
+                skipped: true,
+                skip_reason: Some(reason.as_str().to_string()),
+                skip_message: Some(reason.message()),
+                report: None,
+                error: None,
+            });
+        }
+        AutoGate::Allow => {}
+    }
+
+    if auto_inflight()
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Ok(EvolutionAutoRunDto {
+            ran: false,
+            skipped: true,
+            skip_reason: Some("inflight".into()),
+            skip_message: Some("已有自动进化在运行".into()),
+            report: None,
+            error: None,
+        });
+    }
+
+    let latest_id = decisions.last().map(|d| d.id.clone());
+    let result = run_evolution_core(&app, "auto").await;
+
+    // 无论成败都记一次，挡住热重试；水位推进到当前最新决策。
+    mark_auto_run(&mut state, chrono::Utc::now(), latest_id);
+    let _ = save_auto_state(&base, &state);
+    auto_inflight().store(false, Ordering::SeqCst);
+
+    match result {
+        Ok(report) => {
+            tracing::info!(
+                proposals = report.proposals.len(),
+                generated = report.generated,
+                "auto evolution produced proposals"
+            );
+            Ok(EvolutionAutoRunDto {
+                ran: true,
+                skipped: false,
+                skip_reason: None,
+                skip_message: None,
+                report: Some(report),
+                error: None,
+            })
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "auto evolution failed (cooldown recorded)");
+            Ok(EvolutionAutoRunDto {
+                ran: false,
+                skipped: false,
+                skip_reason: None,
+                skip_message: None,
+                report: None,
+                error: Some(e),
+            })
+        }
+    }
+}
+
+/// fire-and-forget：Chat Done 后尝试自动进化（默认关，护栏内自守）。
+pub fn spawn_maybe_auto_evolution(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        match maybe_run_evolution_auto(app).await {
+            Ok(dto) if dto.ran => {
+                tracing::info!("auto evolution ran");
+            }
+            Ok(dto) if dto.skipped => {
+                tracing::debug!(
+                    reason = dto.skip_reason.as_deref().unwrap_or("-"),
+                    "auto evolution skipped"
+                );
+            }
+            Ok(dto) => {
+                if let Some(err) = dto.error {
+                    tracing::warn!(error = %err, "auto evolution error");
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "auto evolution command failed"),
+        }
+    });
 }
 
 /// 用 judge 给单个候选打分：失败回退中性分 0.5。

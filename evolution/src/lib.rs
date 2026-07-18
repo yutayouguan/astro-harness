@@ -10,6 +10,7 @@
 //!
 //! 非目标：完整 GEPA/Pareto 遗传搜索、自动应用、git/PR 自动化。
 
+pub mod auto;
 pub mod candidate;
 pub mod evalset;
 pub mod gates;
@@ -19,6 +20,10 @@ pub mod proposal;
 pub mod reflect;
 pub mod search;
 
+pub use auto::{
+    auto_state_path, build_auto_status, count_new_decisions, evaluate_auto_gate, load_auto_state,
+    mark_auto_run, save_auto_state, AutoGate, AutoState, AutoStatus, SkipReason,
+};
 pub use candidate::{CandidateKind, SkillCandidate};
 pub use evalset::{
     append_example, build_eval_judge_prompt, evalset_path, examples_for_skill, list_examples,

@@ -38,6 +38,16 @@ pub struct EvolutionSearchDto {
     pub crossover: bool,
 }
 
+/// 自动触发参数展示态。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvolutionAutoDto {
+    pub enabled: bool,
+    pub cooldown_secs: u64,
+    pub min_new_decisions: u32,
+    pub max_runs_per_day: u32,
+}
+
 /// 进化设置全量 DTO。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +56,7 @@ pub struct EvolutionSettingsDto {
     pub routes: Vec<EvolutionRouteDto>,
     pub gates: EvolutionGatesDto,
     pub search: EvolutionSearchDto,
+    pub auto: EvolutionAutoDto,
     pub active_provider_id: Option<String>,
     pub active_model: String,
 }
@@ -139,6 +150,12 @@ fn build_settings_dto() -> Result<EvolutionSettingsDto, String> {
             variants: cfg.search.variants,
             crossover: cfg.search.crossover,
         },
+        auto: EvolutionAutoDto {
+            enabled: cfg.auto.enabled,
+            cooldown_secs: cfg.auto.cooldown_secs,
+            min_new_decisions: cfg.auto.min_new_decisions as u32,
+            max_runs_per_day: cfg.auto.max_runs_per_day,
+        },
         active_provider_id: state.active_provider_id,
         active_model,
     })
@@ -215,6 +232,25 @@ pub async fn set_evolution_search(
         crossover,
     };
     memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
+    build_settings_dto()
+}
+
+/// 设置自动触发参数（默认关；冷却/日限额/最低新决策数）。
+#[tauri::command]
+pub async fn set_evolution_auto(
+    enabled: bool,
+    cooldown_secs: u64,
+    min_new_decisions: u32,
+    max_runs_per_day: u32,
+) -> Result<EvolutionSettingsDto, String> {
+    let base = home::default_memory_dir();
+    let auto = memory::EvolutionAuto {
+        enabled,
+        cooldown_secs: cooldown_secs.clamp(60, 86_400),
+        min_new_decisions: (min_new_decisions.clamp(1, 50)) as usize,
+        max_runs_per_day: max_runs_per_day.clamp(1, 24),
+    };
+    memory::set_evolution_auto(&base, &auto).map_err(|e| e.to_string())?;
     build_settings_dto()
 }
 

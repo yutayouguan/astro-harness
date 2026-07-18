@@ -107,6 +107,11 @@ evolution:
     run_tests: true             # 候选须通过测试
     max_skill_bytes: 15360      # Skill 体积上限（~15KB）
     require_pr: true            # 只开 PR，禁止直接落库
+  auto:                         # 自动触发（Chat Done；默认关）
+    enabled: false
+    cooldown_secs: 3600         # 两次自动运行最小间隔
+    min_new_decisions: 3        # 新增 DecisionLog 条数下限
+    max_runs_per_day: 3         # UTC 日限额；仅单轮 reflect，绝不自动写入
 ```
 
 落地位置：
@@ -122,11 +127,15 @@ evolution:
 3. 语义不漂移（保持原始意图）  
 4. 人工 PR 审核，永不直接 commit  
 
+### 自动触发（已实现，默认关）
+
+Chat Done → Tauri `spawn_maybe_auto_evolution` → 护栏（总开关 + auto.enabled + 冷却 + 日限额 + 最低新决策）→ 单轮 `run_evolution_core(mode=auto)` → 仅入待审提案。状态水位 `learning/evolution/auto_state.json`；失败也记冷却防热重试。不跑遗传搜索 / DSPy，不自动 approve。
+
 ### 明确边界
 
 - 独立 crate / 流水线，默认 `enabled=false`，不改变运行时默认行为。  
 - 目标运行必须用生产主模型；reflection/judge 由 `evolution.*` 指定。  
-- 命名同样禁止 `hermes` 字样。
+- 自动触发仍须人工审批提案；命名同样禁止 `hermes` 字样。
 
 ## 验收
 

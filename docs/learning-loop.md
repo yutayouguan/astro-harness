@@ -116,6 +116,16 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 学习闭环三阶段（评测集/交叉/DSPy）至此全部落地。
 
 **可观测**：进化运行与提案去向记入 `~/.astro/learning/evolution/history.jsonl`（`run` / `outcome` 事件）；「离线进化」页「进化历史」小节展示运行次数、生成提案数、采纳率、采纳均分、采纳/拒绝与近期事件。crate [`evolution::history`](../evolution/src/history.rs)；命令 `evolution_history`。
+**自动触发**（默认关）：Chat Done 后 fire-and-forget 调用 `maybe_run_evolution_auto`。需同时开启 `evolution.enabled` 与 `evolution.auto.enabled`；仅跑**单轮 reflect**（不跑遗传搜索/DSPy），产物只入待审。成本护栏：
+
+| 键 | 默认 | 说明 |
+|----|------|------|
+| `evolution.auto.enabled` | `false` | 自动触发总开关 |
+| `cooldown_secs` | `3600` | 两次自动运行最小间隔（秒） |
+| `min_new_decisions` | `3` | 自上次运行以来 DecisionLog 新增条数下限 |
+| `max_runs_per_day` | `3` | 每个 UTC 自然日最多自动运行次数 |
+
+状态水位：`~/.astro/learning/evolution/auto_state.json`。失败也会记冷却，避免热重试烧钱。crate [`evolution::auto`](../evolution/src/auto.rs)；命令 `evolution_auto_status` / `set_evolution_auto` / `maybe_run_evolution_auto`。
 
 模型角色（不复用在线 `auxiliary.*`）：
 

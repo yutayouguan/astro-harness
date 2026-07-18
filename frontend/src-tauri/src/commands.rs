@@ -1068,6 +1068,8 @@ async fn run_chat_stream(
             Some(proto::chat_event::Payload::Done(true)) => {
                 // 不立即结束：Done 之后仍可能有 background review 的 MemoryUpdate
                 let _ = app.emit(event_name, ChatStreamEvent::Done);
+                // 自动进化：默认关；命令内自守冷却/日限额/最低新决策，仅生成待审提案
+                crate::evolution_run_commands::spawn_maybe_auto_evolution(app.clone());
             }
             Some(proto::chat_event::Payload::Error(err)) => {
                 let _ = app.emit(
