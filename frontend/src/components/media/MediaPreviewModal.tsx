@@ -34,11 +34,21 @@ export default function MediaPreviewModal({ path, kind, alt, onClose }: Props) {
     };
   }, [onClose]);
 
+  const isPdf = /\.pdf($|[?#])/i.test(path);
+
   let body: ReactNode = null;
   if (kind === "html") {
     body = <HtmlPreview path={path} className="media-preview-modal-html" />;
   } else if (kind === "code") {
     body = <CodeFileCard path={path} className="media-preview-modal-code" />;
+  } else if (isPdf && src) {
+    body = (
+      <iframe
+        className="media-preview-modal-pdf"
+        title={alt || t("filespace.preview")}
+        src={src}
+      />
+    );
   } else if (kind === "video" && src) {
     body = (
       <video

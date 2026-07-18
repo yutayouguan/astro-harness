@@ -54,6 +54,7 @@ export default function MediaToolbar({
   const canPreview =
     kind === "html" ||
     kind === "code" ||
+    (kind === "document" && /\.pdf($|[?#])/i.test(path)) ||
     ((kind === "image" || kind === "video" || kind === "audio") &&
       Boolean(previewSrc));
 
