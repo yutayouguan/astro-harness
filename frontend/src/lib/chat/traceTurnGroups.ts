@@ -134,10 +134,12 @@ export function turnGroupTitle(
   return unlabeled;
 }
 
-/** 会话列表标题：首条用户预览，否则短 session_id。 */
-export function traceSessionTitle(title: string | undefined, sessionId: string): string {
+/** 会话列表标题：首条用户预览，否则使用本地化的「未命名会话」。 */
+export function traceSessionTitle(
+  title: string | undefined,
+  unnamedLabel: string,
+): string {
   const t = oneLine(title || "", 72);
   if (t) return t;
-  if (sessionId.length <= 22) return sessionId;
-  return `${sessionId.slice(0, 10)}…${sessionId.slice(-6)}`;
+  return unnamedLabel;
 }

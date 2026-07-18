@@ -1311,12 +1311,16 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                           className="insights-collab-list-goal"
                           title={tr.session_id}
                         >
-                          {traceSessionTitle(tr.title, tr.session_id)}
+                          {traceSessionTitle(
+                            tr.title,
+                            t("insights.trace.unnamedSession"),
+                          )}
                         </span>
                         <span className="insights-collab-list-meta">
                           <span className="insights-collab-list-agent">{tr.agent_id}</span>
                           <span className="insights-trace-meta-chip">
-                            {tr.event_count} · {formatTokens(tr.tokens)}
+                            {formatTraceTime(tr.started_at)} · {tr.event_count} ·{" "}
+                            {formatTokens(tr.tokens)}
                           </span>
                         </span>
                         <span className="insights-trace-kinds">

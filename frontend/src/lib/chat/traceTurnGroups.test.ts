@@ -84,13 +84,13 @@ describe("groupEventsForTraceDisplay", () => {
 
 describe("traceSessionTitle", () => {
   it("uses title when present", () => {
-    expect(traceSessionTitle("查天气", "usage-session")).toBe("查天气");
+    expect(traceSessionTitle("查天气", "未命名会话")).toBe("查天气");
   });
 
-  it("falls back to session id", () => {
-    expect(traceSessionTitle("", "short-id")).toBe("short-id");
-    expect(traceSessionTitle(undefined, "abcdefghijklmnopqrstuvwxyz")).toBe(
-      "abcdefghij…uvwxyz",
+  it("falls back to an unnamed label instead of UUID", () => {
+    expect(traceSessionTitle("", "未命名会话")).toBe("未命名会话");
+    expect(traceSessionTitle(undefined, "Unnamed session")).toBe(
+      "Unnamed session",
     );
   });
 });
