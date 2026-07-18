@@ -512,6 +512,13 @@ pub fn run() {
             RunEvent::ExitRequested { .. } => {
                 ALLOW_EXIT.store(true, Ordering::SeqCst);
             }
+            // 进程真正退出前：清理仍在运行的后台任务（独立进程组，否则会变孤儿）。
+            RunEvent::Exit => {
+                let n = tools::shutdown_background_jobs();
+                if n > 0 {
+                    tracing::info!(killed = n, "terminated background jobs on exit");
+                }
+            }
             // macOS：点 Dock 图标时若窗口已关进托盘，重新显示。
             RunEvent::Reopen {
                 has_visible_windows: false,

@@ -345,6 +345,38 @@ fn kill_job(job: &Arc<Job>) {
     *job.status.lock().unwrap() = JobStatus::Killed;
 }
 
+/// 终止全部仍在运行的后台任务（应用退出时调用，避免孤儿进程）。
+///
+/// 对每个进程组先 `SIGTERM` 再 `SIGKILL`（Unix），返回被终止的任务数。
+/// 由于后台任务处于**独立进程组**，本进程退出不会自动带走它们，须显式清理。
+pub fn shutdown_all_jobs() -> usize {
+    let reg = registry().lock().unwrap();
+    let mut killed = 0usize;
+    for job in reg.jobs.iter() {
+        if job.status().is_terminal() {
+            continue;
+        }
+        let mut guard = job.child.lock().unwrap();
+        let Some(ch) = guard.as_mut() else {
+            continue;
+        };
+        #[cfg(unix)]
+        {
+            signal_group(job.pid, libc::SIGTERM);
+            signal_group(job.pid, libc::SIGKILL);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = ch.kill();
+        }
+        let _ = ch.wait();
+        *guard = None;
+        *job.status.lock().unwrap() = JobStatus::Killed;
+        killed += 1;
+    }
+    killed
+}
+
 fn list_jobs(session_id: &str) -> String {
     let reg = registry().lock().unwrap();
     let mut lines: Vec<String> = Vec::new();
