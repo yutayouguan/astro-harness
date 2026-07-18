@@ -227,11 +227,13 @@ export default function PreferencesPanel({
     setErrorMsg("");
     try {
       const result = await invoke<AgentLogLine[]>("query_agent_logs", {
-        sessionId: effectiveSession || null,
-        turnId: turnId.trim() || null,
-        source,
-        lines,
-        minLevel: level === "issues" ? "WARN" : null,
+        args: {
+          sessionId: effectiveSession || null,
+          turnId: turnId.trim() || null,
+          source,
+          lines,
+          minLevel: level === "issues" ? "WARN" : null,
+        },
       });
       setRows(result);
       setQueried(true);
