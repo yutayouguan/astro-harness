@@ -116,11 +116,17 @@ crate::submit_builtin_tool! {
 /// 使其在文件空间归属当前会话，而非 reconcile 扫盘后的「未关联会话」。
 ///
 /// project_root（委派 worktree / 代码仓）模式写入不属于记忆产物，跳过。
-fn register_workspace_artifact(ctx: &ToolContext<'_>, full: &Path) {
+///
+/// `rel` 为相对 workspace 的路径。这里刻意用非规范化的 `workspace_dir.join(rel)`
+/// 拼绝对路径，与 reconcile 扫盘（`walkdir(memory_dir)`）及媒体登记的路径形态一致；
+/// 若改用 `resolve_safe` 得到的 canonicalize 结果，遇到含符号链接的记忆根目录会与
+/// reconcile 产生两条不同 path 的记录（一条已关联、一条未关联）。
+fn register_workspace_artifact(ctx: &ToolContext<'_>, rel: &str) {
     if ctx.project_root.is_some() || ctx.session_id.trim().is_empty() {
         return;
     }
-    let Some(path) = full.to_str() else {
+    let abs = ctx.workspace_dir.join(rel);
+    let Some(path) = abs.to_str() else {
         return;
     };
     if let Ok(db) = artifacts::open_default(&ctx.memory_dir) {
@@ -187,7 +193,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             // resolve_safe 已拒绝越界 symlink；写前再确认最终路径仍在沙箱根
             reaffirm_within(&full, root)?;
             std::fs::write(&full, content.as_bytes())?;
-            register_workspace_artifact(ctx, &full);
+            register_workspace_artifact(ctx, &rel);
             Ok(maybe_html_sidecar(format!("已写入 {rel}"), &rel))
         }
         "append" => {
@@ -204,7 +210,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .append(true)
                 .open(&full)?;
             f.write_all(content.as_bytes())?;
-            register_workspace_artifact(ctx, &full);
+            register_workspace_artifact(ctx, &rel);
             Ok(maybe_html_sidecar(format!("已追加 {rel}"), &rel))
         }
         "list" => list_dir_capped(&full, root, parsed.recursive.unwrap_or(false), ext_filter(&parsed.ext)),
