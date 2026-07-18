@@ -57,7 +57,13 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "resources/**/*": "./"
+      "resources/**/*": "./",
+      "../../evolution-dspy/pyproject.toml": "evolution-dspy/pyproject.toml",
+      "../../evolution-dspy/README.md": "evolution-dspy/README.md",
+      "../../evolution-dspy/evolution_dspy/__init__.py": "evolution-dspy/evolution_dspy/__init__.py",
+      "../../evolution-dspy/evolution_dspy/__main__.py": "evolution-dspy/evolution_dspy/__main__.py",
+      "../../evolution-dspy/evolution_dspy/metric.py": "evolution-dspy/evolution_dspy/metric.py",
+      "../../evolution-dspy/evolution_dspy/program.py": "evolution-dspy/evolution_dspy/program.py"
     },
     "macOS": {
       "dmg": {
