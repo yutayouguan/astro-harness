@@ -457,6 +457,16 @@ html[data-theme="dark"] .evo-toolbar {
   opacity: 0.92;
 }
 
+.evo-status-chip > svg {
+  flex-shrink: 0;
+  opacity: 0.82;
+}
+
+.evo-status-chip.is-on > svg {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--tone) 45%, transparent));
+}
+
 .evo-status-chip-btn {
   cursor: pointer;
   font: inherit;
@@ -464,18 +474,6 @@ html[data-theme="dark"] .evo-toolbar {
 
 .evo-status-chip-btn:hover {
   filter: brightness(1.03);
-}
-
-.evo-status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ink-mute) 70%, transparent);
-}
-
-.evo-status-chip.is-on .evo-status-dot {
-  background: var(--tone);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 22%, transparent);
 }
 
 .evo-master-toggle {
@@ -564,6 +562,24 @@ html[data-theme="dark"] .evo-seg-item.is-active {
 
 .evo-card {
   animation: evo-card-in 0.22s ease both;
+}
+
+.evo-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.evo-card-title-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: -3px 0;
+  border-radius: 9px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
 @keyframes evo-card-in {

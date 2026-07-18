@@ -16,12 +16,16 @@ import {
   Gavel,
   GitBranch,
   History,
+  Inbox,
   Pencil,
   Play,
+  Power,
   RefreshCw,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Timer,
+  TrendingUp,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -389,7 +393,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
 
           <div className="evo-status-strip" aria-live="polite">
             <span className={`evo-status-chip${evoOn ? " is-on" : ""}`}>
-              <span className="evo-status-dot" aria-hidden />
+              <Power size={12} strokeWidth={2.4} aria-hidden />
               {evoOn ? t("evo.statusOn") : t("evo.statusOff")}
             </span>
             {pendingCount > 0 && (
@@ -398,11 +402,13 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 className="evo-status-chip evo-status-chip-btn is-pending"
                 onClick={() => setSection("run")}
               >
+                <Inbox size={12} strokeWidth={2.3} aria-hidden />
                 {t("evo.pendingCount").replace("{n}", String(pendingCount))}
               </button>
             )}
             {adoptionPct != null && (
               <span className="evo-status-chip is-muted">
+                <TrendingUp size={12} strokeWidth={2.3} aria-hidden />
                 {t("evo.statAdoption")} {adoptionPct}%
               </span>
             )}
@@ -468,7 +474,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
           <section className="prefs-card aux-list-card evo-card">
             <div className="aux-list-head">
               <div>
-                <h2 className="prefs-card-title">{t("evo.enabled")}</h2>
+                <h2 className="prefs-card-title evo-card-title">
+                  <span className="evo-card-title-icon" aria-hidden>
+                    <Dna size={15} />
+                  </span>
+                  {t("evo.enabled")}
+                </h2>
                 <p className="prefs-card-sub">{t("evo.enabledDesc")}</p>
               </div>
             </div>
@@ -576,7 +587,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <section className="prefs-card aux-list-card evo-card">
               <div className="aux-list-head">
                 <div>
-                  <h2 className="prefs-card-title">{t("evo.gatesTitle")}</h2>
+                  <h2 className="prefs-card-title evo-card-title">
+                    <span className="evo-card-title-icon" aria-hidden>
+                      <ShieldCheck size={15} />
+                    </span>
+                    {t("evo.gatesTitle")}
+                  </h2>
                   <p className="prefs-card-sub">{t("evo.gatesSub")}</p>
                 </div>
               </div>
@@ -690,7 +706,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <section className="prefs-card aux-list-card evo-card">
               <div className="aux-list-head">
                 <div>
-                  <h2 className="prefs-card-title">{t("evo.autoTitle")}</h2>
+                  <h2 className="prefs-card-title evo-card-title">
+                    <span className="evo-card-title-icon" aria-hidden>
+                      <Timer size={15} />
+                    </span>
+                    {t("evo.autoTitle")}
+                  </h2>
                   <p className="prefs-card-sub">{t("evo.autoSub")}</p>
                 </div>
               </div>
@@ -812,7 +833,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
         <section className="prefs-card aux-list-card evo-card">
           <div className="aux-list-head">
             <div>
-              <h2 className="prefs-card-title">{t("evo.proposalsTitle")}</h2>
+              <h2 className="prefs-card-title evo-card-title">
+                <span className="evo-card-title-icon" aria-hidden>
+                  <Beaker size={15} />
+                </span>
+                {t("evo.proposalsTitle")}
+              </h2>
               <p className="prefs-card-sub">{t("evo.proposalsSub")}</p>
             </div>
             <div className="aux-list-head-actions">
@@ -1005,7 +1031,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
         <section className="prefs-card aux-list-card evo-card">
           <div className="aux-list-head">
             <div>
-              <h2 className="prefs-card-title">{t("evo.historyTitle")}</h2>
+              <h2 className="prefs-card-title evo-card-title">
+                <span className="evo-card-title-icon" aria-hidden>
+                  <History size={15} />
+                </span>
+                {t("evo.historyTitle")}
+              </h2>
               <p className="prefs-card-sub">{t("evo.historySub")}</p>
             </div>
           </div>
@@ -1119,7 +1150,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
           <section className="prefs-card aux-list-card evo-card">
             <div className="aux-list-head">
               <div>
-                <h2 className="prefs-card-title">{t("evo.evalTitle")}</h2>
+                <h2 className="prefs-card-title evo-card-title">
+                  <span className="evo-card-title-icon" aria-hidden>
+                    <FlaskConical size={15} />
+                  </span>
+                  {t("evo.evalTitle")}
+                </h2>
                 <p className="prefs-card-sub">{t("evo.evalSub")}</p>
               </div>
             </div>
@@ -1214,7 +1250,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
           <section className="prefs-card aux-list-card evo-card">
             <div className="aux-list-head">
               <div>
-                <h2 className="prefs-card-title">{t("evo.dspyTitle")}</h2>
+                <h2 className="prefs-card-title evo-card-title">
+                  <span className="evo-card-title-icon" aria-hidden>
+                    <Sparkles size={15} />
+                  </span>
+                  {t("evo.dspyTitle")}
+                </h2>
                 <p className="prefs-card-sub">{t("evo.dspySub")}</p>
               </div>
             </div>
