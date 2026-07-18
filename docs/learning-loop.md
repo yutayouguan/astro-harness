@@ -85,6 +85,8 @@ learning:
 
 离线遗传优化：读取执行轨迹 → 生成 Skill/提示变体 → 测试与体积门禁 → 人工审 PR。独立流水线，不改变运行时默认行为。
 
+**专页文档**（架构 / 配置 / 三种模式 / 提案 / DSPy 契约 / 命令速查）：[`evolution.md`](./evolution.md)。
+
 **已落地（Rust 内置极简引擎）**：模型服务页「离线进化」子 Tab 可配置 `evolution.enabled`、`reflection` / `judge` 路由与门禁（run_tests / require_pr / max_skill_bytes，写入 `config.yaml` 的 `evolution:` 段），并新增：
 
 - **运行进化**：读 `learning/decisions.jsonl`（工具失败/用户纠错/关键决策等）+ 已启用技能索引 + **相关会话精简 transcript**（按决策的 session_id，最多 3 个）→ `reflection` 模型产出技能候选（新建 / patch）→ 静态门禁 → **`judge` 模型打分**（`min_judge_score` 阈值，0 关闭）→ 存待审提案（`~/.astro/learning/evolution/proposals/`）。
