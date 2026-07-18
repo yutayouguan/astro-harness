@@ -6,7 +6,7 @@
 
 use futures::StreamExt;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -600,6 +600,276 @@ pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
 pub async fn reject_evolution_proposal(id: String) -> Result<(), String> {
     let base = default_memory_dir();
     reject_proposal(&base, &id).map_err(|e| e.to_string())
+}
+
+// ===== Phase 3: DSPy 外部引擎桥接 =====
+
+/// 解析 evolution-dspy 项目路径：config 显式 → resource_dir → 仓库/当前目录。
+fn resolve_dspy_project<R: tauri::Runtime>(app: &AppHandle<R>, cfg_path: &str) -> Option<PathBuf> {
+    let c = cfg_path.trim();
+    if !c.is_empty() {
+        let p = PathBuf::from(c);
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+    if let Ok(res) = app.path().resource_dir() {
+        let p = res.join("evolution-dspy");
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+    let cwd = std::env::current_dir().ok()?.join("evolution-dspy");
+    if cwd.is_dir() {
+        Some(cwd)
+    } else {
+        None
+    }
+}
+
+/// 解析 Python 可执行：config 显式 → ~/.astro venv → 系统 python3。
+fn resolve_dspy_python(cfg_bin: &str) -> String {
+    let c = cfg_bin.trim();
+    if !c.is_empty() {
+        return c.to_string();
+    }
+    let venv = default_memory_dir()
+        .join("evolution-dspy")
+        .join(".venv")
+        .join("bin")
+        .join("python");
+    if venv.is_file() {
+        return venv.to_string_lossy().to_string();
+    }
+    "python3".to_string()
+}
+
+/// DSPy 对接状态。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DspyStatusDto {
+    pub enabled: bool,
+    pub python_bin: String,
+    pub python_ok: bool,
+    pub project_path: Option<String>,
+    pub dspy_installed: bool,
+    pub timeout_secs: u64,
+}
+
+/// 读取 DSPy 对接状态（检测 python 与 dspy 是否可用）。
+#[tauri::command]
+pub async fn evolution_dspy_status<R: tauri::Runtime>(
+    app: AppHandle<R>,
+) -> Result<DspyStatusDto, String> {
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base).dspy;
+    let python_bin = resolve_dspy_python(&cfg.python_bin);
+    let project = resolve_dspy_project(&app, &cfg.project_path);
+
+    let python_ok = std::process::Command::new(&python_bin)
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    let dspy_installed = python_ok
+        && std::process::Command::new(&python_bin)
+            .args(["-c", "import dspy"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+    Ok(DspyStatusDto {
+        enabled: cfg.enabled,
+        python_bin,
+        python_ok,
+        project_path: project.map(|p| home::display_user_path(&p)),
+        dspy_installed,
+        timeout_secs: cfg.timeout_secs,
+    })
+}
+
+/// 在 `~/.astro/evolution-dspy/.venv` 建 venv 并 `pip install -e <project>`。
+#[tauri::command]
+pub async fn setup_evolution_dspy<R: tauri::Runtime>(app: AppHandle<R>) -> Result<String, String> {
+    let base = default_memory_dir();
+    let project = resolve_dspy_project(&app, &memory::load_evolution_config(&base).dspy.project_path)
+        .ok_or_else(|| "找不到 evolution-dspy 项目目录".to_string())?;
+    let venv = base.join("evolution-dspy").join(".venv");
+    if let Some(parent) = venv.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    // 建 venv
+    let out = std::process::Command::new("python3")
+        .args(["-m", "venv", &venv.to_string_lossy()])
+        .output()
+        .map_err(|e| format!("创建 venv 失败: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "创建 venv 失败: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    // pip install -e project
+    let pip = venv.join("bin").join("pip");
+    let out = std::process::Command::new(&pip)
+        .args(["install", "-e", &project.to_string_lossy()])
+        .output()
+        .map_err(|e| format!("pip install 失败: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "pip install 失败: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    Ok(format!(
+        "已安装到 {}（-e {}）",
+        home::display_user_path(&venv),
+        home::display_user_path(&project)
+    ))
+}
+
+/// 用外部 DSPy 引擎优化某技能，产物入待审提案队列。
+#[tauri::command]
+pub async fn run_evolution_dspy<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    skill_id: String,
+) -> Result<EvolutionRunReport, String> {
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base);
+    if !cfg.enabled {
+        return Err("请先开启离线进化".into());
+    }
+    if !cfg.dspy.enabled {
+        return Err("请先在配置中开启 evolution.dspy.enabled".into());
+    }
+    let python_bin = resolve_dspy_python(&cfg.dspy.python_bin);
+    let project = resolve_dspy_project(&app, &cfg.dspy.project_path)
+        .ok_or_else(|| "找不到 evolution-dspy 项目目录".to_string())?;
+
+    // 目标技能内容
+    let loaded = skills::load_skill_by_name(&skill_id).map_err(|e| e.to_string())?;
+
+    // 解析 reflection 目标作为 LLM 端点
+    let primary = active_primary_target()?;
+    let targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
+    let t = &targets.preferred;
+
+    // 导出输入到临时目录
+    let run_id: String = uuid::Uuid::new_v4().to_string().chars().take(8).collect();
+    let dir = base.join("learning").join("evolution").join(format!("dspy-run-{run_id}"));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("skill.md"), loaded.content.as_bytes()).map_err(|e| e.to_string())?;
+
+    let evalset = list_examples(&base);
+    let matched: Vec<&EvalExample> = examples_for_skill(&evalset, &skill_id);
+    let mut jsonl = String::new();
+    for ex in &matched {
+        if let Ok(line) = serde_json::to_string(ex) {
+            jsonl.push_str(&line);
+            jsonl.push('\n');
+        }
+    }
+    std::fs::write(dir.join("evalset.jsonl"), jsonl.as_bytes()).map_err(|e| e.to_string())?;
+
+    let config_json = serde_json::json!({
+        "skill_id": skill_id,
+        "model": t.model,
+        "base_url": t.provider.endpoint,
+        "provider_backend": t.backend_id,
+    });
+    std::fs::write(
+        dir.join("config.json"),
+        serde_json::to_string_pretty(&config_json).unwrap_or_default().as_bytes(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    let output = dir.join("result.json");
+    let mut child = std::process::Command::new(&python_bin)
+        .args([
+            "-m",
+            "evolution_dspy",
+            "optimize",
+            "--input",
+            &dir.to_string_lossy(),
+            "--output",
+            &output.to_string_lossy(),
+        ])
+        .current_dir(&project)
+        .env("ASTRO_DSPY_API_KEY", &t.api_key)
+        .env("PYTHONPATH", &project)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("启动 DSPy 失败: {e}（python_bin={python_bin}）"))?;
+
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(cfg.dspy.timeout_secs.max(30));
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => break,
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    return Err("DSPy 运行超时".into());
+                }
+                std::thread::sleep(Duration::from_millis(300));
+            }
+            Err(e) => return Err(format!("DSPy 执行出错: {e}")),
+        }
+    }
+
+    let raw = std::fs::read_to_string(&output)
+        .map_err(|_| "DSPy 未产出 result.json".to_string())?;
+    let val: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    if let Some(err) = val.get("error").and_then(|v| v.as_str()) {
+        return Err(format!("DSPy 失败: {err}"));
+    }
+    let content = val
+        .get("content")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| "DSPy 结果缺少 content".to_string())?;
+    let score = val.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let rationale = val
+        .get("rationale")
+        .and_then(|v| v.as_str())
+        .unwrap_or("DSPy 优化产物")
+        .to_string();
+
+    let cand = SkillCandidate {
+        id: uuid::Uuid::new_v4().to_string(),
+        kind: CandidateKind::NewSkill,
+        skill_id: skill_id.clone(),
+        description: None,
+        content: Some(content),
+        old_string: None,
+        new_string: None,
+        rationale,
+        sources: vec![format!("dspy-run-{run_id}")],
+        judge_score: Some(score),
+        judge_reason: Some("DSPy+GEPA".into()),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    let mut proposals = Vec::new();
+    if check_candidate(&cand, &cfg.gates).passed {
+        save_proposals(&base, std::slice::from_ref(&cand)).map_err(|e| e.to_string())?;
+        proposals.push(EvolutionProposalDto::from(cand));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let _ = app.emit("evolution-updated", serde_json::json!({ "dspy": true, "proposals": proposals.len() }));
+
+    Ok(EvolutionRunReport {
+        ok: true,
+        generated: 1,
+        gated_out: if proposals.is_empty() { 1 } else { 0 },
+        judged_out: 0,
+        proposals,
+        error: None,
+    })
 }
 
 /// 评测例子展示态。

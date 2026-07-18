@@ -17,6 +17,7 @@ import {
 import { useEvolutionSettings } from "../../hooks/settings/useEvolutionSettings";
 import { useEvolutionProposals } from "../../hooks/settings/useEvolutionProposals";
 import { useEvalExamples } from "../../hooks/settings/useEvalExamples";
+import { useDspy } from "../../hooks/settings/useDspy";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -100,6 +101,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     approve,
     approveToBranch,
     reject,
+    reload: reloadProposals,
   } = useEvolutionProposals(active);
   const [branchMsg, setBranchMsg] = useState<string | null>(null);
   const [genDraft, setGenDraft] = useState("");
@@ -114,6 +116,15 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [evalSkill, setEvalSkill] = useState("");
   const [evalExpect, setEvalExpect] = useState("");
   const [evalVerdict, setEvalVerdict] = useState<"fail" | "pass">("fail");
+  const {
+    status: dspyStatus,
+    busy: dspyBusy,
+    error: dspyError,
+    message: dspyMessage,
+    setup: setupDspy,
+    run: runDspy,
+  } = useDspy(active);
+  const [dspySkill, setDspySkill] = useState("");
 
   const submitEval = () => {
     if (!evalTask.trim()) return;
@@ -795,6 +806,63 @@ export default function EvolutionModelsPanel({ active }: Props) {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="prefs-card aux-list-card">
+        <div className="aux-list-head">
+          <div>
+            <h2 className="prefs-card-title">{t("evo.dspyTitle")}</h2>
+            <p className="prefs-card-sub">{t("evo.dspySub")}</p>
+          </div>
+        </div>
+
+        {dspyError && (
+          <div className="aux-error">
+            <AlertTriangle size={16} />
+            {dspyError}
+          </div>
+        )}
+        {dspyMessage && <p className="aux-muted">{dspyMessage}</p>}
+
+        <p className="aux-muted">
+          {t("evo.dspyStatus")}: python {dspyStatus?.pythonOk ? "OK" : "—"} · dspy{" "}
+          {dspyStatus?.dspyInstalled ? "OK" : "—"} ·{" "}
+          {dspyStatus?.enabled ? t("evo.on") : t("evo.off")}
+          {dspyStatus?.projectPath ? ` · ${dspyStatus.projectPath}` : ""}
+        </p>
+
+        <div className="evo-eval-form">
+          <input
+            className="evo-eval-input"
+            placeholder={t("evo.dspySkillPlaceholder")}
+            value={dspySkill}
+            onChange={(e) => setDspySkill(e.target.value)}
+          />
+          <div className="aux-task-actions">
+            <button
+              type="button"
+              className="aux-action aux-action-ghost"
+              onClick={() => void setupDspy()}
+              disabled={dspyBusy || dspyStatus?.dspyInstalled}
+            >
+              {t("evo.dspySetup")}
+            </button>
+            <button
+              type="button"
+              className="aux-action"
+              onClick={() =>
+                void runDspy(dspySkill.trim()).then((r) => {
+                  if (r) void reloadProposals();
+                })
+              }
+              disabled={dspyBusy || !dspySkill.trim() || !dspyStatus?.enabled}
+            >
+              <Dna size={15} />
+              {dspyBusy ? t("evo.running") : t("evo.dspyRun")}
+            </button>
+          </div>
+        </div>
+        <p className="aux-muted">{t("evo.dspyNote")}</p>
       </section>
 
       <p className="aux-muted evo-phase-note">{t("evo.phaseNote")}</p>

@@ -261,6 +261,16 @@ export type EvolutionSearchDto = {
   crossover: boolean;
 };
 
+/** DSPy 对接状态（Tauri `evolution_dspy_status`） */
+export type DspyStatusDto = {
+  enabled: boolean;
+  pythonBin: string;
+  pythonOk: boolean;
+  projectPath: string | null;
+  dspyInstalled: boolean;
+  timeoutSecs: number;
+};
+
 /** 评测例子（Tauri `list_eval_examples`） */
 export type EvalExampleDto = {
   id: string;

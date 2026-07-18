@@ -105,7 +105,11 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 
 **交叉算子**（Phase 2）：遗传搜索每代对当前 Pareto 前沿 top-2 变体做交叉（`CROSSOVER_SYSTEM_PROMPT` 融合两父代为一个子代），评分后并入本代选择。可在页面开关（`evolution.search.crossover`，默认开）。
 
-**仍为后续**：Python DSPy 对接（Phase 3）。
+**Python DSPy 对接**（Phase 3，默认关）：外部 Python 子项目 [`evolution-dspy/`](../evolution-dspy/)（独立包，非 cargo）通过「临时目录 + JSON 文件」契约被调用——Rust 导出 `skill.md` + `evalset.jsonl` + `config.json`（key 走环境变量）→ `python -m evolution_dspy optimize` 跑 DSPy+GEPA → 回写 `result.json` → 转成候选过门禁入待审队列。命令：`evolution_dspy_status` / `setup_evolution_dspy`（建 venv + pip install）/ `run_evolution_dspy(skill_id)`。配置 `evolution.dspy { enabled=false, python_bin, project_path, timeout_secs }`。
+
+打包形态：源码随 app 作 resource（只读），venv 与临时数据在用户可写的 `~/.astro/evolution-dspy/.venv` 与 `~/.astro/learning/evolution/dspy-run-*/`；首次用 UI「安装依赖」建 venv。DSPy/GEPA API 随版本变，Python 侧带回退（GEPA 不可用退化单轮反思），标 `# ADAPT:` 处按版本调整。
+
+学习闭环三阶段（评测集/交叉/DSPy）至此全部落地。
 
 模型角色（不复用在线 `auxiliary.*`）：
 

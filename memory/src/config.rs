@@ -256,6 +256,40 @@ impl Default for EvolutionSearch {
     }
 }
 
+fn default_dspy_timeout() -> u64 {
+    600
+}
+
+/// 外部 Python DSPy 引擎对接配置（`config.yaml` 的 `evolution.dspy` 段）。
+///
+/// 默认关闭；需用户自备 Python + 依赖（见 `evolution-dspy/`）。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct EvolutionDspy {
+    /// 是否启用 DSPy 对接。
+    #[serde(default)]
+    pub enabled: bool,
+    /// Python 可执行路径（空 = 运行时按 venv/系统 python3 解析）。
+    #[serde(default)]
+    pub python_bin: String,
+    /// evolution-dspy 项目路径（空 = 运行时按 resource_dir/仓库解析）。
+    #[serde(default)]
+    pub project_path: String,
+    /// 子进程超时秒数。
+    #[serde(default = "default_dspy_timeout")]
+    pub timeout_secs: u64,
+}
+
+impl Default for EvolutionDspy {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            python_bin: String::new(),
+            project_path: String::new(),
+            timeout_secs: 600,
+        }
+    }
+}
+
 /// 引擎（GEPA/DSPy 流水线）本身为 Phase 2，未实现；此处只承载配置。
 #[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 pub struct EvolutionConfig {
@@ -274,6 +308,9 @@ pub struct EvolutionConfig {
     /// GEPA-lite 遗传搜索参数。
     #[serde(default)]
     pub search: EvolutionSearch,
+    /// 外部 Python DSPy 对接。
+    #[serde(default)]
+    pub dspy: EvolutionDspy,
 }
 
 /// 进化路由用途。
@@ -432,6 +469,16 @@ fn set_nested_bool(base: &Path, parents: &[&str], key: &str, value: bool) -> any
     save_yaml_root(base, &root)
 }
 
+fn set_nested_string(base: &Path, parents: &[&str], key: &str, value: &str) -> anyhow::Result<()> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, parents)?;
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::String(value.to_string()),
+    );
+    save_yaml_root(base, &root)
+}
+
 fn route_to_value(route: &AuxiliaryRoute) -> serde_yaml::Value {
     let mut map = serde_yaml::Mapping::new();
     map.insert(
@@ -559,6 +606,20 @@ pub fn reset_all_evolution_routes(base: &Path) -> anyhow::Result<EvolutionConfig
     Ok(load_evolution_config(base))
 }
 
+/// 设置 DSPy 对接配置并返回最新配置。
+pub fn set_evolution_dspy(base: &Path, dspy: &EvolutionDspy) -> anyhow::Result<EvolutionConfig> {
+    set_nested_bool(base, &["evolution", "dspy"], "enabled", dspy.enabled)?;
+    set_nested_string(base, &["evolution", "dspy"], "python_bin", &dspy.python_bin)?;
+    set_nested_string(base, &["evolution", "dspy"], "project_path", &dspy.project_path)?;
+    set_nested_usize(
+        base,
+        &["evolution", "dspy"],
+        "timeout_secs",
+        dspy.timeout_secs as usize,
+    )?;
+    Ok(load_evolution_config(base))
+}
+
 /// 设置遗传搜索参数并返回最新配置。
 pub fn set_evolution_search(
     base: &Path,
@@ -679,6 +740,27 @@ mod tests {
         assert_eq!(cfg.search.generations, 2);
         assert_eq!(cfg.search.variants, 3);
         assert!(cfg.search.crossover);
+        assert!(!cfg.dspy.enabled);
+        assert_eq!(cfg.dspy.timeout_secs, 600);
+    }
+
+    #[test]
+    fn evolution_set_dspy_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = set_evolution_dspy(
+            dir.path(),
+            &EvolutionDspy {
+                enabled: true,
+                python_bin: "/x/py".into(),
+                project_path: "evolution-dspy".into(),
+                timeout_secs: 300,
+            },
+        )
+        .unwrap();
+        assert!(cfg.dspy.enabled);
+        assert_eq!(cfg.dspy.python_bin, "/x/py");
+        assert_eq!(cfg.dspy.project_path, "evolution-dspy");
+        assert_eq!(cfg.dspy.timeout_secs, 300);
     }
 
     #[test]

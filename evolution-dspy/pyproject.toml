@@ -1,0 +1,19 @@
+[project]
+name = "evolution-dspy"
+version = "0.1.0"
+description = "Astro 离线进化的 DSPy + GEPA 优化器（外部进程，被 Astro 通过 JSON 文件契约调用）"
+requires-python = ">=3.10"
+dependencies = [
+    "dspy-ai>=2.5",
+]
+
+[project.optional-dependencies]
+# GEPA 优化器；不同 DSPy 版本可能已内置 dspy.GEPA，此时可不装。
+gepa = ["gepa"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["evolution_dspy*"]
