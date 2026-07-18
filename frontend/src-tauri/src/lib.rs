@@ -396,6 +396,7 @@ pub fn run() {
             skills_commands::list_skill_backups,
             skills_commands::reveal_skill_backup,
             artifacts_commands::list_artifacts,
+            artifacts_commands::find_artifact_by_path,
             artifacts_commands::reconcile_artifacts,
             artifacts_commands::register_artifact,
             artifacts_commands::save_chat_upload,

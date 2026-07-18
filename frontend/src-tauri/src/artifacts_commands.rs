@@ -150,6 +150,15 @@ pub async fn list_artifacts(
     })
 }
 
+/// 按文件绝对路径查询单条产物记录（用于「浏览文件 → 回到来源会话」）。
+#[tauri::command]
+pub async fn find_artifact_by_path(path: String) -> Result<Option<ArtifactDto>, String> {
+    let mem = default_memory_dir();
+    let db = open_default(&mem).map_err(|e| e.to_string())?;
+    let row = db.get_by_path(&path).map_err(|e| e.to_string())?;
+    Ok(row.map(map_row))
+}
+
 /// 对账产物库与磁盘文件。
 #[tauri::command]
 pub async fn reconcile_artifacts() -> Result<ReconcileResultDto, String> {

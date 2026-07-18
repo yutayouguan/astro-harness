@@ -63,6 +63,8 @@ type Props = {
   openPath?: string | null;
   /** openPath 消费完成后回调（便于父级清空，避免重复触发） */
   onDidOpenPath?: () => void;
+  /** 打开某文件的来源会话（若该文件已被编入产物索引且关联会话） */
+  onOpenSession?: (sessionId: string, messageId?: string | null) => void;
 };
 
 /** 浏览 / 文本编辑 / 媒体预览 */
@@ -170,6 +172,7 @@ export default function WorkspacePanel({
   onClose,
   openPath,
   onDidOpenPath,
+  onOpenSession,
 }: Props) {
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -186,6 +189,8 @@ export default function WorkspacePanel({
   const [draftContent, setDraftContent] = useState("");
   const [mediaKind, setMediaKind] = useState<MediaKind | null>(null);
   const [mediaMeta, setMediaMeta] = useState<string>("");
+  const [sourceSessionId, setSourceSessionId] = useState<string | null>(null);
+  const [sourceMessageId, setSourceMessageId] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(false);
   const [loadingFile, setLoadingFile] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -307,6 +312,34 @@ export default function WorkspacePanel({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随 openPath 触发
   }, [openPath]);
+
+  // 打开文件时查产物索引，若关联会话则提供「回到来源会话」入口
+  useEffect(() => {
+    if (!onOpenSession || view === "browse" || !editorPath) {
+      setSourceSessionId(null);
+      setSourceMessageId(null);
+      return;
+    }
+    let cancelled = false;
+    void invoke<{ session_id: string | null; message_id: string | null } | null>(
+      "find_artifact_by_path",
+      { path: editorPath },
+    )
+      .then((a) => {
+        if (cancelled) return;
+        setSourceSessionId(a?.session_id ?? null);
+        setSourceMessageId(a?.message_id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSourceSessionId(null);
+          setSourceMessageId(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editorPath, view, onOpenSession]);
 
   useAgentsChanged(() => {
     if (dirty) {
@@ -1023,6 +1056,19 @@ export default function WorkspacePanel({
     runPaste,
   ]);
 
+  const sourceSessionBtn =
+    onOpenSession && sourceSessionId ? (
+      <button
+        type="button"
+        className="ws-tool-btn"
+        onClick={() => onOpenSession(sourceSessionId, sourceMessageId)}
+        title={t("workspace.backToSourceSession")}
+        aria-label={t("workspace.backToSourceSession")}
+      >
+        <IconWsBackChat width={17} height={17} />
+      </button>
+    ) : null;
+
   const previewToggle = canTogglePreview ? (
     <div
       className="ws-md-modes"
@@ -1408,6 +1454,7 @@ export default function WorkspacePanel({
                   <ExternalLink size={17} strokeWidth={2.1} aria-hidden />
                 </button>
               )}
+              {sourceSessionBtn}
               <button
                 type="button"
                 className="ws-tool-btn ws-delete-btn"
@@ -1506,6 +1553,7 @@ export default function WorkspacePanel({
                 />
               ) : null}
               {previewToggle}
+              {sourceSessionBtn}
               <button
                 type="button"
                 className="ws-tool-btn ws-delete-btn"

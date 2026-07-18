@@ -42,6 +42,7 @@ export default function FilesPage({
           onClose={onClose}
           openPath={pendingOpenPath}
           onDidOpenPath={() => setPendingOpenPath(null)}
+          onOpenSession={onOpenSession}
         />
       </div>
       <div
