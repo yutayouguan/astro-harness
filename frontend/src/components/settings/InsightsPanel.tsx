@@ -41,6 +41,7 @@ import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
 import AgentPicker from "../agents/AgentPicker";
 import McpIcon from "../icons/McpIcon";
+import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
 
 type Period = "month" | "quarter" | "year";
 type Metric = "calls" | "tokens" | "cost";
@@ -356,6 +357,22 @@ function KindIcon({ kind }: { kind: string }) {
     default:
       return <Layers {...props} />;
   }
+}
+
+function RankIdentityIcon({
+  type,
+  name,
+}: {
+  type: "model" | "provider" | "kind";
+  name: string;
+}) {
+  if (type === "model") {
+    return <ModelBrandIcon modelId={name} size={14} />;
+  }
+  if (type === "provider") {
+    return <ProviderBrandIcon kind={name} size={14} />;
+  }
+  return <KindIcon kind={name} />;
 }
 
 function CollabGraphSvg({
@@ -897,7 +914,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                             {idx + 1}
                           </span>
                           <span className="insights-rank-kind-icon" title="provider">
-                            <KindIcon kind="provider" />
+                            <ProviderBrandIcon kind={r.name} size={14} />
                           </span>
                           {r.name}
                         </span>
@@ -956,7 +973,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                   <li key={r.name} className="insights-hbar-item">
                     <span className="insights-hbar-label">
                       <span className="insights-rank-kind-icon" title="llm">
-                        <KindIcon kind="llm" />
+                        <ModelBrandIcon modelId={r.name} size={14} />
                       </span>
                       {r.name}
                     </span>
@@ -984,6 +1001,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
               title={t("insights.rank.provider")}
               icon={<Building2 size={14} strokeWidth={2.25} aria-hidden />}
               items={byProvider}
+              identityType="provider"
               showCost
               showTokens
               emptyHint={t("insights.rank.empty")}
@@ -992,6 +1010,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
               title={t("insights.rank.model")}
               icon={<Cpu size={14} strokeWidth={2.25} aria-hidden />}
               items={data.rankings.by_model}
+              identityType="model"
               showCost
               showTokens
               emptyHint={t("insights.rank.empty")}
@@ -1487,6 +1506,7 @@ function RankList({
   showCost,
   showTokens,
   emptyHint,
+  identityType = "kind",
 }: {
   title: string;
   icon: ReactNode;
@@ -1494,6 +1514,7 @@ function RankList({
   showCost?: boolean;
   showTokens?: boolean;
   emptyHint?: string;
+  identityType?: "model" | "provider" | "kind";
 }) {
   return (
     <section className="insights-rank">
@@ -1513,7 +1534,10 @@ function RankList({
               <li key={`${r.kind}:${r.name}`} className="insights-rank-item">
                 <span className="insights-rank-name">
                   <span className="insights-rank-kind-icon" title={r.kind}>
-                    <KindIcon kind={r.kind} />
+                    <RankIdentityIcon
+                      type={identityType}
+                      name={identityType === "kind" ? r.kind : r.name}
+                    />
                   </span>
                   {r.name}
                 </span>
