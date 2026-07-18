@@ -102,7 +102,7 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
 
     for s in summaries {
         let usage_rows = db.list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)?;
-        let (mut events, title) = if let Some(store) = store.as_ref() {
+        let (mut events, preview_title) = if let Some(store) = store.as_ref() {
             match spans_from_chat_history(store, &s.session_id, &s.agent_id) {
                 Ok(built) if !built.0.is_empty() => built,
                 _ => (
@@ -116,6 +116,9 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
                 String::new(),
             )
         };
+        // 与会话列表保持同一标题真源：优先 sessions.title；
+        // 旧会话尚未生成标题时，才回退首条用户消息预览。
+        let title = resolved_trace_title(store.as_ref(), &s.session_id, preview_title);
 
         merge_usage_into_spans(&mut events, &usage_rows);
         propagate_turn_ids(&mut events);
@@ -146,6 +149,18 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
     }
 
     Ok(TraceInsights { kpis: kpi, traces })
+}
+
+fn resolved_trace_title(
+    store: Option<&SessionStore>,
+    session_id: &str,
+    preview_title: String,
+) -> String {
+    store
+        .and_then(|store| store.get_session(session_id).ok().flatten())
+        .and_then(|session| session.title)
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or(preview_title)
 }
 
 fn usage_rows_to_events(
@@ -442,6 +457,25 @@ mod tests {
     }
 
     #[test]
+    fn trace_title_prefers_stored_session_title() {
+        let dir = TempDir::new().unwrap();
+        let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+        store.ensure_session("s-title", "test").unwrap();
+        store
+            .set_session_title("s-title", "云南采菌子女孩")
+            .unwrap();
+
+        assert_eq!(
+            resolved_trace_title(Some(&store), "s-title", "首条用户消息".into()),
+            "云南采菌子女孩"
+        );
+        assert_eq!(
+            resolved_trace_title(Some(&store), "missing", "首条用户消息".into()),
+            "首条用户消息"
+        );
+    }
+
+    #[test]
     fn propagate_turn_ids_fills_user_and_tool_before_llm() {
         let mut events = vec![
             TraceEvent {
@@ -604,6 +638,9 @@ mod tests {
         let store = SessionStore::open(&sessions.join("state.db")).unwrap();
         store.ensure_session("s-io", "test").unwrap();
         store
+            .set_session_title("s-io", "云南采菌子女孩")
+            .unwrap();
+        store
             .append_message(NewMessage {
                 content: Some("帮我查天气"),
                 ..NewMessage::empty("s-io", "user")
@@ -677,7 +714,7 @@ mod tests {
             .iter()
             .find(|t| t.session_id == "s-io")
             .expect("s-io");
-        assert!(tr.title.contains("天气"));
+        assert_eq!(tr.title, "云南采菌子女孩");
         let kinds: Vec<_> = tr.events.iter().map(|e| e.kind.as_str()).collect();
         assert!(kinds.contains(&"user"));
         assert!(kinds.contains(&"tool"));
