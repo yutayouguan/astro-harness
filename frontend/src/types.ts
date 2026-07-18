@@ -251,6 +251,7 @@ export type EvolutionGatesDto = {
   runTests: boolean;
   maxSkillBytes: number;
   requirePr: boolean;
+  minJudgeScore: number;
 };
 
 /** 离线进化设置全量（enabled + reflection/judge 路由 + gates） */
@@ -272,6 +273,8 @@ export type EvolutionProposalDto = {
   oldString: string | null;
   newString: string | null;
   rationale: string;
+  judgeScore: number | null;
+  judgeReason: string | null;
   createdAt: string;
 };
 
@@ -280,6 +283,7 @@ export type EvolutionRunReport = {
   ok: boolean;
   generated: number;
   gatedOut: number;
+  judgedOut: number;
   proposals: EvolutionProposalDto[];
   error: string | null;
 };

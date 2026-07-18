@@ -130,6 +130,8 @@ pub fn parse_candidates(raw: &str) -> anyhow::Result<Vec<SkillCandidate>> {
             new_string: c.new_string,
             rationale: c.rationale,
             sources: Vec::new(),
+            judge_score: None,
+            judge_reason: None,
             created_at: now.clone(),
         });
     }

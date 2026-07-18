@@ -74,6 +74,8 @@ mod tests {
             new_string: Some("b".into()),
             rationale: String::new(),
             sources: vec![],
+            judge_score: None,
+            judge_reason: None,
             created_at: "now".into(),
         }
     }
@@ -86,6 +88,7 @@ mod tests {
             run_tests: false,
             max_skill_bytes: 10,
             require_pr: true,
+            min_judge_score: 0.6,
         };
         let out = check_candidate(&c, &gates);
         assert!(!out.passed);

@@ -87,12 +87,12 @@ learning:
 
 **已落地（Rust 内置极简引擎）**：模型服务页「离线进化」子 Tab 可配置 `evolution.enabled`、`reflection` / `judge` 路由与门禁（run_tests / require_pr / max_skill_bytes，写入 `config.yaml` 的 `evolution:` 段），并新增：
 
-- **运行进化**：读 `learning/decisions.jsonl`（工具失败等）+ 已启用技能索引 → `reflection` 模型产出技能候选（新建 / patch）→ 门禁过滤 → 存待审提案（`~/.astro/learning/evolution/proposals/`）。
-- **应用内审批**：提案在子 Tab 内以 diff 展示，**批准**才写入 Agent skills 目录，**绝不自动应用**（`require_pr` 语义）。
+- **运行进化**：读 `learning/decisions.jsonl`（工具失败等）+ 已启用技能索引 → `reflection` 模型产出技能候选（新建 / patch）→ 静态门禁 → **`judge` 模型打分**（`min_judge_score` 阈值，0 关闭）→ 存待审提案（`~/.astro/learning/evolution/proposals/`）。
+- **应用内审批**：提案在子 Tab 内以 diff + judge 评分展示，**批准**才写入 Agent skills 目录，**绝不自动应用**（`require_pr` 语义）。
 
-实现：crate [`evolution`](../evolution)（candidate/reflect/gates/proposal）+ Tauri `evolution_run_commands`（run/list/approve/reject）+ `EvolutionModelsPanel`。
+实现：crate [`evolution`](../evolution)（candidate/reflect/gates/judge/proposal）+ Tauri `evolution_run_commands`（run/list/approve/reject）+ `EvolutionModelsPanel`。
 
-**仍为后续**：完整 GEPA/Pareto 遗传搜索、`judge` 参与打分、`run_tests` 实跑（技能多为 Markdown，暂仅当存在 `scripts/test.*` 时由调用方执行）、git 分支/PR 自动化。
+**仍为后续**：完整 GEPA/Pareto 遗传搜索、`run_tests` 实跑（技能多为 Markdown，暂仅当存在 `scripts/test.*` 时由调用方执行）、git 分支/PR 自动化。
 
 模型角色（不复用在线 `auxiliary.*`）：
 

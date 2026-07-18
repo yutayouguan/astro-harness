@@ -38,6 +38,12 @@ pub struct SkillCandidate {
     /// 关联的决策来源（DecisionLog summary/id 等）。
     #[serde(default)]
     pub sources: Vec<String>,
+    /// judge 模型打分（0–1）；未评分为 None。
+    #[serde(default)]
+    pub judge_score: Option<f32>,
+    /// judge 评语。
+    #[serde(default)]
+    pub judge_reason: Option<String>,
     /// 创建时间 RFC3339。
     pub created_at: String,
 }

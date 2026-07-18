@@ -156,6 +156,8 @@ mod tests {
             new_string: None,
             rationale: "复用".into(),
             sources: vec![],
+            judge_score: None,
+            judge_reason: None,
             created_at: "2026-07-18T00:00:00Z".into(),
         }
     }
@@ -200,6 +202,8 @@ mod tests {
             new_string: Some("步骤一（改）".into()),
             rationale: "fix".into(),
             sources: vec![],
+            judge_score: None,
+            judge_reason: None,
             created_at: "2026-07-18T00:01:00Z".into(),
         };
         save_proposals(dir.path(), &[patch]).unwrap();

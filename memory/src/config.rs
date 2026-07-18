@@ -188,8 +188,12 @@ fn default_max_skill_bytes() -> usize {
     15_360
 }
 
+fn default_min_judge_score() -> f32 {
+    0.6
+}
+
 /// 离线进化门禁（`config.yaml` 的 `evolution.gates` 段）。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct EvolutionGates {
     /// 候选变体须通过测试。
     #[serde(default = "default_true")]
@@ -200,6 +204,9 @@ pub struct EvolutionGates {
     /// 只允许开 PR，禁止直接落库。
     #[serde(default = "default_true")]
     pub require_pr: bool,
+    /// judge 最低分（0–1）；`<= 0` 表示关闭 judge 评审。
+    #[serde(default = "default_min_judge_score")]
+    pub min_judge_score: f32,
 }
 
 impl Default for EvolutionGates {
@@ -208,6 +215,7 @@ impl Default for EvolutionGates {
             run_tests: true,
             max_skill_bytes: 15_360,
             require_pr: true,
+            min_judge_score: 0.6,
         }
     }
 }
@@ -217,7 +225,7 @@ impl Default for EvolutionGates {
 /// 与 `auxiliary`（在线便宜辅助）分离：进化为离线批量、可接受慢与贵；
 /// `reflection` 应显式指向强模型，`judge` 可省或走中等模型。
 /// 引擎（GEPA/DSPy 流水线）本身为 Phase 2，未实现；此处只承载配置。
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 pub struct EvolutionConfig {
     /// 离线进化总开关（默认关）。
     #[serde(default)]
@@ -463,6 +471,17 @@ pub fn reset_all_auxiliary_routes(base: &Path) -> anyhow::Result<AuxiliaryConfig
     Ok(load_auxiliary_config(base))
 }
 
+/// 设置嵌套浮点键（如 `evolution.gates.min_judge_score`）。
+fn set_nested_f64(base: &Path, parents: &[&str], key: &str, value: f64) -> anyhow::Result<()> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, parents)?;
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Number(serde_yaml::Number::from(value)),
+    );
+    save_yaml_root(base, &root)
+}
+
 /// 设置嵌套无符号整数键（如 `evolution.gates.max_skill_bytes`）。
 fn set_nested_usize(base: &Path, parents: &[&str], key: &str, value: usize) -> anyhow::Result<()> {
     let mut root = load_yaml_root(base)?;
@@ -517,6 +536,12 @@ pub fn set_evolution_gates(
         &["evolution", "gates"],
         "max_skill_bytes",
         gates.max_skill_bytes,
+    )?;
+    set_nested_f64(
+        base,
+        &["evolution", "gates"],
+        "min_judge_score",
+        gates.min_judge_score as f64,
     )?;
     Ok(load_evolution_config(base))
 }
@@ -594,6 +619,7 @@ mod tests {
         assert!(cfg.gates.run_tests);
         assert!(cfg.gates.require_pr);
         assert_eq!(cfg.gates.max_skill_bytes, 15_360);
+        assert!((cfg.gates.min_judge_score - 0.6).abs() < 1e-6);
     }
 
     #[test]
@@ -624,12 +650,14 @@ mod tests {
                 run_tests: false,
                 max_skill_bytes: 8192,
                 require_pr: false,
+                min_judge_score: 0.75,
             },
         )
         .unwrap();
         assert!(!cfg.gates.run_tests);
         assert!(!cfg.gates.require_pr);
         assert_eq!(cfg.gates.max_skill_bytes, 8192);
+        assert!((cfg.gates.min_judge_score - 0.75).abs() < 1e-6);
 
         // 保留无关键
         let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();

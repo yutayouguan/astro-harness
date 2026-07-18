@@ -9,9 +9,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use evolution::{
-    approve_proposal, build_reflection_user_prompt, check_candidate, list_proposals,
-    parse_candidates, reject_proposal, save_proposals, CandidateKind, ReflectionInput,
-    SkillCandidate, REFLECTION_SYSTEM_PROMPT,
+    approve_proposal, build_judge_user_prompt, build_reflection_user_prompt, check_candidate,
+    list_proposals, parse_candidates, parse_judge_output, reject_proposal, save_proposals,
+    CandidateKind, ReflectionInput, SkillCandidate, JUDGE_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -32,6 +32,8 @@ pub struct EvolutionProposalDto {
     pub old_string: Option<String>,
     pub new_string: Option<String>,
     pub rationale: String,
+    pub judge_score: Option<f32>,
+    pub judge_reason: Option<String>,
     pub created_at: String,
 }
 
@@ -51,6 +53,8 @@ impl From<SkillCandidate> for EvolutionProposalDto {
             old_string: c.old_string,
             new_string: c.new_string,
             rationale: c.rationale,
+            judge_score: c.judge_score,
+            judge_reason: c.judge_reason,
             created_at: c.created_at,
         }
     }
@@ -63,6 +67,7 @@ pub struct EvolutionRunReport {
     pub ok: bool,
     pub generated: usize,
     pub gated_out: usize,
+    pub judged_out: usize,
     pub proposals: Vec<EvolutionProposalDto>,
     pub error: Option<String>,
 }
@@ -206,6 +211,43 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
         }
     }
 
+    // judge 评审（min_judge_score <= 0 时关闭）；judge 调用失败对该候选 fail-open 保留。
+    let mut judged_out = 0usize;
+    if cfg.gates.min_judge_score > 0.0 && !passed.is_empty() {
+        if let Ok(judge_targets) =
+            resolve_evolution_targets(memory::EvolutionRouteKind::Judge, &primary)
+        {
+            let enabled_now = skills::list_enabled_for_prompt();
+            let mut kept: Vec<SkillCandidate> = Vec::new();
+            for mut c in passed.into_iter() {
+                let user = build_judge_user_prompt(&c, &enabled_now);
+                match reflect_over_targets(&judge_targets, JUDGE_SYSTEM_PROMPT, &user).await {
+                    Ok(raw) => match parse_judge_output(&raw) {
+                        Ok(v) => {
+                            c.judge_score = Some(v.score);
+                            c.judge_reason = Some(v.reason);
+                            if v.keep && v.score >= cfg.gates.min_judge_score {
+                                kept.push(c);
+                            } else {
+                                judged_out += 1;
+                                tracing::info!(skill = %c.skill_id, score = v.score, "候选被 judge 拒绝");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(skill = %c.skill_id, error = %e, "judge 解析失败，保留候选");
+                            kept.push(c);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!(skill = %c.skill_id, error = %e, "judge 调用失败，保留候选");
+                        kept.push(c);
+                    }
+                }
+            }
+            passed = kept;
+        }
+    }
+
     save_proposals(&base, &passed).map_err(|e| e.to_string())?;
 
     let proposals: Vec<EvolutionProposalDto> =
@@ -223,6 +265,7 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
         ok: true,
         generated,
         gated_out,
+        judged_out,
         proposals,
         error: None,
     })

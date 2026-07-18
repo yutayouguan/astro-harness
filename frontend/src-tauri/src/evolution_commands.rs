@@ -26,6 +26,7 @@ pub struct EvolutionGatesDto {
     pub run_tests: bool,
     pub max_skill_bytes: u64,
     pub require_pr: bool,
+    pub min_judge_score: f32,
 }
 
 /// 进化设置全量 DTO。
@@ -121,6 +122,7 @@ fn build_settings_dto() -> Result<EvolutionSettingsDto, String> {
             run_tests: cfg.gates.run_tests,
             max_skill_bytes: cfg.gates.max_skill_bytes as u64,
             require_pr: cfg.gates.require_pr,
+            min_judge_score: cfg.gates.min_judge_score,
         },
         active_provider_id: state.active_provider_id,
         active_model,
@@ -171,12 +173,14 @@ pub async fn set_evolution_gates(
     run_tests: bool,
     max_skill_bytes: u64,
     require_pr: bool,
+    min_judge_score: f32,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
     let gates = memory::EvolutionGates {
         run_tests,
         max_skill_bytes: max_skill_bytes as usize,
         require_pr,
+        min_judge_score,
     };
     memory::set_evolution_gates(&base, &gates).map_err(|e| e.to_string())?;
     build_settings_dto()

@@ -9,7 +9,12 @@ type UseEvolutionSettings = {
   setEnabled(enabled: boolean): Promise<void>;
   setRoute(route: EvolutionRouteId, provider: string, model: string): Promise<void>;
   resetRoute(route: EvolutionRouteId): Promise<void>;
-  setGates(runTests: boolean, maxSkillBytes: number, requirePr: boolean): Promise<void>;
+  setGates(
+    runTests: boolean,
+    maxSkillBytes: number,
+    requirePr: boolean,
+    minJudgeScore: number,
+  ): Promise<void>;
   reload(): Promise<void>;
 };
 
@@ -78,13 +83,19 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
   }, []);
 
   const setGates = useCallback(
-    async (runTests: boolean, maxSkillBytes: number, requirePr: boolean) => {
+    async (
+      runTests: boolean,
+      maxSkillBytes: number,
+      requirePr: boolean,
+      minJudgeScore: number,
+    ) => {
       setError(null);
       try {
         const next = await invoke<EvolutionSettingsDto>("set_evolution_gates", {
           runTests,
           maxSkillBytes,
           requirePr,
+          minJudgeScore,
         });
         setSettings(next);
       } catch (err) {

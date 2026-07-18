@@ -94,6 +94,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [modelsByProvider, setModelsByProvider] = useState<Record<string, ModelInfo[]>>({});
   const [loadingModelsFor, setLoadingModelsFor] = useState<string | null>(null);
   const [maxBytesDraft, setMaxBytesDraft] = useState("");
+  const [judgeDraft, setJudgeDraft] = useState("");
 
   const enabledProviders = useMemo(
     () => (providersState?.providers ?? []).filter((p) => p.enabled),
@@ -106,7 +107,10 @@ export default function EvolutionModelsPanel({ active }: Props) {
   }, [settings]);
 
   useEffect(() => {
-    if (settings) setMaxBytesDraft(String(settings.gates.maxSkillBytes));
+    if (settings) {
+      setMaxBytesDraft(String(settings.gates.maxSkillBytes));
+      setJudgeDraft(String(settings.gates.minJudgeScore));
+    }
   }, [settings]);
 
   const providerOptions = useMemo(
@@ -210,11 +214,23 @@ export default function EvolutionModelsPanel({ active }: Props) {
     const parsed = Number.parseInt(maxBytesDraft, 10);
     const next = Number.isFinite(parsed) && parsed > 0 ? parsed : gates.maxSkillBytes;
     if (next !== gates.maxSkillBytes) {
-      void setGates(gates.runTests, next, gates.requirePr);
+      void setGates(gates.runTests, next, gates.requirePr, gates.minJudgeScore);
     } else {
       setMaxBytesDraft(String(gates.maxSkillBytes));
     }
   }, [gates, maxBytesDraft, setGates]);
+
+  const commitJudge = useCallback(() => {
+    if (!gates) return;
+    const parsed = Number.parseFloat(judgeDraft);
+    const next =
+      Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : gates.minJudgeScore;
+    if (Math.abs(next - gates.minJudgeScore) > 1e-6) {
+      void setGates(gates.runTests, gates.maxSkillBytes, gates.requirePr, next);
+    } else {
+      setJudgeDraft(String(gates.minJudgeScore));
+    }
+  }, [gates, judgeDraft, setGates]);
 
   return (
     <div className="aux-page prefs-page aux-page-embedded" data-tone="blue">
@@ -387,7 +403,10 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               className="aux-action"
-              onClick={() => gates && void setGates(!gates.runTests, gates.maxSkillBytes, gates.requirePr)}
+              onClick={() =>
+                gates &&
+                void setGates(!gates.runTests, gates.maxSkillBytes, gates.requirePr, gates.minJudgeScore)
+              }
               disabled={!gates}
             >
               {gates?.runTests ? t("evo.on") : t("evo.off")}
@@ -406,7 +425,10 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               className="aux-action"
-              onClick={() => gates && void setGates(gates.runTests, gates.maxSkillBytes, !gates.requirePr)}
+              onClick={() =>
+                gates &&
+                void setGates(gates.runTests, gates.maxSkillBytes, !gates.requirePr, gates.minJudgeScore)
+              }
               disabled={!gates}
             >
               {gates?.requirePr ? t("evo.on") : t("evo.off")}
@@ -432,6 +454,29 @@ export default function EvolutionModelsPanel({ active }: Props) {
               onBlur={commitMaxBytes}
               disabled={!gates}
               aria-label={t("evo.maxSkillBytes")}
+            />
+          </div>
+        </article>
+
+        <article className="aux-task-row">
+          <div className="aux-task-main">
+            <div className="aux-task-titleline">
+              <h3>{t("evo.minJudgeScore")}</h3>
+            </div>
+            <p>{t("evo.minJudgeScoreDesc")}</p>
+          </div>
+          <div className="aux-task-actions">
+            <input
+              type="number"
+              className="aux-number-input"
+              min={0}
+              max={1}
+              step={0.05}
+              value={judgeDraft}
+              onChange={(e) => setJudgeDraft(e.target.value)}
+              onBlur={commitJudge}
+              disabled={!gates}
+              aria-label={t("evo.minJudgeScore")}
             />
           </div>
         </article>
@@ -470,6 +515,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             {t("evo.runSummary")
               .replace("{generated}", String(lastReport.generated))
               .replace("{gated}", String(lastReport.gatedOut))
+              .replace("{judged}", String(lastReport.judgedOut))
               .replace("{proposals}", String(lastReport.proposals.length))}
           </p>
         )}
@@ -489,8 +535,14 @@ export default function EvolutionModelsPanel({ active }: Props) {
                     <span className="aux-route-pill">
                       {p.kind === "new_skill" ? t("evo.kindNew") : t("evo.kindPatch")}
                     </span>
+                    {p.judgeScore != null && (
+                      <span className="aux-route-pill">
+                        {t("evo.judgeScore")}: {p.judgeScore.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                   {p.rationale && <p>{p.rationale}</p>}
+                  {p.judgeReason && <p className="aux-muted">{p.judgeReason}</p>}
                   <pre className="evo-proposal-diff">
                     {p.kind === "new_skill"
                       ? (p.content ?? "").slice(0, 1200)
