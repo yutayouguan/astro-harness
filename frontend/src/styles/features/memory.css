@@ -386,6 +386,27 @@ html[data-theme="dark"] .aux-error {
   font-variant-numeric: tabular-nums;
 }
 
+.evo-trend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 2px 10px;
+}
+
+.evo-spark {
+  width: 160px;
+  height: 36px;
+}
+
+.evo-spark polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .evo-eval-form {
   display: flex;
   flex-direction: column;

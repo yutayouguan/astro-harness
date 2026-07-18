@@ -347,13 +347,13 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               role="switch"
-              className="prefs-switch"
+              className="tool-toggle"
               aria-checked={settings?.enabled ?? false}
               aria-label={t("evo.enabled")}
               onClick={() => void setEnabled(!settings?.enabled)}
               disabled={loading || !settings}
             >
-              <span className="prefs-switch-thumb" />
+              <span className="tool-toggle-thumb" />
             </button>
           </div>
         </article>
@@ -476,7 +476,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               role="switch"
-              className="prefs-switch"
+              className="tool-toggle"
               aria-checked={gates?.runTests ?? false}
               aria-label={t("evo.runTests")}
               onClick={() =>
@@ -485,7 +485,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
               }
               disabled={!gates}
             >
-              <span className="prefs-switch-thumb" />
+              <span className="tool-toggle-thumb" />
             </button>
           </div>
         </article>
@@ -501,7 +501,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               role="switch"
-              className="prefs-switch"
+              className="tool-toggle"
               aria-checked={gates?.requirePr ?? false}
               aria-label={t("evo.requirePr")}
               onClick={() =>
@@ -510,7 +510,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
               }
               disabled={!gates}
             >
-              <span className="prefs-switch-thumb" />
+              <span className="tool-toggle-thumb" />
             </button>
           </div>
         </article>
@@ -622,7 +622,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               role="switch"
-              className="prefs-switch"
+              className="tool-toggle"
               aria-checked={settings?.search.crossover ?? false}
               aria-label={t("evo.crossover")}
               onClick={() =>
@@ -635,7 +635,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
               }
               disabled={!settings}
             >
-              <span className="prefs-switch-thumb" />
+              <span className="tool-toggle-thumb" />
             </button>
           </label>
           <span className="aux-muted">{t("evo.searchCostHint")}</span>
@@ -783,6 +783,24 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <span className="evo-stat-label">{t("evo.statAdoptedRejected")}</span>
           </div>
         </div>
+
+        {history && history.summary.scoreTrend.length >= 2 && (
+          <div className="evo-trend">
+            <span className="evo-stat-label">{t("evo.trend")}</span>
+            <svg className="evo-spark" viewBox="0 0 160 36" preserveAspectRatio="none" aria-hidden>
+              <polyline
+                points={history.summary.scoreTrend
+                  .map((v, i, a) => {
+                    const x = a.length > 1 ? (i / (a.length - 1)) * 160 : 0;
+                    const clamped = Math.max(0, Math.min(1, v));
+                    const y = 35 - clamped * 33;
+                    return `${x.toFixed(1)},${y.toFixed(1)}`;
+                  })
+                  .join(" ")}
+              />
+            </svg>
+          </div>
+        )}
 
         {history && history.recent.length > 0 ? (
           <div className="aux-task-list">
