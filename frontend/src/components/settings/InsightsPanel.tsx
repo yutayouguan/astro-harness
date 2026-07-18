@@ -248,6 +248,29 @@ function formatSeriesTip(
   return `${s.bucket}: ${s.calls}`;
 }
 
+function formatMetricTotal(total: number, metric: Metric): string {
+  if (metric === "tokens") return formatTokens(total);
+  if (metric === "cost") return formatCost(total);
+  return String(total);
+}
+
+/** 柱高用像素，避免百分比在 flex 里塌成贴底细线；非零值保底可见。 */
+const CHART_PLOT_H = 128;
+function barHeightPx(value: number, maxVal: number): number {
+  if (value <= 0 || maxVal <= 0) return 0;
+  const raw = (value / maxVal) * CHART_PLOT_H;
+  return Math.max(10, Math.round(raw));
+}
+
+/** 多数桶接近 0 或峰值相对分布极偏时，提示已放大柱高。 */
+function isSparseSeries(values: number[], maxVal: number): boolean {
+  if (maxVal <= 0) return false;
+  const nonzero = values.filter((v) => v > 0);
+  if (nonzero.length === 0) return false;
+  const mean = nonzero.reduce((a, b) => a + b, 0) / nonzero.length;
+  return nonzero.length <= 2 || mean / maxVal < 0.22;
+}
+
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -416,22 +439,34 @@ function InsightsTrendChart({
   period: Period;
   locale: Locale;
   emptyMessage: string;
-  t: (key: MessageKey) => string;
+  t: (key: MessageKey, vars?: Record<string, string>) => string;
 }) {
+  const values = series.map((s) => seriesValue(s, metric));
+  const total = values.reduce((a, b) => a + b, 0);
+  const hasSignal = total > 0;
+  const sparse = hasSignal && isSparseSeries(values, maxVal);
+
   return (
     <div className="insights-chart-wrap insights-models-chart">
       <div className="insights-chart-heading">
         <div className="insights-chart-heading-label">
           <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
           <span>{title}</span>
+          {hasSignal && (
+            <span className="insights-chart-total">
+              {t("insights.chart.periodTotal", {
+                v: formatMetricTotal(total, metric),
+              })}
+            </span>
+          )}
         </div>
-        <div className="insights-metric-tabs" role="tablist">
+        <div className="insights-seg insights-seg--sm insights-metric-tabs" role="tablist">
           {METRIC_TABS.map(({ id, labelKey }) => (
             <button
               key={id}
               type="button"
               role="tab"
-              className={`insights-metric-tab${metric === id ? " active" : ""}`}
+              className={`insights-seg-item insights-metric-tab${metric === id ? " active" : ""}`}
               aria-selected={metric === id}
               onClick={() => onMetricChange(id)}
             >
@@ -440,25 +475,31 @@ function InsightsTrendChart({
           ))}
         </div>
       </div>
-      {series.length > 0 ? (
+      {series.length > 0 && hasSignal ? (
         <div className="insights-chart" aria-label={`${metric} trend`}>
-          {series.map((s) => (
-            <div
-              key={s.bucket}
-              className="insights-bar-col"
-              title={formatSeriesTip(s, metric)}
-            >
+          {sparse && (
+            <p className="insights-chart-sparse-hint">{t("insights.chart.sparse")}</p>
+          )}
+          {series.map((s) => {
+            const v = seriesValue(s, metric);
+            return (
               <div
-                className="insights-bar"
-                style={{
-                  height: `${(seriesValue(s, metric) / maxVal) * 100}%`,
-                }}
-              />
-              <span className="insights-bar-label">
-                {formatBucketLabel(s.bucket, period, locale)}
-              </span>
-            </div>
-          ))}
+                key={s.bucket}
+                className="insights-bar-col"
+                title={formatSeriesTip(s, metric)}
+              >
+                <div className="insights-bar-plot" style={{ height: CHART_PLOT_H }}>
+                  <div
+                    className={`insights-bar${v > 0 ? "" : " is-empty"}`}
+                    style={{ height: barHeightPx(v, maxVal) }}
+                  />
+                </div>
+                <span className="insights-bar-label">
+                  {formatBucketLabel(s.bucket, period, locale)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="insights-panel-empty insights-chart-empty">
@@ -738,13 +779,13 @@ export default function InsightsPanel({ active }: { active: boolean }) {
             onChange={(id) => void switchAgent(id)}
             labelKey="filespace.agentFilter"
           />
-          <div className="insights-view-tabs" role="tablist" aria-label="insights view">
+          <div className="insights-seg insights-view-tabs" role="tablist" aria-label="insights view">
             {VIEW_TABS.map(({ id, labelKey, Icon }) => (
               <button
                 key={id}
                 type="button"
                 role="tab"
-                className={`insights-view-tab${view === id ? " active" : ""}`}
+                className={`insights-seg-item insights-view-tab${view === id ? " active" : ""}`}
                 aria-selected={view === id}
                 onClick={() => setView(id)}
               >
@@ -755,13 +796,13 @@ export default function InsightsPanel({ active }: { active: boolean }) {
           </div>
         </div>
         <div className="panel-agent-toolbar-end">
-          <div className="insights-period-tabs" role="tablist">
+          <div className="insights-seg insights-period-tabs" role="tablist">
             {PERIOD_TABS.map(({ id, labelKey, Icon }) => (
               <button
                 key={id}
                 type="button"
                 role="tab"
-                className={`insights-period-tab${period === id ? " active" : ""}`}
+                className={`insights-seg-item insights-period-tab${period === id ? " active" : ""}`}
                 aria-selected={period === id}
                 onClick={() => setPeriod(id)}
               >
@@ -778,19 +819,24 @@ export default function InsightsPanel({ active }: { active: boolean }) {
       {view === "overview" && data && (
         <>
           {hasUnpriced && (
-            <p className="insights-unpriced">
-              <AlertTriangle size={14} strokeWidth={2.25} aria-hidden />
-              {t("insights.unpriced")}
-            </p>
+            <div className="insights-unpriced" role="status">
+              <AlertTriangle size={15} strokeWidth={2.25} aria-hidden />
+              <div className="insights-unpriced-copy">
+                <strong>{t("insights.unpriced")}</strong>
+                <span>{t("insights.unpriced.hint")}</span>
+              </div>
+            </div>
           )}
 
           <div className="insights-kpis insights-kpis-overview">
             <KpiCard
+              emphasis={data.kpis.cost_usd <= 0 ? "muted" : "default"}
               icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
               label={t("insights.kpi.cost")}
               value={formatCost(data.kpis.cost_usd)}
             />
             <KpiCard
+              emphasis="primary"
               icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
               label={t("insights.kpi.tokens")}
               value={formatTokens(data.kpis.tokens)}
@@ -833,11 +879,17 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                 <p className="insights-rank-empty">{t("insights.rank.empty")}</p>
               ) : (
                 <ul className="insights-hbar-list">
-                  {overviewProviderTop.map((r) => {
+                  {overviewProviderTop.map((r, idx) => {
                     const val = overviewUseCost ? r.cost_usd : r.tokens;
                     return (
-                      <li key={r.name} className="insights-hbar-item">
+                      <li
+                        key={r.name}
+                        className={`insights-hbar-item${idx < 3 ? ` rank-${idx + 1}` : ""}`}
+                      >
                         <span className="insights-hbar-label">
+                          <span className="insights-hbar-rank" aria-hidden>
+                            {idx + 1}
+                          </span>
                           <span className="insights-rank-kind-icon" title="provider">
                             <KindIcon kind="provider" />
                           </span>
@@ -994,12 +1046,14 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                     className="insights-bar-col"
                     title={`${s.bucket}: ${s.calls}`}
                   >
-                    <div
-                      className="insights-bar"
-                      style={{
-                        height: `${(s.calls / toolSeriesMax) * 100}%`,
-                      }}
-                    />
+                    <div className="insights-bar-plot" style={{ height: CHART_PLOT_H }}>
+                      <div
+                        className={`insights-bar${s.calls > 0 ? "" : " is-empty"}`}
+                        style={{
+                          height: barHeightPx(s.calls, toolSeriesMax),
+                        }}
+                      />
+                    </div>
                     <span className="insights-bar-label">
                       {formatBucketLabel(s.bucket, period, locale)}
                     </span>
@@ -1372,13 +1426,15 @@ function KpiCard({
   icon,
   label,
   value,
+  emphasis = "default",
 }: {
   icon: ReactNode;
   label: string;
   value: string;
+  emphasis?: "default" | "primary" | "muted";
 }) {
   return (
-    <div className="insights-kpi">
+    <div className={`insights-kpi insights-kpi--${emphasis}`}>
       <span className="insights-kpi-label">
         <span className="insights-kpi-icon">{icon}</span>
         {label}

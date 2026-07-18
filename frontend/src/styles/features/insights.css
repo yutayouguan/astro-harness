@@ -13,6 +13,11 @@
   --tone: var(--tone-amber);
   --tone-soft: var(--tone-amber-soft);
   --tone-glow: var(--tone-amber-glow);
+  /* 图表主色：冷灰蓝，强调色留给选中/告警 */
+  --insights-series: color-mix(in srgb, var(--ink) 62%, #64748b);
+  --insights-series-soft: color-mix(in srgb, var(--insights-series) 22%, transparent);
+  --insights-warn: #b45309;
+  --insights-warn-soft: rgba(180, 83, 9, 0.1);
 }
 
 .insights-panel > .panel-agent-toolbar {
@@ -20,55 +25,63 @@
   max-width: 100%;
 }
 
-.insights-period-tabs {
+/* View / Period / Metric 共用分段控件 */
+.insights-seg {
   display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 88%, transparent);
+  box-shadow: none;
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
 }
 
-.insights-period-tab {
+.insights-seg-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border: none;
-  border-radius: 10px;
-  padding: 8px 14px;
+  border-radius: 9px;
+  padding: 7px 12px;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
-.insights-period-tab > svg {
+.insights-seg-item > svg {
   flex-shrink: 0;
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
-.insights-period-tab.active > svg {
+.insights-seg-item.active > svg {
   opacity: 1;
 }
 
-.insights-period-tab:hover {
+.insights-seg-item:hover {
   color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 8%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
-.insights-period-tab.active {
-  color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
-    var(--tone-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent);
+.insights-seg-item.active {
+  color: var(--ink);
+  background: color-mix(in srgb, #fff 82%, var(--tone-soft));
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+.insights-seg--sm .insights-seg-item {
+  padding: 4px 9px;
+  font-size: 11.5px;
+  border-radius: 8px;
 }
 
 .insights-kpis {
@@ -98,10 +111,10 @@
 }
 
 .insights-models-chart .insights-chart {
-  min-height: 160px;
+  min-height: 176px;
   border: none;
   background: transparent;
-  padding: 12px 4px 4px;
+  padding: 28px 4px 4px;
 }
 
 .insights-chart-empty {
@@ -109,6 +122,7 @@
 }
 
 .insights-kpi {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -116,9 +130,49 @@
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.45)) 80%, transparent);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 85%, transparent);
   box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.insights-kpi--primary {
+  border-color: color-mix(in srgb, var(--tone) 28%, var(--glass-edge));
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.35)),
+    color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.5));
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
+}
+
+.insights-kpi--primary::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--tone);
+}
+
+.insights-kpi--primary .insights-kpi-value {
+  font-size: 26px;
+}
+
+.insights-kpi--muted {
+  opacity: 0.88;
+}
+
+.insights-kpi--muted .insights-kpi-value {
+  color: var(--ink-mute);
+  font-weight: 650;
+}
+
+.insights-kpi--muted .insights-kpi-icon {
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .insights-kpi-label {
@@ -137,6 +191,11 @@
   width: 22px;
   height: 22px;
   border-radius: 8px;
+  color: var(--insights-series);
+  background: var(--insights-series-soft);
+}
+
+.insights-kpi--primary .insights-kpi-icon {
   color: var(--tone);
   background: color-mix(in srgb, var(--tone) 14%, transparent);
 }
@@ -150,20 +209,43 @@
   font-weight: 700;
   color: var(--ink);
   letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .insights-unpriced {
   margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--insights-warn) 28%, transparent);
+  background: var(--insights-warn-soft);
   font-size: 12.5px;
-  color: var(--ink-mute);
+  color: color-mix(in srgb, var(--insights-warn) 70%, var(--ink));
 }
 
 .insights-unpriced > svg {
   flex-shrink: 0;
-  color: var(--tone);
+  margin-top: 1px;
+  color: var(--insights-warn);
+}
+
+.insights-unpriced-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.insights-unpriced-copy > strong {
+  font-weight: 700;
+  color: var(--insights-warn);
+}
+
+.insights-unpriced-copy > span {
+  color: var(--ink-mute);
+  line-height: 1.4;
 }
 
 .insights-chart-wrap {
@@ -191,54 +273,53 @@
 }
 
 .insights-chart-heading-label > svg {
-  color: var(--tone);
+  color: var(--insights-series);
 }
 
-.insights-metric-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
-}
-
-.insights-metric-tab {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--ink-mute);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  padding: 4px 9px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.insights-metric-tab:hover {
+.insights-chart-total {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
   color: var(--ink);
-}
-
-.insights-metric-tab.active {
-  background: color-mix(in srgb, var(--tone) 16%, transparent);
-  color: var(--tone);
+  background: color-mix(in srgb, var(--insights-series) 12%, transparent);
+  font-variant-numeric: tabular-nums;
 }
 
 .insights-chart {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  min-height: 140px;
-  padding: 16px 12px 8px;
+  min-height: 168px;
+  padding: 28px 12px 8px;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 75%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--insights-series) 4%, transparent),
+      transparent 42%
+    ),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
   overflow-x: auto;
   overscroll-behavior-x: contain;
+}
+
+.insights-chart-sparse-hint {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  right: 12px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  pointer-events: none;
+  opacity: 0.85;
 }
 
 .insights-bar-col {
@@ -249,16 +330,37 @@
   justify-content: flex-end;
   gap: 6px;
   min-width: 32px;
-  height: 120px;
+}
+
+.insights-bar-plot {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
 }
 
 .insights-bar {
   width: 70%;
-  max-width: 28px;
-  min-height: 2px;
-  border-radius: 6px 6px 2px 2px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 85%, white), var(--tone));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 25%, transparent);
+  max-width: 26px;
+  min-height: 0;
+  border-radius: 7px 7px 3px 3px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--insights-series) 55%, #94a3b8),
+    var(--insights-series)
+  );
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--insights-series) 22%, transparent);
+  transition: height 0.2s ease;
+}
+
+.insights-bar.is-empty {
+  width: 40%;
+  max-width: 14px;
+  height: 3px !important;
+  min-height: 3px;
+  opacity: 0.28;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 .insights-bar-label {
@@ -405,10 +507,43 @@
   white-space: nowrap;
 }
 
+.insights-hbar-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 750;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  flex-shrink: 0;
+}
+
+.insights-hbar-item.rank-1 .insights-hbar-rank {
+  color: #fff;
+  background: color-mix(in srgb, var(--insights-series) 88%, #0f172a);
+}
+
+.insights-hbar-item.rank-2 .insights-hbar-rank,
+.insights-hbar-item.rank-3 .insights-hbar-rank {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--insights-series) 22%, transparent);
+}
+
+.insights-hbar-item.rank-1 .insights-hbar-label {
+  font-weight: 750;
+}
+
+.insights-hbar-item:not(.rank-1):not(.rank-2):not(.rank-3) {
+  opacity: 0.82;
+}
+
 .insights-hbar-track {
   height: 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  background: color-mix(in srgb, var(--insights-series) 10%, transparent);
   overflow: hidden;
 }
 
@@ -417,10 +552,18 @@
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--tone) 70%, transparent),
-    var(--tone)
+    color-mix(in srgb, var(--insights-series) 55%, transparent),
+    var(--insights-series)
   );
   min-width: 2px;
+}
+
+.insights-hbar-item.rank-1 .insights-hbar-fill {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tone) 55%, var(--insights-series)),
+    var(--tone)
+  );
 }
 
 .insights-hbar-value {
@@ -545,81 +688,28 @@
   border: 0;
 }
 
-html[data-theme="dark"] .insights-period-tabs,
-html.dark .insights-period-tabs,
-html[data-theme="dark"] .insights-metric-tabs,
-html.dark .insights-metric-tabs,
-html[data-theme="dark"] .insights-view-tabs,
-html.dark .insights-view-tabs {
+html[data-theme="dark"] .insights-seg,
+html.dark .insights-seg {
+  background: color-mix(in srgb, var(--glass-panel, rgba(20, 20, 24, 0.7)) 88%, transparent);
+}
+
+html[data-theme="dark"] .insights-seg-item.active,
+html.dark .insights-seg-item.active {
+  background: color-mix(in srgb, var(--tone-soft) 70%, rgba(255, 255, 255, 0.08));
+  color: color-mix(in srgb, var(--tone) 40%, #fff);
+}
+
+html[data-theme="dark"] .insights-kpi--primary,
+html.dark .insights-kpi--primary {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--glass-panel, rgba(20, 20, 24, 0.7)) 80%, transparent);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), transparent),
+    color-mix(in srgb, var(--tone-soft) 45%, rgba(20, 20, 24, 0.55));
 }
 
-html[data-theme="dark"] .insights-period-tab.active,
-html.dark .insights-period-tab.active,
-html[data-theme="dark"] .insights-metric-tab.active,
-html.dark .insights-metric-tab.active,
-html[data-theme="dark"] .insights-view-tab.active,
-html.dark .insights-view-tab.active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    var(--tone-soft);
-}
-
-/* —— View mode tabs（模型用量 | 工具技能 | Agent 协作 | Tracing） —— */
-.insights-view-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
-  max-width: 100%;
-  padding: 4px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-}
-
-.insights-view-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  border-radius: 10px;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.insights-view-tab > svg {
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.insights-view-tab.active > svg {
-  opacity: 1;
-}
-
-.insights-view-tab:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 8%, transparent);
-}
-
-.insights-view-tab.active {
-  color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
-    var(--tone-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent);
+html[data-theme="dark"] .insights-unpriced,
+html.dark .insights-unpriced {
+  --insights-warn: #fbbf24;
+  --insights-warn-soft: rgba(251, 191, 36, 0.12);
 }
 
 /* —— Collaboration layout —— */
@@ -1161,7 +1251,7 @@ html.dark .insights-collab-label {
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--tone);
+  color: var(--ink-mute);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
@@ -1171,7 +1261,8 @@ html.dark .insights-collab-label {
 }
 
 .insights-more-btn:hover {
-  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .insights-more-btn:focus-visible {
