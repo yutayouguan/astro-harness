@@ -1491,6 +1491,45 @@ impl AgentLoop {
         self.record_tool_result_with_id(None, None, content)
     }
 
+    /// 将工具生成的媒体文件实时登记到 artifacts 索引，关联当前会话与消息。
+    ///
+    /// 否则这些文件仅在文件空间 `reconcile` 扫盘时以 `session_id=None` 补登记，
+    /// 导致「会话中生成的文件」被归入「未关联会话」。
+    fn register_media_artifacts(&self, media: &[common::MediaAsset], msg_id: i64) {
+        if media.is_empty() {
+            return;
+        }
+        let db = match artifacts::open_default(self.memory_dir()) {
+            Ok(db) => db,
+            Err(e) => {
+                tracing::debug!(error = %e, "open artifacts db failed; skip media register");
+                return;
+            }
+        };
+        let workspace = self.memory.workspace_dir.clone();
+        let session_id = self.session_id.clone();
+        let message_id = msg_id.to_string();
+        let agent_id = self.agent_id().to_string();
+        for asset in media {
+            let Some(rel) = asset.workspace_path() else {
+                continue; // data URL / 远程 URI 不落盘，跳过
+            };
+            let abs = workspace.join(rel);
+            let Some(path) = abs.to_str() else {
+                continue;
+            };
+            if let Err(e) = db.register(
+                path,
+                artifacts::ArtifactSource::AgentWrite,
+                Some(&session_id),
+                Some(&message_id),
+                Some(&agent_id),
+            ) {
+                tracing::debug!(error = %e, path, "register media artifact failed");
+            }
+        }
+    }
+
     /// 将 tool 角色结果写入记忆与会话镜像，并关联 `tool_call_id` / `tool_name`。
     pub fn record_tool_result_with_id(
         &mut self,
@@ -1512,6 +1551,8 @@ impl AgentLoop {
             media_json: media_owned.as_deref(),
             ..NewMessage::empty(&self.session_id, "tool")
         })?;
+
+        self.register_media_artifacts(&media, msg_id);
 
         let mut spill_view: Option<String> = None;
         if content.len() >= common::DEFAULT_SPILL_THRESHOLD_BYTES {
