@@ -143,6 +143,147 @@ impl Default for ApprovalsConfig {
     }
 }
 
+fn default_true_compression() -> bool {
+    true
+}
+fn default_soft_ratio() -> f32 {
+    0.40
+}
+fn default_medium_ratio() -> f32 {
+    0.60
+}
+fn default_hard_ratio() -> f32 {
+    0.80
+}
+fn default_soft_max_chars() -> usize {
+    2_400
+}
+fn default_soft_head_chars() -> usize {
+    1_600
+}
+fn default_soft_tail_chars() -> usize {
+    600
+}
+fn default_medium_max_chars() -> usize {
+    1_800
+}
+fn default_medium_head_chars() -> usize {
+    1_100
+}
+fn default_medium_tail_chars() -> usize {
+    500
+}
+fn default_hard_max_chars() -> usize {
+    900
+}
+fn default_hard_head_chars() -> usize {
+    600
+}
+fn default_hard_tail_chars() -> usize {
+    200
+}
+fn default_tool_results_limit() -> usize {
+    12
+}
+fn default_mid_run_summary_ratio() -> f32 {
+    0.80
+}
+fn default_recommend_compact_ratio() -> f32 {
+    0.85
+}
+fn default_protect_last_n() -> usize {
+    20
+}
+fn default_protect_first_messages() -> usize {
+    4
+}
+fn default_thrashing_min_gain_ratio() -> f32 {
+    0.05
+}
+fn default_thrashing_max_consecutive() -> u32 {
+    3
+}
+fn default_keep_tail_bubbles() -> usize {
+    3
+}
+
+/// 上下文卫生配置（`config.yaml` 的 `compression:` 段）。
+///
+/// 驱动 Run 内 Soft/Medium/Hard、mid-run、Gateway recommend、会话 `/compact` keep_tail。
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct CompressionConfig {
+    #[serde(default = "default_true_compression")]
+    pub enabled: bool,
+    #[serde(default = "default_soft_ratio")]
+    pub soft_ratio: f32,
+    #[serde(default = "default_medium_ratio")]
+    pub medium_ratio: f32,
+    #[serde(default = "default_hard_ratio")]
+    pub hard_ratio: f32,
+    #[serde(default = "default_soft_max_chars")]
+    pub soft_max_chars: usize,
+    #[serde(default = "default_soft_head_chars")]
+    pub soft_head_chars: usize,
+    #[serde(default = "default_soft_tail_chars")]
+    pub soft_tail_chars: usize,
+    #[serde(default = "default_medium_max_chars")]
+    pub medium_max_chars: usize,
+    #[serde(default = "default_medium_head_chars")]
+    pub medium_head_chars: usize,
+    #[serde(default = "default_medium_tail_chars")]
+    pub medium_tail_chars: usize,
+    #[serde(default = "default_hard_max_chars")]
+    pub hard_max_chars: usize,
+    #[serde(default = "default_hard_head_chars")]
+    pub hard_head_chars: usize,
+    #[serde(default = "default_hard_tail_chars")]
+    pub hard_tail_chars: usize,
+    #[serde(default = "default_tool_results_limit")]
+    pub tool_results_limit: usize,
+    #[serde(default = "default_mid_run_summary_ratio")]
+    pub mid_run_summary_ratio: f32,
+    #[serde(default = "default_recommend_compact_ratio")]
+    pub recommend_compact_ratio: f32,
+    #[serde(default = "default_protect_last_n")]
+    pub protect_last_n: usize,
+    #[serde(default = "default_protect_first_messages")]
+    pub protect_first_messages: usize,
+    #[serde(default = "default_thrashing_min_gain_ratio")]
+    pub thrashing_min_gain_ratio: f32,
+    #[serde(default = "default_thrashing_max_consecutive")]
+    pub thrashing_max_consecutive: u32,
+    #[serde(default = "default_keep_tail_bubbles")]
+    pub keep_tail_bubbles: usize,
+}
+
+impl Default for CompressionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            soft_ratio: 0.40,
+            medium_ratio: 0.60,
+            hard_ratio: 0.80,
+            soft_max_chars: 2_400,
+            soft_head_chars: 1_600,
+            soft_tail_chars: 600,
+            medium_max_chars: 1_800,
+            medium_head_chars: 1_100,
+            medium_tail_chars: 500,
+            hard_max_chars: 900,
+            hard_head_chars: 600,
+            hard_tail_chars: 200,
+            tool_results_limit: 12,
+            mid_run_summary_ratio: 0.80,
+            recommend_compact_ratio: 0.85,
+            protect_last_n: 20,
+            protect_first_messages: 4,
+            thrashing_min_gain_ratio: 0.05,
+            thrashing_max_consecutive: 3,
+            keep_tail_bubbles: 3,
+        }
+    }
+}
+
 /// 辅助模型配置（`config.yaml` 的 `auxiliary:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 pub struct AuxiliaryConfig {
@@ -424,6 +565,8 @@ struct FileConfig {
     evolution: Option<EvolutionConfig>,
     #[serde(default)]
     approvals: Option<ApprovalsConfig>,
+    #[serde(default)]
+    compression: Option<CompressionConfig>,
 }
 
 fn read_file_config(base: &Path) -> FileConfig {
@@ -478,6 +621,92 @@ pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
 /// 从 `{base}/config.yaml` 加载危险命令审批配置。
 pub fn load_approvals_config(base: &Path) -> ApprovalsConfig {
     read_file_config(base).approvals.unwrap_or_default()
+}
+
+/// 从 `{base}/config.yaml` 加载上下文卫生配置。
+pub fn load_compression_config(base: &Path) -> CompressionConfig {
+    read_file_config(base).compression.unwrap_or_default()
+}
+
+fn insert_yaml_f64(map: &mut serde_yaml::Mapping, key: &str, value: f64) {
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Number(serde_yaml::Number::from(value)),
+    );
+}
+
+fn insert_yaml_usize(map: &mut serde_yaml::Mapping, key: &str, value: usize) {
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Number(serde_yaml::Number::from(value as u64)),
+    );
+}
+
+fn insert_yaml_u32(map: &mut serde_yaml::Mapping, key: &str, value: u32) {
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Number(serde_yaml::Number::from(value)),
+    );
+}
+
+fn insert_yaml_bool(map: &mut serde_yaml::Mapping, key: &str, value: bool) {
+    map.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Bool(value),
+    );
+}
+
+fn write_compression_mapping(map: &mut serde_yaml::Mapping, cfg: &CompressionConfig) {
+    insert_yaml_bool(map, "enabled", cfg.enabled);
+    insert_yaml_f64(map, "soft_ratio", cfg.soft_ratio as f64);
+    insert_yaml_f64(map, "medium_ratio", cfg.medium_ratio as f64);
+    insert_yaml_f64(map, "hard_ratio", cfg.hard_ratio as f64);
+    insert_yaml_usize(map, "soft_max_chars", cfg.soft_max_chars);
+    insert_yaml_usize(map, "soft_head_chars", cfg.soft_head_chars);
+    insert_yaml_usize(map, "soft_tail_chars", cfg.soft_tail_chars);
+    insert_yaml_usize(map, "medium_max_chars", cfg.medium_max_chars);
+    insert_yaml_usize(map, "medium_head_chars", cfg.medium_head_chars);
+    insert_yaml_usize(map, "medium_tail_chars", cfg.medium_tail_chars);
+    insert_yaml_usize(map, "hard_max_chars", cfg.hard_max_chars);
+    insert_yaml_usize(map, "hard_head_chars", cfg.hard_head_chars);
+    insert_yaml_usize(map, "hard_tail_chars", cfg.hard_tail_chars);
+    insert_yaml_usize(map, "tool_results_limit", cfg.tool_results_limit);
+    insert_yaml_f64(map, "mid_run_summary_ratio", cfg.mid_run_summary_ratio as f64);
+    insert_yaml_f64(
+        map,
+        "recommend_compact_ratio",
+        cfg.recommend_compact_ratio as f64,
+    );
+    insert_yaml_usize(map, "protect_last_n", cfg.protect_last_n);
+    insert_yaml_usize(map, "protect_first_messages", cfg.protect_first_messages);
+    insert_yaml_f64(
+        map,
+        "thrashing_min_gain_ratio",
+        cfg.thrashing_min_gain_ratio as f64,
+    );
+    insert_yaml_u32(
+        map,
+        "thrashing_max_consecutive",
+        cfg.thrashing_max_consecutive,
+    );
+    insert_yaml_usize(map, "keep_tail_bubbles", cfg.keep_tail_bubbles);
+}
+
+/// 整包写入 `compression:` 段并返回最新配置。
+pub fn set_compression_config(
+    base: &Path,
+    cfg: &CompressionConfig,
+) -> anyhow::Result<CompressionConfig> {
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, &["compression"])?;
+    write_compression_mapping(map, cfg);
+    save_yaml_root(base, &root)?;
+    Ok(load_compression_config(base))
+}
+
+/// 将 `compression:` 重置为默认值并返回最新配置。
+pub fn reset_compression_config(base: &Path) -> anyhow::Result<CompressionConfig> {
+    set_compression_config(base, &CompressionConfig::default())
 }
 
 fn config_yaml_path(base: &Path) -> std::path::PathBuf {
@@ -859,6 +1088,59 @@ mod tests {
         assert!(learning.nudge_enabled);
         assert_eq!(learning.complex_task_tool_threshold, 5);
         assert_eq!(learning.unused_skill_days, 30);
+        let compression = load_compression_config(dir.path());
+        assert_eq!(compression, CompressionConfig::default());
+        assert!(compression.enabled);
+        assert!((compression.soft_ratio - 0.40).abs() < 1e-6);
+        assert_eq!(compression.tool_results_limit, 12);
+        assert_eq!(compression.keep_tail_bubbles, 3);
+    }
+
+    #[test]
+    fn compression_yaml_overrides_and_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+hooks:
+  enabled: true
+compression:
+  enabled: false
+  soft_ratio: 0.35
+  medium_ratio: 0.55
+  hard_ratio: 0.75
+  tool_results_limit: 8
+  keep_tail_bubbles: 5
+"#,
+        )
+        .unwrap();
+        let cfg = load_compression_config(dir.path());
+        assert!(!cfg.enabled);
+        assert!((cfg.soft_ratio - 0.35).abs() < 1e-6);
+        assert!((cfg.medium_ratio - 0.55).abs() < 1e-6);
+        assert!((cfg.hard_ratio - 0.75).abs() < 1e-6);
+        assert_eq!(cfg.tool_results_limit, 8);
+        assert_eq!(cfg.keep_tail_bubbles, 5);
+        // 未覆盖字段仍用默认
+        assert_eq!(cfg.soft_max_chars, 2_400);
+        assert_eq!(cfg.protect_last_n, 20);
+
+        let mut next = cfg.clone();
+        next.enabled = true;
+        next.recommend_compact_ratio = 0.90;
+        next.soft_head_chars = 1_200;
+        let saved = set_compression_config(dir.path(), &next).unwrap();
+        assert!(saved.enabled);
+        assert!((saved.recommend_compact_ratio - 0.90).abs() < 1e-6);
+        assert_eq!(saved.soft_head_chars, 1_200);
+        assert_eq!(saved.keep_tail_bubbles, 5);
+
+        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        assert!(text.contains("hooks:"));
+        assert!(text.contains("enabled: true"));
+
+        let reset = reset_compression_config(dir.path()).unwrap();
+        assert_eq!(reset, CompressionConfig::default());
     }
 
     #[test]

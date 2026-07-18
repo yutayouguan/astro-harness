@@ -313,10 +313,11 @@ async fn run_multi_turn_stream_inner(
             return;
         }
 
-        // Gateway 85% 预压安全网（Hermes Session Hygiene）：进 LLM 前再跑一轮廉价维护。
+        // Gateway 预压安全网（Hermes Session Hygiene）：进 LLM 前再跑一轮廉价维护。
         {
             let mut agent = session.lock().await;
-            if agent.occupancy_ratio() >= crate::compression::HARD_STAGE_RECOMMEND_COMPACT_RATIO {
+            let recommend_ratio = agent.compression_config().recommend_compact_ratio;
+            if agent.occupancy_ratio() >= recommend_ratio {
                 match agent.maintain_tool_context().await {
                     Ok(report) if report.pruned + report.compressed > 0 => {
                         tracing::info!(
@@ -325,7 +326,8 @@ async fn run_multi_turn_stream_inner(
                             llm_summarized = report.llm_summarized,
                             occupancy_before = report.occupancy_before,
                             occupancy_after = report.occupancy_after,
-                            "gateway pre-maintain applied (≥85%)"
+                            recommend_ratio,
+                            "gateway pre-maintain applied"
                         );
                     }
                     Ok(report) if report.recommend_session_compact => {
@@ -381,6 +383,7 @@ async fn run_multi_turn_stream_inner(
             let agent = session.lock().await;
             let (system_chars, memory_chars, skills_chars, recall_chars) =
                 agent.system_prompt_layer_chars();
+            let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
             let snap = crate::prompt::context_usage::build_snapshot(
                 crate::prompt::context_usage::ContextUsageInput {
                     system_chars,
@@ -392,6 +395,7 @@ async fn run_multi_turn_stream_inner(
                     context_window: agent.context_window(),
                     updated_at_ms: chrono::Utc::now().timestamp_millis(),
                     recommend_compact: agent.should_recommend_compact(),
+                    recommend_compact_ratio,
                 },
             );
             drop(agent);

@@ -53,6 +53,8 @@ pub struct ContextUsageInput<'a> {
     pub context_window: u32,
     pub updated_at_ms: i64,
     pub recommend_compact: bool,
+    /// 占用 ≥ 该比例时也建议 `/compact`；默认 0.85。
+    pub recommend_compact_ratio: f32,
 }
 
 pub fn estimate_tokens(chars: usize) -> u32 {
@@ -187,13 +189,18 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         input.context_window
     };
 
+    let recommend_ratio = if input.recommend_compact_ratio > 0.0 {
+        input.recommend_compact_ratio as f64
+    } else {
+        0.85
+    };
     ContextUsageSnapshot {
         context_window: window,
         total_tokens,
         segments,
         updated_at: input.updated_at_ms,
         recommend_compact: input.recommend_compact
-            || (window > 0 && total_tokens as f64 / window as f64 >= 0.85),
+            || (window > 0 && total_tokens as f64 / window as f64 >= recommend_ratio),
     }
 }
 
@@ -229,6 +236,7 @@ mod tests {
             context_window: 128_000,
             updated_at_ms: 1,
             recommend_compact: false,
+            recommend_compact_ratio: 0.85,
         });
         let tools_seg = snap.segment("tools").unwrap();
         let mcp_seg = snap.segment("mcp").unwrap();
@@ -259,6 +267,7 @@ mod tests {
             context_window: 128_000,
             updated_at_ms: 1,
             recommend_compact: false,
+            recommend_compact_ratio: 0.85,
         });
         assert_eq!(snap.segment("subagent").map(|s| s.tokens), Some(10));
         assert_eq!(

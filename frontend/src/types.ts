@@ -234,6 +234,31 @@ export type AuxiliarySettingsDto = {
   activeModel: string;
 };
 
+/** 上下文卫生设置（Tauri `get_compression_settings`，对齐 `memory::CompressionConfig`） */
+export type CompressionSettingsDto = {
+  enabled: boolean;
+  softRatio: number;
+  mediumRatio: number;
+  hardRatio: number;
+  softMaxChars: number;
+  softHeadChars: number;
+  softTailChars: number;
+  mediumMaxChars: number;
+  mediumHeadChars: number;
+  mediumTailChars: number;
+  hardMaxChars: number;
+  hardHeadChars: number;
+  hardTailChars: number;
+  toolResultsLimit: number;
+  midRunSummaryRatio: number;
+  recommendCompactRatio: number;
+  protectLastN: number;
+  protectFirstMessages: number;
+  thrashingMinGainRatio: number;
+  thrashingMaxConsecutive: number;
+  keepTailBubbles: number;
+};
+
 /** 离线进化路由 id（对齐 `memory::EvolutionRouteKind`） */
 export type EvolutionRouteId = "reflection" | "judge";
 

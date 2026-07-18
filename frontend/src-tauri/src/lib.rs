@@ -8,6 +8,7 @@ mod auxiliary_resolver;
 mod clipboard_files;
 mod commands;
 mod compaction_commands;
+mod compression_settings_commands;
 mod config_commands;
 mod app_icon;
 mod dreaming_commands;
@@ -409,6 +410,9 @@ pub fn run() {
             dreaming_commands::set_dreaming_enabled_cmd,
             dreaming_commands::run_dreaming,
             compaction_commands::compact_chat_session,
+            compression_settings_commands::get_compression_settings,
+            compression_settings_commands::set_compression_settings,
+            compression_settings_commands::reset_compression_settings,
             ip_location::infer_ip_location,
             auxiliary_commands::get_auxiliary_settings,
             auxiliary_commands::set_auxiliary_route,

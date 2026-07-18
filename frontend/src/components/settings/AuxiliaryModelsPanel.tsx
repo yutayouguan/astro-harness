@@ -361,9 +361,13 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
                       </span>
                     )}
                   </div>
-                  {(task.id === "background_review" ||
+                  {(task.id === "compaction" ||
+                    task.id === "background_review" ||
                     usesPrimaryModel(row, isAuto)) && (
                     <div className="aux-task-hints">
+                      {task.id === "compaction" && (
+                        <span className="aux-hint">{t("aux.compactionThresholdHint")}</span>
+                      )}
                       {task.id === "background_review" && (
                         <span className="aux-hint">{t("aux.backgroundReviewHint")}</span>
                       )}

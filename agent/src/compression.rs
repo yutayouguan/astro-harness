@@ -9,6 +9,7 @@
 //! thresholds, thrashing guard, and head/tail heuristic.
 
 use common::message::{Message, Role};
+use memory::CompressionConfig;
 
 use crate::prompt::context_usage::{estimate_tokens, DEFAULT_CONTEXT_WINDOW};
 
@@ -49,13 +50,39 @@ pub const DEFAULT_COMPRESSION_STAGES: [CompressionStage; 3] = [
     },
 ];
 
-/// 条数兜底触发时用的轻压参数（尚未摸到 Soft 占用）。
-const COUNT_FALLBACK_STAGE: CompressionStage = CompressionStage {
-    min_ratio: 0.0,
-    max_compressed_chars: 2_400,
-    head_chars: 1_600,
-    tail_chars: 600,
-};
+/// Hard 阶段仍高于该占用时，建议用户 `/compact`（会话级整段摘要）。
+///
+/// 运行时请优先读 [`CompressionConfig::recommend_compact_ratio`]。
+pub const HARD_STAGE_RECOMMEND_COMPACT_RATIO: f32 = 0.85;
+
+/// 单次维护占用下降低于该比例视为「低收益」。
+pub const THRASHING_MIN_GAIN_RATIO: f32 = 0.05;
+
+pub const MAX_CONSECUTIVE_LOW_GAIN: u32 = 3;
+
+/// 从 [`CompressionConfig`] 构造 Soft/Medium/Hard 阶段表。
+pub fn stages_from_config(cfg: &CompressionConfig) -> Vec<CompressionStage> {
+    vec![
+        CompressionStage {
+            min_ratio: cfg.soft_ratio,
+            max_compressed_chars: cfg.soft_max_chars,
+            head_chars: cfg.soft_head_chars,
+            tail_chars: cfg.soft_tail_chars,
+        },
+        CompressionStage {
+            min_ratio: cfg.medium_ratio,
+            max_compressed_chars: cfg.medium_max_chars,
+            head_chars: cfg.medium_head_chars,
+            tail_chars: cfg.medium_tail_chars,
+        },
+        CompressionStage {
+            min_ratio: cfg.hard_ratio,
+            max_compressed_chars: cfg.hard_max_chars,
+            head_chars: cfg.hard_head_chars,
+            tail_chars: cfg.hard_tail_chars,
+        },
+    ]
+}
 
 #[derive(Debug, Clone)]
 pub struct ToolCompressionManager {
@@ -68,20 +95,30 @@ pub struct ToolCompressionManager {
     pub context_window: u32,
     /// 按占用比例排序的阶段表（升序 `min_ratio`）。
     pub stages: Vec<CompressionStage>,
+    /// Soft 阶段比例（prune / 兜底对照）。
+    pub soft_ratio: f32,
+    /// Hard 阶段比例（prune 对照）。
+    pub hard_ratio: f32,
 }
 
 impl Default for ToolCompressionManager {
     fn default() -> Self {
-        Self {
-            enabled: true,
-            tool_results_limit: DEFAULT_TOOL_RESULTS_LIMIT,
-            context_window: DEFAULT_CONTEXT_WINDOW,
-            stages: DEFAULT_COMPRESSION_STAGES.to_vec(),
-        }
+        Self::from_config(&CompressionConfig::default())
     }
 }
 
 impl ToolCompressionManager {
+    pub fn from_config(cfg: &CompressionConfig) -> Self {
+        Self {
+            enabled: cfg.enabled,
+            tool_results_limit: cfg.tool_results_limit,
+            context_window: DEFAULT_CONTEXT_WINDOW,
+            stages: stages_from_config(cfg),
+            soft_ratio: cfg.soft_ratio,
+            hard_ratio: cfg.hard_ratio,
+        }
+    }
+
     pub fn with_context_window(mut self, window: u32) -> Self {
         self.context_window = if window == 0 {
             DEFAULT_CONTEXT_WINDOW
@@ -104,6 +141,17 @@ impl ToolCompressionManager {
         }
     }
 
+    /// 条数兜底触发时用 Soft 级预算（`min_ratio` 标 0 仅作标记）。
+    fn count_fallback_stage(&self) -> CompressionStage {
+        let soft = self.stages.first().copied().unwrap_or(DEFAULT_COMPRESSION_STAGES[0]);
+        CompressionStage {
+            min_ratio: 0.0,
+            max_compressed_chars: soft.max_compressed_chars,
+            head_chars: soft.head_chars,
+            tail_chars: soft.tail_chars,
+        }
+    }
+
     /// 当前消息估算占用比例（0.0–∞，通常 < 1.0）。
     pub fn occupancy_ratio(&self, messages: &[Message]) -> f32 {
         let window = self.effective_context_window().max(1) as f32;
@@ -122,12 +170,15 @@ impl ToolCompressionManager {
 
     /// 本次应使用的截断参数：优先窗口阶段，否则条数兜底用 Soft 级。
     pub fn stage_for_compress(&self, messages: &[Message]) -> Option<CompressionStage> {
+        if !self.enabled {
+            return None;
+        }
         if let Some(stage) = self.active_stage(messages) {
             return Some(stage);
         }
         let uncompressed = uncompressed_tool_result_count(messages);
         if self.tool_results_limit > 0 && uncompressed >= self.tool_results_limit {
-            return Some(COUNT_FALLBACK_STAGE);
+            return Some(self.count_fallback_stage());
         }
         None
     }
@@ -208,21 +259,32 @@ fn provider_facing_chars(m: &Message) -> usize {
     body.saturating_add(tool_calls)
 }
 
-/// Hard 阶段仍高于该占用时，建议用户 `/compact`（会话级整段摘要）。
-pub const HARD_STAGE_RECOMMEND_COMPACT_RATIO: f32 = 0.85;
-
-/// 单次维护占用下降低于该比例视为「低收益」。
-pub const THRASHING_MIN_GAIN_RATIO: f32 = 0.05;
-
-pub const MAX_CONSECUTIVE_LOW_GAIN: u32 = 3;
-
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CompressionThrashingGuard {
     consecutive_low_gain: u32,
     pub disabled: bool,
+    min_gain_ratio: f32,
+    max_consecutive: u32,
+    recommend_compact_ratio: f32,
+}
+
+impl Default for CompressionThrashingGuard {
+    fn default() -> Self {
+        Self::from_config(&CompressionConfig::default())
+    }
 }
 
 impl CompressionThrashingGuard {
+    pub fn from_config(cfg: &CompressionConfig) -> Self {
+        Self {
+            consecutive_low_gain: 0,
+            disabled: false,
+            min_gain_ratio: cfg.thrashing_min_gain_ratio,
+            max_consecutive: cfg.thrashing_max_consecutive,
+            recommend_compact_ratio: cfg.recommend_compact_ratio,
+        }
+    }
+
     pub fn allow_run(&self) -> bool {
         !self.disabled
     }
@@ -233,10 +295,10 @@ impl CompressionThrashingGuard {
         }
         let gain = (before - after).max(0.0);
         let low_gain =
-            gain < THRASHING_MIN_GAIN_RATIO || after >= HARD_STAGE_RECOMMEND_COMPACT_RATIO;
+            gain < self.min_gain_ratio || after >= self.recommend_compact_ratio;
         if low_gain {
             self.consecutive_low_gain = self.consecutive_low_gain.saturating_add(1);
-            if self.consecutive_low_gain >= MAX_CONSECUTIVE_LOW_GAIN {
+            if self.consecutive_low_gain >= self.max_consecutive {
                 self.disabled = true;
                 tracing::warn!(
                     consecutive = self.consecutive_low_gain,
@@ -271,11 +333,16 @@ pub fn protect_tail_start_index(message_len: usize, protect_tail_messages: usize
     message_len.saturating_sub(protect_tail_messages.max(1))
 }
 
-pub fn should_prune_tool_at_stage(stage: CompressionStage, content_chars: usize) -> bool {
-    if stage.min_ratio >= DEFAULT_COMPRESSION_STAGES[2].min_ratio {
+pub fn should_prune_tool_at_stage(
+    stage: CompressionStage,
+    content_chars: usize,
+    soft_ratio: f32,
+    hard_ratio: f32,
+) -> bool {
+    if stage.min_ratio >= hard_ratio {
         return true;
     }
-    if stage.min_ratio >= DEFAULT_COMPRESSION_STAGES[0].min_ratio {
+    if stage.min_ratio >= soft_ratio {
         return content_chars >= common::PRUNE_MIN_CHARS;
     }
     false
@@ -344,6 +411,34 @@ mod tests {
     }
 
     #[test]
+    fn from_config_overrides_ratios_and_budgets() {
+        let mut cfg = CompressionConfig::default();
+        cfg.soft_ratio = 0.30;
+        cfg.medium_ratio = 0.50;
+        cfg.hard_ratio = 0.70;
+        cfg.soft_max_chars = 1_000;
+        cfg.soft_head_chars = 700;
+        cfg.soft_tail_chars = 200;
+        cfg.tool_results_limit = 0;
+        let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(1_000);
+        // ~1600 chars → ~400 tokens → 40% → Soft (30%)
+        let mid = "x".repeat(1_600);
+        let messages = vec![Message::tool(&mid)];
+        let stage = mgr.active_stage(&messages).unwrap();
+        assert!((stage.min_ratio - 0.30).abs() < 1e-6);
+        assert_eq!(stage.max_compressed_chars, 1_000);
+    }
+
+    #[test]
+    fn disabled_config_never_compresses() {
+        let mut cfg = CompressionConfig::default();
+        cfg.enabled = false;
+        let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(100);
+        let huge = "x".repeat(10_000);
+        assert!(!mgr.should_compress(&[Message::tool(&huge)]));
+    }
+
+    #[test]
     fn no_uncompressed_tools_never_triggers() {
         let mut messages = vec![Message::tool("a"), Message::tool("b"), Message::tool("c")];
         for m in &mut messages {
@@ -391,6 +486,6 @@ mod tests {
     #[test]
     fn hard_stage_prunes_all_outside_tail() {
         let stage = DEFAULT_COMPRESSION_STAGES[2];
-        assert!(should_prune_tool_at_stage(stage, 10));
+        assert!(should_prune_tool_at_stage(stage, 10, 0.40, 0.80));
     }
 }

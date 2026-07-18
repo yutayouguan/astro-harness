@@ -20,6 +20,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
+import CompressionSettingsCard from "./CompressionSettingsCard";
 
 /** 查询返回的单行日志 */
 type AgentLogLine = { raw: string; source: string };
@@ -372,6 +373,8 @@ export default function PreferencesPanel({
           ))}
         </div>
       </section>
+
+      <CompressionSettingsCard tone={tone} />
 
       <section className="prefs-card">
         <div className="prefs-card-head">

@@ -553,7 +553,8 @@ export function useChatSession({
     try {
       const res = await invoke<{ newSessionId: string; summaryPreview: string; degraded: boolean }>(
         "compact_chat_session",
-        { sessionId, keepTailBubbles: 3, focus: null },
+        // keepTailBubbles 缺省时由后端读 compression.keep_tail_bubbles
+        { sessionId, keepTailBubbles: null, focus: null },
       );
       splitNewId = res.newSessionId;
 

@@ -26,7 +26,6 @@ use tools::{dispatch_tool, register_all, ToolContext, ToolEntry, ToolRegistry};
 use crate::compression::{
     protect_tail_start_index, prune_tool_view, should_prune_tool_at_stage,
     CompressionThrashingGuard, ContextMaintenanceResult, ToolCompressionManager,
-    HARD_STAGE_RECOMMEND_COMPACT_RATIO,
 };
 use crate::prompt::context::{DynamicContext, StaticContext};
 use crate::prompt::hooks::CancelSignal;
@@ -384,7 +383,8 @@ impl AgentLoop {
         let prev_rounds = self.tool_rounds;
         self.tool_rounds = 0;
         self.turn_wrote_disk = false;
-        self.compression_guard = CompressionThrashingGuard::default();
+        let compression = memory::load_compression_config(&self.memory.base_dir);
+        self.compression_guard = CompressionThrashingGuard::from_config(&compression);
         self.mid_run_handoff = None;
         self.mid_run_summary_done = false;
         self.pending_recommend_compact = false;
@@ -418,8 +418,17 @@ impl AgentLoop {
         Some(text)
     }
 
+    /// 热读 `compression:` 段（与 learning 同类）。
+    pub fn compression_config(&self) -> memory::CompressionConfig {
+        memory::load_compression_config(self.memory_dir())
+    }
+
     pub fn config_protect_last_n(&self) -> usize {
-        self.config.protect_last_n.max(1)
+        self.compression_config().protect_last_n.max(1)
+    }
+
+    pub fn config_protect_first_n(&self) -> usize {
+        self.compression_config().protect_first_messages.max(1)
     }
 
     pub fn mid_run_summary_done(&self) -> bool {
@@ -455,7 +464,7 @@ impl AgentLoop {
             Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
                 &self.session_messages,
                 handoff,
-                crate::exec::mid_run_summary::PROTECT_FIRST_MESSAGES,
+                self.config_protect_first_n(),
                 self.config_protect_last_n(),
             ),
             None => self.session_messages.clone(),
@@ -464,7 +473,7 @@ impl AgentLoop {
 
     /// 当前会话占用比例（ceil chars/4 ÷ context_window）。
     pub fn occupancy_ratio(&self) -> f32 {
-        ToolCompressionManager::default()
+        ToolCompressionManager::from_config(&self.compression_config())
             .with_context_window(self.context_window())
             .occupancy_ratio(&self.session_messages)
     }
@@ -812,13 +821,6 @@ impl AgentLoop {
         self.current_turn += 1;
     }
 
-    /// 根据上下文占用比例判断是否需要触发压缩。
-    ///
-    /// 当前阈值：占用超过 50% 时返回 `true`。
-    pub fn needs_compression(&self, context_ratio: f32) -> bool {
-        context_ratio > 0.5
-    }
-
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
     pub fn set_context_window(&mut self, window: u32) {
         self.context_window = if window == 0 {
@@ -841,12 +843,17 @@ impl AgentLoop {
     /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
     pub async fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
         let mut result = ContextMaintenanceResult::default();
+        let cfg = self.compression_config();
+        if !cfg.enabled {
+            return Ok(result);
+        }
         if !self.compression_guard.allow_run() {
             result.thrashing_disabled = true;
             return Ok(result);
         }
 
-        let manager = ToolCompressionManager::default().with_context_window(self.context_window());
+        let manager =
+            ToolCompressionManager::from_config(&cfg).with_context_window(self.context_window());
         let Some(stage) = manager.stage_for_compress(&self.session_messages) else {
             return Ok(result);
         };
@@ -855,7 +862,7 @@ impl AgentLoop {
         result.occupancy_before = manager.occupancy_ratio(&self.session_messages);
 
         let stored = self.sessions.get_messages(&self.session_id)?;
-        let protect_start = protect_tail_start_index(stored.len(), self.config.protect_last_n);
+        let protect_start = protect_tail_start_index(stored.len(), cfg.protect_last_n.max(1));
 
         #[derive(Clone)]
         struct CompressCandidate {
@@ -886,7 +893,14 @@ impl AgentLoop {
                 .exists()
                 .then(|| common::spill_path_for_prompt(self.memory_dir(), &spill_path));
 
-            if idx < protect_start && should_prune_tool_at_stage(stage, content.chars().count()) {
+            if idx < protect_start
+                && should_prune_tool_at_stage(
+                    stage,
+                    content.chars().count(),
+                    manager.soft_ratio,
+                    manager.hard_ratio,
+                )
+            {
                 let current = stored_msg.compressed_content.as_deref().unwrap_or(content);
                 if common::is_externalized_view(current)
                     && current.chars().count() <= stage.max_compressed_chars
@@ -973,7 +987,7 @@ impl AgentLoop {
             .record_outcome(result.occupancy_before, result.occupancy_after);
         result.thrashing_disabled = self.compression_guard.disabled;
         result.recommend_session_compact =
-            result.occupancy_after >= HARD_STAGE_RECOMMEND_COMPACT_RATIO;
+            result.occupancy_after >= cfg.recommend_compact_ratio;
         if result.recommend_session_compact {
             self.pending_recommend_compact = true;
         }

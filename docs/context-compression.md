@@ -166,18 +166,48 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 
 ## 配置与调参
 
-| 常量 | 默认 | 位置 |
+主配置段：`config.yaml` 的 **`compression:`**（`memory::CompressionConfig`）。偏好设置 →「上下文与压缩」可读写；Agent / Gateway / mid-run / `/compact` keep_tail **热读**该段。
+
+```yaml
+compression:
+  enabled: true
+  soft_ratio: 0.40
+  medium_ratio: 0.60
+  hard_ratio: 0.80
+  soft_max_chars: 2400
+  soft_head_chars: 1600
+  soft_tail_chars: 600
+  medium_max_chars: 1800
+  medium_head_chars: 1100
+  medium_tail_chars: 500
+  hard_max_chars: 900
+  hard_head_chars: 600
+  hard_tail_chars: 200
+  tool_results_limit: 12
+  mid_run_summary_ratio: 0.80
+  recommend_compact_ratio: 0.85
+  protect_last_n: 20
+  protect_first_messages: 4
+  thrashing_min_gain_ratio: 0.05
+  thrashing_max_consecutive: 3
+  keep_tail_bubbles: 3
+```
+
+| 项 | 默认 | 来源 |
 |------|------|------|
-| `DEFAULT_SPILL_THRESHOLD_BYTES` | 16 KiB | `common/tool_spill.rs` |
-| `PRUNE_MIN_CHARS` | 200 | `common/tool_spill.rs` |
-| `DEFAULT_TOOL_RESULTS_LIMIT` | 12 | `agent/compression.rs` |
-| Soft/Medium/Hard 比例 | 40% / 60% / 80% | `DEFAULT_COMPRESSION_STAGES` |
-| `MAX_LLM_TOOL_COMPRESS_PER_PASS` | 6 | `agent/exec/tool_llm_compress.rs` |
-| `MAX_LLM_INPUT_CHARS` | 24_000 | 同上 |
-| `protect_last_n` | 20 | `AgentConfig` |
-| `MID_RUN_SUMMARY_RATIO` | 80% | `agent/exec/mid_run_summary.rs` |
-| `HARD_STAGE_RECOMMEND_COMPACT_RATIO` / Gateway | 85% | `agent/compression.rs` |
-| `MAX_CONSECUTIVE_LOW_GAIN` | 3 | thrashing |
+| Soft/Medium/Hard 比例与字符预算 | 见上表 | `compression:` → `ToolCompressionManager::from_config` |
+| `tool_results_limit` | 12 | 同上 |
+| `mid_run_summary_ratio` | 80% | mid-run |
+| `recommend_compact_ratio` / Gateway | 85% | Gateway 预维护 + `ContextUsage` |
+| `protect_last_n` / `protect_first_messages` | 20 / 4 | prune / mid-run 折叠 |
+| thrashing | 5% / 连续 3 次 | `CompressionThrashingGuard` |
+| `keep_tail_bubbles` | 3 | 手动 `/compact` |
+| `DEFAULT_SPILL_THRESHOLD_BYTES` | 16 KiB | 代码常量（UI 未暴露） |
+| `PRUNE_MIN_CHARS` | 200 | 代码常量 |
+| `MAX_LLM_TOOL_COMPRESS_PER_PASS` | 6 | 代码常量 |
+| `MAX_LLM_INPUT_CHARS` | 24_000 | 代码常量 |
+
+UI：占用查看仍在聊天右栏 Context Explorer；辅模型页的 `auxiliary.compaction` 只选摘要模型，阈值在偏好设置。
 
 ---
 

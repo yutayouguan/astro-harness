@@ -13,8 +13,9 @@ use crate::runtime::AgentLoop;
 use common::message::{Message, Role};
 
 pub const MID_RUN_SUMMARY_MARK: &str = "[astro:mid-run-summary]";
-/// Hard 阶段占比；与 Soft/Medium/Hard 表一致。
+/// Hard 阶段占比默认；运行时优先读 `compression.mid_run_summary_ratio`。
 pub const MID_RUN_SUMMARY_RATIO: f32 = 0.80;
+/// 默认头保护条数；运行时优先读 `compression.protect_first_messages`。
 pub const PROTECT_FIRST_MESSAGES: usize = 4;
 
 /// 是否应尝试 mid-run 摘要。
@@ -22,11 +23,17 @@ pub fn should_attempt(agent: &AgentLoop) -> bool {
     if agent.mid_run_summary_done() {
         return false;
     }
-    if agent.session_messages.len() < PROTECT_FIRST_MESSAGES + agent.config_protect_last_n() {
+    let cfg = agent.compression_config();
+    if !cfg.enabled {
         return false;
     }
-    let mgr = ToolCompressionManager::default().with_context_window(agent.context_window());
-    mgr.occupancy_ratio(&agent.session_messages) >= MID_RUN_SUMMARY_RATIO
+    let protect_first = cfg.protect_first_messages.max(1);
+    if agent.session_messages.len() < protect_first + agent.config_protect_last_n() {
+        return false;
+    }
+    let mgr =
+        ToolCompressionManager::from_config(&cfg).with_context_window(agent.context_window());
+    mgr.occupancy_ratio(&agent.session_messages) >= cfg.mid_run_summary_ratio
 }
 
 /// 折叠 Provider 历史：头 + 摘要 + 尾（不改 DB 原文）。
@@ -141,10 +148,11 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
     if !should_attempt(agent) {
         return Ok(false);
     }
+    let protect_first = agent.config_protect_first_n();
     let protect_last = agent.config_protect_last_n();
     let transcript = build_transcript(
         &agent.session_messages,
-        PROTECT_FIRST_MESSAGES,
+        protect_first,
         protect_last,
     );
     if transcript.chars().count() < 400 {
@@ -192,7 +200,7 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
     let collapsed = collapse_history_with_handoff(
         &agent.session_messages,
         &text,
-        PROTECT_FIRST_MESSAGES,
+        protect_first,
         protect_last,
     );
     let after = estimate_messages_tokens(&collapsed);

@@ -12,9 +12,12 @@ use crate::auxiliary_resolver::{
     primary_chat_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
 };
 
-const KEEP_TAIL_DEFAULT: usize = 3;
 const SUMMARY_PREFIX: &str = "[CONTEXT COMPACTION]";
 const FALLBACK_PREFIX: &str = "[CONTEXT COMPACTION — fallback summary]";
+
+fn keep_tail_default() -> usize {
+    memory::load_compression_config(&home::default_memory_dir()).keep_tail_bubbles
+}
 
 fn open_sessions() -> Result<session::SessionStore, String> {
     let root = home::default_memory_dir();
@@ -160,7 +163,7 @@ pub async fn compact_chat_session(
     }
     let keep = keep_tail_bubbles
         .map(|k| k.max(0) as usize)
-        .unwrap_or(KEEP_TAIL_DEFAULT);
+        .unwrap_or_else(keep_tail_default);
 
     // SessionStore（rusqlite）非 Send：先读出元数据/消息并 drop，再 await LLM。
     let (messages, transcript) = {
