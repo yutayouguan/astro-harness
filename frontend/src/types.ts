@@ -261,6 +261,23 @@ export type EvolutionSearchDto = {
   crossover: boolean;
 };
 
+/** 进化历史聚合 + 近期事件（Tauri `evolution_history`） */
+export type EvolutionHistoryDto = {
+  summary: {
+    totalRuns: number;
+    runsByMode: Record<string, number>;
+    totalGenerated: number;
+    totalProposals: number;
+    approved: number;
+    rejected: number;
+    branched: number;
+    adoptionRate: number;
+    avgAdoptedScore: number;
+    scoreTrend: number[];
+  };
+  recent: Array<Record<string, unknown>>;
+};
+
 /** DSPy 对接状态（Tauri `evolution_dspy_status`） */
 export type DspyStatusDto = {
   enabled: boolean;

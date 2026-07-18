@@ -428,6 +428,7 @@ pub fn run() {
             evolution_run_commands::evolution_dspy_status,
             evolution_run_commands::setup_evolution_dspy,
             evolution_run_commands::run_evolution_dspy,
+            evolution_run_commands::evolution_history,
             icon_commands::get_app_icon,
             icon_commands::set_app_icon,
         ])

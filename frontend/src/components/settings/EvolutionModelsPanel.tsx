@@ -18,6 +18,7 @@ import { useEvolutionSettings } from "../../hooks/settings/useEvolutionSettings"
 import { useEvolutionProposals } from "../../hooks/settings/useEvolutionProposals";
 import { useEvalExamples } from "../../hooks/settings/useEvalExamples";
 import { useDspy } from "../../hooks/settings/useDspy";
+import { useEvolutionHistory } from "../../hooks/settings/useEvolutionHistory";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -125,6 +126,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     run: runDspy,
   } = useDspy(active);
   const [dspySkill, setDspySkill] = useState("");
+  const { history, reload: reloadHistory } = useEvolutionHistory(active);
 
   const submitEval = () => {
     if (!evalTask.trim()) return;
@@ -338,20 +340,20 @@ export default function EvolutionModelsPanel({ active }: Props) {
           <div className="aux-task-main">
             <div className="aux-task-titleline">
               <h3>{t("evo.enabled")}</h3>
-              <span className={`aux-route-pill${settings?.enabled ? "" : " is-auto"}`}>
-                {settings?.enabled ? t("evo.on") : t("evo.off")}
-              </span>
             </div>
             <p>{t("evo.enabledDesc")}</p>
           </div>
           <div className="aux-task-actions">
             <button
               type="button"
-              className="aux-action"
+              role="switch"
+              className="prefs-switch"
+              aria-checked={settings?.enabled ?? false}
+              aria-label={t("evo.enabled")}
               onClick={() => void setEnabled(!settings?.enabled)}
               disabled={loading || !settings}
             >
-              {settings?.enabled ? t("evo.disable") : t("evo.enable")}
+              <span className="prefs-switch-thumb" />
             </button>
           </div>
         </article>
@@ -473,14 +475,17 @@ export default function EvolutionModelsPanel({ active }: Props) {
           <div className="aux-task-actions">
             <button
               type="button"
-              className="aux-action"
+              role="switch"
+              className="prefs-switch"
+              aria-checked={gates?.runTests ?? false}
+              aria-label={t("evo.runTests")}
               onClick={() =>
                 gates &&
                 void setGates(!gates.runTests, gates.maxSkillBytes, gates.requirePr, gates.minJudgeScore)
               }
               disabled={!gates}
             >
-              {gates?.runTests ? t("evo.on") : t("evo.off")}
+              <span className="prefs-switch-thumb" />
             </button>
           </div>
         </article>
@@ -495,14 +500,17 @@ export default function EvolutionModelsPanel({ active }: Props) {
           <div className="aux-task-actions">
             <button
               type="button"
-              className="aux-action"
+              role="switch"
+              className="prefs-switch"
+              aria-checked={gates?.requirePr ?? false}
+              aria-label={t("evo.requirePr")}
               onClick={() =>
                 gates &&
                 void setGates(gates.runTests, gates.maxSkillBytes, !gates.requirePr, gates.minJudgeScore)
               }
               disabled={!gates}
             >
-              {gates?.requirePr ? t("evo.on") : t("evo.off")}
+              <span className="prefs-switch-thumb" />
             </button>
           </div>
         </article>
@@ -563,7 +571,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               className="aux-action aux-action-ghost"
-              onClick={() => void runEvolution()}
+              onClick={() => void runEvolution().then(() => reloadHistory())}
               disabled={running || !settings?.enabled}
             >
               <Play size={15} />
@@ -572,7 +580,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <button
               type="button"
               className="aux-action"
-              onClick={() => void runSearch()}
+              onClick={() => void runSearch().then(() => reloadHistory())}
               disabled={running || !settings?.enabled}
               title={t("evo.searchRunHint")}
             >
@@ -609,21 +617,27 @@ export default function EvolutionModelsPanel({ active }: Props) {
               disabled={!settings}
             />
           </label>
-          <button
-            type="button"
-            className="aux-action aux-action-ghost"
-            onClick={() =>
-              settings &&
-              void setSearch(
-                settings.search.generations,
-                settings.search.variants,
-                !settings.search.crossover,
-              )
-            }
-            disabled={!settings}
-          >
-            {t("evo.crossover")}: {settings?.search.crossover ? t("evo.on") : t("evo.off")}
-          </button>
+          <label className="evo-cfg-toggle">
+            {t("evo.crossover")}
+            <button
+              type="button"
+              role="switch"
+              className="prefs-switch"
+              aria-checked={settings?.search.crossover ?? false}
+              aria-label={t("evo.crossover")}
+              onClick={() =>
+                settings &&
+                void setSearch(
+                  settings.search.generations,
+                  settings.search.variants,
+                  !settings.search.crossover,
+                )
+              }
+              disabled={!settings}
+            >
+              <span className="prefs-switch-thumb" />
+            </button>
+          </label>
           <span className="aux-muted">{t("evo.searchCostHint")}</span>
         </div>
         {lastSearch && (
@@ -716,6 +730,83 @@ export default function EvolutionModelsPanel({ active }: Props) {
               </article>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="prefs-card aux-list-card">
+        <div className="aux-list-head">
+          <div>
+            <h2 className="prefs-card-title">{t("evo.historyTitle")}</h2>
+            <p className="prefs-card-sub">{t("evo.historySub")}</p>
+          </div>
+          <div className="aux-list-head-actions">
+            <button
+              type="button"
+              className="aux-action aux-action-ghost"
+              onClick={() => void reloadHistory()}
+            >
+              <RefreshCw size={15} />
+              {t("aux.refresh")}
+            </button>
+          </div>
+        </div>
+
+        <div className="evo-stats">
+          <div className="evo-stat">
+            <span className="evo-stat-num">{history?.summary.totalRuns ?? 0}</span>
+            <span className="evo-stat-label">{t("evo.statRuns")}</span>
+          </div>
+          <div className="evo-stat">
+            <span className="evo-stat-num">{history?.summary.totalProposals ?? 0}</span>
+            <span className="evo-stat-label">{t("evo.statProposals")}</span>
+          </div>
+          <div className="evo-stat">
+            <span className="evo-stat-num">
+              {history ? `${Math.round(history.summary.adoptionRate * 100)}%` : "—"}
+            </span>
+            <span className="evo-stat-label">{t("evo.statAdoption")}</span>
+          </div>
+          <div className="evo-stat">
+            <span className="evo-stat-num">
+              {history && history.summary.avgAdoptedScore > 0
+                ? history.summary.avgAdoptedScore.toFixed(2)
+                : "—"}
+            </span>
+            <span className="evo-stat-label">{t("evo.statAvgScore")}</span>
+          </div>
+          <div className="evo-stat">
+            <span className="evo-stat-num">
+              {history
+                ? `${history.summary.approved + history.summary.branched}/${history.summary.rejected}`
+                : "—"}
+            </span>
+            <span className="evo-stat-label">{t("evo.statAdoptedRejected")}</span>
+          </div>
+        </div>
+
+        {history && history.recent.length > 0 ? (
+          <div className="aux-task-list">
+            {history.recent.slice(0, 12).map((ev, i) => {
+              const type = String(ev.type ?? "");
+              const line =
+                type === "run"
+                  ? `run · ${String(ev.mode ?? "")} · gen ${Number(ev.generated ?? 0)} → 提案 ${Number(
+                      ev.proposals ?? 0,
+                    )}`
+                  : `${String(ev.outcome ?? "")} · ${String(ev.skill_id ?? "")}${
+                      ev.score != null ? ` · ${Number(ev.score).toFixed(2)}` : ""
+                    }`;
+              return (
+                <article className="aux-task-row evo-history-row" key={`${type}-${i}`}>
+                  <div className="aux-task-main">
+                    <p>{line}</p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="aux-muted">{t("evo.historyEmpty")}</p>
         )}
       </section>
 
@@ -852,7 +943,10 @@ export default function EvolutionModelsPanel({ active }: Props) {
               className="aux-action"
               onClick={() =>
                 void runDspy(dspySkill.trim()).then((r) => {
-                  if (r) void reloadProposals();
+                  if (r) {
+                    void reloadProposals();
+                    void reloadHistory();
+                  }
                 })
               }
               disabled={dspyBusy || !dspySkill.trim() || !dspyStatus?.enabled}

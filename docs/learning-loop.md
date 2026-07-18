@@ -111,6 +111,8 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 
 学习闭环三阶段（评测集/交叉/DSPy）至此全部落地。
 
+**可观测**：进化运行与提案去向记入 `~/.astro/learning/evolution/history.jsonl`（`run` / `outcome` 事件）；「离线进化」页「进化历史」小节展示运行次数、生成提案数、采纳率、采纳均分、采纳/拒绝与近期事件。crate [`evolution::history`](../evolution/src/history.rs)；命令 `evolution_history`。
+
 模型角色（不复用在线 `auxiliary.*`）：
 
 | 角色 | 职责 | 模型倾向 |

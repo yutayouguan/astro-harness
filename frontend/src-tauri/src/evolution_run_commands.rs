@@ -313,6 +313,7 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
     let proposals: Vec<EvolutionProposalDto> =
         passed.into_iter().map(EvolutionProposalDto::from).collect();
 
+    evolution::record_run(&base, "reflect", generated, gated_out, judged_out, proposals.len());
     let _ = app.emit(
         "evolution-updated",
         serde_json::json!({
@@ -508,6 +509,7 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
     let proposals: Vec<EvolutionProposalDto> =
         final_props.into_iter().map(EvolutionProposalDto::from).collect();
 
+    evolution::record_run(&base, "search", variants_evaluated, 0, 0, proposals.len());
     let _ = app.emit(
         "evolution-updated",
         serde_json::json!({
@@ -583,23 +585,99 @@ fn run_skill_tests(skill_dir: &Path) -> Result<(), String> {
     }
 }
 
+fn proposal_meta(base: &Path, id: &str) -> (String, String, Option<f32>) {
+    list_proposals(base)
+        .into_iter()
+        .find(|p| p.id == id)
+        .map(|p| {
+            let kind = match p.kind {
+                CandidateKind::NewSkill => "new_skill",
+                CandidateKind::Patch => "patch",
+            }
+            .to_string();
+            (p.skill_id, kind, p.judge_score)
+        })
+        .unwrap_or_default()
+}
+
 /// 批准一条提案：写入 Agent skills 目录；`run_tests` 开启时批准后跑测试，失败回滚。
 #[tauri::command]
 pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
     let base = default_memory_dir();
+    let (skill_id, kind, score) = proposal_meta(&base, &id);
     let run_tests = memory::load_evolution_config(&base).gates.run_tests;
-    if run_tests {
+    let res = if run_tests {
         approve_proposal_checked(&base, &id, run_skill_tests).map_err(|e| e.to_string())
     } else {
         approve_proposal(&base, &id).map_err(|e| e.to_string())
+    };
+    if res.is_ok() {
+        evolution::record_outcome(&base, &id, &skill_id, &kind, score, "approved");
     }
+    res
 }
 
 /// 拒绝并删除一条提案。
 #[tauri::command]
 pub async fn reject_evolution_proposal(id: String) -> Result<(), String> {
     let base = default_memory_dir();
-    reject_proposal(&base, &id).map_err(|e| e.to_string())
+    let (skill_id, kind, score) = proposal_meta(&base, &id);
+    reject_proposal(&base, &id).map_err(|e| e.to_string())?;
+    evolution::record_outcome(&base, &id, &skill_id, &kind, score, "rejected");
+    Ok(())
+}
+
+/// 聚合统计展示态（camelCase）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistorySummaryDto {
+    pub total_runs: usize,
+    pub runs_by_mode: std::collections::BTreeMap<String, usize>,
+    pub total_generated: usize,
+    pub total_proposals: usize,
+    pub approved: usize,
+    pub rejected: usize,
+    pub branched: usize,
+    pub adoption_rate: f32,
+    pub avg_adopted_score: f32,
+    pub score_trend: Vec<f32>,
+}
+
+/// 进化历史（聚合 + 近期事件）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvolutionHistoryDto {
+    pub summary: HistorySummaryDto,
+    pub recent: Vec<serde_json::Value>,
+}
+
+/// 读取进化可观测数据。
+#[tauri::command]
+pub async fn evolution_history() -> Result<EvolutionHistoryDto, String> {
+    let base = default_memory_dir();
+    let s = evolution::summarize_history(&base);
+    let summary = HistorySummaryDto {
+        total_runs: s.total_runs,
+        runs_by_mode: s.runs_by_mode,
+        total_generated: s.total_generated,
+        total_proposals: s.total_proposals,
+        approved: s.approved,
+        rejected: s.rejected,
+        branched: s.branched,
+        adoption_rate: s.adoption_rate,
+        avg_adopted_score: s.avg_adopted_score,
+        score_trend: s.score_trend,
+    };
+    let mut all = evolution::list_history(&base);
+    if all.len() > 20 {
+        all = all.split_off(all.len() - 20);
+    }
+    all.reverse(); // 最新在前
+    let recent = all
+        .into_iter()
+        .filter_map(|e| serde_json::to_value(e).ok())
+        .collect();
+    Ok(EvolutionHistoryDto { summary, recent })
 }
 
 // ===== Phase 3: DSPy 外部引擎桥接 =====
@@ -854,10 +932,14 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
     };
 
     let mut proposals = Vec::new();
-    if check_candidate(&cand, &cfg.gates).passed {
+    let gated = if check_candidate(&cand, &cfg.gates).passed {
         save_proposals(&base, std::slice::from_ref(&cand)).map_err(|e| e.to_string())?;
         proposals.push(EvolutionProposalDto::from(cand));
-    }
+        0
+    } else {
+        1
+    };
+    evolution::record_run(&base, "dspy", 1, gated, 0, proposals.len());
     let _ = std::fs::remove_dir_all(&dir);
 
     let _ = app.emit("evolution-updated", serde_json::json!({ "dspy": true, "proposals": proposals.len() }));
@@ -1048,6 +1130,11 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
         return Err(e);
     }
 
+    let kind = match cand.kind {
+        CandidateKind::NewSkill => "new_skill",
+        CandidateKind::Patch => "patch",
+    };
+    evolution::record_outcome(&base, &id, &cand.skill_id, kind, cand.judge_score, "branch");
     reject_proposal(&base, &id).map_err(|e| e.to_string())?;
     Ok(format!(
         "已在分支 `{branch}` 提交（worktree: {}）。可在该分支 review / 推送 / 开 PR。",

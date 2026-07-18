@@ -13,6 +13,7 @@
 pub mod candidate;
 pub mod evalset;
 pub mod gates;
+pub mod history;
 pub mod judge;
 pub mod proposal;
 pub mod reflect;
@@ -24,6 +25,10 @@ pub use evalset::{
     parse_eval_score, remove_example, EvalExample, Verdict, EVAL_JUDGE_SYSTEM_PROMPT,
 };
 pub use gates::{check_candidate, GateOutcome};
+pub use history::{
+    history_path, list_all as list_history, record_outcome, record_run, summarize as summarize_history,
+    HistoryEvent, HistorySummary,
+};
 pub use judge::{build_judge_user_prompt, parse_judge_output, JudgeVerdict, JUDGE_SYSTEM_PROMPT};
 pub use proposal::{
     apply_patch_unique, approve_proposal, approve_proposal_checked, candidate_new_markdown,
