@@ -57,10 +57,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .trim()
         .to_lowercase();
 
-    let (program, script_args, filename): (&str, Vec<&str>, &str) = match lang.as_str() {
-        "python" | "python3" | "py" => ("python3", vec![], "snippet.py"),
-        "javascript" | "js" => ("node", vec![], "snippet.js"),
-        "shell" | "bash" | "sh" => ("sh", vec![], "snippet.sh"),
+    let (program, script_args, ext): (&str, Vec<&str>, &str) = match lang.as_str() {
+        "python" | "python3" | "py" => ("python3", vec![], "py"),
+        "javascript" | "js" => ("node", vec![], "js"),
+        "shell" | "bash" | "sh" => ("sh", vec![], "sh"),
         other => {
             anyhow::bail!("code_exec 不支持 language={other}；请使用 python、javascript 或 shell")
         }
@@ -70,7 +70,9 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let tmp = root.join(".code_exec");
     std::fs::create_dir_all(&tmp)?;
 
-    let path = tmp.join(filename);
+    // 每次调用唯一文件名：避免并发同语言调用相互覆盖脚本 / 误删对方临时文件
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let path = tmp.join(format!("snippet_{}.{ext}", &unique[..8]));
     std::fs::write(&path, &parsed.code)?;
 
     let mut cmd = tokio::process::Command::new(program);
@@ -170,5 +172,25 @@ mod tests {
         .await
         .unwrap();
         assert!(out.contains("[truncated]"), "{out}");
+    }
+
+    #[tokio::test]
+    async fn concurrent_same_language_no_clobber() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let providers = providers::registry::ProviderRegistry::new();
+        let targets = ImageGenTargets::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        // 两个并发的同语言调用共享同一个 .code_exec 目录；
+        // sleep 制造重叠窗口——若临时文件名固定会相互覆盖。
+        let a = serde_json::json!({"language": "shell", "code": "sleep 0.3; echo MARKER_AAA"});
+        let b = serde_json::json!({"language": "shell", "code": "sleep 0.3; echo MARKER_BBB"});
+        let (r1, r2) = tokio::join!(dispatch(&ctx, &a), dispatch(&ctx, &b));
+        let r1 = r1.unwrap();
+        let r2 = r2.unwrap();
+        assert!(r1.contains("MARKER_AAA"), "r1={r1}");
+        assert!(r2.contains("MARKER_BBB"), "r2={r2}");
     }
 }

@@ -141,8 +141,9 @@
 | `code` | — | 必填，源代码 |
 | `language` | `python` | `python` \| `javascript`\|`js` \| `shell`\|`bash` |
 
+- 每次调用写入**唯一临时文件**（`snippet_{uuid8}.{ext}`），并发同语言调用互不覆盖。
 - 超时 30s，输出超 `MAX_TOOL_RESULT_BYTES` 截断，跑完删临时文件。
-- **非沙箱**：与宿主进程同权限。
+- **非沙箱**：与宿主进程同权限（沙箱化方案见下「后续优化」）。
 
 ---
 
@@ -156,7 +157,7 @@
 
 按性价比排序（截至本文撰写未实现）：
 
-1. **`code_exec` 并发争用固定临时文件名**（真 bug）：文件名写死 `snippet.{py,js,sh}`，并发同语言调用会相互覆盖 / 误删。应按调用唯一化临时文件名。
+1. **`code_exec` 沙箱化**：目前与宿主同权限。分层方案（rlimits → Landlock/`sandbox-exec`/`bwrap` → 容器/WASM）。~~并发临时文件名争用~~ 已修复（唯一 `snippet_{uuid8}`）。
 2. **后台任务输出「丢新留旧」**：缓冲满 1 MiB 后丢弃后续输出、保留最早 1 MiB，与「盯 dev server 最新日志」诉求相反。可考虑有界尾部窗口（需重设计 offset 分页语义）。
 3. **`write` / `patch` 非原子写**：`std::fs::write` 直接截断重写，中途崩溃留半截文件。宜临时文件 + rename 原子落盘。
 4. **`search` / `list` 不读 `.gitignore`**：仅硬编码噪音目录表，真实仓库会污染结果 / 拖慢扫描。可引入 `ignore` crate。
