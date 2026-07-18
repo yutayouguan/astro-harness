@@ -1281,6 +1281,28 @@ impl AgentLoop {
         if exec_name == "skills" {
             self.activate_skill_toolsets_from_args(&exec_args);
         }
+        // KeyChoice：`confirm` 是关键决策闸口，记一笔供学习闭环。
+        if exec_name == "confirm" {
+            memory::try_append_decision(
+                self.memory.base_dir.as_path(),
+                memory::DecisionEntry::new(
+                    memory::DecisionKind::KeyChoice,
+                    format!(
+                        "confirm: {}",
+                        exec_args
+                            .get("prompt")
+                            .or_else(|| exec_args.get("message"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .chars()
+                            .take(160)
+                            .collect::<String>()
+                    ),
+                )
+                .with_tool("confirm")
+                .with_session(self.session_id.clone()),
+            );
+        }
         if tool_writes_disk(exec_name, &exec_args) {
             self.turn_wrote_disk = true;
         }
@@ -1551,6 +1573,22 @@ impl AgentLoop {
         }
 
         self.begin_user_turn();
+        // UserCorrection：上一轮已有回复且本轮像是纠错 → 记一笔供学习闭环。
+        if looks_like_user_correction(user_message)
+            && self
+                .session_messages
+                .iter()
+                .any(|m| matches!(m.role, common::message::Role::Assistant))
+        {
+            memory::try_append_decision(
+                self.memory.base_dir.as_path(),
+                memory::DecisionEntry::new(
+                    memory::DecisionKind::UserCorrection,
+                    user_message.chars().take(200).collect::<String>(),
+                )
+                .with_session(self.session_id.clone()),
+            );
+        }
         self.reload_tools_and_mcp().await;
 
         self.sessions.ensure_session(&self.session_id, "tauri")?;
@@ -1754,6 +1792,16 @@ mod tests {
     }
 
     #[test]
+    fn detects_user_correction_cues() {
+        assert!(looks_like_user_correction("不对，应该用 rg 而不是 grep"));
+        assert!(looks_like_user_correction("Actually that's wrong, should be async"));
+        assert!(looks_like_user_correction("重来"));
+        assert!(!looks_like_user_correction("帮我加一个按钮"));
+        assert!(!looks_like_user_correction("继续"));
+        assert!(!looks_like_user_correction(""));
+    }
+
+    #[test]
     fn learning_nudge_arms_only_when_threshold_met() {
         let dir = TempDir::new().unwrap();
         assert!(AgentLoop::compute_learning_nudge(dir.path(), 2).is_none());
@@ -1774,6 +1822,23 @@ mod tests {
 ///
 /// `terminal` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
 /// `operation`（`write`/`append`/`delete`/`mkdir`）时视为写盘，`read`/`list` 不算。
+/// 启发式判断用户消息是否像「纠正上一轮」（中英常见提示语）。
+///
+/// 仅作学习信号，宁缺毋滥；命中即记 DecisionLog，不改变对话流程。
+fn looks_like_user_correction(msg: &str) -> bool {
+    let m = msg.trim().to_lowercase();
+    if m.is_empty() {
+        return false;
+    }
+    const CUES: &[&str] = &[
+        "不对", "错了", "不是这", "不是这样", "应该是", "应该用", "别这", "别这样", "不要这样",
+        "重来", "搞错", "写错", "改一下", "不对吧", "其实是", "而不是",
+        "actually", "that's wrong", "thats wrong", "not right", "not correct", "should be",
+        "instead", "you got it wrong", "that's not", "thats not", "no, ", "incorrect",
+    ];
+    CUES.iter().any(|c| m.contains(c))
+}
+
 fn tool_writes_disk(name: &str, args: &Value) -> bool {
     match name {
         "terminal" => true,
