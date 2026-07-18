@@ -1,4 +1,5 @@
-/** 「文件」页外壳：浏览（工作区目录）/ 产物（对话产物索引）由页头分段切换控制，右侧复用各自预览。 */
+/** 「工作空间」页外壳：浏览（工作区目录）/ 产物（对话产物索引）由页头分段切换控制。
+ *  两侧面板常驻挂载、仅显隐切换，切回时保留各自滚动/选中/已打开文件等状态。 */
 import { useState } from "react";
 import type { ArtifactDto } from "../../types";
 import type { FilesSubmode } from "../../lib/filespace/filesMode";
@@ -34,13 +35,18 @@ export default function FilesPage({
 
   return (
     <div className="files-page">
-      {submode === "browse" ? (
+      <div
+        className={`files-mode-pane ${submode === "browse" ? "" : "is-hidden"}`}
+      >
         <WorkspacePanel
           onClose={onClose}
           openPath={pendingOpenPath}
           onDidOpenPath={() => setPendingOpenPath(null)}
         />
-      ) : (
+      </div>
+      <div
+        className={`files-mode-pane ${submode === "artifacts" ? "" : "is-hidden"}`}
+      >
         <FileSpacePanel
           active={active && submode === "artifacts"}
           onOpenSession={onOpenSession}
@@ -48,7 +54,7 @@ export default function FilesPage({
           onOpenInWorkspace={openInWorkspace}
           onClose={onClose}
         />
-      )}
+      </div>
     </div>
   );
 }

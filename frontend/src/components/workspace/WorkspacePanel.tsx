@@ -295,17 +295,18 @@ export default function WorkspacePanel({
   }, []);
 
   useEffect(() => {
-    if (openPath) {
-      void (async () => {
-        await openAbsolutePath(openPath);
-        onDidOpenPath?.();
-      })();
-    } else {
-      void load();
-    }
-    // 仅挂载时消费一次 openPath；后续切回浏览会重新挂载
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only bootstrap
+    void load();
   }, [load]);
+
+  // 面板常驻挂载：openPath 变化时（来自「产物 → 在工作区中打开」）定位并打开
+  useEffect(() => {
+    if (!openPath) return;
+    void (async () => {
+      await openAbsolutePath(openPath);
+      onDidOpenPath?.();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随 openPath 触发
+  }, [openPath]);
 
   useAgentsChanged(() => {
     if (dirty) {
