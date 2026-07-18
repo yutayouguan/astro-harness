@@ -1860,6 +1860,107 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   color: var(--ink-mute);
 }
 
+/* ── 命令审批 Tab ───────────────────────────────────────── */
+.approvals-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 24px 32px;
+  max-width: 760px;
+  overflow: auto;
+}
+
+.approvals-section .tools-detail-section {
+  gap: 10px;
+}
+
+.approvals-section .tools-detail-body {
+  margin-top: 2px;
+}
+
+.approvals-mode-select {
+  max-width: 320px;
+}
+
+.approvals-add-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.approvals-add-row input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, rgba(255, 255, 255, 0.55));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.approvals-add-row input::placeholder {
+  color: var(--ink-mute);
+  font-family: inherit;
+}
+
+.approvals-add-row input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 42%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
+}
+
+html[data-theme="dark"] .approvals-add-row input {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.04);
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 20%, rgba(255, 255, 255, 0.12));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.approvals-allow-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approvals-allow-list .mcp-tool-row {
+  gap: 12px;
+}
+
+.approvals-allow-list .mcp-tool-name {
+  overflow-wrap: anywhere;
+}
+
+/* hardline：危险色描边，强调不可越过 */
+.approvals-hardline .tools-detail-body {
+  border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--danger) 10%, rgba(255, 255, 255, 0.86)),
+      rgba(255, 255, 255, 0.5)
+    );
+}
+
+.approvals-hardline .tools-detail-label {
+  color: var(--danger);
+}
+
+html[data-theme="dark"] .approvals-hardline .tools-detail-body {
+  background: color-mix(in srgb, var(--danger) 12%, rgba(0, 0, 0, 0.28));
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
 .agent-tool-param-req {
   font-size: 10px;
   font-weight: 700;

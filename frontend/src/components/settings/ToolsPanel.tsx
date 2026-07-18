@@ -118,16 +118,14 @@ function ApprovalsSection({ active }: { active: boolean }) {
   }));
 
   return (
-    <div
-      className="approvals-section"
-      style={{ padding: "16px 20px", overflow: "auto" }}
-    >
+    <div className="approvals-section">
       <section className="tools-detail-section">
         <h4 className="tools-detail-label">
           <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
           {t("approvals.mode.label")}
         </h4>
         <SelectMenu
+          className="approvals-mode-select"
           value={settings.mode}
           onChange={(v) => void setMode(v)}
           options={modeOptions}
@@ -144,13 +142,9 @@ function ApprovalsSection({ active }: { active: boolean }) {
           {t("approvals.allowlist.label")}
         </h4>
         <p className="tools-detail-body">{t("approvals.allowlist.hint")}</p>
-        <div
-          className="approvals-add-row"
-          style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}
-        >
+        <div className="approvals-add-row">
           <input
             type="text"
-            style={{ flex: 1 }}
             value={newEntry}
             onChange={(e) => setNewEntry(e.target.value)}
             onKeyDown={(e) => {
@@ -173,7 +167,7 @@ function ApprovalsSection({ active }: { active: boolean }) {
             {t("approvals.allowlist.empty")}
           </p>
         ) : (
-          <ul className="mcp-tool-rows" style={{ marginTop: 8 }}>
+          <ul className="approvals-allow-list">
             {settings.commandAllowlist.map((entry) => (
               <li key={entry} className="mcp-tool-row">
                 <code className="mcp-tool-name">{entry}</code>
@@ -192,7 +186,7 @@ function ApprovalsSection({ active }: { active: boolean }) {
         )}
       </section>
 
-      <section className="tools-detail-section">
+      <section className="tools-detail-section approvals-hardline">
         <h4 className="tools-detail-label">
           <ShieldAlert size={15} strokeWidth={2.25} aria-hidden />
           {t("approvals.hardline.label")}
