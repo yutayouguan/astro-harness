@@ -1,15 +1,14 @@
 /* ── Workspace panel ── */
-/* 「文件」页外壳：顶部浏览/产物分段切换 + 下方复用工作区/文件空间面板 */
+/* 「文件」页外壳：复用工作区 / 文件空间面板，浏览/产物切换在页头 */
 .files-page {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
+/* 页头分段切换：浏览 / 产物 */
 .files-mode-switch {
-  align-self: flex-start;
   display: inline-flex;
   gap: 4px;
   flex-shrink: 0;
@@ -45,13 +44,6 @@ html[data-theme="dark"] .files-mode-tab.is-active {
   background: color-mix(in srgb, var(--tone-purple, #8b5cf6) 16%, rgba(255, 255, 255, 0.06));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-purple, #8b5cf6) 28%, transparent);
   color: color-mix(in srgb, #fff 18%, var(--tone-purple, #8b5cf6));
-}
-
-.files-mode-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 .workspace-panel {

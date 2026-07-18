@@ -71,6 +71,12 @@ import {
   PAGE_META,
   type NavId,
 } from "./lib/ui/navConfig";
+import {
+  readFilesSubmode,
+  writeFilesSubmode,
+  type FilesSubmode,
+} from "./lib/filespace/filesMode";
+import { FolderTree, Sparkles } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import type { ProviderModelsResult } from "./types";
 
@@ -99,6 +105,13 @@ export default function App() {
     [setThinkingLevel],
   );
   const [nav, setNav] = useState<NavId>(NAV[0].id);
+  const [filesMode, setFilesMode] = useState<FilesSubmode>(() =>
+    readFilesSubmode(),
+  );
+  const changeFilesMode = (mode: FilesSubmode) => {
+    setFilesMode(mode);
+    writeFilesSubmode(mode);
+  };
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
   const [chatExpanded, setChatExpanded] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -613,6 +626,34 @@ export default function App() {
                 <span className={`status-dot ${chat.status}`} />
                 {activeProvider?.display_name ?? t("status.none")} · {statusText}
               </span>
+              {nav === "files" && (
+                <div
+                  className="files-mode-switch"
+                  role="tablist"
+                  aria-label={t("files.mode")}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={filesMode === "browse"}
+                    className={`files-mode-tab ${filesMode === "browse" ? "is-active" : ""}`}
+                    onClick={() => changeFilesMode("browse")}
+                  >
+                    <FolderTree size={15} strokeWidth={2.2} aria-hidden />
+                    {t("files.mode.browse")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={filesMode === "artifacts"}
+                    className={`files-mode-tab ${filesMode === "artifacts" ? "is-active" : ""}`}
+                    onClick={() => changeFilesMode("artifacts")}
+                  >
+                    <Sparkles size={15} strokeWidth={2.2} aria-hidden />
+                    {t("files.mode.artifacts")}
+                  </button>
+                </div>
+              )}
               {nav === "chat" && (
                 <ModelPicker
                   providers={providers}
@@ -756,6 +797,8 @@ export default function App() {
               {nav === "files" && (
                 <FilesPage
                   active={nav === "files"}
+                  submode={filesMode}
+                  onSubmodeChange={changeFilesMode}
                   onOpenSession={openSessionFromFilespace}
                   onAttachFiles={attachArtifactsToChat}
                   onClose={() => setNav("chat")}
