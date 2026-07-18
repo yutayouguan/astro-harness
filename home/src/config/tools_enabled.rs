@@ -198,7 +198,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "video_gen" => "video_gen",
         "video_understand" => "video_understand",
         "file_ops" => "file_ops",
-        "terminal" => "terminal",
+        "terminal" | "terminal_job" => "terminal",
         "web_search" | "web_extract" => "web_search",
         "browser" => "browser",
         "code_exec" => "code_exec",

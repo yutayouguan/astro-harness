@@ -25,6 +25,10 @@ pub struct TerminalArgs {
     /// 可选：超时秒数（默认 60，钳制到 1..=900）；用于构建 / 测试等长任务。
     #[serde(default)]
     pub timeout_secs: Option<u64>,
+    /// 可选：为 `true` 时把命令放后台运行并立即返回 job id，不受超时约束；
+    /// 之后用 `terminal_job`（action=status/wait/kill）轮询或终止。
+    #[serde(default)]
+    pub background: Option<bool>,
 }
 
 /// `timeout_secs` 上限，防止命令永久挂起占用执行器。
@@ -38,7 +42,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "terminal".to_string(),
         toolset: "terminal".to_string(),
-        description: "Run a shell command. Default cwd is project_root when set (e.g. delegated git worktree), else the agent memory workspace (not a jail—commands can still touch paths outside it). Default timeout 60s, override with timeout_secs (max 900s) for builds/tests/installs. stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
+        description: "Run a shell command. Default cwd is project_root when set (e.g. delegated git worktree), else the agent memory workspace (not a jail—commands can still touch paths outside it). Default timeout 60s, override with timeout_secs (max 900s) for builds/tests/installs. Set background=true for long-running commands to get a job id immediately and poll via terminal_job (status/wait/kill). stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
             .to_string(),
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,
@@ -79,6 +83,19 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         root
     };
     std::fs::create_dir_all(&cwd)?;
+
+    if parsed.background.unwrap_or(false) {
+        let cwd_display = parsed
+            .cwd
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(".");
+        let id = super::jobs::spawn_background(&ctx.session_id, command, &cwd, cwd_display)?;
+        return Ok(format!(
+            "已在后台启动任务 {id}。\n用 terminal_job action=status id={id} 轮询输出，action=wait 等待完成，action=kill 终止。"
+        ));
+    }
 
     let child = tokio::process::Command::new("sh")
         .arg("-c")

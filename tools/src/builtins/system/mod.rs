@@ -3,6 +3,7 @@
 pub mod browser;
 pub mod code_exec;
 pub mod file_ops;
+pub mod jobs;
 pub mod terminal;
 pub mod web_extract;
 pub mod web_search;
