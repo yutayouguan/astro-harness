@@ -42,9 +42,11 @@ pub(crate) fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> b
         return false;
     }
     let cmd = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
+    // Ask 与 Deny 都必须走串行路径：Ask 需 HITL 卡，Deny(hardline) 需被拦截。
+    // 二者的守卫都只存在于 execute_tools_serial_inner；漏判会让危险命令经并发路径直接执行。
     matches!(
         tools::classify_dangerous_command(cmd).map(|d| d.action),
-        Some(tools::ApprovalAction::Ask)
+        Some(tools::ApprovalAction::Ask | tools::ApprovalAction::Deny)
     )
 }
 
@@ -400,6 +402,17 @@ struct ToolExecSnapshot {
 }
 
 fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::Value) -> String {
+    // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
+    // 即便路由判定漏了（见 terminal_needs_approval），也不会执行不可恢复操作。
+    if name == "terminal" {
+        if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
+            if let Some(desc) = tools::is_hardline_blocked(cmd) {
+                return format!(
+                    "Command denied by policy (dangerous: {desc}). Do not retry without changing the command."
+                );
+            }
+        }
+    }
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -450,4 +463,33 @@ fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::
                 format!("工具错误: {e}")
             })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn term(cmd: &str) -> serde_json::Value {
+        json!({ "command": cmd })
+    }
+
+    #[test]
+    fn dangerous_commands_force_serial() {
+        // hardline(Deny) 必须强制串行——否则会经并发路径绕过 Deny 拦截
+        assert!(terminal_needs_approval("terminal", &term("mkfs.ext4 /dev/sdb1")));
+        assert!(terminal_needs_approval("terminal", &term("dd if=/dev/zero of=/dev/sda")));
+        // Ask 也强制串行（需 HITL 卡）
+        assert!(terminal_needs_approval("terminal", &term("rm -rf /tmp/project")));
+    }
+
+    #[test]
+    fn safe_and_auto_commands_allow_concurrent() {
+        // Auto 白名单与安全命令无需串行
+        assert!(!terminal_needs_approval("terminal", &term("rm -rf node_modules")));
+        assert!(!terminal_needs_approval("terminal", &term("ls -la")));
+        assert!(!terminal_needs_approval("terminal", &term("cargo test")));
+        // 非 terminal 工具永不触发
+        assert!(!terminal_needs_approval("file_ops", &term("mkfs")));
+    }
 }
