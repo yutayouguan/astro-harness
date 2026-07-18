@@ -111,17 +111,21 @@ async fn execute_tools_serial_inner(
                             .arguments
                             .get("command")
                             .and_then(|v| v.as_str())
-                            .unwrap_or("");
-                        let (approval_session_id, approval_turn_id) = {
+                            .unwrap_or("")
+                            .to_string();
+                        // 读取审批模式 + 白名单，并触发 PRE_APPROVAL_REQUEST 钩子
+                        let (approval_session_id, approval_turn_id, mode, allowlist, memory_dir) = {
                             let agent = session.lock().await;
                             let approval_session_id = agent.session_id().to_string();
                             let approval_turn_id = agent.current_turn_id().map(str::to_string);
+                            let base = agent.memory_dir().to_path_buf();
+                            let approvals = memory::config::load_approvals_config(&base);
                             agent.fire_hook(
                                 hooks::PRE_APPROVAL_REQUEST,
                                 hooks::HookPayload {
                                     session_id: approval_session_id.clone(),
                                     turn_id: approval_turn_id.clone(),
-                                    message: Some(cmd.to_string()),
+                                    message: Some(cmd.clone()),
                                     detail: format!(
                                         "surface=terminal ask={}",
                                         decision.description
@@ -129,82 +133,123 @@ async fn execute_tools_serial_inner(
                                     ..Default::default()
                                 },
                             );
-                            (approval_session_id, approval_turn_id)
-                        };
-                        // 可选辅模型降级 Ask → Auto（读取 ChatRequest 注入的 SmartApproval 目标链）
-                        let smart_action = {
-                            let agent = session.lock().await;
-                            let targets: Vec<_> = agent
-                                .auxiliary_targets(common::AuxiliaryTask::SmartApproval)
-                                .iter()
-                                .map(crate::control::smart_approval::ApprovalTarget::from)
-                                .collect();
-                            let providers = agent.providers_arc();
-                            drop(agent);
-                            crate::control::smart_approval::maybe_smart_downgrade_ask(
-                                cmd,
-                                decision.description,
-                                providers.as_ref(),
-                                &targets,
+                            (
+                                approval_session_id,
+                                approval_turn_id,
+                                tools::ApprovalMode::parse_lenient(&approvals.mode),
+                                approvals.command_allowlist,
+                                base,
                             )
-                            .await
                         };
-                        if smart_action == tools::ApprovalAction::Auto {
-                            tracing::info!(
-                                command = %cmd,
-                                reason = decision.description,
-                                "smart approval auto-approved dangerous command"
-                            );
+
+                        // 白名单命中 / off 模式：静默放行
+                        if tools::matches_allowlist(&cmd, &allowlist) {
                             fire_post_approval_response(
                                 session,
                                 &approval_session_id,
                                 approval_turn_id.as_deref(),
-                                cmd,
+                                &cmd,
+                                "allowlist",
+                            )
+                            .await;
+                        } else if mode == tools::ApprovalMode::Off {
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                &cmd,
                                 "auto",
                             )
                             .await;
-                            // 放行，继续执行
-                        } else if let Some(gate) = hitl_gate {
-                            let title = "批准危险命令";
-                            let body = format!(
-                                "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
-                                decision.description
-                            );
-                            let confirm =
-                                park_confirm(gate, tx, run_id, &call.id, title, &body).await?;
-                            let choice = match confirm.status.as_str() {
-                                "timeout" => "timeout",
-                                _ if confirm.approved => "allow",
-                                _ => "deny",
+                        } else {
+                            // 仅 Smart 模式尝试辅模型降级；Manual 直接弹卡
+                            let smart_action = if mode == tools::ApprovalMode::Smart {
+                                let agent = session.lock().await;
+                                let targets: Vec<_> = agent
+                                    .auxiliary_targets(common::AuxiliaryTask::SmartApproval)
+                                    .iter()
+                                    .map(crate::control::smart_approval::ApprovalTarget::from)
+                                    .collect();
+                                let providers = agent.providers_arc();
+                                drop(agent);
+                                crate::control::smart_approval::maybe_smart_downgrade_ask(
+                                    &cmd,
+                                    decision.description,
+                                    providers.as_ref(),
+                                    &targets,
+                                )
+                                .await
+                            } else {
+                                tools::ApprovalAction::Ask
                             };
-                            fire_post_approval_response(
-                                session,
-                                &approval_session_id,
-                                approval_turn_id.as_deref(),
-                                cmd,
-                                choice,
-                            )
-                            .await;
-                            if !confirm.approved {
-                                out.push(
-                                    "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".to_string(),
+                            if smart_action == tools::ApprovalAction::Auto {
+                                tracing::info!(
+                                    command = %cmd,
+                                    reason = decision.description,
+                                    "smart approval auto-approved dangerous command"
                                 );
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    "auto",
+                                )
+                                .await;
+                            } else if let Some(gate) = hitl_gate {
+                                let title = "批准危险命令";
+                                let body = format!(
+                                    "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
+                                    decision.description
+                                );
+                                let confirm =
+                                    park_confirm(gate, tx, run_id, &call.id, title, &body, true)
+                                        .await?;
+                                let choice = match confirm.status.as_str() {
+                                    "timeout" => "timeout",
+                                    _ if confirm.approved => "allow",
+                                    _ => "deny",
+                                };
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    choice,
+                                )
+                                .await;
+                                if !confirm.approved {
+                                    out.push(
+                                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".to_string(),
+                                    );
+                                    continue;
+                                }
+                                // 「批准并永久放行」→ 写入用户白名单，后续同命令自动放行
+                                if confirm.always {
+                                    if let Err(e) = memory::config::add_command_to_allowlist(
+                                        &memory_dir,
+                                        &cmd,
+                                    ) {
+                                        tracing::warn!(error = %e, "failed to persist command allowlist");
+                                    } else {
+                                        tracing::info!(command = %cmd, "added command to approval allowlist");
+                                    }
+                                }
+                            } else {
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    "unavailable",
+                                )
+                                .await;
+                                out.push(format!(
+                                    "Command blocked: dangerous ({}) and no HITL gate available.",
+                                    decision.description
+                                ));
                                 continue;
                             }
-                        } else {
-                            fire_post_approval_response(
-                                session,
-                                &approval_session_id,
-                                approval_turn_id.as_deref(),
-                                cmd,
-                                "unavailable",
-                            )
-                            .await;
-                            out.push(format!(
-                                "Command blocked: dangerous ({}) and no HITL gate available.",
-                                decision.description
-                            ));
-                            continue;
                         }
                     }
                 }

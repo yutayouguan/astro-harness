@@ -13,7 +13,10 @@ pub mod builtins;
 pub mod core;
 
 // 保持原有顶层路径，避免破坏下游 crate 引用。
-pub use approval::{classify_dangerous_command, ApprovalAction};
+pub use approval::{
+    classify_dangerous_command, is_hardline_blocked, matches_allowlist, resolve_command_action,
+    ApprovalAction, ApprovalMode,
+};
 pub use builtins::context_tools::render_pinned_for_prompt;
 pub(crate) use core::path_safe;
 pub use core::{catalog, context, dispatch, parse, registry, schema};

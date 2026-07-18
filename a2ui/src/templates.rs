@@ -4,88 +4,85 @@ use crate::catalog::ASTRO_CATALOG_ID;
 
 /// Build A2UI operations for a confirm (approve / deny) HITL surface.
 pub fn build_confirm_surface(surface_id: &str, title: &str, body: &str) -> Vec<Value> {
+    build_confirm_surface_ex(surface_id, title, body, false)
+}
+
+/// Confirm surface with an optional third "Approve & always allow" button.
+///
+/// When `allow_always` is true, an extra button emits the `approve_always` event
+/// (frontend maps it to `{approved:true, always:true}`), used by dangerous-command
+/// approval to persist the command into the user allowlist.
+pub fn build_confirm_surface_ex(
+    surface_id: &str,
+    title: &str,
+    body: &str,
+    allow_always: bool,
+) -> Vec<Value> {
+    let mut actions_children: Vec<&str> = vec!["approve"];
+    if allow_always {
+        actions_children.push("approve_always");
+    }
+    actions_children.push("deny");
+
+    let mut components: Vec<Value> = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({
+            "id": "col",
+            "component": "Column",
+            "children": ["header", "body", "actions"]
+        }),
+        json!({
+            "id": "header",
+            "component": "Row",
+            "children": ["avatar", "header_text", "badge"]
+        }),
+        json!({ "id": "avatar", "component": "Avatar", "name": "shield" }),
+        json!({ "id": "header_text", "component": "Column", "children": ["title"] }),
+        json!({ "id": "title", "component": "Text", "text": title, "variant": "h2" }),
+        json!({ "id": "badge", "component": "Badge", "text": "Confirm", "variant": "warn" }),
+        json!({ "id": "body", "component": "Text", "text": body }),
+        json!({ "id": "actions", "component": "Row", "children": actions_children }),
+        json!({
+            "id": "approve",
+            "component": "Button",
+            "child": "approve_label",
+            "variant": "primary",
+            "action": { "event": { "name": "approve" } }
+        }),
+        json!({ "id": "approve_label", "component": "Text", "text": "Approve" }),
+        json!({
+            "id": "deny",
+            "component": "Button",
+            "child": "deny_label",
+            "variant": "secondary",
+            "action": { "event": { "name": "deny" } }
+        }),
+        json!({ "id": "deny_label", "component": "Text", "text": "Deny" }),
+    ];
+
+    if allow_always {
+        components.push(json!({
+            "id": "approve_always",
+            "component": "Button",
+            "child": "approve_always_label",
+            "variant": "secondary",
+            "action": { "event": { "name": "approve_always" } }
+        }));
+        components.push(json!({
+            "id": "approve_always_label",
+            "component": "Text",
+            "text": "Approve & always allow"
+        }));
+    }
+
     vec![
         json!({
             "version": "v0.9",
-            "createSurface": {
-                "surfaceId": surface_id,
-                "catalogId": ASTRO_CATALOG_ID
-            }
+            "createSurface": { "surfaceId": surface_id, "catalogId": ASTRO_CATALOG_ID }
         }),
         json!({
             "version": "v0.9",
-            "updateComponents": {
-                "surfaceId": surface_id,
-                "components": [
-                    { "id": "root", "component": "Card", "child": "col" },
-                    {
-                        "id": "col",
-                        "component": "Column",
-                        "children": ["header", "body", "actions"]
-                    },
-                    {
-                        "id": "header",
-                        "component": "Row",
-                        "children": ["avatar", "header_text", "badge"]
-                    },
-                    {
-                        "id": "avatar",
-                        "component": "Avatar",
-                        "name": "shield"
-                    },
-                    {
-                        "id": "header_text",
-                        "component": "Column",
-                        "children": ["title"]
-                    },
-                    {
-                        "id": "title",
-                        "component": "Text",
-                        "text": title,
-                        "variant": "h2"
-                    },
-                    {
-                        "id": "badge",
-                        "component": "Badge",
-                        "text": "Confirm",
-                        "variant": "warn"
-                    },
-                    {
-                        "id": "body",
-                        "component": "Text",
-                        "text": body
-                    },
-                    {
-                        "id": "actions",
-                        "component": "Row",
-                        "children": ["approve", "deny"]
-                    },
-                    {
-                        "id": "approve",
-                        "component": "Button",
-                        "child": "approve_label",
-                        "variant": "primary",
-                        "action": { "event": { "name": "approve" } }
-                    },
-                    {
-                        "id": "approve_label",
-                        "component": "Text",
-                        "text": "Approve"
-                    },
-                    {
-                        "id": "deny",
-                        "component": "Button",
-                        "child": "deny_label",
-                        "variant": "secondary",
-                        "action": { "event": { "name": "deny" } }
-                    },
-                    {
-                        "id": "deny_label",
-                        "component": "Text",
-                        "text": "Deny"
-                    }
-                ]
-            }
+            "updateComponents": { "surfaceId": surface_id, "components": components }
         }),
     ]
 }

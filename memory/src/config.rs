@@ -119,6 +119,30 @@ impl Default for LearningConfig {
     }
 }
 
+fn default_approval_mode() -> String {
+    "smart".to_string()
+}
+
+/// 危险命令审批配置（`config.yaml` 的 `approvals:` 段）。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct ApprovalsConfig {
+    /// 审批模式：`smart`（默认）| `manual` | `off`。仅作用于 Ask 级；hardline 永远拦。
+    #[serde(default = "default_approval_mode")]
+    pub mode: String,
+    /// 用户永久放行的命令白名单（精确或 glob，含 `* ? [`）。
+    #[serde(default)]
+    pub command_allowlist: Vec<String>,
+}
+
+impl Default for ApprovalsConfig {
+    fn default() -> Self {
+        Self {
+            mode: default_approval_mode(),
+            command_allowlist: Vec::new(),
+        }
+    }
+}
+
 /// 辅助模型配置（`config.yaml` 的 `auxiliary:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 pub struct AuxiliaryConfig {
@@ -352,6 +376,8 @@ struct FileConfig {
     learning: Option<LearningConfig>,
     #[serde(default)]
     evolution: Option<EvolutionConfig>,
+    #[serde(default)]
+    approvals: Option<ApprovalsConfig>,
 }
 
 fn read_file_config(base: &Path) -> FileConfig {
@@ -401,6 +427,11 @@ pub fn load_learning_config(base: &Path) -> LearningConfig {
 /// 从 `{base}/config.yaml` 加载离线进化配置。
 pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
     read_file_config(base).evolution.unwrap_or_default()
+}
+
+/// 从 `{base}/config.yaml` 加载危险命令审批配置。
+pub fn load_approvals_config(base: &Path) -> ApprovalsConfig {
+    read_file_config(base).approvals.unwrap_or_default()
 }
 
 fn config_yaml_path(base: &Path) -> std::path::PathBuf {
@@ -511,6 +542,38 @@ fn set_nested_route(
 pub fn set_write_approval(base: &Path, enabled: bool) -> anyhow::Result<MemoryConfig> {
     set_nested_bool(base, &["memory"], "write_approval", enabled)?;
     Ok(load_memory_config(base))
+}
+
+/// 设置 `approvals.mode`（smart|manual|off）并返回最新审批配置。
+pub fn set_approval_mode(base: &Path, mode: &str) -> anyhow::Result<ApprovalsConfig> {
+    set_nested_string(base, &["approvals"], "mode", mode)?;
+    Ok(load_approvals_config(base))
+}
+
+/// 向 `approvals.command_allowlist` 追加一条（去重，保留其余键），返回最新审批配置。
+pub fn add_command_to_allowlist(base: &Path, entry: &str) -> anyhow::Result<ApprovalsConfig> {
+    let entry = entry.trim();
+    if entry.is_empty() {
+        return Ok(load_approvals_config(base));
+    }
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let key = serde_yaml::Value::String("command_allowlist".to_string());
+    let list = match map.get_mut(&key).and_then(|v| v.as_sequence_mut()) {
+        Some(seq) => seq,
+        None => {
+            map.insert(key.clone(), serde_yaml::Value::Sequence(Vec::new()));
+            map.get_mut(&key).unwrap().as_sequence_mut().unwrap()
+        }
+    };
+    let exists = list
+        .iter()
+        .any(|v| v.as_str().map(|s| s == entry).unwrap_or(false));
+    if !exists {
+        list.push(serde_yaml::Value::String(entry.to_string()));
+        save_yaml_root(base, &root)?;
+    }
+    Ok(load_approvals_config(base))
 }
 
 /// 设置 `memory.auto_refresh_on_update` 并返回最新配置。
@@ -931,6 +994,35 @@ auxiliary:
         assert!(aux.background_review_enabled);
         let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
         assert!(text.contains("background_review_enabled: true"));
+    }
+
+    #[test]
+    fn approvals_defaults_to_smart_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = load_approvals_config(dir.path());
+        assert_eq!(cfg.mode, "smart");
+        assert!(cfg.command_allowlist.is_empty());
+    }
+
+    #[test]
+    fn set_mode_and_append_allowlist_dedups_and_preserves() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            "memory:\n  memory_char_limit: 42\n",
+        )
+        .unwrap();
+        let cfg = set_approval_mode(dir.path(), "manual").unwrap();
+        assert_eq!(cfg.mode, "manual");
+
+        add_command_to_allowlist(dir.path(), "rm -rf /tmp/x").unwrap();
+        let cfg = add_command_to_allowlist(dir.path(), "rm -rf /tmp/x").unwrap(); // 去重
+        assert_eq!(cfg.command_allowlist, vec!["rm -rf /tmp/x".to_string()]);
+        let cfg = add_command_to_allowlist(dir.path(), "git push --force*").unwrap();
+        assert_eq!(cfg.command_allowlist.len(), 2);
+
+        // 保留无关键
+        assert_eq!(load_memory_config(dir.path()).memory_char_limit, 42);
     }
 
     #[test]

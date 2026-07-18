@@ -100,8 +100,34 @@
 | `background` | false | 见下「后台任务」 |
 
 - stdout/stderr 合并返回，超 `MAX_TOOL_RESULT_BYTES` 截断。
-- **危险命令审批**：命令经 `classify_dangerous_command` 分类，命中时走 HITL（`Deny` 直接拒、`Ask` 询问用户、`Auto` 放行），对 `background=true` 同样生效。
+- **危险命令审批**：命令经 `classify_dangerous_command` 分类为 `Deny`/`Ask`/`Auto`，对 `background=true` 同样生效。详见下节。
 - 支持 `TRANSFORM_TERMINAL_OUTPUT` 插件钩子在截断前改写输出（如脱敏）。
+
+## 危险命令审批（smart / manual / off + hardline + 白名单）
+
+配置在 `~/.astro/config.yaml` 的 `approvals:` 段（`memory::config::ApprovalsConfig`）：
+
+```yaml
+approvals:
+  mode: smart              # smart(默认) | manual | off
+  command_allowlist:       # 用户永久放行（精确或 glob，含 * ? [ ]）
+    - "rm -rf /tmp/build"
+    - "git push --force*"
+```
+
+判定优先级（`tools::resolve_command_action`）：
+
+1. **hardline blocklist**（`Deny` 级：`mkfs`、fork 炸弹、`dd of=/dev/*`、`> /etc/`、停关键服务…）——**任何模式 / 白名单都不可越过**，直接拒。
+2. **命中 `command_allowlist`** → 自动放行。
+3. 其余按 `Ask` 级命令处理：
+   - `off`：非 hardline 一律放行（等价 yolo，hardline 仍拦）。
+   - `manual`：一律弹 HITL 卡人工确认（不走辅模型）。
+   - `smart`（默认）：先用辅模型（`auxiliary.smart_approval`）评估，低危自动放行、拿不准才弹卡。
+4. 安全命令（未分级）直接放行。
+
+HITL 确认卡提供三个按钮：**Approve**（本次）/ **Approve & always allow**（本次 + 写入 `command_allowlist`，后续同命令自动放行）/ **Deny**。「always」经 `approve_always` 事件回传 `{approved:true, always:true}`，由 `memory::config::add_command_to_allowlist` 去重持久化。
+
+> 与 Hermes 一致：这些是「防诚实但犯错的 agent」的护栏，不是对抗蓄意进程的沙箱；真隔离需容器/云后端。
 
 ---
 

@@ -125,9 +125,13 @@ pub(crate) fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
 pub(crate) struct ConfirmOutcome {
     pub approved: bool,
     pub status: String,
+    /// 用户点了「批准并永久放行」时为 `true`（`allow_always` 场景）。
+    pub always: bool,
 }
 
 /// 弹出 confirm 型 HITL surface，等待用户批准/拒绝。
+///
+/// `allow_always` 为 true 时额外提供「批准并永久放行」按钮，其结果 `ConfirmOutcome::always`。
 pub(crate) async fn park_confirm(
     gate: &Arc<HitlGate>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -135,9 +139,11 @@ pub(crate) async fn park_confirm(
     tool_call_id: &str,
     title: &str,
     body: &str,
+    allow_always: bool,
 ) -> Option<ConfirmOutcome> {
     let surface_id = format!("confirm-{}", uuid::Uuid::new_v4());
-    let operations = a2ui::templates::build_confirm_surface(&surface_id, title, body);
+    let operations =
+        a2ui::templates::build_confirm_surface_ex(&surface_id, title, body, allow_always);
     let ops_value = serde_json::Value::Array(operations);
     let resolution = park_astro_hitl_resolution(
         gate,
@@ -156,17 +162,24 @@ pub(crate) async fn park_confirm(
         },
     )
     .await?;
-    let approved = if resolution.status == "resolved" {
-        serde_json::from_str::<serde_json::Value>(&resolution.payload_json)
-            .ok()
+    let (approved, always) = if resolution.status == "resolved" {
+        let v = serde_json::from_str::<serde_json::Value>(&resolution.payload_json).ok();
+        let approved = v
+            .as_ref()
             .and_then(|v| v.get("approved").and_then(|x| x.as_bool()))
-            .unwrap_or(false)
+            .unwrap_or(false);
+        let always = v
+            .as_ref()
+            .and_then(|v| v.get("always").and_then(|x| x.as_bool()))
+            .unwrap_or(false);
+        (approved, always)
     } else {
-        false
+        (false, false)
     };
     Some(ConfirmOutcome {
         approved,
         status: resolution.status,
+        always: always && approved,
     })
 }
 

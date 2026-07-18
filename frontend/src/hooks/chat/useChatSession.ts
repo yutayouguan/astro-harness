@@ -1009,6 +1009,8 @@ export function useChatSession({
         payload = { city };
       } else if (name === "approve") {
         payload = { approved: true };
+      } else if (name === "approve_always") {
+        payload = { approved: true, always: true };
       } else if (name === "deny") {
         payload = isLocationHitl ? { denied: true } : { approved: false };
       } else if (name === "choose") {
