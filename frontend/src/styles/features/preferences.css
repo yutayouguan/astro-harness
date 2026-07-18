@@ -487,6 +487,109 @@ html[data-theme="dark"] .prefs-switch-thumb {
   margin-top: 4px;
 }
 
+/* 一键式快捷筛选（范围 / 内容 / 行数） */
+.prefs-diag-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 22px;
+  align-items: flex-start;
+}
+
+.prefs-diag-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.prefs-diag-group-label {
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+}
+
+.prefs-chip-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.prefs-chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
+  background: color-mix(in srgb, var(--glass-fill, #fff) 82%, transparent);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease,
+    transform 0.1s ease;
+}
+
+.prefs-chip:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--tone) 30%, var(--glass-edge));
+}
+
+.prefs-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.prefs-chip.active {
+  border-color: color-mix(in srgb, var(--tone) 42%, rgba(255, 255, 255, 0.35));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.08)),
+    color-mix(in srgb, var(--tone) 72%, transparent);
+  color: #fff;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--tone) 18%, transparent);
+}
+
+html[data-theme="dark"] .prefs-chip {
+  background: color-mix(in srgb, var(--tone-soft) 12%, rgba(8, 6, 18, 0.45));
+  border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.1));
+}
+
+html[data-theme="dark"] .prefs-chip:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.12));
+}
+
+.prefs-diag-link {
+  margin-left: auto;
+  padding: 7px 6px;
+  border: none;
+  background: none;
+  color: var(--tone);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prefs-diag-link:hover {
+  text-decoration: underline;
+}
+
+.prefs-diag-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft) 14%, rgba(255, 255, 255, 0.25));
+}
+
+html[data-theme="dark"] .prefs-diag-advanced {
+  background: color-mix(in srgb, var(--tone-soft) 10%, rgba(8, 6, 18, 0.4));
+  border-color: color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.08));
+}
+
 .prefs-diag-row {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);

@@ -1,5 +1,5 @@
 /** 偏好设置（主题、语言、日志诊断、关于）。 */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -27,6 +27,15 @@ type AgentLogLine = { raw: string; source: string };
 
 /** 日志来源过滤 */
 type LogSourceFilter = "both" | "agent" | "errors";
+
+/** 查询范围：本次会话 / 全部会话 */
+type LogScope = "current" | "all";
+
+/** 内容过滤：全部 / 只看问题（warn 及以上） */
+type LogLevelFilter = "all" | "issues";
+
+/** 行数预设 */
+const LINE_PRESETS = [50, 100, 200] as const;
 
 /** 偏好设置入参 */
 type Props = {
@@ -127,10 +136,14 @@ export default function PreferencesPanel({
     }
   };
 
-  const [sessionId, setSessionId] = useState(activeSessionId ?? "");
-  const [turnId, setTurnId] = useState("");
+  const hasSession = Boolean(activeSessionId);
+  const [scope, setScope] = useState<LogScope>(hasSession ? "current" : "all");
+  const [level, setLevel] = useState<LogLevelFilter>("all");
+  const [lines, setLines] = useState<number>(50);
   const [source, setSource] = useState<LogSourceFilter>("both");
-  const [lines, setLines] = useState(50);
+  const [manualSession, setManualSession] = useState("");
+  const [turnId, setTurnId] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [rows, setRows] = useState<AgentLogLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -204,16 +217,21 @@ export default function PreferencesPanel({
   const ModeIcon =
     themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
 
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
+
   async function refreshLogs() {
+    const manual = manualSession.trim();
+    const effectiveSession =
+      manual || (scope === "current" ? activeSessionId ?? null : null);
     setBusy(true);
     setErrorMsg("");
     try {
       const result = await invoke<AgentLogLine[]>("query_agent_logs", {
-        sessionId: sessionId.trim() || null,
+        sessionId: effectiveSession || null,
         turnId: turnId.trim() || null,
         source,
         lines,
-        minLevel: null,
+        minLevel: level === "issues" ? "WARN" : null,
       });
       setRows(result);
       setQueried(true);
@@ -225,6 +243,14 @@ export default function PreferencesPanel({
       setBusy(false);
     }
   }
+  refreshRef.current = refreshLogs;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshRef.current();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [scope, level, lines, source, manualSession, turnId]);
 
   async function copyLogs() {
     const text = rows.map((r) => `[${r.source}] ${r.raw}`).join("\n");
@@ -388,56 +414,80 @@ export default function PreferencesPanel({
         </div>
 
         <div className="prefs-diag-form">
-          <label className="prefs-diag-row">
-            <span className="prefs-diag-label">{t("prefs.diag.session")}</span>
-            <input
-              className="prefs-diag-input"
-              type="text"
-              value={sessionId}
-              onChange={(e) => setSessionId(e.target.value)}
-              spellCheck={false}
-              autoComplete="off"
-            />
-          </label>
-          <label className="prefs-diag-row">
-            <span className="prefs-diag-label">{t("prefs.diag.turn")}</span>
-            <input
-              className="prefs-diag-input"
-              type="text"
-              value={turnId}
-              onChange={(e) => setTurnId(e.target.value)}
-              spellCheck={false}
-              autoComplete="off"
-            />
-          </label>
-          <label className="prefs-diag-row">
-            <span className="prefs-diag-label">{t("prefs.diag.source")}</span>
-            <SelectMenu
-              className="prefs-diag-select"
-              value={source}
-              aria-label={t("prefs.diag.source")}
-              onChange={(v) => setSource(v as LogSourceFilter)}
-              options={[
-                { value: "both", label: t("prefs.diag.source.both") },
-                { value: "agent", label: t("prefs.diag.source.agent") },
-                { value: "errors", label: t("prefs.diag.source.errors") },
-              ]}
-            />
-          </label>
-          <label className="prefs-diag-row">
-            <span className="prefs-diag-label">{t("prefs.diag.lines")}</span>
-            <input
-              className="prefs-diag-input"
-              type="number"
-              min={1}
-              max={500}
-              value={lines}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                setLines(Number.isFinite(n) ? Math.max(1, Math.min(500, n)) : 50);
-              }}
-            />
-          </label>
+          <div className="prefs-diag-quick">
+            <div className="prefs-diag-group">
+              <span className="prefs-diag-group-label">{t("prefs.diag.scope")}</span>
+              <div className="prefs-chip-row" role="radiogroup" aria-label={t("prefs.diag.scope")}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={scope === "current"}
+                  className={`prefs-chip ${scope === "current" ? "active" : ""}`}
+                  data-tone={tone}
+                  disabled={!hasSession}
+                  title={hasSession ? undefined : t("prefs.diag.scope.currentNone")}
+                  onClick={() => setScope("current")}
+                >
+                  {t("prefs.diag.scope.current")}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={scope === "all"}
+                  className={`prefs-chip ${scope === "all" ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => setScope("all")}
+                >
+                  {t("prefs.diag.scope.all")}
+                </button>
+              </div>
+            </div>
+
+            <div className="prefs-diag-group">
+              <span className="prefs-diag-group-label">{t("prefs.diag.level")}</span>
+              <div className="prefs-chip-row" role="radiogroup" aria-label={t("prefs.diag.level")}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={level === "all"}
+                  className={`prefs-chip ${level === "all" ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => setLevel("all")}
+                >
+                  {t("prefs.diag.level.all")}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={level === "issues"}
+                  className={`prefs-chip ${level === "issues" ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => setLevel("issues")}
+                >
+                  {t("prefs.diag.level.issues")}
+                </button>
+              </div>
+            </div>
+
+            <div className="prefs-diag-group">
+              <span className="prefs-diag-group-label">{t("prefs.diag.lines")}</span>
+              <div className="prefs-chip-row" role="radiogroup" aria-label={t("prefs.diag.lines")}>
+                {LINE_PRESETS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    role="radio"
+                    aria-checked={lines === n}
+                    className={`prefs-chip ${lines === n ? "active" : ""}`}
+                    data-tone={tone}
+                    onClick={() => setLines(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
 
           <div className="prefs-diag-actions">
             <button
@@ -447,7 +497,7 @@ export default function PreferencesPanel({
               disabled={busy}
               onClick={() => void refreshLogs()}
             >
-              {t("prefs.diag.refresh")}
+              {busy ? t("prefs.diag.loading") : t("prefs.diag.refresh")}
             </button>
             <button
               type="button"
@@ -458,7 +508,58 @@ export default function PreferencesPanel({
             >
               {t("prefs.diag.copy")}
             </button>
+            <button
+              type="button"
+              className="prefs-diag-link"
+              onClick={() => setShowAdvanced((v) => !v)}
+              aria-expanded={showAdvanced}
+            >
+              {showAdvanced ? t("prefs.diag.advanced.hide") : t("prefs.diag.advanced.show")}
+            </button>
           </div>
+
+          {showAdvanced && (
+            <div className="prefs-diag-advanced">
+              <label className="prefs-diag-row">
+                <span className="prefs-diag-label">{t("prefs.diag.session")}</span>
+                <input
+                  className="prefs-diag-input"
+                  type="text"
+                  value={manualSession}
+                  placeholder={t("prefs.diag.session.ph")}
+                  onChange={(e) => setManualSession(e.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="prefs-diag-row">
+                <span className="prefs-diag-label">{t("prefs.diag.turn")}</span>
+                <input
+                  className="prefs-diag-input"
+                  type="text"
+                  value={turnId}
+                  placeholder={t("prefs.diag.turn.ph")}
+                  onChange={(e) => setTurnId(e.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="prefs-diag-row">
+                <span className="prefs-diag-label">{t("prefs.diag.source")}</span>
+                <SelectMenu
+                  className="prefs-diag-select"
+                  value={source}
+                  aria-label={t("prefs.diag.source")}
+                  onChange={(v) => setSource(v as LogSourceFilter)}
+                  options={[
+                    { value: "both", label: t("prefs.diag.source.both") },
+                    { value: "agent", label: t("prefs.diag.source.agent") },
+                    { value: "errors", label: t("prefs.diag.source.errors") },
+                  ]}
+                />
+              </label>
+            </div>
+          )}
 
           {errorMsg && <p className="prefs-diag-error">{errorMsg}</p>}
           {queried && !errorMsg && rows.length === 0 && (
