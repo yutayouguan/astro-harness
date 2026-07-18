@@ -166,7 +166,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     const gen = Number.isFinite(g) && g >= 1 && g <= 6 ? g : settings.search.generations;
     const vari = Number.isFinite(v) && v >= 1 && v <= 6 ? v : settings.search.variants;
     if (gen !== settings.search.generations || vari !== settings.search.variants) {
-      void setSearch(gen, vari);
+      void setSearch(gen, vari, settings.search.crossover);
     } else {
       setGenDraft(String(settings.search.generations));
       setVarDraft(String(settings.search.variants));
@@ -598,6 +598,21 @@ export default function EvolutionModelsPanel({ active }: Props) {
               disabled={!settings}
             />
           </label>
+          <button
+            type="button"
+            className="aux-action aux-action-ghost"
+            onClick={() =>
+              settings &&
+              void setSearch(
+                settings.search.generations,
+                settings.search.variants,
+                !settings.search.crossover,
+              )
+            }
+            disabled={!settings}
+          >
+            {t("evo.crossover")}: {settings?.search.crossover ? t("evo.on") : t("evo.off")}
+          </button>
           <span className="aux-muted">{t("evo.searchCostHint")}</span>
         </div>
         {lastSearch && (

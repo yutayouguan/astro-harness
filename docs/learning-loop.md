@@ -103,7 +103,9 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 
 **评测集 + 客观适应度**（Phase 1）：「离线进化」页可标注评测例子（task + 期望要点 + 曾通过/失败，可关联 skill_id），存 `~/.astro/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配例子，则由 judge 针对具体 task+expectations 做 **grounded 客观评分**（各例子均值）；无匹配则回退泛化 judge。crate [`evolution::evalset`](../evolution/src/evalset.rs)；命令 `list/add/remove_eval_example`。
 
-**仍为后续**：交叉算子（Phase 2）、Python DSPy 对接（Phase 3）。
+**交叉算子**（Phase 2）：遗传搜索每代对当前 Pareto 前沿 top-2 变体做交叉（`CROSSOVER_SYSTEM_PROMPT` 融合两父代为一个子代），评分后并入本代选择。可在页面开关（`evolution.search.crossover`，默认开）。
+
+**仍为后续**：Python DSPy 对接（Phase 3）。
 
 模型角色（不复用在线 `auxiliary.*`）：
 

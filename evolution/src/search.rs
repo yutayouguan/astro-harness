@@ -102,6 +102,43 @@ pub fn build_mutation_prompt(
     s
 }
 
+/// 交叉算子 system 指令：融合两个父代为一个子代，JSON only。
+pub const CROSSOVER_SYSTEM_PROMPT: &str = r#"你是技能进化的交叉算子。给定同一技能的两个候选变体（父代 A / B），产出**一个**融合两者优点的子代（取各自更好的部分、去除冗余与缺陷）。只输出 JSON（不要 markdown 围栏）：
+{"variants":[{"kind":"new_skill|patch","skill_id":"同父代","description":"...","content":"...","old_string":"...","new_string":"...","rationale":"融合了哪些优点"}]}
+规则：只产出 1 个子代；kind 与 skill_id 同父代；不要臆造事实。"#;
+
+fn describe_variant(label: &str, c: &SkillCandidate) -> String {
+    let mut s = format!("### 父代 {label}\n");
+    match c.kind {
+        CandidateKind::NewSkill => {
+            s.push_str("kind: new_skill\ncontent:\n");
+            s.push_str(c.content.as_deref().unwrap_or(""));
+            s.push('\n');
+        }
+        CandidateKind::Patch => {
+            s.push_str(&format!(
+                "kind: patch\nold_string: {}\nnew_string: {}\n",
+                c.old_string.as_deref().unwrap_or(""),
+                c.new_string.as_deref().unwrap_or("")
+            ));
+        }
+    }
+    if let Some(sc) = c.judge_score {
+        s.push_str(&format!("（评分 {sc:.2}）\n"));
+    }
+    s
+}
+
+/// 构造交叉 user 提示（两个父代）。
+pub fn build_crossover_prompt(a: &SkillCandidate, b: &SkillCandidate) -> String {
+    let mut s = format!("对技能 `{}` 做交叉，融合两个父代为一个更优子代。\n\n", a.skill_id);
+    s.push_str(&describe_variant("A", a));
+    s.push('\n');
+    s.push_str(&describe_variant("B", b));
+    s.push_str("\n请输出恰好 1 个子代（JSON）。");
+    s
+}
+
 /// 解析变异输出为候选（沿用 reflection 的健壮解析，强制 kind/skill_id 与种子一致）。
 pub fn parse_variants(raw: &str, seed: &SkillCandidate) -> anyhow::Result<Vec<SkillCandidate>> {
     // 复用 reflect 的解析：把 {"variants":[...]} 归一化成 {"candidates":[...]} 再解析。
@@ -191,6 +228,18 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].skill_id, "pdf-merge");
         assert_eq!(out[0].kind, CandidateKind::NewSkill);
+    }
+
+    #[test]
+    fn crossover_prompt_shows_both_parents() {
+        let a = cand("pdf", "AAA body");
+        let b = cand("pdf", "BBB body");
+        let p = build_crossover_prompt(&a, &b);
+        assert!(p.contains("父代 A"));
+        assert!(p.contains("父代 B"));
+        assert!(p.contains("AAA body"));
+        assert!(p.contains("BBB body"));
+        assert!(p.contains("pdf"));
     }
 
     #[test]

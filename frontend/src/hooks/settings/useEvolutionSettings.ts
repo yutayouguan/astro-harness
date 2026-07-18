@@ -15,7 +15,7 @@ type UseEvolutionSettings = {
     requirePr: boolean,
     minJudgeScore: number,
   ): Promise<void>;
-  setSearch(generations: number, variants: number): Promise<void>;
+  setSearch(generations: number, variants: number, crossover: boolean): Promise<void>;
   reload(): Promise<void>;
 };
 
@@ -106,18 +106,22 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
     [],
   );
 
-  const setSearch = useCallback(async (generations: number, variants: number) => {
-    setError(null);
-    try {
-      const next = await invoke<EvolutionSettingsDto>("set_evolution_search", {
-        generations,
-        variants,
-      });
-      setSettings(next);
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  }, []);
+  const setSearch = useCallback(
+    async (generations: number, variants: number, crossover: boolean) => {
+      setError(null);
+      try {
+        const next = await invoke<EvolutionSettingsDto>("set_evolution_search", {
+          generations,
+          variants,
+          crossover,
+        });
+        setSettings(next);
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    },
+    [],
+  );
 
   return {
     loading,

@@ -258,6 +258,7 @@ export type EvolutionGatesDto = {
 export type EvolutionSearchDto = {
   generations: number;
   variants: number;
+  crossover: boolean;
 };
 
 /** 评测例子（Tauri `list_eval_examples`） */

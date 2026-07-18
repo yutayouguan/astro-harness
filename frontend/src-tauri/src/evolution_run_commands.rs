@@ -18,9 +18,9 @@ use evolution::{
     build_judge_user_prompt, build_mutation_prompt, build_reflection_user_prompt,
     candidate_new_markdown, check_candidate, examples_for_skill, list_examples, list_proposals,
     parse_candidates, parse_eval_score, parse_judge_output, parse_variants, pareto_front,
-    reject_proposal, save_proposals, select_front_capped, CandidateKind, EvalExample,
-    ReflectionInput, ScoredVariant, SkillCandidate, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT,
-    MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    reject_proposal, save_proposals, select_front_capped, build_crossover_prompt, CandidateKind,
+    EvalExample, ReflectionInput, ScoredVariant, SkillCandidate, CROSSOVER_SYSTEM_PROMPT,
+    EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -461,6 +461,27 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                 c.judge_reason = Some(reason);
                 variants_evaluated += 1;
                 scored.push(ScoredVariant::new(c, score));
+            }
+
+            // 交叉：对当前最高分的两个变体融合出一个子代，评分后并入选择。
+            if cfg.search.crossover && scored.len() >= 2 {
+                let top = select_front_capped(pareto_front(&scored), 2);
+                if top.len() == 2 {
+                    let cx = build_crossover_prompt(&top[0].candidate, &top[1].candidate);
+                    if let Ok(raw) =
+                        reflect_over_targets(&refl_targets, CROSSOVER_SYSTEM_PROMPT, &cx).await
+                    {
+                        for mut child in parse_variants(&raw, &current).unwrap_or_default() {
+                            let (score, reason) =
+                                fitness_score(&judge_targets, &child, &enabled_skills, &evalset)
+                                    .await;
+                            child.judge_score = Some(score);
+                            child.judge_reason = Some(format!("[交叉] {reason}"));
+                            variants_evaluated += 1;
+                            scored.push(ScoredVariant::new(child, score));
+                        }
+                    }
+                }
             }
 
             let front = pareto_front(&scored);

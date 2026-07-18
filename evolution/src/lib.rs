@@ -33,6 +33,6 @@ pub use reflect::{
     build_reflection_user_prompt, parse_candidates, ReflectionInput, REFLECTION_SYSTEM_PROMPT,
 };
 pub use search::{
-    build_mutation_prompt, pareto_front, parse_variants, select_front_capped, ScoredVariant,
-    MUTATION_SYSTEM_PROMPT,
+    build_crossover_prompt, build_mutation_prompt, pareto_front, parse_variants,
+    select_front_capped, ScoredVariant, CROSSOVER_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
 };

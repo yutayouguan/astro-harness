@@ -35,6 +35,7 @@ pub struct EvolutionGatesDto {
 pub struct EvolutionSearchDto {
     pub generations: u32,
     pub variants: u32,
+    pub crossover: bool,
 }
 
 /// 进化设置全量 DTO。
@@ -136,6 +137,7 @@ fn build_settings_dto() -> Result<EvolutionSettingsDto, String> {
         search: EvolutionSearchDto {
             generations: cfg.search.generations,
             variants: cfg.search.variants,
+            crossover: cfg.search.crossover,
         },
         active_provider_id: state.active_provider_id,
         active_model,
@@ -204,11 +206,13 @@ pub async fn set_evolution_gates(
 pub async fn set_evolution_search(
     generations: u32,
     variants: u32,
+    crossover: bool,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
     let search = memory::EvolutionSearch {
         generations: generations.clamp(1, 6),
         variants: variants.clamp(1, 6),
+        crossover,
     };
     memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
     build_settings_dto()

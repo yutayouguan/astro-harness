@@ -241,6 +241,9 @@ pub struct EvolutionSearch {
     /// 每代每目标变体数。
     #[serde(default = "default_variants")]
     pub variants: u32,
+    /// 是否启用交叉算子（对 Pareto 前沿 top-2 融合出子代）。
+    #[serde(default = "default_true")]
+    pub crossover: bool,
 }
 
 impl Default for EvolutionSearch {
@@ -248,6 +251,7 @@ impl Default for EvolutionSearch {
         Self {
             generations: 2,
             variants: 3,
+            crossover: true,
         }
     }
 }
@@ -572,6 +576,7 @@ pub fn set_evolution_search(
         "variants",
         search.variants as usize,
     )?;
+    set_nested_bool(base, &["evolution", "search"], "crossover", search.crossover)?;
     Ok(load_evolution_config(base))
 }
 
@@ -673,6 +678,7 @@ mod tests {
         assert!((cfg.gates.min_judge_score - 0.6).abs() < 1e-6);
         assert_eq!(cfg.search.generations, 2);
         assert_eq!(cfg.search.variants, 3);
+        assert!(cfg.search.crossover);
     }
 
     #[test]
@@ -683,11 +689,13 @@ mod tests {
             &EvolutionSearch {
                 generations: 4,
                 variants: 5,
+                crossover: false,
             },
         )
         .unwrap();
         assert_eq!(cfg.search.generations, 4);
         assert_eq!(cfg.search.variants, 5);
+        assert!(!cfg.search.crossover);
     }
 
     #[test]
