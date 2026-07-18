@@ -109,6 +109,8 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 
 打包形态：源码随 app 作 resource（只读），venv 与临时数据在用户可写的 `~/.astro/evolution-dspy/.venv` 与 `~/.astro/learning/evolution/dspy-run-*/`；首次用 UI「安装依赖」建 venv。DSPy/GEPA API 随版本变，Python 侧带回退（GEPA 不可用退化单轮反思），标 `# ADAPT:` 处按版本调整。
 
+**mock 自测**：`run_evolution_dspy(mock=true)` / CLI `--mock` 不调用 dspy、不需凭据，产确定性候选，用于验证「Rust 导出 → 子进程 → result.json → 提案入队」整条契约是否打通（UI「mock 自测」按钮）。
+
 学习闭环三阶段（评测集/交叉/DSPy）至此全部落地。
 
 **可观测**：进化运行与提案去向记入 `~/.astro/learning/evolution/history.jsonl`（`run` / `outcome` 事件）；「离线进化」页「进化历史」小节展示运行次数、生成提案数、采纳率、采纳均分、采纳/拒绝与近期事件。crate [`evolution::history`](../evolution/src/history.rs)；命令 `evolution_history`。

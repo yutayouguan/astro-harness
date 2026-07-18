@@ -231,6 +231,8 @@ export const zh = {
   "evo.dspySetup": "安装依赖（建 venv）",
   "evo.dspyRun": "DSPy 优化",
   "evo.dspyNote": "需在 config.yaml 设 evolution.dspy.enabled=true，并安装 evolution-dspy 依赖；凭据复用 reflection 路由。",
+  "evo.dspyMock": "mock 自测",
+  "evo.dspyMockHint": "不调用真实 dspy，验证导出→子进程→提案的契约是否打通",
 
   "tools.tab.builtin": "内置工具",
   "tools.tab.mcp": "MCP 工具",
@@ -1622,6 +1624,8 @@ export const en: Record<MessageKey, string> = {
   "evo.dspySetup": "Install deps (create venv)",
   "evo.dspyRun": "DSPy optimize",
   "evo.dspyNote": "Set evolution.dspy.enabled=true in config.yaml and install evolution-dspy deps; credentials reuse the reflection route.",
+  "evo.dspyMock": "Mock self-test",
+  "evo.dspyMockHint": "Skips real dspy; verifies the export → subprocess → proposal contract end to end",
 
   "tools.tab.builtin": "Built-in",
   "tools.tab.mcp": "MCP",

@@ -56,6 +56,24 @@ def _read_skill(input_dir: str) -> str:
         return ""
 
 
+def _mock_optimize(input_dir: str) -> dict:
+    """不依赖 dspy 的确定性产物：验证 Rust↔Python↔提案 的 JSON 契约。"""
+    cfg = _read_config(input_dir)
+    skill_id = cfg.get("skill_id", "")
+    current = _read_skill(input_dir)
+    examples = load_evalset(os.path.join(input_dir, "evalset.jsonl"))
+    marker = "\n\n<!-- evolved: mock -->\n"
+    content = current if current.endswith(marker) else (current + marker)
+    return {
+        "skill_id": skill_id,
+        "kind": "edit",
+        "content": content,
+        "score": 0.5,
+        "rationale": "mock 产物（未调用真实 dspy）",
+        "log": f"mock skill_id={skill_id} examples={len(examples)}",
+    }
+
+
 def _optimize(input_dir: str) -> dict:
     cfg = _read_config(input_dir)
     skill_id = cfg.get("skill_id", "")
@@ -136,11 +154,16 @@ def main(argv: list[str] | None = None) -> int:
     opt = sub.add_parser("optimize")
     opt.add_argument("--input", required=True)
     opt.add_argument("--output", required=True)
+    opt.add_argument(
+        "--mock",
+        action="store_true",
+        help="不调用 dspy，产确定性候选（用于契约自测）",
+    )
     args = parser.parse_args(argv)
 
     if args.cmd == "optimize":
         try:
-            result = _optimize(args.input)
+            result = _mock_optimize(args.input) if args.mock else _optimize(args.input)
         except Exception as e:  # noqa: BLE001
             result = {"error": str(e), "trace": traceback.format_exc()}
             with open(args.output, "w", encoding="utf-8") as f:

@@ -958,6 +958,22 @@ export default function EvolutionModelsPanel({ active }: Props) {
             </button>
             <button
               type="button"
+              className="aux-action aux-action-ghost"
+              onClick={() =>
+                void runDspy(dspySkill.trim(), true).then((r) => {
+                  if (r) {
+                    void reloadProposals();
+                    void reloadHistory();
+                  }
+                })
+              }
+              disabled={dspyBusy || !dspySkill.trim()}
+              title={t("evo.dspyMockHint")}
+            >
+              {t("evo.dspyMock")}
+            </button>
+            <button
+              type="button"
               className="aux-action"
               onClick={() =>
                 void runDspy(dspySkill.trim()).then((r) => {

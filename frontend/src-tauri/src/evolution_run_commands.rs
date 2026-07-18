@@ -811,13 +811,15 @@ pub async fn setup_evolution_dspy<R: tauri::Runtime>(app: AppHandle<R>) -> Resul
 pub async fn run_evolution_dspy<R: tauri::Runtime>(
     app: AppHandle<R>,
     skill_id: String,
+    mock: Option<bool>,
 ) -> Result<EvolutionRunReport, String> {
+    let mock = mock.unwrap_or(false);
     let base = default_memory_dir();
     let cfg = memory::load_evolution_config(&base);
     if !cfg.enabled {
         return Err("请先开启离线进化".into());
     }
-    if !cfg.dspy.enabled {
+    if !mock && !cfg.dspy.enabled {
         return Err("请先在配置中开启 evolution.dspy.enabled".into());
     }
     let python_bin = resolve_dspy_python(&cfg.dspy.python_bin);
@@ -827,10 +829,15 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
     // 目标技能内容
     let loaded = skills::load_skill_by_name(&skill_id).map_err(|e| e.to_string())?;
 
-    // 解析 reflection 目标作为 LLM 端点
-    let primary = active_primary_target()?;
-    let targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
-    let t = &targets.preferred;
+    // 解析 reflection 目标作为 LLM 端点；mock 自测跳过（不需要真实模型/凭据）
+    let (model, base_url, backend_id, api_key) = if mock {
+        (String::new(), String::new(), "mock".to_string(), String::new())
+    } else {
+        let primary = active_primary_target()?;
+        let targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
+        let t = targets.preferred;
+        (t.model, t.provider.endpoint, t.backend_id, t.api_key)
+    };
 
     // 导出输入到临时目录
     let run_id: String = uuid::Uuid::new_v4().to_string().chars().take(8).collect();
@@ -851,9 +858,9 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
 
     let config_json = serde_json::json!({
         "skill_id": skill_id,
-        "model": t.model,
-        "base_url": t.provider.endpoint,
-        "provider_backend": t.backend_id,
+        "model": model,
+        "base_url": base_url,
+        "provider_backend": backend_id,
     });
     std::fs::write(
         dir.join("config.json"),
@@ -862,18 +869,22 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
     .map_err(|e| e.to_string())?;
 
     let output = dir.join("result.json");
+    let mut cmd_args: Vec<String> = vec![
+        "-m".into(),
+        "evolution_dspy".into(),
+        "optimize".into(),
+        "--input".into(),
+        dir.to_string_lossy().to_string(),
+        "--output".into(),
+        output.to_string_lossy().to_string(),
+    ];
+    if mock {
+        cmd_args.push("--mock".into());
+    }
     let mut child = std::process::Command::new(&python_bin)
-        .args([
-            "-m",
-            "evolution_dspy",
-            "optimize",
-            "--input",
-            &dir.to_string_lossy(),
-            "--output",
-            &output.to_string_lossy(),
-        ])
+        .args(&cmd_args)
         .current_dir(&project)
-        .env("ASTRO_DSPY_API_KEY", &t.api_key)
+        .env("ASTRO_DSPY_API_KEY", &api_key)
         .env("PYTHONPATH", &project)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
