@@ -150,19 +150,6 @@ export function IconWorkspace(props: IconProps) {
   );
 }
 
-/** 文件空间 — 文档+折角+三横线；默认空心线稿，选中填实后细节镂空 */
-export function IconFileSpace(props: IconProps) {
-  return (
-    <NavIconBase {...props}>
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path className="nav-icon-cutout" d="M14 2v4a2 2 0 0 0 2 2h4" />
-      <path className="nav-icon-cutout" d="M8 9h3" />
-      <path className="nav-icon-cutout" d="M8 13h8" />
-      <path className="nav-icon-cutout" d="M8 17h8" />
-    </NavIconBase>
-  );
-}
-
 /** 我的工具 — 单一扳手剪影，选中整块填实，无内部镂空 */
 export function IconTools(props: IconProps) {
   return (
