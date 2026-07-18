@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n/LocaleContext";
+import { rewriteHtmlRelativeAssets } from "../../lib/media/htmlAssetRewrite";
 import BrokenMedia from "./BrokenMedia";
 import MediaToolbar from "./MediaToolbar";
 
@@ -91,10 +92,15 @@ export default function HtmlPreview({
     void invoke("open_path_externally", { path }).catch(() => {});
   };
 
-  const srcDoc = useMemo(
-    () => (doc != null && path ? withBaseHref(doc, path) : doc),
-    [doc, path],
-  );
+  const srcDoc = useMemo(() => {
+    if (doc == null || !path) return doc;
+    const dir = dirnameOf(path);
+    // 先把相对资源引用改写成绝对 asset URL（正确处理 ../），再补 <base> 作兜底
+    const rewritten = dir
+      ? rewriteHtmlRelativeAssets(doc, dir, convertFileSrc)
+      : doc;
+    return withBaseHref(rewritten, path);
+  }, [doc, path]);
 
   if (error || doc == null) {
     return (
