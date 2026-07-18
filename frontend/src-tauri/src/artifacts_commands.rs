@@ -168,10 +168,71 @@ pub async fn reconcile_artifacts() -> Result<ReconcileResultDto, String> {
         added,
         marked_missing,
     } = db.reconcile(&mem).map_err(|e| e.to_string())?;
+
+    // 回填：历史会话生成的文件此前以 session_id=None 入库，按会话消息里的
+    // 媒体路径重新关联，修复「会话中生成却显示未关联会话」。
+    backfill_artifact_sessions(&db);
+
     Ok(ReconcileResultDto {
         added,
         marked_missing,
     })
+}
+
+/// 把「未关联」产物按历史会话消息的媒体路径回填 session/message。best-effort。
+fn backfill_artifact_sessions(db: &artifacts::ArtifactDb) {
+    let unlinked = match db.unlinked_paths() {
+        Ok(v) if !v.is_empty() => v,
+        _ => return,
+    };
+    let sessions = match open_sessions() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let media_msgs = match sessions.media_messages() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
+    let norm = |s: &str| s.replace('\\', "/");
+    // 生成文件名含时间戳/uuid，按 basename 建索引足够区分，多候选时再比对完整后缀。
+    let mut by_base: HashMap<String, Vec<String>> = HashMap::new();
+    for p in &unlinked {
+        let base = p.rsplit(['/', '\\']).next().unwrap_or(p).to_string();
+        by_base.entry(base).or_default().push(p.clone());
+    }
+
+    for (session_id, msg_id, media_json) in media_msgs {
+        let Ok(arr) = serde_json::from_str::<serde_json::Value>(&media_json) else {
+            continue;
+        };
+        let Some(items) = arr.as_array() else {
+            continue;
+        };
+        for it in items {
+            let Some(rel) = it
+                .get("reference")
+                .and_then(|r| r.get("workspace_path"))
+                .and_then(|v| v.as_str())
+            else {
+                continue; // data URL / 远程 URI 不落盘
+            };
+            let rel_tail = norm(rel);
+            let rel_tail = rel_tail.trim_start_matches("./");
+            let base = rel_tail.rsplit('/').next().unwrap_or(rel_tail);
+            let Some(cands) = by_base.get(base) else {
+                continue;
+            };
+            let hit = cands.iter().map(String::as_str).find(|p| {
+                let pn = norm(p);
+                pn == rel_tail || pn.ends_with(&format!("/{rel_tail}"))
+            });
+            if let Some(path) = hit {
+                let mid = msg_id.to_string();
+                let _ = db.link_session_by_path(path, &session_id, Some(&mid));
+            }
+        }
+    }
 }
 
 /// Tauri 命令：register_artifact。

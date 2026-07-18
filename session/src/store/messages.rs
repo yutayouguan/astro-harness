@@ -69,6 +69,30 @@ impl SessionStore {
     }
 
     /// 按时间顺序读取会话内全部消息行。
+    /// 跨全部会话取「带结构化媒体」的消息 `(session_id, message_id, media_json)`。
+    ///
+    /// 供 artifacts 回填：把历史生成文件关联回来源会话。单条查询，开销低。
+    pub fn media_messages(&self) -> Result<Vec<(String, i64, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, id, media_json
+             FROM messages
+             WHERE media_json IS NOT NULL AND media_json != ''
+             ORDER BY id ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     pub fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,

@@ -308,6 +308,39 @@ impl ArtifactDb {
         Ok(row)
     }
 
+    /// 列出所有未关联会话（session_id 为空）且未 missing 的产物绝对路径。
+    ///
+    /// 供回填：把这些文件按历史会话消息里的媒体路径重新关联。
+    pub fn unlinked_paths(&self) -> anyhow::Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT path FROM artifacts WHERE session_id IS NULL AND missing = 0",
+        )?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// 为「尚未关联」的产物回填 session/message；已关联的行不覆盖。返回是否更新。
+    pub fn link_session_by_path(
+        &self,
+        path: &str,
+        session_id: &str,
+        message_id: Option<&str>,
+    ) -> anyhow::Result<bool> {
+        let changed = self.conn.execute(
+            "UPDATE artifacts
+             SET session_id = ?2,
+                 message_id = COALESCE(?3, message_id),
+                 updated_at = datetime('now')
+             WHERE path = ?1 AND session_id IS NULL",
+            params![path, session_id, message_id],
+        )?;
+        Ok(changed > 0)
+    }
+
     /// 按路径批量删除索引行，返回删除条数
     pub fn remove_by_paths(&self, paths: &[String]) -> anyhow::Result<usize> {
         if paths.is_empty() {
