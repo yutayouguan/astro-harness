@@ -1,15 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
+  Beaker,
   Check,
   Dna,
   FilePlus2,
+  FlaskConical,
   Gavel,
   GitBranch,
+  History,
   Pencil,
   Play,
   RefreshCw,
+  Settings2,
   Sparkles,
   Timer,
   Trash2,
@@ -36,6 +46,19 @@ import { SelectMenu } from "../ui/SelectMenu";
 type Props = {
   active: boolean;
 };
+
+type EvoSection = "setup" | "run" | "history" | "lab";
+
+const SECTIONS: {
+  id: EvoSection;
+  labelKey: MessageKey;
+  Icon: LucideIcon;
+}[] = [
+  { id: "setup", labelKey: "evo.section.setup", Icon: Settings2 },
+  { id: "run", labelKey: "evo.section.run", Icon: Play },
+  { id: "history", labelKey: "evo.section.history", Icon: History },
+  { id: "lab", labelKey: "evo.section.lab", Icon: FlaskConical },
+];
 
 const ROUTES: {
   id: EvolutionRouteId;
@@ -138,6 +161,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [cooldownDraft, setCooldownDraft] = useState("");
   const [minDecDraft, setMinDecDraft] = useState("");
   const [maxRunsDraft, setMaxRunsDraft] = useState("");
+  const [section, setSection] = useState<EvoSection>("setup");
 
   const submitEval = () => {
     if (!evalTask.trim()) return;
@@ -345,8 +369,93 @@ export default function EvolutionModelsPanel({ active }: Props) {
     }
   }, [gates, judgeDraft, setGates]);
 
+  const evoOn = settings?.enabled ?? false;
+  const pendingCount = proposals.length;
+  const adoptionPct = history ? Math.round(history.summary.adoptionRate * 100) : null;
+
   return (
-    <div className="aux-page prefs-page aux-page-embedded" data-tone="blue">
+    <div className="evo-page aux-page prefs-page aux-page-embedded" data-tone="blue">
+      <header className="evo-toolbar">
+        <div className="evo-toolbar-main">
+          <div className="evo-brand">
+            <span className="evo-brand-mark" aria-hidden>
+              <Dna size={18} strokeWidth={2.2} />
+            </span>
+            <div className="evo-brand-text">
+              <h2>{t("evo.title")}</h2>
+              <p>{t("evo.subtitle")}</p>
+            </div>
+          </div>
+
+          <div className="evo-status-strip" aria-live="polite">
+            <span className={`evo-status-chip${evoOn ? " is-on" : ""}`}>
+              <span className="evo-status-dot" aria-hidden />
+              {evoOn ? t("evo.statusOn") : t("evo.statusOff")}
+            </span>
+            {pendingCount > 0 && (
+              <button
+                type="button"
+                className="evo-status-chip evo-status-chip-btn is-pending"
+                onClick={() => setSection("run")}
+              >
+                {t("evo.pendingCount").replace("{n}", String(pendingCount))}
+              </button>
+            )}
+            {adoptionPct != null && (
+              <span className="evo-status-chip is-muted">
+                {t("evo.statAdoption")} {adoptionPct}%
+              </span>
+            )}
+            <button
+              type="button"
+              role="switch"
+              className="tool-toggle evo-master-toggle"
+              aria-checked={evoOn}
+              aria-label={t("evo.enabled")}
+              onClick={() => void setEnabled(!evoOn)}
+              disabled={loading || !settings}
+            >
+              <span className="tool-toggle-thumb" />
+            </button>
+          </div>
+        </div>
+
+        <div className="evo-toolbar-row">
+          <div className="evo-seg" role="tablist" aria-label={t("evo.sections")}>
+            {SECTIONS.map(({ id, labelKey, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={section === id}
+                className={`evo-seg-item${section === id ? " is-active" : ""}`}
+                onClick={() => setSection(id)}
+              >
+                <Icon size={14} strokeWidth={2.25} aria-hidden />
+                {t(labelKey)}
+                {id === "run" && pendingCount > 0 ? (
+                  <span className="evo-seg-badge">{pendingCount}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="aux-action aux-action-ghost evo-refresh-btn"
+            onClick={() => {
+              void reload();
+              void reloadProposals();
+              void reloadHistory();
+              void reloadAutoStatus();
+            }}
+            disabled={loading}
+          >
+            <RefreshCw size={15} />
+            {t("aux.refresh")}
+          </button>
+        </div>
+      </header>
+
       {(error || providersError) && (
         <div className="aux-error">
           <AlertTriangle size={16} />
@@ -354,809 +463,839 @@ export default function EvolutionModelsPanel({ active }: Props) {
         </div>
       )}
 
-      <section className="prefs-card aux-list-card">
-        <div className="aux-list-head">
-          <div>
-            <h2 className="prefs-card-title">{t("evo.title")}</h2>
-            <p className="prefs-card-sub">{t("evo.subtitle")}</p>
-          </div>
-          <div className="aux-list-head-actions">
-            <button
-              type="button"
-              className="aux-action aux-action-ghost"
-              onClick={() => void reload()}
-              disabled={loading}
-            >
-              <RefreshCw size={15} />
-              {t("aux.refresh")}
-            </button>
-          </div>
-        </div>
-
-        <article className="aux-task-row">
-          <div className="aux-task-icon">
-            <Dna size={18} />
-          </div>
-          <div className="aux-task-main">
-            <div className="aux-task-titleline">
-              <h3>{t("evo.enabled")}</h3>
+      {section === "setup" && (
+        <>
+          <section className="prefs-card aux-list-card evo-card">
+            <div className="aux-list-head">
+              <div>
+                <h2 className="prefs-card-title">{t("evo.enabled")}</h2>
+                <p className="prefs-card-sub">{t("evo.enabledDesc")}</p>
+              </div>
             </div>
-            <p>{t("evo.enabledDesc")}</p>
-          </div>
-          <div className="aux-task-actions">
-            <button
-              type="button"
-              role="switch"
-              className="tool-toggle"
-              aria-checked={settings?.enabled ?? false}
-              aria-label={t("evo.enabled")}
-              onClick={() => void setEnabled(!settings?.enabled)}
-              disabled={loading || !settings}
-            >
-              <span className="tool-toggle-thumb" />
-            </button>
-          </div>
-        </article>
 
-        <div className="aux-task-list">
-          {ROUTES.map((route) => {
-            const row = routeRows.find((item) => item.id === route.id);
-            const Icon = route.Icon;
-            const isEditing = editingRoute === route.id;
-            const isAuto = !row || row.provider === "auto";
-            return (
-              <article className="aux-task-row" key={route.id}>
-                <div className="aux-task-icon">
-                  <Icon size={18} />
-                </div>
-                <div className="aux-task-main">
-                  <div className="aux-task-titleline">
-                    <h3>{t(route.labelKey)}</h3>
-                    <span className={`aux-route-pill${isAuto ? " is-auto" : ""}`}>
-                      {isAuto ? t("aux.auto") : t("aux.custom")}
-                    </span>
-                  </div>
-                  <p>{t(route.descKey)}</p>
-                  <div className="aux-task-current">
-                    <span>{row?.displayLabel ?? t("aux.followPrimary")}</span>
-                    {row?.unavailable && (
-                      <span className="aux-warning">
-                        <AlertTriangle size={13} />
-                        {t("aux.unavailable")}
-                      </span>
-                    )}
-                  </div>
+            <div className="aux-task-list">
+              {ROUTES.map((route) => {
+                const row = routeRows.find((item) => item.id === route.id);
+                const Icon = route.Icon;
+                const isEditing = editingRoute === route.id;
+                const isAuto = !row || row.provider === "auto";
+                return (
+                  <article className="aux-task-row" key={route.id}>
+                    <div className="aux-task-icon">
+                      <Icon size={18} />
+                    </div>
+                    <div className="aux-task-main">
+                      <div className="aux-task-titleline">
+                        <h3>{t(route.labelKey)}</h3>
+                        <span className={`aux-route-pill${isAuto ? " is-auto" : ""}`}>
+                          {isAuto ? t("aux.auto") : t("aux.custom")}
+                        </span>
+                      </div>
+                      <p>{t(route.descKey)}</p>
+                      <div className="aux-task-current">
+                        <span>{row?.displayLabel ?? t("aux.followPrimary")}</span>
+                        {row?.unavailable && (
+                          <span className="aux-warning">
+                            <AlertTriangle size={13} />
+                            {t("aux.unavailable")}
+                          </span>
+                        )}
+                      </div>
 
-                  {isEditing && (
-                    <div className="aux-editor">
-                      <SelectMenu
-                        value={selectedProviderId}
-                        options={providerOptions}
-                        onChange={handleProviderChange}
-                        disabled={providerOptions.length === 0}
-                        placeholder={t("aux.selectProvider")}
-                        aria-label={t("aux.selectProvider")}
-                      />
-                      <SelectMenu
-                        value=""
-                        options={modelOptions}
-                        onChange={handleModelChange}
-                        disabled={!selectedProvider || loadingModelsFor === selectedProvider?.id}
-                        placeholder={
-                          loadingModelsFor === selectedProvider?.id
-                            ? t("aux.loadingModels")
-                            : t("aux.selectModel")
-                        }
-                        aria-label={t("aux.selectModel")}
-                      />
+                      {isEditing && (
+                        <div className="aux-editor">
+                          <SelectMenu
+                            value={selectedProviderId}
+                            options={providerOptions}
+                            onChange={handleProviderChange}
+                            disabled={providerOptions.length === 0}
+                            placeholder={t("aux.selectProvider")}
+                            aria-label={t("aux.selectProvider")}
+                          />
+                          <SelectMenu
+                            value=""
+                            options={modelOptions}
+                            onChange={handleModelChange}
+                            disabled={!selectedProvider || loadingModelsFor === selectedProvider?.id}
+                            placeholder={
+                              loadingModelsFor === selectedProvider?.id
+                                ? t("aux.loadingModels")
+                                : t("aux.selectModel")
+                            }
+                            aria-label={t("aux.selectModel")}
+                          />
+                          <button
+                            type="button"
+                            className="aux-action aux-action-ghost"
+                            onClick={() => setEditingRoute(null)}
+                          >
+                            {t("aux.cancel")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="aux-task-actions">
                       <button
                         type="button"
                         className="aux-action aux-action-ghost"
-                        onClick={() => setEditingRoute(null)}
+                        onClick={() => {
+                          void resetRoute(route.id);
+                          if (editingRoute === route.id) setEditingRoute(null);
+                        }}
+                        disabled={isAuto}
                       >
-                        {t("aux.cancel")}
+                        {t("aux.usePrimary")}
+                      </button>
+                      <button
+                        type="button"
+                        className="aux-action"
+                        onClick={() => {
+                          if (!providersState) void loadProviders();
+                          beginEdit(
+                            row ?? {
+                              id: route.id,
+                              provider: "auto",
+                              model: "auto",
+                              displayLabel: t("aux.followPrimary"),
+                              unavailable: false,
+                            },
+                          );
+                        }}
+                        disabled={enabledProviders.length === 0}
+                      >
+                        {t("aux.change")}
                       </button>
                     </div>
-                  )}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <div className="evo-split">
+            <section className="prefs-card aux-list-card evo-card">
+              <div className="aux-list-head">
+                <div>
+                  <h2 className="prefs-card-title">{t("evo.gatesTitle")}</h2>
+                  <p className="prefs-card-sub">{t("evo.gatesSub")}</p>
+                </div>
+              </div>
+
+              <article className="aux-task-row evo-compact-row">
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{t("evo.runTests")}</h3>
+                  </div>
+                  <p>{t("evo.runTestsDesc")}</p>
                 </div>
                 <div className="aux-task-actions">
                   <button
                     type="button"
-                    className="aux-action aux-action-ghost"
-                    onClick={() => {
-                      void resetRoute(route.id);
-                      if (editingRoute === route.id) setEditingRoute(null);
-                    }}
-                    disabled={isAuto}
+                    role="switch"
+                    className="tool-toggle"
+                    aria-checked={gates?.runTests ?? false}
+                    aria-label={t("evo.runTests")}
+                    onClick={() =>
+                      gates &&
+                      void setGates(
+                        !gates.runTests,
+                        gates.maxSkillBytes,
+                        gates.requirePr,
+                        gates.minJudgeScore,
+                      )
+                    }
+                    disabled={!gates}
                   >
-                    {t("aux.usePrimary")}
-                  </button>
-                  <button
-                    type="button"
-                    className="aux-action"
-                    onClick={() => {
-                      if (!providersState) void loadProviders();
-                      beginEdit(
-                        row ?? {
-                          id: route.id,
-                          provider: "auto",
-                          model: "auto",
-                          displayLabel: t("aux.followPrimary"),
-                          unavailable: false,
-                        },
-                      );
-                    }}
-                    disabled={enabledProviders.length === 0}
-                  >
-                    {t("aux.change")}
+                    <span className="tool-toggle-thumb" />
                   </button>
                 </div>
               </article>
-            );
-          })}
-        </div>
-      </section>
 
-      <section className="prefs-card aux-list-card">
-        <div className="aux-list-head">
-          <div>
-            <h2 className="prefs-card-title">{t("evo.gatesTitle")}</h2>
-            <p className="prefs-card-sub">{t("evo.gatesSub")}</p>
-          </div>
-        </div>
+              <article className="aux-task-row evo-compact-row">
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{t("evo.requirePr")}</h3>
+                  </div>
+                  <p>{t("evo.requirePrDesc")}</p>
+                </div>
+                <div className="aux-task-actions">
+                  <button
+                    type="button"
+                    role="switch"
+                    className="tool-toggle"
+                    aria-checked={gates?.requirePr ?? false}
+                    aria-label={t("evo.requirePr")}
+                    onClick={() =>
+                      gates &&
+                      void setGates(
+                        gates.runTests,
+                        gates.maxSkillBytes,
+                        !gates.requirePr,
+                        gates.minJudgeScore,
+                      )
+                    }
+                    disabled={!gates}
+                  >
+                    <span className="tool-toggle-thumb" />
+                  </button>
+                </div>
+              </article>
 
-        <article className="aux-task-row">
-          <div className="aux-task-main">
-            <div className="aux-task-titleline">
-              <h3>{t("evo.runTests")}</h3>
-            </div>
-            <p>{t("evo.runTestsDesc")}</p>
-          </div>
-          <div className="aux-task-actions">
-            <button
-              type="button"
-              role="switch"
-              className="tool-toggle"
-              aria-checked={gates?.runTests ?? false}
-              aria-label={t("evo.runTests")}
-              onClick={() =>
-                gates &&
-                void setGates(!gates.runTests, gates.maxSkillBytes, gates.requirePr, gates.minJudgeScore)
-              }
-              disabled={!gates}
-            >
-              <span className="tool-toggle-thumb" />
-            </button>
-          </div>
-        </article>
+              <article className="aux-task-row evo-compact-row">
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{t("evo.maxSkillBytes")}</h3>
+                  </div>
+                  <p>{t("evo.maxSkillBytesDesc")}</p>
+                </div>
+                <div className="aux-task-actions">
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={1024}
+                    step={1024}
+                    value={maxBytesDraft}
+                    onChange={(e) => setMaxBytesDraft(e.target.value)}
+                    onBlur={commitMaxBytes}
+                    disabled={!gates}
+                    aria-label={t("evo.maxSkillBytes")}
+                  />
+                </div>
+              </article>
 
-        <article className="aux-task-row">
-          <div className="aux-task-main">
-            <div className="aux-task-titleline">
-              <h3>{t("evo.requirePr")}</h3>
-            </div>
-            <p>{t("evo.requirePrDesc")}</p>
-          </div>
-          <div className="aux-task-actions">
-            <button
-              type="button"
-              role="switch"
-              className="tool-toggle"
-              aria-checked={gates?.requirePr ?? false}
-              aria-label={t("evo.requirePr")}
-              onClick={() =>
-                gates &&
-                void setGates(gates.runTests, gates.maxSkillBytes, !gates.requirePr, gates.minJudgeScore)
-              }
-              disabled={!gates}
-            >
-              <span className="tool-toggle-thumb" />
-            </button>
-          </div>
-        </article>
+              <article className="aux-task-row evo-compact-row">
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{t("evo.minJudgeScore")}</h3>
+                  </div>
+                  <p>{t("evo.minJudgeScoreDesc")}</p>
+                </div>
+                <div className="aux-task-actions">
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={judgeDraft}
+                    onChange={(e) => setJudgeDraft(e.target.value)}
+                    onBlur={commitJudge}
+                    disabled={!gates}
+                    aria-label={t("evo.minJudgeScore")}
+                  />
+                </div>
+              </article>
+            </section>
 
-        <article className="aux-task-row">
-          <div className="aux-task-main">
-            <div className="aux-task-titleline">
-              <h3>{t("evo.maxSkillBytes")}</h3>
-            </div>
-            <p>{t("evo.maxSkillBytesDesc")}</p>
-          </div>
-          <div className="aux-task-actions">
-            <input
-              type="number"
-              className="aux-number-input"
-              min={1024}
-              step={1024}
-              value={maxBytesDraft}
-              onChange={(e) => setMaxBytesDraft(e.target.value)}
-              onBlur={commitMaxBytes}
-              disabled={!gates}
-              aria-label={t("evo.maxSkillBytes")}
-            />
-          </div>
-        </article>
+            <section className="prefs-card aux-list-card evo-card">
+              <div className="aux-list-head">
+                <div>
+                  <h2 className="prefs-card-title">{t("evo.autoTitle")}</h2>
+                  <p className="prefs-card-sub">{t("evo.autoSub")}</p>
+                </div>
+              </div>
 
-        <article className="aux-task-row">
-          <div className="aux-task-main">
-            <div className="aux-task-titleline">
-              <h3>{t("evo.minJudgeScore")}</h3>
-            </div>
-            <p>{t("evo.minJudgeScoreDesc")}</p>
-          </div>
-          <div className="aux-task-actions">
-            <input
-              type="number"
-              className="aux-number-input"
-              min={0}
-              max={1}
-              step={0.05}
-              value={judgeDraft}
-              onChange={(e) => setJudgeDraft(e.target.value)}
-              onBlur={commitJudge}
-              disabled={!gates}
-              aria-label={t("evo.minJudgeScore")}
-            />
-          </div>
-        </article>
-      </section>
-
-      <section className="prefs-card aux-list-card">
-        <div className="aux-list-head">
-          <div>
-            <h2 className="prefs-card-title">{t("evo.autoTitle")}</h2>
-            <p className="prefs-card-sub">{t("evo.autoSub")}</p>
-          </div>
-          <div className="aux-list-head-actions">
-            <button
-              type="button"
-              className="aux-action aux-action-ghost"
-              onClick={() => void reloadAutoStatus()}
-            >
-              <RefreshCw size={15} />
-              {t("aux.refresh")}
-            </button>
-          </div>
-        </div>
-
-        <article className="aux-task-row">
-          <div className="aux-task-icon">
-            <Timer size={18} />
-          </div>
-          <div className="aux-task-main">
-            <div className="aux-task-titleline">
-              <h3>{t("evo.autoEnabled")}</h3>
-            </div>
-            <p>{t("evo.autoEnabledDesc")}</p>
-          </div>
-          <div className="aux-task-actions">
-            <button
-              type="button"
-              role="switch"
-              className="tool-toggle"
-              aria-checked={settings?.auto.enabled ?? false}
-              aria-label={t("evo.autoEnabled")}
-              onClick={() =>
-                settings &&
-                void setAuto(
-                  !settings.auto.enabled,
-                  settings.auto.cooldownSecs,
-                  settings.auto.minNewDecisions,
-                  settings.auto.maxRunsPerDay,
-                ).then(() => reloadAutoStatus())
-              }
-              disabled={loading || !settings || !settings.enabled}
-            >
-              <span className="tool-toggle-thumb" />
-            </button>
-          </div>
-        </article>
-
-        {!settings?.enabled && (
-          <p className="aux-muted">{t("evo.autoNeedMaster")}</p>
-        )}
-
-        <div className="evo-search-cfg">
-          <label>
-            {t("evo.autoCooldown")}
-            <input
-              type="number"
-              className="aux-number-input"
-              min={60}
-              max={86400}
-              step={60}
-              value={cooldownDraft}
-              onChange={(e) => setCooldownDraft(e.target.value)}
-              onBlur={commitAutoNums}
-              disabled={!settings}
-              aria-label={t("evo.autoCooldown")}
-            />
-          </label>
-          <label>
-            {t("evo.autoMinDecisions")}
-            <input
-              type="number"
-              className="aux-number-input"
-              min={1}
-              max={50}
-              value={minDecDraft}
-              onChange={(e) => setMinDecDraft(e.target.value)}
-              onBlur={commitAutoNums}
-              disabled={!settings}
-              aria-label={t("evo.autoMinDecisions")}
-            />
-          </label>
-          <label>
-            {t("evo.autoMaxRuns")}
-            <input
-              type="number"
-              className="aux-number-input"
-              min={1}
-              max={24}
-              value={maxRunsDraft}
-              onChange={(e) => setMaxRunsDraft(e.target.value)}
-              onBlur={commitAutoNums}
-              disabled={!settings}
-              aria-label={t("evo.autoMaxRuns")}
-            />
-          </label>
-        </div>
-        <p className="aux-muted">{t("evo.autoCostHint")}</p>
-
-        {autoStatusError && (
-          <div className="aux-error">
-            <AlertTriangle size={16} />
-            {autoStatusError}
-          </div>
-        )}
-        {autoStatus && (
-          <p className="aux-muted">
-            {t("evo.autoStatusLine")
-              .replace("{runs}", String(autoStatus.state.runsToday ?? 0))
-              .replace("{max}", String(autoStatus.maxRunsPerDay))
-              .replace("{new}", String(autoStatus.newDecisions))
-              .replace("{need}", String(autoStatus.minNewDecisions))
-              .replace(
-                "{gate}",
-                autoStatus.wouldRun
-                  ? t("evo.autoWouldRun")
-                  : (autoStatus.skipMessage ?? t("evo.autoSkipped")),
-              )}
-          </p>
-        )}
-      </section>
-
-      <section className="prefs-card aux-list-card">
-        <div className="aux-list-head">
-          <div>
-            <h2 className="prefs-card-title">{t("evo.proposalsTitle")}</h2>
-            <p className="prefs-card-sub">{t("evo.proposalsSub")}</p>
-          </div>
-          <div className="aux-list-head-actions">
-            <button
-              type="button"
-              className="aux-action aux-action-ghost"
-              onClick={() => void runEvolution().then(() => reloadHistory())}
-              disabled={running || !settings?.enabled}
-            >
-              <Play size={15} />
-              {running ? t("evo.running") : t("evo.run")}
-            </button>
-            <button
-              type="button"
-              className="aux-action"
-              onClick={() => void runSearch().then(() => reloadHistory())}
-              disabled={running || !settings?.enabled}
-              title={t("evo.searchRunHint")}
-            >
-              <Dna size={15} />
-              {running ? t("evo.running") : t("evo.searchRun")}
-            </button>
-          </div>
-        </div>
-
-        <div className="evo-search-cfg">
-          <label>
-            {t("evo.generations")}
-            <input
-              type="number"
-              className="aux-number-input"
-              min={1}
-              max={6}
-              value={genDraft}
-              onChange={(e) => setGenDraft(e.target.value)}
-              onBlur={commitSearch}
-              disabled={!settings}
-            />
-          </label>
-          <label>
-            {t("evo.variants")}
-            <input
-              type="number"
-              className="aux-number-input"
-              min={1}
-              max={6}
-              value={varDraft}
-              onChange={(e) => setVarDraft(e.target.value)}
-              onBlur={commitSearch}
-              disabled={!settings}
-            />
-          </label>
-          <label className="evo-cfg-toggle">
-            {t("evo.crossover")}
-            <button
-              type="button"
-              role="switch"
-              className="tool-toggle"
-              aria-checked={settings?.search.crossover ?? false}
-              aria-label={t("evo.crossover")}
-              onClick={() =>
-                settings &&
-                void setSearch(
-                  settings.search.generations,
-                  settings.search.variants,
-                  !settings.search.crossover,
-                )
-              }
-              disabled={!settings}
-            >
-              <span className="tool-toggle-thumb" />
-            </button>
-          </label>
-          <span className="aux-muted">{t("evo.searchCostHint")}</span>
-        </div>
-        {lastSearch && (
-          <p className="aux-muted">
-            {t("evo.searchSummary")
-              .replace("{gen}", String(lastSearch.generations))
-              .replace("{evaluated}", String(lastSearch.variantsEvaluated))
-              .replace("{kept}", String(lastSearch.paretoKept))
-              .replace("{proposals}", String(lastSearch.proposals.length))}
-          </p>
-        )}
-
-        {!settings?.enabled && (
-          <p className="aux-muted">{t("evo.disabledHint")}</p>
-        )}
-        {evoError && (
-          <div className="aux-error">
-            <AlertTriangle size={16} />
-            {evoError}
-          </div>
-        )}
-        {branchMsg && <p className="aux-muted">{branchMsg}</p>}
-        {lastReport && (
-          <p className="aux-muted">
-            {t("evo.runSummary")
-              .replace("{generated}", String(lastReport.generated))
-              .replace("{gated}", String(lastReport.gatedOut))
-              .replace("{judged}", String(lastReport.judgedOut))
-              .replace("{proposals}", String(lastReport.proposals.length))}
-          </p>
-        )}
-
-        {proposals.length === 0 ? (
-          <p className="aux-muted">{t("evo.noProposals")}</p>
-        ) : (
-          <div className="aux-task-list">
-            {proposals.map((p) => (
-              <article className="aux-task-row" key={p.id}>
+              <article className="aux-task-row evo-compact-row">
                 <div className="aux-task-icon">
-                  {p.kind === "new_skill" ? <FilePlus2 size={18} /> : <Pencil size={18} />}
+                  <Timer size={18} />
                 </div>
                 <div className="aux-task-main">
                   <div className="aux-task-titleline">
-                    <h3>{p.skillId}</h3>
-                    <span className="aux-route-pill">
-                      {p.kind === "new_skill" ? t("evo.kindNew") : t("evo.kindPatch")}
-                    </span>
-                    {p.judgeScore != null && (
-                      <span className="aux-route-pill">
-                        {t("evo.judgeScore")}: {p.judgeScore.toFixed(2)}
-                      </span>
-                    )}
+                    <h3>{t("evo.autoEnabled")}</h3>
                   </div>
-                  {p.rationale && <p>{p.rationale}</p>}
-                  {p.judgeReason && <p className="aux-muted">{p.judgeReason}</p>}
-                  <pre className="evo-proposal-diff">
-                    {p.kind === "new_skill"
-                      ? (p.content ?? "").slice(0, 1200)
-                      : `- ${(p.oldString ?? "").slice(0, 400)}\n+ ${(p.newString ?? "").slice(0, 400)}`}
-                  </pre>
+                  <p>{t("evo.autoEnabledDesc")}</p>
                 </div>
                 <div className="aux-task-actions">
                   <button
                     type="button"
-                    className="aux-action aux-action-ghost"
-                    onClick={() => void reject(p.id)}
-                  >
-                    <Trash2 size={15} />
-                    {t("evo.reject")}
-                  </button>
-                  <button
-                    type="button"
-                    className="aux-action aux-action-ghost"
+                    role="switch"
+                    className="tool-toggle"
+                    aria-checked={settings?.auto.enabled ?? false}
+                    aria-label={t("evo.autoEnabled")}
                     onClick={() =>
-                      void approveToBranch(p.id).then((m) => m && setBranchMsg(m))
+                      settings &&
+                      void setAuto(
+                        !settings.auto.enabled,
+                        settings.auto.cooldownSecs,
+                        settings.auto.minNewDecisions,
+                        settings.auto.maxRunsPerDay,
+                      ).then(() => reloadAutoStatus())
                     }
+                    disabled={loading || !settings || !settings.enabled}
                   >
-                    <GitBranch size={15} />
-                    {t("evo.approveToBranch")}
-                  </button>
-                  <button
-                    type="button"
-                    className="aux-action"
-                    onClick={() => void approve(p.id)}
-                  >
-                    <Check size={15} />
-                    {t("evo.approve")}
+                    <span className="tool-toggle-thumb" />
                   </button>
                 </div>
               </article>
-            ))}
-          </div>
-        )}
-      </section>
 
-      <section className="prefs-card aux-list-card">
-        <div className="aux-list-head">
-          <div>
-            <h2 className="prefs-card-title">{t("evo.historyTitle")}</h2>
-            <p className="prefs-card-sub">{t("evo.historySub")}</p>
-          </div>
-          <div className="aux-list-head-actions">
-            <button
-              type="button"
-              className="aux-action aux-action-ghost"
-              onClick={() => void reloadHistory()}
-            >
-              <RefreshCw size={15} />
-              {t("aux.refresh")}
-            </button>
-          </div>
-        </div>
+              {!settings?.enabled && (
+                <p className="aux-muted evo-inline-hint">{t("evo.autoNeedMaster")}</p>
+              )}
 
-        <div className="evo-stats">
-          <div className="evo-stat">
-            <span className="evo-stat-num">{history?.summary.totalRuns ?? 0}</span>
-            <span className="evo-stat-label">{t("evo.statRuns")}</span>
-          </div>
-          <div className="evo-stat">
-            <span className="evo-stat-num">{history?.summary.totalProposals ?? 0}</span>
-            <span className="evo-stat-label">{t("evo.statProposals")}</span>
-          </div>
-          <div className="evo-stat">
-            <span className="evo-stat-num">
-              {history ? `${Math.round(history.summary.adoptionRate * 100)}%` : "—"}
-            </span>
-            <span className="evo-stat-label">{t("evo.statAdoption")}</span>
-          </div>
-          <div className="evo-stat">
-            <span className="evo-stat-num">
-              {history && history.summary.avgAdoptedScore > 0
-                ? history.summary.avgAdoptedScore.toFixed(2)
-                : "—"}
-            </span>
-            <span className="evo-stat-label">{t("evo.statAvgScore")}</span>
-          </div>
-          <div className="evo-stat">
-            <span className="evo-stat-num">
-              {history
-                ? `${history.summary.approved + history.summary.branched}/${history.summary.rejected}`
-                : "—"}
-            </span>
-            <span className="evo-stat-label">{t("evo.statAdoptedRejected")}</span>
-          </div>
-        </div>
+              <div className="evo-search-cfg evo-cfg-grid">
+                <label>
+                  {t("evo.autoCooldown")}
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={60}
+                    max={86400}
+                    step={60}
+                    value={cooldownDraft}
+                    onChange={(e) => setCooldownDraft(e.target.value)}
+                    onBlur={commitAutoNums}
+                    disabled={!settings}
+                    aria-label={t("evo.autoCooldown")}
+                  />
+                </label>
+                <label>
+                  {t("evo.autoMinDecisions")}
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={1}
+                    max={50}
+                    value={minDecDraft}
+                    onChange={(e) => setMinDecDraft(e.target.value)}
+                    onBlur={commitAutoNums}
+                    disabled={!settings}
+                    aria-label={t("evo.autoMinDecisions")}
+                  />
+                </label>
+                <label>
+                  {t("evo.autoMaxRuns")}
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={1}
+                    max={24}
+                    value={maxRunsDraft}
+                    onChange={(e) => setMaxRunsDraft(e.target.value)}
+                    onBlur={commitAutoNums}
+                    disabled={!settings}
+                    aria-label={t("evo.autoMaxRuns")}
+                  />
+                </label>
+              </div>
+              <p className="aux-muted evo-inline-hint">{t("evo.autoCostHint")}</p>
 
-        {history && history.summary.scoreTrend.length >= 2 && (
-          <div className="evo-trend">
-            <span className="evo-stat-label">{t("evo.trend")}</span>
-            <svg className="evo-spark" viewBox="0 0 160 36" preserveAspectRatio="none" aria-hidden>
-              <polyline
-                points={history.summary.scoreTrend
-                  .map((v, i, a) => {
-                    const x = a.length > 1 ? (i / (a.length - 1)) * 160 : 0;
-                    const clamped = Math.max(0, Math.min(1, v));
-                    const y = 35 - clamped * 33;
-                    return `${x.toFixed(1)},${y.toFixed(1)}`;
-                  })
-                  .join(" ")}
-              />
-            </svg>
+              {autoStatusError && (
+                <div className="aux-error">
+                  <AlertTriangle size={16} />
+                  {autoStatusError}
+                </div>
+              )}
+              {autoStatus && (
+                <div
+                  className={`evo-auto-banner${autoStatus.wouldRun ? " is-ready" : ""}`}
+                  role="status"
+                >
+                  {t("evo.autoStatusLine")
+                    .replace("{runs}", String(autoStatus.state.runsToday ?? 0))
+                    .replace("{max}", String(autoStatus.maxRunsPerDay))
+                    .replace("{new}", String(autoStatus.newDecisions))
+                    .replace("{need}", String(autoStatus.minNewDecisions))
+                    .replace(
+                      "{gate}",
+                      autoStatus.wouldRun
+                        ? t("evo.autoWouldRun")
+                        : (autoStatus.skipMessage ?? t("evo.autoSkipped")),
+                    )}
+                </div>
+              )}
+            </section>
           </div>
-        )}
+        </>
+      )}
 
-        {history && history.recent.length > 0 ? (
-          <div className="aux-task-list">
-            {history.recent.slice(0, 12).map((ev, i) => {
-              const type = String(ev.type ?? "");
-              const line =
-                type === "run"
-                  ? `run · ${String(ev.mode ?? "")} · gen ${Number(ev.generated ?? 0)} → 提案 ${Number(
-                      ev.proposals ?? 0,
-                    )}`
-                  : `${String(ev.outcome ?? "")} · ${String(ev.skill_id ?? "")}${
-                      ev.score != null ? ` · ${Number(ev.score).toFixed(2)}` : ""
-                    }`;
-              return (
-                <article className="aux-task-row evo-history-row" key={`${type}-${i}`}>
+      {section === "run" && (
+        <section className="prefs-card aux-list-card evo-card">
+          <div className="aux-list-head">
+            <div>
+              <h2 className="prefs-card-title">{t("evo.proposalsTitle")}</h2>
+              <p className="prefs-card-sub">{t("evo.proposalsSub")}</p>
+            </div>
+            <div className="aux-list-head-actions">
+              <button
+                type="button"
+                className="aux-action aux-action-ghost"
+                onClick={() => void runEvolution().then(() => reloadHistory())}
+                disabled={running || !settings?.enabled}
+              >
+                <Play size={15} />
+                {running ? t("evo.running") : t("evo.run")}
+              </button>
+              <button
+                type="button"
+                className="aux-action"
+                onClick={() => void runSearch().then(() => reloadHistory())}
+                disabled={running || !settings?.enabled}
+                title={t("evo.searchRunHint")}
+              >
+                <Dna size={15} />
+                {running ? t("evo.running") : t("evo.searchRun")}
+              </button>
+            </div>
+          </div>
+
+          <div className="evo-run-panel">
+            <div className="evo-search-cfg evo-cfg-grid">
+              <label>
+                {t("evo.generations")}
+                <input
+                  type="number"
+                  className="aux-number-input"
+                  min={1}
+                  max={6}
+                  value={genDraft}
+                  onChange={(e) => setGenDraft(e.target.value)}
+                  onBlur={commitSearch}
+                  disabled={!settings}
+                />
+              </label>
+              <label>
+                {t("evo.variants")}
+                <input
+                  type="number"
+                  className="aux-number-input"
+                  min={1}
+                  max={6}
+                  value={varDraft}
+                  onChange={(e) => setVarDraft(e.target.value)}
+                  onBlur={commitSearch}
+                  disabled={!settings}
+                />
+              </label>
+              <label className="evo-cfg-toggle">
+                {t("evo.crossover")}
+                <button
+                  type="button"
+                  role="switch"
+                  className="tool-toggle"
+                  aria-checked={settings?.search.crossover ?? false}
+                  aria-label={t("evo.crossover")}
+                  onClick={() =>
+                    settings &&
+                    void setSearch(
+                      settings.search.generations,
+                      settings.search.variants,
+                      !settings.search.crossover,
+                    )
+                  }
+                  disabled={!settings}
+                >
+                  <span className="tool-toggle-thumb" />
+                </button>
+              </label>
+            </div>
+            <p className="aux-muted evo-inline-hint">{t("evo.searchCostHint")}</p>
+          </div>
+
+          {lastSearch && (
+            <p className="evo-run-summary">
+              {t("evo.searchSummary")
+                .replace("{gen}", String(lastSearch.generations))
+                .replace("{evaluated}", String(lastSearch.variantsEvaluated))
+                .replace("{kept}", String(lastSearch.paretoKept))
+                .replace("{proposals}", String(lastSearch.proposals.length))}
+            </p>
+          )}
+
+          {!settings?.enabled && (
+            <p className="aux-muted evo-inline-hint">{t("evo.disabledHint")}</p>
+          )}
+          {evoError && (
+            <div className="aux-error">
+              <AlertTriangle size={16} />
+              {evoError}
+            </div>
+          )}
+          {branchMsg && <p className="aux-muted evo-inline-hint">{branchMsg}</p>}
+          {lastReport && (
+            <p className="evo-run-summary">
+              {t("evo.runSummary")
+                .replace("{generated}", String(lastReport.generated))
+                .replace("{gated}", String(lastReport.gatedOut))
+                .replace("{judged}", String(lastReport.judgedOut))
+                .replace("{proposals}", String(lastReport.proposals.length))}
+            </p>
+          )}
+
+          {proposals.length === 0 ? (
+            <div className="evo-empty">
+              <Beaker size={22} strokeWidth={1.8} aria-hidden />
+              <p>{t("evo.noProposals")}</p>
+            </div>
+          ) : (
+            <div className="aux-task-list evo-proposal-list">
+              {proposals.map((p) => (
+                <article className="aux-task-row evo-proposal-card" key={p.id}>
+                  <div className="aux-task-icon">
+                    {p.kind === "new_skill" ? <FilePlus2 size={18} /> : <Pencil size={18} />}
+                  </div>
                   <div className="aux-task-main">
-                    <p>{line}</p>
+                    <div className="aux-task-titleline">
+                      <h3>{p.skillId}</h3>
+                      <span className="aux-route-pill">
+                        {p.kind === "new_skill" ? t("evo.kindNew") : t("evo.kindPatch")}
+                      </span>
+                      {p.judgeScore != null && (
+                        <span className="evo-score-pill">
+                          {t("evo.judgeScore")} {p.judgeScore.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    {p.rationale && <p>{p.rationale}</p>}
+                    {p.judgeReason && <p className="aux-muted">{p.judgeReason}</p>}
+                    {p.judgeScore != null && (
+                      <div
+                        className="evo-score-bar"
+                        aria-hidden
+                        style={
+                          {
+                            "--score": String(Math.max(0, Math.min(1, p.judgeScore))),
+                          } as CSSProperties
+                        }
+                      >
+                        <span />
+                      </div>
+                    )}
+                    <pre className="evo-proposal-diff">
+                      {p.kind === "new_skill"
+                        ? (p.content ?? "").slice(0, 1200)
+                        : `- ${(p.oldString ?? "").slice(0, 400)}\n+ ${(p.newString ?? "").slice(0, 400)}`}
+                    </pre>
+                  </div>
+                  <div className="aux-task-actions evo-proposal-actions">
+                    <button
+                      type="button"
+                      className="aux-action aux-action-ghost"
+                      onClick={() => void reject(p.id)}
+                    >
+                      <Trash2 size={15} />
+                      {t("evo.reject")}
+                    </button>
+                    <button
+                      type="button"
+                      className="aux-action aux-action-ghost"
+                      onClick={() =>
+                        void approveToBranch(p.id).then((m) => m && setBranchMsg(m))
+                      }
+                    >
+                      <GitBranch size={15} />
+                      {t("evo.approveToBranch")}
+                    </button>
+                    <button
+                      type="button"
+                      className="aux-action"
+                      onClick={() => void approve(p.id)}
+                    >
+                      <Check size={15} />
+                      {t("evo.approve")}
+                    </button>
                   </div>
                 </article>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="aux-muted">{t("evo.historyEmpty")}</p>
-        )}
-      </section>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
-      <section className="prefs-card aux-list-card">
-        <div className="aux-list-head">
-          <div>
-            <h2 className="prefs-card-title">{t("evo.evalTitle")}</h2>
-            <p className="prefs-card-sub">{t("evo.evalSub")}</p>
+      {section === "history" && (
+        <section className="prefs-card aux-list-card evo-card">
+          <div className="aux-list-head">
+            <div>
+              <h2 className="prefs-card-title">{t("evo.historyTitle")}</h2>
+              <p className="prefs-card-sub">{t("evo.historySub")}</p>
+            </div>
           </div>
-        </div>
 
-        {evalError && (
-          <div className="aux-error">
-            <AlertTriangle size={16} />
-            {evalError}
+          <div className="evo-stats">
+            <div className="evo-stat evo-stat-primary">
+              <span className="evo-stat-num">{history?.summary.totalRuns ?? 0}</span>
+              <span className="evo-stat-label">{t("evo.statRuns")}</span>
+            </div>
+            <div className="evo-stat">
+              <span className="evo-stat-num">{history?.summary.totalProposals ?? 0}</span>
+              <span className="evo-stat-label">{t("evo.statProposals")}</span>
+            </div>
+            <div className="evo-stat">
+              <span className="evo-stat-num">
+                {history ? `${Math.round(history.summary.adoptionRate * 100)}%` : "—"}
+              </span>
+              <span className="evo-stat-label">{t("evo.statAdoption")}</span>
+            </div>
+            <div className="evo-stat">
+              <span className="evo-stat-num">
+                {history && history.summary.avgAdoptedScore > 0
+                  ? history.summary.avgAdoptedScore.toFixed(2)
+                  : "—"}
+              </span>
+              <span className="evo-stat-label">{t("evo.statAvgScore")}</span>
+            </div>
+            <div className="evo-stat">
+              <span className="evo-stat-num">
+                {history
+                  ? `${history.summary.approved + history.summary.branched}/${history.summary.rejected}`
+                  : "—"}
+              </span>
+              <span className="evo-stat-label">{t("evo.statAdoptedRejected")}</span>
+            </div>
           </div>
-        )}
 
-        <div className="evo-eval-form">
-          <input
-            className="evo-eval-input"
-            placeholder={t("evo.evalTaskPlaceholder")}
-            value={evalTask}
-            onChange={(e) => setEvalTask(e.target.value)}
-          />
-          <input
-            className="evo-eval-input"
-            placeholder={t("evo.evalSkillPlaceholder")}
-            value={evalSkill}
-            onChange={(e) => setEvalSkill(e.target.value)}
-          />
-          <textarea
-            className="evo-eval-input evo-eval-textarea"
-            placeholder={t("evo.evalExpectPlaceholder")}
-            value={evalExpect}
-            onChange={(e) => setEvalExpect(e.target.value)}
-            rows={3}
-          />
-          <div className="aux-task-actions">
-            <button
-              type="button"
-              className="aux-action aux-action-ghost"
-              onClick={() => setEvalVerdict(evalVerdict === "fail" ? "pass" : "fail")}
-            >
-              {evalVerdict === "fail" ? t("evo.evalVerdictFail") : t("evo.evalVerdictPass")}
-            </button>
-            <button
-              type="button"
-              className="aux-action"
-              onClick={submitEval}
-              disabled={!evalTask.trim()}
-            >
-              <Check size={15} />
-              {t("evo.evalAdd")}
-            </button>
-          </div>
-        </div>
+          {history && history.summary.scoreTrend.length >= 2 && (
+            <div className="evo-trend">
+              <span className="evo-stat-label">{t("evo.trend")}</span>
+              <svg className="evo-spark" viewBox="0 0 160 36" preserveAspectRatio="none" aria-hidden>
+                <defs>
+                  <linearGradient id="evoSparkFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--tone)" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="var(--tone)" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <polyline
+                  className="evo-spark-area"
+                  points={`0,36 ${history.summary.scoreTrend
+                    .map((v, i, a) => {
+                      const x = a.length > 1 ? (i / (a.length - 1)) * 160 : 0;
+                      const clamped = Math.max(0, Math.min(1, v));
+                      const y = 35 - clamped * 33;
+                      return `${x.toFixed(1)},${y.toFixed(1)}`;
+                    })
+                    .join(" ")} 160,36`}
+                />
+                <polyline
+                  points={history.summary.scoreTrend
+                    .map((v, i, a) => {
+                      const x = a.length > 1 ? (i / (a.length - 1)) * 160 : 0;
+                      const clamped = Math.max(0, Math.min(1, v));
+                      const y = 35 - clamped * 33;
+                      return `${x.toFixed(1)},${y.toFixed(1)}`;
+                    })
+                    .join(" ")}
+                />
+              </svg>
+            </div>
+          )}
 
-        {evalExamples.length === 0 ? (
-          <p className="aux-muted">{t("evo.evalEmpty")}</p>
-        ) : (
-          <div className="aux-task-list">
-            {evalExamples.map((ex) => (
-              <article className="aux-task-row" key={ex.id}>
-                <div className="aux-task-main">
-                  <div className="aux-task-titleline">
-                    <h3>{ex.task}</h3>
-                    <span className={`aux-route-pill${ex.verdict === "pass" ? "" : " is-auto"}`}>
-                      {ex.verdict === "pass" ? t("evo.evalVerdictPass") : t("evo.evalVerdictFail")}
-                    </span>
-                    {ex.skillId && <span className="aux-route-pill">{ex.skillId}</span>}
-                  </div>
-                  {ex.expectations.length > 0 && (
-                    <p className="aux-muted">{ex.expectations.join(" · ")}</p>
-                  )}
-                </div>
-                <div className="aux-task-actions">
-                  <button
-                    type="button"
-                    className="aux-action aux-action-ghost"
-                    onClick={() => void removeEval(ex.id)}
+          {history && history.recent.length > 0 ? (
+            <div className="aux-task-list evo-history-list">
+              {history.recent.slice(0, 12).map((ev, i) => {
+                const type = String(ev.type ?? "");
+                const line =
+                  type === "run"
+                    ? `run · ${String(ev.mode ?? "")} · gen ${Number(ev.generated ?? 0)} → 提案 ${Number(
+                        ev.proposals ?? 0,
+                      )}`
+                    : `${String(ev.outcome ?? "")} · ${String(ev.skill_id ?? "")}${
+                        ev.score != null ? ` · ${Number(ev.score).toFixed(2)}` : ""
+                      }`;
+                return (
+                  <article
+                    className={`aux-task-row evo-history-row evo-history-${type || "event"}`}
+                    key={`${type}-${i}`}
                   >
-                    <Trash2 size={15} />
-                    {t("evo.reject")}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+                    <div className="evo-history-kind" aria-hidden>
+                      {type === "run" ? <Play size={14} /> : <Check size={14} />}
+                    </div>
+                    <div className="aux-task-main">
+                      <p>{line}</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="evo-empty">
+              <History size={22} strokeWidth={1.8} aria-hidden />
+              <p>{t("evo.historyEmpty")}</p>
+            </div>
+          )}
+        </section>
+      )}
 
-      <section className="prefs-card aux-list-card">
-        <div className="aux-list-head">
-          <div>
-            <h2 className="prefs-card-title">{t("evo.dspyTitle")}</h2>
-            <p className="prefs-card-sub">{t("evo.dspySub")}</p>
-          </div>
-        </div>
+      {section === "lab" && (
+        <div className="evo-split">
+          <section className="prefs-card aux-list-card evo-card">
+            <div className="aux-list-head">
+              <div>
+                <h2 className="prefs-card-title">{t("evo.evalTitle")}</h2>
+                <p className="prefs-card-sub">{t("evo.evalSub")}</p>
+              </div>
+            </div>
 
-        {dspyError && (
-          <div className="aux-error">
-            <AlertTriangle size={16} />
-            {dspyError}
-          </div>
-        )}
-        {dspyMessage && <p className="aux-muted">{dspyMessage}</p>}
+            {evalError && (
+              <div className="aux-error">
+                <AlertTriangle size={16} />
+                {evalError}
+              </div>
+            )}
 
-        <p className="aux-muted">
-          {t("evo.dspyStatus")}: python {dspyStatus?.pythonOk ? "OK" : "—"} · dspy{" "}
-          {dspyStatus?.dspyInstalled ? "OK" : "—"} ·{" "}
-          {dspyStatus?.enabled ? t("evo.on") : t("evo.off")}
-          {dspyStatus?.projectPath ? ` · ${dspyStatus.projectPath}` : ""}
-        </p>
+            <div className="evo-eval-form">
+              <input
+                className="evo-eval-input"
+                placeholder={t("evo.evalTaskPlaceholder")}
+                value={evalTask}
+                onChange={(e) => setEvalTask(e.target.value)}
+              />
+              <input
+                className="evo-eval-input"
+                placeholder={t("evo.evalSkillPlaceholder")}
+                value={evalSkill}
+                onChange={(e) => setEvalSkill(e.target.value)}
+              />
+              <textarea
+                className="evo-eval-input evo-eval-textarea"
+                placeholder={t("evo.evalExpectPlaceholder")}
+                value={evalExpect}
+                onChange={(e) => setEvalExpect(e.target.value)}
+                rows={3}
+              />
+              <div className="aux-task-actions">
+                <button
+                  type="button"
+                  className={`aux-action aux-action-ghost evo-verdict-btn${
+                    evalVerdict === "pass" ? " is-pass" : " is-fail"
+                  }`}
+                  onClick={() => setEvalVerdict(evalVerdict === "fail" ? "pass" : "fail")}
+                >
+                  {evalVerdict === "fail" ? t("evo.evalVerdictFail") : t("evo.evalVerdictPass")}
+                </button>
+                <button
+                  type="button"
+                  className="aux-action"
+                  onClick={submitEval}
+                  disabled={!evalTask.trim()}
+                >
+                  <Check size={15} />
+                  {t("evo.evalAdd")}
+                </button>
+              </div>
+            </div>
 
-        <div className="evo-eval-form">
-          <input
-            className="evo-eval-input"
-            placeholder={t("evo.dspySkillPlaceholder")}
-            value={dspySkill}
-            onChange={(e) => setDspySkill(e.target.value)}
-          />
-          <div className="aux-task-actions">
-            <button
-              type="button"
-              className="aux-action aux-action-ghost"
-              onClick={() => void setupDspy()}
-              disabled={dspyBusy || dspyStatus?.dspyInstalled}
-            >
-              {t("evo.dspySetup")}
-            </button>
-            <button
-              type="button"
-              className="aux-action aux-action-ghost"
-              onClick={() =>
-                void runDspy(dspySkill.trim(), true).then((r) => {
-                  if (r) {
-                    void reloadProposals();
-                    void reloadHistory();
+            {evalExamples.length === 0 ? (
+              <p className="aux-muted evo-inline-hint">{t("evo.evalEmpty")}</p>
+            ) : (
+              <div className="aux-task-list">
+                {evalExamples.map((ex) => (
+                  <article className="aux-task-row evo-compact-row" key={ex.id}>
+                    <div className="aux-task-main">
+                      <div className="aux-task-titleline">
+                        <h3>{ex.task}</h3>
+                        <span
+                          className={`aux-route-pill${ex.verdict === "pass" ? " is-pass" : " is-auto"}`}
+                        >
+                          {ex.verdict === "pass"
+                            ? t("evo.evalVerdictPass")
+                            : t("evo.evalVerdictFail")}
+                        </span>
+                        {ex.skillId && <span className="aux-route-pill">{ex.skillId}</span>}
+                      </div>
+                      {ex.expectations.length > 0 && (
+                        <p className="aux-muted">{ex.expectations.join(" · ")}</p>
+                      )}
+                    </div>
+                    <div className="aux-task-actions">
+                      <button
+                        type="button"
+                        className="aux-action aux-action-ghost"
+                        onClick={() => void removeEval(ex.id)}
+                      >
+                        <Trash2 size={15} />
+                        {t("evo.reject")}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="prefs-card aux-list-card evo-card">
+            <div className="aux-list-head">
+              <div>
+                <h2 className="prefs-card-title">{t("evo.dspyTitle")}</h2>
+                <p className="prefs-card-sub">{t("evo.dspySub")}</p>
+              </div>
+            </div>
+
+            {dspyError && (
+              <div className="aux-error">
+                <AlertTriangle size={16} />
+                {dspyError}
+              </div>
+            )}
+            {dspyMessage && <p className="aux-muted evo-inline-hint">{dspyMessage}</p>}
+
+            <div className="evo-dspy-status">
+              <span className={`evo-dspy-chip${dspyStatus?.pythonOk ? " is-ok" : ""}`}>
+                Python {dspyStatus?.pythonOk ? "OK" : "—"}
+              </span>
+              <span className={`evo-dspy-chip${dspyStatus?.dspyInstalled ? " is-ok" : ""}`}>
+                DSPy {dspyStatus?.dspyInstalled ? t("evo.dspyReady") : t("evo.dspyMissing")}
+              </span>
+              <span className={`evo-dspy-chip${dspyStatus?.enabled ? " is-ok" : ""}`}>
+                {dspyStatus?.enabled ? t("evo.on") : t("evo.off")}
+              </span>
+            </div>
+            {dspyStatus?.projectPath && (
+              <p className="aux-muted evo-path">{dspyStatus.projectPath}</p>
+            )}
+
+            <div className="evo-eval-form">
+              <input
+                className="evo-eval-input"
+                placeholder={t("evo.dspySkillPlaceholder")}
+                value={dspySkill}
+                onChange={(e) => setDspySkill(e.target.value)}
+              />
+              <div className="aux-task-actions evo-dspy-actions">
+                <button
+                  type="button"
+                  className="aux-action aux-action-ghost"
+                  onClick={() => void setupDspy()}
+                  disabled={dspyBusy || dspyStatus?.dspyInstalled}
+                >
+                  {t("evo.dspySetup")}
+                </button>
+                <button
+                  type="button"
+                  className="aux-action aux-action-ghost"
+                  onClick={() =>
+                    void runDspy(dspySkill.trim(), true).then((r) => {
+                      if (r) {
+                        void reloadProposals();
+                        void reloadHistory();
+                      }
+                    })
                   }
-                })
-              }
-              disabled={dspyBusy || !dspySkill.trim()}
-              title={t("evo.dspyMockHint")}
-            >
-              {t("evo.dspyMock")}
-            </button>
-            <button
-              type="button"
-              className="aux-action"
-              onClick={() =>
-                void runDspy(dspySkill.trim()).then((r) => {
-                  if (r) {
-                    void reloadProposals();
-                    void reloadHistory();
+                  disabled={dspyBusy || !dspySkill.trim()}
+                  title={t("evo.dspyMockHint")}
+                >
+                  {t("evo.dspyMock")}
+                </button>
+                <button
+                  type="button"
+                  className="aux-action"
+                  onClick={() =>
+                    void runDspy(dspySkill.trim()).then((r) => {
+                      if (r) {
+                        void reloadProposals();
+                        void reloadHistory();
+                      }
+                    })
                   }
-                })
-              }
-              disabled={dspyBusy || !dspySkill.trim() || !dspyStatus?.enabled}
-            >
-              <Dna size={15} />
-              {dspyBusy ? t("evo.running") : t("evo.dspyRun")}
-            </button>
-          </div>
+                  disabled={dspyBusy || !dspySkill.trim() || !dspyStatus?.enabled}
+                >
+                  <Dna size={15} />
+                  {dspyBusy ? t("evo.running") : t("evo.dspyRun")}
+                </button>
+              </div>
+            </div>
+            <p className="aux-muted evo-inline-hint">{t("evo.dspyNote")}</p>
+          </section>
         </div>
-        <p className="aux-muted">{t("evo.dspyNote")}</p>
-      </section>
+      )}
 
       <p className="aux-muted evo-phase-note">{t("evo.phaseNote")}</p>
     </div>

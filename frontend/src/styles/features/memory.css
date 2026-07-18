@@ -348,86 +348,535 @@ html[data-theme="dark"] .aux-error {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+/* Offline evolution — instrument / lab panel */
+.evo-page {
+  gap: 14px;
+}
+
+.evo-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, var(--glass-edge));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--tone-soft) 40%, var(--glass-panel, transparent));
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+html[data-theme="dark"] .evo-toolbar {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 30%, rgba(8, 6, 18, 0.55));
+}
+
+.evo-toolbar-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.evo-brand {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.evo-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  color: var(--tone);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.7), transparent),
+    var(--tone-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+  flex-shrink: 0;
+}
+
+.evo-brand-text h2 {
+  margin: 0 0 3px;
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.evo-brand-text p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-mute);
+  max-width: 52ch;
+}
+
+.evo-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.evo-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+}
+
+.evo-status-chip.is-on {
+  color: color-mix(in srgb, var(--tone) 70%, var(--ink));
+  background: color-mix(in srgb, var(--tone-soft) 70%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 24%, var(--glass-edge));
+}
+
+.evo-status-chip.is-pending {
+  color: color-mix(in srgb, #b45309 70%, var(--ink));
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  border-color: color-mix(in srgb, #f59e0b 28%, var(--glass-edge));
+}
+
+.evo-status-chip.is-muted {
+  opacity: 0.92;
+}
+
+.evo-status-chip-btn {
+  cursor: pointer;
+  font: inherit;
+}
+
+.evo-status-chip-btn:hover {
+  filter: brightness(1.03);
+}
+
+.evo-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink-mute) 70%, transparent);
+}
+
+.evo-status-chip.is-on .evo-status-dot {
+  background: var(--tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+.evo-master-toggle {
+  margin-left: 2px;
+}
+
+.evo-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.evo-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 88%, transparent);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+}
+
+.evo-seg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  color: var(--ink-mute);
+  background: transparent;
+  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.evo-seg-item > svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.evo-seg-item:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.evo-seg-item.is-active {
+  color: var(--ink);
+  background: color-mix(in srgb, #fff 82%, var(--tone-soft));
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+.evo-seg-item.is-active > svg {
+  opacity: 1;
+  color: var(--tone);
+}
+
+html[data-theme="dark"] .evo-seg-item.is-active {
+  background: color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.06));
+}
+
+.evo-seg-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: color-mix(in srgb, #f59e0b 88%, #b45309);
+}
+
+.evo-refresh-btn {
+  flex-shrink: 0;
+}
+
+.evo-card {
+  animation: evo-card-in 0.22s ease both;
+}
+
+@keyframes evo-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evo-card {
+    animation: none;
+  }
+}
+
+.evo-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .evo-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.evo-compact-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.evo-compact-row:not(:has(.aux-task-icon)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.evo-inline-hint {
+  margin: 0 2px;
+}
+
+.evo-auto-banner {
+  margin: 2px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--glass-edge);
+  font-variant-numeric: tabular-nums;
+}
+
+.evo-auto-banner.is-ready {
+  color: color-mix(in srgb, var(--tone) 55%, var(--ink));
+  background: color-mix(in srgb, var(--tone-soft) 45%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
+}
+
+.evo-run-panel {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px dashed color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft) 18%, transparent);
+}
+
+.evo-run-summary {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone-soft) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
+  font-variant-numeric: tabular-nums;
+}
+
+.evo-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 120px;
+  padding: 24px 16px;
+  border-radius: 16px;
+  border: 1px dashed color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+
+.evo-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.evo-proposal-list {
+  gap: 12px;
+}
+
+.evo-proposal-card {
+  align-items: start;
+}
+
+.evo-proposal-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .evo-proposal-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .evo-proposal-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+.evo-score-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--tone) 75%, var(--ink));
+  background: color-mix(in srgb, var(--tone-soft) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, transparent);
+}
+
+.evo-score-bar {
+  height: 4px;
+  margin: 4px 0 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+
+.evo-score-bar > span {
+  display: block;
+  height: 100%;
+  width: calc(var(--score, 0) * 100%);
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tone) 55%, #94a3b8),
+    var(--tone)
+  );
+}
+
 .evo-phase-note {
   margin: 4px 2px 0;
 }
 
 .evo-stats {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
-  margin: 6px 2px 10px;
+  margin: 2px 0 4px;
+}
+
+@media (max-width: 900px) {
+  .evo-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .evo-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .evo-stat {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 84px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--glass-edge);
-  background: color-mix(in srgb, var(--glass-fill) 70%, transparent);
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.22)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+  overflow: hidden;
+}
+
+html[data-theme="dark"] .evo-stat {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 18%, rgba(8, 6, 18, 0.4));
+}
+
+.evo-stat-primary {
+  border-color: color-mix(in srgb, var(--tone) 28%, var(--glass-edge));
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.3)),
+    color-mix(in srgb, var(--tone-soft) 50%, rgba(255, 255, 255, 0.45));
+}
+
+.evo-stat-primary::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--tone);
 }
 
 .evo-stat-num {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
 .evo-stat-label {
   font-size: 11.5px;
+  font-weight: 600;
   color: var(--ink-mute);
 }
 
+.evo-history-list {
+  gap: 8px;
+}
+
+.evo-history-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
 .evo-history-row p {
+  margin: 0;
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.evo-history-kind {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 65%, transparent);
 }
 
 .evo-trend {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 2px 10px;
+  gap: 12px;
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
 }
 
 .evo-spark {
-  width: 160px;
-  height: 36px;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
 }
 
 .evo-spark polyline {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.5;
+  stroke: var(--tone);
+  stroke-width: 1.75;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+}
+
+.evo-spark-area {
+  fill: url(#evoSparkFill);
+  stroke: none !important;
 }
 
 .evo-eval-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 6px 2px 10px;
+  margin: 2px 0 8px;
 }
 
 .evo-eval-input {
   width: 100%;
-  padding: 7px 10px;
-  border-radius: 8px;
+  padding: 8px 11px;
+  border-radius: 11px;
   border: 1px solid var(--glass-edge);
   background: color-mix(in srgb, var(--glass-fill) 70%, transparent);
   color: var(--ink);
   font-size: 13px;
   font-family: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .evo-eval-input:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 .evo-eval-textarea {
@@ -435,14 +884,35 @@ html[data-theme="dark"] .aux-error {
   min-height: 56px;
 }
 
+.evo-verdict-btn.is-pass {
+  color: color-mix(in srgb, #15803d 70%, var(--ink));
+  border-color: color-mix(in srgb, #22c55e 28%, var(--glass-edge));
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+}
+
+.evo-verdict-btn.is-fail {
+  color: color-mix(in srgb, #b91c1c 65%, var(--ink));
+  border-color: color-mix(in srgb, #ef4444 24%, var(--glass-edge));
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+}
+
+.aux-route-pill.is-pass {
+  color: color-mix(in srgb, #15803d 70%, var(--ink));
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+}
+
 .evo-search-cfg {
   display: flex;
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  margin: 6px 2px 2px;
+  margin: 0;
   font-size: 12.5px;
   color: var(--ink-mute);
+}
+
+.evo-cfg-grid {
+  gap: 12px 16px;
 }
 
 .evo-search-cfg label {
@@ -451,14 +921,55 @@ html[data-theme="dark"] .aux-error {
   gap: 6px;
 }
 
+.evo-cfg-toggle {
+  gap: 8px;
+}
+
 .evo-search-cfg .aux-number-input {
-  width: 70px;
+  width: 78px;
+}
+
+.evo-dspy-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.evo-dspy-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--glass-edge);
+}
+
+.evo-dspy-chip.is-ok {
+  color: color-mix(in srgb, var(--tone) 65%, var(--ink));
+  background: color-mix(in srgb, var(--tone-soft) 60%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
+}
+
+.evo-path {
+  margin: 0 0 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.evo-dspy-actions {
+  flex-wrap: wrap;
 }
 
 .evo-proposal-diff {
   margin: 8px 0 0;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   border: 1px solid var(--glass-edge);
   color: var(--ink-soft);

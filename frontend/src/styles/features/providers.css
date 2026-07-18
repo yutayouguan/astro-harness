@@ -8,16 +8,27 @@
   --tone-glow: var(--tone-blue-glow);
 }
 
+.providers-page > .aux-page,
+.providers-page > .evo-page {
+  flex: 1;
+  min-height: 0;
+}
+
 .providers-page-tabs {
-  display: flex;
-  gap: 4px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
   flex-shrink: 0;
   margin: 0 0 14px;
-  padding: 4px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--tone-soft, transparent) 42%, var(--sidebar-bg, var(--glass-fill)));
-  border: 1px solid color-mix(in srgb, var(--tone, transparent) 16%, var(--glass-edge));
+  padding: 3px;
+  border-radius: 12px;
   width: fit-content;
+  max-width: 100%;
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  box-shadow: none;
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
 }
 
 .providers-page-tab {
@@ -26,26 +37,26 @@
   gap: 7px;
   border: none;
   background: transparent;
-  padding: 8px 16px;
-  border-radius: 10px;
+  padding: 8px 14px;
+  border-radius: 9px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--ink-mute);
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    box-shadow 0.12s ease;
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .providers-page-tab svg {
   flex-shrink: 0;
-  opacity: 0.78;
+  opacity: 0.8;
 }
 
 .providers-page-tab:hover {
-  color: var(--tone, var(--ink));
-  background: color-mix(in srgb, var(--tone) 8%, transparent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .providers-page-tab:hover svg {
@@ -53,24 +64,21 @@
 }
 
 .providers-page-tab.is-active {
-  color: var(--tone, var(--ink));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.55)),
-    var(--tone-soft);
+  color: var(--ink);
+  background: color-mix(in srgb, #fff 82%, var(--tone-soft));
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
 }
 
 .providers-page-tab.is-active svg {
   opacity: 1;
+  color: var(--tone);
 }
 
 html[data-theme="dark"] .providers-page-tab.is-active {
   color: color-mix(in srgb, #fff 14%, var(--tone));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 70%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.06));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
 }
 
