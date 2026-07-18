@@ -18,6 +18,8 @@ import {
   List,
   Plus,
   Radio,
+  ShieldAlert,
+  ShieldCheck,
   Tag,
   Terminal,
   Trash2,
@@ -46,8 +48,160 @@ import LucideByName from "../icons/LucideByName";
 import { IconRefresh } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 
-/** 工具面板 Tab：内置 / MCP */
-type ToolTab = "builtin" | "mcp";
+/** 工具面板 Tab：内置 / MCP / 审批 */
+type ToolTab = "builtin" | "mcp" | "approvals";
+
+/** 危险命令审批设置（Tauri camelCase） */
+type ApprovalSettings = { mode: string; commandAllowlist: string[] };
+
+const APPROVAL_MODES = ["smart", "manual", "off"] as const;
+
+/** 危险命令审批设置区（全局，非按 Agent） */
+function ApprovalsSection({ active }: { active: boolean }) {
+  const { t } = useI18n();
+  const [settings, setSettings] = useState<ApprovalSettings | null>(null);
+  const [newEntry, setNewEntry] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!active || !isTauri()) return;
+    void (async () => {
+      try {
+        setSettings(await invoke<ApprovalSettings>("get_approval_settings"));
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [active]);
+
+  const setMode = async (mode: string) => {
+    try {
+      setSettings(await invoke<ApprovalSettings>("set_approval_mode", { mode }));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const addEntry = async () => {
+    const entry = newEntry.trim();
+    if (!entry || busy) return;
+    setBusy(true);
+    try {
+      setSettings(
+        await invoke<ApprovalSettings>("add_command_allowlist", { entry }),
+      );
+      setNewEntry("");
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeEntry = async (entry: string) => {
+    try {
+      setSettings(
+        await invoke<ApprovalSettings>("remove_command_allowlist", { entry }),
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  if (!settings) {
+    return <p className="agent-tools-empty">{t("approvals.loading")}</p>;
+  }
+
+  const modeOptions = APPROVAL_MODES.map((m) => ({
+    value: m,
+    label: t(`approvals.mode.${m}` as MessageKey),
+  }));
+
+  return (
+    <div
+      className="approvals-section"
+      style={{ padding: "16px 20px", overflow: "auto" }}
+    >
+      <section className="tools-detail-section">
+        <h4 className="tools-detail-label">
+          <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
+          {t("approvals.mode.label")}
+        </h4>
+        <SelectMenu
+          value={settings.mode}
+          onChange={(v) => void setMode(v)}
+          options={modeOptions}
+          aria-label={t("approvals.mode.label")}
+        />
+        <p className="tools-detail-body">
+          {t(`approvals.mode.hint.${settings.mode}` as MessageKey)}
+        </p>
+      </section>
+
+      <section className="tools-detail-section">
+        <h4 className="tools-detail-label">
+          <Terminal size={15} strokeWidth={2.25} aria-hidden />
+          {t("approvals.allowlist.label")}
+        </h4>
+        <p className="tools-detail-body">{t("approvals.allowlist.hint")}</p>
+        <div
+          className="approvals-add-row"
+          style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}
+        >
+          <input
+            type="text"
+            style={{ flex: 1 }}
+            value={newEntry}
+            onChange={(e) => setNewEntry(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void addEntry();
+            }}
+            placeholder={t("approvals.allowlist.placeholder")}
+          />
+          <button
+            type="button"
+            className="mcp-btn-primary"
+            onClick={() => void addEntry()}
+            disabled={!newEntry.trim() || busy}
+          >
+            <Plus size={14} strokeWidth={2.3} aria-hidden />
+            {t("approvals.allowlist.add")}
+          </button>
+        </div>
+        {settings.commandAllowlist.length === 0 ? (
+          <p className="tools-detail-empty-params">
+            {t("approvals.allowlist.empty")}
+          </p>
+        ) : (
+          <ul className="mcp-tool-rows" style={{ marginTop: 8 }}>
+            {settings.commandAllowlist.map((entry) => (
+              <li key={entry} className="mcp-tool-row">
+                <code className="mcp-tool-name">{entry}</code>
+                <button
+                  type="button"
+                  className="mcp-btn-ghost"
+                  onClick={() => void removeEntry(entry)}
+                  aria-label={t("approvals.allowlist.remove")}
+                >
+                  <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                  {t("approvals.allowlist.remove")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="tools-detail-section">
+        <h4 className="tools-detail-label">
+          <ShieldAlert size={15} strokeWidth={2.25} aria-hidden />
+          {t("approvals.hardline.label")}
+        </h4>
+        <p className="tools-detail-body">{t("approvals.hardline.desc")}</p>
+      </section>
+    </div>
+  );
+}
 /** 添加 MCP 对话框：JSON 粘贴 / 表单 */
 type AddTab = "json" | "form";
 /** 内容布局 */
@@ -818,9 +972,20 @@ export default function ToolsPanel({
             <span className="tool-main-tab-count">{servers.length}</span>
           )}
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "approvals"}
+          className={`tool-main-tab ${tab === "approvals" ? "active" : ""}`}
+          onClick={() => setTab("approvals")}
+        >
+          <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
+          {t("tools.tab.approvals")}
+        </button>
       </div>
 
       <div className="agent-tools-body">
+      {tab !== "approvals" && (
       <div className="panel-agent-toolbar">
         <div className="panel-agent-toolbar-start">
           <AgentPicker
@@ -868,6 +1033,7 @@ export default function ToolsPanel({
           )}
         </div>
       </div>
+      )}
 
       <AnimatedSwitch switchKey={tab} className="anim-switch--fill">
       {tab === "builtin" && (
@@ -1308,6 +1474,8 @@ export default function ToolsPanel({
           )}
         </>
       )}
+
+      {tab === "approvals" && <ApprovalsSection active={active} />}
       </AnimatedSwitch>
       </div>
 

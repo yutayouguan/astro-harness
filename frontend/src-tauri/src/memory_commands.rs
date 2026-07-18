@@ -228,6 +228,65 @@ pub async fn set_background_review_enabled(enabled: bool) -> Result<MemorySettin
     get_memory_settings().await
 }
 
+/// 危险命令审批设置（`approvals:` 段）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalSettingsDto {
+    pub mode: String,
+    pub command_allowlist: Vec<String>,
+}
+
+impl From<memory::ApprovalsConfig> for ApprovalSettingsDto {
+    fn from(c: memory::ApprovalsConfig) -> Self {
+        Self {
+            mode: c.mode,
+            command_allowlist: c.command_allowlist,
+        }
+    }
+}
+
+/// 读取危险命令审批设置。
+#[tauri::command]
+pub async fn get_approval_settings() -> Result<ApprovalSettingsDto, String> {
+    let root = home::default_memory_dir();
+    Ok(memory::load_approvals_config(&root).into())
+}
+
+/// 设置审批模式（`smart` | `manual` | `off`）。
+#[tauri::command]
+pub async fn set_approval_mode(mode: String) -> Result<ApprovalSettingsDto, String> {
+    let normalized = match mode.trim().to_ascii_lowercase().as_str() {
+        m @ ("smart" | "manual" | "off") => m.to_string(),
+        other => return Err(format!("无效的审批模式: {other}（应为 smart|manual|off）")),
+    };
+    let root = home::default_memory_dir();
+    Ok(memory::set_approval_mode(&root, &normalized)
+        .map_err(|e| e.to_string())?
+        .into())
+}
+
+/// 向命令白名单追加一条（精确或 glob）。
+#[tauri::command]
+pub async fn add_command_allowlist(entry: String) -> Result<ApprovalSettingsDto, String> {
+    let entry = entry.trim();
+    if entry.is_empty() {
+        return Err("白名单条目不能为空".to_string());
+    }
+    let root = home::default_memory_dir();
+    Ok(memory::add_command_to_allowlist(&root, entry)
+        .map_err(|e| e.to_string())?
+        .into())
+}
+
+/// 从命令白名单移除一条。
+#[tauri::command]
+pub async fn remove_command_allowlist(entry: String) -> Result<ApprovalSettingsDto, String> {
+    let root = home::default_memory_dir();
+    Ok(memory::remove_command_from_allowlist(&root, &entry)
+        .map_err(|e| e.to_string())?
+        .into())
+}
+
 /// 批准全部 pending；逐条 emit（末条角标为准）。
 #[tauri::command]
 pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String, String> {

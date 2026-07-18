@@ -576,6 +576,22 @@ pub fn add_command_to_allowlist(base: &Path, entry: &str) -> anyhow::Result<Appr
     Ok(load_approvals_config(base))
 }
 
+/// 从 `approvals.command_allowlist` 移除一条（按精确文本），返回最新审批配置。
+pub fn remove_command_from_allowlist(base: &Path, entry: &str) -> anyhow::Result<ApprovalsConfig> {
+    let entry = entry.trim();
+    let mut root = load_yaml_root(base)?;
+    let map = ensure_mapping_path(&mut root, &["approvals"])?;
+    let key = serde_yaml::Value::String("command_allowlist".to_string());
+    if let Some(list) = map.get_mut(&key).and_then(|v| v.as_sequence_mut()) {
+        let before = list.len();
+        list.retain(|v| v.as_str().map(|s| s != entry).unwrap_or(true));
+        if list.len() != before {
+            save_yaml_root(base, &root)?;
+        }
+    }
+    Ok(load_approvals_config(base))
+}
+
 /// 设置 `memory.auto_refresh_on_update` 并返回最新配置。
 pub fn set_auto_refresh_on_update(base: &Path, enabled: bool) -> anyhow::Result<MemoryConfig> {
     set_nested_bool(base, &["memory"], "auto_refresh_on_update", enabled)?;
@@ -1020,6 +1036,13 @@ auxiliary:
         assert_eq!(cfg.command_allowlist, vec!["rm -rf /tmp/x".to_string()]);
         let cfg = add_command_to_allowlist(dir.path(), "git push --force*").unwrap();
         assert_eq!(cfg.command_allowlist.len(), 2);
+
+        // 移除一条
+        let cfg = remove_command_from_allowlist(dir.path(), "rm -rf /tmp/x").unwrap();
+        assert_eq!(cfg.command_allowlist, vec!["git push --force*".to_string()]);
+        // 移除不存在的不报错、不改动
+        let cfg = remove_command_from_allowlist(dir.path(), "nope").unwrap();
+        assert_eq!(cfg.command_allowlist.len(), 1);
 
         // 保留无关键
         assert_eq!(load_memory_config(dir.path()).memory_char_limit, 42);
