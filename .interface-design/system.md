@@ -39,7 +39,7 @@ Empty-session hero uses the product logo, not an empty-state illustration.
 
 - Component: `AstroLogoMark` at 72×72 inside `.chat-welcome-mark` (88×88 slot)
 - Soft radial glow behind the mark; gentle float animation
-- Wordmark “Astro Agent” sits under the mark; greeting title remains the primary text
+- Wordmark “Astro Agent” and greeting title (“Hi, 我是 Astro”) use continuous brand gradients (`purple → blue → cyan` / `ink → blue → purple`), not flat muted gray
 - Do not put cards or secondary chrome in the brand stack
 
-Source: `ChatWelcome.tsx`, `markdown.css` (`.chat-welcome-mark*`, `.chat-welcome-logo`).
+Source: `ChatWelcome.tsx`, `markdown.css` (`.chat-welcome-mark*`, `.chat-welcome-logo`, `.chat-welcome-wordmark`, `.chat-welcome-title`).

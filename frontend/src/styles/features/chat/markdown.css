@@ -1756,16 +1756,6 @@ html[data-theme="dark"] .chat-welcome-logo {
   filter: drop-shadow(0 4px 14px color-mix(in srgb, var(--tone-blue) 18%, transparent));
 }
 
-html[data-theme="dark"] .chat-welcome-wordmark-astro {
-  background: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--tone-blue) 78%, var(--ink-soft)) 0%,
-    color-mix(in srgb, var(--tone-cyan) 40%, var(--tone-blue)) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-}
-
 .chat-welcome-copy {
   position: relative;
   z-index: 1;
@@ -1835,13 +1825,11 @@ html[data-theme="dark"] .chat-welcome-wordmark-astro {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   line-height: 1;
-}
-
-.chat-welcome-wordmark-astro {
   background: linear-gradient(
-    120deg,
-    var(--tone-blue) 0%,
-    color-mix(in srgb, var(--tone-cyan) 55%, var(--tone-blue)) 100%
+    115deg,
+    var(--tone-purple, #6020fc) 0%,
+    var(--tone-blue, #2563eb) 46%,
+    color-mix(in srgb, var(--tone-cyan, #06b6d4) 58%, var(--tone-blue, #2563eb)) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -1849,11 +1837,16 @@ html[data-theme="dark"] .chat-welcome-wordmark-astro {
   -webkit-text-fill-color: transparent;
 }
 
+.chat-welcome-wordmark-astro {
+  color: inherit;
+  -webkit-text-fill-color: transparent;
+}
+
 .chat-welcome-wordmark-agent {
-  color: var(--ink-mute);
   font-weight: 600;
   letter-spacing: 0.12em;
-  -webkit-text-fill-color: currentColor;
+  color: inherit;
+  -webkit-text-fill-color: transparent;
 }
 
 .chat-welcome-title {
@@ -1863,43 +1856,47 @@ html[data-theme="dark"] .chat-welcome-wordmark-astro {
   letter-spacing: -0.038em;
   line-height: 1.18;
   text-align: center;
-  color: var(--ink);
-  -webkit-text-fill-color: currentColor;
-}
-
-.chat-welcome-greeting {
-  font-weight: 650;
-  color: color-mix(in srgb, var(--ink) 88%, transparent);
-}
-
-.chat-welcome-title-brand {
-  font-weight: 780;
   background: linear-gradient(
-    120deg,
+    118deg,
     var(--ink) 0%,
-    color-mix(in srgb, var(--tone-blue) 62%, var(--ink)) 48%,
-    color-mix(in srgb, var(--tone-purple) 48%, var(--ink)) 100%
+    color-mix(in srgb, var(--tone-blue) 58%, var(--ink)) 46%,
+    color-mix(in srgb, var(--tone-purple) 46%, var(--ink)) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
+}
+
+.chat-welcome-greeting {
+  font-weight: 650;
+  color: inherit;
+  -webkit-text-fill-color: transparent;
+}
+
+.chat-welcome-title-brand {
+  font-weight: 780;
+  color: inherit;
+  -webkit-text-fill-color: transparent;
   position: relative;
 }
 
-html[data-theme="dark"] .chat-welcome-title-brand {
+html[data-theme="dark"] .chat-welcome-wordmark {
   background: linear-gradient(
-    120deg,
-    var(--ink) 0%,
-    color-mix(in srgb, var(--tone-blue) 48%, var(--ink)) 52%,
-    color-mix(in srgb, var(--tone-purple) 38%, var(--ink)) 100%
+    115deg,
+    color-mix(in srgb, var(--tone-purple) 72%, var(--ink-soft)) 0%,
+    color-mix(in srgb, var(--tone-blue) 78%, var(--ink-soft)) 48%,
+    color-mix(in srgb, var(--tone-cyan) 55%, var(--tone-blue)) 100%
   );
-  -webkit-background-clip: text;
-  background-clip: text;
 }
 
-html[data-theme="dark"] .chat-welcome-wordmark-agent {
-  color: var(--ink-mute);
+html[data-theme="dark"] .chat-welcome-title {
+  background: linear-gradient(
+    118deg,
+    color-mix(in srgb, var(--ink) 92%, transparent) 0%,
+    color-mix(in srgb, var(--tone-blue) 52%, var(--ink)) 46%,
+    color-mix(in srgb, var(--tone-purple) 42%, var(--ink)) 100%
+  );
 }
 
 .chat-welcome-sub {
