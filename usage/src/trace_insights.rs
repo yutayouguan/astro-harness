@@ -118,6 +118,7 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
         };
 
         merge_usage_into_spans(&mut events, &usage_rows);
+        propagate_turn_ids(&mut events);
 
         for e in &events {
             kpi.events += 1;
@@ -303,6 +304,43 @@ fn extract_skill_id(input: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
+/// 将 llm 上的 turn_id 回填到同回合前面的 user / tool / skill / mcp。
+/// chat history 展开的 span 默认没有 turn_id，只有 usage 合并后的 llm 带 id。
+fn propagate_turn_ids(events: &mut [TraceEvent]) {
+    for i in 0..events.len() {
+        if events[i].kind != "llm" {
+            continue;
+        }
+        let Some(tid) = events[i]
+            .turn_id
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+        else {
+            continue;
+        };
+        let mut j = i;
+        while j > 0 {
+            j -= 1;
+            if events[j].kind == "llm" {
+                break;
+            }
+            if events[j]
+                .turn_id
+                .as_ref()
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true)
+            {
+                events[j].turn_id = Some(tid.clone());
+            }
+            if events[j].kind == "user" {
+                break;
+            }
+        }
+    }
+}
+
 /// 将 usage 中的 llm token/费用按顺序合并到 chat history 的 llm span；
 /// 若 history 无 llm 名，用 usage 的模型名覆盖。
 fn merge_usage_into_spans(events: &mut [TraceEvent], usage_rows: &[crate::db::TraceEventRow]) {
@@ -401,6 +439,64 @@ mod tests {
             billing_mode: None,
             meta_json: None,
         }
+    }
+
+    #[test]
+    fn propagate_turn_ids_fills_user_and_tool_before_llm() {
+        let mut events = vec![
+            TraceEvent {
+                id: "u1".into(),
+                ts: "2026-07-13T10:00:00Z".into(),
+                kind: "user".into(),
+                name: "user".into(),
+                agent_id: "a".into(),
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                cost_usd: 0.0,
+                parent_id: None,
+                status: None,
+                input: None,
+                output: Some("查天气".into()),
+                turn_id: None,
+            },
+            TraceEvent {
+                id: "t1".into(),
+                ts: "2026-07-13T10:00:01Z".into(),
+                kind: "tool".into(),
+                name: "web_search".into(),
+                agent_id: "a".into(),
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                cost_usd: 0.0,
+                parent_id: None,
+                status: None,
+                input: None,
+                output: None,
+                turn_id: None,
+            },
+            TraceEvent {
+                id: "l1".into(),
+                ts: "2026-07-13T10:00:02Z".into(),
+                kind: "llm".into(),
+                name: "gpt".into(),
+                agent_id: "a".into(),
+                input_tokens: 1,
+                output_tokens: 1,
+                total_tokens: 2,
+                cost_usd: 0.0,
+                parent_id: None,
+                status: None,
+                input: None,
+                output: None,
+                turn_id: Some("turn-abc".into()),
+            },
+        ];
+        propagate_turn_ids(&mut events);
+        assert_eq!(events[0].turn_id.as_deref(), Some("turn-abc"));
+        assert_eq!(events[1].turn_id.as_deref(), Some("turn-abc"));
+        assert_eq!(events[2].turn_id.as_deref(), Some("turn-abc"));
     }
 
     #[test]

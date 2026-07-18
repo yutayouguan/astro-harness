@@ -1150,9 +1150,14 @@ html.dark .insights-collab-label {
   font-size: 13px;
   font-weight: 650;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
   min-width: 0;
+  text-align: left;
+  line-height: 1.35;
 }
 
 .insights-turn-group-meta {
@@ -1247,6 +1252,25 @@ html.dark .insights-collab-label {
   font-size: 11.5px;
   color: var(--ink-mute);
   font-variant-numeric: tabular-nums;
+}
+
+.insights-trace-event-io {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  opacity: 0.88;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.insights-trace-kind.kind-user {
+  color: color-mix(in srgb, var(--tone) 70%, var(--ink));
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
 }
 
 .insights-kpis-overview {

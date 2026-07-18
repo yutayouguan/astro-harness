@@ -31,7 +31,12 @@ import {
   providerSpendTop,
   type InsightsViewMode,
 } from "../../lib/insights/insightsView";
-import { groupEventsByTurn, shortTurnId } from "../../lib/chat/traceTurnGroups";
+import {
+  groupEventsForTraceDisplay,
+  shortTurnId,
+  traceSessionTitle,
+  turnGroupTitle,
+} from "../../lib/chat/traceTurnGroups";
 import type { AgentInfo } from "../../types/agent";
 import { normalizeAgentId } from "../../types/agent";
 import AgentPicker from "../agents/AgentPicker";
@@ -761,7 +766,8 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   const selectedTrace =
     traces?.traces.find((t) => t.session_id === selectedTraceId) ?? null;
   const turnGroups = useMemo(
-    () => (selectedTrace ? groupEventsByTurn(selectedTrace.events) : []),
+    () =>
+      selectedTrace ? groupEventsForTraceDisplay(selectedTrace.events) : [],
     [selectedTrace],
   );
 
@@ -1301,10 +1307,11 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                         className={`insights-collab-list-item${selectedTraceId === tr.session_id ? " active" : ""}`}
                         onClick={() => setSelectedTraceId(tr.session_id)}
                       >
-                        <span className="insights-collab-list-goal">
-                          {tr.session_id.length > 18
-                            ? `${tr.session_id.slice(0, 8)}…${tr.session_id.slice(-6)}`
-                            : tr.session_id}
+                        <span
+                          className="insights-collab-list-goal"
+                          title={tr.session_id}
+                        >
+                          {traceSessionTitle(tr.title, tr.session_id)}
                         </span>
                         <span className="insights-collab-list-meta">
                           <span className="insights-collab-list-agent">{tr.agent_id}</span>
@@ -1339,12 +1346,22 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                 <ol className="insights-turn-groups">
                   {turnGroups.map((g) => {
                     const open = !!expandedTurns[g.turnKey];
+                    const label = turnGroupTitle(
+                      g.events,
+                      g.turn_id,
+                      t("insights.trace.unlabeledTurn"),
+                      t("insights.trace.turnGroup"),
+                    );
+                    const turnHint = g.turn_id
+                      ? shortTurnId(g.turn_id, t("insights.trace.unlabeledTurn"))
+                      : undefined;
                     return (
                       <li key={g.turnKey} className="insights-turn-group">
                         <button
                           type="button"
                           className="insights-turn-group-head"
                           aria-expanded={open}
+                          title={turnHint ? `${label} · ${turnHint}` : label}
                           onClick={() =>
                             setExpandedTurns((s) => ({
                               ...s,
@@ -1352,11 +1369,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                             }))
                           }
                         >
-                          <span className="insights-turn-group-label">
-                            {g.turn_id
-                              ? `${t("insights.trace.turnGroup")} ${shortTurnId(g.turn_id, t("insights.trace.unlabeledTurn"))}`
-                              : t("insights.trace.unlabeledTurn")}
-                          </span>
+                          <span className="insights-turn-group-label">{label}</span>
                           <span className="insights-turn-group-meta">
                             {g.events.length} · {formatTokens(g.tokens)} tok ·{" "}
                             {formatCost(g.cost_usd)}
@@ -1364,43 +1377,62 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                         </button>
                         {open && (
                           <ol className="insights-trace-timeline insights-trace-timeline-nested">
-                            {g.events.map((ev, i) => (
-                              <li
-                                key={ev.id}
-                                className={`insights-trace-event kind-${ev.kind}`}
-                              >
-                                <span className="insights-trace-rail" aria-hidden>
-                                  <span className="insights-trace-dot">
-                                    <KindIcon kind={ev.kind} />
+                            {g.events.map((ev, i) => {
+                              const ioPreview = (ev.output || ev.input)
+                                ?.trim()
+                                .replace(/\s+/g, " ");
+                              return (
+                                <li
+                                  key={ev.id}
+                                  className={`insights-trace-event kind-${ev.kind}`}
+                                >
+                                  <span className="insights-trace-rail" aria-hidden>
+                                    <span className="insights-trace-dot">
+                                      <KindIcon kind={ev.kind} />
+                                    </span>
+                                    {i < g.events.length - 1 && (
+                                      <span className="insights-trace-line" />
+                                    )}
                                   </span>
-                                  {i < g.events.length - 1 && (
-                                    <span className="insights-trace-line" />
-                                  )}
-                                </span>
-                                <div className="insights-trace-event-body">
-                                  <div className="insights-trace-event-head">
-                                    <span className="insights-trace-event-name">
-                                      {ev.name}
-                                    </span>
-                                    <span
-                                      className={`insights-trace-kind kind-${ev.kind}`}
-                                    >
-                                      {ev.kind}
-                                    </span>
-                                  </div>
-                                  <div className="insights-trace-event-meta">
-                                    <span>{formatTraceTime(ev.ts)}</span>
-                                    {ev.total_tokens > 0 && (
-                                      <span>{formatTokens(ev.total_tokens)} tok</span>
+                                  <div className="insights-trace-event-body">
+                                    <div className="insights-trace-event-head">
+                                      <span className="insights-trace-event-name">
+                                        {ev.kind === "user"
+                                          ? t("insights.trace.event.user")
+                                          : ev.name}
+                                      </span>
+                                      <span
+                                        className={`insights-trace-kind kind-${ev.kind}`}
+                                      >
+                                        {ev.kind}
+                                      </span>
+                                    </div>
+                                    {ioPreview && (
+                                      <p
+                                        className="insights-trace-event-io"
+                                        title={ioPreview}
+                                      >
+                                        {ioPreview.length > 160
+                                          ? `${ioPreview.slice(0, 159)}…`
+                                          : ioPreview}
+                                      </p>
                                     )}
-                                    {ev.cost_usd > 0 && (
-                                      <span>{formatCost(ev.cost_usd)}</span>
-                                    )}
-                                    {ev.agent_id && <span>{ev.agent_id}</span>}
+                                    <div className="insights-trace-event-meta">
+                                      <span>{formatTraceTime(ev.ts)}</span>
+                                      {ev.total_tokens > 0 && (
+                                        <span>
+                                          {formatTokens(ev.total_tokens)} tok
+                                        </span>
+                                      )}
+                                      {ev.cost_usd > 0 && (
+                                        <span>{formatCost(ev.cost_usd)}</span>
+                                      )}
+                                      {ev.agent_id && <span>{ev.agent_id}</span>}
+                                    </div>
                                   </div>
-                                </div>
-                              </li>
-                            ))}
+                                </li>
+                              );
+                            })}
                           </ol>
                         )}
                       </li>
