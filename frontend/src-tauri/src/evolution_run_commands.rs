@@ -8,10 +8,14 @@ use futures::StreamExt;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use std::path::Path;
+use std::time::Duration;
+
 use evolution::{
-    approve_proposal, build_judge_user_prompt, build_reflection_user_prompt, check_candidate,
-    list_proposals, parse_candidates, parse_judge_output, reject_proposal, save_proposals,
-    CandidateKind, ReflectionInput, SkillCandidate, JUDGE_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    approve_proposal, approve_proposal_checked, build_judge_user_prompt,
+    build_reflection_user_prompt, check_candidate, list_proposals, parse_candidates,
+    parse_judge_output, reject_proposal, save_proposals, CandidateKind, ReflectionInput,
+    SkillCandidate, JUDGE_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -281,11 +285,63 @@ pub async fn list_evolution_proposals() -> Result<Vec<EvolutionProposalDto>, Str
         .collect())
 }
 
-/// 批准一条提案：写入 Agent skills 目录。
+/// 在技能目录查找并运行 `scripts/test.{sh,py}`；无脚本则视为通过。
+///
+/// 仅在用户点「批准」后执行（内容已经人工审阅），60s 超时。
+fn run_skill_tests(skill_dir: &Path) -> Result<(), String> {
+    let scripts = skill_dir.join("scripts");
+    let (program, script) = if scripts.join("test.sh").is_file() {
+        ("sh", scripts.join("test.sh"))
+    } else if scripts.join("test.py").is_file() {
+        ("python3", scripts.join("test.py"))
+    } else {
+        return Ok(()); // 无测试脚本：跳过
+    };
+
+    let mut cmd = std::process::Command::new(program);
+    cmd.arg(&script)
+        .current_dir(skill_dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = cmd.spawn().map_err(|e| format!("启动测试失败: {e}"))?;
+
+    // 简单超时：轮询 60s
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if status.success() {
+                    return Ok(());
+                }
+                let out = child.wait_with_output().ok();
+                let tail = out
+                    .map(|o| String::from_utf8_lossy(&o.stderr).chars().take(500).collect::<String>())
+                    .unwrap_or_default();
+                return Err(format!("测试退出码非零: {tail}"));
+            }
+            Ok(None) => {
+                if start.elapsed() > Duration::from_secs(60) {
+                    let _ = child.kill();
+                    return Err("测试超时（>60s）".into());
+                }
+                std::thread::sleep(Duration::from_millis(150));
+            }
+            Err(e) => return Err(format!("测试执行出错: {e}")),
+        }
+    }
+}
+
+/// 批准一条提案：写入 Agent skills 目录；`run_tests` 开启时批准后跑测试，失败回滚。
 #[tauri::command]
 pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
     let base = default_memory_dir();
-    approve_proposal(&base, &id).map_err(|e| e.to_string())
+    let run_tests = memory::load_evolution_config(&base).gates.run_tests;
+    if run_tests {
+        approve_proposal_checked(&base, &id, run_skill_tests).map_err(|e| e.to_string())
+    } else {
+        approve_proposal(&base, &id).map_err(|e| e.to_string())
+    }
 }
 
 /// 拒绝并删除一条提案。

@@ -63,9 +63,34 @@ pub fn reject_proposal(base: &Path, id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 批准提案：写入 Agent skills 目录，成功后删除提案文件，返回摘要。
-pub fn approve_proposal(base: &Path, id: &str) -> anyhow::Result<String> {
-    let cand = get_proposal(base, id)?;
+/// 应用回滚令牌：写入失败或测试不过时恢复原状。
+enum Rollback {
+    /// 目录原本不存在：整树删除。
+    RemoveDir(PathBuf),
+    /// 目录已存在：把 SKILL.md 还原为原内容（None = 原本无此文件）。
+    RestoreFile(PathBuf, Option<String>),
+}
+
+impl Rollback {
+    fn run(self) {
+        match self {
+            Rollback::RemoveDir(dir) => {
+                let _ = fs::remove_dir_all(&dir);
+            }
+            Rollback::RestoreFile(path, old) => match old {
+                Some(text) => {
+                    let _ = fs::write(&path, text.as_bytes());
+                }
+                None => {
+                    let _ = fs::remove_file(&path);
+                }
+            },
+        }
+    }
+}
+
+/// 将候选写入 Agent skills，返回（摘要, 技能目录, 回滚令牌）。
+fn apply_candidate(cand: &SkillCandidate) -> anyhow::Result<(String, PathBuf, Rollback)> {
     if !valid_skill_id(&cand.skill_id) {
         anyhow::bail!("非法 skill_id: {}", cand.skill_id);
     }
@@ -74,8 +99,10 @@ pub fn approve_proposal(base: &Path, id: &str) -> anyhow::Result<String> {
     let agent_root = skills_dir
         .canonicalize()
         .unwrap_or_else(|_| skills_dir.clone());
+    let skill_md = dest.join("SKILL.md");
+    let dir_existed = dest.exists();
 
-    let summary = match cand.kind {
+    match cand.kind {
         CandidateKind::NewSkill => {
             let body = cand
                 .content
@@ -83,6 +110,7 @@ pub fn approve_proposal(base: &Path, id: &str) -> anyhow::Result<String> {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("新建候选缺少 content"))?;
+            let prev = fs::read_to_string(&skill_md).ok();
             fs::create_dir_all(&dest)?;
             let md = if body.starts_with("---") {
                 body.to_string()
@@ -98,12 +126,16 @@ pub fn approve_proposal(base: &Path, id: &str) -> anyhow::Result<String> {
                     cand.skill_id
                 )
             };
-            fs::write(dest.join("SKILL.md"), md.as_bytes())?;
+            fs::write(&skill_md, md.as_bytes())?;
             let _ = skills::set_enabled(&cand.skill_id, true);
-            format!("已新建技能 `{}`", cand.skill_id)
+            let rollback = if dir_existed {
+                Rollback::RestoreFile(skill_md, prev)
+            } else {
+                Rollback::RemoveDir(dest.clone())
+            };
+            Ok((format!("已新建技能 `{}`", cand.skill_id), dest, rollback))
         }
         CandidateKind::Patch => {
-            let skill_md = dest.join("SKILL.md");
             if !skill_md.is_file() {
                 anyhow::bail!("patch 目标不存在于 Agent skills: {}", cand.skill_id);
             }
@@ -127,13 +159,38 @@ pub fn approve_proposal(base: &Path, id: &str) -> anyhow::Result<String> {
             match text.matches(old).count() {
                 0 => anyhow::bail!("patch old_string 未命中（技能可能已改）"),
                 1 => {
+                    let rollback = Rollback::RestoreFile(skill_md.clone(), Some(text.clone()));
                     fs::write(&skill_md, text.replacen(old, new, 1).as_bytes())?;
-                    format!("已 patch 技能 `{}`", cand.skill_id)
+                    Ok((format!("已 patch 技能 `{}`", cand.skill_id), dest, rollback))
                 }
                 n => anyhow::bail!("patch old_string 命中 {n} 处，不唯一"),
             }
         }
-    };
+    }
+}
+
+/// 批准提案：写入 Agent skills 目录，成功后删除提案文件，返回摘要。
+pub fn approve_proposal(base: &Path, id: &str) -> anyhow::Result<String> {
+    approve_proposal_checked(base, id, |_dir| Ok(()))
+}
+
+/// 批准提案并在写入后运行校验闭包（如 run_tests）；校验失败自动回滚并报错。
+///
+/// `check` 收到已写入的技能目录路径；返回 `Err` 时回滚本次写入且不删除提案。
+pub fn approve_proposal_checked<F>(base: &Path, id: &str, check: F) -> anyhow::Result<String>
+where
+    F: FnOnce(&Path) -> Result<(), String>,
+{
+    let cand = get_proposal(base, id)?;
+    let (summary, skill_dir, rollback) = apply_candidate(&cand)?;
+
+    if let Err(reason) = check(&skill_dir) {
+        rollback.run();
+        if cand.kind == CandidateKind::NewSkill {
+            let _ = skills::set_enabled(&cand.skill_id, false);
+        }
+        anyhow::bail!("测试未通过，已回滚: {reason}");
+    }
 
     reject_proposal(base, id)?; // 删除已应用提案
     Ok(summary)
@@ -181,6 +238,34 @@ mod tests {
         assert!(msg.contains("已新建"));
         let skills_dir = skills::install::agent_skills_dir(None).unwrap();
         assert!(skills_dir.join("demo-approve/SKILL.md").is_file());
+        assert!(list_proposals(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn approve_checked_rolls_back_new_on_failure() {
+        let dir = TempDir::new().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        save_proposals(dir.path(), &[new_cand("f", "demo-fail")]).unwrap();
+        let err = approve_proposal_checked(dir.path(), "f", |_dir| Err("boom".into()));
+        assert!(err.is_err());
+        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        // 新建应被整树回滚
+        assert!(!skills_dir.join("demo-fail").exists());
+        // 提案保留（未删除）
+        assert_eq!(list_proposals(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn approve_checked_keeps_on_success() {
+        let dir = TempDir::new().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        save_proposals(dir.path(), &[new_cand("s", "demo-ok")]).unwrap();
+        let msg = approve_proposal_checked(dir.path(), "s", |dir| {
+            assert!(dir.join("SKILL.md").is_file());
+            Ok(())
+        })
+        .unwrap();
+        assert!(msg.contains("已新建"));
         assert!(list_proposals(dir.path()).is_empty());
     }
 

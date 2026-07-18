@@ -92,7 +92,9 @@ learning:
 
 实现：crate [`evolution`](../evolution)（candidate/reflect/gates/judge/proposal）+ Tauri `evolution_run_commands`（run/list/approve/reject）+ `EvolutionModelsPanel`。
 
-**仍为后续**：完整 GEPA/Pareto 遗传搜索、`run_tests` 实跑（技能多为 Markdown，暂仅当存在 `scripts/test.*` 时由调用方执行）、git 分支/PR 自动化。
+`run_tests`（默认开）：**批准写入后**若技能含 `scripts/test.sh` / `test.py` 则沙箱执行（60s 超时），失败自动回滚且保留提案；无脚本则跳过。放在批准后执行，确保人已审阅内容再运行。
+
+**仍为后续**：完整 GEPA/Pareto 遗传搜索、git 分支/PR 自动化。
 
 模型角色（不复用在线 `auxiliary.*`）：
 
