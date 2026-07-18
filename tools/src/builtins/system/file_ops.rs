@@ -112,6 +112,29 @@ crate::submit_builtin_tool! {
     sync_ctx: dispatch,
 }
 
+/// 把写入 memory 工作区的文件登记为本会话产物（关联 session_id），
+/// 使其在文件空间归属当前会话，而非 reconcile 扫盘后的「未关联会话」。
+///
+/// project_root（委派 worktree / 代码仓）模式写入不属于记忆产物，跳过。
+fn register_workspace_artifact(ctx: &ToolContext<'_>, full: &Path) {
+    if ctx.project_root.is_some() || ctx.session_id.trim().is_empty() {
+        return;
+    }
+    let Some(path) = full.to_str() else {
+        return;
+    };
+    if let Ok(db) = artifacts::open_default(&ctx.memory_dir) {
+        // 垃圾/系统文件名会被 register 自行拒绝；失败不影响写入主流程。
+        let _ = db.register(
+            path,
+            artifacts::ArtifactSource::AgentWrite,
+            Some(&ctx.session_id),
+            None,
+            Some(&ctx.memory.agent_id),
+        );
+    }
+}
+
 /// 写入 HTML 文件时附加 media sidecar，使前端活动卡渲染可预览的 HTML 卡片。
 ///
 /// 前端 `commands.rs` 已把 `file` 类且扩展名为 html/htm 的 sidecar 映射为 html 预览。
@@ -164,6 +187,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             // resolve_safe 已拒绝越界 symlink；写前再确认最终路径仍在沙箱根
             reaffirm_within(&full, root)?;
             std::fs::write(&full, content.as_bytes())?;
+            register_workspace_artifact(ctx, &full);
             Ok(maybe_html_sidecar(format!("已写入 {rel}"), &rel))
         }
         "append" => {
@@ -180,6 +204,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .append(true)
                 .open(&full)?;
             f.write_all(content.as_bytes())?;
+            register_workspace_artifact(ctx, &full);
             Ok(maybe_html_sidecar(format!("已追加 {rel}"), &rel))
         }
         "list" => list_dir_capped(&full, root, parsed.recursive.unwrap_or(false), ext_filter(&parsed.ext)),
