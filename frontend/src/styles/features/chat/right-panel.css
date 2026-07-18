@@ -548,24 +548,17 @@ html[data-theme="dark"] .chat-session-row.is-active {
   place-items: center;
 }
 
-.chat-session-status-spacer {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: transparent;
-}
-
 .chat-session-status-spin {
   color: var(--tone-blue, #2563eb);
   animation: chat-session-spin 0.85s linear infinite;
 }
 
-.chat-session-unread-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--tone-blue, #2563eb);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone-blue, #2563eb) 18%, transparent);
+.chat-session-status-complete {
+  color: var(--ink-soft);
+}
+
+.chat-session-row.is-unread .chat-session-status-complete {
+  color: var(--tone-blue, #2563eb);
 }
 
 .chat-session-row.is-unread .chat-session-item strong {

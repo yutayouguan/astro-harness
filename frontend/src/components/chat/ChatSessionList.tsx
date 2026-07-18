@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Archive,
   ArchiveRestore,
+  CircleCheck,
   Download,
   GitBranch,
   LoaderCircle,
@@ -599,10 +600,12 @@ export default function ChatSessionList({
                         size={14}
                         strokeWidth={2.2}
                       />
-                    ) : unread ? (
-                      <span className="chat-session-unread-dot" />
                     ) : (
-                      <span className="chat-session-status-spacer" />
+                      <CircleCheck
+                        className="chat-session-status-complete"
+                        size={14}
+                        strokeWidth={2}
+                      />
                     )}
                   </span>
                   <strong>
