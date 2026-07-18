@@ -145,14 +145,21 @@ pub fn spawn_background(
     cwd: &Path,
     cwd_display: &str,
 ) -> anyhow::Result<String> {
-    let mut child = Command::new("sh")
-        .arg("-c")
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c")
         .arg(command)
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .stderr(Stdio::piped());
+    // Unix：让子进程自成进程组（pgid = 子进程 pid），kill 时可整组带走，
+    // 否则 `sh -c "npm run dev"` 这类 fork 出的孙进程会变孤儿继续运行。
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    let mut child = cmd.spawn()?;
     let pid = child.id();
 
     let output = Arc::new(Mutex::new(JobBuf::default()));
@@ -262,11 +269,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     match action.as_str() {
         "list" => Ok(list_jobs(&ctx.session_id)),
         "status" | "poll" => {
-            let job = require_job(&parsed.id)?;
+            let job = require_job(&parsed.id, &ctx.session_id)?;
             Ok(render_status(&job, parsed.offset.unwrap_or(0)))
         }
         "wait" => {
-            let job = require_job(&parsed.id)?;
+            let job = require_job(&parsed.id, &ctx.session_id)?;
             let timeout = parsed.timeout_secs.unwrap_or(30).clamp(1, 600);
             let deadline = Instant::now() + Duration::from_secs(timeout);
             while !job.status().is_terminal() && Instant::now() < deadline {
@@ -275,7 +282,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
             Ok(render_status(&job, parsed.offset.unwrap_or(0)))
         }
         "kill" => {
-            let job = require_job(&parsed.id)?;
+            let job = require_job(&parsed.id, &ctx.session_id)?;
             kill_job(&job);
             Ok(format!("已请求终止任务 {}（{}）", job.id, job.command))
         }
@@ -283,27 +290,59 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     }
 }
 
-fn require_job(id: &Option<String>) -> anyhow::Result<Arc<Job>> {
+fn require_job(id: &Option<String>, session_id: &str) -> anyhow::Result<Arc<Job>> {
     let id = id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("该 action 需要 id 参数"))?;
-    registry()
+    let job = registry()
         .lock()
         .unwrap()
         .get(id)
-        .ok_or_else(|| anyhow::anyhow!("未找到任务 {id}（可能已被淘汰）"))
+        .ok_or_else(|| anyhow::anyhow!("未找到任务 {id}（可能已被淘汰）"))?;
+    // 会话隔离：不暴露其他会话的任务（返回同样的「未找到」避免探测）
+    if job.session_id != session_id {
+        anyhow::bail!("未找到任务 {id}（可能已被淘汰）");
+    }
+    Ok(job)
+}
+
+/// 向进程组（Unix）或直接子进程发送信号；`pid` 即进程组 pgid。
+#[cfg(unix)]
+fn signal_group(pid: u32, sig: i32) {
+    // 负 pid 已由 killpg(pgid, sig) 表达；pgid == 子进程 pid（spawn 时 process_group(0)）
+    unsafe {
+        libc::killpg(pid as libc::pid_t, sig);
+    }
 }
 
 fn kill_job(job: &Arc<Job>) {
     let mut guard = job.child.lock().unwrap();
-    if let Some(ch) = guard.as_mut() {
-        let _ = ch.kill();
-        let _ = ch.wait();
-        *guard = None;
-        *job.status.lock().unwrap() = JobStatus::Killed;
+    let Some(ch) = guard.as_mut() else {
+        return;
+    };
+    #[cfg(unix)]
+    {
+        // 先 SIGTERM 整组，给一点收尾时间，再 SIGKILL 兜底
+        signal_group(job.pid, libc::SIGTERM);
+        for _ in 0..15 {
+            if matches!(ch.try_wait(), Ok(Some(_))) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        if !matches!(ch.try_wait(), Ok(Some(_))) {
+            signal_group(job.pid, libc::SIGKILL);
+        }
     }
+    #[cfg(not(unix))]
+    {
+        let _ = ch.kill();
+    }
+    let _ = ch.wait();
+    *guard = None;
+    *job.status.lock().unwrap() = JobStatus::Killed;
 }
 
 fn list_jobs(session_id: &str) -> String {
@@ -335,8 +374,20 @@ fn render_status(job: &Arc<Job>, offset: usize) -> String {
         let total = b.data.len();
         let start = offset.min(total);
         let end = (start + MAX_POLL_BYTES).min(total);
-        let slice = String::from_utf8_lossy(&b.data[start..end]).to_string();
-        (slice, total, end, b.truncated)
+        let raw = &b.data[start..end];
+        // 按 UTF-8 字符边界对齐，避免在多字节字符中间截断产生替换字符；
+        // 下次续读从对齐后的 next_offset 继续，无缝衔接。
+        let valid = match std::str::from_utf8(raw) {
+            Ok(s) => s.len(),
+            Err(e) => e.valid_up_to(),
+        };
+        if valid == 0 && !raw.is_empty() {
+            // offset 被手动错位到字符中间：退回 lossy 整段，保证有进展不会卡死
+            (String::from_utf8_lossy(raw).to_string(), total, end, b.truncated)
+        } else {
+            let slice = String::from_utf8_lossy(&raw[..valid]).to_string();
+            (slice, total, start + valid, b.truncated)
+        }
     };
 
     let mut out = format!(
@@ -418,6 +469,38 @@ mod tests {
         assert!(!job.status().is_terminal());
         kill_job(&job);
         assert!(matches!(job.status(), JobStatus::Killed));
+    }
+
+    #[test]
+    fn require_job_enforces_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let id = spawn_background("owner", "printf ok", dir.path(), ".").unwrap();
+        wait_terminal(&id, 5);
+        // 同会话可取
+        assert!(require_job(&Some(id.clone()), "owner").is_ok());
+        // 他会话视为不存在
+        let res = require_job(&Some(id.clone()), "intruder");
+        assert!(res.is_err());
+        let err = res.err().unwrap();
+        assert!(err.to_string().contains("未找到"), "{err}");
+    }
+
+    #[test]
+    fn render_status_handles_multibyte_offsets() {
+        let dir = tempfile::tempdir().unwrap();
+        let id = spawn_background("s4", "printf '你好'", dir.path(), ".").unwrap();
+        wait_terminal(&id, 5);
+        let job = registry().lock().unwrap().get(&id).unwrap();
+        // 完整读
+        let full = render_status(&job, 0);
+        assert!(full.contains("你好"), "{full}");
+        // 从「你」「好」之间的字符边界读
+        let aligned = render_status(&job, 3);
+        assert!(aligned.contains("好"));
+        assert!(!aligned.contains('\u{fffd}'), "边界对齐处不应有替换字符");
+        // offset 落在「你」中间：不 panic，且能推进（不返回 bytes 1..1）
+        let mid = render_status(&job, 1);
+        assert!(!mid.contains("bytes 1..1"), "mid-char offset should progress: {mid}");
     }
 
     #[test]

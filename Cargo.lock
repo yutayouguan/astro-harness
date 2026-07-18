@@ -5451,6 +5451,7 @@ dependencies = [
  "home",
  "hooks",
  "inventory",
+ "libc",
  "memory",
  "orchestration",
  "providers",

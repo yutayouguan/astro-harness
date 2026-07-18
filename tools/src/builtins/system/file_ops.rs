@@ -439,9 +439,14 @@ fn read_lines_range(
         .map_err(|_| anyhow::anyhow!("read 行范围仅支持 UTF-8 文本文件: {rel}"))?;
 
     let total_lines = text.lines().count();
+    if start > total_lines {
+        anyhow::bail!("start_line({start}) 超出文件总行数({total_lines})");
+    }
+
     let mut out = String::new();
     let mut emitted = 0usize;
     let mut capped = false;
+    let mut partial_line = false;
     for (idx, line) in text.lines().enumerate() {
         let ln = idx + 1;
         if ln < start {
@@ -457,19 +462,30 @@ fn read_lines_range(
         };
         if out.len() + piece.len() > MAX_READ_BYTES {
             capped = true;
+            if out.is_empty() {
+                // 单行本身就超上限：截断到字符边界后返回前缀，避免静默丢弃整行
+                let mut cut = MAX_READ_BYTES.min(line.len());
+                while cut > 0 && !line.is_char_boundary(cut) {
+                    cut -= 1;
+                }
+                out.push_str(&line[..cut]);
+                emitted = 1;
+                partial_line = true;
+            }
             break;
         }
         out.push_str(&piece);
         emitted += 1;
     }
 
-    if start > total_lines {
-        anyhow::bail!("start_line({start}) 超出文件总行数({total_lines})");
-    }
-
     let last = start + emitted.saturating_sub(1);
     let header = format!("[lines {start}..{last} of {total_lines}]\n");
-    if capped {
+    if partial_line {
+        Ok(format!(
+            "{header}{out}\n\n[truncated] line {start} exceeds {MAX_READ_BYTES} bytes; only its prefix is shown. \
+             Use byte-mode read (offset/limit) to page through this long line.",
+        ))
+    } else if capped {
         Ok(format!(
             "{header}{out}\n\n[truncated] line range exceeded {MAX_READ_BYTES} bytes; \
              continue with start_line={}.",
@@ -1147,6 +1163,20 @@ mod tests {
         assert!(out.contains("l2\nl3\nl4"));
         assert!(!out.contains("l1"));
         assert!(!out.contains("l5"));
+    }
+
+    #[test]
+    fn read_line_range_huge_single_line_returns_prefix() {
+        let dir = TempDir::new().unwrap();
+        let long = "x".repeat(MAX_READ_BYTES + 500);
+        let body = format!("{long}\nsecond\n");
+        let p = write_ws_file(&dir, "long.txt", body.as_bytes());
+        let out = read_lines_range(&p, "long.txt", Some(1), None).unwrap();
+        assert!(out.contains("[lines 1..1 of 2]"));
+        assert!(out.contains("line 1 exceeds"));
+        // 返回的是前缀（不含整行），且未静默丢弃
+        let shown = out.split("]\n").nth(1).unwrap_or("");
+        assert!(shown.len() >= MAX_READ_BYTES - 4 && shown.starts_with("xxxx"));
     }
 
     #[test]
