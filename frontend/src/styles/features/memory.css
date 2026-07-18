@@ -336,16 +336,16 @@ html[data-theme="dark"] .aux-error {
   width: 120px;
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.14));
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
-  color: var(--ink-soft, inherit);
+  border: 1px solid var(--glass-edge);
+  background: color-mix(in srgb, var(--glass-fill) 70%, transparent);
+  color: var(--ink);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
 .aux-number-input:focus {
   outline: none;
-  border-color: var(--accent, #5b8cff);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .evo-phase-note {
@@ -363,11 +363,16 @@ html[data-theme="dark"] .aux-error {
   width: 100%;
   padding: 7px 10px;
   border-radius: 8px;
-  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.14));
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
-  color: var(--ink-soft, inherit);
+  border: 1px solid var(--glass-edge);
+  background: color-mix(in srgb, var(--glass-fill) 70%, transparent);
+  color: var(--ink);
   font-size: 13px;
   font-family: inherit;
+}
+
+.evo-eval-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .evo-eval-textarea {
@@ -399,8 +404,9 @@ html[data-theme="dark"] .aux-error {
   margin: 8px 0 0;
   padding: 8px 10px;
   border-radius: 8px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid var(--glass-edge);
+  color: var(--ink-soft);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11.5px;
   line-height: 1.5;

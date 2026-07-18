@@ -144,8 +144,8 @@ html[data-theme="dark"] .prefs-icon-badge {
   gap: 8px;
   padding: 12px 8px;
   border-radius: 12px;
-  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.14));
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--glass-edge);
+  background: color-mix(in srgb, var(--glass-fill) 70%, transparent);
   cursor: pointer;
   transition:
     border-color 0.15s ease,
