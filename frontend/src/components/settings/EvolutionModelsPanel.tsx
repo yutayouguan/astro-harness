@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEvolutionSettings } from "../../hooks/settings/useEvolutionSettings";
 import { useEvolutionProposals } from "../../hooks/settings/useEvolutionProposals";
+import { useEvalExamples } from "../../hooks/settings/useEvalExamples";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -103,6 +104,33 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [branchMsg, setBranchMsg] = useState<string | null>(null);
   const [genDraft, setGenDraft] = useState("");
   const [varDraft, setVarDraft] = useState("");
+  const {
+    examples: evalExamples,
+    add: addEval,
+    remove: removeEval,
+    error: evalError,
+  } = useEvalExamples(active);
+  const [evalTask, setEvalTask] = useState("");
+  const [evalSkill, setEvalSkill] = useState("");
+  const [evalExpect, setEvalExpect] = useState("");
+  const [evalVerdict, setEvalVerdict] = useState<"fail" | "pass">("fail");
+
+  const submitEval = () => {
+    if (!evalTask.trim()) return;
+    void addEval({
+      skillId: evalSkill.trim() || null,
+      task: evalTask.trim(),
+      expectations: evalExpect
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      verdict: evalVerdict,
+    }).then(() => {
+      setEvalTask("");
+      setEvalSkill("");
+      setEvalExpect("");
+    });
+  };
   const [providersState, setProvidersState] = useState<ProvidersStateDto | null>(null);
   const [providersError, setProvidersError] = useState<string | null>(null);
   const [editingRoute, setEditingRoute] = useState<EvolutionRouteId | null>(null);
@@ -657,6 +685,95 @@ export default function EvolutionModelsPanel({ active }: Props) {
                   >
                     <Check size={15} />
                     {t("evo.approve")}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="prefs-card aux-list-card">
+        <div className="aux-list-head">
+          <div>
+            <h2 className="prefs-card-title">{t("evo.evalTitle")}</h2>
+            <p className="prefs-card-sub">{t("evo.evalSub")}</p>
+          </div>
+        </div>
+
+        {evalError && (
+          <div className="aux-error">
+            <AlertTriangle size={16} />
+            {evalError}
+          </div>
+        )}
+
+        <div className="evo-eval-form">
+          <input
+            className="evo-eval-input"
+            placeholder={t("evo.evalTaskPlaceholder")}
+            value={evalTask}
+            onChange={(e) => setEvalTask(e.target.value)}
+          />
+          <input
+            className="evo-eval-input"
+            placeholder={t("evo.evalSkillPlaceholder")}
+            value={evalSkill}
+            onChange={(e) => setEvalSkill(e.target.value)}
+          />
+          <textarea
+            className="evo-eval-input evo-eval-textarea"
+            placeholder={t("evo.evalExpectPlaceholder")}
+            value={evalExpect}
+            onChange={(e) => setEvalExpect(e.target.value)}
+            rows={3}
+          />
+          <div className="aux-task-actions">
+            <button
+              type="button"
+              className="aux-action aux-action-ghost"
+              onClick={() => setEvalVerdict(evalVerdict === "fail" ? "pass" : "fail")}
+            >
+              {evalVerdict === "fail" ? t("evo.evalVerdictFail") : t("evo.evalVerdictPass")}
+            </button>
+            <button
+              type="button"
+              className="aux-action"
+              onClick={submitEval}
+              disabled={!evalTask.trim()}
+            >
+              <Check size={15} />
+              {t("evo.evalAdd")}
+            </button>
+          </div>
+        </div>
+
+        {evalExamples.length === 0 ? (
+          <p className="aux-muted">{t("evo.evalEmpty")}</p>
+        ) : (
+          <div className="aux-task-list">
+            {evalExamples.map((ex) => (
+              <article className="aux-task-row" key={ex.id}>
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{ex.task}</h3>
+                    <span className={`aux-route-pill${ex.verdict === "pass" ? "" : " is-auto"}`}>
+                      {ex.verdict === "pass" ? t("evo.evalVerdictPass") : t("evo.evalVerdictFail")}
+                    </span>
+                    {ex.skillId && <span className="aux-route-pill">{ex.skillId}</span>}
+                  </div>
+                  {ex.expectations.length > 0 && (
+                    <p className="aux-muted">{ex.expectations.join(" · ")}</p>
+                  )}
+                </div>
+                <div className="aux-task-actions">
+                  <button
+                    type="button"
+                    className="aux-action aux-action-ghost"
+                    onClick={() => void removeEval(ex.id)}
+                  >
+                    <Trash2 size={15} />
+                    {t("evo.reject")}
                   </button>
                 </div>
               </article>

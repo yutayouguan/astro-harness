@@ -260,6 +260,17 @@ export type EvolutionSearchDto = {
   variants: number;
 };
 
+/** 评测例子（Tauri `list_eval_examples`） */
+export type EvalExampleDto = {
+  id: string;
+  skillId: string | null;
+  task: string;
+  expectations: string[];
+  verdict: "pass" | "fail";
+  sourceSession: string | null;
+  createdAt: string;
+};
+
 /** GEPA-lite 遗传搜索运行结果（Tauri `run_evolution_search`） */
 export type EvolutionSearchReport = {
   ok: boolean;

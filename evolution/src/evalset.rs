@@ -1,0 +1,244 @@
+//! 标注评测集：用户从历史挑例子，标注 task + 期望要点 + 通过/失败。
+//!
+//! 存 `{base}/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配
+//! 例子，则让 judge 针对具体 task+expectations 做 grounded 评分（0–1），比泛化
+//! judge 更客观；无匹配则回退泛化 judge（由调用方处理）。
+//!
+//! 无标准技能运行时，适应度仍是 LLM 评分，但锚定到用户给的具体期望。
+
+use std::fs::{self, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::candidate::{CandidateKind, SkillCandidate};
+
+/// 观测结果：该例子当初是「做对了」还是「做错了」。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    Pass,
+    Fail,
+}
+
+/// 一条评测例子。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalExample {
+    pub id: String,
+    /// 该例子评测哪个技能（None = 通用）。
+    #[serde(default)]
+    pub skill_id: Option<String>,
+    /// 任务 / 用户诉求。
+    pub task: String,
+    /// 期望满足的要点。
+    #[serde(default)]
+    pub expectations: Vec<String>,
+    /// 观测结果。
+    pub verdict: Verdict,
+    /// 来源会话。
+    #[serde(default)]
+    pub source_session: Option<String>,
+    pub created_at: String,
+}
+
+impl EvalExample {
+    pub fn new(
+        skill_id: Option<String>,
+        task: impl Into<String>,
+        expectations: Vec<String>,
+        verdict: Verdict,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            skill_id,
+            task: task.into(),
+            expectations,
+            verdict,
+            source_session: None,
+            created_at: Utc::now().to_rfc3339(),
+        }
+    }
+}
+
+/// `{base}/learning/evolution/evalset.jsonl`
+pub fn evalset_path(base: &Path) -> PathBuf {
+    base.join("learning")
+        .join("evolution")
+        .join("evalset.jsonl")
+}
+
+/// 追加一条例子（append-only JSONL）。
+pub fn append_example(base: &Path, ex: &EvalExample) -> anyhow::Result<()> {
+    let path = evalset_path(base);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut f = OpenOptions::new().create(true).append(true).open(&path)?;
+    serde_json::to_writer(&mut f, ex)?;
+    f.write_all(b"\n")?;
+    Ok(())
+}
+
+/// 列出全部例子（跳过坏行）。
+pub fn list_examples(base: &Path) -> Vec<EvalExample> {
+    let path = evalset_path(base);
+    let Ok(f) = fs::File::open(&path) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for line in BufReader::new(f).lines() {
+        let Ok(line) = line else { break };
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if let Ok(ex) = serde_json::from_str::<EvalExample>(t) {
+            out.push(ex);
+        }
+    }
+    out
+}
+
+/// 按 id 删除；重写文件。
+pub fn remove_example(base: &Path, id: &str) -> anyhow::Result<()> {
+    let path = evalset_path(base);
+    if !path.is_file() {
+        return Ok(());
+    }
+    let kept: Vec<EvalExample> = list_examples(base).into_iter().filter(|e| e.id != id).collect();
+    let tmp = path.with_extension("jsonl.tmp");
+    {
+        let mut f = fs::File::create(&tmp)?;
+        for e in &kept {
+            serde_json::to_writer(&mut f, e)?;
+            f.write_all(b"\n")?;
+        }
+    }
+    fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// 取与某技能匹配的例子（skill_id 相同，或例子为通用 None）。
+pub fn examples_for_skill<'a>(all: &'a [EvalExample], skill_id: &str) -> Vec<&'a EvalExample> {
+    all.iter()
+        .filter(|e| e.skill_id.as_deref() == Some(skill_id) || e.skill_id.is_none())
+        .collect()
+}
+
+/// eval judge 的 system 指令：针对具体 task+expectations 评分，JSON only。
+pub const EVAL_JUDGE_SYSTEM_PROMPT: &str = r#"你是技能评测器。给定一个技能内容、一个任务与该任务的期望要点，判断「若用该技能执行此任务，能在多大程度上满足期望」。只输出 JSON（不要 markdown 围栏）：
+{"score":0.0,"reason":"简述哪些期望满足/未满足"}
+score 为 0~1 小数：全部满足≈1，完全不满足≈0。宁严勿滥。"#;
+
+/// 构造针对单个例子的 eval judge user 提示。
+pub fn build_eval_judge_prompt(cand: &SkillCandidate, ex: &EvalExample) -> String {
+    let mut s = String::new();
+    s.push_str("## 技能内容\n");
+    match cand.kind {
+        CandidateKind::NewSkill => {
+            s.push_str(cand.content.as_deref().unwrap_or(""));
+        }
+        CandidateKind::Patch => {
+            s.push_str(&format!(
+                "（patch）将 `{}` 替换为 `{}`",
+                cand.old_string.as_deref().unwrap_or(""),
+                cand.new_string.as_deref().unwrap_or("")
+            ));
+        }
+    }
+    s.push_str(&format!("\n\n## 任务\n{}\n\n## 期望要点\n", ex.task));
+    if ex.expectations.is_empty() {
+        s.push_str("（未列具体要点，按任务合理判断）\n");
+    } else {
+        for e in &ex.expectations {
+            s.push_str(&format!("- {e}\n"));
+        }
+    }
+    s.push_str("\n请评分并只输出 JSON。");
+    s
+}
+
+/// 解析 eval judge 输出为 0–1 分。
+pub fn parse_eval_score(raw: &str) -> anyhow::Result<f32> {
+    let trimmed = raw.trim();
+    let start = trimmed
+        .find('{')
+        .ok_or_else(|| anyhow::anyhow!("eval 输出不含 JSON"))?;
+    let end = trimmed
+        .rfind('}')
+        .ok_or_else(|| anyhow::anyhow!("eval 输出缺少 JSON 结尾"))?;
+
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        #[serde(default)]
+        score: f32,
+    }
+    let parsed: Raw = serde_json::from_str(&trimmed[start..=end])?;
+    Ok(parsed.score.clamp(0.0, 1.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn cand(skill: &str) -> SkillCandidate {
+        SkillCandidate {
+            id: "1".into(),
+            kind: CandidateKind::NewSkill,
+            skill_id: skill.into(),
+            description: None,
+            content: Some("# demo\n步骤".into()),
+            old_string: None,
+            new_string: None,
+            rationale: String::new(),
+            sources: vec![],
+            judge_score: None,
+            judge_reason: None,
+            created_at: "now".into(),
+        }
+    }
+
+    #[test]
+    fn append_list_remove_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let a = EvalExample::new(Some("pdf".into()), "合并两个 PDF", vec!["保持顺序".into()], Verdict::Fail);
+        let b = EvalExample::new(None, "通用任务", vec![], Verdict::Pass);
+        append_example(dir.path(), &a).unwrap();
+        append_example(dir.path(), &b).unwrap();
+        assert_eq!(list_examples(dir.path()).len(), 2);
+        remove_example(dir.path(), &a.id).unwrap();
+        let left = list_examples(dir.path());
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].id, b.id);
+    }
+
+    #[test]
+    fn examples_for_skill_includes_generic() {
+        let all = vec![
+            EvalExample::new(Some("pdf".into()), "t1", vec![], Verdict::Pass),
+            EvalExample::new(Some("other".into()), "t2", vec![], Verdict::Pass),
+            EvalExample::new(None, "t3", vec![], Verdict::Pass),
+        ];
+        let m = examples_for_skill(&all, "pdf");
+        assert_eq!(m.len(), 2); // pdf + generic
+    }
+
+    #[test]
+    fn parse_eval_score_clamps() {
+        assert!((parse_eval_score(r#"{"score":0.7}"#).unwrap() - 0.7).abs() < 1e-6);
+        assert!((parse_eval_score(r#"{"score":2.0}"#).unwrap() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn eval_prompt_has_task_and_expectations() {
+        let ex = EvalExample::new(Some("s".into()), "做个 X", vec!["要点A".into()], Verdict::Fail);
+        let p = build_eval_judge_prompt(&cand("s"), &ex);
+        assert!(p.contains("做个 X"));
+        assert!(p.contains("要点A"));
+        assert!(p.contains("技能内容"));
+    }
+}

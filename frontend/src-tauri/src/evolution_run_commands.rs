@@ -14,12 +14,13 @@ use std::time::Duration;
 use std::collections::HashSet;
 
 use evolution::{
-    apply_patch_unique, approve_proposal, approve_proposal_checked, build_judge_user_prompt,
-    build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
-    list_proposals, parse_candidates, parse_judge_output, parse_variants, pareto_front,
-    reject_proposal, save_proposals, select_front_capped, CandidateKind, ReflectionInput,
-    ScoredVariant, SkillCandidate, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
-    REFLECTION_SYSTEM_PROMPT,
+    apply_patch_unique, approve_proposal, approve_proposal_checked, build_eval_judge_prompt,
+    build_judge_user_prompt, build_mutation_prompt, build_reflection_user_prompt,
+    candidate_new_markdown, check_candidate, examples_for_skill, list_examples, list_proposals,
+    parse_candidates, parse_eval_score, parse_judge_output, parse_variants, pareto_front,
+    reject_proposal, save_proposals, select_front_capped, CandidateKind, EvalExample,
+    ReflectionInput, ScoredVariant, SkillCandidate, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT,
+    MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -289,30 +290,18 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
             resolve_evolution_targets(memory::EvolutionRouteKind::Judge, &primary)
         {
             let enabled_now = skills::list_enabled_for_prompt();
+            let evalset = list_examples(&base);
             let mut kept: Vec<SkillCandidate> = Vec::new();
             for mut c in passed.into_iter() {
-                let user = build_judge_user_prompt(&c, &enabled_now);
-                match reflect_over_targets(&judge_targets, JUDGE_SYSTEM_PROMPT, &user).await {
-                    Ok(raw) => match parse_judge_output(&raw) {
-                        Ok(v) => {
-                            c.judge_score = Some(v.score);
-                            c.judge_reason = Some(v.reason);
-                            if v.keep && v.score >= cfg.gates.min_judge_score {
-                                kept.push(c);
-                            } else {
-                                judged_out += 1;
-                                tracing::info!(skill = %c.skill_id, score = v.score, "候选被 judge 拒绝");
-                            }
-                        }
-                        Err(e) => {
-                            tracing::warn!(skill = %c.skill_id, error = %e, "judge 解析失败，保留候选");
-                            kept.push(c);
-                        }
-                    },
-                    Err(e) => {
-                        tracing::warn!(skill = %c.skill_id, error = %e, "judge 调用失败，保留候选");
-                        kept.push(c);
-                    }
+                let (score, reason) =
+                    fitness_score(&judge_targets, &c, &enabled_now, &evalset).await;
+                c.judge_score = Some(score);
+                c.judge_reason = Some(reason);
+                if score >= cfg.gates.min_judge_score {
+                    kept.push(c);
+                } else {
+                    judged_out += 1;
+                    tracing::info!(skill = %c.skill_id, score, "候选被适应度评分拒绝");
                 }
             }
             passed = kept;
@@ -356,6 +345,36 @@ async fn judge_candidate(
         },
         Err(_) => (0.5, "judge 调用失败（中性分）".into()),
     }
+}
+
+/// 客观适应度：若候选技能有匹配评测例子，则对每个例子做 grounded 评分取均值；
+/// 否则回退泛化 judge。返回 (score, reason)。
+async fn fitness_score(
+    targets: &AuxiliaryTargets,
+    cand: &SkillCandidate,
+    enabled_skills: &[(String, String)],
+    evalset: &[EvalExample],
+) -> (f32, String) {
+    let matched = examples_for_skill(evalset, &cand.skill_id);
+    if matched.is_empty() {
+        return judge_candidate(targets, cand, enabled_skills).await;
+    }
+    let mut sum = 0.0f32;
+    let mut n = 0u32;
+    for ex in &matched {
+        let user = build_eval_judge_prompt(cand, ex);
+        if let Ok(raw) = reflect_over_targets(targets, EVAL_JUDGE_SYSTEM_PROMPT, &user).await {
+            if let Ok(score) = parse_eval_score(&raw) {
+                sum += score;
+                n += 1;
+            }
+        }
+    }
+    if n == 0 {
+        return judge_candidate(targets, cand, enabled_skills).await;
+    }
+    let avg = sum / n as f32;
+    (avg, format!("基于 {n} 个评测例子的 grounded 评分"))
 }
 
 /// GEPA-lite 遗传搜索：种子 → 每目标多代变异 + judge 打分 + Pareto 选择 → 待审提案。
@@ -406,6 +425,7 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         }
     }
 
+    let evalset = list_examples(&base);
     let generations = cfg.search.generations.max(1);
     let variants = cfg.search.variants.max(1);
     let mut variants_evaluated = 0usize;
@@ -435,7 +455,8 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
 
             let mut scored: Vec<ScoredVariant> = Vec::new();
             for mut c in cands {
-                let (score, reason) = judge_candidate(&judge_targets, &c, &enabled_skills).await;
+                let (score, reason) =
+                    fitness_score(&judge_targets, &c, &enabled_skills, &evalset).await;
                 c.judge_score = Some(score);
                 c.judge_reason = Some(reason);
                 variants_evaluated += 1;
@@ -558,6 +579,90 @@ pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
 pub async fn reject_evolution_proposal(id: String) -> Result<(), String> {
     let base = default_memory_dir();
     reject_proposal(&base, &id).map_err(|e| e.to_string())
+}
+
+/// 评测例子展示态。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvalExampleDto {
+    pub id: String,
+    pub skill_id: Option<String>,
+    pub task: String,
+    pub expectations: Vec<String>,
+    pub verdict: String,
+    pub source_session: Option<String>,
+    pub created_at: String,
+}
+
+impl From<EvalExample> for EvalExampleDto {
+    fn from(e: EvalExample) -> Self {
+        let verdict = match e.verdict {
+            evolution::Verdict::Pass => "pass",
+            evolution::Verdict::Fail => "fail",
+        }
+        .to_string();
+        Self {
+            id: e.id,
+            skill_id: e.skill_id,
+            task: e.task,
+            expectations: e.expectations,
+            verdict,
+            source_session: e.source_session,
+            created_at: e.created_at,
+        }
+    }
+}
+
+/// 列出评测集。
+#[tauri::command]
+pub async fn list_eval_examples() -> Result<Vec<EvalExampleDto>, String> {
+    let base = default_memory_dir();
+    Ok(list_examples(&base)
+        .into_iter()
+        .map(EvalExampleDto::from)
+        .collect())
+}
+
+/// 新增一条评测例子。
+#[tauri::command]
+pub async fn add_eval_example(
+    skill_id: Option<String>,
+    task: String,
+    expectations: Vec<String>,
+    verdict: String,
+    source_session: Option<String>,
+) -> Result<Vec<EvalExampleDto>, String> {
+    let task = task.trim().to_string();
+    if task.is_empty() {
+        return Err("task 不能为空".into());
+    }
+    let v = match verdict.trim().to_lowercase().as_str() {
+        "pass" => evolution::Verdict::Pass,
+        "fail" => evolution::Verdict::Fail,
+        _ => return Err("verdict 只能是 pass 或 fail".into()),
+    };
+    let mut ex = EvalExample::new(
+        skill_id.filter(|s| !s.trim().is_empty()),
+        task,
+        expectations
+            .into_iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+        v,
+    );
+    ex.source_session = source_session.filter(|s| !s.trim().is_empty());
+    let base = default_memory_dir();
+    evolution::append_example(&base, &ex).map_err(|e| e.to_string())?;
+    list_eval_examples().await
+}
+
+/// 删除一条评测例子。
+#[tauri::command]
+pub async fn remove_eval_example(id: String) -> Result<Vec<EvalExampleDto>, String> {
+    let base = default_memory_dir();
+    evolution::remove_example(&base, &id).map_err(|e| e.to_string())?;
+    list_eval_examples().await
 }
 
 fn git(args: &[&str], cwd: &Path) -> Result<String, String> {

@@ -101,7 +101,9 @@ DecisionLog 现覆盖：`ToolFailure`、`MemoryRejected`、`UserCorrection`（�
 
 crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `select_front_capped` / 变异提示与解析）；命令 `run_evolution_search`。
 
-**仍为后续**：带标注评测集/benchmark 适应度、交叉算子、Python DSPy 对接。
+**评测集 + 客观适应度**（Phase 1）：「离线进化」页可标注评测例子（task + 期望要点 + 曾通过/失败，可关联 skill_id），存 `~/.astro/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配例子，则由 judge 针对具体 task+expectations 做 **grounded 客观评分**（各例子均值）；无匹配则回退泛化 judge。crate [`evolution::evalset`](../evolution/src/evalset.rs)；命令 `list/add/remove_eval_example`。
+
+**仍为后续**：交叉算子（Phase 2）、Python DSPy 对接（Phase 3）。
 
 模型角色（不复用在线 `auxiliary.*`）：
 
