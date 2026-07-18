@@ -20,8 +20,8 @@ pub use candidate::{CandidateKind, SkillCandidate};
 pub use gates::{check_candidate, GateOutcome};
 pub use judge::{build_judge_user_prompt, parse_judge_output, JudgeVerdict, JUDGE_SYSTEM_PROMPT};
 pub use proposal::{
-    approve_proposal, approve_proposal_checked, list_proposals, proposals_dir, reject_proposal,
-    save_proposals,
+    apply_patch_unique, approve_proposal, approve_proposal_checked, candidate_new_markdown,
+    list_proposals, proposals_dir, reject_proposal, save_proposals,
 };
 pub use reflect::{
     build_reflection_user_prompt, parse_candidates, ReflectionInput, REFLECTION_SYSTEM_PROMPT,

@@ -196,6 +196,7 @@ export const zh = {
   "evo.judgeScore": "评分",
   "evo.reject": "拒绝",
   "evo.approve": "批准写入",
+  "evo.approveToBranch": "批准到分支",
   "evo.minJudgeScore": "judge 最低分（0–1）",
   "evo.minJudgeScoreDesc": "judge 模型对候选打分，低于该分丢弃；设为 0 关闭 judge 评审。",
 
@@ -1537,6 +1538,7 @@ export const en: Record<MessageKey, string> = {
   "evo.judgeScore": "Score",
   "evo.reject": "Reject",
   "evo.approve": "Approve",
+  "evo.approveToBranch": "Approve to branch",
   "evo.minJudgeScore": "Min judge score (0-1)",
   "evo.minJudgeScoreDesc": "The judge model scores candidates; below this they are dropped. Set to 0 to disable judging.",
 

@@ -6,6 +6,7 @@ import {
   Dna,
   FilePlus2,
   Gavel,
+  GitBranch,
   Pencil,
   Play,
   RefreshCw,
@@ -85,8 +86,10 @@ export default function EvolutionModelsPanel({ active }: Props) {
     proposals,
     run: runEvolution,
     approve,
+    approveToBranch,
     reject,
   } = useEvolutionProposals(active);
+  const [branchMsg, setBranchMsg] = useState<string | null>(null);
   const [providersState, setProvidersState] = useState<ProvidersStateDto | null>(null);
   const [providersError, setProvidersError] = useState<string | null>(null);
   const [editingRoute, setEditingRoute] = useState<EvolutionRouteId | null>(null);
@@ -510,6 +513,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             {evoError}
           </div>
         )}
+        {branchMsg && <p className="aux-muted">{branchMsg}</p>}
         {lastReport && (
           <p className="aux-muted">
             {t("evo.runSummary")
@@ -557,6 +561,16 @@ export default function EvolutionModelsPanel({ active }: Props) {
                   >
                     <Trash2 size={15} />
                     {t("evo.reject")}
+                  </button>
+                  <button
+                    type="button"
+                    className="aux-action aux-action-ghost"
+                    onClick={() =>
+                      void approveToBranch(p.id).then((m) => m && setBranchMsg(m))
+                    }
+                  >
+                    <GitBranch size={15} />
+                    {t("evo.approveToBranch")}
                   </button>
                   <button
                     type="button"

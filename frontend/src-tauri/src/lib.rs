@@ -418,6 +418,7 @@ pub fn run() {
             evolution_run_commands::run_evolution,
             evolution_run_commands::list_evolution_proposals,
             evolution_run_commands::approve_evolution_proposal,
+            evolution_run_commands::approve_evolution_proposal_to_branch,
             evolution_run_commands::reject_evolution_proposal,
             icon_commands::get_app_icon,
             icon_commands::set_app_icon,

@@ -63,6 +63,39 @@ pub fn reject_proposal(base: &Path, id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 渲染新建技能的 SKILL.md 文本（无 frontmatter 时自动补 name/description）。
+pub fn candidate_new_markdown(cand: &SkillCandidate) -> anyhow::Result<String> {
+    let body = cand
+        .content
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("新建候选缺少 content"))?;
+    if body.starts_with("---") {
+        Ok(body.to_string())
+    } else {
+        let desc = cand
+            .description
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .replace('"', "'");
+        Ok(format!(
+            "---\nname: {}\ndescription: \"{desc}\"\n---\n\n{body}\n",
+            cand.skill_id
+        ))
+    }
+}
+
+/// 唯一字符串替换：`old` 须在 `text` 中恰好出现一次。
+pub fn apply_patch_unique(text: &str, old: &str, new: &str) -> anyhow::Result<String> {
+    match text.matches(old).count() {
+        0 => anyhow::bail!("patch old_string 未命中（技能可能已改）"),
+        1 => Ok(text.replacen(old, new, 1)),
+        n => anyhow::bail!("patch old_string 命中 {n} 处，不唯一"),
+    }
+}
+
 /// 应用回滚令牌：写入失败或测试不过时恢复原状。
 enum Rollback {
     /// 目录原本不存在：整树删除。
@@ -104,28 +137,9 @@ fn apply_candidate(cand: &SkillCandidate) -> anyhow::Result<(String, PathBuf, Ro
 
     match cand.kind {
         CandidateKind::NewSkill => {
-            let body = cand
-                .content
-                .as_deref()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .ok_or_else(|| anyhow::anyhow!("新建候选缺少 content"))?;
+            let md = candidate_new_markdown(cand)?;
             let prev = fs::read_to_string(&skill_md).ok();
             fs::create_dir_all(&dest)?;
-            let md = if body.starts_with("---") {
-                body.to_string()
-            } else {
-                let desc = cand
-                    .description
-                    .as_deref()
-                    .unwrap_or("")
-                    .trim()
-                    .replace('"', "'");
-                format!(
-                    "---\nname: {}\ndescription: \"{desc}\"\n---\n\n{body}\n",
-                    cand.skill_id
-                )
-            };
             fs::write(&skill_md, md.as_bytes())?;
             let _ = skills::set_enabled(&cand.skill_id, true);
             let rollback = if dir_existed {
@@ -156,15 +170,10 @@ fn apply_candidate(cand: &SkillCandidate) -> anyhow::Result<(String, PathBuf, Ro
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("patch 缺少 new_string"))?;
             let text = fs::read_to_string(&skill_md)?;
-            match text.matches(old).count() {
-                0 => anyhow::bail!("patch old_string 未命中（技能可能已改）"),
-                1 => {
-                    let rollback = Rollback::RestoreFile(skill_md.clone(), Some(text.clone()));
-                    fs::write(&skill_md, text.replacen(old, new, 1).as_bytes())?;
-                    Ok((format!("已 patch 技能 `{}`", cand.skill_id), dest, rollback))
-                }
-                n => anyhow::bail!("patch old_string 命中 {n} 处，不唯一"),
-            }
+            let updated = apply_patch_unique(&text, old, new)?;
+            let rollback = Rollback::RestoreFile(skill_md.clone(), Some(text));
+            fs::write(&skill_md, updated.as_bytes())?;
+            Ok((format!("已 patch 技能 `{}`", cand.skill_id), dest, rollback))
         }
     }
 }

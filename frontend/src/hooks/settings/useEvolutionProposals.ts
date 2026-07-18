@@ -10,6 +10,7 @@ type UseEvolutionProposals = {
   proposals: EvolutionProposalDto[];
   run(): Promise<void>;
   approve(id: string): Promise<void>;
+  approveToBranch(id: string): Promise<string | null>;
   reject(id: string): Promise<void>;
   reload(): Promise<void>;
 };
@@ -67,6 +68,18 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
     }
   }, []);
 
+  const approveToBranch = useCallback(async (id: string): Promise<string | null> => {
+    setError(null);
+    try {
+      const msg = await invoke<string>("approve_evolution_proposal_to_branch", { id });
+      setProposals((prev) => prev.filter((p) => p.id !== id));
+      return msg;
+    } catch (err) {
+      setError(errorMessage(err));
+      return null;
+    }
+  }, []);
+
   const reject = useCallback(async (id: string) => {
     setError(null);
     try {
@@ -77,5 +90,16 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
     }
   }, []);
 
-  return { loading, running, error, lastReport, proposals, run, approve, reject, reload };
+  return {
+    loading,
+    running,
+    error,
+    lastReport,
+    proposals,
+    run,
+    approve,
+    approveToBranch,
+    reject,
+    reload,
+  };
 }

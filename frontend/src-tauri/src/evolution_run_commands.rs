@@ -8,14 +8,14 @@ use futures::StreamExt;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use evolution::{
-    approve_proposal, approve_proposal_checked, build_judge_user_prompt,
-    build_reflection_user_prompt, check_candidate, list_proposals, parse_candidates,
-    parse_judge_output, reject_proposal, save_proposals, CandidateKind, ReflectionInput,
-    SkillCandidate, JUDGE_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    apply_patch_unique, approve_proposal, approve_proposal_checked, build_judge_user_prompt,
+    build_reflection_user_prompt, candidate_new_markdown, check_candidate, list_proposals,
+    parse_candidates, parse_judge_output, reject_proposal, save_proposals, CandidateKind,
+    ReflectionInput, SkillCandidate, JUDGE_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -400,4 +400,103 @@ pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
 pub async fn reject_evolution_proposal(id: String) -> Result<(), String> {
     let base = default_memory_dir();
     reject_proposal(&base, &id).map_err(|e| e.to_string())
+}
+
+fn git(args: &[&str], cwd: &Path) -> Result<String, String> {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| format!("git 执行失败: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+fn git_root(start: &Path) -> Option<PathBuf> {
+    let s = git(&["rev-parse", "--show-toplevel"], start).ok()?;
+    if s.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(s))
+    }
+}
+
+/// 批准提案到独立 worktree 分支：在新分支的独立检出里写入+commit，不动当前工作树。
+///
+/// 前提：Agent 技能目录位于某 git 仓库内；否则返回错误。成功后删除提案并返回分支与路径。
+#[tauri::command]
+pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, String> {
+    let base = default_memory_dir();
+    let cand = list_proposals(&base)
+        .into_iter()
+        .find(|c| c.id == id)
+        .ok_or_else(|| format!("提案不存在: {id}"))?;
+
+    let skills_dir =
+        skills::install::agent_skills_dir(None).map_err(|e| e.to_string())?;
+    let repo = git_root(&skills_dir)
+        .ok_or_else(|| "技能目录不在 git 仓库中，无法开分支（可用普通「批准写入」）".to_string())?;
+
+    let canon_skills = skills_dir.canonicalize().unwrap_or(skills_dir.clone());
+    let canon_repo = repo.canonicalize().unwrap_or(repo.clone());
+    let rel = canon_skills
+        .strip_prefix(&canon_repo)
+        .map_err(|_| "技能目录不在仓库根之下".to_string())?
+        .to_path_buf();
+
+    let short: String = id.chars().take(6).collect();
+    let branch = format!("astro/evolution/{}-{}", cand.skill_id, short);
+    let wt_root = base.join("evolution-worktrees");
+    std::fs::create_dir_all(&wt_root).map_err(|e| e.to_string())?;
+    let wt = wt_root.join(format!("{}-{}", cand.skill_id, short));
+    if wt.exists() {
+        let _ = std::fs::remove_dir_all(&wt);
+    }
+
+    // 新分支 + 独立检出
+    git(
+        &["worktree", "add", "-b", &branch, &wt.to_string_lossy(), "HEAD"],
+        &repo,
+    )?;
+
+    let apply_and_commit = || -> Result<(), String> {
+        let skill_dir = wt.join(&rel).join(&cand.skill_id);
+        let skill_md = skill_dir.join("SKILL.md");
+        match cand.kind {
+            CandidateKind::NewSkill => {
+                let md = candidate_new_markdown(&cand).map_err(|e| e.to_string())?;
+                std::fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
+                std::fs::write(&skill_md, md.as_bytes()).map_err(|e| e.to_string())?;
+            }
+            CandidateKind::Patch => {
+                if !skill_md.is_file() {
+                    return Err(format!("patch 目标在仓库中不存在: {}", cand.skill_id));
+                }
+                let old = cand.old_string.as_deref().unwrap_or("");
+                let new = cand.new_string.as_deref().unwrap_or("");
+                let text = std::fs::read_to_string(&skill_md).map_err(|e| e.to_string())?;
+                let updated = apply_patch_unique(&text, old, new).map_err(|e| e.to_string())?;
+                std::fs::write(&skill_md, updated.as_bytes()).map_err(|e| e.to_string())?;
+            }
+        }
+        git(&["add", "-A"], &wt)?;
+        let msg = format!("evolve: {} ({:?})", cand.skill_id, cand.kind);
+        git(&["commit", "-m", &msg], &wt)?;
+        Ok(())
+    };
+
+    if let Err(e) = apply_and_commit() {
+        // 回滚 worktree + 分支（best-effort）
+        let _ = git(&["worktree", "remove", "--force", &wt.to_string_lossy()], &repo);
+        let _ = git(&["branch", "-D", &branch], &repo);
+        return Err(e);
+    }
+
+    reject_proposal(&base, &id).map_err(|e| e.to_string())?;
+    Ok(format!(
+        "已在分支 `{branch}` 提交（worktree: {}）。可在该分支 review / 推送 / 开 PR。",
+        home::display_user_path(&wt)
+    ))
 }
