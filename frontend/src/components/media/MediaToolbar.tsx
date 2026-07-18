@@ -19,7 +19,7 @@ import {
   type MediaActionKind,
 } from "../../lib/media/mediaActions";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
-import MediaLightbox from "./MediaLightbox";
+import MediaPreviewModal from "./MediaPreviewModal";
 
 type Props = {
   path: string;
@@ -42,7 +42,7 @@ export default function MediaToolbar({
   const { showToast, toastHost } = useTransientToast();
   const [busy, setBusy] = useState<"download" | "copy" | "quote" | null>(null);
   const [copied, setCopied] = useState(false);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const previewSrc = useMemo(() => resolveMediaSrc(path), [path]);
   const canQuote =
@@ -51,7 +51,10 @@ export default function MediaToolbar({
       kind === "code" ||
       kind === "document") &&
     Boolean(attachApi);
-  const canZoom = kind === "image" && Boolean(previewSrc);
+  const canPreview =
+    kind === "html" ||
+    ((kind === "image" || kind === "video" || kind === "audio") &&
+      Boolean(previewSrc));
 
   const onQuote = useCallback(
     async (e: MouseEvent) => {
@@ -74,15 +77,11 @@ export default function MediaToolbar({
     [attachApi, busy, path, showToast, t],
   );
 
-  const onZoom = useCallback(
-    (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!previewSrc) return;
-      setLightboxOpen(true);
-    },
-    [previewSrc],
-  );
+  const onPreview = useCallback((e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPreviewOpen(true);
+  }, []);
 
   const onDownload = useCallback(
     async (e: MouseEvent) => {
@@ -145,7 +144,7 @@ export default function MediaToolbar({
 
   const icon = compact ? 14 : 15;
   const quoteLabel = t("media.quote");
-  const zoomLabel = t("media.zoom");
+  const previewLabel = t("filespace.preview");
   const copyLabel = copied ? t("media.copied") : t("media.copy");
   const dlLabel = t("media.download");
   const openLabel = t("workspace.openExternally");
@@ -169,14 +168,13 @@ export default function MediaToolbar({
             <Quote size={icon} strokeWidth={2.1} aria-hidden />
           </button>
         ) : null}
-        {canZoom ? (
+        {canPreview ? (
           <button
             type="button"
             className="media-toolbar-btn"
-            onClick={onZoom}
-            disabled={busy !== null}
-            title={zoomLabel}
-            aria-label={zoomLabel}
+            onClick={onPreview}
+            title={previewLabel}
+            aria-label={previewLabel}
           >
             <Maximize2 size={icon} strokeWidth={2.1} aria-hidden />
           </button>
@@ -216,11 +214,12 @@ export default function MediaToolbar({
         </button>
       </div>
       {toastHost}
-      {lightboxOpen && previewSrc ? (
-        <MediaLightbox
-          src={previewSrc}
+      {previewOpen ? (
+        <MediaPreviewModal
+          path={path}
+          kind={kind}
           alt={alt}
-          onClose={() => setLightboxOpen(false)}
+          onClose={() => setPreviewOpen(false)}
         />
       ) : null}
     </>

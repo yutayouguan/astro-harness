@@ -427,6 +427,142 @@ html[data-theme="dark"] .media-lightbox-close:hover {
   }
 }
 
+/* ── App 内全屏媒体预览（网页/图片/视频/音频，自适应） ── */
+.media-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: 40px 28px;
+  background:
+    linear-gradient(160deg, rgba(244, 246, 250, 0.55) 0%, rgba(226, 232, 240, 0.42) 100%),
+    color-mix(in srgb, var(--bg0, #eef2f7) 55%, transparent);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  cursor: default;
+  animation: media-lightbox-in 160ms ease-out;
+}
+
+html[data-theme="dark"] .media-preview-modal {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(124, 58, 237, 0.14), transparent 65%),
+    linear-gradient(165deg, rgba(14, 10, 26, 0.88) 0%, rgba(6, 4, 14, 0.92) 100%);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+}
+
+.media-preview-modal-stage {
+  position: relative;
+  width: min(96vw, 1280px);
+  height: min(90vh, 900px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-preview-modal-image,
+.media-preview-modal-video {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  box-shadow:
+    var(--shadow-card),
+    0 24px 64px color-mix(in srgb, var(--ink) 12%, rgba(15, 23, 42, 0.18)),
+    var(--glass-rim);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.38)) 70%, transparent);
+}
+
+.media-preview-modal-audio {
+  width: min(92vw, 460px);
+}
+
+/* HTML：铺满 stage，隐藏内嵌小标题栏，iframe 撑满 */
+.media-preview-modal .html-preview {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  border-radius: 14px;
+  box-shadow:
+    var(--shadow-card),
+    0 24px 64px color-mix(in srgb, var(--ink) 12%, rgba(15, 23, 42, 0.18));
+}
+
+.media-preview-modal .html-preview-bar {
+  display: none;
+}
+
+.media-preview-modal .html-preview-frame {
+  flex: 1;
+  height: 100%;
+}
+
+.media-preview-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
+  border-radius: 12px;
+  color: var(--ink);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 35%, var(--glass-panel, rgba(255, 255, 255, 0.42)));
+  box-shadow:
+    var(--glass-rim),
+    0 8px 20px color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.1));
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.media-preview-modal-close:hover {
+  color: var(--tone, var(--ink));
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 28%, var(--glass-edge));
+}
+
+.media-preview-modal-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 45%, transparent);
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] .media-preview-modal-close {
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 32%, rgba(255, 255, 255, 0.18));
+  color: color-mix(in srgb, #fff 55%, var(--ink, #ece8f8));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%),
+    rgba(10, 8, 22, 0.82);
+}
+
+html[data-theme="dark"] .media-preview-modal-close:hover {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--tone, #a78bfa) 45%, rgba(255, 255, 255, 0.22));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-preview-modal {
+    animation: none;
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
