@@ -25,6 +25,24 @@
   max-width: 100%;
 }
 
+.insights-panel > .panel-agent-toolbar .panel-agent-toolbar-start {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* View Tab 保持单行，避免 Tracing 被挤换行 */
+.insights-panel .insights-view-tabs {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  max-width: none;
+  width: max-content;
+}
+
+.insights-panel .insights-period-tabs {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
 /* View / Period / Metric 共用分段控件 */
 .insights-seg {
   display: inline-flex;
