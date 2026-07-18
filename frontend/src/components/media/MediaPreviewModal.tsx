@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MediaActionKind } from "../../lib/media/mediaActions";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
+import CodeFileCard from "./CodeFileCard";
 import GlassAudioPlayer from "./GlassAudioPlayer";
 import HtmlPreview from "./HtmlPreview";
 
@@ -36,6 +37,8 @@ export default function MediaPreviewModal({ path, kind, alt, onClose }: Props) {
   let body: ReactNode = null;
   if (kind === "html") {
     body = <HtmlPreview path={path} className="media-preview-modal-html" />;
+  } else if (kind === "code") {
+    body = <CodeFileCard path={path} className="media-preview-modal-code" />;
   } else if (kind === "video" && src) {
     body = (
       <video

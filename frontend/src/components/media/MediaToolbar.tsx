@@ -53,6 +53,7 @@ export default function MediaToolbar({
     Boolean(attachApi);
   const canPreview =
     kind === "html" ||
+    kind === "code" ||
     ((kind === "image" || kind === "video" || kind === "audio") &&
       Boolean(previewSrc));
 
