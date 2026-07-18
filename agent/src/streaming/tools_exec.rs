@@ -14,6 +14,33 @@ use super::hitl_bridge::{
 };
 use super::types::MultiTurnStreamItem;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApprovalRoute {
+    Deny,
+    Allowlist,
+    Off,
+    Smart,
+    Manual,
+}
+
+fn approval_route(
+    command: &str,
+    mode: tools::ApprovalMode,
+    allowlist: &[String],
+) -> ApprovalRoute {
+    if tools::is_hardline_blocked(command).is_some() {
+        ApprovalRoute::Deny
+    } else if tools::matches_allowlist(command, allowlist) {
+        ApprovalRoute::Allowlist
+    } else {
+        match mode {
+            tools::ApprovalMode::Off => ApprovalRoute::Off,
+            tools::ApprovalMode::Smart => ApprovalRoute::Smart,
+            tools::ApprovalMode::Manual => ApprovalRoute::Manual,
+        }
+    }
+}
+
 /// 触发 `post_approval_response`（观察型，忽略返回值）：`choice` 为
 /// `auto`（辅模型降级）/ `allow`（用户批准）/ `deny`（用户拒绝或 cancelled）/
 /// `timeout`（park 超时）/ `unavailable`（无 HITL gate）。
@@ -144,8 +171,15 @@ async fn execute_tools_serial_inner(
                             )
                         };
 
-                        // 白名单命中 / off 模式：静默放行
-                        if tools::matches_allowlist(&cmd, &allowlist) {
+                        let route = approval_route(&cmd, mode, &allowlist);
+                        // 防御性兜底：即使规则分级未来发生漂移，hardline 仍不可进入 HITL 放行。
+                        if route == ApprovalRoute::Deny {
+                            out.push(
+                                "Command denied by hardline policy. Do not retry without changing the command."
+                                    .to_string(),
+                            );
+                            continue;
+                        } else if route == ApprovalRoute::Allowlist {
                             fire_post_approval_response(
                                 session,
                                 &approval_session_id,
@@ -154,7 +188,7 @@ async fn execute_tools_serial_inner(
                                 "allowlist",
                             )
                             .await;
-                        } else if mode == tools::ApprovalMode::Off {
+                        } else if route == ApprovalRoute::Off {
                             fire_post_approval_response(
                                 session,
                                 &approval_session_id,
@@ -165,7 +199,7 @@ async fn execute_tools_serial_inner(
                             .await;
                         } else {
                             // 仅 Smart 模式尝试辅模型降级；Manual 直接弹卡
-                            let smart_action = if mode == tools::ApprovalMode::Smart {
+                            let smart_action = if route == ApprovalRoute::Smart {
                                 let agent = session.lock().await;
                                 let targets: Vec<_> = agent
                                     .auxiliary_targets(common::AuxiliaryTask::SmartApproval)
@@ -491,5 +525,39 @@ mod tests {
         assert!(!terminal_needs_approval("terminal", &term("cargo test")));
         // 非 terminal 工具永不触发
         assert!(!terminal_needs_approval("file_ops", &term("mkfs")));
+    }
+
+    #[test]
+    fn approval_modes_and_allowlist_route_correctly() {
+        let ask = "rm -rf /tmp/project";
+        let none: Vec<String> = Vec::new();
+        assert_eq!(
+            approval_route(ask, tools::ApprovalMode::Smart, &none),
+            ApprovalRoute::Smart
+        );
+        assert_eq!(
+            approval_route(ask, tools::ApprovalMode::Manual, &none),
+            ApprovalRoute::Manual
+        );
+        assert_eq!(
+            approval_route(ask, tools::ApprovalMode::Off, &none),
+            ApprovalRoute::Off
+        );
+
+        let allowlist = vec![ask.to_string()];
+        assert_eq!(
+            approval_route(ask, tools::ApprovalMode::Manual, &allowlist),
+            ApprovalRoute::Allowlist
+        );
+    }
+
+    #[test]
+    fn hardline_wins_over_off_and_allowlist() {
+        let command = "mkfs.ext4 /dev/sdb1";
+        let allowlist = vec!["mkfs*".to_string()];
+        assert_eq!(
+            approval_route(command, tools::ApprovalMode::Off, &allowlist),
+            ApprovalRoute::Deny
+        );
     }
 }

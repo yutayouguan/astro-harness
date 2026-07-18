@@ -168,8 +168,11 @@ HITL 确认卡提供三个按钮：**Approve**（本次）/ **Approve & always a
 | `language` | `python` | `python` \| `javascript`\|`js` \| `shell`\|`bash` |
 
 - 每次调用写入**唯一临时文件**（`snippet_{uuid8}.{ext}`），并发同语言调用互不覆盖。
-- 超时 30s，输出超 `MAX_TOOL_RESULT_BYTES` 截断，跑完删临时文件。
-- **非沙箱**：与宿主进程同权限（沙箱化方案见下「后续优化」）。
+- 超时 30s（超时也会删临时文件并 `kill_on_drop` 子进程），输出超 `MAX_TOOL_RESULT_BYTES` 截断。
+- **资源护栏，不是硬沙箱**（仍跑在宿主、cwd 在工作区根内）：
+  - **环境剥离**：子进程 `env_clear` 后仅注入 `PATH`/`HOME`/`LANG`/`TMPDIR` 等白名单变量；名称含 `KEY`/`TOKEN`/`SECRET`/`PASSWORD`/`CREDENTIAL`/`AUTH` 等一律不传。
+  - **Unix rlimit**（`pre_exec` + `setrlimit`）：CPU 30s、地址空间 512MiB、单文件 32MiB、打开 fd 64（不设 `NPROC`：该限制按用户计数，桌面环境易误杀）。
+  - 更深隔离（Landlock / `sandbox-exec` / `bwrap` / 容器）仍属后续优化。
 
 ---
 
@@ -183,7 +186,7 @@ HITL 确认卡提供三个按钮：**Approve**（本次）/ **Approve & always a
 
 按性价比排序（截至本文撰写未实现）：
 
-1. **`code_exec` 沙箱化**：目前与宿主同权限。分层方案（rlimits → Landlock/`sandbox-exec`/`bwrap` → 容器/WASM）。~~并发临时文件名争用~~ 已修复（唯一 `snippet_{uuid8}`）。
+1. **`code_exec` 更深隔离**：已具备 env 剥离 + Unix rlimits；下一层可为 Landlock/`sandbox-exec`/`bwrap` → 容器/WASM。~~并发临时文件名争用~~ / ~~敏感环境泄露~~ / ~~基础 rlimit~~ 已落地。
 2. **后台任务输出「丢新留旧」**：缓冲满 1 MiB 后丢弃后续输出、保留最早 1 MiB，与「盯 dev server 最新日志」诉求相反。可考虑有界尾部窗口（需重设计 offset 分页语义）。
 3. **`write` / `patch` 非原子写**：`std::fs::write` 直接截断重写，中途崩溃留半截文件。宜临时文件 + rename 原子落盘。
 4. **`search` / `list` 不读 `.gitignore`**：仅硬编码噪音目录表，真实仓库会污染结果 / 拖慢扫描。可引入 `ignore` crate。

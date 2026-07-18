@@ -553,6 +553,30 @@ html[data-theme="dark"] .aux-task-row {
   color: var(--ink);
 }
 
+.aux-task-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.aux-hint {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-mute);
+}
+
+.aux-hint-cost {
+  color: #a16207;
+}
+
+html[data-theme="dark"] .aux-hint-cost {
+  color: #fbbf24;
+}
+
 .aux-warning {
   display: inline-flex;
   align-items: center;

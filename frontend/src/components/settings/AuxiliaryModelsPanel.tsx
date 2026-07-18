@@ -116,10 +116,50 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
     [providersState],
   );
 
+  /** 自动路由实际生效的主模型（provider 展示名 + model id） */
+  const primaryRoute = useMemo(() => {
+    const providerId =
+      settings?.activeProviderId ?? providersState?.active_provider_id ?? null;
+    if (!providerId) return null;
+    const provider = (providersState?.providers ?? []).find((p) => p.id === providerId);
+    const model = (settings?.activeModel || provider?.model || "").trim();
+    if (!provider || !model) return null;
+    return {
+      id: provider.id,
+      name: provider.display_name || provider.id,
+      model,
+    };
+  }, [providersState, settings?.activeModel, settings?.activeProviderId]);
+
   const taskRows = useMemo(() => {
     const byId = new Map((settings?.tasks ?? []).map((task) => [task.id, task]));
     return TASKS.map((task) => byId.get(task.id)).filter(Boolean) as AuxiliaryTaskDto[];
   }, [settings]);
+
+  const resolveRouteLabel = useCallback(
+    (row: AuxiliaryTaskDto | undefined, isAuto: boolean) => {
+      if (isAuto) {
+        if (primaryRoute) {
+          return t("aux.inherits", {
+            provider: primaryRoute.name,
+            model: primaryRoute.model,
+          });
+        }
+        return t("aux.inheritsUnknown");
+      }
+      return row?.displayLabel ?? t("aux.followPrimary");
+    },
+    [primaryRoute, t],
+  );
+
+  const usesPrimaryModel = useCallback(
+    (row: AuxiliaryTaskDto | undefined, isAuto: boolean) => {
+      if (isAuto) return Boolean(primaryRoute);
+      if (!row || !primaryRoute) return false;
+      return row.provider === primaryRoute.id && row.model === primaryRoute.model;
+    },
+    [primaryRoute],
+  );
 
   const providerOptions = useMemo(
     () =>
@@ -313,7 +353,7 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
                   </div>
                   <p>{t(task.descKey)}</p>
                   <div className="aux-task-current">
-                    <span>{row?.displayLabel ?? t("aux.followPrimary")}</span>
+                    <span>{resolveRouteLabel(row, isAuto)}</span>
                     {row?.unavailable && (
                       <span className="aux-warning">
                         <AlertTriangle size={13} />
@@ -321,6 +361,19 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
                       </span>
                     )}
                   </div>
+                  {(task.id === "background_review" ||
+                    usesPrimaryModel(row, isAuto)) && (
+                    <div className="aux-task-hints">
+                      {task.id === "background_review" && (
+                        <span className="aux-hint">{t("aux.backgroundReviewHint")}</span>
+                      )}
+                      {usesPrimaryModel(row, isAuto) && (
+                        <span className="aux-hint aux-hint-cost">
+                          {t("aux.costSameAsPrimary")}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {isEditing && (
                     <div className="aux-editor">
@@ -371,13 +424,15 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
                     className="aux-action"
                     onClick={() => {
                       if (!providersState) void loadProviders();
-                      beginEdit(row ?? {
-                        id: task.id,
-                        provider: "auto",
-                        model: "auto",
-                        displayLabel: t("aux.followPrimary"),
-                        unavailable: false,
-                      });
+                      beginEdit(
+                        row ?? {
+                          id: task.id,
+                          provider: "auto",
+                          model: "auto",
+                          displayLabel: resolveRouteLabel(undefined, true),
+                          unavailable: false,
+                        },
+                      );
                     }}
                     disabled={enabledProviders.length === 0}
                   >
