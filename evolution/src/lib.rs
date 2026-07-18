@@ -15,6 +15,7 @@ pub mod gates;
 pub mod judge;
 pub mod proposal;
 pub mod reflect;
+pub mod search;
 
 pub use candidate::{CandidateKind, SkillCandidate};
 pub use gates::{check_candidate, GateOutcome};
@@ -25,4 +26,8 @@ pub use proposal::{
 };
 pub use reflect::{
     build_reflection_user_prompt, parse_candidates, ReflectionInput, REFLECTION_SYSTEM_PROMPT,
+};
+pub use search::{
+    build_mutation_prompt, pareto_front, parse_variants, select_front_capped, ScoredVariant,
+    MUTATION_SYSTEM_PROMPT,
 };

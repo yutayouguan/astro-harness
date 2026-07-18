@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { EvolutionProposalDto, EvolutionRunReport } from "../../types";
+import type {
+  EvolutionProposalDto,
+  EvolutionRunReport,
+  EvolutionSearchReport,
+} from "../../types";
 
 type UseEvolutionProposals = {
   loading: boolean;
   running: boolean;
   error: string | null;
   lastReport: EvolutionRunReport | null;
+  lastSearch: EvolutionSearchReport | null;
   proposals: EvolutionProposalDto[];
   run(): Promise<void>;
+  runSearch(): Promise<void>;
   approve(id: string): Promise<void>;
   approveToBranch(id: string): Promise<string | null>;
   reject(id: string): Promise<void>;
@@ -24,6 +30,7 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<EvolutionRunReport | null>(null);
+  const [lastSearch, setLastSearch] = useState<EvolutionSearchReport | null>(null);
   const [proposals, setProposals] = useState<EvolutionProposalDto[]>([]);
 
   const reload = useCallback(async () => {
@@ -50,6 +57,20 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
     try {
       const report = await invoke<EvolutionRunReport>("run_evolution");
       setLastReport(report);
+      await reload();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setRunning(false);
+    }
+  }, [reload]);
+
+  const runSearch = useCallback(async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      const report = await invoke<EvolutionSearchReport>("run_evolution_search");
+      setLastSearch(report);
       await reload();
     } catch (err) {
       setError(errorMessage(err));
@@ -95,8 +116,10 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
     running,
     error,
     lastReport,
+    lastSearch,
     proposals,
     run,
+    runSearch,
     approve,
     approveToBranch,
     reject,

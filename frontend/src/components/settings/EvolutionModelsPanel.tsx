@@ -77,19 +77,32 @@ function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {
 
 export default function EvolutionModelsPanel({ active }: Props) {
   const { t } = useI18n();
-  const { loading, error, settings, setEnabled, setRoute, resetRoute, setGates, reload } =
-    useEvolutionSettings(active);
+  const {
+    loading,
+    error,
+    settings,
+    setEnabled,
+    setRoute,
+    resetRoute,
+    setGates,
+    setSearch,
+    reload,
+  } = useEvolutionSettings(active);
   const {
     running,
     error: evoError,
     lastReport,
+    lastSearch,
     proposals,
     run: runEvolution,
+    runSearch,
     approve,
     approveToBranch,
     reject,
   } = useEvolutionProposals(active);
   const [branchMsg, setBranchMsg] = useState<string | null>(null);
+  const [genDraft, setGenDraft] = useState("");
+  const [varDraft, setVarDraft] = useState("");
   const [providersState, setProvidersState] = useState<ProvidersStateDto | null>(null);
   const [providersError, setProvidersError] = useState<string | null>(null);
   const [editingRoute, setEditingRoute] = useState<EvolutionRouteId | null>(null);
@@ -113,8 +126,24 @@ export default function EvolutionModelsPanel({ active }: Props) {
     if (settings) {
       setMaxBytesDraft(String(settings.gates.maxSkillBytes));
       setJudgeDraft(String(settings.gates.minJudgeScore));
+      setGenDraft(String(settings.search.generations));
+      setVarDraft(String(settings.search.variants));
     }
   }, [settings]);
+
+  const commitSearch = useCallback(() => {
+    if (!settings) return;
+    const g = Number.parseInt(genDraft, 10);
+    const v = Number.parseInt(varDraft, 10);
+    const gen = Number.isFinite(g) && g >= 1 && g <= 6 ? g : settings.search.generations;
+    const vari = Number.isFinite(v) && v >= 1 && v <= 6 ? v : settings.search.variants;
+    if (gen !== settings.search.generations || vari !== settings.search.variants) {
+      void setSearch(gen, vari);
+    } else {
+      setGenDraft(String(settings.search.generations));
+      setVarDraft(String(settings.search.variants));
+    }
+  }, [settings, genDraft, varDraft, setSearch]);
 
   const providerOptions = useMemo(
     () => enabledProviders.map((p) => ({ value: p.id, label: p.display_name })),
@@ -494,15 +523,64 @@ export default function EvolutionModelsPanel({ active }: Props) {
           <div className="aux-list-head-actions">
             <button
               type="button"
-              className="aux-action"
+              className="aux-action aux-action-ghost"
               onClick={() => void runEvolution()}
               disabled={running || !settings?.enabled}
             >
               <Play size={15} />
               {running ? t("evo.running") : t("evo.run")}
             </button>
+            <button
+              type="button"
+              className="aux-action"
+              onClick={() => void runSearch()}
+              disabled={running || !settings?.enabled}
+              title={t("evo.searchRunHint")}
+            >
+              <Dna size={15} />
+              {running ? t("evo.running") : t("evo.searchRun")}
+            </button>
           </div>
         </div>
+
+        <div className="evo-search-cfg">
+          <label>
+            {t("evo.generations")}
+            <input
+              type="number"
+              className="aux-number-input"
+              min={1}
+              max={6}
+              value={genDraft}
+              onChange={(e) => setGenDraft(e.target.value)}
+              onBlur={commitSearch}
+              disabled={!settings}
+            />
+          </label>
+          <label>
+            {t("evo.variants")}
+            <input
+              type="number"
+              className="aux-number-input"
+              min={1}
+              max={6}
+              value={varDraft}
+              onChange={(e) => setVarDraft(e.target.value)}
+              onBlur={commitSearch}
+              disabled={!settings}
+            />
+          </label>
+          <span className="aux-muted">{t("evo.searchCostHint")}</span>
+        </div>
+        {lastSearch && (
+          <p className="aux-muted">
+            {t("evo.searchSummary")
+              .replace("{gen}", String(lastSearch.generations))
+              .replace("{evaluated}", String(lastSearch.variantsEvaluated))
+              .replace("{kept}", String(lastSearch.paretoKept))
+              .replace("{proposals}", String(lastSearch.proposals.length))}
+          </p>
+        )}
 
         {!settings?.enabled && (
           <p className="aux-muted">{t("evo.disabledHint")}</p>

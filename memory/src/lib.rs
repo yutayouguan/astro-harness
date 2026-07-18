@@ -21,9 +21,9 @@ pub use config::{
     load_auxiliary_config, load_evolution_config, load_learning_config, load_memory_config,
     reset_all_auxiliary_routes, reset_all_evolution_routes, resolve_auxiliary,
     set_auto_refresh_on_update, set_auxiliary_route, set_background_review_enabled,
-    set_evolution_enabled, set_evolution_gates, set_evolution_route, set_write_approval,
-    AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute, EvolutionConfig, EvolutionGates,
-    EvolutionRouteKind, LearningConfig, MemoryConfig,
+    set_evolution_enabled, set_evolution_gates, set_evolution_route, set_evolution_search,
+    set_write_approval, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute, EvolutionConfig,
+    EvolutionGates, EvolutionRouteKind, EvolutionSearch, LearningConfig, MemoryConfig,
 };
 pub use decision_log::{
     append_decision, decisions_path, list_recent as list_recent_decisions, try_append_decision,

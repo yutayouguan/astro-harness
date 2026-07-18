@@ -97,7 +97,11 @@ learning:
 
 DecisionLog 现覆盖：`ToolFailure`、`MemoryRejected`、`UserCorrection`（启发式识别用户纠错）、`KeyChoice`（`confirm` 决策闸口）。
 
-**仍为后续**：完整 GEPA/Pareto 遗传搜索。
+**遗传搜索（GEPA-lite）**：「离线进化」页可选「遗传搜索」——reflection 产种子（按 skill_id+kind 去重取前 3）→ 每目标多代变异（`generations`）+ 每代多变体（`variants`）→ judge 打分 → **Pareto 选择（judge 分↑ / 体积↓）** + 反思评语回喂下一代 → 每目标取 Pareto front 前 2 过门禁入待审。无标注评测集，适应度来自 judge 分与体积；仅变异+反思，不做交叉。参数与成本（≈ 目标×代数×变体 次调用）在页面可调。
+
+crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `select_front_capped` / 变异提示与解析）；命令 `run_evolution_search`。
+
+**仍为后续**：带标注评测集/benchmark 适应度、交叉算子、Python DSPy 对接。
 
 模型角色（不复用在线 `auxiliary.*`）：
 

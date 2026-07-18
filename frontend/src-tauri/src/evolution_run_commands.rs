@@ -11,11 +11,15 @@ use tauri::{AppHandle, Emitter};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use std::collections::HashSet;
+
 use evolution::{
     apply_patch_unique, approve_proposal, approve_proposal_checked, build_judge_user_prompt,
-    build_reflection_user_prompt, candidate_new_markdown, check_candidate, list_proposals,
-    parse_candidates, parse_judge_output, reject_proposal, save_proposals, CandidateKind,
-    ReflectionInput, SkillCandidate, JUDGE_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
+    list_proposals, parse_candidates, parse_judge_output, parse_variants, pareto_front,
+    reject_proposal, save_proposals, select_front_capped, CandidateKind, ReflectionInput,
+    ScoredVariant, SkillCandidate, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
+    REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -72,6 +76,18 @@ pub struct EvolutionRunReport {
     pub generated: usize,
     pub gated_out: usize,
     pub judged_out: usize,
+    pub proposals: Vec<EvolutionProposalDto>,
+    pub error: Option<String>,
+}
+
+/// GEPA-lite 遗传搜索运行结果。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvolutionSearchReport {
+    pub ok: bool,
+    pub generations: u32,
+    pub variants_evaluated: usize,
+    pub pareto_kept: usize,
     pub proposals: Vec<EvolutionProposalDto>,
     pub error: Option<String>,
 }
@@ -321,6 +337,148 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
         generated,
         gated_out,
         judged_out,
+        proposals,
+        error: None,
+    })
+}
+
+/// 用 judge 给单个候选打分：失败回退中性分 0.5。
+async fn judge_candidate(
+    targets: &AuxiliaryTargets,
+    cand: &SkillCandidate,
+    enabled_skills: &[(String, String)],
+) -> (f32, String) {
+    let user = build_judge_user_prompt(cand, enabled_skills);
+    match reflect_over_targets(targets, JUDGE_SYSTEM_PROMPT, &user).await {
+        Ok(raw) => match parse_judge_output(&raw) {
+            Ok(v) => (v.score, v.reason),
+            Err(_) => (0.5, "judge 解析失败（中性分）".into()),
+        },
+        Err(_) => (0.5, "judge 调用失败（中性分）".into()),
+    }
+}
+
+/// GEPA-lite 遗传搜索：种子 → 每目标多代变异 + judge 打分 + Pareto 选择 → 待审提案。
+#[tauri::command]
+pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchReport, String> {
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base);
+    if !cfg.enabled {
+        return Err("请先在「离线进化」中开启进化".into());
+    }
+
+    let primary = active_primary_target()?;
+    let refl_targets =
+        resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
+    if refl_targets.preferred.provider.kind.requires_api_key()
+        && refl_targets.preferred.api_key.trim().is_empty()
+        && refl_targets.fallback.as_ref().map_or(true, |fb| {
+            fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
+        })
+    {
+        return Err("未配置 API Key，无法运行进化".into());
+    }
+    let judge_targets =
+        resolve_evolution_targets(memory::EvolutionRouteKind::Judge, &primary)?;
+
+    // 种子：reflection 产候选
+    let decisions = memory::list_recent_decisions(&base, 20).unwrap_or_default();
+    let enabled_skills = skills::list_enabled_for_prompt();
+    let transcripts = build_transcripts(&base, &decisions);
+    let seed_user = build_reflection_user_prompt(&ReflectionInput {
+        decisions,
+        enabled_skills: enabled_skills.clone(),
+        transcripts,
+    });
+    let seed_raw = reflect_over_targets(&refl_targets, REFLECTION_SYSTEM_PROMPT, &seed_user).await?;
+    let seeds_all = parse_candidates(&seed_raw).map_err(|e| e.to_string())?;
+
+    // 按 (skill_id, kind) 去重，最多 3 个目标
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut seeds: Vec<SkillCandidate> = Vec::new();
+    for c in seeds_all {
+        let key = format!("{}::{:?}", c.skill_id, c.kind);
+        if seen.insert(key) {
+            seeds.push(c);
+        }
+        if seeds.len() >= 3 {
+            break;
+        }
+    }
+
+    let generations = cfg.search.generations.max(1);
+    let variants = cfg.search.variants.max(1);
+    let mut variants_evaluated = 0usize;
+    let mut pareto_kept = 0usize;
+    let mut final_props: Vec<SkillCandidate> = Vec::new();
+
+    for seed in seeds {
+        let mut current = seed.clone();
+        let mut critiques: Vec<String> = Vec::new();
+        let mut last_front: Vec<ScoredVariant> = Vec::new();
+
+        for _gen in 0..generations {
+            let muser = build_mutation_prompt(&current, variants, &critiques);
+            let raw = match reflect_over_targets(&refl_targets, MUTATION_SYSTEM_PROMPT, &muser).await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!(skill = %current.skill_id, error = %e, "变异调用失败，停止该目标");
+                    break;
+                }
+            };
+            let mut cands = parse_variants(&raw, &current).unwrap_or_default();
+            cands.push(current.clone()); // 保留上一代最优作为基线
+            if cands.is_empty() {
+                break;
+            }
+
+            let mut scored: Vec<ScoredVariant> = Vec::new();
+            for mut c in cands {
+                let (score, reason) = judge_candidate(&judge_targets, &c, &enabled_skills).await;
+                c.judge_score = Some(score);
+                c.judge_reason = Some(reason);
+                variants_evaluated += 1;
+                scored.push(ScoredVariant::new(c, score));
+            }
+
+            let front = pareto_front(&scored);
+            critiques = front
+                .iter()
+                .filter_map(|v| v.candidate.judge_reason.clone())
+                .collect();
+            if let Some(best) = select_front_capped(front.clone(), 1).into_iter().next() {
+                current = best.candidate.clone();
+            }
+            last_front = front;
+        }
+
+        // 每目标取 Pareto front 前 2 个，过静态门禁
+        for v in select_front_capped(last_front, 2) {
+            pareto_kept += 1;
+            if check_candidate(&v.candidate, &cfg.gates).passed {
+                final_props.push(v.candidate);
+            }
+        }
+    }
+
+    save_proposals(&base, &final_props).map_err(|e| e.to_string())?;
+    let proposals: Vec<EvolutionProposalDto> =
+        final_props.into_iter().map(EvolutionProposalDto::from).collect();
+
+    let _ = app.emit(
+        "evolution-updated",
+        serde_json::json!({
+            "search": true,
+            "proposals": proposals.len(),
+        }),
+    );
+
+    Ok(EvolutionSearchReport {
+        ok: true,
+        generations,
+        variants_evaluated,
+        pareto_kept,
         proposals,
         error: None,
     })

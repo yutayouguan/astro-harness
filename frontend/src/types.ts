@@ -254,11 +254,28 @@ export type EvolutionGatesDto = {
   minJudgeScore: number;
 };
 
+/** 遗传搜索参数 */
+export type EvolutionSearchDto = {
+  generations: number;
+  variants: number;
+};
+
+/** GEPA-lite 遗传搜索运行结果（Tauri `run_evolution_search`） */
+export type EvolutionSearchReport = {
+  ok: boolean;
+  generations: number;
+  variantsEvaluated: number;
+  paretoKept: number;
+  proposals: EvolutionProposalDto[];
+  error: string | null;
+};
+
 /** 离线进化设置全量（enabled + reflection/judge 路由 + gates） */
 export type EvolutionSettingsDto = {
   enabled: boolean;
   routes: EvolutionRouteDto[];
   gates: EvolutionGatesDto;
+  search: EvolutionSearchDto;
   activeProviderId: string | null;
   activeModel: string;
 };

@@ -224,6 +224,34 @@ impl Default for EvolutionGates {
 ///
 /// 与 `auxiliary`（在线便宜辅助）分离：进化为离线批量、可接受慢与贵；
 /// `reflection` 应显式指向强模型，`judge` 可省或走中等模型。
+fn default_generations() -> u32 {
+    2
+}
+
+fn default_variants() -> u32 {
+    3
+}
+
+/// GEPA-lite 遗传搜索参数（`config.yaml` 的 `evolution.search` 段）。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct EvolutionSearch {
+    /// 迭代代数。
+    #[serde(default = "default_generations")]
+    pub generations: u32,
+    /// 每代每目标变体数。
+    #[serde(default = "default_variants")]
+    pub variants: u32,
+}
+
+impl Default for EvolutionSearch {
+    fn default() -> Self {
+        Self {
+            generations: 2,
+            variants: 3,
+        }
+    }
+}
+
 /// 引擎（GEPA/DSPy 流水线）本身为 Phase 2，未实现；此处只承载配置。
 #[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 pub struct EvolutionConfig {
@@ -239,6 +267,9 @@ pub struct EvolutionConfig {
     /// 门禁。
     #[serde(default)]
     pub gates: EvolutionGates,
+    /// GEPA-lite 遗传搜索参数。
+    #[serde(default)]
+    pub search: EvolutionSearch,
 }
 
 /// 进化路由用途。
@@ -524,6 +555,26 @@ pub fn reset_all_evolution_routes(base: &Path) -> anyhow::Result<EvolutionConfig
     Ok(load_evolution_config(base))
 }
 
+/// 设置遗传搜索参数并返回最新配置。
+pub fn set_evolution_search(
+    base: &Path,
+    search: &EvolutionSearch,
+) -> anyhow::Result<EvolutionConfig> {
+    set_nested_usize(
+        base,
+        &["evolution", "search"],
+        "generations",
+        search.generations as usize,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "search"],
+        "variants",
+        search.variants as usize,
+    )?;
+    Ok(load_evolution_config(base))
+}
+
 /// 设置进化门禁并返回最新配置。
 pub fn set_evolution_gates(
     base: &Path,
@@ -620,6 +671,23 @@ mod tests {
         assert!(cfg.gates.require_pr);
         assert_eq!(cfg.gates.max_skill_bytes, 15_360);
         assert!((cfg.gates.min_judge_score - 0.6).abs() < 1e-6);
+        assert_eq!(cfg.search.generations, 2);
+        assert_eq!(cfg.search.variants, 3);
+    }
+
+    #[test]
+    fn evolution_set_search_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = set_evolution_search(
+            dir.path(),
+            &EvolutionSearch {
+                generations: 4,
+                variants: 5,
+            },
+        )
+        .unwrap();
+        assert_eq!(cfg.search.generations, 4);
+        assert_eq!(cfg.search.variants, 5);
     }
 
     #[test]

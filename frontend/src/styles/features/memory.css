@@ -352,6 +352,26 @@ html[data-theme="dark"] .aux-error {
   margin: 4px 2px 0;
 }
 
+.evo-search-cfg {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 6px 2px 2px;
+  font-size: 12.5px;
+  color: var(--ink-mute);
+}
+
+.evo-search-cfg label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.evo-search-cfg .aux-number-input {
+  width: 70px;
+}
+
 .evo-proposal-diff {
   margin: 8px 0 0;
   padding: 8px 10px;

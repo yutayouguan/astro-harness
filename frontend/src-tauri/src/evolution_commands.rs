@@ -29,6 +29,14 @@ pub struct EvolutionGatesDto {
     pub min_judge_score: f32,
 }
 
+/// 遗传搜索参数展示态。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvolutionSearchDto {
+    pub generations: u32,
+    pub variants: u32,
+}
+
 /// 进化设置全量 DTO。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +44,7 @@ pub struct EvolutionSettingsDto {
     pub enabled: bool,
     pub routes: Vec<EvolutionRouteDto>,
     pub gates: EvolutionGatesDto,
+    pub search: EvolutionSearchDto,
     pub active_provider_id: Option<String>,
     pub active_model: String,
 }
@@ -124,6 +133,10 @@ fn build_settings_dto() -> Result<EvolutionSettingsDto, String> {
             require_pr: cfg.gates.require_pr,
             min_judge_score: cfg.gates.min_judge_score,
         },
+        search: EvolutionSearchDto {
+            generations: cfg.search.generations,
+            variants: cfg.search.variants,
+        },
         active_provider_id: state.active_provider_id,
         active_model,
     })
@@ -183,6 +196,21 @@ pub async fn set_evolution_gates(
         min_judge_score,
     };
     memory::set_evolution_gates(&base, &gates).map_err(|e| e.to_string())?;
+    build_settings_dto()
+}
+
+/// 设置遗传搜索参数。
+#[tauri::command]
+pub async fn set_evolution_search(
+    generations: u32,
+    variants: u32,
+) -> Result<EvolutionSettingsDto, String> {
+    let base = home::default_memory_dir();
+    let search = memory::EvolutionSearch {
+        generations: generations.clamp(1, 6),
+        variants: variants.clamp(1, 6),
+    };
+    memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
     build_settings_dto()
 }
 
