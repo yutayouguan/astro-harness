@@ -27,15 +27,13 @@ import { buildWorkspaceMenuItems } from "../../lib/filespace/workspaceMenuItems"
 import type { AgentInfo } from "../../types/agent";
 import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
-import { ChatMarkdown } from "../chat/ChatMarkdown";
-import MediaPreview from "../media/MediaPreview";
 import MediaToolbar from "../media/MediaToolbar";
+import FilePreviewContent from "../filespace/FilePreviewContent";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
 import FileGlyph from "../filespace/FileGlyph";
 import { formatSize, isTauri } from "../../lib/filespace/fileMeta";
 import WorkspaceBatchBar from "./WorkspaceBatchBar";
-import WorkspaceEditor from "./WorkspaceEditor";
 import { EmptyIllustration } from "../../illustrations";
 import {
   IconWsArrowLeft,
@@ -220,8 +218,6 @@ export default function WorkspacePanel({
   const editorIsHtml = mediaKindOf(editorName) === "html";
   const canTogglePreview = editorIsMarkdown || editorIsHtml;
   const docPreview = canTogglePreview && mdMode === "preview";
-  const showMdPreview = editorIsMarkdown && mdMode === "preview";
-  const showHtmlPreview = editorIsHtml && mdMode === "preview";
 
   const setMdModePersist = (mode: MdMode) => {
     setMdMode(mode);
@@ -1470,17 +1466,20 @@ export default function WorkspacePanel({
 
           {error && <div className="side-error">{error}</div>}
 
-          <div className="ws-media-stage" data-kind={mediaKind ?? "image"}>
-            <div className="ws-media-frame">
-              {editorPath && mediaKind ? (
-                <MediaPreview
-                  kind={mediaKind}
-                  path={editorPath}
-                  htmlSource={mediaKind === "html" ? draftContent : null}
-                  alt={editorName}
-                  showToolbar={false}
-                />
-              ) : (
+          {editorPath && mediaKind ? (
+            <FilePreviewContent
+              kind={mediaKind}
+              path={editorPath}
+              name={editorName}
+              theme={theme}
+              draft={draftContent}
+              onDraftChange={setDraftContent}
+              previewMode={false}
+              onOpenExternally={() => void openCurrentExternally()}
+            />
+          ) : (
+            <div className="ws-media-stage" data-kind="image">
+              <div className="ws-media-frame">
                 <div className="ws-media-fallback">
                   <FileGlyph name={editorName} isDir={false} />
                   <p>{t("workspace.mediaLoadError")}</p>
@@ -1492,9 +1491,9 @@ export default function WorkspacePanel({
                     {t("workspace.openExternally")}
                   </button>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          )}
         </>
       ) : (
         <>
@@ -1569,30 +1568,18 @@ export default function WorkspacePanel({
 
           {error && <div className="side-error">{error}</div>}
 
-          <div
-            className="ws-editor-wrap"
-            data-mode={docPreview ? "preview" : "source"}
-          >
-            {showMdPreview ? (
-              <div className="ws-md-preview">
-                <ChatMarkdown content={draftContent} />
-              </div>
-            ) : showHtmlPreview && editorPath ? (
-              <MediaPreview
-                kind="html"
-                path={editorPath}
-                htmlSource={draftContent}
-                className="ws-editor-html"
-              />
-            ) : (
-              <WorkspaceEditor
-                value={draftContent}
-                filename={editorName}
-                theme={theme}
-                onChange={setDraftContent}
-              />
-            )}
-          </div>
+          <FilePreviewContent
+            kind={
+              editorIsHtml ? "html" : editorIsMarkdown ? "markdown" : "text"
+            }
+            path={editorPath ?? ""}
+            name={editorName}
+            theme={theme}
+            draft={draftContent}
+            onDraftChange={setDraftContent}
+            previewMode={docPreview}
+            onOpenExternally={() => void openCurrentExternally()}
+          />
         </>
       )}
       </AnimatedSwitch>
