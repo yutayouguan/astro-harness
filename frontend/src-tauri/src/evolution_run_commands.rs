@@ -170,6 +170,55 @@ async fn reflect_over_targets(
     Err(last_err)
 }
 
+/// 为近期决策关联的会话构建精简 transcript（最多 3 个会话，各 ~1500 字符）。
+fn build_transcripts(
+    base: &Path,
+    decisions: &[memory::DecisionEntry],
+) -> Vec<(String, String)> {
+    let mut session_ids: Vec<String> = Vec::new();
+    for d in decisions {
+        if let Some(sid) = d.session_id.as_deref().filter(|s| !s.is_empty()) {
+            if !session_ids.iter().any(|s| s == sid) {
+                session_ids.push(sid.to_string());
+            }
+        }
+        if session_ids.len() >= 3 {
+            break;
+        }
+    }
+    if session_ids.is_empty() {
+        return Vec::new();
+    }
+    let store = match session::SessionStore::open_sessions_dir(&base.join("sessions")) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for sid in session_ids {
+        let Ok(msgs) = store.get_messages(&sid) else {
+            continue;
+        };
+        let start = msgs.len().saturating_sub(10);
+        let mut text = String::new();
+        for m in &msgs[start..] {
+            let content = m.content.as_deref().unwrap_or("").trim();
+            if content.is_empty() {
+                continue;
+            }
+            let clipped: String = content.chars().take(300).collect();
+            text.push_str(&format!("{}: {}\n", m.role, clipped));
+            if text.len() > 1500 {
+                text.push_str("…(截断)\n");
+                break;
+            }
+        }
+        if !text.trim().is_empty() {
+            out.push((sid, text));
+        }
+    }
+    out
+}
+
 /// 运行一次离线进化（生成待审提案）。
 #[tauri::command]
 pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String> {
@@ -193,9 +242,11 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
 
     let decisions = memory::list_recent_decisions(&base, 20).unwrap_or_default();
     let enabled_skills = skills::list_enabled_for_prompt();
+    let transcripts = build_transcripts(&base, &decisions);
     let input = ReflectionInput {
         decisions,
         enabled_skills,
+        transcripts,
     };
     let user = build_reflection_user_prompt(&input);
 

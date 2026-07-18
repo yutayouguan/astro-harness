@@ -17,6 +17,8 @@ pub struct ReflectionInput {
     pub decisions: Vec<DecisionEntry>,
     /// 已启用技能 `(name, description)`。
     pub enabled_skills: Vec<(String, String)>,
+    /// 相关会话的精简 transcript `(session_id, 文本)`；由调用方构建。
+    pub transcripts: Vec<(String, String)>,
 }
 
 /// 供 reflection 模型的 system 指令：只输出 JSON。
@@ -50,6 +52,13 @@ pub fn build_reflection_user_prompt(input: &ReflectionInput) -> String {
                 "- [{:?}] tool={tool} :: {}\n",
                 d.kind, d.summary
             ));
+        }
+    }
+    if !input.transcripts.is_empty() {
+        s.push_str("\n## 相关会话轨迹（精简）\n");
+        for (sid, text) in &input.transcripts {
+            let short: String = sid.chars().take(8).collect();
+            s.push_str(&format!("### 会话 {short}\n{text}\n\n"));
         }
     }
     s.push_str("\n请据此提出技能候选（JSON）。");
@@ -186,11 +195,14 @@ mod tests {
                     .with_tool("web_search"),
             ],
             enabled_skills: vec![("aihot".into(), "AI 资讯".into())],
+            transcripts: vec![("sess1234abcd".into(), "user: 帮我合并 PDF\ntool: pdf_merge ok".into())],
         };
         let p = build_reflection_user_prompt(&input);
         assert!(p.contains("aihot"));
         assert!(p.contains("web_search timeout"));
         assert!(p.contains("ToolFailure"));
+        assert!(p.contains("相关会话轨迹"));
+        assert!(p.contains("合并 PDF"));
     }
 
     #[test]

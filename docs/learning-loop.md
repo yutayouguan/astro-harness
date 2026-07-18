@@ -87,12 +87,14 @@ learning:
 
 **已落地（Rust 内置极简引擎）**：模型服务页「离线进化」子 Tab 可配置 `evolution.enabled`、`reflection` / `judge` 路由与门禁（run_tests / require_pr / max_skill_bytes，写入 `config.yaml` 的 `evolution:` 段），并新增：
 
-- **运行进化**：读 `learning/decisions.jsonl`（工具失败等）+ 已启用技能索引 → `reflection` 模型产出技能候选（新建 / patch）→ 静态门禁 → **`judge` 模型打分**（`min_judge_score` 阈值，0 关闭）→ 存待审提案（`~/.astro/learning/evolution/proposals/`）。
+- **运行进化**：读 `learning/decisions.jsonl`（工具失败/用户纠错/关键决策等）+ 已启用技能索引 + **相关会话精简 transcript**（按决策的 session_id，最多 3 个）→ `reflection` 模型产出技能候选（新建 / patch）→ 静态门禁 → **`judge` 模型打分**（`min_judge_score` 阈值，0 关闭）→ 存待审提案（`~/.astro/learning/evolution/proposals/`）。
 - **应用内审批**：提案在子 Tab 内以 diff + judge 评分展示，**批准**才写入 Agent skills 目录，**绝不自动应用**（`require_pr` 语义）。
 
 实现：crate [`evolution`](../evolution)（candidate/reflect/gates/judge/proposal）+ Tauri `evolution_run_commands`（run/list/approve/reject）+ `EvolutionModelsPanel`。
 
 `run_tests`（默认开）：**批准写入后**若技能含 `scripts/test.sh` / `test.py` 则沙箱执行（60s 超时），失败自动回滚且保留提案；无脚本则跳过。放在批准后执行，确保人已审阅内容再运行。
+
+DecisionLog 现覆盖：`ToolFailure`、`MemoryRejected`、`UserCorrection`（启发式识别用户纠错）、`KeyChoice`（`confirm` 决策闸口）。
 
 **仍为后续**：完整 GEPA/Pareto 遗传搜索、git 分支/PR 自动化。
 
