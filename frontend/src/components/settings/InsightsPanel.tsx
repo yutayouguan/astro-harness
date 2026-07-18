@@ -10,6 +10,7 @@ import {
   Calendar,
   CalendarDays,
   CalendarRange,
+  ChevronRight,
   Coins,
   Cpu,
   DollarSign,
@@ -19,6 +20,7 @@ import {
   Network,
   Puzzle,
   Timer,
+  UserRound,
   Wrench,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -119,6 +121,7 @@ type TraceEvent = {
   output_tokens: number;
   total_tokens: number;
   cost_usd: number;
+  duration_ms?: number | null;
   turn_id?: string | null;
   parent_id?: string | null;
   status?: string | null;
@@ -350,6 +353,8 @@ function KindIcon({ kind }: { kind: string }) {
       return <Timer {...props} />;
     case "llm":
       return <Cpu {...props} />;
+    case "user":
+      return <UserRound {...props} />;
     case "provider":
       return <Building2 {...props} />;
     case "agent":
@@ -1400,62 +1405,14 @@ export default function InsightsPanel({ active }: { active: boolean }) {
                         </button>
                         {open && (
                           <ol className="insights-trace-timeline insights-trace-timeline-nested">
-                            {g.events.map((ev, i) => {
-                              const ioPreview = (ev.output || ev.input)
-                                ?.trim()
-                                .replace(/\s+/g, " ");
-                              return (
-                                <li
-                                  key={ev.id}
-                                  className={`insights-trace-event kind-${ev.kind}`}
-                                >
-                                  <span className="insights-trace-rail" aria-hidden>
-                                    <span className="insights-trace-dot">
-                                      <KindIcon kind={ev.kind} />
-                                    </span>
-                                    {i < g.events.length - 1 && (
-                                      <span className="insights-trace-line" />
-                                    )}
-                                  </span>
-                                  <div className="insights-trace-event-body">
-                                    <div className="insights-trace-event-head">
-                                      <span className="insights-trace-event-name">
-                                        {ev.kind === "user"
-                                          ? t("insights.trace.event.user")
-                                          : ev.name}
-                                      </span>
-                                      <span
-                                        className={`insights-trace-kind kind-${ev.kind}`}
-                                      >
-                                        {ev.kind}
-                                      </span>
-                                    </div>
-                                    {ioPreview && (
-                                      <p
-                                        className="insights-trace-event-io"
-                                        title={ioPreview}
-                                      >
-                                        {ioPreview.length > 160
-                                          ? `${ioPreview.slice(0, 159)}…`
-                                          : ioPreview}
-                                      </p>
-                                    )}
-                                    <div className="insights-trace-event-meta">
-                                      <span>{formatTraceTime(ev.ts)}</span>
-                                      {ev.total_tokens > 0 && (
-                                        <span>
-                                          {formatTokens(ev.total_tokens)} tok
-                                        </span>
-                                      )}
-                                      {ev.cost_usd > 0 && (
-                                        <span>{formatCost(ev.cost_usd)}</span>
-                                      )}
-                                      {ev.agent_id && <span>{ev.agent_id}</span>}
-                                    </div>
-                                  </div>
-                                </li>
-                              );
-                            })}
+                            {g.events.map((ev, i) => (
+                              <TraceEventItem
+                                key={ev.id}
+                                event={ev}
+                                isLast={i === g.events.length - 1}
+                                t={t}
+                              />
+                            ))}
                           </ol>
                         )}
                       </li>
@@ -1468,6 +1425,136 @@ export default function InsightsPanel({ active }: { active: boolean }) {
         </>
       )}
     </div>
+  );
+}
+
+function formatTraceDuration(ms: number): string {
+  if (ms < 1_000) return `${Math.max(0, Math.round(ms))} ms`;
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = Math.round((ms % 60_000) / 1_000);
+  return `${minutes}m ${seconds}s`;
+}
+
+function traceStatusLabel(
+  status: string | null | undefined,
+  t: (key: MessageKey) => string,
+): string | null {
+  if (!status) return null;
+  if (status === "ok" || status === "done" || status === "success") {
+    return t("insights.trace.status.done");
+  }
+  if (status === "error" || status === "failed") {
+    return t("insights.trace.status.error");
+  }
+  if (status === "running") return t("insights.trace.status.running");
+  return status;
+}
+
+function TraceEventItem({
+  event,
+  isLast,
+  t,
+}: {
+  event: TraceEvent;
+  isLast: boolean;
+  t: (key: MessageKey, vars?: Record<string, string>) => string;
+}) {
+  const name =
+    event.kind === "user" ? t("insights.trace.event.user") : event.name;
+  const status = traceStatusLabel(event.status, t);
+  const duration =
+    event.duration_ms != null
+      ? formatTraceDuration(event.duration_ms)
+      : t("insights.trace.durationUnavailable");
+
+  return (
+    <li className={`insights-trace-event kind-${event.kind}`}>
+      <span className="insights-trace-rail" aria-hidden>
+        <span className="insights-trace-dot">
+          <KindIcon kind={event.kind} />
+        </span>
+        {!isLast && <span className="insights-trace-line" />}
+      </span>
+      <details className="insights-trace-event-details">
+        <summary className="insights-trace-event-summary">
+          <span className="insights-trace-event-chevron" aria-hidden>
+            <ChevronRight size={14} strokeWidth={2.25} />
+          </span>
+          <span className="insights-trace-event-summary-main">
+            <span className="insights-trace-event-head">
+              <span className="insights-trace-event-name">{name}</span>
+              <span className={`insights-trace-kind kind-${event.kind}`}>
+                {event.kind}
+              </span>
+            </span>
+            <span className="insights-trace-event-meta">
+              <span>{formatTraceTime(event.ts)}</span>
+              <span>{duration}</span>
+              {event.total_tokens > 0 && (
+                <span>{formatTokens(event.total_tokens)} tok</span>
+              )}
+              {status && <span>{status}</span>}
+            </span>
+          </span>
+        </summary>
+
+        <div className="insights-trace-event-detail">
+          <div className="insights-trace-event-facts">
+            <span>
+              <strong>{t("insights.trace.detail.duration")}</strong>
+              {duration}
+            </span>
+            <span>
+              <strong>{t("insights.trace.detail.inputTokens")}</strong>
+              {formatTokens(event.input_tokens)}
+            </span>
+            <span>
+              <strong>{t("insights.trace.detail.outputTokens")}</strong>
+              {formatTokens(event.output_tokens)}
+            </span>
+            <span>
+              <strong>{t("insights.trace.detail.totalTokens")}</strong>
+              {formatTokens(event.total_tokens)}
+            </span>
+            <span>
+              <strong>{t("insights.trace.detail.cost")}</strong>
+              {formatCost(event.cost_usd)}
+            </span>
+            {event.agent_id && (
+              <span>
+                <strong>Agent</strong>
+                {event.agent_id}
+              </span>
+            )}
+          </div>
+
+          {event.input ? (
+            <section className="insights-trace-io-block">
+              <h4>{t("insights.trace.detail.input")}</h4>
+              <pre>{event.input}</pre>
+            </section>
+          ) : (
+            <section className="insights-trace-io-block is-empty">
+              <h4>{t("insights.trace.detail.input")}</h4>
+              <p>{t("insights.trace.detail.noData")}</p>
+            </section>
+          )}
+
+          {event.output ? (
+            <section className="insights-trace-io-block">
+              <h4>{t("insights.trace.detail.output")}</h4>
+              <pre>{event.output}</pre>
+            </section>
+          ) : (
+            <section className="insights-trace-io-block is-empty">
+              <h4>{t("insights.trace.detail.output")}</h4>
+              <p>{t("insights.trace.detail.noData")}</p>
+            </section>
+          )}
+        </div>
+      </details>
+    </li>
   );
 }
 
