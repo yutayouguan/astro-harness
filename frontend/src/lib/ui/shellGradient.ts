@@ -352,6 +352,13 @@ export function applyShellGradientVars(
     "--unified-tone-glow",
     `color-mix(in srgb, ${gradient.primary.color} 40%, transparent)`,
   );
+  // html/body 底色跟渐变走，缩放露边时不闪默认白/蓝
+  const themeAttr =
+    (typeof document !== "undefined"
+      ? document.documentElement.getAttribute("data-theme")
+      : null) ?? el.getAttribute("data-theme");
+  const theme = themeAttr === "dark" ? "dark" : "light";
+  el.style.setProperty("--window-underlay", underlayFromGradient(theme, gradient));
 }
 
 let glassFlushRaf = 0;
@@ -406,6 +413,7 @@ export function clearShellGradientVars(el: HTMLElement): void {
     "--unified-tone",
     "--unified-tone-soft",
     "--unified-tone-glow",
+    "--window-underlay",
   ]) {
     el.style.removeProperty(key);
   }

@@ -23,11 +23,24 @@ html[data-theme="dark"] select:-webkit-autofill {
 
 
 
-/* 窗口缩放动画期间关掉过渡，减轻透明窗闪白 */
+/* 窗口缩放动画期间：关过渡 + 关磨砂，避免透明窗白边与卡片闪白 */
 html.zooming,
 html.zooming * {
   animation: none !important;
   transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 缩放时用更实的底，盖住新露出的窗体缝 */
+html.zooming,
+html.zooming body,
+html.zooming #root {
+  background: var(--window-underlay, var(--bg1)) !important;
+}
+
+html.zooming .app-shell {
+  background-color: var(--window-underlay, var(--bg1));
 }
 
 /* Overlay 标题栏：红绿灯约占 12–38px 高、左侧约 78px 宽 */

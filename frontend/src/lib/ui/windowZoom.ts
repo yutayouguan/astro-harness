@@ -5,6 +5,7 @@
  * 做法：禁止原生 zoom；用物理像素逐帧 setPosition/setSize，让 WebView 跟每一帧。
  */
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   currentMonitor,
   getCurrentWindow,
@@ -64,6 +65,19 @@ async function animatePhysical(from: Rect, to: Rect): Promise<void> {
   const win = getCurrentWindow();
   animating = true;
   document.documentElement.classList.add("zooming");
+  // 动画前把原生窗/WebView 底色锁到当前 underlay，避免扩边露白
+  try {
+    const underlay =
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--window-underlay")
+        .trim() || "#dbeafe";
+    await Promise.all([
+      win.setBackgroundColor(underlay),
+      getCurrentWebview().setBackgroundColor(underlay),
+    ]);
+  } catch {
+    // ignore
+  }
   const start = performance.now();
   try {
     await new Promise<void>((resolve) => {
@@ -88,9 +102,10 @@ async function animatePhysical(from: Rect, to: Rect): Promise<void> {
     });
   } finally {
     animating = false;
+    // 稍留一会再开磨砂，等布局稳定，减少卡片闪白
     window.setTimeout(() => {
       document.documentElement.classList.remove("zooming");
-    }, 40);
+    }, 120);
   }
 }
 
