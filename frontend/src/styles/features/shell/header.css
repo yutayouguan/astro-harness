@@ -814,7 +814,7 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
   text-overflow: ellipsis;
 }
 
-/* 标题栏 AgentPicker：与 status / model 胶囊同高 */
+/* 标题栏 AgentPicker：与 status / model / 工具组同一套胶囊表面与强调色 */
 .header-actions .header-agent-picker {
   max-width: min(220px, 42vw);
 }
@@ -822,8 +822,112 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 .header-actions .header-agent-picker .agent-picker-chip {
   min-height: 40px;
   height: 40px;
+  min-width: 0;
   border-radius: 999px;
-  padding: 0 12px 0 10px;
+  padding: 0 12px 0 6px;
+  gap: 6px;
+  background: var(--header-chip-bg);
+  border: 1px solid var(--header-chip-border);
+  box-shadow: var(--header-chip-shadow);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
+
+.header-actions .header-agent-picker .agent-picker-chip:hover:not(:disabled),
+.header-actions .header-agent-picker .agent-picker-chip.is-open {
+  background: var(--header-chip-bg);
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 32%, var(--header-chip-border));
+  box-shadow:
+    var(--header-chip-shadow),
+    0 0 0 2px color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
+}
+
+.header-actions .header-agent-picker .agent-picker-chip .agent-avatar {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.95), transparent 55%),
+    rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  color: var(--tone, var(--ink));
+}
+
+html[data-theme="dark"] .header-actions .header-agent-picker .agent-picker-chip .agent-avatar {
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.14), transparent 55%),
+    rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.header-actions .header-agent-picker .agent-picker-chip .agent-avatar--default {
+  color: var(--tone, var(--ink));
+}
+
+.header-actions .header-agent-picker .agent-picker-chevron {
+  color: var(--ink-mute);
+}
+
+.header-actions .header-agent-picker .agent-picker-chip.is-open .agent-picker-chevron,
+.header-actions .header-agent-picker .agent-picker-chip:hover:not(:disabled) .agent-picker-chevron {
+  color: var(--tone, var(--ink));
+}
+
+/* 标题栏内图标强调色统一走 --tone（status 绿点保留语义色） */
+.header-actions .model-picker-icon {
+  color: var(--tone, var(--ink));
+}
+
+html[data-theme="dark"] .header-actions .model-picker-icon {
+  color: var(--tone, var(--ink));
+}
+
+.header-actions .header-icon-btn {
+  color: var(--tone, var(--ink-soft));
+}
+
+.header-actions .header-icon-btn:hover,
+.header-actions .header-icon-btn.is-active {
+  color: var(--tone, var(--ink));
+}
+
+/* 标题栏「浏览 / 产物」分段：同套胶囊表面与 --tone */
+.header-actions .files-mode-switch {
+  height: 40px;
+  box-sizing: border-box;
+  align-items: center;
+  padding: 3px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--header-chip-border);
+  background: var(--header-chip-bg);
+  box-shadow: var(--header-chip-shadow);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
+
+.header-actions .files-mode-tab {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--ink-mute);
+}
+
+.header-actions .files-mode-tab.is-active {
+  color: var(--tone, var(--ink));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent);
+}
+
+html[data-theme="dark"] .header-actions .files-mode-tab.is-active {
+  color: color-mix(in srgb, #fff 14%, var(--tone, var(--ink)));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 18%, rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent);
 }
 
 .status-dot {
