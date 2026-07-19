@@ -1462,10 +1462,12 @@ html[data-theme="dark"] .shell-grad-palette {
   border-radius: 50%;
   padding: 0;
   cursor: pointer;
+  /* 极淡描边，避免白/黑块在浅/深底上「失踪」 */
+  outline: 1px solid color-mix(in srgb, var(--ink, #0f172a) 10%, transparent);
+  outline-offset: -1px;
   box-shadow:
     inset 0 1px 1px color-mix(in srgb, #fff 55%, transparent),
     inset 0 -1px 2px color-mix(in srgb, #0f172a 18%, transparent),
-    0 1px 0 color-mix(in srgb, #fff 35%, transparent),
     0 2px 6px color-mix(in srgb, #0f172a 14%, transparent);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1487,6 +1489,7 @@ html[data-theme="dark"] .shell-grad-palette {
 }
 
 html[data-theme="dark"] .shell-grad-swatch {
+  outline-color: color-mix(in srgb, #fff 14%, transparent);
   box-shadow:
     inset 0 1px 1px color-mix(in srgb, #fff 18%, transparent),
     inset 0 -1px 2px color-mix(in srgb, #000 35%, transparent),
@@ -1507,9 +1510,11 @@ html[data-theme="dark"] .shell-grad-swatch.is-active {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
+  margin-left: 2px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
+  isolation: isolate;
   background:
     conic-gradient(
       from 200deg,
@@ -1526,6 +1531,19 @@ html[data-theme="dark"] .shell-grad-swatch.is-active {
     0 3px 10px color-mix(in srgb, #0f172a 16%, transparent),
     inset 0 1px 1px color-mix(in srgb, #fff 40%, transparent);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 与快捷色之间的细分隔 */
+.shell-grad-custom-color::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink, #0f172a) 12%, transparent);
+  pointer-events: none;
 }
 
 .shell-grad-custom-color:hover {
@@ -1572,9 +1590,16 @@ html[data-theme="dark"] .shell-grad-custom-color:hover {
     0 6px 16px color-mix(in srgb, #000 40%, transparent);
 }
 
+html[data-theme="dark"] .shell-grad-custom-color::before {
+  background: color-mix(in srgb, #fff 16%, transparent);
+}
+
 html[data-theme="dark"] .shell-grad-custom-color-core {
   background:
-    radial-gradient(circle at 35% 30%, #f8fafc 0%, #cbd5e1 60%, #94a3b8 100%);
+    radial-gradient(circle at 35% 30%, #334155 0%, #1e293b 55%, #0f172a 100%);
+  box-shadow:
+    inset 0 1px 2px color-mix(in srgb, #000 45%, transparent),
+    0 0 0 1px color-mix(in srgb, #fff 12%, transparent);
 }
 
 .shell-grad-custom-color input {
