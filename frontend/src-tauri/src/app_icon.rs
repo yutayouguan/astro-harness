@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::image::Image;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 /// 与 [`tray::install_tray`](crate::tray) 使用的 tray id 保持一致。
 const TRAY_ID: &str = "main-tray";

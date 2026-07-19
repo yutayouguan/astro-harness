@@ -183,7 +183,6 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 
     #[cfg(unix)]
     unsafe {
-        use std::os::unix::process::CommandExt;
         cmd.pre_exec(|| {
             apply_unix_rlimits();
             Ok(())
