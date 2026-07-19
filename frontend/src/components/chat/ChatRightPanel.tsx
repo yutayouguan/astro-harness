@@ -209,6 +209,8 @@ export default function ChatRightPanel({
               <ChatAgentInfo
                 sessionId={sessionId}
                 turnId={turnId}
+                contextUsage={contextUsage}
+                contextWindow={contextWindow}
                 onOpenMemory={onOpenMemory}
                 onOpenSkills={onOpenSkills}
                 onOpenContextTab={() => onTabChange("context")}

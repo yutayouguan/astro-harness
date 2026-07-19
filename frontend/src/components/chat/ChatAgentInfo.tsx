@@ -13,15 +13,26 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
+import {
+  displayContextWindow,
+  formatTokenCount,
+  usagePercent,
+  type ContextUsageSnapshot,
+} from "../../lib/chat/contextUsage";
 import { formatDiagnosticContext } from "../../lib/chat/diagnosticContext";
 import type { AgentInfo } from "../../types/agent";
 import type { InstalledSkill } from "../../types";
 import AgentAvatar from "../agents/AgentAvatar";
+import ContextUsageBar from "./ContextUsageBar";
 
 /** 当前 Agent 信息条入参 */
 type Props = {
   sessionId?: string | null;
   turnId?: string | null;
+  /** 分层上下文占用快照 */
+  contextUsage?: ContextUsageSnapshot | null;
+  /** 模型上下文窗口；未知时由快照回落 */
+  contextWindow?: number;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
   /** 打开右侧「上下文」Tab 查看分层占用 */
@@ -33,12 +44,17 @@ const MEMORY_PREVIEW_LEN = 280;
 export default function ChatAgentInfo({
   sessionId = null,
   turnId = null,
+  contextUsage = null,
+  contextWindow = 0,
   onOpenMemory,
   onOpenSkills,
   onOpenContextTab,
 }: Props) {
   const { t } = useI18n();
   const [agent, setAgent] = useState<AgentInfo | null>(null);
+  const win = displayContextWindow(contextUsage, contextWindow);
+  const used = contextUsage?.totalTokens ?? 0;
+  const pct = win > 0 ? usagePercent(used, win) : null;
   const [memoryPreview, setMemoryPreview] = useState("");
   const [diary, setDiary] = useState("");
   const [skillNames, setSkillNames] = useState<string[]>([]);
@@ -155,20 +171,49 @@ export default function ChatAgentInfo({
       </header>
 
       <section className="chat-agent-card">
-        <h4 className="chat-agent-card-title">
-          <span className="chat-agent-card-icon" aria-hidden>
-            <Gauge size={15} strokeWidth={2.1} />
-          </span>
-          <span>{t("chat.rightPanel.usageTitle")}</span>
-        </h4>
-        <button
-          type="button"
-          className="chat-agent-view-all"
-          onClick={onOpenContextTab}
-        >
-          <span>{t("chat.rightPanel.viewContextUsage")}</span>
-          <ArrowUpRight size={14} strokeWidth={2.1} aria-hidden />
-        </button>
+        <div className="chat-agent-card-head">
+          <h4 className="chat-agent-card-title">
+            <span className="chat-agent-card-icon" aria-hidden>
+              <Gauge size={15} strokeWidth={2.1} />
+            </span>
+            <span>{t("chat.rightPanel.usageTitle")}</span>
+          </h4>
+          <button type="button" className="linkish" onClick={onOpenContextTab}>
+            <span>{t("chat.contextUsageDetail")}</span>
+            <ArrowUpRight size={12} strokeWidth={2.1} aria-hidden />
+          </button>
+        </div>
+        {contextUsage && (win > 0 || used > 0) ? (
+          <button
+            type="button"
+            className="chat-agent-usage"
+            onClick={onOpenContextTab}
+            aria-label={
+              pct != null
+                ? t("chat.contextUsageFull", { pct: String(pct) })
+                : t("chat.contextUsage")
+            }
+          >
+            <div className="chat-agent-usage-meta">
+              <span className="chat-agent-usage-pct">
+                {pct != null
+                  ? t("chat.contextUsageFull", { pct: String(pct) })
+                  : t("chat.contextUsage")}
+              </span>
+              <span className="chat-agent-usage-tokens">
+                ~{formatTokenCount(used)}
+                {win > 0 ? ` / ${formatTokenCount(win)}` : ""}
+              </span>
+            </div>
+            {win > 0 ? (
+              <ContextUsageBar snapshot={contextUsage} windowTokens={win} />
+            ) : null}
+          </button>
+        ) : (
+          <p className="chat-agent-usage-empty muted">
+            {t("chat.rightPanel.usagePlaceholder")}
+          </p>
+        )}
         {turnId && sessionId ? (
           <div className="chat-agent-turn">
             <span>{t("chat.rightPanel.turnLabel")}</span>

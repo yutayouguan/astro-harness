@@ -1123,23 +1123,68 @@ html[data-theme="dark"] .chat-session-menu {
   background: color-mix(in srgb, var(--tone-blue, #2563eb) 24%, transparent);
 }
 
-.chat-agent-usage-list {
-  margin: 0 0 8px;
-  padding-left: 1.1em;
-  font-size: 12px;
-  color: var(--ink-soft);
-  line-height: 1.55;
+.chat-agent-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 14%, var(--glass-edge));
+  border-radius: 12px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 28%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
 }
 
-.chat-agent-usage-bar {
-  height: 8px;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--tone-blue, #2563eb) 35%, transparent),
-    transparent
-  );
-  margin-top: 8px;
+.chat-agent-usage:hover {
+  border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 28%, var(--glass-edge));
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.16)),
+    color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 46%, transparent);
+  transform: translateY(-1px);
+}
+
+.chat-agent-usage:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone-blue, #2563eb) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.chat-agent-usage-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-agent-usage-pct {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.chat-agent-usage-tokens {
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-agent-usage .ctx-usage-bar {
+  height: 7px;
+}
+
+.chat-agent-usage-empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .chat-agent-skill-tags {
@@ -1233,10 +1278,16 @@ html[data-theme="dark"] .chat-agent-card-icon {
 
 html[data-theme="dark"] .chat-agent-status,
 html[data-theme="dark"] .chat-agent-skill-tags span,
-html[data-theme="dark"] .chat-agent-view-all {
+html[data-theme="dark"] .chat-agent-view-all,
+html[data-theme="dark"] .chat-agent-usage {
   border-color: color-mix(in srgb, var(--tone-blue, #60a5fa) 20%, rgba(255, 255, 255, 0.1));
   background: color-mix(in srgb, var(--tone-blue-soft, #172554) 40%, rgba(255, 255, 255, 0.025));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .chat-agent-usage:hover {
+  border-color: color-mix(in srgb, var(--tone-blue, #60a5fa) 32%, rgba(255, 255, 255, 0.14));
+  background: color-mix(in srgb, var(--tone-blue-soft, #172554) 56%, rgba(255, 255, 255, 0.04));
 }
 
 html[data-theme="dark"] .chat-agent-preview {
