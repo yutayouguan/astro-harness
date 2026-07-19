@@ -179,6 +179,26 @@ html[data-tone="twilight"] {
 }
 
 /*
+ * 统一 / 灵动换色时：色相关属性瞬时切换。
+ * 壳层背景本身无 transition；若导航/卡片仍过渡 background/color，会显得「慢半拍」。
+ */
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .nav-item,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .nav-icon,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-nav-indicator,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-pin-btn,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-section,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-category-nav,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-category-nav-item,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-icon-badge,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .theme-option,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .shell-dynamic-reshuffle,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .page-title-icon {
+  transition-property: transform, opacity, width, box-shadow;
+}
+
+/*
  * 统一色彩：强调色跟随 --unified-tone（由 JS 写入起始色）。
  * Skills 卡片哈希色不在此重映射（各自 class 仍指向原 token）。
  */

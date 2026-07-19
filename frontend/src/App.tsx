@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -250,7 +251,8 @@ export default function App() {
     }
     return null;
   }, [colorStyle, gradient, dynamicSeed, nav, resolved]);
-  useEffect(() => {
+  // layout：在绘制前写 CSS 变量，避免壳层先变、导航/卡片慢一帧
+  useLayoutEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);

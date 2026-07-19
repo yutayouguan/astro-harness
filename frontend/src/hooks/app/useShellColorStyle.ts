@@ -111,13 +111,15 @@ export function useShellColorStyle() {
 
   /** 重新生成灵动配色种子（全体 Tab 换色） */
   const reshuffleDynamic = useCallback(() => {
+    const dynamicSeed = createDynamicSeed();
     setPrefsState((prev) => {
       const next = {
         ...prev,
         style: "dynamic" as const,
-        dynamicSeed: createDynamicSeed(),
+        dynamicSeed,
       };
-      persistPrefs(next);
+      // 写盘放到微任务，避免阻塞本次渲染与配色同步
+      queueMicrotask(() => persistPrefs(next));
       return next;
     });
   }, []);
