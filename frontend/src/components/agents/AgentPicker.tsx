@@ -25,6 +25,8 @@ type Props = {
   /** 无障碍 / 菜单标题 */
   labelKey?: MessageKey;
   className?: string;
+  /** 菜单相对锚点对齐；标题栏靠右时用 end */
+  menuAlign?: "start" | "end";
   /** 菜单末项「新建 Agent」；提供时渲染分隔线 + 操作项 */
   onCreateNew?: () => void;
   /** 新建项文案；默认 chat.newAgent */
@@ -66,6 +68,7 @@ export default function AgentPicker({
   disabled = false,
   labelKey = "filespace.agentFilter",
   className = "",
+  menuAlign = "start",
   onCreateNew,
   createLabelKey = "chat.newAgent",
 }: Props) {
@@ -90,7 +93,7 @@ export default function AgentPicker({
     maxWidth: 340,
     maxHeightCap: 300,
     maxHeightRatio: 0.42,
-    preferAlign: "start",
+    preferAlign: menuAlign,
     placement: "auto",
   });
 

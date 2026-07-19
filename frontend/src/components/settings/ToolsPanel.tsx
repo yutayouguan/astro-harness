@@ -35,13 +35,10 @@ import {
   type McpServer,
   type McpTransportType,
 } from "../../hooks/providers/useMcpTools";
+import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import type { AgentInfo } from "../../types/agent";
-import { normalizeAgentId } from "../../types/agent";
-import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import McpIcon from "../icons/McpIcon";
-import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import LucideByName from "../icons/LucideByName";
@@ -770,8 +767,7 @@ export default function ToolsPanel({
   const [tab, setTab] = useState<ToolTab>("builtin");
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState("");
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [agentId, setAgentId] = useState("workspace");
+  const { activeAgentId: agentId } = useActiveAgent();
   const [viewMode, setViewMode] = useState<ToolsView>(() => readToolsView());
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [selectedFnName, setSelectedFnName] = useState<string | null>(null);
@@ -811,53 +807,6 @@ export default function ToolsPanel({
       }
     })();
   }, [active, agentId]);
-
-  useEffect(() => {
-    if (!active || !isTauri()) return;
-    void (async () => {
-      try {
-        const cfg = await invoke<{
-          active_agent_id: string;
-          agents: AgentInfo[];
-        }>("get_config");
-        setAgents(cfg.agents);
-        setAgentId(normalizeAgentId(cfg.active_agent_id));
-      } catch {
-        // ignore
-      }
-    })();
-  }, [active]);
-
-  useAgentsChanged((payload) => {
-    if (!active || !isTauri()) return;
-    void (async () => {
-      try {
-        const cfg = await invoke<{
-          active_agent_id: string;
-          agents: AgentInfo[];
-        }>("get_config");
-        setAgents(cfg.agents);
-        setAgentId(normalizeAgentId(cfg.active_agent_id || payload.active_agent_id));
-      } catch {
-        // ignore
-      }
-    })();
-  });
-
-  const switchAgent = async (id: string) => {
-    setAgentId(id);
-    if (!isTauri()) return;
-    try {
-      const cfg = await invoke<{
-        active_agent_id: string;
-        agents: AgentInfo[];
-      }>("set_active_agent", { agentId: id });
-      setAgents(cfg.agents);
-      setAgentId(normalizeAgentId(cfg.active_agent_id));
-    } catch {
-      // keep local selection
-    }
-  };
 
   const items = useMemo(() => {
     if (tab !== "builtin") return [];
@@ -981,14 +930,6 @@ export default function ToolsPanel({
       <div className="agent-tools-body">
       {tab !== "approvals" && (
       <div className="panel-agent-toolbar">
-        <div className="panel-agent-toolbar-start">
-          <AgentPicker
-            agents={agents}
-            value={agentId}
-            onChange={(id) => void switchAgent(id)}
-            labelKey="filespace.agentFilter"
-          />
-        </div>
         <div className="panel-agent-toolbar-end">
           <ExpandableSearch
             value={search}

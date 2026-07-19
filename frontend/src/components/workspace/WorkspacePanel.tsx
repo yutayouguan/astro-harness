@@ -10,13 +10,13 @@ import {
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { Eye, ExternalLink, FileCode2, Save, Undo2 } from "lucide-react";
+import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useTheme } from "../../hooks/app/useTheme";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useFileSelection } from "../../hooks/ui/useFileSelection";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { FileEntryDto } from "../../types";
-import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import {
   isMarkdownFilename,
   readWorkspaceMdMode,
@@ -24,8 +24,6 @@ import {
   type MdMode,
 } from "../../lib/filespace/workspaceMdMode";
 import { buildWorkspaceMenuItems } from "../../lib/filespace/workspaceMenuItems";
-import type { AgentInfo } from "../../types/agent";
-import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import MediaToolbar from "../media/MediaToolbar";
 import FilePreviewContent from "../filespace/FilePreviewContent";
@@ -175,10 +173,15 @@ export default function WorkspacePanel({
   const { t } = useI18n();
   const confirm = useConfirm();
   const { resolved: theme } = useTheme();
+  const {
+    activeAgentId,
+    workspaceDir,
+    setActiveAgent,
+    refreshAgents,
+  } = useActiveAgent();
   const [root, setRoot] = useState("");
   const [workspaceRoot, setWorkspaceRoot] = useState("");
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [activeAgentId, setActiveAgentId] = useState("workspace");
+  const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null);
   const [entries, setEntries] = useState<FileEntryDto[]>([]);
   const [view, setView] = useState<ViewMode>("browse");
   const [editorPath, setEditorPath] = useState<string | null>(null);
@@ -214,6 +217,8 @@ export default function WorkspacePanel({
   const renameBusyRef = useRef(false);
 
   const dirty = view === "editor" && draftContent !== savedContent;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
   const editorIsMarkdown = isMarkdownFilename(editorName);
   const editorIsHtml = mediaKindOf(editorName) === "html";
   const canTogglePreview = editorIsMarkdown || editorIsHtml;
@@ -270,15 +275,12 @@ export default function WorkspacePanel({
     try {
       if (!path) {
         const cfg = await invoke<{
-          memory_dir: string;
           workspace_dir: string;
           active_agent_id: string;
-          agents: AgentInfo[];
         }>("get_config");
-        setAgents(cfg.agents);
-        setActiveAgentId(cfg.active_agent_id);
         setWorkspaceRoot(cfg.workspace_dir);
         setRoot(cfg.workspace_dir);
+        setLoadedAgentId(cfg.active_agent_id);
         const list = await invoke<FileEntryDto[]>("list_files", {
           path: cfg.workspace_dir,
         });
@@ -298,6 +300,60 @@ export default function WorkspacePanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 标题栏等处切换 Agent：脏文件先确认，取消则回滚共享态
+  useEffect(() => {
+    if (!activeAgentId) return;
+    if (loadedAgentId === null) return;
+    if (activeAgentId === loadedAgentId) return;
+
+    let cancelled = false;
+    void (async () => {
+      if (
+        dirtyRef.current &&
+        !(await confirm({
+          title: t("dialog.unsavedTitle"),
+          message: t("workspace.unsavedConfirm"),
+        }))
+      ) {
+        if (!cancelled) {
+          void setActiveAgent(loadedAgentId).catch(() => {});
+        }
+        return;
+      }
+      if (cancelled) return;
+      setLoadingList(true);
+      setError(null);
+      try {
+        const dir =
+          workspaceDir ||
+          (
+            await invoke<{ workspace_dir: string }>("get_config")
+          ).workspace_dir;
+        setWorkspaceRoot(dir);
+        setRoot(dir);
+        setView("browse");
+        setEditorPath(null);
+        selection.clear();
+        setPendingCut(null);
+        setRenamingPath(null);
+        const list = await invoke<FileEntryDto[]>("list_files", { path: dir });
+        if (cancelled) return;
+        setEntries(list);
+        setLoadedAgentId(activeAgentId);
+      } catch (e) {
+        if (!cancelled) setError(String(e));
+      } finally {
+        if (!cancelled) setLoadingList(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // selection 用最新闭包；刻意不放进 deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAgentId, loadedAgentId, workspaceDir, confirm, t, setActiveAgent]);
 
   // 面板常驻挂载：openPath 变化时（来自「产物 → 在工作区中打开」）定位并打开
   useEffect(() => {
@@ -336,64 +392,6 @@ export default function WorkspacePanel({
       cancelled = true;
     };
   }, [editorPath, view, onOpenSession]);
-
-  useAgentsChanged(() => {
-    if (dirty) {
-      // 有未保存编辑时只刷新列表，不切走当前文件
-      void (async () => {
-        try {
-          const cfg = await invoke<{
-            active_agent_id: string;
-            agents: AgentInfo[];
-          }>("get_config");
-          setAgents(cfg.agents);
-        } catch {
-          // ignore
-        }
-      })();
-      return;
-    }
-    void load();
-  });
-
-  const switchAgent = async (agentId: string) => {
-    if (agentId === activeAgentId) return;
-    if (
-      dirty &&
-      !(await confirm({
-        title: t("dialog.unsavedTitle"),
-        message: t("workspace.unsavedConfirm"),
-      }))
-    ) {
-      return;
-    }
-    setLoadingList(true);
-    setError(null);
-    try {
-      const cfg = await invoke<{
-        workspace_dir: string;
-        active_agent_id: string;
-        agents: AgentInfo[];
-      }>("set_active_agent", { agentId });
-      setAgents(cfg.agents);
-      setActiveAgentId(cfg.active_agent_id);
-      setWorkspaceRoot(cfg.workspace_dir);
-      setRoot(cfg.workspace_dir);
-      setView("browse");
-      setEditorPath(null);
-      selection.clear();
-      setPendingCut(null);
-      setRenamingPath(null);
-      const list = await invoke<FileEntryDto[]>("list_files", {
-        path: cfg.workspace_dir,
-      });
-      setEntries(list);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoadingList(false);
-    }
-  };
 
   const openEditor = (path: string, name: string, content: string) => {
     setEditorPath(path);
@@ -491,15 +489,13 @@ export default function WorkspacePanel({
     const idx = norm.lastIndexOf("/");
     const dir = idx > 0 ? abs.slice(0, idx) : abs;
     try {
+      await refreshAgents();
       const cfg = await invoke<{
-        memory_dir: string;
         workspace_dir: string;
         active_agent_id: string;
-        agents: AgentInfo[];
       }>("get_config");
-      setAgents(cfg.agents);
-      setActiveAgentId(cfg.active_agent_id);
       setWorkspaceRoot(cfg.workspace_dir);
+      setLoadedAgentId(cfg.active_agent_id);
       const list = await invoke<FileEntryDto[]>("list_files", { path: dir });
       setEntries(list);
       setRoot(dir);
@@ -1187,16 +1183,6 @@ export default function WorkspacePanel({
           )}
 
           <div className="ws-path-row">
-            {agents.length > 0 && (
-              <AgentPicker
-                agents={agents}
-                value={activeAgentId}
-                onChange={(id) => void switchAgent(id)}
-                disabled={loadingList}
-                labelKey="workspace.switchAgent"
-                className="ws-agent-picker"
-              />
-            )}
             <button
               type="button"
               className="ws-icon-btn"

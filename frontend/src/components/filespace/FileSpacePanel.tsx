@@ -33,7 +33,6 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "../workspace/WorkspaceIcons";
-import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
@@ -43,8 +42,7 @@ import FileSpaceViewer from "./FileSpaceViewer";
 import { formatSize, isTauri } from "../../lib/filespace/fileMeta";
 import { EmptyIllustration } from "../../illustrations";
 import { useFileSelection } from "../../hooks/ui/useFileSelection";
-import { useAgentsChanged } from "../../lib/agent/agentsChanged";
-import type { AgentInfo } from "../../types/agent";
+import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 
 /** 附件到聊天：新会话或当前会话 */
 type AttachMode = "new" | "current";
@@ -147,8 +145,7 @@ export default function FileSpacePanel({
 }: Props) {
   const { t } = useI18n();
   const confirm = useConfirm();
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [agentId, setAgentId] = useState("workspace");
+  const { activeAgentId: agentId } = useActiveAgent();
   const [category, setCategory] = useState<ArtifactCategory>("all");
   const [recentOnly, setRecentOnly] = useState(true);
   const [query, setQuery] = useState("");
@@ -175,40 +172,6 @@ export default function FileSpacePanel({
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
     };
   }, [query]);
-
-  useEffect(() => {
-    if (!active || !isTauri()) return;
-    void (async () => {
-      try {
-        const cfg = await invoke<{
-          memory_dir: string;
-          workspace_dir: string;
-          active_agent_id: string;
-          agents: AgentInfo[];
-        }>("get_config");
-        setAgents(cfg.agents);
-        setAgentId(cfg.active_agent_id);
-      } catch {
-        // config unavailable outside Tauri or during startup
-      }
-    })();
-  }, [active]);
-
-  useAgentsChanged((payload) => {
-    if (!active || !isTauri()) return;
-    void (async () => {
-      try {
-        const cfg = await invoke<{
-          active_agent_id: string;
-          agents: AgentInfo[];
-        }>("get_config");
-        setAgents(cfg.agents);
-        setAgentId(cfg.active_agent_id || payload.active_agent_id);
-      } catch {
-        // ignore
-      }
-    })();
-  });
 
   const load = useCallback(async () => {
     if (!isTauri()) {
@@ -247,22 +210,6 @@ export default function FileSpacePanel({
       if (gen === loadGen.current) setLoading(false);
     }
   }, [category, debouncedQuery, recentOnly, agentId]);
-
-  const handleAgentChange = async (id: string) => {
-    if (id === agentId) return;
-    setAgentId(id);
-    try {
-      const cfg = await invoke<{
-        workspace_dir: string;
-        active_agent_id: string;
-        agents: AgentInfo[];
-      }>("set_active_agent", { agentId: id });
-      setAgents(cfg.agents);
-      setAgentId(cfg.active_agent_id);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
 
   useEffect(() => {
     if (!active) return;
@@ -607,16 +554,6 @@ export default function FileSpacePanel({
   return (
     <div className="filespace-panel">
       <aside className="fs-cats" aria-label={t("filespace.cat.all")}>
-        <div className="fs-agent-slot">
-          <AgentPicker
-            agents={agents}
-            value={agentId}
-            onChange={(id) => void handleAgentChange(id)}
-            disabled={agents.length === 0}
-            labelKey="filespace.agentFilter"
-            className="fs-agent-picker"
-          />
-        </div>
         <div className="fs-cat-list">
           {CATEGORIES.map((cat) => {
             const count = counts[cat] ?? (cat === "all" ? totalCount : 0);

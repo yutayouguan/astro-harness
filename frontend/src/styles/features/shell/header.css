@@ -799,6 +799,7 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
   align-items: center;
   gap: 6px;
   height: 40px;
+  max-width: min(220px, 36vw);
   padding: 7px 12px;
   border-radius: 999px;
   background: var(--header-chip-bg);
@@ -808,6 +809,21 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
   box-shadow: var(--header-chip-shadow);
   backdrop-filter: blur(16px) saturate(1.3);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 标题栏 AgentPicker：与 status / model 胶囊同高 */
+.header-actions .header-agent-picker {
+  max-width: min(220px, 42vw);
+}
+
+.header-actions .header-agent-picker .agent-picker-chip {
+  min-height: 40px;
+  height: 40px;
+  border-radius: 999px;
+  padding: 0 12px 0 10px;
 }
 
 .status-dot {

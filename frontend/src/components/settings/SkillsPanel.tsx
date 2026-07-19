@@ -71,11 +71,9 @@ import {
   mergeUpdateRows,
   originMatchesSkill,
 } from "../../lib/skills/skillUpdateRows";
-import type { AgentInfo } from "../../types/agent";
+import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { normalizeAgentId } from "../../types/agent";
-import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
-import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgStreamLoader from "../chat/MsgStreamLoader";
@@ -390,8 +388,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [agentId, setAgentId] = useState("workspace");
+  const { activeAgentId: agentId } = useActiveAgent();
   const [viewMode, setViewMode] = useState<SkillsView>(() => readSkillsView());
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -894,52 +891,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   }, [fetchStorePage, hasMore, loadingMore, loadingStore, storePage]);
 
   loadMoreRef.current = loadMore;
-
-  useEffect(() => {
-    if (!active || !isTauri()) return;
-    void (async () => {
-      try {
-        const cfg = await invoke<{
-          active_agent_id: string;
-          agents: AgentInfo[];
-        }>("get_config");
-        setAgents(cfg.agents);
-        setAgentId(normalizeAgentId(cfg.active_agent_id));
-      } catch {
-        // ignore
-      }
-    })();
-  }, [active]);
-
-  useAgentsChanged((payload) => {
-    if (!active || !isTauri()) return;
-    void (async () => {
-      try {
-        const cfg = await invoke<{
-          active_agent_id: string;
-          agents: AgentInfo[];
-        }>("get_config");
-        setAgents(cfg.agents);
-        setAgentId(
-          normalizeAgentId(cfg.active_agent_id || payload.active_agent_id),
-        );
-      } catch {
-        // ignore
-      }
-    })();
-  });
-
-  const switchAgent = async (id: string) => {
-    setAgentId(id);
-    setLastCheckResults([]);
-    updateCheckMetaRef.current = null;
-    if (!isTauri()) return;
-    try {
-      await invoke("set_active_agent", { agentId: id });
-    } catch {
-      // ignore
-    }
-  };
 
   useEffect(() => {
     if (!active || tab !== "installed") return;
@@ -2767,14 +2718,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               </p>
             </div>
             <div className="skills-pane-actions">
-              <div className="skills-tab-shell">
-                <AgentPicker
-                  agents={agents}
-                  value={agentId}
-                  onChange={(id) => void switchAgent(id)}
-                  labelKey="filespace.agentFilter"
-                />
-              </div>
               <SelectMenu
                 size="sm"
                 value={installedSort}
@@ -2865,14 +2808,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               <p>{t("skills.machineSub")}</p>
             </div>
             <div className="skills-pane-actions">
-              <div className="skills-tab-shell">
-                <AgentPicker
-                  agents={agents}
-                  value={agentId}
-                  onChange={(id) => void switchAgent(id)}
-                  labelKey="filespace.agentFilter"
-                />
-              </div>
               <SelectMenu
                 size="sm"
                 value={machineLinkFilter}
@@ -2973,14 +2908,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               </p>
             </div>
             <div className="skills-pane-actions">
-              <div className="skills-tab-shell">
-                <AgentPicker
-                  agents={agents}
-                  value={agentId}
-                  onChange={(id) => void switchAgent(id)}
-                  labelKey="filespace.agentFilter"
-                />
-              </div>
               <div className="skills-tab-shell">
                 <button
                   type="button"

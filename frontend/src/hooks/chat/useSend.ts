@@ -37,6 +37,7 @@ import { isCodePath } from "../../lib/media/parseGeneratedMedia";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
+import { useActiveAgent } from "../app/useActiveAgent";
 
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
 type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
@@ -133,6 +134,9 @@ function calcTokensPerSec(completionTokens: number, durationMs: number): number 
 export function useSend(deps: UseSendDeps) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
+  const { setActiveAgent } = useActiveAgent();
+  const setActiveAgentRef = useRef(setActiveAgent);
+  setActiveAgentRef.current = setActiveAgent;
 
   const send = useCallback(
     async (opts?: SendOpts) => {
@@ -270,7 +274,7 @@ export function useSend(deps: UseSendDeps) {
 
           if (resolved.switchAgentId) {
             try {
-              await invoke("set_active_agent", { agentId: resolved.switchAgentId });
+              await setActiveAgentRef.current(resolved.switchAgentId);
               const hasHistory = messages.some(
                 (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
               );

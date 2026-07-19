@@ -3,6 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LocaleProvider } from "./i18n/LocaleContext";
+import { ActiveAgentProvider } from "./hooks/app/useActiveAgent";
 import { ThemeProvider } from "./hooks/app/useTheme";
 import { DialogProvider } from "./hooks/ui/DialogContext";
 import { installContextMenuGuard } from "./lib/ui/contextMenuGuard";
@@ -67,9 +68,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <RootErrorBoundary>
       <ThemeProvider>
         <LocaleProvider>
-          <DialogProvider>
-            <App />
-          </DialogProvider>
+          <ActiveAgentProvider>
+            <DialogProvider>
+              <App />
+            </DialogProvider>
+          </ActiveAgentProvider>
         </LocaleProvider>
       </ThemeProvider>
     </RootErrorBoundary>

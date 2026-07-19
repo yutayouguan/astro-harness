@@ -20,9 +20,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
-import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import AgentAvatar from "../agents/AgentAvatar";
 import { EmptyIllustration } from "../../illustrations";
@@ -180,11 +180,15 @@ function IconSave(props: { width?: number; height?: number }) {
 export default function MemoryPanel({ onClose, sessionId = null }: Props) {
   const { t, locale } = useI18n();
   const confirm = useConfirm();
+  const {
+    agents,
+    activeAgentId,
+    setActiveAgent,
+    refreshAgents,
+  } = useActiveAgent();
   const [view, setView] = useState<MemoryView>("diary");
   const [, setMemoryDir] = useState("");
   const [workspaceDir, setWorkspaceDir] = useState("");
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [activeAgentId, setActiveAgentId] = useState("workspace");
   const [filterAgentId, setFilterAgentId] = useState(ALL_AGENTS);
   /** 右侧正文当前展示对应的专家（与侧栏选中可短暂不同，避免切换时内容区闪跳） */
   const [diaryPaneAgentId, setDiaryPaneAgentId] = useState(ALL_AGENTS);
@@ -505,8 +509,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     }) => {
       if (cfg.memory_dir) setMemoryDir(cfg.memory_dir);
       setWorkspaceDir(cfg.workspace_dir);
-      setActiveAgentId(cfg.active_agent_id);
-      setAgents(cfg.agents);
+      await refreshAgents();
       let nextFilter = filterAgentId;
       if (filterAgentId !== ALL_AGENTS && !cfg.agents.some((a) => a.id === filterAgentId)) {
         nextFilter = ALL_AGENTS;
@@ -534,6 +537,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
       loadDaily,
       loadMemoryMd,
       refreshAllDiaryMarks,
+      refreshAgents,
     ],
   );
 
@@ -562,24 +566,6 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
   }, []);
-
-  useAgentsChanged(() => {
-    if (dirty) {
-      void (async () => {
-        try {
-          const cfg = await invoke<{
-            active_agent_id: string;
-            agents: AgentInfo[];
-          }>("get_config");
-          setAgents(cfg.agents);
-        } catch {
-          // ignore
-        }
-      })();
-      return;
-    }
-    void bootstrap();
-  });
 
   useEffect(() => {
     if (view !== "dream") return;
@@ -612,16 +598,13 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
       void (async () => {
         setLoading(true);
         try {
+          await setActiveAgent(activeAgentId);
           const cfg = await invoke<{
             memory_dir: string;
             workspace_dir: string;
-            active_agent_id: string;
-            agents: AgentInfo[];
-          }>("set_active_agent", { agentId: activeAgentId });
+          }>("get_config");
           setMemoryDir(cfg.memory_dir);
           setWorkspaceDir(cfg.workspace_dir);
-          setActiveAgentId(cfg.active_agent_id);
-          setAgents(cfg.agents);
           await loadMemoryMd(cfg.workspace_dir);
           await loadArchive(cfg.workspace_dir, archiveId);
         } catch (e) {
@@ -653,17 +636,16 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
         // 侧栏先切高亮；正文等加载完成再切，避免空态/编辑器来回闪
         const cached = diaryDatesByAgent[agentId];
         if (cached) setDailyDates(cached);
+        await setActiveAgent(agentId);
+        if (gen !== filterSwitchGen.current) return;
         const cfg = await invoke<{
           memory_dir: string;
           workspace_dir: string;
-          active_agent_id: string;
           agents: AgentInfo[];
-        }>("set_active_agent", { agentId });
+        }>("get_config");
         if (gen !== filterSwitchGen.current) return;
         setMemoryDir(cfg.memory_dir);
         setWorkspaceDir(cfg.workspace_dir);
-        setActiveAgentId(cfg.active_agent_id);
-        setAgents(cfg.agents);
         await loadDaily(agentId, date);
         if (gen !== filterSwitchGen.current) return;
         setDiaryPaneAgentId(agentId);

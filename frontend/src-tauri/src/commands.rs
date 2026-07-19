@@ -560,20 +560,40 @@ pub async fn list_agents() -> Result<Vec<AgentInfoDto>, String> {
         .collect())
 }
 
+/// 与前端 `AGENTS_CHANGED_EVENT` 对齐。
+const EVENT_AGENTS_CHANGED: &str = "agents-changed";
+
+#[derive(Debug, Clone, Serialize)]
+struct AgentsChangedPayload {
+    active_agent_id: String,
+}
+
+fn emit_agents_changed(app: &AppHandle, active_agent_id: &str) {
+    let _ = app.emit(
+        EVENT_AGENTS_CHANGED,
+        AgentsChangedPayload {
+            active_agent_id: active_agent_id.to_string(),
+        },
+    );
+}
+
 /// 创建新 Agent 记忆空间（可选激活）。
 #[tauri::command]
-pub async fn create_agent(name: String) -> Result<AgentInfoDto, String> {
+pub async fn create_agent(app: AppHandle, name: String) -> Result<AgentInfoDto, String> {
     bootstrap_workspace()?;
     let info = home::create_agent(&memory_root(), &name).map_err(|e| e.to_string())?;
+    emit_agents_changed(&app, &home::active_agent_id(&memory_root()));
     Ok(agent_info_dto(info))
 }
 
 /// 切换当前活跃 Agent。
 #[tauri::command]
-pub async fn set_active_agent(agent_id: String) -> Result<AppConfigDto, String> {
+pub async fn set_active_agent(app: AppHandle, agent_id: String) -> Result<AppConfigDto, String> {
     bootstrap_workspace()?;
     home::set_active_agent(&memory_root(), &agent_id).map_err(|e| e.to_string())?;
-    get_config().await
+    let cfg = get_config().await?;
+    emit_agents_changed(&app, &cfg.active_agent_id);
+    Ok(cfg)
 }
 
 /// 创建引导页：暂存 Agent 图标（Lucide SVG / 上传图片），待 create_agent 时写入工作区。

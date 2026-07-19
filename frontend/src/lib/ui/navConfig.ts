@@ -11,6 +11,12 @@ import {
   IconWorkspace,
 } from "../../components/icons";
 import type { MessageKey } from "../../i18n/messages";
+import { HEADER_AGENT_PICKER_NAV_IDS } from "./headerAgentPicker";
+
+export {
+  HEADER_AGENT_PICKER_NAV_IDS,
+  showsHeaderAgentPicker,
+} from "./headerAgentPicker";
 
 export type NavId =
   | "chat"
@@ -95,3 +101,8 @@ export const PAGE_META: Record<
   },
   settings: { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };
+
+/** 标题栏展示统一 AgentPicker 的导航页（chat/memory 保留页内专用入口）。 */
+export const HEADER_AGENT_PICKER_NAVS: ReadonlySet<NavId> = new Set(
+  HEADER_AGENT_PICKER_NAV_IDS,
+);

@@ -18,6 +18,7 @@ import CronPanel from "./components/schedule/CronPanel";
 import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
 import MemoryPanel from "./components/settings/MemoryPanel";
+import AgentPicker from "./components/agents/AgentPicker";
 import ModelPicker from "./components/agents/ModelPicker";
 import PreferencesPanel from "./components/settings/PreferencesPanel";
 import ProvidersPanel from "./components/settings/ProvidersPanel";
@@ -36,6 +37,7 @@ import {
   IconSidebarIcons,
   IconSidebarLabels,
 } from "./components/icons";
+import { useActiveAgent } from "./hooks/app/useActiveAgent";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useChatSession } from "./hooks/chat/useChatSession";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
@@ -72,6 +74,7 @@ import {
 import {
   NAV,
   PAGE_META,
+  showsHeaderAgentPicker,
   type NavId,
 } from "./lib/ui/navConfig";
 import {
@@ -144,6 +147,11 @@ export default function App() {
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
   const winChrome = useWindowChrome();
+  const {
+    agents,
+    activeAgentId,
+    setActiveAgent,
+  } = useActiveAgent();
   const {
     providers,
     activeProviderId,
@@ -677,6 +685,19 @@ export default function App() {
                 <span className={`status-dot ${chat.status}`} />
                 {activeProvider?.display_name ?? t("status.none")} · {statusText}
               </span>
+              {showsHeaderAgentPicker(nav) && (
+                <AgentPicker
+                  className="header-agent-picker"
+                  agents={agents}
+                  value={activeAgentId}
+                  onChange={(id) => {
+                    void setActiveAgent(id).catch((e) => {
+                      console.warn("set_active_agent failed", e);
+                    });
+                  }}
+                  menuAlign="end"
+                />
+              )}
               {nav === "files" && (
                 <div
                   className="files-mode-switch"

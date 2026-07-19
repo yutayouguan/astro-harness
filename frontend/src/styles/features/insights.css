@@ -20,11 +20,12 @@
   --insights-warn-soft: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-/* 筛选行：Agent 左、周期右，同一基线 */
+/* 筛选行：周期右对齐（Agent 已上移标题栏） */
 .insights-panel > .insights-toolbar-filters {
   flex-wrap: wrap;
   max-width: 100%;
   row-gap: 8px;
+  justify-content: flex-end;
 }
 
 /* 导航行：视图 Tab 独占，与筛选行更紧（panel gap 16px 过大） */

@@ -17,9 +17,9 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import {
   deleteManagedSession,
   dispatchSessionsChanged,
@@ -35,8 +35,6 @@ import {
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useAppDialog } from "../../hooks/ui/DialogContext";
 import type { RecentSessionDto } from "../../types";
-import type { AgentInfo } from "../../types/agent";
-import { normalizeAgentId } from "../../types/agent";
 import AgentPicker from "../agents/AgentPicker";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import EmptyIllustration from "../../illustrations/EmptyIllustration";
@@ -167,8 +165,7 @@ export default function ChatSessionList({
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [activeAgentId, setActiveAgentId] = useState("workspace");
+  const { agents, activeAgentId, setActiveAgent } = useActiveAgent();
   const [listKind, setListKind] = useState<SessionListKind>("active");
   const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
@@ -190,23 +187,9 @@ export default function ChatSessionList({
     }
   }, [listKind]);
 
-  const loadAgents = useCallback(async () => {
-    try {
-      const cfg = await invoke<{
-        active_agent_id: string;
-        agents: AgentInfo[];
-      }>("get_config");
-      setAgents(cfg.agents ?? []);
-      setActiveAgentId(normalizeAgentId(cfg.active_agent_id));
-    } catch {
-      setAgents([]);
-    }
-  }, []);
-
   useEffect(() => {
     void loadSessions();
-    void loadAgents();
-  }, [loadSessions, loadAgents]);
+  }, [loadSessions]);
 
   useEffect(() => {
     const unlisten = subscribeSessionsChanged(() => {
@@ -273,23 +256,14 @@ export default function ChatSessionList({
     }
   }, [streamingSessionId]);
 
-  useAgentsChanged((payload) => {
-    setActiveAgentId(normalizeAgentId(payload.active_agent_id));
-    void loadAgents();
-  });
-
-  const handleAgentChange = useCallback(async (id: string) => {
-    try {
-      const cfg = await invoke<{
-        active_agent_id: string;
-        agents: AgentInfo[];
-      }>("set_active_agent", { agentId: id });
-      setAgents(cfg.agents ?? []);
-      setActiveAgentId(normalizeAgentId(cfg.active_agent_id));
-    } catch (e) {
-      console.warn("set_active_agent failed", e);
-    }
-  }, []);
+  const handleAgentChange = useCallback(
+    (id: string) => {
+      void setActiveAgent(id).catch((e) => {
+        console.warn("set_active_agent failed", e);
+      });
+    },
+    [setActiveAgent],
+  );
 
   const runSessionAction = useCallback(
     async (sessionId: string, action: () => Promise<void>) => {

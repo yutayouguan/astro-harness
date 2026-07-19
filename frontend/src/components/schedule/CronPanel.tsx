@@ -28,10 +28,8 @@ import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
-import { useAgentsChanged } from "../../lib/agent/agentsChanged";
-import type { AgentInfo } from "../../types/agent";
+import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { normalizeAgentId } from "../../types/agent";
-import AgentPicker from "../agents/AgentPicker";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import {
@@ -370,8 +368,7 @@ export default function CronPanel({
   const { t, locale } = useI18n();
   const confirm = useConfirm();
   const [jobs, setJobs] = useState<CronJobDto[]>([]);
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [agentId, setAgentId] = useState("workspace");
+  const { agents, activeAgentId: agentId } = useActiveAgent();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -424,20 +421,6 @@ export default function CronPanel({
     moreBtnRef.current = btn;
     setMenuJobId(jobId);
   };
-
-  const loadAgents = useCallback(async () => {
-    if (!isTauri()) return;
-    try {
-      const cfg = await invoke<{
-        active_agent_id: string;
-        agents: AgentInfo[];
-      }>("get_config");
-      setAgents(cfg.agents);
-      setAgentId(normalizeAgentId(cfg.active_agent_id));
-    } catch {
-      // ignore
-    }
-  }, []);
 
   const loadJobs = useCallback(async () => {
     if (!isTauri()) {
@@ -498,14 +481,8 @@ export default function CronPanel({
 
   useEffect(() => {
     if (!active) return;
-    void loadAgents();
     void loadJobs();
-  }, [active, loadAgents, loadJobs]);
-
-  useAgentsChanged(() => {
-    if (!active) return;
-    void loadAgents();
-  });
+  }, [active, loadJobs]);
 
   useEffect(() => {
     if (!active || activeTab !== "history") return;
@@ -648,21 +625,6 @@ export default function CronPanel({
     ],
     [agents, t],
   );
-
-  const switchAgent = async (id: string) => {
-    setAgentId(id);
-    if (!isTauri()) return;
-    try {
-      const cfg = await invoke<{
-        active_agent_id: string;
-        agents: AgentInfo[];
-      }>("set_active_agent", { agentId: id });
-      setAgents(cfg.agents);
-      setAgentId(normalizeAgentId(cfg.active_agent_id));
-    } catch (err) {
-      setError(String(err));
-    }
-  };
 
   const toggleEnabled = async (job: CronJobDto) => {
     if (!isTauri()) return;
@@ -1131,13 +1093,6 @@ export default function CronPanel({
         <AnimatedSwitch switchKey={activeTab} className="anim-switch--fill">
         {activeTab === "jobs" && (
           <header className="cron-pane-head panel-agent-toolbar">
-            <AgentPicker
-              agents={agents}
-              value={agentId}
-              onChange={(id) => void switchAgent(id)}
-              disabled={loading}
-              labelKey="cron.field.agent"
-            />
             <div className="panel-agent-toolbar-end">
               <ExpandableSearch
                 value={search}
