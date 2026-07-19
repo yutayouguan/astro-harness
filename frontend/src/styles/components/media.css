@@ -90,9 +90,14 @@
 }
 
 html[data-theme="dark"] .media-toolbar.is-inline {
-  background: transparent;
+  /* 须覆盖下方 html[data-theme=dark] .media-toolbar 的磨砂，否则标题行会残留方形玻璃底 */
+  padding: 0;
   border: none;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 html[data-theme="dark"] .media-toolbar.is-inline .media-toolbar-btn {
