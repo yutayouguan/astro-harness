@@ -2,6 +2,7 @@
 
 #![allow(unexpected_cfgs)] // 旧版 objc 的 msg_send!/sel! 使用 cfg(feature = "cargo-clippy")
 
+mod app_icon;
 mod artifacts_commands;
 mod auxiliary_commands;
 mod auxiliary_resolver;
@@ -10,14 +11,13 @@ mod commands;
 mod compaction_commands;
 mod compression_settings_commands;
 mod config_commands;
-mod app_icon;
 mod dreaming_commands;
 mod env_hydrate;
 mod evolution_commands;
 mod evolution_run_commands;
-mod icon_commands;
 mod fs_ops;
 mod grpc;
+mod icon_commands;
 mod ip_location;
 mod keystore;
 mod litellm_meta;

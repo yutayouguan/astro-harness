@@ -70,11 +70,13 @@ async function animatePhysical(from: Rect, to: Rect): Promise<void> {
     const underlay =
       getComputedStyle(document.documentElement)
         .getPropertyValue("--window-underlay")
-        .trim() || "#dbeafe";
+        .trim() || "#080e16";          // 暗色保底，比亮蓝 #dbeafe 更安全
     await Promise.all([
       win.setBackgroundColor(underlay),
       getCurrentWebview().setBackgroundColor(underlay),
     ]);
+    // 再等一帧，让底色变更提交到合成器，再开始 setSize
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
   } catch {
     // ignore
   }

@@ -127,7 +127,10 @@ pub fn normalize_day(state: &mut AutoState) {
 /// 统计 DecisionLog 中位于水位之后的条目数。
 ///
 /// `watermark_id` 为 `None` 时，全部算「新」。
-pub fn count_new_decisions(decisions: &[memory::DecisionEntry], watermark_id: Option<&str>) -> usize {
+pub fn count_new_decisions(
+    decisions: &[memory::DecisionEntry],
+    watermark_id: Option<&str>,
+) -> usize {
     let Some(wid) = watermark_id.filter(|s| !s.is_empty()) else {
         return decisions.len();
     };
@@ -401,9 +404,6 @@ mod tests {
         };
         normalize_day(&mut state);
         assert_eq!(state.runs_today, 0);
-        assert_eq!(
-            state.runs_today_date.as_deref(),
-            Some(utc_today().as_str())
-        );
+        assert_eq!(state.runs_today_date.as_deref(), Some(utc_today().as_str()));
     }
 }

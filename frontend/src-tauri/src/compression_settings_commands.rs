@@ -118,14 +118,24 @@ pub fn normalize_compression_settings(
         }
         Ok(())
     }
-    check_stage("Soft", d.soft_max_chars, d.soft_head_chars, d.soft_tail_chars)?;
+    check_stage(
+        "Soft",
+        d.soft_max_chars,
+        d.soft_head_chars,
+        d.soft_tail_chars,
+    )?;
     check_stage(
         "Medium",
         d.medium_max_chars,
         d.medium_head_chars,
         d.medium_tail_chars,
     )?;
-    check_stage("Hard", d.hard_max_chars, d.hard_head_chars, d.hard_tail_chars)?;
+    check_stage(
+        "Hard",
+        d.hard_max_chars,
+        d.hard_head_chars,
+        d.hard_tail_chars,
+    )?;
 
     d.tool_results_limit = d.tool_results_limit.min(200);
     d.protect_last_n = d.protect_last_n.clamp(1, 200);

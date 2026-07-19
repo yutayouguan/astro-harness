@@ -18,15 +18,15 @@ pub(crate) mod test_env;
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::workspace;
 pub use config::{
-    add_command_to_allowlist, load_approvals_config, load_auxiliary_config, load_compression_config,
-    load_evolution_config, load_learning_config, load_memory_config, remove_command_from_allowlist,
-    reset_all_auxiliary_routes, reset_all_evolution_routes, reset_compression_config,
-    resolve_auxiliary, set_approval_mode, set_auto_refresh_on_update, set_auxiliary_route,
-    set_background_review_enabled, set_compression_config, set_evolution_auto, set_evolution_dspy,
-    set_evolution_enabled, set_evolution_gates, set_evolution_route, set_evolution_search,
-    set_write_approval, ApprovalsConfig, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute,
-    CompressionConfig, EvolutionAuto, EvolutionConfig, EvolutionDspy, EvolutionGates,
-    EvolutionRouteKind, EvolutionSearch, LearningConfig, MemoryConfig,
+    add_command_to_allowlist, load_approvals_config, load_auxiliary_config,
+    load_compression_config, load_evolution_config, load_learning_config, load_memory_config,
+    remove_command_from_allowlist, reset_all_auxiliary_routes, reset_all_evolution_routes,
+    reset_compression_config, resolve_auxiliary, set_approval_mode, set_auto_refresh_on_update,
+    set_auxiliary_route, set_background_review_enabled, set_compression_config, set_evolution_auto,
+    set_evolution_dspy, set_evolution_enabled, set_evolution_gates, set_evolution_route,
+    set_evolution_search, set_write_approval, ApprovalsConfig, AuxiliaryConfig, AuxiliaryKind,
+    AuxiliaryRoute, CompressionConfig, EvolutionAuto, EvolutionConfig, EvolutionDspy,
+    EvolutionGates, EvolutionRouteKind, EvolutionSearch, LearningConfig, MemoryConfig,
 };
 pub use decision_log::{
     append_decision, decisions_path, list_recent as list_recent_decisions, try_append_decision,

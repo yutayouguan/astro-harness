@@ -23,11 +23,7 @@ enum ApprovalRoute {
     Manual,
 }
 
-fn approval_route(
-    command: &str,
-    mode: tools::ApprovalMode,
-    allowlist: &[String],
-) -> ApprovalRoute {
+fn approval_route(command: &str, mode: tools::ApprovalMode, allowlist: &[String]) -> ApprovalRoute {
     if tools::is_hardline_blocked(command).is_some() {
         ApprovalRoute::Deny
     } else if tools::matches_allowlist(command, allowlist) {
@@ -262,10 +258,9 @@ async fn execute_tools_serial_inner(
                                 }
                                 // 「批准并永久放行」→ 写入用户白名单，后续同命令自动放行
                                 if confirm.always {
-                                    if let Err(e) = memory::config::add_command_to_allowlist(
-                                        &memory_dir,
-                                        &cmd,
-                                    ) {
+                                    if let Err(e) =
+                                        memory::config::add_command_to_allowlist(&memory_dir, &cmd)
+                                    {
                                         tracing::warn!(error = %e, "failed to persist command allowlist");
                                     } else {
                                         tracing::info!(command = %cmd, "added command to approval allowlist");
@@ -511,16 +506,28 @@ mod tests {
     #[test]
     fn dangerous_commands_force_serial() {
         // hardline(Deny) 必须强制串行——否则会经并发路径绕过 Deny 拦截
-        assert!(terminal_needs_approval("terminal", &term("mkfs.ext4 /dev/sdb1")));
-        assert!(terminal_needs_approval("terminal", &term("dd if=/dev/zero of=/dev/sda")));
+        assert!(terminal_needs_approval(
+            "terminal",
+            &term("mkfs.ext4 /dev/sdb1")
+        ));
+        assert!(terminal_needs_approval(
+            "terminal",
+            &term("dd if=/dev/zero of=/dev/sda")
+        ));
         // Ask 也强制串行（需 HITL 卡）
-        assert!(terminal_needs_approval("terminal", &term("rm -rf /tmp/project")));
+        assert!(terminal_needs_approval(
+            "terminal",
+            &term("rm -rf /tmp/project")
+        ));
     }
 
     #[test]
     fn safe_and_auto_commands_allow_concurrent() {
         // Auto 白名单与安全命令无需串行
-        assert!(!terminal_needs_approval("terminal", &term("rm -rf node_modules")));
+        assert!(!terminal_needs_approval(
+            "terminal",
+            &term("rm -rf node_modules")
+        ));
         assert!(!terminal_needs_approval("terminal", &term("ls -la")));
         assert!(!terminal_needs_approval("terminal", &term("cargo test")));
         // 非 terminal 工具永不触发

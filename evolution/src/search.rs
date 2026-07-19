@@ -63,13 +63,11 @@ pub const MUTATION_SYSTEM_PROMPT: &str = r#"你是技能进化的变异器。给
 - 不要臆造事实；宁可少而精。"#;
 
 /// 构造变异 user 提示：种子 + 期望变体数 + 可选上一代评语。
-pub fn build_mutation_prompt(
-    seed: &SkillCandidate,
-    variants: u32,
-    critiques: &[String],
-) -> String {
+pub fn build_mutation_prompt(seed: &SkillCandidate, variants: u32, critiques: &[String]) -> String {
     let mut s = String::new();
-    s.push_str(&format!("目标：产出 {variants} 个改进变体。\n\n## 种子候选\n"));
+    s.push_str(&format!(
+        "目标：产出 {variants} 个改进变体。\n\n## 种子候选\n"
+    ));
     s.push_str(&format!("skill_id: {}\n", seed.skill_id));
     match seed.kind {
         CandidateKind::NewSkill => {
@@ -131,7 +129,10 @@ fn describe_variant(label: &str, c: &SkillCandidate) -> String {
 
 /// 构造交叉 user 提示（两个父代）。
 pub fn build_crossover_prompt(a: &SkillCandidate, b: &SkillCandidate) -> String {
-    let mut s = format!("对技能 `{}` 做交叉，融合两个父代为一个更优子代。\n\n", a.skill_id);
+    let mut s = format!(
+        "对技能 `{}` 做交叉，融合两个父代为一个更优子代。\n\n",
+        a.skill_id
+    );
     s.push_str(&describe_variant("A", a));
     s.push('\n');
     s.push_str(&describe_variant("B", b));

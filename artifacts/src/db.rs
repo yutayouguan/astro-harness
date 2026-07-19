@@ -312,9 +312,9 @@ impl ArtifactDb {
     ///
     /// 供回填：把这些文件按历史会话消息里的媒体路径重新关联。
     pub fn unlinked_paths(&self) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT path FROM artifacts WHERE session_id IS NULL AND missing = 0",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path FROM artifacts WHERE session_id IS NULL AND missing = 0")?;
         let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
         let mut out = Vec::new();
         for row in rows {

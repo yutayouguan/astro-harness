@@ -31,8 +31,7 @@ pub fn should_attempt(agent: &AgentLoop) -> bool {
     if agent.session_messages.len() < protect_first + agent.config_protect_last_n() {
         return false;
     }
-    let mgr =
-        ToolCompressionManager::from_config(&cfg).with_context_window(agent.context_window());
+    let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(agent.context_window());
     mgr.occupancy_ratio(&agent.session_messages) >= cfg.mid_run_summary_ratio
 }
 
@@ -150,11 +149,7 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
     }
     let protect_first = agent.config_protect_first_n();
     let protect_last = agent.config_protect_last_n();
-    let transcript = build_transcript(
-        &agent.session_messages,
-        protect_first,
-        protect_last,
-    );
+    let transcript = build_transcript(&agent.session_messages, protect_first, protect_last);
     if transcript.chars().count() < 400 {
         agent.mark_mid_run_summary_skipped();
         return Ok(false);
@@ -197,12 +192,8 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
 
     let before = estimate_messages_tokens(&agent.session_messages);
     agent.set_mid_run_handoff(text.clone());
-    let collapsed = collapse_history_with_handoff(
-        &agent.session_messages,
-        &text,
-        protect_first,
-        protect_last,
-    );
+    let collapsed =
+        collapse_history_with_handoff(&agent.session_messages, &text, protect_first, protect_last);
     let after = estimate_messages_tokens(&collapsed);
     info!(
         session = %agent.session_id(),

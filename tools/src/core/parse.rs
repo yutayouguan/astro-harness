@@ -295,9 +295,7 @@ before
             index: 0,
             id: Some("t".into()),
             name: Some("file_ops".into()),
-            arguments: Some(
-                "{\"operation\":\"write\",\"content\":\"<div>very long".into(),
-            ),
+            arguments: Some("{\"operation\":\"write\",\"content\":\"<div>very long".into()),
             signature: None,
         });
         let calls = acc.finish();

@@ -226,10 +226,13 @@ pub async fn set_evolution_search(
     crossover: bool,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
+    let current = memory::load_evolution_config(&base);
     let search = memory::EvolutionSearch {
         generations: generations.clamp(1, 6),
         variants: variants.clamp(1, 6),
         crossover,
+        max_eval_examples: current.search.max_eval_examples,
+        max_llm_calls: current.search.max_llm_calls,
     };
     memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
     build_settings_dto()

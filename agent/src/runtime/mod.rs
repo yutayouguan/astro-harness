@@ -986,8 +986,7 @@ impl AgentLoop {
         self.compression_guard
             .record_outcome(result.occupancy_before, result.occupancy_after);
         result.thrashing_disabled = self.compression_guard.disabled;
-        result.recommend_session_compact =
-            result.occupancy_after >= cfg.recommend_compact_ratio;
+        result.recommend_session_compact = result.occupancy_after >= cfg.recommend_compact_ratio;
         if result.recommend_session_compact {
             self.pending_recommend_compact = true;
         }
@@ -1849,7 +1848,9 @@ mod tests {
     #[test]
     fn detects_user_correction_cues() {
         assert!(looks_like_user_correction("不对，应该用 rg 而不是 grep"));
-        assert!(looks_like_user_correction("Actually that's wrong, should be async"));
+        assert!(looks_like_user_correction(
+            "Actually that's wrong, should be async"
+        ));
         assert!(looks_like_user_correction("重来"));
         assert!(!looks_like_user_correction("帮我加一个按钮"));
         assert!(!looks_like_user_correction("继续"));
@@ -1886,10 +1887,34 @@ fn looks_like_user_correction(msg: &str) -> bool {
         return false;
     }
     const CUES: &[&str] = &[
-        "不对", "错了", "不是这", "不是这样", "应该是", "应该用", "别这", "别这样", "不要这样",
-        "重来", "搞错", "写错", "改一下", "不对吧", "其实是", "而不是",
-        "actually", "that's wrong", "thats wrong", "not right", "not correct", "should be",
-        "instead", "you got it wrong", "that's not", "thats not", "no, ", "incorrect",
+        "不对",
+        "错了",
+        "不是这",
+        "不是这样",
+        "应该是",
+        "应该用",
+        "别这",
+        "别这样",
+        "不要这样",
+        "重来",
+        "搞错",
+        "写错",
+        "改一下",
+        "不对吧",
+        "其实是",
+        "而不是",
+        "actually",
+        "that's wrong",
+        "thats wrong",
+        "not right",
+        "not correct",
+        "should be",
+        "instead",
+        "you got it wrong",
+        "that's not",
+        "thats not",
+        "no, ",
+        "incorrect",
     ];
     CUES.iter().any(|c| m.contains(c))
 }

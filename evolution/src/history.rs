@@ -163,9 +163,7 @@ pub fn summarize(base: &Path) -> HistorySummary {
                 s.total_generated += generated;
                 s.total_proposals += proposals;
             }
-            HistoryEvent::Outcome {
-                outcome, score, ..
-            } => match outcome.as_str() {
+            HistoryEvent::Outcome { outcome, score, .. } => match outcome.as_str() {
                 "approved" => {
                     s.approved += 1;
                     if let Some(sc) = score {

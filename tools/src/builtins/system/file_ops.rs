@@ -213,7 +213,12 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             register_workspace_artifact(ctx, &rel);
             Ok(maybe_html_sidecar(format!("已追加 {rel}"), &rel))
         }
-        "list" => list_dir_capped(&full, root, parsed.recursive.unwrap_or(false), ext_filter(&parsed.ext)),
+        "list" => list_dir_capped(
+            &full,
+            root,
+            parsed.recursive.unwrap_or(false),
+            ext_filter(&parsed.ext),
+        ),
         "search" => {
             let query = parsed
                 .query
@@ -227,7 +232,14 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .unwrap_or(MAX_SEARCH_HITS)
                 .clamp(1, MAX_SEARCH_HITS);
             let matcher = build_matcher(query, parsed.regex.unwrap_or(false))?;
-            search_under(&full, root, query, &matcher, max_hits, ext_filter(&parsed.ext))
+            search_under(
+                &full,
+                root,
+                query,
+                &matcher,
+                max_hits,
+                ext_filter(&parsed.ext),
+            )
         }
         "patch" => {
             let old = parsed
@@ -1083,7 +1095,8 @@ mod tests {
         assert!(out.contains("L1:"));
 
         let name_m = build_matcher("todo_notes", false).unwrap();
-        let by_name = search_under(dir.path(), dir.path(), "todo_notes", &name_m, 20, None).unwrap();
+        let by_name =
+            search_under(dir.path(), dir.path(), "todo_notes", &name_m, 20, None).unwrap();
         assert!(by_name.contains("todo_notes.txt"));
         assert!(by_name.contains("filename match"));
     }
@@ -1193,7 +1206,10 @@ mod tests {
         let err = read_file_capped(&p, 0, Some(2)).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("limit"), "should mention limit: {msg}");
-        assert!(!msg.contains("不是有效 UTF-8"), "must not falsely claim binary: {msg}");
+        assert!(
+            !msg.contains("不是有效 UTF-8"),
+            "must not falsely claim binary: {msg}"
+        );
     }
 
     #[test]

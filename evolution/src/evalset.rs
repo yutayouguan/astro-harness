@@ -108,7 +108,10 @@ pub fn remove_example(base: &Path, id: &str) -> anyhow::Result<()> {
     if !path.is_file() {
         return Ok(());
     }
-    let kept: Vec<EvalExample> = list_examples(base).into_iter().filter(|e| e.id != id).collect();
+    let kept: Vec<EvalExample> = list_examples(base)
+        .into_iter()
+        .filter(|e| e.id != id)
+        .collect();
     let tmp = path.with_extension("jsonl.tmp");
     {
         let mut f = fs::File::create(&tmp)?;
@@ -161,6 +164,27 @@ pub fn build_eval_judge_prompt(cand: &SkillCandidate, ex: &EvalExample) -> Strin
     s
 }
 
+/// 加权均值适应度：`Verdict::Fail` 例权重 2.0，`Verdict::Pass` 例权重 1.0。
+///
+/// 背景：修复已知失败比维持已通过任务的通过率更有价值；Fail 例加权让
+/// 适应度函数优先选出「能修复缺陷」的候选，而非只追求通过率平均分。
+///
+/// 返回 `None` 当 `verdicts` 为空或权重和为 0。
+pub fn weighted_eval_score(verdicts: &[(Verdict, f32)]) -> Option<f32> {
+    let (w_sum, w_total) = verdicts.iter().fold((0.0f32, 0.0f32), |(s, w), (v, score)| {
+        let weight = match v {
+            Verdict::Fail => 2.0,
+            Verdict::Pass => 1.0,
+        };
+        (s + score * weight, w + weight)
+    });
+    if w_total == 0.0 {
+        None
+    } else {
+        Some((w_sum / w_total).clamp(0.0, 1.0))
+    }
+}
+
 /// 解析 eval judge 输出为 0–1 分。
 pub fn parse_eval_score(raw: &str) -> anyhow::Result<f32> {
     let trimmed = raw.trim();
@@ -205,7 +229,12 @@ mod tests {
     #[test]
     fn append_list_remove_roundtrip() {
         let dir = TempDir::new().unwrap();
-        let a = EvalExample::new(Some("pdf".into()), "合并两个 PDF", vec!["保持顺序".into()], Verdict::Fail);
+        let a = EvalExample::new(
+            Some("pdf".into()),
+            "合并两个 PDF",
+            vec!["保持顺序".into()],
+            Verdict::Fail,
+        );
         let b = EvalExample::new(None, "通用任务", vec![], Verdict::Pass);
         append_example(dir.path(), &a).unwrap();
         append_example(dir.path(), &b).unwrap();
@@ -235,10 +264,42 @@ mod tests {
 
     #[test]
     fn eval_prompt_has_task_and_expectations() {
-        let ex = EvalExample::new(Some("s".into()), "做个 X", vec!["要点A".into()], Verdict::Fail);
+        let ex = EvalExample::new(
+            Some("s".into()),
+            "做个 X",
+            vec!["要点A".into()],
+            Verdict::Fail,
+        );
         let p = build_eval_judge_prompt(&cand("s"), &ex);
         assert!(p.contains("做个 X"));
         assert!(p.contains("要点A"));
         assert!(p.contains("技能内容"));
+    }
+
+    #[test]
+    fn weighted_eval_score_empty_returns_none() {
+        assert!(weighted_eval_score(&[]).is_none());
+    }
+
+    #[test]
+    fn weighted_eval_score_fail_weights_double() {
+        // Fail(0.4) × 2 + Pass(1.0) × 1 = 1.8 / 3 = 0.6
+        let vs = [(Verdict::Fail, 0.4), (Verdict::Pass, 1.0)];
+        let s = weighted_eval_score(&vs).unwrap();
+        assert!((s - 0.6).abs() < 1e-5, "got {s}");
+    }
+
+    #[test]
+    fn weighted_eval_score_only_pass_equals_plain_mean() {
+        let vs = [(Verdict::Pass, 0.8), (Verdict::Pass, 0.4)];
+        let s = weighted_eval_score(&vs).unwrap();
+        assert!((s - 0.6).abs() < 1e-5, "got {s}");
+    }
+
+    #[test]
+    fn weighted_eval_score_clamps_to_one() {
+        let vs = [(Verdict::Fail, 1.5)];
+        let s = weighted_eval_score(&vs).unwrap();
+        assert!((s - 1.0).abs() < 1e-5);
     }
 }

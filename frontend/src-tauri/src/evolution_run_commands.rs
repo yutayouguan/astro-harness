@@ -18,17 +18,17 @@ use evolution::{
     build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
     build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
     examples_for_skill, list_examples, list_proposals, load_auto_state, mark_auto_run,
-    parse_candidates, parse_eval_score, parse_judge_output, parse_variants, pareto_front,
-    reject_proposal, save_auto_state, save_proposals, select_front_capped, AutoGate, AutoStatus,
-    CandidateKind, EvalExample, ReflectionInput, ScoredVariant, SkillCandidate,
-    CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
-    REFLECTION_SYSTEM_PROMPT,
+    pareto_front, parse_candidates, parse_eval_score, parse_judge_output, parse_variants,
+    reject_proposal, save_auto_state, save_proposals, select_front_capped, weighted_eval_score,
+    AutoGate, AutoStatus, CandidateKind, EvalExample, ReflectionInput, ScoredVariant,
+    SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT,
+    MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
 use crate::auxiliary_resolver::{resolve_evolution_targets, AuxiliaryTargets, ResolvedTarget};
 use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
@@ -192,10 +192,7 @@ async fn reflect_over_targets(
 }
 
 /// 为近期决策关联的会话构建精简 transcript（最多 3 个会话，各 ~1500 字符）。
-fn build_transcripts(
-    base: &Path,
-    decisions: &[memory::DecisionEntry],
-) -> Vec<(String, String)> {
+fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(String, String)> {
     let mut session_ids: Vec<String> = Vec::new();
     for d in decisions {
         if let Some(sid) = d.session_id.as_deref().filter(|s| !s.is_empty()) {
@@ -252,10 +249,9 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
     let targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
     if targets.preferred.provider.kind.requires_api_key()
         && targets.preferred.api_key.trim().is_empty()
-        && targets
-            .fallback
-            .as_ref()
-            .map_or(true, |fb| fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty())
+        && targets.fallback.as_ref().map_or(true, |fb| {
+            fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
+        })
     {
         return Err("未配置 API Key，无法运行进化".into());
     }
@@ -296,8 +292,8 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
             let evalset = list_examples(&base);
             let mut kept: Vec<SkillCandidate> = Vec::new();
             for mut c in passed.into_iter() {
-                let (score, reason) =
-                    fitness_score(&judge_targets, &c, &enabled_now, &evalset).await;
+                let (score, reason, _) =
+                    fitness_score(&judge_targets, &c, &enabled_now, &evalset, cfg.search.max_eval_examples).await;
                 c.judge_score = Some(score);
                 c.judge_reason = Some(reason);
                 if score >= cfg.gates.min_judge_score {
@@ -316,7 +312,14 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
     let proposals: Vec<EvolutionProposalDto> =
         passed.into_iter().map(EvolutionProposalDto::from).collect();
 
-    evolution::record_run(&base, mode, generated, gated_out, judged_out, proposals.len());
+    evolution::record_run(
+        &base,
+        mode,
+        generated,
+        gated_out,
+        judged_out,
+        proposals.len(),
+    );
     let _ = app.emit(
         "evolution-updated",
         serde_json::json!({
@@ -495,34 +498,58 @@ async fn judge_candidate(
     }
 }
 
-/// 客观适应度：若候选技能有匹配评测例子，则对每个例子做 grounded 评分取均值；
-/// 否则回退泛化 judge。返回 (score, reason)。
+/// 客观适应度：若候选技能有匹配评测例子，则对每个例子做 grounded 评分后
+/// 以 Fail/Pass 加权均值聚合（Fail 权重 2×，修复失败比维持通过率更有价值）；
+/// 否则回退泛化 judge。返回 (score, reason, llm_calls_used)。
 async fn fitness_score(
     targets: &AuxiliaryTargets,
     cand: &SkillCandidate,
     enabled_skills: &[(String, String)],
     evalset: &[EvalExample],
-) -> (f32, String) {
-    let matched = examples_for_skill(evalset, &cand.skill_id);
-    if matched.is_empty() {
-        return judge_candidate(targets, cand, enabled_skills).await;
+    max_eval_examples: usize,
+) -> (f32, String, u32) {
+    let all_matched = examples_for_skill(evalset, &cand.skill_id);
+    if all_matched.is_empty() {
+        let (s, r) = judge_candidate(targets, cand, enabled_skills).await;
+        return (s, r, 1);
     }
-    let mut sum = 0.0f32;
-    let mut n = 0u32;
-    for ex in &matched {
+    // 例数上限：超出时截断，Fail 例优先（保留更有诊断价值的案例）
+    let capped: Vec<&&EvalExample> = if max_eval_examples > 0 && all_matched.len() > max_eval_examples {
+        let mut sorted = all_matched.iter().collect::<Vec<_>>();
+        sorted.sort_by_key(|e| if e.verdict == Verdict::Fail { 0u8 } else { 1u8 });
+        sorted.truncate(max_eval_examples);
+        sorted
+    } else {
+        all_matched.iter().collect()
+    };
+
+    let mut verdict_scores: Vec<(Verdict, f32)> = Vec::new();
+    let mut calls: u32 = 0;
+    for ex in &capped {
         let user = build_eval_judge_prompt(cand, ex);
         if let Ok(raw) = reflect_over_targets(targets, EVAL_JUDGE_SYSTEM_PROMPT, &user).await {
+            calls += 1;
             if let Ok(score) = parse_eval_score(&raw) {
-                sum += score;
-                n += 1;
+                verdict_scores.push((ex.verdict, score));
             }
         }
     }
-    if n == 0 {
-        return judge_candidate(targets, cand, enabled_skills).await;
+    match weighted_eval_score(&verdict_scores) {
+        Some(avg) => {
+            let n = verdict_scores.len();
+            let fail_n = verdict_scores.iter().filter(|(v, _)| *v == Verdict::Fail).count();
+            let reason = if fail_n > 0 {
+                format!("grounded 评分（{n} 例，其中 {fail_n} 例 Fail 双权重）")
+            } else {
+                format!("grounded 评分（{n} 例）")
+            };
+            (avg, reason, calls)
+        }
+        None => {
+            let (s, r) = judge_candidate(targets, cand, enabled_skills).await;
+            (s, r, calls + 1)
+        }
     }
-    let avg = sum / n as f32;
-    (avg, format!("基于 {n} 个评测例子的 grounded 评分"))
 }
 
 /// GEPA-lite 遗传搜索：种子 → 每目标多代变异 + judge 打分 + Pareto 选择 → 待审提案。
@@ -535,8 +562,7 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
     }
 
     let primary = active_primary_target()?;
-    let refl_targets =
-        resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
+    let refl_targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
     if refl_targets.preferred.provider.kind.requires_api_key()
         && refl_targets.preferred.api_key.trim().is_empty()
         && refl_targets.fallback.as_ref().map_or(true, |fb| {
@@ -545,8 +571,7 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
     {
         return Err("未配置 API Key，无法运行进化".into());
     }
-    let judge_targets =
-        resolve_evolution_targets(memory::EvolutionRouteKind::Judge, &primary)?;
+    let judge_targets = resolve_evolution_targets(memory::EvolutionRouteKind::Judge, &primary)?;
 
     // 种子：reflection 产候选
     let decisions = memory::list_recent_decisions(&base, 20).unwrap_or_default();
@@ -557,7 +582,8 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         enabled_skills: enabled_skills.clone(),
         transcripts,
     });
-    let seed_raw = reflect_over_targets(&refl_targets, REFLECTION_SYSTEM_PROMPT, &seed_user).await?;
+    let seed_raw =
+        reflect_over_targets(&refl_targets, REFLECTION_SYSTEM_PROMPT, &seed_user).await?;
     let seeds_all = parse_candidates(&seed_raw).map_err(|e| e.to_string())?;
 
     // 按 (skill_id, kind) 去重，最多 3 个目标
@@ -576,20 +602,32 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
     let evalset = list_examples(&base);
     let generations = cfg.search.generations.max(1);
     let variants = cfg.search.variants.max(1);
+    let max_eval_examples = cfg.search.max_eval_examples;
+    let budget = cfg.search.max_llm_calls; // 0 = 不限
+    let mut llm_calls: u32 = 1; // 已用：seed reflection 调用
     let mut variants_evaluated = 0usize;
     let mut pareto_kept = 0usize;
+    let mut search_gated_out = 0usize;
+    let mut search_judged_out = 0usize;
     let mut final_props: Vec<SkillCandidate> = Vec::new();
 
-    for seed in seeds {
+    'seed: for seed in seeds {
         let mut current = seed.clone();
         let mut critiques: Vec<String> = Vec::new();
         let mut last_front: Vec<ScoredVariant> = Vec::new();
 
         for _gen in 0..generations {
+            // 预算检查：变异调用前确认还有余量
+            if budget > 0 && llm_calls >= budget {
+                tracing::info!(skill = %current.skill_id, llm_calls, budget, "LLM 预算耗尽，停止搜索");
+                break 'seed;
+            }
+
             let muser = build_mutation_prompt(&current, variants, &critiques);
-            let raw = match reflect_over_targets(&refl_targets, MUTATION_SYSTEM_PROMPT, &muser).await
+            let raw = match reflect_over_targets(&refl_targets, MUTATION_SYSTEM_PROMPT, &muser)
+                .await
             {
-                Ok(r) => r,
+                Ok(r) => { llm_calls += 1; r }
                 Err(e) => {
                     tracing::warn!(skill = %current.skill_id, error = %e, "变异调用失败，停止该目标");
                     break;
@@ -603,8 +641,9 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
 
             let mut scored: Vec<ScoredVariant> = Vec::new();
             for mut c in cands {
-                let (score, reason) =
-                    fitness_score(&judge_targets, &c, &enabled_skills, &evalset).await;
+                let (score, reason, calls) =
+                    fitness_score(&judge_targets, &c, &enabled_skills, &evalset, max_eval_examples).await;
+                llm_calls += calls;
                 c.judge_score = Some(score);
                 c.judge_reason = Some(reason);
                 variants_evaluated += 1;
@@ -612,17 +651,19 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
             }
 
             // 交叉：对当前最高分的两个变体融合出一个子代，评分后并入选择。
-            if cfg.search.crossover && scored.len() >= 2 {
+            if cfg.search.crossover && scored.len() >= 2 && (budget == 0 || llm_calls < budget) {
                 let top = select_front_capped(pareto_front(&scored), 2);
                 if top.len() == 2 {
                     let cx = build_crossover_prompt(&top[0].candidate, &top[1].candidate);
                     if let Ok(raw) =
                         reflect_over_targets(&refl_targets, CROSSOVER_SYSTEM_PROMPT, &cx).await
                     {
+                        llm_calls += 1;
                         for mut child in parse_variants(&raw, &current).unwrap_or_default() {
-                            let (score, reason) =
-                                fitness_score(&judge_targets, &child, &enabled_skills, &evalset)
+                            let (score, reason, calls) =
+                                fitness_score(&judge_targets, &child, &enabled_skills, &evalset, max_eval_examples)
                                     .await;
+                            llm_calls += calls;
                             child.judge_score = Some(score);
                             child.judge_reason = Some(format!("[交叉] {reason}"));
                             variants_evaluated += 1;
@@ -643,20 +684,53 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
             last_front = front;
         }
 
-        // 每目标取 Pareto front 前 2 个，过静态门禁
+        // 每目标取 Pareto front 前 2 个，依次过静态门禁与 min_judge_score 阈值
         for v in select_front_capped(last_front, 2) {
             pareto_kept += 1;
-            if check_candidate(&v.candidate, &cfg.gates).passed {
-                final_props.push(v.candidate);
+            if !check_candidate(&v.candidate, &cfg.gates).passed {
+                search_gated_out += 1;
+                continue;
             }
+            if cfg.gates.min_judge_score > 0.0 {
+                let score = v.candidate.judge_score.unwrap_or(0.0);
+                if score < cfg.gates.min_judge_score {
+                    search_judged_out += 1;
+                    tracing::info!(
+                        skill = %v.candidate.skill_id,
+                        score,
+                        threshold = cfg.gates.min_judge_score,
+                        "搜索候选被 min_judge_score 拒绝"
+                    );
+                    continue;
+                }
+            }
+            final_props.push(v.candidate);
         }
     }
 
     save_proposals(&base, &final_props).map_err(|e| e.to_string())?;
-    let proposals: Vec<EvolutionProposalDto> =
-        final_props.into_iter().map(EvolutionProposalDto::from).collect();
+    let proposals: Vec<EvolutionProposalDto> = final_props
+        .into_iter()
+        .map(EvolutionProposalDto::from)
+        .collect();
 
-    evolution::record_run(&base, "search", variants_evaluated, 0, 0, proposals.len());
+    tracing::info!(
+        variants_evaluated,
+        pareto_kept,
+        gated_out = search_gated_out,
+        judged_out = search_judged_out,
+        llm_calls,
+        proposals = proposals.len(),
+        "GEPA-lite 搜索完成"
+    );
+    evolution::record_run(
+        &base,
+        "search",
+        variants_evaluated,
+        search_gated_out,
+        search_judged_out,
+        proposals.len(),
+    );
     let _ = app.emit(
         "evolution-updated",
         serde_json::json!({
@@ -716,7 +790,12 @@ fn run_skill_tests(skill_dir: &Path) -> Result<(), String> {
                 }
                 let out = child.wait_with_output().ok();
                 let tail = out
-                    .map(|o| String::from_utf8_lossy(&o.stderr).chars().take(500).collect::<String>())
+                    .map(|o| {
+                        String::from_utf8_lossy(&o.stderr)
+                            .chars()
+                            .take(500)
+                            .collect::<String>()
+                    })
                     .unwrap_or_default();
                 return Err(format!("测试退出码非零: {tail}"));
             }
@@ -917,8 +996,11 @@ pub async fn evolution_dspy_status<R: tauri::Runtime>(
 #[tauri::command]
 pub async fn setup_evolution_dspy<R: tauri::Runtime>(app: AppHandle<R>) -> Result<String, String> {
     let base = default_memory_dir();
-    let project = resolve_dspy_project(&app, &memory::load_evolution_config(&base).dspy.project_path)
-        .ok_or_else(|| "找不到 evolution-dspy 项目目录".to_string())?;
+    let project = resolve_dspy_project(
+        &app,
+        &memory::load_evolution_config(&base).dspy.project_path,
+    )
+    .ok_or_else(|| "找不到 evolution-dspy 项目目录".to_string())?;
     let venv = base.join("evolution-dspy").join(".venv");
     if let Some(parent) = venv.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -978,7 +1060,12 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
 
     // 解析 reflection 目标作为 LLM 端点；mock 自测跳过（不需要真实模型/凭据）
     let (model, base_url, backend_id, api_key) = if mock {
-        (String::new(), String::new(), "mock".to_string(), String::new())
+        (
+            String::new(),
+            String::new(),
+            "mock".to_string(),
+            String::new(),
+        )
     } else {
         let primary = active_primary_target()?;
         let targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
@@ -988,7 +1075,10 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
 
     // 导出输入到临时目录
     let run_id: String = uuid::Uuid::new_v4().to_string().chars().take(8).collect();
-    let dir = base.join("learning").join("evolution").join(format!("dspy-run-{run_id}"));
+    let dir = base
+        .join("learning")
+        .join("evolution")
+        .join(format!("dspy-run-{run_id}"));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("skill.md"), loaded.content.as_bytes()).map_err(|e| e.to_string())?;
 
@@ -1011,7 +1101,9 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
     });
     std::fs::write(
         dir.join("config.json"),
-        serde_json::to_string_pretty(&config_json).unwrap_or_default().as_bytes(),
+        serde_json::to_string_pretty(&config_json)
+            .unwrap_or_default()
+            .as_bytes(),
     )
     .map_err(|e| e.to_string())?;
 
@@ -1055,8 +1147,8 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
         }
     }
 
-    let raw = std::fs::read_to_string(&output)
-        .map_err(|_| "DSPy 未产出 result.json".to_string())?;
+    let raw =
+        std::fs::read_to_string(&output).map_err(|_| "DSPy 未产出 result.json".to_string())?;
     let val: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
     if let Some(err) = val.get("error").and_then(|v| v.as_str()) {
         return Err(format!("DSPy 失败: {err}"));
@@ -1100,7 +1192,10 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
     evolution::record_run(&base, "dspy", 1, gated, 0, proposals.len());
     let _ = std::fs::remove_dir_all(&dir);
 
-    let _ = app.emit("evolution-updated", serde_json::json!({ "dspy": true, "proposals": proposals.len() }));
+    let _ = app.emit(
+        "evolution-updated",
+        serde_json::json!({ "dspy": true, "proposals": proposals.len() }),
+    );
 
     Ok(EvolutionRunReport {
         ok: true,
@@ -1228,8 +1323,7 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
         .find(|c| c.id == id)
         .ok_or_else(|| format!("提案不存在: {id}"))?;
 
-    let skills_dir =
-        skills::install::agent_skills_dir(None).map_err(|e| e.to_string())?;
+    let skills_dir = skills::install::agent_skills_dir(None).map_err(|e| e.to_string())?;
     let repo = git_root(&skills_dir)
         .ok_or_else(|| "技能目录不在 git 仓库中，无法开分支（可用普通「批准写入」）".to_string())?;
 
@@ -1251,7 +1345,14 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
 
     // 新分支 + 独立检出
     git(
-        &["worktree", "add", "-b", &branch, &wt.to_string_lossy(), "HEAD"],
+        &[
+            "worktree",
+            "add",
+            "-b",
+            &branch,
+            &wt.to_string_lossy(),
+            "HEAD",
+        ],
         &repo,
     )?;
 
@@ -1283,7 +1384,10 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
 
     if let Err(e) = apply_and_commit() {
         // 回滚 worktree + 分支（best-effort）
-        let _ = git(&["worktree", "remove", "--force", &wt.to_string_lossy()], &repo);
+        let _ = git(
+            &["worktree", "remove", "--force", &wt.to_string_lossy()],
+            &repo,
+        );
         let _ = git(&["branch", "-D", &branch], &repo);
         return Err(e);
     }

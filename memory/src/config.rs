@@ -397,6 +397,10 @@ fn default_variants() -> u32 {
     3
 }
 
+fn default_max_eval_examples() -> usize {
+    5
+}
+
 /// GEPA-lite 遗传搜索参数（`config.yaml` 的 `evolution.search` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct EvolutionSearch {
@@ -409,6 +413,14 @@ pub struct EvolutionSearch {
     /// 是否启用交叉算子（对 Pareto 前沿 top-2 融合出子代）。
     #[serde(default = "default_true")]
     pub crossover: bool,
+    /// 每技能最多参与 grounded 评分的评测例数（0 = 不限）。
+    /// 防止大型评测集导致调用数随「候选 × 例」线性放大。
+    #[serde(default = "default_max_eval_examples")]
+    pub max_eval_examples: usize,
+    /// 单次遗传搜索（mutation + crossover）的 LLM 调用总上限（0 = 不限）。
+    /// 超出后停止当前 target 的后续代数，已评分变体仍参与 Pareto 选择。
+    #[serde(default)]
+    pub max_llm_calls: u32,
 }
 
 impl Default for EvolutionSearch {
@@ -417,6 +429,8 @@ impl Default for EvolutionSearch {
             generations: 2,
             variants: 3,
             crossover: true,
+            max_eval_examples: 5,
+            max_llm_calls: 0,
         }
     }
 }
@@ -671,7 +685,11 @@ fn write_compression_mapping(map: &mut serde_yaml::Mapping, cfg: &CompressionCon
     insert_yaml_usize(map, "hard_head_chars", cfg.hard_head_chars);
     insert_yaml_usize(map, "hard_tail_chars", cfg.hard_tail_chars);
     insert_yaml_usize(map, "tool_results_limit", cfg.tool_results_limit);
-    insert_yaml_f64(map, "mid_run_summary_ratio", cfg.mid_run_summary_ratio as f64);
+    insert_yaml_f64(
+        map,
+        "mid_run_summary_ratio",
+        cfg.mid_run_summary_ratio as f64,
+    );
     insert_yaml_f64(
         map,
         "recommend_compact_ratio",
@@ -964,7 +982,12 @@ pub fn reset_all_evolution_routes(base: &Path) -> anyhow::Result<EvolutionConfig
 pub fn set_evolution_dspy(base: &Path, dspy: &EvolutionDspy) -> anyhow::Result<EvolutionConfig> {
     set_nested_bool(base, &["evolution", "dspy"], "enabled", dspy.enabled)?;
     set_nested_string(base, &["evolution", "dspy"], "python_bin", &dspy.python_bin)?;
-    set_nested_string(base, &["evolution", "dspy"], "project_path", &dspy.project_path)?;
+    set_nested_string(
+        base,
+        &["evolution", "dspy"],
+        "project_path",
+        &dspy.project_path,
+    )?;
     set_nested_usize(
         base,
         &["evolution", "dspy"],
@@ -991,7 +1014,24 @@ pub fn set_evolution_search(
         "variants",
         search.variants as usize,
     )?;
-    set_nested_bool(base, &["evolution", "search"], "crossover", search.crossover)?;
+    set_nested_bool(
+        base,
+        &["evolution", "search"],
+        "crossover",
+        search.crossover,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "search"],
+        "max_eval_examples",
+        search.max_eval_examples,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "search"],
+        "max_llm_calls",
+        search.max_llm_calls as usize,
+    )?;
     Ok(load_evolution_config(base))
 }
 
@@ -1020,12 +1060,14 @@ pub fn set_evolution_auto(base: &Path, auto: &EvolutionAuto) -> anyhow::Result<E
 }
 
 /// 设置进化门禁并返回最新配置。
-pub fn set_evolution_gates(
-    base: &Path,
-    gates: &EvolutionGates,
-) -> anyhow::Result<EvolutionConfig> {
+pub fn set_evolution_gates(base: &Path, gates: &EvolutionGates) -> anyhow::Result<EvolutionConfig> {
     set_nested_bool(base, &["evolution", "gates"], "run_tests", gates.run_tests)?;
-    set_nested_bool(base, &["evolution", "gates"], "require_pr", gates.require_pr)?;
+    set_nested_bool(
+        base,
+        &["evolution", "gates"],
+        "require_pr",
+        gates.require_pr,
+    )?;
     set_nested_usize(
         base,
         &["evolution", "gates"],

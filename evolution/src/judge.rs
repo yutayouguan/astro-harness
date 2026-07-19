@@ -22,7 +22,10 @@ pub const JUDGE_SYSTEM_PROMPT: &str = r#"你是 Agent 技能评审。评估一�
 score 为 0~1 的小数；keep 为布尔。宁严勿滥：低质量或投机性候选给低分。"#;
 
 /// 构造单个候选的 judge user 提示词。
-pub fn build_judge_user_prompt(cand: &SkillCandidate, enabled_skills: &[(String, String)]) -> String {
+pub fn build_judge_user_prompt(
+    cand: &SkillCandidate,
+    enabled_skills: &[(String, String)],
+) -> String {
     let mut s = String::new();
     s.push_str("## 现有技能\n");
     if enabled_skills.is_empty() {

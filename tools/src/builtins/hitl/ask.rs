@@ -84,13 +84,10 @@ fn normalize_options(raw: Vec<String>) -> Vec<String> {
 
 /// 按 `mode`（或参数推断）分派到 question / confirm 载荷构建。
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: AskArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("ask 参数无效: {e}"))?;
+    let parsed: AskArgs =
+        serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("ask 参数无效: {e}"))?;
 
-    let mode = parsed
-        .mode
-        .as_deref()
-        .map(|s| s.trim().to_lowercase());
+    let mode = parsed.mode.as_deref().map(|s| s.trim().to_lowercase());
     let is_confirm = match mode.as_deref() {
         Some("confirm") => true,
         Some("question") => false,

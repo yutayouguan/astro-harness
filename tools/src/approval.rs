@@ -315,7 +315,10 @@ mod tests {
 
     #[test]
     fn allowlist_exact_and_glob() {
-        let allow = vec!["rm -rf /tmp/build".to_string(), "rm -rf *node_modules".to_string()];
+        let allow = vec![
+            "rm -rf /tmp/build".to_string(),
+            "rm -rf *node_modules".to_string(),
+        ];
         // 精确
         assert!(matches_allowlist("rm -rf /tmp/build", &allow));
         // glob

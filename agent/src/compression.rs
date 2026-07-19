@@ -143,7 +143,11 @@ impl ToolCompressionManager {
 
     /// 条数兜底触发时用 Soft 级预算（`min_ratio` 标 0 仅作标记）。
     fn count_fallback_stage(&self) -> CompressionStage {
-        let soft = self.stages.first().copied().unwrap_or(DEFAULT_COMPRESSION_STAGES[0]);
+        let soft = self
+            .stages
+            .first()
+            .copied()
+            .unwrap_or(DEFAULT_COMPRESSION_STAGES[0]);
         CompressionStage {
             min_ratio: 0.0,
             max_compressed_chars: soft.max_compressed_chars,
@@ -294,8 +298,7 @@ impl CompressionThrashingGuard {
             return;
         }
         let gain = (before - after).max(0.0);
-        let low_gain =
-            gain < self.min_gain_ratio || after >= self.recommend_compact_ratio;
+        let low_gain = gain < self.min_gain_ratio || after >= self.recommend_compact_ratio;
         if low_gain {
             self.consecutive_low_gain = self.consecutive_low_gain.saturating_add(1);
             if self.consecutive_low_gain >= self.max_consecutive {

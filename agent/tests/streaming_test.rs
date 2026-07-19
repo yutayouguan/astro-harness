@@ -886,7 +886,8 @@ async fn hitl_waiting_parks_then_continues_same_run() {
                     id: Some("call_confirm".into()),
                     name: Some("ask".into()),
                     arguments: Some(
-                        r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#.into(),
+                        r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
+                            .into(),
                     ),
                     signature: None,
                 }],

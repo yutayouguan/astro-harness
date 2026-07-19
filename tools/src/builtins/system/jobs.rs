@@ -202,10 +202,7 @@ pub fn spawn_background(
         });
     }
 
-    let id = format!(
-        "job_{}",
-        &uuid::Uuid::new_v4().simple().to_string()[..8]
-    );
+    let id = format!("job_{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
     let job = Arc::new(Job {
         id: id.clone(),
         session_id: session_id.to_string(),
@@ -415,7 +412,12 @@ fn render_status(job: &Arc<Job>, offset: usize) -> String {
         };
         if valid == 0 && !raw.is_empty() {
             // offset 被手动错位到字符中间：退回 lossy 整段，保证有进展不会卡死
-            (String::from_utf8_lossy(raw).to_string(), total, end, b.truncated)
+            (
+                String::from_utf8_lossy(raw).to_string(),
+                total,
+                end,
+                b.truncated,
+            )
         } else {
             let slice = String::from_utf8_lossy(&raw[..valid]).to_string();
             (slice, total, start + valid, b.truncated)
@@ -532,7 +534,10 @@ mod tests {
         assert!(!aligned.contains('\u{fffd}'), "边界对齐处不应有替换字符");
         // offset 落在「你」中间：不 panic，且能推进（不返回 bytes 1..1）
         let mid = render_status(&job, 1);
-        assert!(!mid.contains("bytes 1..1"), "mid-char offset should progress: {mid}");
+        assert!(
+            !mid.contains("bytes 1..1"),
+            "mid-char offset should progress: {mid}"
+        );
     }
 
     #[test]

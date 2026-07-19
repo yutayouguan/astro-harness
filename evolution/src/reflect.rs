@@ -48,10 +48,7 @@ pub fn build_reflection_user_prompt(input: &ReflectionInput) -> String {
     } else {
         for d in &input.decisions {
             let tool = d.tool_name.as_deref().unwrap_or("-");
-            s.push_str(&format!(
-                "- [{:?}] tool={tool} :: {}\n",
-                d.kind, d.summary
-            ));
+            s.push_str(&format!("- [{:?}] tool={tool} :: {}\n", d.kind, d.summary));
         }
     }
     if !input.transcripts.is_empty() {
@@ -195,7 +192,10 @@ mod tests {
                     .with_tool("web_search"),
             ],
             enabled_skills: vec![("aihot".into(), "AI 资讯".into())],
-            transcripts: vec![("sess1234abcd".into(), "user: 帮我合并 PDF\ntool: pdf_merge ok".into())],
+            transcripts: vec![(
+                "sess1234abcd".into(),
+                "user: 帮我合并 PDF\ntool: pdf_merge ok".into(),
+            )],
         };
         let p = build_reflection_user_prompt(&input);
         assert!(p.contains("aihot"));

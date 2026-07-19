@@ -21,6 +21,7 @@ pub use builtins::context_tools::render_pinned_for_prompt;
 pub(crate) use core::path_safe;
 pub use core::{catalog, context, dispatch, parse, registry, schema};
 
+pub use builtins::system::jobs::shutdown_all_jobs as shutdown_background_jobs;
 pub use catalog::{
     builtin_catalog, catalog_for_ui, params_from_schema, ToolCatalogItem, ToolFunctionInfo,
     ToolParamInfo,
@@ -30,7 +31,6 @@ pub use dispatch::{builtin_handler_names, dispatch_tool};
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
-pub use builtins::system::jobs::shutdown_all_jobs as shutdown_background_jobs;
 pub use path_safe::resolve_safe;
 pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};

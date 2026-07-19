@@ -231,7 +231,11 @@ mod tests {
     #[test]
     fn save_list_reject_roundtrip() {
         let dir = TempDir::new().unwrap();
-        save_proposals(dir.path(), &[new_cand("a", "demo-a"), new_cand("b", "demo-b")]).unwrap();
+        save_proposals(
+            dir.path(),
+            &[new_cand("a", "demo-a"), new_cand("b", "demo-b")],
+        )
+        .unwrap();
         let listed = list_proposals(dir.path());
         assert_eq!(listed.len(), 2);
         reject_proposal(dir.path(), "a").unwrap();
