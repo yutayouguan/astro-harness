@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 /// 默认 Agent 的 id / 目录名：`~/.astro/workspace`
 pub const DEFAULT_AGENT_ID: &str = "workspace";
 
+/// 新建 Agent 的 id 前缀：`agt_` + 16 位十六进制
+pub const AGENT_ID_PREFIX: &str = "agt_";
+
 /// 当前激活 Agent 的持久化文件名（位于数据根目录）
 pub(crate) const ACTIVE_AGENT_FILE: &str = "active-agent.json";
 
@@ -125,8 +128,27 @@ pub fn default_agent_workspace_dir() -> PathBuf {
     agent_workspace_dir(&base, &id)
 }
 
-/// 规范化 agent id：小写、空格转 `-`，仅保留 `[a-z0-9_-]`
-/// 纯非 ASCII 名称（如中文）用 `agent-{hash}` 兜底，避免落到默认 `workspace`
+/// 生成新 Agent 的不可变 id：`agt_` + 16 位十六进制（64 bit）。
+///
+/// 显示名写在 `AgentInfo.name` / config，与 id 解耦；改名不改目录。
+pub fn generate_agent_id() -> String {
+    let hex = uuid::Uuid::new_v4().simple().to_string();
+    format!("{AGENT_ID_PREFIX}{}", &hex[..16])
+}
+
+/// 是否为新式随机 id（`agt_` + 16 hex）
+pub fn is_generated_agent_id(id: &str) -> bool {
+    let Some(rest) = id.strip_prefix(AGENT_ID_PREFIX) else {
+        return false;
+    };
+    rest.len() == 16 && rest.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// 规范化已有 agent id（查找路径 / 激活 / 兼容旧数据）。
+///
+/// - 空 → `workspace`
+/// - 新式 `agt_<16hex>` 与旧 slug（如 `ppt-expert`）均小写清洗后透传
+/// - 纯非 ASCII 遗留输入仍用 `agent-{hash}` 兜底（**新建**请用 [`generate_agent_id`]）
 pub fn normalize_agent_id(raw: &str) -> String {
     let s = raw.trim().to_lowercase().replace(' ', "-");
     let cleaned: String = s
@@ -255,5 +277,26 @@ mod tests {
             dl_abs,
             home_abs
         );
+    }
+
+    #[test]
+    fn generate_agent_id_is_agt_prefix_hex16() {
+        let id = generate_agent_id();
+        assert!(is_generated_agent_id(&id), "got {id}");
+        assert_ne!(generate_agent_id(), generate_agent_id());
+    }
+
+    #[test]
+    fn normalize_keeps_generated_and_legacy_ids() {
+        assert_eq!(
+            normalize_agent_id("agt_7f3a91c2d8e4b605"),
+            "agt_7f3a91c2d8e4b605"
+        );
+        assert_eq!(normalize_agent_id("PPT Expert"), "ppt-expert");
+        assert_eq!(normalize_agent_id(""), DEFAULT_AGENT_ID);
+        assert_eq!(normalize_agent_id("default"), "default");
+        assert!(is_generated_agent_id(&normalize_agent_id(
+            "AGT_AABBCCDDEEFF0011"
+        )));
     }
 }

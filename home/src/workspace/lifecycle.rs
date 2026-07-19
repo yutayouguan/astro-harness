@@ -9,7 +9,8 @@ use crate::GENERATED_SUBDIRS;
 use super::agent_config::AgentRuntimeConfig;
 use super::paths::{
     active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
-    daily_memory_path, default_memory_dir, normalize_agent_id, set_active_agent, DEFAULT_AGENT_ID,
+    daily_memory_path, default_memory_dir, generate_agent_id, normalize_agent_id, set_active_agent,
+    DEFAULT_AGENT_ID,
 };
 use super::templates::{
     render_template, AGENT_SUBDIRS, CORE_FILES, ENSURED_DIRS, STATE_JSON_FILES,
@@ -236,7 +237,8 @@ pub fn create_agent(base: &Path, name: &str) -> anyhow::Result<AgentInfo> {
 
 /// 新建 Agent（完整参数）：工作区 + 配置 + 可选人设 + 是否继承全局配置并激活
 ///
-/// `id` 为空时由 `name` 规范化生成；不能覆盖默认 `workspace` 或系统保留名。
+/// `id` 为空时生成 `agt_<16hex>` 随机 id（与显示名解耦）；显式 `id` 仍规范化后使用（测试 / 高级覆盖）。
+/// 不能覆盖默认 `workspace` 或系统保留名。
 pub fn create_agent_with_profile(
     base: &Path,
     name: &str,
@@ -246,10 +248,21 @@ pub fn create_agent_with_profile(
     activate: bool,
 ) -> anyhow::Result<AgentInfo> {
     let display = name.trim();
-    let id = id
-        .map(normalize_agent_id)
-        .filter(|s| !s.is_empty() && s != DEFAULT_AGENT_ID)
-        .unwrap_or_else(|| normalize_agent_id(display));
+    if display.is_empty() {
+        anyhow::bail!("Agent 名称不能为空");
+    }
+
+    let id = match id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(raw) => {
+            let normalized = normalize_agent_id(raw);
+            if normalized.is_empty() || normalized == DEFAULT_AGENT_ID {
+                anyhow::bail!("不能覆盖默认 Agent `workspace`，请换一个 id");
+            }
+            normalized
+        }
+        None => allocate_agent_id(base)?,
+    };
+
     if id == DEFAULT_AGENT_ID {
         anyhow::bail!("不能覆盖默认 Agent `workspace`，请换一个名称");
     }
@@ -264,7 +277,7 @@ pub fn create_agent_with_profile(
         "workspace",
     ];
     if RESERVED.contains(&id.as_str()) || id.starts_with("workspace-") {
-        anyhow::bail!("名称 `{id}` 为系统保留，请换一个");
+        anyhow::bail!("id `{id}` 为系统保留，请换一个");
     }
 
     let ws = agent_workspace_dir(base, &id);
@@ -304,6 +317,17 @@ pub fn create_agent_with_profile(
         avatar: resolve_icon_field(&ws, identity.avatar.as_deref()),
         vibe: identity.vibe,
     })
+}
+
+/// 生成不与现有工作区冲突的 `agt_<hex>` id
+fn allocate_agent_id(base: &Path) -> anyhow::Result<String> {
+    for _ in 0..16 {
+        let id = generate_agent_id();
+        if !agent_workspace_dir(base, &id).exists() {
+            return Ok(id);
+        }
+    }
+    anyhow::bail!("无法生成唯一 Agent id，请重试")
 }
 
 /// 按 `AgentProfile` 写入 AGENT/IDENTITY/SOUL/USER/MEMORY 初始内容
@@ -595,7 +619,8 @@ pub struct EnsureWorkspaceReport {
 #[cfg(test)]
 mod tests {
     use super::super::paths::{
-        active_agent_id, agent_workspace_dir, list_daily_memory_dates, set_active_agent,
+        active_agent_id, agent_workspace_dir, is_generated_agent_id, list_daily_memory_dates,
+        set_active_agent,
     };
     use super::super::templates::{CORE_FILES, ENSURED_DIRS, STATE_JSON_FILES};
     use super::*;
@@ -686,26 +711,56 @@ mod tests {
         ensure_workspace(dir.path()).unwrap();
 
         let info = create_agent(dir.path(), "PPT Expert").unwrap();
-        assert_eq!(info.id, "ppt-expert");
-        assert!(info.path.ends_with("workspace-ppt-expert"));
+        assert!(
+            is_generated_agent_id(&info.id),
+            "expected agt_<hex> id, got {}",
+            info.id
+        );
+        assert_eq!(info.name, "PPT Expert");
+        assert!(info.path.ends_with(&format!("workspace-{}", info.id)));
 
         let agents = list_agents(dir.path());
         assert!(agents.iter().any(|a| a.is_default));
-        assert!(agents.iter().any(|a| a.id == "ppt-expert"));
+        assert!(agents.iter().any(|a| a.id == info.id && a.name == "PPT Expert"));
 
         let ws = PathBuf::from(&info.path);
         assert!(ws.join("AGENT.md").is_file());
         assert!(ws.join("MEMORY.md").is_file());
         assert!(ws.join("mermaid").is_dir());
         assert!(ws.join("skills").is_dir());
-        assert!(dir.path().join("agents/ppt-expert/config.json").is_file());
+        assert!(dir
+            .path()
+            .join(format!("agents/{}/config.json", info.id))
+            .is_file());
 
         set_active_agent(dir.path(), &info.id).unwrap();
         assert_eq!(active_agent_id(dir.path()), info.id);
         assert_eq!(
             agent_workspace_dir(dir.path(), &active_agent_id(dir.path())),
-            agent_workspace_dir(dir.path(), "ppt-expert")
+            agent_workspace_dir(dir.path(), &info.id)
         );
+
+        // 同名可再建（id 不同）
+        let info2 = create_agent(dir.path(), "PPT Expert").unwrap();
+        assert_ne!(info.id, info2.id);
+        assert!(is_generated_agent_id(&info2.id));
+    }
+
+    #[test]
+    fn create_agent_keeps_legacy_explicit_id() {
+        let dir = TempDir::new().unwrap();
+        ensure_workspace(dir.path()).unwrap();
+        let info = create_agent_with_profile(
+            dir.path(),
+            "遗留助手",
+            Some("legacy-slug"),
+            None,
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(info.id, "legacy-slug");
+        assert!(info.path.ends_with("workspace-legacy-slug"));
     }
 
     #[test]
