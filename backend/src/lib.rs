@@ -1,6 +1,7 @@
 //! Astro 独立 gRPC 后端入口。
 //!
-//! 引导工作区、启动 [`AstroServiceImpl`]，并在后台每 30s 认领并执行到期 cron。
+//! 引导工作区、启动 [`AstroServiceImpl`]，并在独立线程的 current_thread 运行时中
+//! 每 30s 认领并执行到期 cron（因 `SessionStore`/`AgentLoop` 非 Send）。
 //! 也可由桌面壳同进程调用 [`run_embedded`]（跳过二次日志初始化）。
 
 pub mod cron_runner;
@@ -81,14 +82,30 @@ pub async fn serve(
         let _ = tx.send(addr_str.clone());
     }
 
-    // 后台 cron ticker：每 30s claim_due + execute_job
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(30));
-        loop {
-            interval.tick().await;
-            cron_runner::tick_and_execute().await;
-        }
-    });
+    // 后台 cron ticker：独立 current_thread 运行时。
+    // AgentLoop / SessionStore（rusqlite RefCell）不是 Send，不能进多线程 tokio::spawn。
+    std::thread::Builder::new()
+        .name("astro-cron".into())
+        .spawn(|| {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(err) => {
+                    tracing::error!(error = %err, "cron runtime build failed");
+                    return;
+                }
+            };
+            rt.block_on(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(30));
+                loop {
+                    interval.tick().await;
+                    cron_runner::tick_and_execute().await;
+                }
+            });
+        })
+        .context("spawn astro-cron thread")?;
 
     tracing::info!("Astro Backend v0.1.0");
     tracing::info!("gRPC Server: {}", addr_str);
