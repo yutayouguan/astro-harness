@@ -1137,15 +1137,9 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   inset: 0;
   z-index: var(--z-dialog, 1500);
   display: grid;
-  place-items: center;
-  padding: 24px 16px;
-  background: color-mix(in srgb, #0f172a 42%, transparent);
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
-}
-
-html[data-theme="light"] .shell-grad-editor-backdrop {
-  background: color-mix(in srgb, #64748b 28%, transparent);
+  place-items: start end;
+  padding: 52px 22px 22px;
+  background: transparent;
 }
 
 .shell-grad-editor {
@@ -1161,6 +1155,13 @@ html[data-theme="light"] .shell-grad-editor-backdrop {
     inset 0 0 0 1px color-mix(in srgb, #fff 40%, transparent);
   backdrop-filter: blur(18px) saturate(1.2);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+@media (max-width: 700px) {
+  .shell-grad-editor-backdrop {
+    place-items: end center;
+    padding: 16px;
+  }
 }
 
 html[data-theme="dark"] .shell-grad-editor {
