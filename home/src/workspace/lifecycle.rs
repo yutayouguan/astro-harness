@@ -237,8 +237,8 @@ pub fn create_agent(base: &Path, name: &str) -> anyhow::Result<AgentInfo> {
 
 /// 新建 Agent（完整参数）：工作区 + 配置 + 可选人设 + 是否继承全局配置并激活
 ///
-/// `id` 为空时生成 `agt_<16hex>` 随机 id（与显示名解耦）；显式 `id` 仍规范化后使用（测试 / 高级覆盖）。
-/// 不能覆盖默认 `workspace` 或系统保留名。
+/// `id` 为空时生成 `{slug}--{hex}`（slug 取自显示名，可读；与显示名解耦、改名不变）；
+/// 显式 `id` 仍规范化后使用（测试 / 高级覆盖）。不能覆盖默认 `workspace` 或系统保留名。
 pub fn create_agent_with_profile(
     base: &Path,
     name: &str,
@@ -260,7 +260,7 @@ pub fn create_agent_with_profile(
             }
             normalized
         }
-        None => allocate_agent_id(base)?,
+        None => allocate_agent_id(base, display)?,
     };
 
     if id == DEFAULT_AGENT_ID {
@@ -319,10 +319,10 @@ pub fn create_agent_with_profile(
     })
 }
 
-/// 生成不与现有工作区冲突的 `agt_<hex>` id
-fn allocate_agent_id(base: &Path) -> anyhow::Result<String> {
+/// 生成不与现有工作区冲突的 `{slug}--{hex}` id
+fn allocate_agent_id(base: &Path, name: &str) -> anyhow::Result<String> {
     for _ in 0..16 {
-        let id = generate_agent_id();
+        let id = generate_agent_id(name);
         if !agent_workspace_dir(base, &id).exists() {
             return Ok(id);
         }
@@ -713,7 +713,12 @@ mod tests {
         let info = create_agent(dir.path(), "PPT Expert").unwrap();
         assert!(
             is_generated_agent_id(&info.id),
-            "expected agt_<hex> id, got {}",
+            "expected {{slug}}--{{hex}} id, got {}",
+            info.id
+        );
+        assert!(
+            info.id.starts_with("ppt-expert--"),
+            "expected readable slug prefix, got {}",
             info.id
         );
         assert_eq!(info.name, "PPT Expert");

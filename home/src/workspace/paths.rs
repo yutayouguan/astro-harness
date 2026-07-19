@@ -6,8 +6,17 @@ use std::path::{Path, PathBuf};
 /// 默认 Agent 的 id / 目录名：`~/.astro/workspace`
 pub const DEFAULT_AGENT_ID: &str = "workspace";
 
-/// 新建 Agent 的 id 前缀：`agt_` + 16 位十六进制
-pub const AGENT_ID_PREFIX: &str = "agt_";
+/// 新建 Agent id 的可读 slug 与随机后缀分隔符：`{slug}--{hex}`
+pub const AGENT_ID_SUFFIX_SEP: &str = "--";
+
+/// slug 为空（如纯中文名）时的兜底可读段：`agent--{hex}`
+pub const AGENT_ID_FALLBACK_SLUG: &str = "agent";
+
+/// 随机后缀的十六进制位数（48 bit，本地少量 Agent 足够且目录名不至过长）
+const AGENT_ID_HEX_LEN: usize = 12;
+
+/// slug 段最大长度（避免目录名过长）
+const AGENT_ID_SLUG_MAX: usize = 24;
 
 /// 当前激活 Agent 的持久化文件名（位于数据根目录）
 pub(crate) const ACTIVE_AGENT_FILE: &str = "active-agent.json";
@@ -128,26 +137,65 @@ pub fn default_agent_workspace_dir() -> PathBuf {
     agent_workspace_dir(&base, &id)
 }
 
-/// 生成新 Agent 的不可变 id：`agt_` + 16 位十六进制（64 bit）。
+/// 由显示名派生可读 slug（ASCII 小写、`-` 连接、压缩连续分隔、限长）。
 ///
-/// 显示名写在 `AgentInfo.name` / config，与 id 解耦；改名不改目录。
-pub fn generate_agent_id() -> String {
-    let hex = uuid::Uuid::new_v4().simple().to_string();
-    format!("{AGENT_ID_PREFIX}{}", &hex[..16])
+/// 纯非 ASCII（如中文）返回空串，由调用方用兜底段。仅用于**创建时**的可读快照，
+/// 不参与身份判等——id 一旦生成即不可变，改名不影响。
+pub fn slug_from_name(name: &str) -> String {
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for c in name.trim().to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+            prev_dash = false;
+        } else if (c == '-' || c == '_' || c.is_whitespace()) && !slug.is_empty() && !prev_dash {
+            slug.push('-');
+            prev_dash = true;
+        }
+    }
+    let trimmed = slug.trim_matches('-');
+    trimmed
+        .chars()
+        .take(AGENT_ID_SLUG_MAX)
+        .collect::<String>()
+        .trim_end_matches('-')
+        .to_string()
 }
 
-/// 是否为新式随机 id（`agt_` + 16 hex）
+/// 生成新 Agent 的不可变 id：`{slug}--{hex12}`（slug 来自显示名，可读；hex 保唯一）。
+///
+/// 纯非 ASCII 名回退为 `agent--{hex12}`。显示名另存 `AgentInfo.name` / config，
+/// 与 id 解耦；改名不改 id、不改目录。
+pub fn generate_agent_id(name: &str) -> String {
+    let hex: String = uuid::Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(AGENT_ID_HEX_LEN)
+        .collect();
+    let slug = slug_from_name(name);
+    let head = if slug.is_empty() {
+        AGENT_ID_FALLBACK_SLUG
+    } else {
+        &slug
+    };
+    format!("{head}{AGENT_ID_SUFFIX_SEP}{hex}")
+}
+
+/// 是否为新式生成 id（以 `--{12hex}` 结尾且前缀非空）。
 pub fn is_generated_agent_id(id: &str) -> bool {
-    let Some(rest) = id.strip_prefix(AGENT_ID_PREFIX) else {
+    let Some((head, hex)) = id.rsplit_once(AGENT_ID_SUFFIX_SEP) else {
         return false;
     };
-    rest.len() == 16 && rest.chars().all(|c| c.is_ascii_hexdigit())
+    !head.is_empty()
+        && hex.len() == AGENT_ID_HEX_LEN
+        && hex.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// 规范化已有 agent id（查找路径 / 激活 / 兼容旧数据）。
 ///
 /// - 空 → `workspace`
-/// - 新式 `agt_<16hex>` 与旧 slug（如 `ppt-expert`）均小写清洗后透传
+/// - 新式 `{slug}--{hex}` 与旧 slug（如 `ppt-expert`）均小写清洗后透传
 /// - 纯非 ASCII 遗留输入仍用 `agent-{hash}` 兜底（**新建**请用 [`generate_agent_id`]）
 pub fn normalize_agent_id(raw: &str) -> String {
     let s = raw.trim().to_lowercase().replace(' ', "-");
@@ -280,23 +328,41 @@ mod tests {
     }
 
     #[test]
-    fn generate_agent_id_is_agt_prefix_hex16() {
-        let id = generate_agent_id();
+    fn slug_from_name_ascii_and_cjk() {
+        assert_eq!(slug_from_name("PPT Expert"), "ppt-expert");
+        assert_eq!(slug_from_name("  Code_Reviewer "), "code-reviewer");
+        assert_eq!(slug_from_name("我的助手"), "");
+        assert_eq!(slug_from_name("助手 Pro"), "pro");
+    }
+
+    #[test]
+    fn generate_agent_id_is_slug_dashdash_hex12() {
+        let id = generate_agent_id("PPT Expert");
         assert!(is_generated_agent_id(&id), "got {id}");
-        assert_ne!(generate_agent_id(), generate_agent_id());
+        assert!(id.starts_with("ppt-expert--"), "got {id}");
+        let hex = id.rsplit_once("--").unwrap().1;
+        assert_eq!(hex.len(), 12);
+
+        let cjk = generate_agent_id("我的助手");
+        assert!(is_generated_agent_id(&cjk), "got {cjk}");
+        assert!(cjk.starts_with("agent--"), "got {cjk}");
+
+        assert_ne!(generate_agent_id("A"), generate_agent_id("A"));
     }
 
     #[test]
     fn normalize_keeps_generated_and_legacy_ids() {
         assert_eq!(
-            normalize_agent_id("agt_7f3a91c2d8e4b605"),
-            "agt_7f3a91c2d8e4b605"
+            normalize_agent_id("ppt-expert--a1b2c3d4e5f6"),
+            "ppt-expert--a1b2c3d4e5f6"
         );
         assert_eq!(normalize_agent_id("PPT Expert"), "ppt-expert");
         assert_eq!(normalize_agent_id(""), DEFAULT_AGENT_ID);
         assert_eq!(normalize_agent_id("default"), "default");
         assert!(is_generated_agent_id(&normalize_agent_id(
-            "AGT_AABBCCDDEEFF0011"
+            "PPT-Expert--AABBCCDDEEFF"
         )));
+        // 旧式 agt_ 前缀不再视为新式生成 id
+        assert!(!is_generated_agent_id("agt_7f3a91c2d8e4b605"));
     }
 }

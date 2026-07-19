@@ -38,7 +38,7 @@ pub struct AgentProfileArgs {
 pub struct CreateAgentArgs {
     /// 助手显示名（可中文、可重名；与不可变 id 解耦）。
     pub name: String,
-    /// 可选显式 id（高级覆盖 / 测试）。缺省自动生成 `agt_<16hex>`，勿用显示名派生。
+    /// 可选显式 id（高级覆盖 / 测试）。缺省自动生成 `{slug}--{hex12}`（slug 取自 name，可读；hex 保唯一）。
     #[serde(default)]
     pub id: Option<String>,
     /// 创建后是否切换为当前 Agent（会改 ASTRO_WORKSPACE / MEMORY）；缺省 `false`，需显式 true。
@@ -57,7 +57,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "create_agent".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Create a durable Agent persona (MEMORY/IDENTITY workspace at ~/.astro/workspace-{id}/ + agents/{id}/config.json). id defaults to random agt_<16hex> (not derived from name). NOT for in-turn task splitting—use `delegate` for ephemeral sub-agents. activate defaults to false. Prefer after loading the create-agent skill.".to_string(),
+        description: "Create a durable Agent persona (MEMORY/IDENTITY workspace at ~/.astro/workspace-{id}/ + agents/{id}/config.json). id defaults to {slug}--{hex12} from name (readable dir, immutable). NOT for in-turn task splitting—use `delegate` for ephemeral sub-agents. activate defaults to false. Prefer after loading the create-agent skill.".to_string(),
         schema: schema_for_args::<CreateAgentArgs>(),
         check_fn: None,
         icon: "bot",
