@@ -294,7 +294,9 @@ async fn execute_job_with_roots_local(
 
 /// 以 Agent 主循环执行 `job.task`，通过 [`run_headless_multi_turn`] 驱动完整工具循环。
 ///
-/// `session_id` 为 `None` 时为本次执行生成临时 UUID，不关联聊天 UI 会话。
+/// 按 `job.agent_id` 绑定已有 Agent 工作区（SOUL / MEMORY / 工具门控 / MCP），
+/// 不依赖全局活跃 Agent。`session_id` 为 `None` 时为本次执行生成临时 UUID，
+/// 不关联聊天 UI 会话。
 async fn run_agent_job(
     job: &CronJob,
     creds: CronExecCredentials,
@@ -304,9 +306,16 @@ async fn run_agent_job(
     let sid = session_id
         .map(str::to_string)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let agent_id = home::normalize_agent_id(&job.agent_id);
 
-    let config = AgentConfig::with_defaults(memory_dir);
-    let mut agent = AgentLoop::with_session_id(config, sid)?;
+    let mut config = AgentConfig::with_defaults(memory_dir.clone());
+    // with_defaults 读的是活跃 agent 的 SOUL；覆盖为任务指定 agent。
+    let ws = home::agent_workspace_dir(&memory_dir, &agent_id);
+    if let Ok(soul) = std::fs::read_to_string(ws.join("SOUL.md")) {
+        config.soul = soul;
+    }
+
+    let mut agent = AgentLoop::with_session_id_for_agent(config, sid, &agent_id)?;
     agent.set_chat_credentials(
         &creds.provider,
         &creds.model,
