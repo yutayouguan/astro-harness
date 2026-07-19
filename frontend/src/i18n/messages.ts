@@ -1045,6 +1045,13 @@ export const zh = {
   "filespace.toast.trashed": "已移到废纸篓",
   "filespace.toast.removedIndex": "已从索引移除",
 
+  "prefs.category.aria": "偏好设置分类",
+  "prefs.category.appearance": "外观",
+  "prefs.category.conversation": "对话与上下文",
+  "prefs.category.general": "通用",
+  "prefs.category.diagnostics": "诊断",
+  "prefs.category.about": "关于",
+
   "prefs.theme.title": "外观主题",
   "prefs.theme.sub": "Glassmorphism 亮色 / 暗色，或跟随系统自动切换",
   "prefs.theme.light": "亮色",
@@ -2567,6 +2574,13 @@ export const en: Record<MessageKey, string> = {
   "filespace.toast.copiedFile": "File copied",
   "filespace.toast.trashed": "Moved to Trash",
   "filespace.toast.removedIndex": "Removed from index",
+
+  "prefs.category.aria": "Preference categories",
+  "prefs.category.appearance": "Appearance",
+  "prefs.category.conversation": "Chat & context",
+  "prefs.category.general": "General",
+  "prefs.category.diagnostics": "Diagnostics",
+  "prefs.category.about": "About",
 
   "prefs.theme.title": "Appearance",
   "prefs.theme.sub": "Glassmorphism light / dark, or follow system",

@@ -45,6 +45,13 @@ type LogScope = "current" | "all";
 /** 内容过滤：全部 / 只看问题（warn 及以上） */
 type LogLevelFilter = "all" | "issues";
 
+type PreferenceCategory =
+  | "appearance"
+  | "conversation"
+  | "general"
+  | "diagnostics"
+  | "about";
+
 /** 行数预设 */
 const LINE_PRESETS = [50, 100, 200] as const;
 
@@ -150,6 +157,8 @@ export default function PreferencesPanel({
   const { locale, setLocale, t } = useI18n();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
+  const [activeCategory, setActiveCategory] =
+    useState<PreferenceCategory>("appearance");
 
   const appIconLabel = (id: AppIconId): string => {
     switch (id) {
@@ -276,6 +285,33 @@ export default function PreferencesPanel({
     themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
   const ColorStyleIcon =
     colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
+  const categoryOptions = [
+    {
+      id: "appearance" as const,
+      label: t("prefs.category.appearance"),
+      Icon: Palette,
+    },
+    {
+      id: "conversation" as const,
+      label: t("prefs.category.conversation"),
+      Icon: IconChat,
+    },
+    {
+      id: "general" as const,
+      label: t("prefs.category.general"),
+      Icon: IconGlobe,
+    },
+    {
+      id: "diagnostics" as const,
+      label: t("prefs.category.diagnostics"),
+      Icon: ScrollText,
+    },
+    {
+      id: "about" as const,
+      label: t("prefs.category.about"),
+      Icon: IconAtom,
+    },
+  ];
 
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
@@ -325,6 +361,30 @@ export default function PreferencesPanel({
 
   return (
     <div className="prefs-page" data-tone={tone}>
+      <nav className="prefs-category-nav" aria-label={t("prefs.category.aria")}>
+        {categoryOptions.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className={`prefs-category-nav-item ${
+              activeCategory === id ? "is-active" : ""
+            } ${id === "diagnostics" ? "is-separated" : ""}`}
+            aria-current={activeCategory === id ? "page" : undefined}
+            onClick={() => setActiveCategory(id)}
+          >
+            <span className="prefs-category-nav-icon" aria-hidden>
+              <Icon width={17} height={17} />
+            </span>
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="prefs-category-content">
+      <div
+        className="prefs-category-stack"
+        hidden={activeCategory !== "appearance"}
+      >
       <section className="prefs-card">
         <div className="prefs-card-head">
           <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
@@ -521,7 +581,12 @@ export default function PreferencesPanel({
         </div>
         <p className="prefs-card-note">{t("prefs.appIcon.finderNote")}</p>
       </section>
+      </div>
 
+      <div
+        className="prefs-category-stack"
+        hidden={activeCategory !== "conversation"}
+      >
       <section className="prefs-card">
         <div className="prefs-card-head">
           <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
@@ -587,7 +652,12 @@ export default function PreferencesPanel({
       </section>
 
       <CompressionSettingsCard tone={tone} />
+      </div>
 
+      <div
+        className="prefs-category-stack"
+        hidden={activeCategory !== "diagnostics"}
+      >
       <section className="prefs-card">
         <div className="prefs-card-head">
           <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
@@ -758,7 +828,12 @@ export default function PreferencesPanel({
           )}
         </div>
       </section>
+      </div>
 
+      <div
+        className="prefs-category-stack"
+        hidden={activeCategory !== "general"}
+      >
       <section className="prefs-card">
         <div className="prefs-card-head">
           <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
@@ -797,7 +872,12 @@ export default function PreferencesPanel({
           ))}
         </div>
       </section>
+      </div>
 
+      <div
+        className="prefs-category-stack"
+        hidden={activeCategory !== "about"}
+      >
       <section className="prefs-card">
         <div className="prefs-card-head">
           <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
@@ -809,6 +889,8 @@ export default function PreferencesPanel({
           </div>
         </div>
       </section>
+      </div>
+      </div>
     </div>
   );
 }
