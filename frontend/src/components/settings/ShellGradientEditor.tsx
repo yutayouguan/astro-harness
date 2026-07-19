@@ -261,30 +261,31 @@ export default function ShellGradientEditor({
               onClick={() => setActive(index)}
             />
           ))}
-        </div>
 
-        <div className="shell-grad-stop-actions" aria-label={t("prefs.colorStyle.stopCount")}>
-          <button
-            type="button"
-            className="shell-grad-stop-btn"
-            disabled={stops.length <= 2}
-            onClick={removeStop}
-            aria-label={t("prefs.colorStyle.removeStop")}
+          <div
+            className="shell-grad-stop-actions"
+            aria-label={t("prefs.colorStyle.stopCount")}
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            −
-          </button>
-          <span>
-            {stops.length} / 5
-          </span>
-          <button
-            type="button"
-            className="shell-grad-stop-btn"
-            disabled={stops.length >= 5}
-            onClick={addStop}
-            aria-label={t("prefs.colorStyle.addStop")}
-          >
-            +
-          </button>
+            <button
+              type="button"
+              className="shell-grad-stop-btn"
+              disabled={stops.length <= 2}
+              onClick={removeStop}
+              aria-label={t("prefs.colorStyle.removeStop")}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="shell-grad-stop-btn"
+              disabled={stops.length >= 5}
+              onClick={addStop}
+              aria-label={t("prefs.colorStyle.addStop")}
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div className="shell-grad-palette" role="group" aria-label={t("prefs.colorStyle.swatches")}>

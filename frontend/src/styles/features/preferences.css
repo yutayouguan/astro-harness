@@ -1235,26 +1235,35 @@ html[data-theme="dark"] .shell-grad-editor {
 }
 
 .shell-grad-stop-actions {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  margin-top: 12px;
-  color: var(--ink-soft);
-  font-size: 12px;
-  font-weight: 650;
+  gap: 18px;
+  transform: translateX(-50%);
+  pointer-events: auto;
 }
 
 .shell-grad-stop-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
-  background: color-mix(in srgb, var(--glass-fill, transparent) 80%, transparent);
-  color: var(--ink);
+  border: 1px solid color-mix(in srgb, #fff 55%, rgba(15, 23, 42, 0.2));
+  background: color-mix(in srgb, #fff 82%, transparent);
+  color: #334155;
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+  box-shadow: 0 4px 12px color-mix(in srgb, #0f172a 16%, transparent);
+}
+
+html[data-theme="dark"] .shell-grad-stop-btn {
+  background: color-mix(in srgb, #111827 78%, transparent);
+  color: #e2e8f0;
+  border-color: color-mix(in srgb, #fff 18%, transparent);
 }
 
 .shell-grad-stop-btn:disabled {
@@ -1266,8 +1275,9 @@ html[data-theme="dark"] .shell-grad-editor {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .shell-grad-swatch {
