@@ -79,13 +79,26 @@ import {
 } from "./lib/filespace/filesMode";
 import { FolderTree, Sparkles } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
+import {
+  applyShellGradientVars,
+  clearShellGradientVars,
+} from "./lib/ui/shellGradient";
 import type { ProviderModelsResult } from "./types";
 
 const NAV_ROW_PITCH_PX = 44;
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
   const { mode, setMode, resolved, reassert } = useTheme();
-  const { colorStyle, setColorStyle } = useShellColorStyle();
+  const {
+    colorStyle,
+    gradient,
+    setColorStyle,
+    setGradient,
+    beginGradientEdit,
+    previewGradient,
+    commitGradientEdit,
+    cancelGradientEdit,
+  } = useShellColorStyle();
   useBeautifyTips();
   const { t, locale } = useI18n();
   const { prefs: chatDisplayPrefs, setVerbosity, setToggle } = useChatDisplayPrefs();
@@ -220,17 +233,26 @@ export default function App() {
 
   // ── Nav tone + underlay ───────────────────────────────────────────────────
   const activeTone = NAV.find((n) => n.id === nav)?.tone ?? "blue";
-  /** 统一模式锁定 brand blue；多彩模式跟随当前 tab */
+  /** 统一模式用 custom tone 标记；多彩模式跟随当前 tab */
   const shellTone = colorStyle === "unified" ? "blue" : activeTone;
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);
+    if (colorStyle === "unified") {
+      applyShellGradientVars(root, gradient);
+    } else {
+      clearShellGradientVars(root);
+    }
     reassert();
-  }, [shellTone, colorStyle, reassert]);
+  }, [shellTone, colorStyle, gradient, reassert]);
   useEffect(() => {
-    void syncWindowUnderlay(resolved, shellTone);
-  }, [resolved, shellTone]);
+    void syncWindowUnderlay(
+      resolved,
+      shellTone,
+      colorStyle === "unified" ? gradient : null,
+    );
+  }, [resolved, shellTone, colorStyle, gradient]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const contextWindow = resolveContextWindow(
@@ -825,6 +847,12 @@ export default function App() {
                   onChange={setMode}
                   colorStyle={colorStyle}
                   onColorStyleChange={setColorStyle}
+                  gradient={gradient}
+                  onGradientChange={setGradient}
+                  onBeginCustomGradient={beginGradientEdit}
+                  onPreviewGradient={previewGradient}
+                  onCommitCustomGradient={commitGradientEdit}
+                  onCancelCustomGradient={cancelGradientEdit}
                   tone={shellTone}
                   chatDisplayPrefs={chatDisplayPrefs}
                   onChatVerbosityChange={setVerbosity}

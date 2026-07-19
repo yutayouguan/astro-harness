@@ -212,6 +212,47 @@ html[data-theme="light"] .app-shell[data-tone="teal"] {
     linear-gradient(165deg, #f0fdfa 0%, #ccfbf1 48%, #e8faf6 100%);
 }
 
+/* 统一模式自定义双色点渐变（位置与 RGB 由 JS 写入） */
+html[data-theme="dark"][data-color-style="unified"] .app-shell {
+  --shell-bg:
+    radial-gradient(
+      ellipse 85% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.34),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
+      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), 0.16),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.1),
+      transparent 55%
+    ),
+    linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
+}
+
+html[data-theme="light"][data-color-style="unified"] .app-shell {
+  --shell-bg:
+    radial-gradient(
+      ellipse 90% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.58),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
+      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.28),
+      transparent 55%
+    ),
+    linear-gradient(165deg, #f0f7ff 0%, #e8eef8 48%, #f4f7fb 100%);
+}
+
 .body-row {
   --sidebar-w: 76px;
     --sidebar-w-wide: 220px;

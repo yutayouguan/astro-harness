@@ -1080,3 +1080,235 @@ html[data-theme="dark"] .prefs-context-budget-ico {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Shell 色彩风格：预设色板 ── */
+.shell-color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 2px 0 4px;
+}
+
+.shell-color-swatch {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #fff 35%, transparent),
+    0 4px 12px color-mix(in srgb, var(--ink) 8%, transparent);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.shell-color-swatch:hover {
+  transform: translateY(-1px) scale(1.04);
+}
+
+.shell-color-swatch.is-active {
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 55%, var(--glass-edge));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--tone, #2563eb) 22%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, #fff 40%, transparent),
+    0 6px 16px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.shell-color-swatch--custom {
+  display: grid;
+  place-items: center;
+  background:
+    conic-gradient(from 210deg, #2563eb, #06b6d4, #8b5cf6, #fb7185, #2563eb);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.shell-color-swatch--custom span {
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.35);
+}
+
+/* ── 自定义渐变编辑弹层 ── */
+.shell-grad-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog, 1500);
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: color-mix(in srgb, #0f172a 42%, transparent);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+}
+
+html[data-theme="light"] .shell-grad-editor-backdrop {
+  background: color-mix(in srgb, #64748b 28%, transparent);
+}
+
+.shell-grad-editor {
+  width: min(420px, 94vw);
+  padding: 16px 16px 14px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 18%, var(--glass-edge));
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.42)),
+    var(--glass-panel, rgba(255, 255, 255, 0.7));
+  box-shadow:
+    0 24px 60px color-mix(in srgb, #0f172a 22%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, #fff 40%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+html[data-theme="dark"] .shell-grad-editor {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, #111827 78%, transparent);
+}
+
+.shell-grad-editor-head {
+  margin-bottom: 12px;
+}
+
+.shell-grad-editor-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.shell-grad-editor-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.shell-grad-canvas {
+  position: relative;
+  height: 220px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+  background-image:
+    radial-gradient(circle, color-mix(in srgb, #64748b 18%, transparent) 1px, transparent 1.5px);
+  background-size: 14px 14px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 25%, transparent);
+}
+
+.shell-grad-handle {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #0f172a 22%, transparent),
+    0 6px 16px color-mix(in srgb, #0f172a 25%, transparent);
+  cursor: grab;
+  touch-action: none;
+  padding: 0;
+  z-index: 2;
+}
+
+.shell-grad-handle.is-secondary {
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+}
+
+.shell-grad-handle.is-active {
+  z-index: 3;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--tone, #2563eb) 35%, transparent),
+    0 8px 18px color-mix(in srgb, #0f172a 28%, transparent);
+}
+
+.shell-grad-handle:active {
+  cursor: grabbing;
+}
+
+.shell-grad-palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.shell-grad-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, #fff 55%, var(--glass-edge));
+  box-shadow: 0 2px 8px color-mix(in srgb, #0f172a 12%, transparent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.shell-grad-swatch.is-active {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--tone, #2563eb) 45%, transparent),
+    0 2px 8px color-mix(in srgb, #0f172a 12%, transparent);
+}
+
+.shell-grad-custom-color {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px dashed color-mix(in srgb, var(--ink-mute) 40%, transparent);
+  cursor: pointer;
+  background:
+    conic-gradient(#ef4444, #eab308, #22c55e, #3b82f6, #a855f7, #ef4444);
+}
+
+.shell-grad-custom-color input {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.shell-grad-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.shell-grad-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.shell-grad-btn--ghost {
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--glass-fill, transparent) 70%, transparent);
+  border-color: var(--glass-edge);
+}
+
+.shell-grad-btn--primary {
+  color: #fff;
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--unified-tone, var(--tone, #2563eb)) 88%, #fff),
+    var(--unified-tone, var(--tone, #2563eb))
+  );
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--unified-tone, #2563eb) 28%, transparent);
+}

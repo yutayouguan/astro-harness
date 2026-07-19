@@ -21,9 +21,16 @@ import type { ThemeMode } from "../../hooks/app/useTheme";
 import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
+import {
+  gradientCssBackground,
+  gradientFromPreset,
+  SHELL_GRADIENT_PRESETS,
+  type ShellGradient,
+} from "../../lib/ui/shellGradient";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import CompressionSettingsCard from "./CompressionSettingsCard";
+import ShellGradientEditor from "./ShellGradientEditor";
 
 /** 查询返回的单行日志 */
 type AgentLogLine = { raw: string; source: string };
@@ -48,6 +55,12 @@ type Props = {
   /** Shell 色彩风格：多彩 / 统一 */
   colorStyle: ShellColorStyle;
   onColorStyleChange: (style: ShellColorStyle) => void;
+  gradient: ShellGradient;
+  onGradientChange: (gradient: ShellGradient) => void;
+  onBeginCustomGradient: () => void;
+  onPreviewGradient: (gradient: ShellGradient) => void;
+  onCommitCustomGradient: (gradient?: ShellGradient) => void;
+  onCancelCustomGradient: () => void;
   /** 当前 shell 主题色：blue | green | purple | orange | pink */
   tone?: string;
   chatDisplayPrefs: ChatDisplayPrefs;
@@ -118,6 +131,12 @@ export default function PreferencesPanel({
   onChange,
   colorStyle,
   onColorStyleChange,
+  gradient,
+  onGradientChange,
+  onBeginCustomGradient,
+  onPreviewGradient,
+  onCommitCustomGradient,
+  onCancelCustomGradient,
   tone = "pink",
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
@@ -126,6 +145,7 @@ export default function PreferencesPanel({
 }: Props) {
   const { locale, setLocale, t } = useI18n();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
+  const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
 
   const appIconLabel = (id: AppIconId): string => {
     switch (id) {
@@ -371,7 +391,63 @@ export default function PreferencesPanel({
             </button>
           ))}
         </div>
+
+        {colorStyle === "unified" ? (
+          <div
+            className="shell-color-presets"
+            role="radiogroup"
+            aria-label={t("prefs.colorStyle.presets")}
+          >
+            {SHELL_GRADIENT_PRESETS.map((preset) => {
+              const g = gradientFromPreset(preset.id);
+              const selected = gradient.id === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={`shell-color-swatch ${selected ? "is-active" : ""}`}
+                  style={{ background: gradientCssBackground(g) }}
+                  title={t(preset.labelKey)}
+                  aria-label={t(preset.labelKey)}
+                  onClick={() => onGradientChange(g)}
+                />
+              );
+            })}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={gradient.id === "custom"}
+              className={`shell-color-swatch shell-color-swatch--custom ${
+                gradient.id === "custom" ? "is-active" : ""
+              }`}
+              title={t("prefs.colorStyle.custom")}
+              aria-label={t("prefs.colorStyle.custom")}
+              onClick={() => {
+                onBeginCustomGradient();
+                setGradientEditorOpen(true);
+              }}
+            >
+              <span aria-hidden>+</span>
+            </button>
+          </div>
+        ) : null}
       </section>
+
+      <ShellGradientEditor
+        open={gradientEditorOpen}
+        initial={gradient}
+        onPreview={onPreviewGradient}
+        onConfirm={(g) => {
+          onCommitCustomGradient(g);
+          setGradientEditorOpen(false);
+        }}
+        onCancel={() => {
+          onCancelCustomGradient();
+          setGradientEditorOpen(false);
+        }}
+      />
 
       <section className="prefs-card">
         <div className="prefs-card-head">

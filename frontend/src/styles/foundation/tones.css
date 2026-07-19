@@ -147,90 +147,99 @@ html[data-tone="teal"] {
 }
 
 /*
- * 统一色彩：内容区强调色跟随 brand blue。
+ * 统一色彩：强调色跟随 --unified-tone（由 JS 写入起始色）。
  * Skills 卡片哈希色不在此重映射（各自 class 仍指向原 token）。
  */
+html[data-color-style="unified"] .nav-item,
+html[data-color-style="unified"] .page-title-icon,
+html[data-color-style="unified"] .content-title,
+html[data-color-style="unified"] .sidebar-pin-btn {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
 html[data-color-style="unified"] .content-pane {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --accent: var(--tone-blue);
-  --accent-2: var(--tone-blue);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --accent: var(--unified-tone, var(--tone-blue));
+  --accent-2: var(--unified-tone, var(--tone-blue));
 }
 
 html[data-color-style="unified"] .memory-panel {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --tone-green: var(--tone-blue);
-  --tone-green-soft: var(--tone-blue-soft);
-  --tone-green-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-green: var(--unified-tone, var(--tone-blue));
+  --tone-green-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-green-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .workspace-panel,
 html[data-color-style="unified"] .filespace-panel {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --tone-purple: var(--tone-blue);
-  --tone-purple-soft: var(--tone-blue-soft);
-  --tone-purple-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-purple: var(--unified-tone, var(--tone-blue));
+  --tone-purple-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-purple-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .content-header {
-  --tone-purple: var(--tone-blue);
-  --tone-purple-soft: var(--tone-blue-soft);
-  --tone-purple-glow: var(--tone-blue-glow);
+  --tone-purple: var(--unified-tone, var(--tone-blue));
+  --tone-purple-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-purple-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .agent-tools-page {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --tone-orange: var(--tone-blue);
-  --tone-orange-soft: var(--tone-blue-soft);
-  --tone-orange-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-orange: var(--unified-tone, var(--tone-blue));
+  --tone-orange-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-orange-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .skills-page {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --tone-indigo: var(--tone-blue);
-  --tone-indigo-soft: var(--tone-blue-soft);
-  --tone-indigo-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-indigo: var(--unified-tone, var(--tone-blue));
+  --tone-indigo-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-indigo-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .cron-page {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --tone-teal: var(--tone-blue);
-  --tone-teal-soft: var(--tone-blue-soft);
-  --tone-teal-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-teal: var(--unified-tone, var(--tone-blue));
+  --tone-teal-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-teal-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .insights-panel {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --tone-amber: var(--tone-blue);
-  --tone-amber-soft: var(--tone-blue-soft);
-  --tone-amber-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-amber: var(--unified-tone, var(--tone-blue));
+  --tone-amber-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-amber-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .providers-page {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html[data-color-style="unified"] .prefs-page,
 html[data-color-style="unified"] .preferences-page {
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
-  --tone-pink: var(--tone-blue);
-  --tone-pink-soft: var(--tone-blue-soft);
-  --tone-pink-glow: var(--tone-blue-glow);
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-pink: var(--unified-tone, var(--tone-blue));
+  --tone-pink-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-pink-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }

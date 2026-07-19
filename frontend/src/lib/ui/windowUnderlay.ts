@@ -1,6 +1,10 @@
 /** 原生窗 underlay 与主题底色同步。 */
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import {
+  underlayFromGradient,
+  type ShellGradient,
+} from "./shellGradient";
 
 /** 与 base.css --window-underlay 对齐，填满系统圆角抗锯齿缝 */
 const UNDERLAY: Record<"light" | "dark", Record<string, string>> = {
@@ -42,8 +46,10 @@ export function underlayColor(
 export async function syncWindowUnderlay(
   theme: "light" | "dark",
   tone: string,
+  gradient?: ShellGradient | null,
 ): Promise<void> {
-  const color = underlayColor(theme, tone);
+  const color =
+    gradient != null ? underlayFromGradient(theme, gradient) : underlayColor(theme, tone);
   try {
     await Promise.all([
       getCurrentWindow().setBackgroundColor(color),
