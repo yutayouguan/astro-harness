@@ -30,6 +30,7 @@ import {
   IconChat,
   IconCollapse,
   IconExpand,
+  IconNewChat,
   IconNewSession,
   IconPanelClose,
   IconPanelOpen,
@@ -750,6 +751,15 @@ export default function App() {
                     ) : (
                       <IconExpand width={16} height={16} />
                     )}
+                  </button>
+                  <button
+                    type="button"
+                    className="header-icon-btn"
+                    onClick={() => void startNewChat()}
+                    title={t("chat.newChat")}
+                    aria-label={t("chat.newChat")}
+                  >
+                    <IconNewChat width={16} height={16} />
                   </button>
                   <button
                     type="button"
