@@ -1,8 +1,8 @@
 //! 定时任务（Cron）执行器：将 [`CronJob`] 派发给 Agent 或 Provider 并完成运行记录落库。
 //!
 //! 负责并发互斥（同一 job 不重叠执行）、可选会话创建、600 秒超时兜底，以及成功/失败
-//! 状态写入 `CronRunDb`。任务文案经 [`AgentLoop::run_turn`] 进入主循环；若需继续多轮
-//! 工具调用则回落到 [`run_provider_loop`] 直接与 LLM Provider 交互（最多 5 轮）。
+//! 状态写入 `CronRunDb`。任务文案经 [`AgentLoop::run_turn`] 完成初始化后，由
+//! [`super::headless::run_headless_multi_turn`] 驱动完整的 LLM → 工具 → LLM 多轮循环。
 
 use std::path::Path;
 use std::time::Duration;
@@ -10,18 +10,16 @@ use std::time::Duration;
 use chrono::Utc;
 use common::ChatTarget;
 use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
-use futures::StreamExt;
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
-use providers::trait_::ProviderConfig;
 use session::SessionStore;
 use uuid::Uuid;
 
-use crate::prompt::messages::to_provider_messages;
 use crate::runtime::usage::apply_llm_usage_dual_write;
 use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
-use crate::streaming::fallback::try_stream_completion_with_fallback;
+
+use super::headless::run_headless_multi_turn;
 
 /// 执行定时任务所需的 LLM 凭据与路由信息。
 ///
@@ -116,13 +114,41 @@ pub async fn execute_job(
 /// - 执行期错误：Agent/Provider 返回的 `Err` 会写入 `finish_failure` 后仍尝试 `get` 该行。
 /// - 超时：600 秒内未完成则记为「执行超时（600s）」。
 /// - 记录异常：插入后无法 `get` 同一 `run_id` 时返回 `cron run vanished`。
+///
+/// # Send
+///
+/// `AgentLoop`/`SessionStore` 含 rusqlite `RefCell`，内部 future 非 Send。
+/// 本函数经 `spawn_blocking` + `current_thread` runtime 隔离，对外返回 Send future，
+/// 可供 Tauri command / 多线程 runtime 直接 `.await`。
 pub async fn execute_job_with_roots(
     cron_root: impl AsRef<Path>,
     job: &CronJob,
     creds: CronExecCredentials,
     trigger: &str,
 ) -> anyhow::Result<cron::CronRunRow> {
-    let cron_root = cron_root.as_ref();
+    let cron_root = cron_root.as_ref().to_path_buf();
+    let job = job.clone();
+    let trigger = trigger.to_string();
+    tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| anyhow::anyhow!("cron runtime: {e}"))?;
+        rt.block_on(execute_job_with_roots_local(
+            &cron_root, &job, creds, &trigger,
+        ))
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("cron join: {e}"))?
+}
+
+/// 非 Send 的实际执行体；仅在 `current_thread` runtime / LocalSet 内调用。
+async fn execute_job_with_roots_local(
+    cron_root: &Path,
+    job: &CronJob,
+    creds: CronExecCredentials,
+    trigger: &str,
+) -> anyhow::Result<cron::CronRunRow> {
     let db = CronRunDb::new(cron_db_path(cron_root))?;
 
     if db.has_running_for_job(&job.id)? {
@@ -266,13 +292,9 @@ pub async fn execute_job_with_roots(
     Ok(row)
 }
 
-/// 以 Agent 主循环执行 `job.task`，必要时进入 Provider 工具多轮循环。
+/// 以 Agent 主循环执行 `job.task`，通过 [`run_headless_multi_turn`] 驱动完整工具循环。
 ///
 /// `session_id` 为 `None` 时为本次执行生成临时 UUID，不关联聊天 UI 会话。
-///
-/// # 错误
-///
-/// 预算耗尽、工具深度超限，或出现定时任务不支持的 [`TurnResult`] 变体时返回 `Err`。
 async fn run_agent_job(
     job: &CronJob,
     creds: CronExecCredentials,
@@ -293,144 +315,19 @@ async fn run_agent_job(
     );
     let registry = ProviderRegistry::new();
     let targets = creds.effective_targets(&registry);
-    agent.set_chat_targets(targets);
+    agent.set_chat_targets(targets.clone());
 
-    let turn_result = agent.run_turn(&job.task, "cron").await?;
-    match turn_result {
+    let system_prompt = match agent.run_turn(&job.task, "cron").await? {
         TurnResult::Finished(message) => return Ok((message, Usage::default())),
-        TurnResult::Continue { system_prompt, .. } => {
-            run_provider_loop(&mut agent, &creds, &system_prompt).await
-        }
+        TurnResult::Continue { system_prompt, .. } => system_prompt,
         TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
         TurnResult::MaxDepth => anyhow::bail!("工具调用轮次已达上限"),
         TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
             anyhow::bail!("定时任务不支持该轮次结果")
         }
-    }
-}
+    };
 
-/// 直接与 LLM Provider 进行最多 5 轮流式对话，并在模型返回工具调用时同步执行工具。
-///
-/// 每轮重新加载 MCP/工具注册表，将 `system_prompt` 与会话消息转为 Provider 格式后
-/// 经 [`try_stream_completion_with_fallback`] 调用；无工具调用则返回最终助手文本。
-///
-/// # 错误
-///
-/// 未知 Provider、流式错误、轮次预算问题，或 5 轮后仍无有效回复时返回 `Err`。
-async fn run_provider_loop(
-    agent: &mut AgentLoop,
-    creds: &CronExecCredentials,
-    initial_system_prompt: &str,
-) -> anyhow::Result<(String, Usage)> {
-    let providers = ProviderRegistry::new();
-    let targets = creds.effective_targets(&providers);
-    let base_config = ProviderConfig::default();
-
-    let mut system_prompt = initial_system_prompt.to_string();
-    let mut last_response = String::new();
-    let mut total_usage = Usage::default();
-
-    for _round in 0..5 {
-        agent.reload_tools_and_mcp().await;
-        let messages = to_provider_messages(&system_prompt, &agent.session_messages);
-        let tools = agent.tool_registry().schemas_for_api();
-
-        let (mut stream, _meta) = try_stream_completion_with_fallback(
-            &targets,
-            &providers,
-            messages,
-            tools,
-            &base_config,
-            |from, to, err| {
-                tracing::warn!(
-                    from_backend = %from.backend_id,
-                    from_model = %from.model,
-                    to_backend = %to.backend_id,
-                    to_model = %to.model,
-                    error = %err,
-                    "cron chat failover: switching target before first content"
-                );
-            },
-        )
-        .await?;
-
-        let mut full_response = String::new();
-        // 与 streaming.rs 一致：同轮内覆盖取最后一次 usage，跨轮累加
-        let mut round_usage: Option<Usage> = None;
-        while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result.map_err(|e| anyhow::anyhow!("{e}"))?;
-            if let Some(token) = chunk.token {
-                full_response.push_str(&token);
-            }
-            if let Some(u) = chunk.usage {
-                round_usage = Some(u);
-            }
-        }
-        if let Some(u) = round_usage {
-            total_usage.add_assign(u);
-        }
-
-        if full_response.is_empty() {
-            break;
-        }
-
-        last_response = full_response.clone();
-        let calls = tools::extract_tool_calls(&full_response);
-        let tc = if calls.is_empty() {
-            None
-        } else {
-            Some(
-                calls
-                    .iter()
-                    .map(|c| common::message::ToolCall {
-                        id: c.id.clone(),
-                        name: c.name.clone(),
-                        arguments: c.arguments.clone(),
-                        signature: None,
-                    })
-                    .collect(),
-            )
-        };
-        agent.record_assistant_message_with_tools(&full_response, tc, None, None)?;
-
-        if calls.is_empty() {
-            return Ok((last_response, total_usage));
-        }
-
-        for call in calls {
-            let result =
-                tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
-                    .unwrap_or_else(|e| format!("工具错误: {e}"));
-
-            agent.record_tool_result_with_id(
-                Some(&call.id),
-                Some(&call.name),
-                &format!(
-                    "tool={} args={} result={}",
-                    call.name, call.arguments, result
-                ),
-            )?;
-        }
-
-        let turn_result = agent
-            .run_turn("", "cron-tool-followup")
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-        system_prompt = match turn_result {
-            TurnResult::Continue { system_prompt, .. } => system_prompt,
-            TurnResult::Finished(message) => return Ok((message, total_usage)),
-            TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
-            TurnResult::MaxDepth => anyhow::bail!("工具调用轮次已达上限"),
-            TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
-                anyhow::bail!("定时任务不支持该轮次结果")
-            }
-        };
-    }
-
-    if last_response.is_empty() {
-        anyhow::bail!("模型未返回有效回复");
-    }
-    Ok((last_response, total_usage))
+    run_headless_multi_turn(&mut agent, targets, system_prompt).await
 }
 
 /// 返回当前 UTC 时间的 RFC3339 字符串（秒精度，含时区偏移）。
