@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 将现有 GEPA-lite 从“单精英 + LLM 主观评分”的搜索骨架，逐步强化为具备严格预算、多谱系种群、结构化反馈、验证集与可选执行反馈的可控进化系统。
+**Goal:** 将现有 GEPA-lite 从“单精英 + LLM 主观评分”的搜索骨架，逐步强化为具备严格预算、多谱系种群、结构化反馈、验证集、可选执行反馈，以及 Hermes 风格 Curator（技能库定期健康维护）的可控进化系统。
 
-**Architecture:** 保留 Rust 侧 `reflection → mutation/crossover → fitness → Pareto → gates → proposal` 主链路，不引入新的 Python 运行时依赖。强化按“先正确、再多样、后客观”的顺序推进：先稳定当前质量契约和预算，再引入小种群与结构化 critique，最后增加 holdout 和沙箱执行反馈。
+**Architecture:** 保留 Rust 侧 `reflection → mutation/crossover → fitness → Pareto → gates → proposal` 主链路，不引入新的 Python 运行时依赖。强化按「先正确、再多样、后客观、再护库」的顺序推进：先稳定质量契约和预算，再引入小种群与结构化 critique，然后 holdout 与沙箱执行反馈，最后用 Curator 防止技能库因持续进化而膨胀/腐化。Curator 在现有 `skills::curate_report`（闲置检测）之上扩展，产物仍只写待审提案，绝不自动删改技能。
 
-**Tech Stack:** Rust、Tauri 2、Serde/YAML、现有 Provider 抽象、JSONL evalset/history、Cargo tests。
+**Tech Stack:** Rust、Tauri 2、Serde/YAML、现有 Provider 抽象、JSONL evalset/history、`skills` crate 使用统计、Cargo tests。
 
 ---
 
@@ -613,6 +613,203 @@ git commit -m "feat(evolution): score testable skills with sandbox feedback"
 
 ---
 
+## Phase 5：Curator — 技能库定期健康维护（Hermes 对齐）
+
+> 参考 Hermes Agent v0.12 Curator：每周给 skill 打分、合并重叠、剪枝过时项，防止技能库变成坟场。  
+> Astro 现状：`skills/src/usage.rs` 的 `curate_report` 仅基于 `last_loaded` 报告闲置建议；`skills` 工具 `action=curate` 已暴露给模型。本阶段把它升级为**可调度、可评分、可入待审**的策展环，仍不自动删除。
+
+### Task 8：结构化策展报告 + 配置周期
+
+把纯文本 `curate_report` 升级为结构化结果，并增加可配置的策展周期（默认每周，手动也可跑）。
+
+**Files:**
+
+- Modify: `skills/src/usage.rs`
+- Modify: `skills/src/lib.rs`
+- Modify: `memory/src/config.rs`（`learning.unused_skill_days` 旁增加 `evolution.curator` 或 `learning.curator`）
+- Modify: `tools/src/builtins/memory/skills_tool.rs`
+- Create: `evolution/src/curator.rs`（或先放 `skills`，若需写 proposal 再由 Tauri 调用）
+- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`（或新建 `curator_commands.rs`）
+- Test: `skills/src/usage.rs`
+- Test: `memory/src/config.rs`
+
+**Step 1: 定义结构化报告**
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurateSkillRow {
+    pub skill_id: String,
+    pub description: String,
+    pub last_loaded: Option<String>,
+    pub stale: bool,
+    /// 0–1；无足够信号时为 None
+    pub health_score: Option<f32>,
+    pub health_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurateReport {
+    pub generated_at: String,
+    pub unused_skill_days: u32,
+    pub enabled_count: usize,
+    pub stale: Vec<String>,
+    pub rows: Vec<CurateSkillRow>,
+    /// 重叠簇：同一簇内 skill_id 列表（相似度高）
+    pub overlap_clusters: Vec<Vec<String>>,
+    pub suggestions: Vec<CurateSuggestion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CurateSuggestion {
+    Disable { skill_id: String, reason: String },
+    Merge { keep: String, absorb: Vec<String>, reason: String },
+    Rewrite { skill_id: String, reason: String },
+}
+```
+
+保持 `curate_report` / `curate_report_at` 返回 Markdown 的兼容包装，内部调用结构化版本，避免破坏现有 `skills curate` 工具。
+
+**Step 2: 写失败测试**
+
+- 从未加载 / 超过 N 天 → `stale=true` 且进入 `suggestions::Disable`；
+- 近期加载 → 不 stale；
+- 空启用列表 → 空报告、非 panic；
+- YAML 增加 `curator.enabled` / `curator.interval_days`（默认 7）roundtrip。
+
+**Step 3: 实现健康分（纯启发式，无模型）**
+
+第一版不用 LLM，避免成本；信号来自已有数据：
+
+| 信号 | 来源 | 影响 |
+|------|------|------|
+| 闲置 | `skill-usage.json` last_loaded | 降分 / stale |
+| 体积 | `SKILL.md` 字节 | 过大轻度降分 |
+| 进化采纳 | `evolution/history.jsonl` 该 skill 近期 approved/rejected | 批准↑ / 拒绝↓ |
+| 评测 | `evalset.jsonl` 匹配 Fail 例占比 | Fail 多则降分 |
+
+`health_score` 缺信号时 `None`，不得伪造 0.5。
+
+**Step 4: Tauri 命令与 UI 入口（最小）**
+
+- `run_skill_curator` → 返回 `CurateReport` + 可选写入 `learning/evolution/curator-last.json`；
+- 进化面板增加「策展」按钮或在历史旁展示上次报告摘要；
+- **不**自动 disable/delete。
+
+**Step 5: 运行测试**
+
+```bash
+cargo test -p skills usage -- --nocapture
+cargo test -p memory learning -- --nocapture
+cargo check -p astro-agent
+```
+
+Expected: PASS；旧 `skills curate` 仍返回可读 Markdown。
+
+**Step 6: Commit**
+
+```bash
+git add skills/src/usage.rs skills/src/lib.rs memory/src/config.rs \
+  tools/src/builtins/memory/skills_tool.rs \
+  frontend/src-tauri/src/evolution_run_commands.rs \
+  frontend/src/components/settings/
+git commit -m "feat(skills): structured curator report with health signals"
+```
+
+---
+
+### Task 9：重叠检测 + 合并/剪枝提案入队
+
+在结构化报告之上，把高置信建议变成与 GEPA 同口径的**待审提案**（`SkillCandidate` 或独立 `CurateProposal`），人批准后才改库——对齐 Hermes「Curator 建议 → 人审」而非自动剪枝。
+
+**Files:**
+
+- Modify: `skills/src/usage.rs` 或 Create: `evolution/src/curator.rs`
+- Modify: `evolution/src/proposal.rs`（若复用提案目录）
+- Modify: `evolution/src/history.rs`（`mode=curator`）
+- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
+- Modify: `docs/evolution.md`
+- Test: `evolution/src/curator.rs`（或 `skills` 侧）
+
+**Step 1: 重叠检测（无模型优先）**
+
+纯函数：
+
+```rust
+pub fn find_overlap_clusters(
+    skills: &[(String, String)], // id, description(+可选正文摘要)
+    threshold: f32,
+) -> Vec<Vec<String>>;
+```
+
+建议实现（由简到繁，本 Task 只做到 1–2）：
+
+1. 描述 + 标题 token Jaccard / 字符 n-gram；
+2. 可选：正文前 N 字的 simhash；
+3. **不做**嵌入模型调用（留给后续可选增强）。
+
+簇大小 ≥2 才进入 `Merge` 建议；保留「描述更完整 / 最近加载更新 / health 更高」者为 `keep`。
+
+**Step 2: 建议 → 待审提案**
+
+映射规则：
+
+| 建议 | 提案形态 | 批准效果 |
+|------|----------|----------|
+| `Disable` | 记录型提案或 UI 专项动作 | `set_enabled(false)`，不删文件 |
+| `Merge` | `patch`/`new_skill`：把 absorb 要点并入 keep，并附带「禁用 absorb」清单 | 先写 keep，再禁用 absorb |
+| `Rewrite` | 可选触发一次 targeted `run_evolution_search`（仅该 skill）或人工编辑链接 | 不自动开搜，默认只生成说明提案 |
+
+所有提案必须：
+
+- 带 `rationale` + 证据（闲置天数、重叠分数、health 原因）；
+- 走现有审批 UI；
+- `history` 记 `mode=curator` 的 run/outcome。
+
+**Step 3: 调度与安全**
+
+- `curator.enabled` 默认 **false**（与 `evolution.auto` 一致，防误烧/误改）；
+- 开启后可在 App 启动或每日 tick 检查 `interval_days`，到期提示用户或仅产生报告（**默认只报告，不自动入队提案**；入队需显式 `enqueue_suggestions=true`）；
+- 单次最多入队 N 条（建议 5），避免刷屏；
+- 绝不在 Curator 路径调用高成本 GEPA search，除非用户点「为此技能进化」。
+
+**Step 4: 写测试**
+
+- Jaccard 重叠：同义描述聚成一簇，无关技能不聚；
+- Merge 提案：`keep`/`absorb` 合法且不自吸收；
+- Disable 提案：不生成 delete；
+- `enqueue_suggestions=false` 时只写报告文件。
+
+**Step 5: 运行测试**
+
+```bash
+cargo test -p skills --lib
+cargo test -p evolution curator -- --nocapture
+cargo test -p evolution history -- --nocapture
+cargo check -p astro-agent
+```
+
+Expected: PASS；文档说明 Curator 与 search/reflect/dspy 并列。
+
+**Step 6: Commit**
+
+```bash
+git add skills/src/usage.rs evolution/src/curator.rs evolution/src/lib.rs \
+  evolution/src/history.rs evolution/src/proposal.rs \
+  frontend/src-tauri/src/evolution_run_commands.rs docs/evolution.md
+git commit -m "feat(evolution): curator overlap merge proposals with human review"
+```
+
+---
+
+### Task 10（可选）：LLM 辅助策展诊断
+
+仅在 Task 8–9 稳定后考虑。用 cheap judge 路由对「健康分低或重叠簇」生成一句可操作诊断（Hermes 的 Actionable Side Information 轻量版），写入 suggestion.reason；**禁止**直接改 SKILL.md。
+
+预算：单次 Curator 跑最多 `curator.max_llm_calls`（默认 3）。失败则回退纯启发式 reason。
+
+---
+
 ## 验收标准
 
 完成 Phase 1–3 后应满足：
@@ -635,6 +832,14 @@ cargo test -p memory --lib
 cargo check -p astro-agent
 ```
 
+完成 Phase 5（Task 8–9）后额外满足：
+
+11. `curate_report` 仍可用，且存在等价结构化 `CurateReport`；
+12. 健康分仅基于本地启发式信号，缺信号时为 `None`；
+13. 重叠簇与 Disable/Merge 建议可生成，但默认不自动改技能、不自动入队；
+14. 显式入队时提案走现有人审，history 含 `mode=curator`；
+15. `cargo test -p skills --lib` 通过。
+
 ## 推荐实施顺序
 
 严格按以下顺序：
@@ -645,6 +850,10 @@ cargo check -p astro-agent
 4. Task 4 结构化 critique；
 5. Task 5 holdout；
 6. Task 6 可复现 history；
-7. Task 7 执行反馈（可选）。
+7. Task 7 执行反馈（可选）；
+8. Task 8 结构化 Curator 报告 + 周期配置；
+9. Task 9 重叠检测与人审合并/剪枝提案；
+10. Task 10 LLM 策展诊断（可选）。
 
-不要在 Task 1–2 尚未稳定时扩大搜索规模，否则只会放大成本和评分噪声。
+不要在 Task 1–2 尚未稳定时扩大搜索规模，否则只会放大成本和评分噪声。  
+不要在 Task 8 尚未提供结构化报告时做自动入队；Curator 的第一原则是**护库、可逆、人审**。
