@@ -1,6 +1,7 @@
 /** 标题栏 AgentPicker 显隐矩阵（与 nav 解耦，便于单测）。 */
 
 export const HEADER_AGENT_PICKER_NAV_IDS = [
+  "chat",
   "files",
   "skills",
   "tools",

@@ -28,10 +28,6 @@ import ToolsPanel from "./components/settings/ToolsPanel";
 import {
   AstroLogoMark,
   IconChat,
-  IconCollapse,
-  IconExpand,
-  IconNewChat,
-  IconNewSession,
   IconPanelClose,
   IconPanelOpen,
   IconRightPanel,
@@ -141,7 +137,6 @@ export default function App() {
     writeFilesSubmode(mode);
   };
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
-  const [chatExpanded, setChatExpanded] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
 
@@ -302,12 +297,6 @@ export default function App() {
     backendId: activeProvider?.backend_id,
   });
   const statusText = chat.statusDetail ?? t(`status.${chat.statusPhase}` as MessageKey);
-  const newChatShortcut =
-    typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
-      ? "⌘N"
-      : "Ctrl+N";
-  const newChatTitle = `${t("chat.newChat")} (${newChatShortcut})`;
-
   // ── Thinking callbacks ────────────────────────────────────────────────────
   const onThinkingLevelChange = useCallback(
     (level: ThinkingLevel) => {
@@ -322,15 +311,6 @@ export default function App() {
     const next: ThinkingLevel = thinkingPrefs.level === "off" ? "high" : "off";
     onThinkingLevelChange(next);
   }, [thinkingPrefs.level, onThinkingLevelChange]);
-
-  // ── Chat expand (touches sidebar) ─────────────────────────────────────────
-  const toggleChatExpand = () => {
-    setChatExpanded((prev) => {
-      const next = !prev;
-      if (next) sidebar.collapseSidebar();
-      return next;
-    });
-  };
 
   // ── handleSlashAction (cross-cutting: chat + nav + prefs) ─────────────────
   const handleSlashAction = useCallback(
@@ -563,7 +543,7 @@ export default function App() {
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
     <div
-      className={`app-shell ${chatExpanded && nav === "chat" ? "is-chat-expanded" : ""} ${winChrome.windowMaximized ? "is-maximized" : ""}`}
+      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
     >
@@ -715,6 +695,7 @@ export default function App() {
                       console.warn("set_active_agent failed", e);
                     });
                   }}
+                  onCreateNew={nav === "chat" ? startNewAgent : undefined}
                   menuAlign="end"
                 />
               )}
@@ -757,38 +738,6 @@ export default function App() {
               )}
               {nav === "chat" && (
                 <div className="chat-header-tools">
-                  <button
-                    type="button"
-                    className={`header-icon-btn ${chatExpanded ? "is-active" : ""}`}
-                    onClick={toggleChatExpand}
-                    title={chatExpanded ? t("chat.collapse") : t("chat.expand")}
-                    aria-label={chatExpanded ? t("chat.collapse") : t("chat.expand")}
-                    aria-pressed={chatExpanded}
-                  >
-                    {chatExpanded ? (
-                      <IconCollapse width={16} height={16} />
-                    ) : (
-                      <IconExpand width={16} height={16} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className="header-icon-btn"
-                    onClick={() => void startNewChat()}
-                    title={newChatTitle}
-                    aria-label={newChatTitle}
-                  >
-                    <IconNewChat width={16} height={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className="header-icon-btn"
-                    onClick={startNewAgent}
-                    title={t("chat.newAgent")}
-                    aria-label={t("chat.newAgent")}
-                  >
-                    <IconNewSession width={16} height={16} />
-                  </button>
                   <button
                     type="button"
                     className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
