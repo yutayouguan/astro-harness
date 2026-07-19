@@ -449,6 +449,72 @@ html[data-theme="dark"] .msg-md-codeblock {
   min-height: 44px;
 }
 
+.composer-slot-mirror {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: 2px 4px 4px;
+  margin: 0;
+  overflow: auto;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  font: inherit;
+  color: var(--ink);
+  scrollbar-width: none;
+}
+
+.composer-slot-mirror::-webkit-scrollbar {
+  display: none;
+}
+
+.composer-slot-chip {
+  display: inline;
+  padding: 0.05em 0.28em;
+  margin: 0 0.04em;
+  border-radius: 0.45em;
+  font-weight: 650;
+  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.composer-slot-chip.is-empty {
+  color: var(--tone, var(--accent));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent);
+}
+
+.composer-slot-chip.is-filled {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
+}
+
+html[data-theme="dark"] .composer-slot-chip.is-empty {
+  color: color-mix(in srgb, #fff 22%, var(--tone, var(--accent)));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 20%, rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 32%, rgba(255, 255, 255, 0.08));
+}
+
+html[data-theme="dark"] .composer-slot-chip.is-filled {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone, var(--accent)) 14%, rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 22%, rgba(255, 255, 255, 0.06));
+}
+
+.composer-input-wrap.is-agent-template .composer-input.is-slot-highlight {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--ink);
+  background: transparent;
+}
+
+.composer-input-wrap.is-agent-template .composer-input.is-slot-highlight::selection {
+  background: color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent);
+  color: transparent;
+}
+
 .composer-typed-hint {
   position: absolute;
   inset: 0;
@@ -1983,7 +2049,7 @@ html[data-theme="dark"] .chat-welcome-logo {
 }
 
 html[data-theme="dark"] .chat-welcome-wordmark {
-  background: linear-gradient(
+  background-image: linear-gradient(
     115deg,
     color-mix(in srgb, var(--tone-purple) 72%, var(--ink-soft)) 0%,
     color-mix(in srgb, var(--tone-blue) 78%, var(--ink-soft)) 48%,
@@ -1992,7 +2058,7 @@ html[data-theme="dark"] .chat-welcome-wordmark {
 }
 
 html[data-theme="dark"] .chat-welcome-greeting {
-  background: linear-gradient(
+  background-image: linear-gradient(
     118deg,
     color-mix(in srgb, var(--ink) 92%, transparent) 0%,
     color-mix(in srgb, var(--tone-blue) 52%, var(--ink)) 100%
@@ -2000,7 +2066,7 @@ html[data-theme="dark"] .chat-welcome-greeting {
 }
 
 html[data-theme="dark"] .chat-welcome-title-brand {
-  background: linear-gradient(
+  background-image: linear-gradient(
     118deg,
     color-mix(in srgb, var(--tone-blue) 62%, var(--ink)) 0%,
     color-mix(in srgb, var(--tone-purple) 52%, var(--ink)) 100%
@@ -2311,9 +2377,10 @@ html[data-theme="dark"] .chat-agent-guide-card {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
     color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.55)) 82%, rgba(8, 6, 18, 0.35));
+  border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    var(--shadow-card),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 18px 40px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 html[data-theme="dark"] .chat-agent-guide-card::before {
@@ -2535,7 +2602,8 @@ html[data-theme="dark"] .chat-agent-guide-steps {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
     color-mix(in srgb, rgba(8, 6, 18, 0.45) 70%, var(--glass-inner, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .chat-agent-guide-step {
@@ -2750,9 +2818,15 @@ html[data-theme="dark"] .chat-agent-icons {
 
 html[data-theme="dark"] .chat-agent-icon-slot {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--glass-panel, #fff) 8%, transparent);
-  box-shadow: var(--glass-rim);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+    rgba(8, 6, 18, 0.45);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .chat-agent-icon-slot:hover {
+  border-color: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--tone) 12%, rgba(0, 0, 0, 0.35));
 }
 
 .chat-agent-icon-slot-meta {

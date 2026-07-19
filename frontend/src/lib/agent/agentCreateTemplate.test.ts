@@ -3,9 +3,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   findSlotAt,
+  firstSlotValue,
   nextEmptySlot,
   prevEmptySlot,
   listSlots,
+  listTemplateSegments,
+  isSlotHint,
+  AGENT_CREATE_TEMPLATE_ZH,
 } from "./agentCreateTemplate.ts";
 
 const SAMPLE =
@@ -16,6 +20,23 @@ test("listSlots finds all bracket pairs", () => {
   assert.equal(slots.length, 3);
   assert.equal(SAMPLE.slice(slots[0].innerStart, slots[0].innerEnd), "");
   assert.equal(SAMPLE.slice(slots[1].innerStart, slots[1].innerEnd), "已填");
+  assert.equal(slots[0].empty, true);
+  assert.equal(slots[1].empty, false);
+});
+
+test("hint labels count as empty slots", () => {
+  const slots = listSlots(AGENT_CREATE_TEMPLATE_ZH);
+  assert.equal(slots.length, 7);
+  assert.ok(slots.every((s) => s.empty));
+  assert.equal(isSlotHint("名称"), true);
+  assert.equal(firstSlotValue(AGENT_CREATE_TEMPLATE_ZH), "");
+});
+
+test("listTemplateSegments marks empty slots", () => {
+  const segs = listTemplateSegments(AGENT_CREATE_TEMPLATE_ZH);
+  const slots = segs.filter((s) => s.type === "slot");
+  assert.equal(slots.length, 7);
+  assert.ok(slots.every((s) => s.type === "slot" && s.empty));
 });
 
 test("findSlotAt returns slot when caret inside brackets", () => {

@@ -47,6 +47,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import {
   findSlotAt,
   firstSlotValue,
+  listTemplateSegments,
   nextEmptySlot,
   prevEmptySlot,
 } from "../../lib/agent/agentCreateTemplate";
@@ -1237,6 +1238,34 @@ export default function ChatView({
     !sendBlocked &&
     (input.trim().length > 0 || attachments.length > 0);
 
+  const slotMirrorRef = useRef<HTMLDivElement>(null);
+  const agentTemplateSegments = useMemo(
+    () => (emptyMode === "agent" ? listTemplateSegments(input) : []),
+    [emptyMode, input],
+  );
+
+  useEffect(() => {
+    if (emptyMode !== "agent") return;
+    const el = textareaRef.current;
+    if (!el) return;
+    const slot = nextEmptySlot(input, -1);
+    if (!slot) return;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(slot.innerStart, slot.innerEnd);
+    });
+    // 仅在进入创建模式时定位首个空槽
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emptyMode]);
+
+  const syncSlotMirrorScroll = () => {
+    const ta = textareaRef.current;
+    const mirror = slotMirrorRef.current;
+    if (!ta || !mirror) return;
+    mirror.scrollTop = ta.scrollTop;
+    mirror.scrollLeft = ta.scrollLeft;
+  };
+
   const composerPlaceholder = streaming
     ? t("chat.placeholderStreaming")
     : sendBlocked && sendBlockedReason
@@ -1652,7 +1681,7 @@ export default function ChatView({
               {t("chat.dropFilesHint")}
             </div>
           ) : null}
-          <div className="composer-input-wrap">
+          <div className={`composer-input-wrap ${emptyMode === "agent" ? "is-agent-template" : ""}`.trim()}>
             <div
               className="composer-typed-hint"
               hidden={!typingPlaceholderEnabled}
@@ -1661,9 +1690,27 @@ export default function ChatView({
               <span ref={typedHintRef} className="composer-typed-text" />
               <span className="composer-typed-caret" />
             </div>
+            {emptyMode === "agent" ? (
+              <div ref={slotMirrorRef} className="composer-slot-mirror" aria-hidden>
+                {agentTemplateSegments.map((seg, i) =>
+                  seg.type === "text" ? (
+                    <span key={`t-${i}`}>{seg.value}</span>
+                  ) : (
+                    <span
+                      key={`s-${i}`}
+                      className={`composer-slot-chip ${seg.empty ? "is-empty" : "is-filled"}`}
+                    >
+                      {seg.open}
+                      {seg.value || "\u00a0"}
+                      {seg.close}
+                    </span>
+                  ),
+                )}
+              </div>
+            ) : null}
             <textarea
               ref={textareaRef}
-              className="composer-input"
+              className={`composer-input ${emptyMode === "agent" ? "is-slot-highlight" : ""}`.trim()}
               value={input}
               rows={2}
               onChange={(e) => {
@@ -1671,6 +1718,7 @@ export default function ChatView({
                 onInputChange(v);
                 syncTriggerFromCaret(v, e.target.selectionStart ?? v.length);
               }}
+              onScroll={syncSlotMirrorScroll}
               onSelect={(e) => {
                 const el = e.currentTarget;
                 syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
@@ -1692,9 +1740,11 @@ export default function ChatView({
               onKeyDown={onComposerKeyDown}
               placeholder={composerPlaceholder}
               aria-label={
-                emptyMode === "chat"
-                  ? t("chat.welcomePlaceholder")
-                  : composerPlaceholder || t("chat.placeholder")
+                emptyMode === "agent"
+                  ? t("chat.agentGuideComposerAria")
+                  : emptyMode === "chat"
+                    ? t("chat.welcomePlaceholder")
+                    : composerPlaceholder || t("chat.placeholder")
               }
               disabled={streaming || interruptBlocked}
               autoFocus
