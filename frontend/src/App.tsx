@@ -223,9 +223,11 @@ export default function App() {
   /** 统一模式锁定 brand blue；多彩模式跟随当前 tab */
   const shellTone = colorStyle === "unified" ? "blue" : activeTone;
   useEffect(() => {
-    document.documentElement.setAttribute("data-tone", shellTone);
+    const root = document.documentElement;
+    root.setAttribute("data-tone", shellTone);
+    root.setAttribute("data-color-style", colorStyle);
     reassert();
-  }, [shellTone, reassert]);
+  }, [shellTone, colorStyle, reassert]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone);
   }, [resolved, shellTone]);
@@ -498,6 +500,7 @@ export default function App() {
     <div
       className={`app-shell ${chatExpanded && nav === "chat" ? "is-chat-expanded" : ""} ${winChrome.windowMaximized ? "is-maximized" : ""}`}
       data-tone={shellTone}
+      data-color-style={colorStyle}
     >
       <div
         className="native-drag-region"
@@ -610,11 +613,11 @@ export default function App() {
           <div className="content-header">
             <div className="content-heading">
               <div className="page-title-block">
-                <div className="page-title-icon" data-tone={activeTone} aria-hidden>
+                <div className="page-title-icon" data-tone={shellTone} aria-hidden>
                   <ActiveIcon width={15} height={15} />
                 </div>
                 <div className="page-title-text">
-                  <h1 className="content-title" data-tone={activeTone}>
+                  <h1 className="content-title" data-tone={shellTone}>
                     <span className="content-title-main">{t(meta.titleKey)}</span>
                     <span className="content-sub-sep" aria-hidden>
                       ·
