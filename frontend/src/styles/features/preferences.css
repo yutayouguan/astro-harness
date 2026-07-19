@@ -1234,6 +1234,34 @@ html[data-theme="dark"] .shell-grad-editor {
   cursor: grabbing;
 }
 
+.shell-grad-stop-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 12px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.shell-grad-stop-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-fill, transparent) 80%, transparent);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.shell-grad-stop-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .shell-grad-palette {
   display: flex;
   flex-wrap: wrap;

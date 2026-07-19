@@ -1,4 +1,4 @@
-/** Shell 统一色：预设渐变与自定义双色点。 */
+/** Shell 统一色：预设渐变与自定义多色点。 */
 
 export type ShellColorStyle = "colorful" | "unified";
 
@@ -24,6 +24,8 @@ export type ShellGradient = {
   id: ShellGradientPresetId | "custom";
   primary: ShellGradientStop;
   secondary: ShellGradientStop;
+  /** 用户追加的色点；最多 3 个，总色点数最多 5。 */
+  extras: ShellGradientStop[];
 };
 
 export type ShellColorPrefs = {
@@ -77,7 +79,15 @@ export function underlayFromGradient(
   theme: "light" | "dark",
   gradient: ShellGradient,
 ): string {
-  const mid = mixHex(gradient.primary.color, gradient.secondary.color, 0.45);
+  const colors = [
+    gradient.primary.color,
+    gradient.secondary.color,
+    ...gradient.extras.map((stop) => stop.color),
+  ];
+  const mid = colors.slice(1).reduce(
+    (mixed, color, index) => mixHex(mixed, color, 1 / (index + 2)),
+    colors[0],
+  );
   if (theme === "light") {
     return mixHex(mid, "#f8fafc", 0.72);
   }
@@ -152,11 +162,17 @@ export const DEFAULT_SHELL_GRADIENT: ShellGradient = {
   id: "ocean",
   primary: { ...SHELL_GRADIENT_PRESETS[0].primary },
   secondary: { ...SHELL_GRADIENT_PRESETS[0].secondary },
+  extras: [],
 };
 
 export const DEFAULT_SHELL_COLOR_PREFS: ShellColorPrefs = {
   style: "colorful",
-  gradient: { ...DEFAULT_SHELL_GRADIENT, primary: { ...DEFAULT_SHELL_GRADIENT.primary }, secondary: { ...DEFAULT_SHELL_GRADIENT.secondary } },
+  gradient: {
+    ...DEFAULT_SHELL_GRADIENT,
+    primary: { ...DEFAULT_SHELL_GRADIENT.primary },
+    secondary: { ...DEFAULT_SHELL_GRADIENT.secondary },
+    extras: [],
+  },
 };
 
 export const SHELL_GRADIENT_SWATCH_COLORS = [
@@ -178,6 +194,7 @@ export function gradientFromPreset(id: ShellGradientPresetId): ShellGradient {
     id: p.id,
     primary: { ...p.primary },
     secondary: { ...p.secondary },
+    extras: [],
   };
 }
 
@@ -186,6 +203,35 @@ export function cloneGradient(g: ShellGradient): ShellGradient {
     id: g.id,
     primary: { ...g.primary },
     secondary: { ...g.secondary },
+    extras: g.extras.map((stop) => ({ ...stop })),
+  };
+}
+
+export function gradientStops(g: ShellGradient): ShellGradientStop[] {
+  return [
+    { ...g.primary },
+    { ...g.secondary },
+    ...g.extras.map((stop) => ({ ...stop })),
+  ];
+}
+
+export function gradientWithStops(
+  id: ShellGradient["id"],
+  stops: ShellGradientStop[],
+): ShellGradient {
+  const safe = stops.slice(0, 5);
+  while (safe.length < 2) {
+    safe.push(
+      safe.length === 0
+        ? { ...DEFAULT_SHELL_GRADIENT.primary }
+        : { ...DEFAULT_SHELL_GRADIENT.secondary },
+    );
+  }
+  return {
+    id,
+    primary: { ...safe[0] },
+    secondary: { ...safe[1] },
+    extras: safe.slice(2).map((stop) => ({ ...stop })),
   };
 }
 
@@ -197,12 +243,26 @@ export function gradientsEqual(a: ShellGradient, b: ShellGradient): boolean {
     a.primary.y === b.primary.y &&
     a.secondary.color === b.secondary.color &&
     a.secondary.x === b.secondary.x &&
-    a.secondary.y === b.secondary.y
+    a.secondary.y === b.secondary.y &&
+    a.extras.length === b.extras.length &&
+    a.extras.every(
+      (stop, index) =>
+        stop.color === b.extras[index]?.color &&
+        stop.x === b.extras[index]?.x &&
+        stop.y === b.extras[index]?.y,
+    )
   );
 }
 
 export function gradientCssBackground(g: ShellGradient): string {
-  return `radial-gradient(circle at ${g.primary.x}% ${g.primary.y}%, ${g.primary.color}, transparent 55%), radial-gradient(circle at ${g.secondary.x}% ${g.secondary.y}%, ${g.secondary.color}, transparent 50%), linear-gradient(135deg, ${g.primary.color}, ${g.secondary.color})`;
+  const stops = [g.primary, g.secondary, ...g.extras];
+  const radial = stops
+    .map(
+      (stop, index) =>
+        `radial-gradient(circle at ${stop.x}% ${stop.y}%, ${stop.color}, transparent ${index === 0 ? 55 : 50}%)`,
+    )
+    .join(", ");
+  return `${radial}, linear-gradient(135deg, ${g.primary.color}, ${g.secondary.color})`;
 }
 
 export function normalizeGradient(raw: unknown): ShellGradient {
@@ -214,10 +274,22 @@ export function normalizeGradient(raw: unknown): ShellGradient {
     idRaw === "custom" || SHELL_GRADIENT_PRESETS.some((p) => p.id === idRaw)
       ? (idRaw as ShellGradient["id"])
       : "ocean";
+  const extras = Array.isArray(o.extras)
+    ? o.extras
+        .slice(0, 3)
+        .map((stop, index) =>
+          normalizeStop(stop, {
+            color: SHELL_GRADIENT_SWATCH_COLORS[(index + 2) % SHELL_GRADIENT_SWATCH_COLORS.length],
+            x: 50,
+            y: 50,
+          }),
+        )
+    : [];
   return {
     id,
     primary: normalizeStop(o.primary, fallback.primary),
     secondary: normalizeStop(o.secondary, fallback.secondary),
+    extras,
   };
 }
 
@@ -239,6 +311,20 @@ export function applyShellGradientVars(
   el.style.setProperty("--shell-grad-py", `${clampPercent(gradient.primary.y)}%`);
   el.style.setProperty("--shell-grad-sx", `${clampPercent(gradient.secondary.x)}%`);
   el.style.setProperty("--shell-grad-sy", `${clampPercent(gradient.secondary.y)}%`);
+  gradient.extras.slice(0, 3).forEach((stop, index) => {
+    const rgb = hexToRgb(stop.color);
+    if (!rgb) return;
+    const n = index + 1;
+    el.style.setProperty(`--shell-grad-e${n}r`, String(rgb.r));
+    el.style.setProperty(`--shell-grad-e${n}g`, String(rgb.g));
+    el.style.setProperty(`--shell-grad-e${n}b`, String(rgb.b));
+    el.style.setProperty(`--shell-grad-e${n}x`, `${clampPercent(stop.x)}%`);
+    el.style.setProperty(`--shell-grad-e${n}y`, `${clampPercent(stop.y)}%`);
+    el.style.setProperty(`--shell-grad-e${n}a`, "1");
+  });
+  for (let index = gradient.extras.length; index < 3; index += 1) {
+    el.style.setProperty(`--shell-grad-e${index + 1}a`, "0");
+  }
   el.style.setProperty("--unified-tone", gradient.primary.color);
   el.style.setProperty(
     "--unified-tone-soft",
@@ -262,6 +348,24 @@ export function clearShellGradientVars(el: HTMLElement): void {
     "--shell-grad-py",
     "--shell-grad-sx",
     "--shell-grad-sy",
+    "--shell-grad-e1r",
+    "--shell-grad-e1g",
+    "--shell-grad-e1b",
+    "--shell-grad-e1x",
+    "--shell-grad-e1y",
+    "--shell-grad-e1a",
+    "--shell-grad-e2r",
+    "--shell-grad-e2g",
+    "--shell-grad-e2b",
+    "--shell-grad-e2x",
+    "--shell-grad-e2y",
+    "--shell-grad-e2a",
+    "--shell-grad-e3r",
+    "--shell-grad-e3g",
+    "--shell-grad-e3b",
+    "--shell-grad-e3x",
+    "--shell-grad-e3y",
+    "--shell-grad-e3a",
     "--unified-tone",
     "--unified-tone-soft",
     "--unified-tone-glow",

@@ -216,6 +216,21 @@ html[data-theme="light"] .app-shell[data-tone="teal"] {
 html[data-theme="dark"][data-color-style="unified"] .app-shell {
   --shell-bg:
     radial-gradient(
+      circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
+      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.2)),
+      transparent 48%
+    ),
+    radial-gradient(
+      circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
+      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.18)),
+      transparent 46%
+    ),
+    radial-gradient(
+      circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
+      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.16)),
+      transparent 44%
+    ),
+    radial-gradient(
       ellipse 85% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
       rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.34),
       transparent 55%
@@ -235,6 +250,21 @@ html[data-theme="dark"][data-color-style="unified"] .app-shell {
 
 html[data-theme="light"][data-color-style="unified"] .app-shell {
   --shell-bg:
+    radial-gradient(
+      circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
+      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.38)),
+      transparent 48%
+    ),
+    radial-gradient(
+      circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
+      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.34)),
+      transparent 46%
+    ),
+    radial-gradient(
+      circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
+      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.3)),
+      transparent 44%
+    ),
     radial-gradient(
       ellipse 90% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
       rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.58),

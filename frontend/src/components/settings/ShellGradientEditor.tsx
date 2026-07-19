@@ -1,4 +1,4 @@
-/** Shell 自定义渐变编辑器：双色点拖拽 + 快捷色 + 确认/取消。 */
+/** Shell 自定义渐变编辑器：2–5 个色点拖拽 + 快捷色 + 确认/取消。 */
 import {
   useCallback,
   useEffect,
@@ -13,11 +13,12 @@ import { useI18n } from "../../i18n/LocaleContext";
 import {
   clampPercent,
   cloneGradient,
+  gradientStops,
+  gradientWithStops,
   SHELL_GRADIENT_SWATCH_COLORS,
   type ShellGradient,
+  type ShellGradientStop,
 } from "../../lib/ui/shellGradient";
-
-type StopKey = "primary" | "secondary";
 
 type Props = {
   open: boolean;
@@ -37,12 +38,12 @@ export default function ShellGradientEditor({
   const { t } = useI18n();
   const titleId = useId();
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<StopKey | null>(null);
+  const dragRef = useRef<number | null>(null);
   const [draft, setDraft] = useState<ShellGradient>(() => ({
     ...cloneGradient(initial),
     id: "custom",
   }));
-  const [active, setActive] = useState<StopKey>("primary");
+  const [active, setActive] = useState(0);
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<ShellGradient | null>(null);
 
@@ -50,7 +51,7 @@ export default function ShellGradientEditor({
     if (!open) return;
     const next = { ...cloneGradient(initial), id: "custom" as const };
     setDraft(next);
-    setActive("primary");
+    setActive(0);
     onPreview(next);
     // 仅在打开时同步；编辑中 parent 的 preview 回写不应重置 draft
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,16 +89,18 @@ export default function ShellGradientEditor({
   }, [open, onCancel]);
 
   const updateStop = useCallback(
-    (key: StopKey, patch: Partial<ShellGradient["primary"]>) => {
+    (index: number, patch: Partial<ShellGradientStop>) => {
       setDraft((prev) => {
-        const next: ShellGradient = {
-          id: "custom",
-          primary: key === "primary" ? { ...prev.primary, ...patch } : prev.primary,
-          secondary:
-            key === "secondary" ? { ...prev.secondary, ...patch } : prev.secondary,
+        const stops = gradientStops(prev);
+        const current = stops[index];
+        if (!current) return prev;
+        stops[index] = {
+          ...current,
+          ...patch,
+          x: patch.x != null ? clampPercent(patch.x) : current.x,
+          y: patch.y != null ? clampPercent(patch.y) : current.y,
         };
-        if (patch.x != null) next[key].x = clampPercent(patch.x);
-        if (patch.y != null) next[key].y = clampPercent(patch.y);
+        const next = gradientWithStops("custom", stops);
         flushPreview(next);
         return next;
       });
@@ -115,24 +118,24 @@ export default function ShellGradientEditor({
     return { x: clampPercent(x), y: clampPercent(y) };
   };
 
-  const onPointerDownStop = (key: StopKey, e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onPointerDownStop = (index: number, e: ReactPointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setActive(key);
-    dragRef.current = key;
+    setActive(index);
+    dragRef.current = index;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
-    const key = dragRef.current;
-    if (!key) return;
+    const index = dragRef.current;
+    if (index == null) return;
     const pt = pointFromEvent(e.clientX, e.clientY);
     if (!pt) return;
-    updateStop(key, pt);
+    updateStop(index, pt);
   };
 
   const onPointerUp = (e: ReactPointerEvent<HTMLElement>) => {
-    if (dragRef.current && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+    if (dragRef.current != null && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     dragRef.current = null;
@@ -145,7 +148,7 @@ export default function ShellGradientEditor({
     updateStop(active, pt);
   };
 
-  const onStopKeyDown = (key: StopKey, e: ReactKeyboardEvent<HTMLButtonElement>) => {
+  const onStopKeyDown = (index: number, e: ReactKeyboardEvent<HTMLButtonElement>) => {
     const step = e.shiftKey ? 5 : 2;
     let dx = 0;
     let dy = 0;
@@ -155,12 +158,45 @@ export default function ShellGradientEditor({
     else if (e.key === "ArrowDown") dy = step;
     else return;
     e.preventDefault();
-    setActive(key);
-    const stop = draft[key];
-    updateStop(key, { x: stop.x + dx, y: stop.y + dy });
+    setActive(index);
+    const stop = gradientStops(draft)[index];
+    if (!stop) return;
+    updateStop(index, { x: stop.x + dx, y: stop.y + dy });
+  };
+
+  const addStop = () => {
+    const stops = gradientStops(draft);
+    if (stops.length >= 5) return;
+    const index = stops.length;
+    const color =
+      SHELL_GRADIENT_SWATCH_COLORS[(index + 2) % SHELL_GRADIENT_SWATCH_COLORS.length];
+    const offsets = [
+      { x: 50, y: 50 },
+      { x: 35, y: 65 },
+      { x: 68, y: 62 },
+    ];
+    const pos = offsets[index - 2] ?? offsets[0];
+    stops.push({ color, ...pos });
+    const next = gradientWithStops("custom", stops);
+    setDraft(next);
+    setActive(stops.length - 1);
+    flushPreview(next);
+  };
+
+  const removeStop = () => {
+    const stops = gradientStops(draft);
+    if (stops.length <= 2) return;
+    stops.splice(active, 1);
+    const next = gradientWithStops("custom", stops);
+    setDraft(next);
+    setActive(Math.min(active, stops.length - 1));
+    flushPreview(next);
   };
 
   if (!open || typeof document === "undefined") return null;
+
+  const stops = gradientStops(draft);
+  const selected = stops[active] ?? stops[0];
 
   return createPortal(
     <div
@@ -190,45 +226,65 @@ export default function ShellGradientEditor({
           ref={canvasRef}
           className="shell-grad-canvas"
           style={{
-            background: `
-              radial-gradient(circle at ${draft.primary.x}% ${draft.primary.y}%, ${draft.primary.color} 0%, transparent 42%),
-              radial-gradient(circle at ${draft.secondary.x}% ${draft.secondary.y}%, ${draft.secondary.color} 0%, transparent 48%),
-              #e8edf5
-            `,
+            background: `${stops
+              .map(
+                (stop, index) =>
+                  `radial-gradient(circle at ${stop.x}% ${stop.y}%, ${stop.color} 0%, transparent ${index === 0 ? 42 : 48}%)`,
+              )
+              .join(", ")}, #e8edf5`,
           }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
-          {(["primary", "secondary"] as const).map((key) => {
-            const stop = draft[key];
-            return (
-              <button
-                key={key}
-                type="button"
-                className={`shell-grad-handle ${active === key ? "is-active" : ""} ${
-                  key === "secondary" ? "is-secondary" : ""
-                }`}
-                style={{
-                  left: `${stop.x}%`,
-                  top: `${stop.y}%`,
-                  background: stop.color,
-                }}
-                aria-label={
-                  key === "primary"
-                    ? t("prefs.colorStyle.primaryStop")
-                    : t("prefs.colorStyle.secondaryStop")
-                }
-                aria-pressed={active === key}
-                onPointerDown={(e) => onPointerDownStop(key, e)}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onKeyDown={(e) => onStopKeyDown(key, e)}
-                onClick={() => setActive(key)}
-              />
-            );
-          })}
+          {stops.map((stop, index) => (
+            <button
+              key={index}
+              type="button"
+              className={`shell-grad-handle ${active === index ? "is-active" : ""} ${
+                index === 1 ? "is-secondary" : ""
+              }`}
+              style={{
+                left: `${stop.x}%`,
+                top: `${stop.y}%`,
+                background: stop.color,
+              }}
+              aria-label={t("prefs.colorStyle.colorStop", {
+                index: String(index + 1),
+              })}
+              aria-pressed={active === index}
+              onPointerDown={(e) => onPointerDownStop(index, e)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onKeyDown={(e) => onStopKeyDown(index, e)}
+              onClick={() => setActive(index)}
+            />
+          ))}
+        </div>
+
+        <div className="shell-grad-stop-actions" aria-label={t("prefs.colorStyle.stopCount")}>
+          <button
+            type="button"
+            className="shell-grad-stop-btn"
+            disabled={stops.length <= 2}
+            onClick={removeStop}
+            aria-label={t("prefs.colorStyle.removeStop")}
+          >
+            −
+          </button>
+          <span>
+            {stops.length} / 5
+          </span>
+          <button
+            type="button"
+            className="shell-grad-stop-btn"
+            disabled={stops.length >= 5}
+            onClick={addStop}
+            aria-label={t("prefs.colorStyle.addStop")}
+          >
+            +
+          </button>
         </div>
 
         <div className="shell-grad-palette" role="group" aria-label={t("prefs.colorStyle.swatches")}>
@@ -236,18 +292,18 @@ export default function ShellGradientEditor({
             <button
               key={color}
               type="button"
-              className={`shell-grad-swatch ${draft[active].color === color ? "is-active" : ""}`}
+              className={`shell-grad-swatch ${selected?.color === color ? "is-active" : ""}`}
               style={{ background: color }}
               title={color}
               aria-label={color}
-              aria-pressed={draft[active].color === color}
+              aria-pressed={selected?.color === color}
               onClick={() => updateStop(active, { color })}
             />
           ))}
           <label className="shell-grad-custom-color" title={t("prefs.colorStyle.pickColor")}>
             <input
               type="color"
-              value={draft[active].color}
+              value={selected?.color ?? "#2563eb"}
               onChange={(e) => updateStop(active, { color: e.target.value })}
               aria-label={t("prefs.colorStyle.pickColor")}
             />
