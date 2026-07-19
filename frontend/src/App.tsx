@@ -581,7 +581,7 @@ export default function App() {
                 <button
                   key={item.id}
                   className={`nav-item ${nav === item.id ? "active" : ""}`}
-                  data-tone={item.tone}
+                  data-tone={colorStyle === "unified" ? shellTone : item.tone}
                   onClick={() => setNav(item.id)}
                   {...(sidebar.showSidebarLabels
                     ? {}

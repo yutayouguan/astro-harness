@@ -1059,7 +1059,7 @@ export const zh = {
   "prefs.colorStyle.colorful": "多彩",
   "prefs.colorStyle.colorfulDesc": "每个页面有专属色调，切换时背景随之变化",
   "prefs.colorStyle.unified": "统一",
-  "prefs.colorStyle.unifiedDesc": "全局固定氛围色，侧栏图标仍保留各自颜色",
+  "prefs.colorStyle.unifiedDesc": "全局固定氛围色，导航与内容统一着色",
 
   "prefs.appIcon.title": "应用图标",
   "prefs.appIcon.sub": "切换托盘、程序坞与窗口图标，选择保存在本机并在启动时应用",
@@ -2556,7 +2556,7 @@ export const en: Record<MessageKey, string> = {
   "prefs.colorStyle.colorful": "Colorful",
   "prefs.colorStyle.colorfulDesc": "Each page has its own tint; the background follows as you switch",
   "prefs.colorStyle.unified": "Unified",
-  "prefs.colorStyle.unifiedDesc": "One ambient tint for the shell; nav icons stay colorful",
+  "prefs.colorStyle.unifiedDesc": "One ambient tint for shell, nav, and content",
 
   "prefs.appIcon.title": "App icon",
   "prefs.appIcon.sub": "Switch the tray, dock, and window icon. Saved locally and applied on launch.",

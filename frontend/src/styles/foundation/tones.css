@@ -148,7 +148,6 @@ html[data-tone="teal"] {
 
 /*
  * 统一色彩：内容区强调色跟随 brand blue。
- * 仅作用在 .content-pane 内，侧栏 .nav-item 仍用各自 data-tone。
  * Skills 卡片哈希色不在此重映射（各自 class 仍指向原 token）。
  */
 html[data-color-style="unified"] .content-pane {
