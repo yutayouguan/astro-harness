@@ -1,9 +1,79 @@
-//! GEPA-lite 遗传搜索：多变体 + Pareto 选择（judge 分↑ / 体积↓）。
+//! GEPA-lite 遗传搜索：变异 + 交叉 + Pareto 选择（judge 分↑ / 体积↓）。
 //!
-//! 无标注评测集，适应度来自 judge 分与写入体积；变异/评分模型调用由 Tauri 注入。
-//! 仅做「变异 + 反思回喂」，不做交叉（crossover）。
+//! 适应度来自 judge 分（含 grounded eval + Fail 加权）与写入体积；
+//! 变异/评分模型调用由 Tauri 注入，通过 [`SearchBudget`] 控制总调用上限。
 
 use crate::candidate::{CandidateKind, SkillCandidate};
+
+// ---------------------------------------------------------------------------
+// SearchBudget：LLM 调用预算的严格上限
+// ---------------------------------------------------------------------------
+
+/// 搜索过程的 LLM 调用预算。`limit == 0` 表示不限。
+///
+/// 所有消费同一预算的调用方（seed reflection、mutation、crossover、judge、
+/// grounded eval）必须在发起 LLM 请求**前**调用 `try_reserve_one()`，
+/// 失败则不得发起该次请求。
+#[derive(Debug, Clone)]
+pub struct SearchBudget {
+    limit: u32,
+    used: u32,
+}
+
+impl SearchBudget {
+    pub fn new(limit: u32) -> Self {
+        Self { limit, used: 0 }
+    }
+
+    /// 预留 `calls` 次调用。预算充足则扣减并返回 true；不足则不扣减并返回 false。
+    pub fn try_reserve(&mut self, calls: u32) -> bool {
+        if self.limit > 0 && self.used.saturating_add(calls) > self.limit {
+            return false;
+        }
+        self.used = self.used.saturating_add(calls);
+        true
+    }
+
+    /// 预留 1 次调用（循环内逐次消费的快捷方法）。
+    pub fn try_reserve_one(&mut self) -> bool {
+        self.try_reserve(1)
+    }
+
+    pub fn remaining(&self) -> Option<u32> {
+        (self.limit > 0).then(|| self.limit.saturating_sub(self.used))
+    }
+
+    pub fn used(&self) -> u32 {
+        self.used
+    }
+}
+
+/// 计算候选的有效体积（post-image 字节数）。
+///
+/// - `NewSkill`：完整 `content` 长度。
+/// - `Patch`：将 `old_string → new_string` 应用到 `current_skill` 后的完整文本长度。
+///   `current_skill` 为 `None`、替换未命中或多次命中时返回错误。
+pub fn effective_candidate_size(
+    candidate: &SkillCandidate,
+    current_skill: Option<&str>,
+) -> anyhow::Result<usize> {
+    match candidate.kind {
+        CandidateKind::NewSkill => Ok(candidate
+            .content
+            .as_deref()
+            .map(str::len)
+            .unwrap_or(0)),
+        CandidateKind::Patch => {
+            let text = current_skill.ok_or_else(|| {
+                anyhow::anyhow!("patch 需要 current_skill 计算有效体积")
+            })?;
+            let old = candidate.old_string.as_deref().unwrap_or("");
+            let new = candidate.new_string.as_deref().unwrap_or("");
+            let post = crate::proposal::apply_patch_unique(text, old, new)?;
+            Ok(post.len())
+        }
+    }
+}
 
 /// 一个被评分的变体。
 #[derive(Debug, Clone)]
@@ -11,11 +81,21 @@ pub struct ScoredVariant {
     pub candidate: SkillCandidate,
     /// judge 分（0–1，越高越好）。
     pub score: f32,
-    /// 写入体积字节（越小越好）。
+    /// 有效体积字节（越小越好）。
     pub size: usize,
 }
 
 impl ScoredVariant {
+    /// 使用调用方已计算的 `effective_size` 构造。
+    pub fn with_size(candidate: SkillCandidate, score: f32, effective_size: usize) -> Self {
+        Self {
+            candidate,
+            score,
+            size: effective_size,
+        }
+    }
+
+    /// 便捷构造：使用 `payload_len()`（兼容不需要 post-image 体积的场景）。
     pub fn new(candidate: SkillCandidate, score: f32) -> Self {
         let size = candidate.payload_len();
         Self {
@@ -54,6 +134,81 @@ pub fn select_front_capped(mut front: Vec<ScoredVariant>, n: usize) -> Vec<Score
     front
 }
 
+/// 候选指纹：用于种群去重（相同 kind + skill_id + 内容 → 同一指纹）。
+pub fn candidate_fingerprint(c: &SkillCandidate) -> String {
+    match c.kind {
+        CandidateKind::NewSkill => {
+            format!(
+                "new:{}:{}",
+                c.skill_id,
+                c.content.as_deref().unwrap_or("")
+            )
+        }
+        CandidateKind::Patch => {
+            format!(
+                "patch:{}:{}->{}",
+                c.skill_id,
+                c.old_string.as_deref().unwrap_or(""),
+                c.new_string.as_deref().unwrap_or("")
+            )
+        }
+    }
+}
+
+/// 从评分变体中选出种群：Pareto 前沿优先，不足时从被支配集按 score 降序
+/// （同分取更小 size）补齐。去重后最多保留 `population_size` 个。
+pub fn select_population(
+    scored: Vec<ScoredVariant>,
+    population_size: usize,
+) -> Vec<ScoredVariant> {
+    if population_size == 0 || scored.is_empty() {
+        return Vec::new();
+    }
+    let front = pareto_front(&scored);
+    let mut seen = std::collections::HashSet::new();
+    let mut result: Vec<ScoredVariant> = Vec::new();
+
+    // 先从前沿取
+    let mut front_sorted = front;
+    front_sorted.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.size.cmp(&b.size))
+    });
+    for v in front_sorted {
+        let fp = candidate_fingerprint(&v.candidate);
+        if seen.insert(fp) {
+            result.push(v);
+        }
+        if result.len() >= population_size {
+            return result;
+        }
+    }
+
+    // 不足时从被支配集合按 score 降序补齐
+    let mut rest: Vec<ScoredVariant> = scored
+        .into_iter()
+        .filter(|v| !seen.contains(&candidate_fingerprint(&v.candidate)))
+        .collect();
+    rest.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.size.cmp(&b.size))
+    });
+    for v in rest {
+        let fp = candidate_fingerprint(&v.candidate);
+        if seen.insert(fp) {
+            result.push(v);
+        }
+        if result.len() >= population_size {
+            break;
+        }
+    }
+    result
+}
+
 /// 变异模型 system 指令：产出多个改进变体，JSON only。
 pub const MUTATION_SYSTEM_PROMPT: &str = r#"你是技能进化的变异器。给定一个技能候选（种子）与上一代的评审意见，产出若干**改进后的变体**。只输出 JSON（不要 markdown 围栏）：
 {"variants":[{"kind":"new_skill|patch","skill_id":"同种子","description":"...","content":"...","old_string":"...","new_string":"...","rationale":"改了什么、为什么更好"}]}
@@ -62,8 +217,13 @@ pub const MUTATION_SYSTEM_PROMPT: &str = r#"你是技能进化的变异器。给
 - new_skill 用 content；patch 用 old_string/new_string。
 - 不要臆造事实；宁可少而精。"#;
 
-/// 构造变异 user 提示：种子 + 期望变体数 + 可选上一代评语。
-pub fn build_mutation_prompt(seed: &SkillCandidate, variants: u32, critiques: &[String]) -> String {
+/// 构造变异 user 提示：种子 + 期望变体数 + 结构化 critique（缺口 + 保留项）。
+pub fn build_mutation_prompt(
+    seed: &SkillCandidate,
+    variants: u32,
+    critiques: &[String],
+    strengths: &[String],
+) -> String {
     let mut s = String::new();
     s.push_str(&format!(
         "目标：产出 {variants} 个改进变体。\n\n## 种子候选\n"
@@ -89,10 +249,18 @@ pub fn build_mutation_prompt(seed: &SkillCandidate, variants: u32, critiques: &[
         }
     }
     if !critiques.is_empty() {
-        s.push_str("\n## 上一代评审意见（请针对性改进）\n");
+        s.push_str("\n## 必须修复的缺口（上一代评审指出的未满足要点）\n");
         for c in critiques {
             if !c.trim().is_empty() {
                 s.push_str(&format!("- {}\n", c.replace('\n', " ")));
+            }
+        }
+    }
+    if !strengths.is_empty() {
+        s.push_str("\n## 必须保留的已有能力\n");
+        for item in strengths {
+            if !item.trim().is_empty() {
+                s.push_str(&format!("- {}\n", item.replace('\n', " ")));
             }
         }
     }
@@ -247,5 +415,122 @@ mod tests {
     fn scored_variant_size_from_payload() {
         let v = ScoredVariant::new(cand("s", "hello"), 0.5);
         assert_eq!(v.size, 5);
+    }
+
+    #[test]
+    fn scored_variant_with_explicit_size() {
+        let v = ScoredVariant::with_size(cand("s", "hello"), 0.5, 42);
+        assert_eq!(v.size, 42);
+    }
+
+    #[test]
+    fn effective_size_new_skill_equals_content_len() {
+        let c = cand("s", "hello world");
+        assert_eq!(effective_candidate_size(&c, None).unwrap(), 11);
+    }
+
+    #[test]
+    fn effective_size_patch_uses_post_image() {
+        let mut c = cand("s", "");
+        c.kind = CandidateKind::Patch;
+        c.content = None;
+        c.old_string = Some("foo".into());
+        c.new_string = Some("bar baz".into());
+        let current = "prefix foo suffix";
+        let result = effective_candidate_size(&c, Some(current)).unwrap();
+        // "prefix bar baz suffix" = 21 bytes
+        assert_eq!(result, 21);
+    }
+
+    #[test]
+    fn effective_size_patch_without_skill_errors() {
+        let mut c = cand("s", "");
+        c.kind = CandidateKind::Patch;
+        c.old_string = Some("x".into());
+        c.new_string = Some("y".into());
+        assert!(effective_candidate_size(&c, None).is_err());
+    }
+
+    #[test]
+    fn effective_size_patch_no_match_errors() {
+        let mut c = cand("s", "");
+        c.kind = CandidateKind::Patch;
+        c.old_string = Some("not found".into());
+        c.new_string = Some("y".into());
+        assert!(effective_candidate_size(&c, Some("no match here")).is_err());
+    }
+
+    #[test]
+    fn select_population_deduplicates() {
+        let c1 = cand("s", "hello");
+        let c2 = cand("s", "hello"); // same fingerprint
+        let c3 = cand("s", "world"); // different
+        let scored = vec![
+            ScoredVariant::with_size(c1, 0.9, 5),
+            ScoredVariant::with_size(c2, 0.8, 5),
+            ScoredVariant::with_size(c3, 0.7, 5),
+        ];
+        let pop = select_population(scored, 3);
+        assert_eq!(pop.len(), 2); // deduplicated
+    }
+
+    #[test]
+    fn select_population_size_one_takes_best() {
+        let scored = vec![
+            ScoredVariant::with_size(cand("s", "aaa"), 0.6, 3),
+            ScoredVariant::with_size(cand("s", "bbb"), 0.9, 3),
+        ];
+        let pop = select_population(scored, 1);
+        assert_eq!(pop.len(), 1);
+        assert!((pop[0].score - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn select_population_fills_from_dominated() {
+        // A dominates B (higher score, same size), C is non-dominated (lower score, smaller size)
+        let scored = vec![
+            ScoredVariant::with_size(cand("s", "aaa"), 0.9, 100),
+            ScoredVariant::with_size(cand("s", "bbb"), 0.8, 200), // dominated
+            ScoredVariant::with_size(cand("s", "ccc"), 0.7, 50),  // non-dominated
+        ];
+        // front = {aaa, ccc}, request 3 → fills bbb from dominated set
+        let pop = select_population(scored, 3);
+        assert_eq!(pop.len(), 3);
+    }
+
+    #[test]
+    fn search_budget_never_exceeds_limit() {
+        let mut budget = SearchBudget::new(3);
+        assert!(budget.try_reserve(1));
+        assert!(budget.try_reserve(2));
+        assert!(!budget.try_reserve(1));
+        assert_eq!(budget.used(), 3);
+        assert_eq!(budget.remaining(), Some(0));
+    }
+
+    #[test]
+    fn zero_budget_means_unlimited() {
+        let mut budget = SearchBudget::new(0);
+        assert!(budget.try_reserve(10_000));
+        assert_eq!(budget.remaining(), None);
+    }
+
+    #[test]
+    fn search_budget_try_reserve_one() {
+        let mut budget = SearchBudget::new(2);
+        assert!(budget.try_reserve_one());
+        assert!(budget.try_reserve_one());
+        assert!(!budget.try_reserve_one());
+        assert_eq!(budget.used(), 2);
+    }
+
+    #[test]
+    fn search_budget_no_partial_reserve() {
+        let mut budget = SearchBudget::new(3);
+        assert!(budget.try_reserve(2));
+        // 剩余 1，请求 2 — 不扣减
+        assert!(!budget.try_reserve(2));
+        assert_eq!(budget.used(), 2);
+        assert_eq!(budget.remaining(), Some(1));
     }
 }

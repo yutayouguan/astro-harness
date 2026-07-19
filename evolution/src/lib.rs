@@ -26,9 +26,9 @@ pub use auto::{
 };
 pub use candidate::{CandidateKind, SkillCandidate};
 pub use evalset::{
-    append_example, build_eval_judge_prompt, evalset_path, examples_for_skill, list_examples,
-    parse_eval_score, remove_example, weighted_eval_score, EvalExample, Verdict,
-    EVAL_JUDGE_SYSTEM_PROMPT,
+    aggregate_critiques, append_example, build_eval_judge_prompt, evalset_path,
+    examples_for_skill, list_examples, parse_eval_judgement, parse_eval_score, remove_example,
+    weighted_eval_score, EvalExample, EvalJudgement, Verdict, EVAL_JUDGE_SYSTEM_PROMPT,
 };
 pub use gates::{check_candidate, GateOutcome};
 pub use history::{
@@ -44,6 +44,8 @@ pub use reflect::{
     build_reflection_user_prompt, parse_candidates, ReflectionInput, REFLECTION_SYSTEM_PROMPT,
 };
 pub use search::{
-    build_crossover_prompt, build_mutation_prompt, pareto_front, parse_variants,
-    select_front_capped, ScoredVariant, CROSSOVER_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
+    build_crossover_prompt, build_mutation_prompt, candidate_fingerprint,
+    effective_candidate_size, pareto_front, parse_variants, select_front_capped,
+    select_population, ScoredVariant, SearchBudget, CROSSOVER_SYSTEM_PROMPT,
+    MUTATION_SYSTEM_PROMPT,
 };

@@ -14,15 +14,16 @@ use std::time::Duration;
 use std::collections::HashSet;
 
 use evolution::{
-    apply_patch_unique, approve_proposal, approve_proposal_checked, build_auto_status,
-    build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
+    aggregate_critiques, apply_patch_unique, approve_proposal, approve_proposal_checked,
+    build_auto_status, build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
     build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
-    examples_for_skill, list_examples, list_proposals, load_auto_state, mark_auto_run,
-    pareto_front, parse_candidates, parse_eval_score, parse_judge_output, parse_variants,
-    reject_proposal, save_auto_state, save_proposals, select_front_capped, weighted_eval_score,
-    AutoGate, AutoStatus, CandidateKind, EvalExample, ReflectionInput, ScoredVariant,
-    SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT,
-    MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    effective_candidate_size, examples_for_skill, list_examples, list_proposals, load_auto_state,
+    mark_auto_run, pareto_front, parse_candidates, parse_eval_judgement, parse_eval_score,
+    parse_judge_output, parse_variants, reject_proposal, save_auto_state, save_proposals,
+    select_front_capped, select_population, weighted_eval_score, AutoGate, AutoStatus,
+    CandidateKind, EvalExample, EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget,
+    SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
+    JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -290,17 +291,21 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
         {
             let enabled_now = skills::list_enabled_for_prompt();
             let evalset = list_examples(&base);
+            // reflect 模式不限预算（max_llm_calls 仅约束 search）
+            let mut reflect_budget = SearchBudget::new(0);
             let mut kept: Vec<SkillCandidate> = Vec::new();
             for mut c in passed.into_iter() {
-                let (score, reason, _) =
-                    fitness_score(&judge_targets, &c, &enabled_now, &evalset, cfg.search.max_eval_examples).await;
-                c.judge_score = Some(score);
-                c.judge_reason = Some(reason);
-                if score >= cfg.gates.min_judge_score {
-                    kept.push(c);
-                } else {
-                    judged_out += 1;
-                    tracing::info!(skill = %c.skill_id, score, "候选被适应度评分拒绝");
+                if let Some((score, reason, _)) =
+                    fitness_score(&judge_targets, &c, &enabled_now, &evalset, cfg.search.max_eval_examples, &mut reflect_budget).await
+                {
+                    c.judge_score = Some(score);
+                    c.judge_reason = Some(reason);
+                    if score >= cfg.gates.min_judge_score {
+                        kept.push(c);
+                    } else {
+                        judged_out += 1;
+                        tracing::info!(skill = %c.skill_id, score, "候选被适应度评分拒绝");
+                    }
                 }
             }
             passed = kept;
@@ -500,20 +505,26 @@ async fn judge_candidate(
 
 /// 客观适应度：若候选技能有匹配评测例子，则对每个例子做 grounded 评分后
 /// 以 Fail/Pass 加权均值聚合（Fail 权重 2×，修复失败比维持通过率更有价值）；
-/// 否则回退泛化 judge。返回 (score, reason, llm_calls_used)。
+/// 否则回退泛化 judge。
+///
+/// 返回 `(score, reason, judgements)` — judgements 收集结构化 critique 供后续聚合。
+/// 返回 `None` 表示预算耗尽且无任何分数——该候选不应进入 Pareto front。
 async fn fitness_score(
     targets: &AuxiliaryTargets,
     cand: &SkillCandidate,
     enabled_skills: &[(String, String)],
     evalset: &[EvalExample],
     max_eval_examples: usize,
-) -> (f32, String, u32) {
+    budget: &mut SearchBudget,
+) -> Option<(f32, String, Vec<EvalJudgement>)> {
     let all_matched = examples_for_skill(evalset, &cand.skill_id);
     if all_matched.is_empty() {
+        if !budget.try_reserve_one() {
+            return None;
+        }
         let (s, r) = judge_candidate(targets, cand, enabled_skills).await;
-        return (s, r, 1);
+        return Some((s, r, Vec::new()));
     }
-    // 例数上限：超出时截断，Fail 例优先（保留更有诊断价值的案例）
     let capped: Vec<&&EvalExample> = if max_eval_examples > 0 && all_matched.len() > max_eval_examples {
         let mut sorted = all_matched.iter().collect::<Vec<_>>();
         sorted.sort_by_key(|e| if e.verdict == Verdict::Fail { 0u8 } else { 1u8 });
@@ -524,13 +535,16 @@ async fn fitness_score(
     };
 
     let mut verdict_scores: Vec<(Verdict, f32)> = Vec::new();
-    let mut calls: u32 = 0;
+    let mut judgements: Vec<EvalJudgement> = Vec::new();
     for ex in &capped {
+        if !budget.try_reserve_one() {
+            break;
+        }
         let user = build_eval_judge_prompt(cand, ex);
         if let Ok(raw) = reflect_over_targets(targets, EVAL_JUDGE_SYSTEM_PROMPT, &user).await {
-            calls += 1;
-            if let Ok(score) = parse_eval_score(&raw) {
-                verdict_scores.push((ex.verdict, score));
+            if let Ok(j) = parse_eval_judgement(&raw) {
+                verdict_scores.push((ex.verdict, j.score));
+                judgements.push(j);
             }
         }
     }
@@ -543,11 +557,14 @@ async fn fitness_score(
             } else {
                 format!("grounded 评分（{n} 例）")
             };
-            (avg, reason, calls)
+            Some((avg, reason, judgements))
         }
         None => {
+            if !budget.try_reserve_one() {
+                return None;
+            }
             let (s, r) = judge_candidate(targets, cand, enabled_skills).await;
-            (s, r, calls + 1)
+            Some((s, r, judgements))
         }
     }
 }
@@ -603,89 +620,130 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
     let generations = cfg.search.generations.max(1);
     let variants = cfg.search.variants.max(1);
     let max_eval_examples = cfg.search.max_eval_examples;
-    let budget = cfg.search.max_llm_calls; // 0 = 不限
-    let mut llm_calls: u32 = 1; // 已用：seed reflection 调用
+    let mut budget = SearchBudget::new(cfg.search.max_llm_calls);
+    budget.try_reserve_one(); // seed reflection 调用已消费
     let mut variants_evaluated = 0usize;
     let mut pareto_kept = 0usize;
     let mut search_gated_out = 0usize;
     let mut search_judged_out = 0usize;
     let mut final_props: Vec<SkillCandidate> = Vec::new();
 
-    'seed: for seed in seeds {
-        let mut current = seed.clone();
-        let mut critiques: Vec<String> = Vec::new();
-        let mut last_front: Vec<ScoredVariant> = Vec::new();
+    let pop_size = cfg.search.population_size.max(1) as usize;
 
-        for _gen in 0..generations {
-            // 预算检查：变异调用前确认还有余量
-            if budget > 0 && llm_calls >= budget {
-                tracing::info!(skill = %current.skill_id, llm_calls, budget, "LLM 预算耗尽，停止搜索");
+    'seed: for seed in seeds {
+        let mut population: Vec<ScoredVariant> = vec![ScoredVariant::new(seed.clone(), 0.0)];
+        let mut critiques: Vec<String> = Vec::new();
+
+        let current_skill_text: Option<String> =
+            skills::load_skill_by_name(&seed.skill_id)
+                .ok()
+                .map(|s| s.content);
+
+        let mut strengths: Vec<String> = Vec::new();
+
+        for gen in 0..generations {
+            if !budget.try_reserve_one() {
+                tracing::info!(
+                    skill = %seed.skill_id,
+                    used = budget.used(),
+                    "LLM 预算耗尽，停止搜索"
+                );
                 break 'seed;
             }
 
-            let muser = build_mutation_prompt(&current, variants, &critiques);
+            let parent = &population[gen as usize % population.len()].candidate;
+            let muser = build_mutation_prompt(parent, variants, &critiques, &strengths);
             let raw = match reflect_over_targets(&refl_targets, MUTATION_SYSTEM_PROMPT, &muser)
                 .await
             {
-                Ok(r) => { llm_calls += 1; r }
+                Ok(r) => r,
                 Err(e) => {
-                    tracing::warn!(skill = %current.skill_id, error = %e, "变异调用失败，停止该目标");
+                    tracing::warn!(skill = %seed.skill_id, error = %e, "变异调用失败，停止该目标");
                     break;
                 }
             };
-            let mut cands = parse_variants(&raw, &current).unwrap_or_default();
-            cands.push(current.clone()); // 保留上一代最优作为基线
+            let mut cands = parse_variants(&raw, parent).unwrap_or_default();
+            // 保留当前种群作为基线
+            cands.extend(population.iter().map(|v| v.candidate.clone()));
             if cands.is_empty() {
                 break;
             }
 
             let mut scored: Vec<ScoredVariant> = Vec::new();
+            let mut gen_judgements: Vec<EvalJudgement> = Vec::new();
             for mut c in cands {
-                let (score, reason, calls) =
-                    fitness_score(&judge_targets, &c, &enabled_skills, &evalset, max_eval_examples).await;
-                llm_calls += calls;
-                c.judge_score = Some(score);
-                c.judge_reason = Some(reason);
-                variants_evaluated += 1;
-                scored.push(ScoredVariant::new(c, score));
+                let eff_size = match effective_candidate_size(&c, current_skill_text.as_deref()) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        search_gated_out += 1;
+                        tracing::info!(skill = %c.skill_id, error = %e, "候选 dry-run 失败，跳过");
+                        continue;
+                    }
+                };
+
+                if let Some((score, reason, js)) =
+                    fitness_score(&judge_targets, &c, &enabled_skills, &evalset, max_eval_examples, &mut budget).await
+                {
+                    c.judge_score = Some(score);
+                    c.judge_reason = Some(reason);
+                    gen_judgements.extend(js);
+                    variants_evaluated += 1;
+                    scored.push(ScoredVariant::with_size(c, score, eff_size));
+                } else {
+                    tracing::debug!(skill = %c.skill_id, "预算不足，跳过该候选评分");
+                }
             }
 
-            // 交叉：对当前最高分的两个变体融合出一个子代，评分后并入选择。
-            if cfg.search.crossover && scored.len() >= 2 && (budget == 0 || llm_calls < budget) {
+            // 交叉：从种群中选两个内容不同的高分个体
+            if cfg.search.crossover && scored.len() >= 2 {
                 let top = select_front_capped(pareto_front(&scored), 2);
-                if top.len() == 2 {
+                if top.len() == 2 && budget.try_reserve_one() {
                     let cx = build_crossover_prompt(&top[0].candidate, &top[1].candidate);
                     if let Ok(raw) =
                         reflect_over_targets(&refl_targets, CROSSOVER_SYSTEM_PROMPT, &cx).await
                     {
-                        llm_calls += 1;
-                        for mut child in parse_variants(&raw, &current).unwrap_or_default() {
-                            let (score, reason, calls) =
-                                fitness_score(&judge_targets, &child, &enabled_skills, &evalset, max_eval_examples)
-                                    .await;
-                            llm_calls += calls;
-                            child.judge_score = Some(score);
-                            child.judge_reason = Some(format!("[交叉] {reason}"));
-                            variants_evaluated += 1;
-                            scored.push(ScoredVariant::new(child, score));
+                        for mut child in parse_variants(&raw, &seed).unwrap_or_default() {
+                            let eff_size = match effective_candidate_size(&child, current_skill_text.as_deref()) {
+                                Ok(s) => s,
+                                Err(_) => {
+                                    search_gated_out += 1;
+                                    continue;
+                                }
+                            };
+                            if let Some((score, reason, js)) =
+                                fitness_score(&judge_targets, &child, &enabled_skills, &evalset, max_eval_examples, &mut budget).await
+                            {
+                                child.judge_score = Some(score);
+                                child.judge_reason = Some(format!("[交叉] {reason}"));
+                                gen_judgements.extend(js);
+                                variants_evaluated += 1;
+                                scored.push(ScoredVariant::with_size(child, score, eff_size));
+                            }
                         }
                     }
                 }
             }
 
-            let front = pareto_front(&scored);
-            critiques = front
-                .iter()
-                .filter_map(|v| v.candidate.judge_reason.clone())
-                .collect();
-            if let Some(best) = select_front_capped(front.clone(), 1).into_iter().next() {
-                current = best.candidate.clone();
+            // 选择种群：Pareto front 优先 + 被支配补齐 + 去重
+            population = select_population(scored, pop_size);
+            if population.is_empty() {
+                tracing::warn!(skill = %seed.skill_id, "种群为空（所有候选被门禁或预算拦截），停止该目标");
+                break;
             }
-            last_front = front;
+            // 结构化 critique：unmet 优先，去重，按频次排序
+            critiques = aggregate_critiques(&gen_judgements, 8);
+            // 保留已满足要点作为 strengths
+            strengths = gen_judgements
+                .iter()
+                .flat_map(|j| j.satisfied.iter().cloned())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .take(8)
+                .collect();
         }
 
-        // 每目标取 Pareto front 前 2 个，依次过静态门禁与 min_judge_score 阈值
-        for v in select_front_capped(last_front, 2) {
+        // 从最终种群中取前 2 个，依次过门禁
+        for v in select_front_capped(population, 2) {
             pareto_kept += 1;
             if !check_candidate(&v.candidate, &cfg.gates).passed {
                 search_gated_out += 1;
@@ -719,7 +777,7 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         pareto_kept,
         gated_out = search_gated_out,
         judged_out = search_judged_out,
-        llm_calls,
+        llm_calls = budget.used(),
         proposals = proposals.len(),
         "GEPA-lite 搜索完成"
     );

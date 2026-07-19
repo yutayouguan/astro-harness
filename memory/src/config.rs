@@ -401,26 +401,31 @@ fn default_max_eval_examples() -> usize {
     5
 }
 
+fn default_population_size() -> u32 {
+    3
+}
+
 /// GEPA-lite 遗传搜索参数（`config.yaml` 的 `evolution.search` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct EvolutionSearch {
     /// 迭代代数。
     #[serde(default = "default_generations")]
     pub generations: u32,
-    /// 每代每目标变体数。
+    /// 每代总变体目标（不按父代展开，控制成本）。
     #[serde(default = "default_variants")]
     pub variants: u32,
     /// 是否启用交叉算子（对 Pareto 前沿 top-2 融合出子代）。
     #[serde(default = "default_true")]
     pub crossover: bool,
     /// 每技能最多参与 grounded 评分的评测例数（0 = 不限）。
-    /// 防止大型评测集导致调用数随「候选 × 例」线性放大。
     #[serde(default = "default_max_eval_examples")]
     pub max_eval_examples: usize,
-    /// 单次遗传搜索（mutation + crossover）的 LLM 调用总上限（0 = 不限）。
-    /// 超出后停止当前 target 的后续代数，已评分变体仍参与 Pareto 选择。
+    /// 单次遗传搜索的 LLM 调用总上限（0 = 不限）。
     #[serde(default)]
     pub max_llm_calls: u32,
+    /// 每代保留的种群大小（Pareto 选择后保留的最多个体数）。
+    #[serde(default = "default_population_size")]
+    pub population_size: u32,
 }
 
 impl Default for EvolutionSearch {
@@ -431,6 +436,7 @@ impl Default for EvolutionSearch {
             crossover: true,
             max_eval_examples: 5,
             max_llm_calls: 0,
+            population_size: 3,
         }
     }
 }
@@ -1032,6 +1038,12 @@ pub fn set_evolution_search(
         "max_llm_calls",
         search.max_llm_calls as usize,
     )?;
+    set_nested_usize(
+        base,
+        &["evolution", "search"],
+        "population_size",
+        search.population_size as usize,
+    )?;
     Ok(load_evolution_config(base))
 }
 
@@ -1268,12 +1280,18 @@ compression:
                 generations: 4,
                 variants: 5,
                 crossover: false,
+                max_eval_examples: 8,
+                max_llm_calls: 20,
+                population_size: 2,
             },
         )
         .unwrap();
         assert_eq!(cfg.search.generations, 4);
         assert_eq!(cfg.search.variants, 5);
         assert!(!cfg.search.crossover);
+        assert_eq!(cfg.search.max_eval_examples, 8);
+        assert_eq!(cfg.search.max_llm_calls, 20);
+        assert_eq!(cfg.search.population_size, 2);
     }
 
     #[test]

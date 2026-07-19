@@ -18,19 +18,27 @@
   - `Verdict::{Pass, Fail}`
   - `weighted_eval_score`：Fail 权重 2、Pass 权重 1
 - `memory/src/config.rs`
-  - `search.max_eval_examples`
-  - `search.max_llm_calls`
+  - `search.max_eval_examples`（默认 5）
+  - `search.max_llm_calls`（默认 0 = 不限）
 - `frontend/src-tauri/src/evolution_run_commands.rs`
+  - `fitness_score` 返回 `(f32, String, u32)` — 第三个值为实际 LLM 调用数
   - `fitness_score` 对 Fail 例优先截断
   - 搜索出口应用 `gates.min_judge_score`
-  - 记录 `gated_out` / `judged_out`
+  - 真实记录 `gated_out` / `judged_out`（不再硬编码 0）
+  - `llm_calls` 以 `u32` 在 `run_evolution_search` 中手动累加
+
+**已知遗漏（必须在 Phase 1 补上）：**
+
+- `EvolutionSearchDto`（`evolution_commands.rs:35`）只导出 `generations`/`variants`/`crossover`，不包含 `max_eval_examples`/`max_llm_calls` — 前端看不到这些配置
+- `set_evolution_search` Tauri 命令签名和 `useEvolutionSettings.ts` 的 `setSearch` 同理
 
 这些内容目前可能仍是未提交 WIP。执行本计划时先运行：
 
 ```bash
 git status --short
 git diff -- evolution/src/evalset.rs memory/src/config.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs
+  frontend/src-tauri/src/evolution_run_commands.rs \
+  frontend/src-tauri/src/evolution_commands.rs
 ```
 
 不得覆盖或回退用户现有改动。
@@ -104,12 +112,18 @@ impl SearchBudget {
         Self { limit, used: 0 }
     }
 
+    /// 预留 calls 次调用。预算充足则扣减并返回 true；不足则不扣减并返回 false。
     pub fn try_reserve(&mut self, calls: u32) -> bool {
         if self.limit > 0 && self.used.saturating_add(calls) > self.limit {
             return false;
         }
         self.used = self.used.saturating_add(calls);
         true
+    }
+
+    /// 预留 1 次调用（循环内逐次消费的快捷方法）。
+    pub fn try_reserve_one(&mut self) -> bool {
+        self.try_reserve(1)
     }
 
     pub fn remaining(&self) -> Option<u32> {
@@ -124,15 +138,17 @@ impl SearchBudget {
 
 **Step 4: 让评分消费剩余预算**
 
-调整 `fitness_score` 入参，使它接收“最多允许的评测调用数”，并只选取不超过剩余额度的 eval examples。泛化 judge 也必须先成功 reserve 1 次，不能 fail-open 偷跑。
+现状：`fitness_score` 返回 `(f32, String, u32)`，第三个值为实际 LLM 调用数；调用方在 `run_evolution_search` 中手动累加 `llm_calls` 并在循环顶部检查 `llm_calls >= budget`。问题是 `fitness_score` 内部循环可能一次评多个例子，累加只在返回后才发生——实际调用数可能超出 `max_llm_calls`。
+
+改法：将 `&mut SearchBudget` 传入 `fitness_score`，在每次 LLM 调用**前**调用 `budget.try_reserve_one()`，失败则提前终止评分循环，用已收集的部分分数通过 `weighted_eval_score` 聚合。泛化 judge 也必须先 `try_reserve_one()` 成功才能调用——不能 fail-open 偷跑。
 
 建议语义：
 
-- `max_llm_calls == 0`：不限；
-- seed reflection、mutation、crossover、judge 全部计数；
-- 预算不足以完成某候选评分时，停止生成新候选；
-- 已完成评分的候选仍进入 Pareto；
-- 未评分候选不得以 `0.5` 中性分进入 front。
+- `max_llm_calls == 0`：不限（`SearchBudget::new(0)` 的 `try_reserve` 永远返回 true）；
+- seed reflection、mutation、crossover、judge 全部消费同一个 `SearchBudget`；
+- 预算不足以完成某候选评分时，用已有部分分数聚合（而非硬编 0.5）；若无任何分数，则**不进入 Pareto front**；
+- 预算不足以启动下一轮 mutation 时，立即 `break 'seed`；
+- 已完成评分的候选仍进入 Pareto。
 
 **Step 5: 运行测试**
 
@@ -160,13 +176,18 @@ git commit -m "fix(evolution): enforce strict GEPA-lite call budget"
 
 当前 `SkillCandidate::payload_len` 对新技能取完整 `content`，对 patch 只取 `new_string`。两者不可比，短 patch 会获得系统性优势；而 old string 不唯一要到批准时才失败。
 
+**注意：** `gates.rs:35` 的 `check_candidate` 也调用 `c.payload_len()` 做体积门禁，同样受此不一致影响。本 Task 需一并修正，改为接收 `effective_size` 参数或在门禁内计算 post-image 体积。
+
 **Files:**
 
-- Modify: `evolution/src/search.rs`
-- Modify: `evolution/src/candidate.rs`
+- Modify: `evolution/src/search.rs`（`effective_candidate_size` + `ScoredVariant::new` 改签名）
+- Modify: `evolution/src/candidate.rs`（保留 `payload_len` 兼容，不破坏 gates 调用）
+- Modify: `evolution/src/gates.rs`（`check_candidate` 接收 `effective_size` 或在内部计算）
 - Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
 - Test: `evolution/src/search.rs`
 - Test: `evolution/src/proposal.rs`
+
+**依赖说明：** `effective_candidate_size` 对 Patch 需要调用 `apply_patch_unique`（位于 `proposal.rs`），因此 `search.rs` 需加 `use crate::proposal::apply_patch_unique`。
 
 **Step 1: 写失败测试**
 
@@ -175,7 +196,8 @@ git commit -m "fix(evolution): enforce strict GEPA-lite call budget"
 1. 新技能的 Pareto size 等于完整候选长度；
 2. patch 的 Pareto size 等于应用后的完整 `SKILL.md` 长度；
 3. patch 未命中或多次命中时返回错误，不进入评分；
-4. 合法 patch 应用后能正常构造 `ScoredVariant`。
+4. 合法 patch 应用后能正常构造 `ScoredVariant`；
+5. **现有测试 `scored_variant_size_from_payload`（`search.rs:247`）需同步更新** — 它断言 `ScoredVariant::new(cand, 0.5)` 中 `v.size == 5`，改签名后需传入显式 size。
 
 **Step 2: 确认测试失败**
 
@@ -244,13 +266,25 @@ git commit -m "fix(evolution): compare candidates by effective skill size"
 
 **Files:**
 
-- Modify: `memory/src/config.rs`
-- Modify: `memory/src/lib.rs`
-- Modify: `frontend/src-tauri/src/compression_settings_commands.rs`
+- Modify: `memory/src/config.rs`（新字段 `population_size` + setter `set_evolution_search` 持久化）
+- Modify: `evolution/src/search.rs`（`select_population` + `candidate_fingerprint`）
+- Modify: `frontend/src-tauri/src/evolution_commands.rs`（`EvolutionSearchDto` 加 `population_size`/`max_eval_examples`/`max_llm_calls`；`set_evolution_search` 新增参数）
 - Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
-- Modify: `evolution/src/search.rs`
+- Modify: `frontend/src/hooks/settings/useEvolutionSettings.ts`（`setSearch` 新增参数）
+- ~~`compression_settings_commands.rs`~~（该文件与进化无关，不改）
 - Test: `memory/src/config.rs`
 - Test: `evolution/src/search.rs`
+
+**⚠️ UI 传播链（同时修正 Phase 1 遗漏）：**
+
+本 Task 必须将 `max_eval_examples`、`max_llm_calls`（Phase 1 已有但前端不可见）和新增的 `population_size` 一并曝光到 4 层：
+
+| 层 | 文件 | 改动 |
+|---|---|---|
+| config 持久化 | `memory/src/config.rs` | `population_size` 新字段 + `set_evolution_search` 持久化 |
+| DTO 展示 | `evolution_commands.rs` `EvolutionSearchDto` | 加 `populationSize`/`maxEvalExamples`/`maxLlmCalls` 字段 |
+| Tauri cmd 设置 | `evolution_commands.rs` `set_evolution_search` | 加 3 个新参数（移除从 current 读取的 hack） |
+| 前端 hook | `useEvolutionSettings.ts` `setSearch` | 加 3 个新参数 |
 
 **Step 1: 写配置测试**
 
@@ -260,13 +294,13 @@ git commit -m "fix(evolution): compare candidates by effective skill size"
 assert_eq!(cfg.search.population_size, 3);
 ```
 
-并测试 YAML roundtrip。
+并测试 YAML roundtrip（含 `max_eval_examples`/`max_llm_calls` 的 roundtrip）。
 
 建议默认值与约束：
 
 - `population_size = 3`
 - UI/命令层 clamp 到 `1..=8`
-- `variants` 表示每个父代请求的候选数时成本会乘以种群大小；为控制成本，第一版定义为“每代总变体目标”，不要按父代全部展开。
+- `variants` 表示每个父代请求的候选数时成本会乘以种群大小；为控制成本，第一版定义为”每代总变体目标”，不要按父代全部展开。
 
 **Step 2: 写种群选择测试**
 
@@ -337,16 +371,23 @@ git commit -m "feat(evolution): maintain diverse GEPA-lite population"
 
 当前 grounded parser 只保留 score，多个 `judge_reason` 以自然语言列表回喂，信息密度低且难以稳定聚合。
 
+**与现有类型的关系：**
+
+- `JudgeVerdict`（`judge.rs:9`）— 用于泛化 judge（无 evalset 时的回退打分），输出 `{"score","keep","reason"}`。**保持不变**。
+- `EvalJudgement`（本 Task 新增，放在 `evalset.rs`）— 用于 grounded eval judge 路径（有评测例子时），输出增加 `satisfied`/`unmet` 数组。两者是不同场景的不同结构，不要合并。
+
 **Files:**
 
-- Modify: `evolution/src/evalset.rs`
-- Modify: `evolution/src/judge.rs`
-- Modify: `evolution/src/search.rs`
+- Modify: `evolution/src/evalset.rs`（新增 `EvalJudgement` + `parse_eval_judgement` + `aggregate_critiques`）
+- Keep: `evolution/src/judge.rs`（`JudgeVerdict` 保持不变）
+- Modify: `evolution/src/search.rs`（`build_mutation_prompt` 接受结构化 critique）
 - Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
 - Test: `evolution/src/evalset.rs`
-- Test: `evolution/src/judge.rs`
+- Test: `evolution/src/judge.rs`（确认未破坏）
 
 **Step 1: 定义结构化结果**
+
+在 `evolution/src/evalset.rs` 新增：
 
 ```rust
 pub struct EvalJudgement {
@@ -357,7 +398,7 @@ pub struct EvalJudgement {
 }
 ```
 
-Prompt JSON 契约：
+更新 `EVAL_JUDGE_SYSTEM_PROMPT` 的 JSON 契约（现有格式 `{"score","reason"}` → 扩展为）：
 
 ```json
 {
@@ -367,6 +408,8 @@ Prompt JSON 契约：
   "reason": "..."
 }
 ```
+
+新增 `parse_eval_judgement` 函数（保留 `parse_eval_score` 供旧调用方兼容）。`satisfied`/`unmet` 缺失时使用空数组，不报错。
 
 **Step 2: 写 parser 测试**
 
@@ -465,14 +508,16 @@ pub fn split_eval_examples(
 ) -> EvalSplit<'_>;
 ```
 
-不要使用进程随机 seed。使用 example id 的稳定哈希，并按 verdict 分层。
+不要使用进程随机 seed。使用 example id 的稳定哈希（如 `id.bytes().fold(0u64, |h, b| h.wrapping_mul(31).wrapping_add(b as u64)) % 100`），并按 verdict 分层。
+
+**稳定性注意：** 当用户增删 example 后，已有 example 的分区不变（hash 基于 id 不基于索引）。但样本数从 5 降到 4 时 holdout 会自动关闭——此时搜索质量默默退化。应在 history 中记录 `holdout_enabled: bool` 以便事后诊断。
 
 **Step 3: 分离优化分与最终分**
 
 - 每代 fitness 使用 optimize 集；
 - 搜索结束后仅对 Pareto 前沿候选跑一次 holdout；
 - 最终排序以 holdout 为主，optimize 为次；
-- history 同时记录 `optimize_score`、`holdout_score`、样本数和模型路由；
+- history 同时记录 `optimize_score`、`holdout_score`、样本数、`holdout_enabled` 和模型路由；
 - holdout 原始任务文本不进入 history。
 
 **Step 4: 运行测试**
@@ -519,13 +564,39 @@ history 记录：
 
 **Step 2: 写序列化兼容测试**
 
-旧 history 行缺少新字段时必须仍能读取。
+旧 history 行缺少新字段时必须仍能读取。关键：所有新字段必须用 `#[serde(default)]`，否则旧 JSONL 反序列化会报错。
+
+现有 `HistoryEvent::Run` 只有 `{id, ts, mode, generated, gated_out, judged_out, proposals}`。新增字段建议以 `Option` 类型追加，而非改动已有字段：
+
+```rust
+HistoryEvent::Run {
+    // 现有字段保持不变...
+    #[serde(default)]
+    search_meta: Option<SearchRunMeta>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchRunMeta {
+    pub generations: u32,
+    pub variants: u32,
+    pub population_size: u32,
+    pub crossover: bool,
+    pub budget_limit: u32,
+    pub budget_used: u32,
+    pub optimize_examples: usize,
+    pub holdout_examples: usize,
+    pub holdout_enabled: bool,
+    pub reflection_model: String,
+    pub judge_model: String,
+    pub termination: String,  // completed | budget_exhausted | provider_error | no_candidates
+}
+```
 
 **Step 3: 实现并更新文档**
 
 同步修正：
 
-- `evolution/src/search.rs` 顶部过时的“无评测集、不做交叉”注释；
+- `evolution/src/search.rs` 第 4 行过时注释「不做交叉（crossover）」— **在本 Task 修正**（不要等到 Task 6 才改，因为 Task 1 就会接触 search.rs）；
 - `docs/evolution.md` 的成本公式，加入 grounded eval 倍数；
 - `docs/learning-loop.md` 中与交叉/evalset 冲突的描述。
 
@@ -569,7 +640,7 @@ git commit -m "docs(evolution): record reproducible GEPA-lite search summaries"
 
 **Step 1: 先抽取现有测试 runner**
 
-将批准阶段测试逻辑抽成可复用函数，入参必须是临时技能目录，不能直接修改真实技能。
+现有测试 runner 是 `run_skill_tests`（`evolution_run_commands.rs:696–743`），位于 Tauri 侧而非 `evolution` crate。需将其逻辑抽取到 `evolution/src/gates.rs` 或新建 `evolution/src/sandbox.rs`，使其成为纯 Rust 可测试函数，入参必须是临时技能目录路径，不能直接修改真实技能。
 
 **Step 2: 设计安全边界**
 
@@ -823,10 +894,12 @@ git commit -m "feat(evolution): curator overlap merge proposals with human revie
 7. history 可解释成本、路由、数据规模、终止原因与筛选结果；
 8. 全流程仍只写待审 proposal，不自动修改技能；
 9. API Key、会话全文和完整评测任务不写入 history；
-10. 以下命令通过：
+10. `search.rs` 顶部过时注释「不做交叉」已修正；
+11. 以下命令通过：
 
 ```bash
 cargo fmt --check
+cargo clippy -p evolution -p memory -- -D warnings
 cargo test -p evolution --lib
 cargo test -p memory --lib
 cargo check -p astro-agent
@@ -834,11 +907,11 @@ cargo check -p astro-agent
 
 完成 Phase 5（Task 8–9）后额外满足：
 
-11. `curate_report` 仍可用，且存在等价结构化 `CurateReport`；
-12. 健康分仅基于本地启发式信号，缺信号时为 `None`；
-13. 重叠簇与 Disable/Merge 建议可生成，但默认不自动改技能、不自动入队；
-14. 显式入队时提案走现有人审，history 含 `mode=curator`；
-15. `cargo test -p skills --lib` 通过。
+12. `curate_report` 仍可用，且存在等价结构化 `CurateReport`；
+13. 健康分仅基于本地启发式信号，缺信号时为 `None`；
+14. 重叠簇与 Disable/Merge 建议可生成，但默认不自动改技能、不自动入队；
+15. 显式入队时提案走现有人审，history 含 `mode=curator`；
+16. `cargo test -p skills --lib` 通过。
 
 ## 推荐实施顺序
 
@@ -857,3 +930,5 @@ cargo check -p astro-agent
 
 不要在 Task 1–2 尚未稳定时扩大搜索规模，否则只会放大成本和评分噪声。  
 不要在 Task 8 尚未提供结构化报告时做自动入队；Curator 的第一原则是**护库、可逆、人审**。
+
+**首次接触 `search.rs` 时（Task 1）顺手修正第 4 行过时注释**：删除「不做交叉（crossover）」，改为「变异 + 交叉 + Pareto 选择」。

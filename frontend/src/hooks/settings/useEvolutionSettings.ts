@@ -15,7 +15,14 @@ type UseEvolutionSettings = {
     requirePr: boolean,
     minJudgeScore: number,
   ): Promise<void>;
-  setSearch(generations: number, variants: number, crossover: boolean): Promise<void>;
+  setSearch(
+    generations: number,
+    variants: number,
+    crossover: boolean,
+    populationSize?: number,
+    maxEvalExamples?: number,
+    maxLlmCalls?: number,
+  ): Promise<void>;
   setAuto(
     enabled: boolean,
     cooldownSecs: number,
@@ -113,13 +120,23 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
   );
 
   const setSearch = useCallback(
-    async (generations: number, variants: number, crossover: boolean) => {
+    async (
+      generations: number,
+      variants: number,
+      crossover: boolean,
+      populationSize?: number,
+      maxEvalExamples?: number,
+      maxLlmCalls?: number,
+    ) => {
       setError(null);
       try {
         const next = await invoke<EvolutionSettingsDto>("set_evolution_search", {
           generations,
           variants,
           crossover,
+          populationSize: populationSize ?? null,
+          maxEvalExamples: maxEvalExamples ?? null,
+          maxLlmCalls: maxLlmCalls ?? null,
         });
         setSettings(next);
       } catch (err) {

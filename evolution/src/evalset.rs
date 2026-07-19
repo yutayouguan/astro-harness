@@ -131,10 +131,10 @@ pub fn examples_for_skill<'a>(all: &'a [EvalExample], skill_id: &str) -> Vec<&'a
         .collect()
 }
 
-/// eval judge 的 system 指令：针对具体 task+expectations 评分，JSON only。
+/// eval judge 的 system 指令：针对具体 task+expectations 评分，输出结构化 JSON。
 pub const EVAL_JUDGE_SYSTEM_PROMPT: &str = r#"你是技能评测器。给定一个技能内容、一个任务与该任务的期望要点，判断「若用该技能执行此任务，能在多大程度上满足期望」。只输出 JSON（不要 markdown 围栏）：
-{"score":0.0,"reason":"简述哪些期望满足/未满足"}
-score 为 0~1 小数：全部满足≈1，完全不满足≈0。宁严勿滥。"#;
+{"score":0.0,"satisfied":["已满足的要点"],"unmet":["未满足的要点"],"reason":"简述"}
+score 为 0~1 小数：全部满足≈1，完全不满足≈0。宁严勿滥。satisfied/unmet 列出具体要点。"#;
 
 /// 构造针对单个例子的 eval judge user 提示。
 pub fn build_eval_judge_prompt(cand: &SkillCandidate, ex: &EvalExample) -> String {
@@ -185,8 +185,23 @@ pub fn weighted_eval_score(verdicts: &[(Verdict, f32)]) -> Option<f32> {
     }
 }
 
-/// 解析 eval judge 输出为 0–1 分。
+/// 解析 eval judge 输出为 0–1 分（兼容旧格式）。
 pub fn parse_eval_score(raw: &str) -> anyhow::Result<f32> {
+    let j = parse_eval_judgement(raw)?;
+    Ok(j.score)
+}
+
+/// 结构化 eval judge 结果（grounded eval 路径专用）。
+#[derive(Debug, Clone)]
+pub struct EvalJudgement {
+    pub score: f32,
+    pub satisfied: Vec<String>,
+    pub unmet: Vec<String>,
+    pub reason: String,
+}
+
+/// 解析结构化 eval judge 输出。`satisfied`/`unmet` 缺失时使用空数组。
+pub fn parse_eval_judgement(raw: &str) -> anyhow::Result<EvalJudgement> {
     let trimmed = raw.trim();
     let start = trimmed
         .find('{')
@@ -199,9 +214,40 @@ pub fn parse_eval_score(raw: &str) -> anyhow::Result<f32> {
     struct Raw {
         #[serde(default)]
         score: f32,
+        #[serde(default)]
+        satisfied: Vec<String>,
+        #[serde(default)]
+        unmet: Vec<String>,
+        #[serde(default)]
+        reason: String,
     }
     let parsed: Raw = serde_json::from_str(&trimmed[start..=end])?;
-    Ok(parsed.score.clamp(0.0, 1.0))
+    Ok(EvalJudgement {
+        score: parsed.score.clamp(0.0, 1.0),
+        satisfied: parsed.satisfied,
+        unmet: parsed.unmet,
+        reason: parsed.reason,
+    })
+}
+
+/// 聚合多条 judgement 的 critique：优先 unmet，去重，按频次排序，最多 `max_items` 条。
+pub fn aggregate_critiques(judgements: &[EvalJudgement], max_items: usize) -> Vec<String> {
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for j in judgements {
+        for item in &j.unmet {
+            let key = item.trim().to_string();
+            if !key.is_empty() {
+                *counts.entry(key).or_default() += 1;
+            }
+        }
+    }
+    let mut items: Vec<(String, usize)> = counts.into_iter().collect();
+    items.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    items
+        .into_iter()
+        .take(max_items.max(1).min(8))
+        .map(|(s, _)| s)
+        .collect()
 }
 
 #[cfg(test)]
@@ -301,5 +347,68 @@ mod tests {
         let vs = [(Verdict::Fail, 1.5)];
         let s = weighted_eval_score(&vs).unwrap();
         assert!((s - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn parse_eval_judgement_full() {
+        let raw = r#"{"score":0.7,"satisfied":["A"],"unmet":["B","C"],"reason":"ok"}"#;
+        let j = parse_eval_judgement(raw).unwrap();
+        assert!((j.score - 0.7).abs() < 1e-6);
+        assert_eq!(j.satisfied, vec!["A"]);
+        assert_eq!(j.unmet, vec!["B", "C"]);
+        assert_eq!(j.reason, "ok");
+    }
+
+    #[test]
+    fn parse_eval_judgement_missing_arrays() {
+        let raw = r#"{"score":0.5,"reason":"no arrays"}"#;
+        let j = parse_eval_judgement(raw).unwrap();
+        assert!(j.satisfied.is_empty());
+        assert!(j.unmet.is_empty());
+    }
+
+    #[test]
+    fn parse_eval_judgement_with_fence() {
+        let raw = "```json\n{\"score\":0.3}\n```";
+        let j = parse_eval_judgement(raw).unwrap();
+        assert!((j.score - 0.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parse_eval_judgement_invalid_json_errors() {
+        assert!(parse_eval_judgement("not json at all").is_err());
+    }
+
+    #[test]
+    fn aggregate_critiques_deduplicates_and_sorts() {
+        let judgements = vec![
+            EvalJudgement {
+                score: 0.5,
+                satisfied: vec![],
+                unmet: vec!["缺少错误处理".into(), "步骤不清晰".into()],
+                reason: String::new(),
+            },
+            EvalJudgement {
+                score: 0.6,
+                satisfied: vec!["A".into()],
+                unmet: vec!["缺少错误处理".into(), "缺少回退".into()],
+                reason: String::new(),
+            },
+        ];
+        let c = aggregate_critiques(&judgements, 8);
+        assert_eq!(c[0], "缺少错误处理"); // appears 2x, ranked first
+        assert_eq!(c.len(), 3);
+    }
+
+    #[test]
+    fn aggregate_critiques_caps_at_max() {
+        let j = EvalJudgement {
+            score: 0.3,
+            satisfied: vec![],
+            unmet: (0..20).map(|i| format!("item {i}")).collect(),
+            reason: String::new(),
+        };
+        let c = aggregate_critiques(&[j], 3);
+        assert_eq!(c.len(), 3);
     }
 }

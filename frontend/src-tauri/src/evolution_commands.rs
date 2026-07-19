@@ -36,6 +36,9 @@ pub struct EvolutionSearchDto {
     pub generations: u32,
     pub variants: u32,
     pub crossover: bool,
+    pub population_size: u32,
+    pub max_eval_examples: usize,
+    pub max_llm_calls: u32,
 }
 
 /// 自动触发参数展示态。
@@ -149,6 +152,9 @@ fn build_settings_dto() -> Result<EvolutionSettingsDto, String> {
             generations: cfg.search.generations,
             variants: cfg.search.variants,
             crossover: cfg.search.crossover,
+            population_size: cfg.search.population_size,
+            max_eval_examples: cfg.search.max_eval_examples,
+            max_llm_calls: cfg.search.max_llm_calls,
         },
         auto: EvolutionAutoDto {
             enabled: cfg.auto.enabled,
@@ -224,6 +230,9 @@ pub async fn set_evolution_search(
     generations: u32,
     variants: u32,
     crossover: bool,
+    population_size: Option<u32>,
+    max_eval_examples: Option<u32>,
+    max_llm_calls: Option<u32>,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
     let current = memory::load_evolution_config(&base);
@@ -231,8 +240,9 @@ pub async fn set_evolution_search(
         generations: generations.clamp(1, 6),
         variants: variants.clamp(1, 6),
         crossover,
-        max_eval_examples: current.search.max_eval_examples,
-        max_llm_calls: current.search.max_llm_calls,
+        population_size: population_size.unwrap_or(current.search.population_size).clamp(1, 8),
+        max_eval_examples: max_eval_examples.map(|v| v as usize).unwrap_or(current.search.max_eval_examples),
+        max_llm_calls: max_llm_calls.unwrap_or(current.search.max_llm_calls),
     };
     memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
     build_settings_dto()

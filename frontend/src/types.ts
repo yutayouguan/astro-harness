@@ -284,6 +284,9 @@ export type EvolutionSearchDto = {
   generations: number;
   variants: number;
   crossover: boolean;
+  populationSize: number;
+  maxEvalExamples: number;
+  maxLlmCalls: number;
 };
 
 /** 自动触发参数 */
