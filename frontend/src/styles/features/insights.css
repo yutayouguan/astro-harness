@@ -20,14 +20,21 @@
   --insights-warn-soft: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-.insights-panel > .panel-agent-toolbar {
+/* 筛选行：Agent 左、周期右，同一基线 */
+.insights-panel > .insights-toolbar-filters {
   flex-wrap: wrap;
   max-width: 100%;
+  row-gap: 8px;
 }
 
-.insights-panel > .panel-agent-toolbar .panel-agent-toolbar-start {
-  flex-wrap: wrap;
-  row-gap: 8px;
+/* 导航行：视图 Tab 独占，与筛选行更紧（panel gap 16px 过大） */
+.insights-panel > .insights-view-row {
+  display: flex;
+  align-items: center;
+  margin-top: -8px;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 /* View Tab 保持单行，避免 Tracing 被挤换行 */
