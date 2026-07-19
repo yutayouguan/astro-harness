@@ -49,6 +49,7 @@ import {
   firstSlotValue,
   listTemplateSegments,
   nextEmptySlot,
+  prepareAgentCreateSend,
   prevEmptySlot,
 } from "../../lib/agent/agentCreateTemplate";
 import {
@@ -566,6 +567,8 @@ export default function ChatView({
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
   const [mediaBaseDir, setMediaBaseDir] = useState<string | null>(null);
+  /** 创建 Agent：发送校验失败时高亮的必填槽 index */
+  const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
 
@@ -964,7 +967,7 @@ export default function ChatView({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (tryHandleSlashSubmit()) return;
-      if (canSend) onSend();
+      trySubmitComposer();
     }
   };
 
@@ -1243,6 +1246,49 @@ export default function ChatView({
     () => (emptyMode === "agent" ? listTemplateSegments(input) : []),
     [emptyMode, input],
   );
+  const agentCreateMissingSet = useMemo(
+    () => new Set(agentCreateMissing),
+    [agentCreateMissing],
+  );
+
+  useEffect(() => {
+    setAgentCreateMissing((prev) => {
+      if (emptyMode !== "agent" || prev.length === 0) {
+        return prev.length === 0 ? prev : [];
+      }
+      const still = prepareAgentCreateSend(input).missingRequired.map((s) => s.index);
+      if (
+        still.length === prev.length &&
+        still.every((idx, n) => idx === prev[n])
+      ) {
+        return prev;
+      }
+      return still;
+    });
+  }, [emptyMode, input]);
+
+  const trySubmitComposer = () => {
+    if (!canSend) return;
+    if (emptyMode === "agent") {
+      const prep = prepareAgentCreateSend(input);
+      if (!prep.ok) {
+        setAgentCreateMissing(prep.missingRequired.map((s) => s.index));
+        const first = prep.missingRequired[0];
+        const el = textareaRef.current;
+        if (first && el) {
+          requestAnimationFrame(() => {
+            el.focus();
+            el.setSelectionRange(first.innerStart, first.innerEnd);
+          });
+        }
+        return;
+      }
+      setAgentCreateMissing([]);
+      onSend({ text: prep.sanitized });
+      return;
+    }
+    onSend();
+  };
 
   useEffect(() => {
     if (emptyMode !== "agent") return;
@@ -1614,7 +1660,7 @@ export default function ChatView({
         onSubmit={(e) => {
           e.preventDefault();
           if (tryHandleSlashSubmit()) return;
-          if (canSend) onSend();
+          trySubmitComposer();
         }}
       >
         {attachments.length > 0 && (
@@ -1681,6 +1727,11 @@ export default function ChatView({
               {t("chat.dropFilesHint")}
             </div>
           ) : null}
+          {emptyMode === "agent" && agentCreateMissing.length > 0 ? (
+            <p className="composer-agent-validate-hint" role="alert">
+              {t("chat.agentCreateNeedRequired")}
+            </p>
+          ) : null}
           <div className={`composer-input-wrap ${emptyMode === "agent" ? "is-agent-template" : ""}`.trim()}>
             <div
               className="composer-typed-hint"
@@ -1698,7 +1749,13 @@ export default function ChatView({
                   ) : (
                     <span
                       key={`s-${i}`}
-                      className={`composer-slot-chip ${seg.empty ? "is-empty" : "is-filled"}`}
+                      className={[
+                        "composer-slot-chip",
+                        seg.empty ? "is-empty" : "is-filled",
+                        agentCreateMissingSet.has(seg.index) ? "is-invalid" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                     >
                       {seg.open}
                       {seg.value || "\u00a0"}

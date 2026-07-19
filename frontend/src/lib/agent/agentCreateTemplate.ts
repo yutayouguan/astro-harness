@@ -41,7 +41,26 @@ export type BracketSlot = {
 
 export type TemplateSegment =
   | { type: "text"; value: string }
-  | { type: "slot"; value: string; empty: boolean; open: string; close: string };
+  | {
+      type: "slot";
+      value: string;
+      empty: boolean;
+      open: string;
+      close: string;
+      index: number;
+      required: boolean;
+    };
+
+/** 必填槽：0=名称，3=主要做什么 */
+export const REQUIRED_SLOT_INDICES = [0, 3] as const;
+
+export type AgentCreatePrepareResult = {
+  ok: boolean;
+  /** 未填的必填槽 */
+  missingRequired: BracketSlot[];
+  /** 去掉未填选填占位后的发送文案 */
+  sanitized: string;
+};
 
 const OPEN = "「";
 const CLOSE = "」";
@@ -49,6 +68,10 @@ const CLOSE = "」";
 /** 槽位内容是否仍为占位提示（未真正填写） */
 export function isSlotHint(inner: string): boolean {
   return SLOT_HINT_SET.has(inner.trim());
+}
+
+export function isRequiredSlotIndex(index: number): boolean {
+  return (REQUIRED_SLOT_INDICES as readonly number[]).includes(index);
 }
 
 export function listSlots(text: string): BracketSlot[] {
@@ -95,6 +118,8 @@ export function listTemplateSegments(text: string): TemplateSegment[] {
       empty: slot.empty,
       open: OPEN,
       close: CLOSE,
+      index: slot.index,
+      required: isRequiredSlotIndex(slot.index),
     });
     cursor = slot.close + CLOSE.length;
   }
@@ -102,6 +127,65 @@ export function listTemplateSegments(text: string): TemplateSegment[] {
     out.push({ type: "text", value: text.slice(cursor) });
   }
   return out;
+}
+
+/**
+ * 删除选填空槽所在短句（含前导逗号），从后往前删以保持下标有效。
+ * 例：`，背景经历是「背景」` / `, background is 「background」`
+ */
+function removeOptionalSlotClause(text: string, slot: BracketSlot): string {
+  let start = slot.open;
+  let i = slot.open - 1;
+  while (
+    i >= 0 &&
+    text[i] !== "，" &&
+    text[i] !== "," &&
+    text[i] !== "：" &&
+    text[i] !== ":"
+  ) {
+    i -= 1;
+  }
+  if (i >= 0 && (text[i] === "，" || text[i] === ",")) {
+    start = i;
+  } else {
+    start = i + 1;
+  }
+  return text.slice(0, start) + text.slice(slot.close + CLOSE.length);
+}
+
+function tidySanitizedTemplate(text: string): string {
+  return text
+    .replace(/[，,]{2,}/g, "，")
+    .replace(/:\s*,/g, ": ")
+    .replace(/：\s*，/g, "：")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[，,]\s*$/g, "")
+    .trim();
+}
+
+/**
+ * 发送前准备：校验必填；去掉未填选填占位，避免把「背景」「风格」等提示发给模型。
+ */
+export function prepareAgentCreateSend(text: string): AgentCreatePrepareResult {
+  const slots = listSlots(text);
+  const missingRequired = REQUIRED_SLOT_INDICES.map((i) => slots[i]).filter(
+    (s): s is BracketSlot => Boolean(s?.empty),
+  );
+
+  let sanitized = text;
+  const optionalEmpty = slots.filter(
+    (s) => !isRequiredSlotIndex(s.index) && s.empty,
+  );
+  for (let i = optionalEmpty.length - 1; i >= 0; i -= 1) {
+    sanitized = removeOptionalSlotClause(sanitized, optionalEmpty[i]);
+  }
+  sanitized = tidySanitizedTemplate(sanitized);
+
+  return {
+    ok: missingRequired.length === 0,
+    missingRequired,
+    sanitized,
+  };
 }
 
 export function findSlotAt(

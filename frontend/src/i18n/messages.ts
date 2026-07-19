@@ -625,7 +625,7 @@ export const zh = {
   "chat.agentGuideEyebrow": "新建 Agent",
   "chat.agentGuideTitle": "开始创建 Agent",
   "chat.agentGuideBody":
-    "在下方输入框里点击高亮的「填空」处填写，Tab 切换下一格。发送后将自动加载 create-agent 技能，并写入 IDENTITY / SOUL / MEMORY。",
+    "在下方输入框里点击高亮处填写（「名称」「做什么」必填，其余选填），Tab 切换下一格。发送后将自动加载 create-agent 技能，并写入 IDENTITY / SOUL / MEMORY。",
   "chat.agentGuideStepsLabel": "创建步骤",
   "chat.agentGuideStep1": "填空模板",
   "chat.agentGuideStep2": "可选外观",
@@ -633,6 +633,7 @@ export const zh = {
   "chat.agentGuideCancel": "取消创建",
   "chat.agentGuideSkip": "取消创建，直接聊天",
   "chat.agentGuideComposerAria": "创建 Agent 模板，点击高亮处填空，Tab 切换",
+  "chat.agentCreateNeedRequired": "请先填写「名称」和「做什么」；其余选填，未填不会发给模型。",
   "chat.agentCreateHint":
     "请先用 skills 工具加载 create-agent 技能，再按技能步骤调用 create_agent 工具创建助手，并填充各 md 文件。",
   "chat.agentIconsTitle": "外观（可选）",
@@ -2155,7 +2156,7 @@ export const en: Record<MessageKey, string> = {
   "chat.agentGuideEyebrow": "New Agent",
   "chat.agentGuideTitle": "Create an Agent",
   "chat.agentGuideBody":
-    "Click the highlighted 「slots」 below to fill them in, then press Tab for the next. Astro loads create-agent and writes IDENTITY / SOUL / MEMORY.",
+    "Click the highlighted slots below (「name」 and 「help with」 required; others optional), then Tab for the next. Astro loads create-agent and writes IDENTITY / SOUL / MEMORY.",
   "chat.agentGuideStepsLabel": "Creation steps",
   "chat.agentGuideStep1": "Fill template",
   "chat.agentGuideStep2": "Optional look",
@@ -2163,6 +2164,8 @@ export const en: Record<MessageKey, string> = {
   "chat.agentGuideCancel": "Cancel",
   "chat.agentGuideSkip": "Cancel and just chat",
   "chat.agentGuideComposerAria": "Agent create template — click highlighted slots, Tab to move",
+  "chat.agentCreateNeedRequired":
+    "Fill in 「name」 and 「help with」 first; other slots are optional and omitted if empty.",
   "chat.agentCreateHint":
     "First load the create-agent skill with the skills tool, then call create_agent and fill the markdown files as the skill describes.",
   "chat.agentIconsTitle": "Look (optional)",

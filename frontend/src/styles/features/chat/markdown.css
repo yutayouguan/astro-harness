@@ -490,6 +490,12 @@ html[data-theme="dark"] .msg-md-codeblock {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
 }
 
+.composer-slot-chip.is-invalid {
+  color: var(--danger, #c44);
+  background: color-mix(in srgb, var(--danger, #c44) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger, #c44) 36%, transparent);
+}
+
 html[data-theme="dark"] .composer-slot-chip.is-empty {
   color: color-mix(in srgb, #fff 22%, var(--tone, var(--accent)));
   background: color-mix(in srgb, var(--tone, var(--accent)) 20%, rgba(255, 255, 255, 0.04));
@@ -500,6 +506,24 @@ html[data-theme="dark"] .composer-slot-chip.is-filled {
   color: var(--ink);
   background: color-mix(in srgb, var(--tone, var(--accent)) 14%, rgba(255, 255, 255, 0.03));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 22%, rgba(255, 255, 255, 0.06));
+}
+
+html[data-theme="dark"] .composer-slot-chip.is-invalid {
+  color: color-mix(in srgb, #fff 18%, var(--danger, #f87171));
+  background: color-mix(in srgb, var(--danger, #f87171) 18%, rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger, #f87171) 40%, rgba(255, 255, 255, 0.08));
+}
+
+.composer-agent-validate-hint {
+  margin: 0 0 6px;
+  padding: 0 2px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--danger, #c44);
+}
+
+html[data-theme="dark"] .composer-agent-validate-hint {
+  color: color-mix(in srgb, #fff 22%, var(--danger, #f87171));
 }
 
 .composer-input-wrap.is-agent-template .composer-input.is-slot-highlight {
@@ -2693,9 +2717,10 @@ html[data-theme="dark"] .chat-agent-guide-step {
 
 html[data-theme="dark"] .chat-agent-icons {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.06)) 50%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    rgba(8, 6, 18, 0.35);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .chat-agent-icons-head {
