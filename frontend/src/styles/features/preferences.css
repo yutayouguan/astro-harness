@@ -1081,6 +1081,58 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   }
 }
 
+/* ── Shell 色彩风格：灵动操作 ── */
+.shell-dynamic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-top: 14px;
+}
+
+.shell-dynamic-hint {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted, #64748b);
+}
+
+.shell-dynamic-reshuffle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tone, #2563eb) 35%, var(--glass-edge, #cbd5e1));
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone, #2563eb) 12%, transparent),
+      color-mix(in srgb, #fff 55%, transparent)
+    );
+  color: var(--ink, #0f172a);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.shell-dynamic-reshuffle:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 55%, var(--glass-edge, #cbd5e1));
+}
+
+html[data-theme="dark"] .shell-dynamic-reshuffle {
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone, #60a5fa) 18%, transparent),
+      color-mix(in srgb, #111827 70%, transparent)
+    );
+  color: var(--ink, #e2e8f0);
+}
+
 /* ── Shell 色彩风格：预设色板（玻璃胶囊） ── */
 .shell-color-presets {
   display: flex;

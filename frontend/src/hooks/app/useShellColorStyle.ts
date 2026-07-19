@@ -1,5 +1,6 @@
-/** Shell 色彩风格偏好：多彩 / 统一 + 渐变（含预览事务）。 */
+/** Shell 色彩风格偏好：多彩 / 统一 / 灵动（含预览事务）。 */
 import { useCallback, useRef, useState } from "react";
+import { createDynamicSeed } from "../../lib/ui/dynamicGradient";
 import {
   cloneGradient,
   DEFAULT_SHELL_COLOR_PREFS,
@@ -12,6 +13,11 @@ import {
 const STORAGE_KEY_V2 = "astro-shell-color-prefs.v2";
 const STORAGE_KEY_V1 = "astro-shell-color-style";
 
+function parseStyle(raw: unknown): ShellColorStyle {
+  if (raw === "unified" || raw === "colorful" || raw === "dynamic") return raw;
+  return "colorful";
+}
+
 function readStoredPrefs(): ShellColorPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_V2);
@@ -19,13 +25,14 @@ function readStoredPrefs(): ShellColorPrefs {
       const parsed = JSON.parse(raw) as unknown;
       if (parsed && typeof parsed === "object") {
         const o = parsed as Record<string, unknown>;
-        const style =
-          o.style === "unified" || o.style === "colorful"
-            ? (o.style as ShellColorStyle)
-            : "colorful";
+        const seed =
+          typeof o.dynamicSeed === "string" && o.dynamicSeed.trim()
+            ? o.dynamicSeed.trim()
+            : createDynamicSeed();
         return {
-          style,
+          style: parseStyle(o.style),
           gradient: normalizeGradient(o.gradient),
+          dynamicSeed: seed,
         };
       }
     }
@@ -36,10 +43,11 @@ function readStoredPrefs(): ShellColorPrefs {
   // 迁移 v1：仅 style 字符串
   try {
     const v1 = localStorage.getItem(STORAGE_KEY_V1);
-    if (v1 === "unified" || v1 === "colorful") {
+    if (v1 === "unified" || v1 === "colorful" || v1 === "dynamic") {
       return {
         style: v1,
         gradient: cloneGradient(DEFAULT_SHELL_COLOR_PREFS.gradient),
+        dynamicSeed: createDynamicSeed(),
       };
     }
   } catch {
@@ -49,6 +57,7 @@ function readStoredPrefs(): ShellColorPrefs {
   return {
     style: DEFAULT_SHELL_COLOR_PREFS.style,
     gradient: cloneGradient(DEFAULT_SHELL_COLOR_PREFS.gradient),
+    dynamicSeed: createDynamicSeed(),
   };
 }
 
@@ -59,9 +68,9 @@ function persistPrefs(prefs: ShellColorPrefs) {
       JSON.stringify({
         style: prefs.style,
         gradient: prefs.gradient,
+        dynamicSeed: prefs.dynamicSeed,
       }),
     );
-    // 保留 v1 键，方便旧代码/调试读到最新 style
     localStorage.setItem(STORAGE_KEY_V1, prefs.style);
   } catch {
     // ignore
@@ -72,7 +81,9 @@ export type { ShellColorStyle } from "../../lib/ui/shellGradient";
 
 export function useShellColorStyle() {
   const [prefs, setPrefsState] = useState<ShellColorPrefs>(() =>
-    typeof window === "undefined" ? DEFAULT_SHELL_COLOR_PREFS : readStoredPrefs(),
+    typeof window === "undefined"
+      ? DEFAULT_SHELL_COLOR_PREFS
+      : readStoredPrefs(),
   );
   const snapshotRef = useRef<ShellColorPrefs | null>(null);
   const [editing, setEditing] = useState(false);
@@ -88,7 +99,24 @@ export function useShellColorStyle() {
   /** 立即持久化（预设色） */
   const setGradient = useCallback((gradient: ShellGradient) => {
     setPrefsState((prev) => {
-      const next = { ...prev, style: "unified" as const, gradient: cloneGradient(gradient) };
+      const next = {
+        ...prev,
+        style: "unified" as const,
+        gradient: cloneGradient(gradient),
+      };
+      persistPrefs(next);
+      return next;
+    });
+  }, []);
+
+  /** 重新生成灵动配色种子（全体 Tab 换色） */
+  const reshuffleDynamic = useCallback(() => {
+    setPrefsState((prev) => {
+      const next = {
+        ...prev,
+        style: "dynamic" as const,
+        dynamicSeed: createDynamicSeed(),
+      };
       persistPrefs(next);
       return next;
     });
@@ -100,6 +128,7 @@ export function useShellColorStyle() {
       snapshotRef.current = {
         style: prev.style,
         gradient: cloneGradient(prev.gradient),
+        dynamicSeed: prev.dynamicSeed,
       };
       return {
         ...prev,
@@ -126,6 +155,7 @@ export function useShellColorStyle() {
     setPrefsState((prev) => {
       const base = gradient ? cloneGradient(gradient) : cloneGradient(prev.gradient);
       const next = {
+        ...prev,
         style: "unified" as const,
         gradient: { ...base, id: "custom" as const },
       };
@@ -142,9 +172,8 @@ export function useShellColorStyle() {
       setPrefsState({
         style: snap.style,
         gradient: cloneGradient(snap.gradient),
+        dynamicSeed: snap.dynamicSeed,
       });
-      // 若打开前已是 unified，取消不应丢弃已保存的预设；快照本身就是打开前状态
-      // 快照未 persist（打开时没写盘），恢复内存即可
     }
     snapshotRef.current = null;
     setEditing(false);
@@ -153,8 +182,10 @@ export function useShellColorStyle() {
   return {
     colorStyle: prefs.style,
     gradient: prefs.gradient,
+    dynamicSeed: prefs.dynamicSeed,
     setColorStyle,
     setGradient,
+    reshuffleDynamic,
     beginGradientEdit,
     previewGradient,
     commitGradientEdit,

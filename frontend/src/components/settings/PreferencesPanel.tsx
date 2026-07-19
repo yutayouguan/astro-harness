@@ -6,6 +6,7 @@ import {
   Blend,
   Brain,
   Clock,
+  Dices,
   Palette,
   Plug,
   ScrollText,
@@ -52,7 +53,7 @@ type Props = {
   /** 当前主题模式 */
   mode: ThemeMode;
   onChange: (mode: ThemeMode) => void;
-  /** Shell 色彩风格：多彩 / 统一 */
+  /** Shell 色彩风格：多彩 / 统一 / 灵动 */
   colorStyle: ShellColorStyle;
   onColorStyleChange: (style: ShellColorStyle) => void;
   gradient: ShellGradient;
@@ -61,6 +62,8 @@ type Props = {
   onPreviewGradient: (gradient: ShellGradient) => void;
   onCommitCustomGradient: (gradient?: ShellGradient) => void;
   onCancelCustomGradient: () => void;
+  /** 灵动模式：重新生成本机配色种子 */
+  onReshuffleDynamic: () => void;
   /** 当前 shell 主题色：blue | green | purple | orange | pink */
   tone?: string;
   chatDisplayPrefs: ChatDisplayPrefs;
@@ -137,6 +140,7 @@ export default function PreferencesPanel({
   onPreviewGradient,
   onCommitCustomGradient,
   onCancelCustomGradient,
+  onReshuffleDynamic,
   tone = "pink",
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
@@ -220,6 +224,12 @@ export default function PreferencesPanel({
       label: t("prefs.colorStyle.unified"),
       desc: t("prefs.colorStyle.unifiedDesc"),
       Icon: Blend,
+    },
+    {
+      id: "dynamic",
+      label: t("prefs.colorStyle.dynamic"),
+      desc: t("prefs.colorStyle.dynamicDesc"),
+      Icon: Sparkles,
     },
   ];
 
@@ -444,6 +454,21 @@ export default function PreferencesPanel({
               <span className="shell-color-swatch-core" aria-hidden>
                 <span className="shell-color-swatch-plus">+</span>
               </span>
+            </button>
+          </div>
+        ) : null}
+
+        {colorStyle === "dynamic" ? (
+          <div className="shell-dynamic-actions">
+            <p className="shell-dynamic-hint">{t("prefs.colorStyle.dynamicHint")}</p>
+            <button
+              type="button"
+              className="shell-dynamic-reshuffle"
+              data-tone={tone}
+              onClick={onReshuffleDynamic}
+            >
+              <Dices width={16} height={16} aria-hidden />
+              {t("prefs.colorStyle.reshuffle")}
             </button>
           </div>
         ) : null}

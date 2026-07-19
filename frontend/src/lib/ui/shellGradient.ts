@@ -1,6 +1,6 @@
 /** Shell 统一色：预设渐变与自定义多色点。 */
 
-export type ShellColorStyle = "colorful" | "unified";
+export type ShellColorStyle = "colorful" | "unified" | "dynamic";
 
 export type ShellGradientStop = {
   color: string;
@@ -31,6 +31,8 @@ export type ShellGradient = {
 export type ShellColorPrefs = {
   style: ShellColorStyle;
   gradient: ShellGradient;
+  /** 灵动配色本机种子；换种子即全体 Tab 换色 */
+  dynamicSeed: string;
 };
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -173,6 +175,7 @@ export const DEFAULT_SHELL_COLOR_PREFS: ShellColorPrefs = {
     secondary: { ...DEFAULT_SHELL_GRADIENT.secondary },
     extras: [],
   },
+  dynamicSeed: "astro-default-seed",
 };
 
 export const SHELL_GRADIENT_SWATCH_COLORS = [

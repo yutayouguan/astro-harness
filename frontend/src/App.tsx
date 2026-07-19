@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -80,6 +81,10 @@ import {
 import { FolderTree, Sparkles } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import {
+  dynamicGradientForTab,
+  toneCssVarsFromHex,
+} from "./lib/ui/dynamicGradient";
+import {
   applyShellGradientVars,
   clearShellGradientVars,
 } from "./lib/ui/shellGradient";
@@ -92,8 +97,10 @@ export default function App() {
   const {
     colorStyle,
     gradient,
+    dynamicSeed,
     setColorStyle,
     setGradient,
+    reshuffleDynamic,
     beginGradientEdit,
     previewGradient,
     commitGradientEdit,
@@ -233,26 +240,30 @@ export default function App() {
 
   // ── Nav tone + underlay ───────────────────────────────────────────────────
   const activeTone = NAV.find((n) => n.id === nav)?.tone ?? "blue";
-  /** 统一模式用 custom tone 标记；多彩模式跟随当前 tab */
-  const shellTone = colorStyle === "unified" ? "blue" : activeTone;
+  /** 统一/灵动用 custom gradient；多彩跟随当前 tab 的 tone token */
+  const usesShellGradient = colorStyle === "unified" || colorStyle === "dynamic";
+  const shellTone = usesShellGradient ? "blue" : activeTone;
+  const activeShellGradient = useMemo(() => {
+    if (colorStyle === "unified") return gradient;
+    if (colorStyle === "dynamic") {
+      return dynamicGradientForTab(dynamicSeed, nav, resolved);
+    }
+    return null;
+  }, [colorStyle, gradient, dynamicSeed, nav, resolved]);
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);
-    if (colorStyle === "unified") {
-      applyShellGradientVars(root, gradient);
+    if (activeShellGradient) {
+      applyShellGradientVars(root, activeShellGradient);
     } else {
       clearShellGradientVars(root);
     }
     reassert();
-  }, [shellTone, colorStyle, gradient, reassert]);
+  }, [shellTone, colorStyle, activeShellGradient, reassert]);
   useEffect(() => {
-    void syncWindowUnderlay(
-      resolved,
-      shellTone,
-      colorStyle === "unified" ? gradient : null,
-    );
-  }, [resolved, shellTone, colorStyle, gradient]);
+    void syncWindowUnderlay(resolved, shellTone, activeShellGradient);
+  }, [resolved, shellTone, activeShellGradient]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const contextWindow = resolveContextWindow(
@@ -599,11 +610,19 @@ export default function App() {
                     ? "99+"
                     : String(chat.memoryPendingCount)
                   : null;
+              const dynamicToneStyle =
+                colorStyle === "dynamic"
+                  ? (toneCssVarsFromHex(
+                      dynamicGradientForTab(dynamicSeed, item.id, resolved)
+                        .primary.color,
+                    ) as CSSProperties)
+                  : undefined;
               return (
                 <button
                   key={item.id}
                   className={`nav-item ${nav === item.id ? "active" : ""}`}
-                  data-tone={colorStyle === "unified" ? shellTone : item.tone}
+                  data-tone={usesShellGradient ? shellTone : item.tone}
+                  style={dynamicToneStyle}
                   onClick={() => setNav(item.id)}
                   {...(sidebar.showSidebarLabels
                     ? {}
@@ -853,6 +872,7 @@ export default function App() {
                   onPreviewGradient={previewGradient}
                   onCommitCustomGradient={commitGradientEdit}
                   onCancelCustomGradient={cancelGradientEdit}
+                  onReshuffleDynamic={reshuffleDynamic}
                   tone={shellTone}
                   chatDisplayPrefs={chatDisplayPrefs}
                   onChatVerbosityChange={setVerbosity}

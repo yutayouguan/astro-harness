@@ -213,7 +213,7 @@ html[data-theme="light"] .app-shell[data-tone="teal"] {
 }
 
 /* 统一模式自定义双色点渐变（位置与 RGB 由 JS 写入） */
-html[data-theme="dark"][data-color-style="unified"] .app-shell {
+html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
@@ -248,7 +248,7 @@ html[data-theme="dark"][data-color-style="unified"] .app-shell {
     linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
 }
 
-html[data-theme="light"][data-color-style="unified"] .app-shell {
+html[data-theme="light"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),

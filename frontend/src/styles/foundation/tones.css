@@ -150,45 +150,45 @@ html[data-tone="teal"] {
  * 统一色彩：强调色跟随 --unified-tone（由 JS 写入起始色）。
  * Skills 卡片哈希色不在此重映射（各自 class 仍指向原 token）。
  */
-html[data-color-style="unified"] .app-shell,
-html[data-color-style="unified"] .app-shell[data-tone],
-html[data-color-style="unified"] .app-shell[data-tone] .sidebar {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell[data-tone] .sidebar {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
   --shell-tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
 }
 
-html[data-color-style="unified"] .nav-item,
-html[data-color-style="unified"] .nav-item[data-tone],
-html[data-color-style="unified"] .page-title-icon,
-html[data-color-style="unified"] .page-title-icon[data-tone],
-html[data-color-style="unified"] .content-title,
-html[data-color-style="unified"] .content-title[data-tone],
-html[data-color-style="unified"] .sidebar-pin-btn,
-html[data-color-style="unified"] .sidebar-pin-btn[data-tone],
-html[data-color-style="unified"] .sidebar-toggle,
-html[data-color-style="unified"] .sidebar-toggle[data-tone] {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .nav-item,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .nav-item[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .page-title-icon,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .page-title-icon[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-title[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-pin-btn,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-pin-btn[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-toggle,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-toggle[data-tone] {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 /* 标题曾用 color: var(--tone-blue) 写死，需直接覆盖 */
-html[data-color-style="unified"] .content-title,
-html[data-color-style="unified"] .content-title[data-tone] {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-title[data-tone] {
   color: var(--unified-tone, var(--tone-blue));
 }
 
-html[data-color-style="unified"] .sidebar-logo,
-html[data-color-style="unified"] .sidebar-brand-text {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-logo,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar-brand-text {
   --tone: var(--unified-tone, var(--tone-blue));
   --astro-mark-c0: color-mix(in srgb, var(--unified-tone, #2563eb) 82%, #0b1020 18%);
   --astro-mark-c1: var(--unified-tone, #2563eb);
   --astro-mark-c2: color-mix(in srgb, var(--unified-tone, #2563eb) 60%, #ffffff 40%);
 }
 
-html[data-color-style="unified"] .content-pane {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-pane {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
@@ -196,7 +196,7 @@ html[data-color-style="unified"] .content-pane {
   --accent-2: var(--unified-tone, var(--tone-blue));
 }
 
-html[data-color-style="unified"] .memory-panel {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .memory-panel {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
@@ -205,8 +205,8 @@ html[data-color-style="unified"] .memory-panel {
   --tone-green-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .workspace-panel,
-html[data-color-style="unified"] .filespace-panel {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .workspace-panel,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .filespace-panel {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
@@ -215,13 +215,13 @@ html[data-color-style="unified"] .filespace-panel {
   --tone-purple-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .content-header {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .content-header {
   --tone-purple: var(--unified-tone, var(--tone-blue));
   --tone-purple-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-purple-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .agent-tools-page {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .agent-tools-page {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
@@ -230,7 +230,7 @@ html[data-color-style="unified"] .agent-tools-page {
   --tone-orange-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .skills-page {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .skills-page {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
@@ -239,7 +239,7 @@ html[data-color-style="unified"] .skills-page {
   --tone-indigo-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .cron-page {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .cron-page {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
@@ -248,7 +248,7 @@ html[data-color-style="unified"] .cron-page {
   --tone-teal-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .insights-panel {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .insights-panel {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
@@ -257,14 +257,14 @@ html[data-color-style="unified"] .insights-panel {
   --tone-amber-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .providers-page {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .providers-page {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-color-style="unified"] .prefs-page,
-html[data-color-style="unified"] .preferences-page {
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-page,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .preferences-page {
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
