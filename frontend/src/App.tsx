@@ -39,6 +39,7 @@ import { useChatSession } from "./hooks/chat/useChatSession";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
 import { useProviders } from "./hooks/providers/useProviders";
+import { useShellColorStyle } from "./hooks/app/useShellColorStyle";
 import { useSidebar } from "./hooks/app/useSidebar";
 import { useTheme } from "./hooks/app/useTheme";
 import { useTransientToast } from "./hooks/ui/useTransientToast";
@@ -84,6 +85,7 @@ const NAV_ROW_PITCH_PX = 44;
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
   const { mode, setMode, resolved, reassert } = useTheme();
+  const { colorStyle, setColorStyle } = useShellColorStyle();
   useBeautifyTips();
   const { t, locale } = useI18n();
   const { prefs: chatDisplayPrefs, setVerbosity, setToggle } = useChatDisplayPrefs();
@@ -218,13 +220,15 @@ export default function App() {
 
   // ── Nav tone + underlay ───────────────────────────────────────────────────
   const activeTone = NAV.find((n) => n.id === nav)?.tone ?? "blue";
+  /** 统一模式锁定 brand blue；多彩模式跟随当前 tab */
+  const shellTone = colorStyle === "unified" ? "blue" : activeTone;
   useEffect(() => {
-    document.documentElement.setAttribute("data-tone", activeTone);
+    document.documentElement.setAttribute("data-tone", shellTone);
     reassert();
-  }, [activeTone, reassert]);
+  }, [shellTone, reassert]);
   useEffect(() => {
-    void syncWindowUnderlay(resolved, activeTone);
-  }, [resolved, activeTone]);
+    void syncWindowUnderlay(resolved, shellTone);
+  }, [resolved, shellTone]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const contextWindow = resolveContextWindow(
@@ -483,7 +487,6 @@ export default function App() {
 
   // ── Layout helpers ────────────────────────────────────────────────────────
   const meta = PAGE_META[nav];
-  const activeToneData = activeTone;
   const ActiveIcon = NAV.find((n) => n.id === nav)?.Icon ?? IconChat;
   const activeNavIndex = NAV.findIndex((item) => item.id === nav);
   const sidebarNavStyle = {
@@ -494,7 +497,7 @@ export default function App() {
   return (
     <div
       className={`app-shell ${chatExpanded && nav === "chat" ? "is-chat-expanded" : ""} ${winChrome.windowMaximized ? "is-maximized" : ""}`}
-      data-tone={activeToneData}
+      data-tone={shellTone}
     >
       <div
         className="native-drag-region"
@@ -507,7 +510,7 @@ export default function App() {
         <button
           type="button"
           className="sidebar-pin-btn"
-          data-tone={activeTone}
+          data-tone={shellTone}
           onClick={sidebar.toggleSidebar}
           title={sidebar.sidebarPinned ? t("sidebar.unpin") : t("sidebar.pin")}
           aria-label={sidebar.sidebarPinned ? t("sidebar.unpinAria") : t("sidebar.pinAria")}
@@ -545,7 +548,7 @@ export default function App() {
               <button
                 type="button"
                 className="sidebar-pin-btn"
-                data-tone={activeTone}
+                data-tone={shellTone}
                 onClick={sidebar.toggleSidebarLabels}
                 title={sidebar.sidebarLabels ? t("sidebar.hideLabels") : t("sidebar.showLabels")}
                 aria-label={
@@ -817,7 +820,9 @@ export default function App() {
                 <PreferencesPanel
                   mode={mode}
                   onChange={setMode}
-                  tone={activeTone}
+                  colorStyle={colorStyle}
+                  onColorStyleChange={setColorStyle}
+                  tone={shellTone}
                   chatDisplayPrefs={chatDisplayPrefs}
                   onChatVerbosityChange={setVerbosity}
                   onChatToggleChange={setToggle}

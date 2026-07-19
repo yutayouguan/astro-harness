@@ -1054,6 +1054,13 @@ export const zh = {
   "prefs.theme.auto": "自动",
   "prefs.theme.autoDesc": "跟随系统外观设置",
 
+  "prefs.colorStyle.title": "色彩风格",
+  "prefs.colorStyle.sub": "背景随页面变色，或全局使用同一氛围色",
+  "prefs.colorStyle.colorful": "多彩",
+  "prefs.colorStyle.colorfulDesc": "每个页面有专属色调，切换时背景随之变化",
+  "prefs.colorStyle.unified": "统一",
+  "prefs.colorStyle.unifiedDesc": "全局固定氛围色，侧栏图标仍保留各自颜色",
+
   "prefs.appIcon.title": "应用图标",
   "prefs.appIcon.sub": "切换托盘、程序坞与窗口图标，选择保存在本机并在启动时应用",
   "prefs.appIcon.finderNote": "注：已安装应用在访达 / 任务栏的图标为安装包内置，不随此设置更改；仅影响托盘、macOS 程序坞与 Windows/Linux 窗口图标。",
@@ -2543,6 +2550,13 @@ export const en: Record<MessageKey, string> = {
   "prefs.theme.darkDesc": "Deep purple glass for night use",
   "prefs.theme.auto": "Auto",
   "prefs.theme.autoDesc": "Follow system appearance",
+
+  "prefs.colorStyle.title": "Color style",
+  "prefs.colorStyle.sub": "Tint the shell per page, or keep one accent everywhere",
+  "prefs.colorStyle.colorful": "Colorful",
+  "prefs.colorStyle.colorfulDesc": "Each page has its own tint; the background follows as you switch",
+  "prefs.colorStyle.unified": "Unified",
+  "prefs.colorStyle.unifiedDesc": "One ambient tint for the shell; nav icons stay colorful",
 
   "prefs.appIcon.title": "App icon",
   "prefs.appIcon.sub": "Switch the tray, dock, and window icon. Saved locally and applied on launch.",

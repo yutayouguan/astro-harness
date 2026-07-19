@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Blend,
   Brain,
   Clock,
+  Palette,
   Plug,
   ScrollText,
   Sparkles,
@@ -14,6 +16,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useAppIcon } from "../../hooks/settings/useAppIcon";
 import type { AppIconId } from "../../types";
+import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
 import type { ThemeMode } from "../../hooks/app/useTheme";
 import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -42,7 +45,10 @@ type Props = {
   /** 当前主题模式 */
   mode: ThemeMode;
   onChange: (mode: ThemeMode) => void;
-  /** 当前 tab 主题色：blue | green | purple | orange | pink */
+  /** Shell 色彩风格：多彩 / 统一 */
+  colorStyle: ShellColorStyle;
+  onColorStyleChange: (style: ShellColorStyle) => void;
+  /** 当前 shell 主题色：blue | green | purple | orange | pink */
   tone?: string;
   chatDisplayPrefs: ChatDisplayPrefs;
   onChatVerbosityChange: (verbosity: ChatVerbosity) => void;
@@ -110,6 +116,8 @@ const TOGGLE_KEYS: {
 export default function PreferencesPanel({
   mode,
   onChange,
+  colorStyle,
+  onColorStyleChange,
   tone = "pink",
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
@@ -175,6 +183,26 @@ export default function PreferencesPanel({
     },
   ];
 
+  const colorStyleOptions: {
+    id: ShellColorStyle;
+    label: string;
+    desc: string;
+    Icon: LucideIcon;
+  }[] = [
+    {
+      id: "colorful",
+      label: t("prefs.colorStyle.colorful"),
+      desc: t("prefs.colorStyle.colorfulDesc"),
+      Icon: Palette,
+    },
+    {
+      id: "unified",
+      label: t("prefs.colorStyle.unified"),
+      desc: t("prefs.colorStyle.unifiedDesc"),
+      Icon: Blend,
+    },
+  ];
+
   const langOptions: {
     id: Locale;
     label: string;
@@ -216,6 +244,8 @@ export default function PreferencesPanel({
 
   const ModeIcon =
     themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
+  const ColorStyleIcon =
+    colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
 
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
@@ -290,6 +320,45 @@ export default function PreferencesPanel({
               className={`theme-option ${mode === id ? "active" : ""}`}
               data-tone={tone}
               onClick={() => onChange(id)}
+            >
+              <span className="theme-option-icon" aria-hidden>
+                <Icon />
+              </span>
+              <span className="theme-option-text">
+                <span className="theme-option-label">{label}</span>
+                <span className="theme-option-desc">{desc}</span>
+              </span>
+              <span className="theme-option-check" aria-hidden />
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="prefs-card">
+        <div className="prefs-card-head">
+          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+            <ColorStyleIcon width={22} height={22} />
+          </div>
+          <div>
+            <h2 className="prefs-card-title">{t("prefs.colorStyle.title")}</h2>
+            <p className="prefs-card-sub">{t("prefs.colorStyle.sub")}</p>
+          </div>
+        </div>
+
+        <div
+          className="theme-options"
+          role="radiogroup"
+          aria-label={t("prefs.colorStyle.title")}
+        >
+          {colorStyleOptions.map(({ id, label, desc, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={colorStyle === id}
+              className={`theme-option ${colorStyle === id ? "active" : ""}`}
+              data-tone={tone}
+              onClick={() => onColorStyleChange(id)}
             >
               <span className="theme-option-icon" aria-hidden>
                 <Icon />
