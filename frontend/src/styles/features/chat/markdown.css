@@ -2737,6 +2737,19 @@ html[data-theme="dark"] .chat-agent-icons {
   gap: 12px;
 }
 
+.chat-agent-icons-grid .chat-agent-icon-preview {
+  max-height: 96px;
+  border-radius: 16px;
+}
+
+.chat-agent-icons-grid .chat-agent-icon-slot {
+  height: 100%;
+}
+
+.chat-agent-icons-grid .chat-agent-icon-slot-meta {
+  flex: 1;
+}
+
 .chat-agent-icon-slot {
   --tone: var(--tone-blue);
   --tone-soft: var(--tone-blue-soft);

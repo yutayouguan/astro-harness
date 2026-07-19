@@ -284,85 +284,87 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
             <p className="chat-agent-icons-sub">{t("chat.agentIconsSub")}</p>
           </div>
 
-          <div
-            className="chat-agent-icon-slot tone-avatar is-row"
-            data-tone="purple"
-            style={{ animationDelay: "0.14s" }}
-          >
-            <button
-              type="button"
-              className={`chat-agent-icon-preview ${avatar.previewUrl ? "has-image" : ""}`}
-              onClick={openAvatar}
-              aria-label={t("chat.agentCoversTitle")}
+          <div className="chat-agent-icons-grid">
+            <div
+              className="chat-agent-icon-slot tone-avatar"
+              data-tone="purple"
+              style={{ animationDelay: "0.14s" }}
             >
-              <span className="chat-agent-icon-preview-glow" aria-hidden />
-              {avatar.previewUrl ? (
-                <img src={avatar.previewUrl} alt="" draggable={false} />
-              ) : (
-                <span className="chat-agent-icon-fallback">{initial}</span>
-              )}
-            </button>
-            <div className="chat-agent-icon-slot-meta">
-              <span className="chat-agent-icon-slot-label">{t("chat.agentCoversTitle")}</span>
-              <span className="chat-agent-icon-slot-hint">{t("chat.agentCoversSub")}</span>
-              <div className="chat-agent-icon-actions">
-                <button type="button" className="chat-agent-icon-btn" onClick={openAvatar}>
-                  {avatar.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
-                </button>
+              <button
+                type="button"
+                className={`chat-agent-icon-preview ${avatar.previewUrl ? "has-image" : ""}`}
+                onClick={openAvatar}
+                aria-label={t("chat.agentCoversTitle")}
+              >
+                <span className="chat-agent-icon-preview-glow" aria-hidden />
                 {avatar.previewUrl ? (
-                  <button
-                    type="button"
-                    className="chat-agent-icon-btn subtle"
-                    onClick={() => void clear("avatar")}
-                  >
-                    {t("chat.agentIconClear")}
+                  <img src={avatar.previewUrl} alt="" draggable={false} />
+                ) : (
+                  <span className="chat-agent-icon-fallback">{initial}</span>
+                )}
+              </button>
+              <div className="chat-agent-icon-slot-meta">
+                <span className="chat-agent-icon-slot-label">{t("chat.agentCoversTitle")}</span>
+                <span className="chat-agent-icon-slot-hint">{t("chat.agentCoversSub")}</span>
+                <div className="chat-agent-icon-actions">
+                  <button type="button" className="chat-agent-icon-btn" onClick={openAvatar}>
+                    {avatar.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
                   </button>
-                ) : null}
+                  {avatar.previewUrl ? (
+                    <button
+                      type="button"
+                      className="chat-agent-icon-btn subtle"
+                      onClick={() => void clear("avatar")}
+                    >
+                      {t("chat.agentIconClear")}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div
-            className="chat-agent-icon-slot tone-emoji is-row"
-            data-tone="blue"
-            style={{ animationDelay: "0.2s" }}
-          >
-            <button
-              type="button"
-              className={`chat-agent-icon-preview ${emoji.previewUrl ? "has-image" : ""}`}
-              onClick={openLucide}
-              aria-label={t("chat.agentIconEmoji")}
-              disabled={lucideBusy}
+            <div
+              className="chat-agent-icon-slot tone-emoji"
+              data-tone="blue"
+              style={{ animationDelay: "0.2s" }}
             >
-              <span className="chat-agent-icon-preview-glow" aria-hidden />
-              {emoji.previewUrl ? (
-                <img src={emoji.previewUrl} alt="" draggable={false} />
-              ) : (
-                <span className="chat-agent-icon-fallback">{initial}</span>
-              )}
-            </button>
-            <div className="chat-agent-icon-slot-meta">
-              <span className="chat-agent-icon-slot-label">{t("chat.agentIconEmoji")}</span>
-              <span className="chat-agent-icon-slot-hint">{t("chat.agentIconEmojiHint")}</span>
-              <div className="chat-agent-icon-actions">
-                <button
-                  type="button"
-                  className="chat-agent-icon-btn"
-                  onClick={openLucide}
-                  disabled={lucideBusy}
-                >
-                  {emoji.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
-                </button>
+              <button
+                type="button"
+                className={`chat-agent-icon-preview ${emoji.previewUrl ? "has-image" : ""}`}
+                onClick={openLucide}
+                aria-label={t("chat.agentIconEmoji")}
+                disabled={lucideBusy}
+              >
+                <span className="chat-agent-icon-preview-glow" aria-hidden />
                 {emoji.previewUrl ? (
+                  <img src={emoji.previewUrl} alt="" draggable={false} />
+                ) : (
+                  <span className="chat-agent-icon-fallback">{initial}</span>
+                )}
+              </button>
+              <div className="chat-agent-icon-slot-meta">
+                <span className="chat-agent-icon-slot-label">{t("chat.agentIconEmoji")}</span>
+                <span className="chat-agent-icon-slot-hint">{t("chat.agentIconEmojiHint")}</span>
+                <div className="chat-agent-icon-actions">
                   <button
                     type="button"
-                    className="chat-agent-icon-btn subtle"
-                    onClick={() => void clear("emoji")}
+                    className="chat-agent-icon-btn"
+                    onClick={openLucide}
                     disabled={lucideBusy}
                   >
-                    {t("chat.agentIconClear")}
+                    {emoji.previewUrl ? t("chat.agentIconChange") : t("chat.agentIconPick")}
                   </button>
-                ) : null}
+                  {emoji.previewUrl ? (
+                    <button
+                      type="button"
+                      className="chat-agent-icon-btn subtle"
+                      onClick={() => void clear("emoji")}
+                      disabled={lucideBusy}
+                    >
+                      {t("chat.agentIconClear")}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
