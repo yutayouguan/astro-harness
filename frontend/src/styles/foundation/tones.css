@@ -324,3 +324,56 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .preferences
   --tone-twilight-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-twilight-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
+
+/*
+ * WebKit backdrop-filter 换色滞后：短暂关闭磨砂，用实色顶住观感。
+ * flushGlassBackdrop 会在两帧后移除 data-glass-flush。
+ */
+html[data-glass-flush] .sidebar,
+html[data-glass-flush] .sidebar-nav-indicator,
+html[data-glass-flush] .prefs-card,
+html[data-glass-flush] .prefs-section,
+html[data-glass-flush] .prefs-category-nav,
+html[data-glass-flush] .theme-option,
+html[data-glass-flush] .prefs-icon-badge,
+html[data-glass-flush] .content-pane {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 统一/灵动：加强实色染色，少依赖玻璃背后的模糊采样 */
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar {
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--unified-tone-soft, transparent) 55%, transparent),
+      color-mix(in srgb, var(--unified-tone-soft, transparent) 22%, transparent)
+    ),
+    var(--sidebar-bg);
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-section {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--tone-soft) 52%, var(--glass-panel, transparent));
+}
+
+html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,
+html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-section {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 42%, rgba(8, 6, 18, 0.62));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-category-nav {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
+    color-mix(in srgb, var(--tone-soft) 40%, var(--glass-panel, transparent));
+}
+
+html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-category-nav {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 34%, rgba(8, 6, 18, 0.6));
+}

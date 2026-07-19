@@ -103,7 +103,7 @@ export function dynamicGradientForTab(
 export function toneCssVarsFromHex(hex: string): Record<string, string> {
   return {
     "--tone": hex,
-    "--tone-soft": `color-mix(in srgb, ${hex} 18%, transparent)`,
-    "--tone-glow": `color-mix(in srgb, ${hex} 35%, transparent)`,
+    "--tone-soft": `color-mix(in srgb, ${hex} 28%, transparent)`,
+    "--tone-glow": `color-mix(in srgb, ${hex} 40%, transparent)`,
   };
 }

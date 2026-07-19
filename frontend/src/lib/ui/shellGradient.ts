@@ -343,14 +343,34 @@ export function applyShellGradientVars(
     el.style.setProperty(`--shell-grad-e${index + 1}a`, "0");
   }
   el.style.setProperty("--unified-tone", gradient.primary.color);
+  // soft 稍提高：玻璃层在 WebKit 里可能滞后，实色染色要能立刻跟上
   el.style.setProperty(
     "--unified-tone-soft",
-    `color-mix(in srgb, ${gradient.primary.color} 18%, transparent)`,
+    `color-mix(in srgb, ${gradient.primary.color} 28%, transparent)`,
   );
   el.style.setProperty(
     "--unified-tone-glow",
-    `color-mix(in srgb, ${gradient.primary.color} 35%, transparent)`,
+    `color-mix(in srgb, ${gradient.primary.color} 40%, transparent)`,
   );
+}
+
+let glassFlushRaf = 0;
+
+/**
+ * WebKit/Tauri 下 backdrop-filter 会缓存模糊采样；
+ * 壳层背景已变时，侧栏/卡片玻璃可能仍显示旧色约数百毫秒～1s。
+ * 关一帧再开，强制重建玻璃层。
+ */
+export function flushGlassBackdrop(root: HTMLElement = document.documentElement): void {
+  if (typeof window === "undefined") return;
+  root.setAttribute("data-glass-flush", "1");
+  if (glassFlushRaf) cancelAnimationFrame(glassFlushRaf);
+  glassFlushRaf = requestAnimationFrame(() => {
+    glassFlushRaf = requestAnimationFrame(() => {
+      root.removeAttribute("data-glass-flush");
+      glassFlushRaf = 0;
+    });
+  });
 }
 
 export function clearShellGradientVars(el: HTMLElement): void {

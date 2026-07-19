@@ -88,6 +88,7 @@ import {
 import {
   applyShellGradientVars,
   clearShellGradientVars,
+  flushGlassBackdrop,
 } from "./lib/ui/shellGradient";
 import type { ProviderModelsResult } from "./types";
 
@@ -251,13 +252,14 @@ export default function App() {
     }
     return null;
   }, [colorStyle, gradient, dynamicSeed, nav, resolved]);
-  // layout：在绘制前写 CSS 变量，避免壳层先变、导航/卡片慢一帧
+  // layout：在绘制前写 CSS 变量，并刷新玻璃层（避免 backdrop-filter 缓存旧色）
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);
     if (activeShellGradient) {
       applyShellGradientVars(root, activeShellGradient);
+      flushGlassBackdrop(root);
     } else {
       clearShellGradientVars(root);
     }
