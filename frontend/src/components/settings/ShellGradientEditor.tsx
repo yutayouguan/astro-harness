@@ -302,6 +302,12 @@ export default function ShellGradientEditor({
             />
           ))}
           <label className="shell-grad-custom-color" title={t("prefs.colorStyle.pickColor")}>
+            <span className="shell-grad-custom-color-core" aria-hidden />
+            <span
+              className="shell-grad-custom-color-dot"
+              style={{ background: selected?.color ?? "#2563eb" }}
+              aria-hidden
+            />
             <input
               type="color"
               value={selected?.color ?? "#2563eb"}
