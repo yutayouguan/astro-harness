@@ -224,6 +224,20 @@ export default function App() {
     return () => { cancelled = true; };
   }, [activeProvider?.id, activeProvider?.model]);
 
+  // ── ⌘/Ctrl+N：聊天页新建会话 ─────────────────────────────────────────────
+  useEffect(() => {
+    if (nav !== "chat") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.key.toLowerCase() !== "n") return;
+      if (e.isComposing) return;
+      e.preventDefault();
+      void startNewChat();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [nav, startNewChat]);
+
   // ── macOS open-preferences / open-about listener ─────────────────────────
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
@@ -288,6 +302,11 @@ export default function App() {
     backendId: activeProvider?.backend_id,
   });
   const statusText = chat.statusDetail ?? t(`status.${chat.statusPhase}` as MessageKey);
+  const newChatShortcut =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+      ? "⌘N"
+      : "Ctrl+N";
+  const newChatTitle = `${t("chat.newChat")} (${newChatShortcut})`;
 
   // ── Thinking callbacks ────────────────────────────────────────────────────
   const onThinkingLevelChange = useCallback(
@@ -756,8 +775,8 @@ export default function App() {
                     type="button"
                     className="header-icon-btn"
                     onClick={() => void startNewChat()}
-                    title={t("chat.newChat")}
-                    aria-label={t("chat.newChat")}
+                    title={newChatTitle}
+                    aria-label={newChatTitle}
                   >
                     <IconNewChat width={16} height={16} />
                   </button>
