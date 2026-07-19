@@ -39,10 +39,6 @@ html.zooming #root {
   background: var(--window-underlay, var(--bg1)) !important;
 }
 
-/* 缩放期间用纯色覆盖复杂渐层，减少每帧重绘开销，同时消除边缘色差 */
-html.zooming .app-shell {
-  background: var(--window-underlay, var(--bg1)) !important;
-}
 
 /* Overlay 标题栏：红绿灯约占 12–38px 高、左侧约 78px 宽 */
 :root {
