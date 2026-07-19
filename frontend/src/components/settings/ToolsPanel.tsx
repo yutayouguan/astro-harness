@@ -886,90 +886,90 @@ export default function ToolsPanel({
 
   return (
     <div className="agent-tools-page">
-      <div
-        className="tool-main-tabs"
-        role="tablist"
-        aria-label={t("tools.mainTabs")}
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "builtin"}
-          className={`tool-main-tab ${tab === "builtin" ? "active" : ""}`}
-          onClick={() => setTab("builtin")}
+      <div className="tools-toolbar">
+        <div
+          className="tool-main-tabs"
+          role="tablist"
+          aria-label={t("tools.mainTabs")}
         >
-          <Wrench size={15} strokeWidth={2.25} aria-hidden />
-          {t("tools.tab.builtin")}
-          <span className="tool-main-tab-count">{agentTools.length}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "mcp"}
-          className={`tool-main-tab ${tab === "mcp" ? "active" : ""}`}
-          onClick={() => setTab("mcp")}
-        >
-          <McpIcon size={15} />
-          {t("tools.tab.mcp")}
-          {servers.length > 0 && (
-            <span className="tool-main-tab-count">{servers.length}</span>
-          )}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "approvals"}
-          className={`tool-main-tab ${tab === "approvals" ? "active" : ""}`}
-          onClick={() => setTab("approvals")}
-        >
-          <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
-          {t("tools.tab.approvals")}
-        </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "builtin"}
+            className={`tool-main-tab ${tab === "builtin" ? "active" : ""}`}
+            onClick={() => setTab("builtin")}
+          >
+            <Wrench size={15} strokeWidth={2.25} aria-hidden />
+            {t("tools.tab.builtin")}
+            <span className="tool-main-tab-count">{agentTools.length}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "mcp"}
+            className={`tool-main-tab ${tab === "mcp" ? "active" : ""}`}
+            onClick={() => setTab("mcp")}
+          >
+            <McpIcon size={15} />
+            {t("tools.tab.mcp")}
+            {servers.length > 0 && (
+              <span className="tool-main-tab-count">{servers.length}</span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "approvals"}
+            className={`tool-main-tab ${tab === "approvals" ? "active" : ""}`}
+            onClick={() => setTab("approvals")}
+          >
+            <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
+            {t("tools.tab.approvals")}
+          </button>
+        </div>
+
+        {tab !== "approvals" && (
+          <div className="tools-toolbar-end">
+            <ExpandableSearch
+              value={search}
+              onChange={setSearch}
+              placeholderKey="tools.searchPlaceholder"
+            />
+            <div
+              className="tools-view-toggle"
+              role="group"
+              aria-label={t("tools.viewMode")}
+            >
+              {VIEW_OPTIONS.map(({ id, Icon, labelKey }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`tools-view-btn ${viewMode === id ? "is-active" : ""}`}
+                  onClick={() => setViewMode(id)}
+                  title={t(labelKey)}
+                  aria-label={t(labelKey)}
+                  aria-pressed={viewMode === id}
+                >
+                  <Icon />
+                </button>
+              ))}
+            </div>
+            {tab === "mcp" && (
+              <button
+                type="button"
+                className="mcp-add-btn"
+                onClick={() => setShowAdd(true)}
+                title={t("mcpTools.add")}
+                aria-label={t("mcpTools.add")}
+              >
+                <McpIcon size={17} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="agent-tools-body">
-      {tab !== "approvals" && (
-      <div className="panel-agent-toolbar">
-        <div className="panel-agent-toolbar-end">
-          <ExpandableSearch
-            value={search}
-            onChange={setSearch}
-            placeholderKey="tools.searchPlaceholder"
-          />
-          <div
-            className="tools-view-toggle"
-            role="group"
-            aria-label={t("tools.viewMode")}
-          >
-            {VIEW_OPTIONS.map(({ id, Icon, labelKey }) => (
-              <button
-                key={id}
-                type="button"
-                className={`tools-view-btn ${viewMode === id ? "is-active" : ""}`}
-                onClick={() => setViewMode(id)}
-                title={t(labelKey)}
-                aria-label={t(labelKey)}
-                aria-pressed={viewMode === id}
-              >
-                <Icon />
-              </button>
-            ))}
-          </div>
-          {tab === "mcp" && (
-            <button
-              type="button"
-              className="mcp-add-btn"
-              onClick={() => setShowAdd(true)}
-              title={t("mcpTools.add")}
-              aria-label={t("mcpTools.add")}
-            >
-              <McpIcon size={17} />
-            </button>
-          )}
-        </div>
-      </div>
-      )}
-
       <AnimatedSwitch switchKey={tab} className="anim-switch--fill">
       {tab === "builtin" && (
         <>

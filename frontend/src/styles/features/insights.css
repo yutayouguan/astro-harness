@@ -20,35 +20,30 @@
   --insights-warn-soft: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-/* 筛选行：周期右对齐（Agent 已上移标题栏） */
-.insights-panel > .insights-toolbar-filters {
-  flex-wrap: wrap;
-  max-width: 100%;
-  row-gap: 8px;
-  justify-content: flex-end;
-}
-
-/* 导航行：视图 Tab 独占，与筛选行更紧（panel gap 16px 过大） */
-.insights-panel > .insights-view-row {
+/* 顶栏一行：左视图 Tab，右周期筛选 */
+.insights-panel > .insights-toolbar {
   display: flex;
   align-items: center;
-  margin-top: -8px;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
 }
 
 /* View Tab 保持单行，避免 Tracing 被挤换行 */
 .insights-panel .insights-view-tabs {
   flex-wrap: nowrap;
-  flex-shrink: 0;
-  max-width: none;
-  width: max-content;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .insights-panel .insights-period-tabs {
   flex-wrap: nowrap;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* View / Period / Metric 共用分段控件 */

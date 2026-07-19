@@ -695,26 +695,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
 
   return (
     <div className="insights-panel">
-      <div className="panel-agent-toolbar insights-toolbar-filters">
-        <div className="panel-agent-toolbar-end">
-          <div className="insights-seg insights-period-tabs" role="tablist">
-            {PERIOD_TABS.map(({ id, labelKey, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                className={`insights-seg-item insights-period-tab${period === id ? " active" : ""}`}
-                aria-selected={period === id}
-                onClick={() => setPeriod(id)}
-              >
-                <Icon size={15} strokeWidth={2.25} aria-hidden />
-                {t(labelKey)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="insights-view-row">
+      <div className="insights-toolbar">
         <div
           className="insights-seg insights-view-tabs"
           role="tablist"
@@ -728,6 +709,21 @@ export default function InsightsPanel({ active }: { active: boolean }) {
               className={`insights-seg-item insights-view-tab${view === id ? " active" : ""}`}
               aria-selected={view === id}
               onClick={() => setView(id)}
+            >
+              <Icon size={15} strokeWidth={2.25} aria-hidden />
+              {t(labelKey)}
+            </button>
+          ))}
+        </div>
+        <div className="insights-seg insights-period-tabs" role="tablist">
+          {PERIOD_TABS.map(({ id, labelKey, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              className={`insights-seg-item insights-period-tab${period === id ? " active" : ""}`}
+              aria-selected={period === id}
+              onClick={() => setPeriod(id)}
             >
               <Icon size={15} strokeWidth={2.25} aria-hidden />
               {t(labelKey)}

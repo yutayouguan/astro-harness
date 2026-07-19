@@ -60,6 +60,32 @@ html[data-theme="dark"] .cron-pane {
   z-index: 1;
 }
 
+/* 顶栏一行：左 Tab，右操作（搜索 / 视图 / 新建） */
+.cron-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  z-index: 40;
+}
+
+.cron-toolbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+  height: 36px;
+}
+
+.cron-toolbar-end .expandable-search-btn,
+.cron-toolbar-end .expandable-search-field {
+  height: 36px;
+  border-radius: 12px;
+}
+
 .cron-pane-head {
   display: flex;
   align-items: center;
@@ -1838,9 +1864,10 @@ html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
   display: flex;
   gap: 4px;
   padding: 4px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   border-radius: 14px;
   width: fit-content;
+  flex-shrink: 0;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
@@ -2265,7 +2292,7 @@ html[data-theme="dark"] .cron-job-detail-task {
   padding: 7px 14px;
 }
 
-/* History filters — glass toolbar */
+/* History filters — glass toolbar（可嵌在 cron-toolbar 右侧） */
 .cron-history-filters {
   display: flex;
   flex-wrap: wrap;
@@ -2282,6 +2309,15 @@ html[data-theme="dark"] .cron-job-detail-task {
   box-shadow: var(--glass-rim), inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+.cron-toolbar-end.cron-history-filters {
+  margin-bottom: 0;
+  height: auto;
+  min-height: 36px;
+  flex: 1 1 280px;
+  justify-content: flex-end;
+  max-width: min(100%, 640px);
 }
 
 html[data-theme="dark"] .cron-history-filters {

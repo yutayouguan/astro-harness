@@ -1071,29 +1071,28 @@ export default function CronPanel({
   return (
     <div className="cron-page" data-tone="teal">
       <section className="cron-pane">
-        <nav className="cron-tabs" aria-label={t("page.cron.title")}>
-          <button
-            type="button"
-            className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
-            onClick={() => setActiveTab("jobs")}
-          >
-            <ListTodo size={15} strokeWidth={2.25} aria-hidden />
-            {t("cron.tab.jobs")}
-          </button>
-          <button
-            type="button"
-            className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
-            onClick={() => setActiveTab("history")}
-          >
-            <History size={15} strokeWidth={2.25} aria-hidden />
-            {t("cron.tab.history")}
-          </button>
-        </nav>
+        <div className="cron-toolbar">
+          <nav className="cron-tabs" aria-label={t("page.cron.title")}>
+            <button
+              type="button"
+              className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("jobs")}
+            >
+              <ListTodo size={15} strokeWidth={2.25} aria-hidden />
+              {t("cron.tab.jobs")}
+            </button>
+            <button
+              type="button"
+              className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("history")}
+            >
+              <History size={15} strokeWidth={2.25} aria-hidden />
+              {t("cron.tab.history")}
+            </button>
+          </nav>
 
-        <AnimatedSwitch switchKey={activeTab} className="anim-switch--fill">
-        {activeTab === "jobs" && (
-          <header className="cron-pane-head panel-agent-toolbar">
-            <div className="panel-agent-toolbar-end">
+          {activeTab === "jobs" && (
+            <div className="cron-toolbar-end">
               <ExpandableSearch
                 value={search}
                 onChange={setSearch}
@@ -1137,49 +1136,50 @@ export default function CronPanel({
                 <CalendarPlus size={17} strokeWidth={2.2} aria-hidden />
               </button>
             </div>
-          </header>
-        )}
+          )}
 
-        {activeTab === "history" && (
-          <header className="cron-history-filters">
-            <SelectMenu
-              value={filterJobId}
-              onChange={setFilterJobId}
-              options={jobFilterOptions}
-              aria-label={t("cron.history.filterJob")}
-              className="cron-history-filter"
-            />
-            <SelectMenu
-              value={filterAgentId}
-              onChange={setFilterAgentId}
-              options={agentFilterOptions}
-              aria-label={t("cron.history.filterAgent")}
-              className="cron-history-filter"
-            />
-            <input
-              type="date"
-              className="cron-history-date"
-              value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
-              aria-label={t("cron.history.filterDate")}
-              title={t("cron.history.filterDate")}
-            />
-            <input
-              type="date"
-              className="cron-history-date"
-              value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
-              aria-label={t("cron.history.filterDate")}
-              title={t("cron.history.filterDate")}
-            />
-          </header>
-        )}
+          {activeTab === "history" && (
+            <div className="cron-toolbar-end cron-history-filters">
+              <SelectMenu
+                value={filterJobId}
+                onChange={setFilterJobId}
+                options={jobFilterOptions}
+                aria-label={t("cron.history.filterJob")}
+                className="cron-history-filter"
+              />
+              <SelectMenu
+                value={filterAgentId}
+                onChange={setFilterAgentId}
+                options={agentFilterOptions}
+                aria-label={t("cron.history.filterAgent")}
+                className="cron-history-filter"
+              />
+              <input
+                type="date"
+                className="cron-history-date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                aria-label={t("cron.history.filterDate")}
+                title={t("cron.history.filterDate")}
+              />
+              <input
+                type="date"
+                className="cron-history-date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                aria-label={t("cron.history.filterDate")}
+                title={t("cron.history.filterDate")}
+              />
+            </div>
+          )}
+        </div>
 
-        {error && <p className="cron-error">{error}</p>}
-
+        <AnimatedSwitch switchKey={activeTab} className="anim-switch--fill">
         {activeTab === "jobs" && loading && filteredJobs.length === 0 && (
           <p className="cron-loading">{t("workspace.loading")}</p>
         )}
+
+        {error && <p className="cron-error">{error}</p>}
 
         {activeTab === "jobs" && !loading && filteredJobs.length === 0 && !error && (
           <EmptyIllustration

@@ -2645,6 +2645,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
 
   return (
     <div className="skills-page" data-tone="indigo">
+      <div className="skills-toolbar">
       <div
         className="skills-main-tabs"
         role="tablist"
@@ -2704,6 +2705,186 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
           {t("skills.tab.online")}
         </button>
       </div>
+      <div className="skills-toolbar-end">
+        {tab === "installed" && (
+          <>
+            <SelectMenu
+              size="sm"
+              value={installedSort}
+              onChange={(v) => setInstalledSort(v as CallSort)}
+              options={callSortOptions}
+              aria-label={t("skills.sort.label")}
+            />
+            <ExpandableSearch
+              value={installedQuery}
+              onChange={setInstalledQuery}
+              placeholderKey="skills.installedSearchPlaceholder"
+            />
+            {viewToggle}
+            <button
+              type="button"
+              className="skills-icon-btn"
+              onClick={() => {
+                void refreshInstalled({ mode: "hard" });
+                void refreshSkillCalls({ force: true });
+              }}
+              disabled={loadingInstalled}
+              title={
+                loadingInstalled ? t("skills.refreshing") : t("skills.refresh")
+              }
+              aria-label={
+                loadingInstalled ? t("skills.refreshing") : t("skills.refresh")
+              }
+            >
+              <IconRefresh
+                width={16}
+                height={16}
+                className={loadingInstalled ? "is-spin" : undefined}
+              />
+            </button>
+          </>
+        )}
+        {tab === "machine" && (
+          <>
+            <SelectMenu
+              size="sm"
+              value={machineLinkFilter}
+              onChange={(v) => setMachineLinkFilter(v as MachineLinkFilter)}
+              options={machineLinkFilterOptions}
+              aria-label={t("skills.filter.linkAll")}
+            />
+            <SelectMenu
+              size="sm"
+              value={machineSort}
+              onChange={(v) => setMachineSort(v as CallSort)}
+              options={callSortOptions}
+              aria-label={t("skills.sort.label")}
+            />
+            <ExpandableSearch
+              value={machineQuery}
+              onChange={setMachineQuery}
+              placeholderKey="skills.installedSearchPlaceholder"
+            />
+            {viewToggle}
+            <button
+              type="button"
+              className="skills-icon-btn"
+              onClick={() => {
+                void refreshMachine({ mode: "hard" });
+                void refreshSkillCalls({ force: true });
+              }}
+              disabled={loadingMachine}
+              title={
+                loadingMachine ? t("skills.refreshing") : t("skills.refresh")
+              }
+              aria-label={
+                loadingMachine ? t("skills.refreshing") : t("skills.refresh")
+              }
+            >
+              <IconRefresh
+                width={16}
+                height={16}
+                className={loadingMachine ? "is-spin" : undefined}
+              />
+            </button>
+          </>
+        )}
+        {tab === "updates" && (
+          <>
+            <div className="skills-tab-shell">
+              <button
+                type="button"
+                className="skills-action-btn"
+                disabled={
+                  checkingUpdates || updatingAll || updatingFolder !== null
+                }
+                onClick={() => void checkSkillUpdates({ force: true })}
+                title={t("skills.checkUpdates")}
+              >
+                {checkingUpdates ? (
+                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+                ) : (
+                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+                )}
+                <span>
+                  {checkingUpdates
+                    ? t("skills.checkingUpdates")
+                    : t("skills.checkUpdates")}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="skills-action-btn primary"
+                disabled={
+                  outdatedCount === 0 ||
+                  updatingAll ||
+                  updatingFolder !== null ||
+                  checkingUpdates
+                }
+                onClick={() => void updateAllSkills()}
+                title={t("skills.updateAll")}
+              >
+                {updatingAll ? (
+                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
+                ) : (
+                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
+                )}
+                <span>{updatingAll ? t("skills.updating") : t("skills.updateAll")}</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              className="skills-icon-btn"
+              onClick={() => {
+                void refreshInstalled({ mode: "hard" });
+                void refreshMachine({ mode: "hard" });
+                void refreshOrigins({ mode: "hard" });
+              }}
+              disabled={loadingInstalled || loadingMachine || loadingOrigins}
+              title={
+                loadingInstalled || loadingMachine || loadingOrigins
+                  ? t("skills.refreshing")
+                  : t("skills.refresh")
+              }
+              aria-label={
+                loadingInstalled || loadingMachine || loadingOrigins
+                  ? t("skills.refreshing")
+                  : t("skills.refresh")
+              }
+            >
+              <IconRefresh
+                width={16}
+                height={16}
+                className={
+                  loadingInstalled || loadingMachine || loadingOrigins
+                    ? "is-spin"
+                    : undefined
+                }
+              />
+            </button>
+          </>
+        )}
+        {tab === "online" && (
+          <>
+            <ExpandableSearch
+              value={query}
+              onChange={(value) => {
+                const prev = query;
+                setQuery(value);
+                if (prev.trim() && !value.trim()) {
+                  persistActiveStoreCache();
+                  activeStoreCacheKeyRef.current = null;
+                  void fetchStorePage(1, false, { mode: "hard" });
+                }
+              }}
+              onSubmit={() => void searchStore()}
+              placeholderKey="skills.searchPlaceholder"
+            />
+            {viewToggle}
+          </>
+        )}
+      </div>
+      </div>
 
       <AnimatedSwitch switchKey={tab} className="anim-switch--fill">
       {tab === "installed" && (
@@ -2716,42 +2897,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
                   .replace("{count}", String(enabledCount))
                   .replace("{total}", String(installed.length))}
               </p>
-            </div>
-            <div className="skills-pane-actions">
-              <SelectMenu
-                size="sm"
-                value={installedSort}
-                onChange={(v) => setInstalledSort(v as CallSort)}
-                options={callSortOptions}
-                aria-label={t("skills.sort.label")}
-              />
-              <ExpandableSearch
-                value={installedQuery}
-                onChange={setInstalledQuery}
-                placeholderKey="skills.installedSearchPlaceholder"
-              />
-              {viewToggle}
-              <button
-                type="button"
-                className="skills-icon-btn"
-                onClick={() => {
-                  void refreshInstalled({ mode: "hard" });
-                  void refreshSkillCalls({ force: true });
-                }}
-                disabled={loadingInstalled}
-                title={
-                  loadingInstalled ? t("skills.refreshing") : t("skills.refresh")
-                }
-                aria-label={
-                  loadingInstalled ? t("skills.refreshing") : t("skills.refresh")
-                }
-              >
-                <IconRefresh
-                  width={16}
-                  height={16}
-                  className={loadingInstalled ? "is-spin" : undefined}
-                />
-              </button>
             </div>
           </header>
 
@@ -2806,49 +2951,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
             <div>
               <h2>{t("skills.machineTitle")}</h2>
               <p>{t("skills.machineSub")}</p>
-            </div>
-            <div className="skills-pane-actions">
-              <SelectMenu
-                size="sm"
-                value={machineLinkFilter}
-                onChange={(v) => setMachineLinkFilter(v as MachineLinkFilter)}
-                options={machineLinkFilterOptions}
-                aria-label={t("skills.filter.linkAll")}
-              />
-              <SelectMenu
-                size="sm"
-                value={machineSort}
-                onChange={(v) => setMachineSort(v as CallSort)}
-                options={callSortOptions}
-                aria-label={t("skills.sort.label")}
-              />
-              <ExpandableSearch
-                value={machineQuery}
-                onChange={setMachineQuery}
-                placeholderKey="skills.installedSearchPlaceholder"
-              />
-              {viewToggle}
-              <button
-                type="button"
-                className="skills-icon-btn"
-                onClick={() => {
-                  void refreshMachine({ mode: "hard" });
-                  void refreshSkillCalls({ force: true });
-                }}
-                disabled={loadingMachine}
-                title={
-                  loadingMachine ? t("skills.refreshing") : t("skills.refresh")
-                }
-                aria-label={
-                  loadingMachine ? t("skills.refreshing") : t("skills.refresh")
-                }
-              >
-                <IconRefresh
-                  width={16}
-                  height={16}
-                  className={loadingMachine ? "is-spin" : undefined}
-                />
-              </button>
             </div>
           </header>
 
@@ -2906,79 +3008,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
               <p className="skills-updates-hint">
                 {t("skills.updateOverwriteHint")}
               </p>
-            </div>
-            <div className="skills-pane-actions">
-              <div className="skills-tab-shell">
-                <button
-                  type="button"
-                  className="skills-action-btn"
-                  disabled={
-                    checkingUpdates || updatingAll || updatingFolder !== null
-                  }
-                  onClick={() => void checkSkillUpdates({ force: true })}
-                  title={t("skills.checkUpdates")}
-                >
-                  {checkingUpdates ? (
-                    <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
-                  ) : (
-                    <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
-                  )}
-                  <span>
-                    {checkingUpdates
-                      ? t("skills.checkingUpdates")
-                      : t("skills.checkUpdates")}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="skills-action-btn primary"
-                  disabled={
-                    outdatedCount === 0 ||
-                    updatingAll ||
-                    updatingFolder !== null ||
-                    checkingUpdates
-                  }
-                  onClick={() => void updateAllSkills()}
-                  title={t("skills.updateAll")}
-                >
-                  {updatingAll ? (
-                    <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
-                  ) : (
-                    <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
-                  )}
-                  <span>{updatingAll ? t("skills.updating") : t("skills.updateAll")}</span>
-                </button>
-              </div>
-              <button
-                type="button"
-                className="skills-icon-btn"
-                onClick={() => {
-                  void refreshInstalled({ mode: "hard" });
-                  void refreshMachine({ mode: "hard" });
-                  void refreshOrigins({ mode: "hard" });
-                }}
-                disabled={loadingInstalled || loadingMachine || loadingOrigins}
-                title={
-                  loadingInstalled || loadingMachine || loadingOrigins
-                    ? t("skills.refreshing")
-                    : t("skills.refresh")
-                }
-                aria-label={
-                  loadingInstalled || loadingMachine || loadingOrigins
-                    ? t("skills.refreshing")
-                    : t("skills.refresh")
-                }
-              >
-                <IconRefresh
-                  width={16}
-                  height={16}
-                  className={
-                    loadingInstalled || loadingMachine || loadingOrigins
-                      ? "is-spin"
-                      : undefined
-                  }
-                />
-              </button>
             </div>
           </header>
 
@@ -3111,23 +3140,6 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
             <div>
               <h2>{t("skills.storeTitle")}</h2>
               <p>{t("skills.storeSub")}</p>
-            </div>
-            <div className="skills-pane-actions">
-              <ExpandableSearch
-                value={query}
-                onChange={(value) => {
-                  const prev = query;
-                  setQuery(value);
-                  if (prev.trim() && !value.trim()) {
-                    persistActiveStoreCache();
-                    activeStoreCacheKeyRef.current = null;
-                    void fetchStorePage(1, false, { mode: "hard" });
-                  }
-                }}
-                onSubmit={() => void searchStore()}
-                placeholderKey="skills.searchPlaceholder"
-              />
-              {viewToggle}
             </div>
           </header>
 
