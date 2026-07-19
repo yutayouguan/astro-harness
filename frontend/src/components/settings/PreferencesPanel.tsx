@@ -1,5 +1,5 @@
 /** 偏好设置（主题、语言、日志诊断、关于）。 */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -22,8 +22,8 @@ import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/chat/useChatDi
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import {
-  gradientCssBackground,
   gradientFromPreset,
+  gradientSwatchBackground,
   SHELL_GRADIENT_PRESETS,
   type ShellGradient,
 } from "../../lib/ui/shellGradient";
@@ -408,11 +408,18 @@ export default function PreferencesPanel({
                   role="radio"
                   aria-checked={selected}
                   className={`shell-color-swatch ${selected ? "is-active" : ""}`}
-                  style={{ background: gradientCssBackground(g) }}
+                  style={
+                    {
+                      "--swatch-bg": gradientSwatchBackground(g),
+                      "--swatch-ring": g.primary.color,
+                    } as CSSProperties
+                  }
                   title={t(preset.labelKey)}
                   aria-label={t(preset.labelKey)}
                   onClick={() => onGradientChange(g)}
-                />
+                >
+                  <span className="shell-color-swatch-core" aria-hidden />
+                </button>
               );
             })}
             <button
@@ -422,6 +429,11 @@ export default function PreferencesPanel({
               className={`shell-color-swatch shell-color-swatch--custom ${
                 gradient.id === "custom" ? "is-active" : ""
               }`}
+              style={
+                {
+                  "--swatch-ring": gradient.primary.color,
+                } as CSSProperties
+              }
               title={t("prefs.colorStyle.custom")}
               aria-label={t("prefs.colorStyle.custom")}
               onClick={() => {
@@ -429,7 +441,9 @@ export default function PreferencesPanel({
                 setGradientEditorOpen(true);
               }}
             >
-              <span aria-hidden>+</span>
+              <span className="shell-color-swatch-core" aria-hidden>
+                <span className="shell-color-swatch-plus">+</span>
+              </span>
             </button>
           </div>
         ) : null}

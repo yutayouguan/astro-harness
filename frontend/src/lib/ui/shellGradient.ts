@@ -256,13 +256,27 @@ export function gradientsEqual(a: ShellGradient, b: ShellGradient): boolean {
 
 export function gradientCssBackground(g: ShellGradient): string {
   const stops = [g.primary, g.secondary, ...g.extras];
-  const radial = stops
-    .map(
-      (stop, index) =>
-        `radial-gradient(circle at ${stop.x}% ${stop.y}%, ${stop.color}, transparent ${index === 0 ? 55 : 50}%)`,
-    )
+  if (stops.length <= 2) {
+    return `linear-gradient(135deg, ${g.primary.color} 8%, ${g.secondary.color} 92%)`;
+  }
+  const mid = Math.round(100 / (stops.length - 1));
+  const parts = stops
+    .map((stop, index) => `${stop.color} ${Math.min(100, index * mid)}%`)
     .join(", ");
-  return `${radial}, linear-gradient(135deg, ${g.primary.color}, ${g.secondary.color})`;
+  return `linear-gradient(135deg, ${parts})`;
+}
+
+/** 小色板预览：线性渐变更干净，避免小圆里径向叠色发浊 */
+export function gradientSwatchBackground(g: ShellGradient): string {
+  const stops = gradientStops(g);
+  if (stops.length <= 1) return stops[0]?.color ?? "#2563eb";
+  if (stops.length === 2) {
+    return `linear-gradient(135deg, ${stops[0].color} 8%, ${stops[1].color} 92%)`;
+  }
+  const step = 100 / (stops.length - 1);
+  return `linear-gradient(135deg, ${stops
+    .map((stop, index) => `${stop.color} ${Math.round(index * step)}%`)
+    .join(", ")})`;
 }
 
 export function normalizeGradient(raw: unknown): ShellGradient {

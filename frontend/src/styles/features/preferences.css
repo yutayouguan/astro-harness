@@ -1081,54 +1081,138 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   }
 }
 
-/* ── Shell 色彩风格：预设色板 ── */
+/* ── Shell 色彩风格：预设色板（玻璃胶囊） ── */
 .shell-color-presets {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 10px;
-  margin-top: 12px;
-  padding: 2px 0 4px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 14px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, #fff 72%, transparent) 0%,
+      color-mix(in srgb, #fff 38%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--glass-panel, #fff) 55%, transparent);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, #0f172a 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, #94a3b8 10%, transparent);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  scrollbar-width: none;
+}
+
+.shell-color-presets::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-theme="dark"] .shell-color-presets {
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, #fff 10%, transparent) 0%,
+      color-mix(in srgb, #fff 3%, transparent) 100%
+    ),
+    color-mix(in srgb, #111827 62%, transparent);
+  box-shadow:
+    0 12px 30px color-mix(in srgb, #000 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 
 .shell-color-swatch {
+  --swatch-ring: var(--tone, #2563eb);
   position: relative;
-  width: 36px;
-  height: 36px;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: none;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, #fff 35%, transparent),
-    0 4px 12px color-mix(in srgb, var(--ink) 8%, transparent);
-  cursor: pointer;
   padding: 0;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  background: transparent;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.shell-color-swatch-core {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--swatch-bg, #94a3b8);
+  box-shadow:
+    inset 0 1px 1px color-mix(in srgb, #fff 55%, transparent),
+    inset 0 -1px 2px color-mix(in srgb, #0f172a 18%, transparent),
+    0 2px 6px color-mix(in srgb, #0f172a 12%, transparent);
+  transition:
+    inset 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+}
+
+.shell-color-swatch::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--swatch-ring) 18%, transparent);
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .shell-color-swatch:hover {
-  transform: translateY(-1px) scale(1.04);
+  transform: translateY(-1px);
 }
 
-.shell-color-swatch.is-active {
-  border-color: color-mix(in srgb, var(--tone, #2563eb) 55%, var(--glass-edge));
+.shell-color-swatch:hover .shell-color-swatch-core {
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--tone, #2563eb) 22%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, #fff 40%, transparent),
-    0 6px 16px color-mix(in srgb, var(--ink) 10%, transparent);
+    inset 0 1px 1px color-mix(in srgb, #fff 62%, transparent),
+    inset 0 -1px 2px color-mix(in srgb, #0f172a 16%, transparent),
+    0 5px 12px color-mix(in srgb, var(--swatch-ring) 28%, transparent);
 }
 
-.shell-color-swatch--custom {
+.shell-color-swatch.is-active::before {
+  opacity: 1;
+  transform: scale(1);
+  border-color: color-mix(in srgb, var(--swatch-ring) 72%, #fff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--swatch-ring) 22%, transparent);
+}
+
+.shell-color-swatch.is-active .shell-color-swatch-core {
+  inset: 4px;
+  box-shadow:
+    inset 0 1px 1px color-mix(in srgb, #fff 70%, transparent),
+    inset 0 -1px 2px color-mix(in srgb, #0f172a 14%, transparent),
+    0 4px 10px color-mix(in srgb, var(--swatch-ring) 30%, transparent);
+}
+
+.shell-color-swatch--custom .shell-color-swatch-core {
   display: grid;
   place-items: center;
   background:
-    conic-gradient(from 210deg, #2563eb, #06b6d4, #8b5cf6, #fb7185, #2563eb);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
+    conic-gradient(
+      from 200deg,
+      #2563eb,
+      #22d3ee,
+      #a78bfa,
+      #fb7185,
+      #fbbf24,
+      #2563eb
+    );
 }
 
-.shell-color-swatch--custom span {
-  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.35);
+.shell-color-swatch-plus {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.4);
 }
 
 /* ── 自定义渐变编辑弹层 ── */
