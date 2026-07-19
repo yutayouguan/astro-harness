@@ -2,9 +2,9 @@
 
 .prefs-page,
 .preferences-page {
-  --tone: var(--tone-pink);
-  --tone-soft: var(--tone-pink-soft);
-  --tone-glow: var(--tone-pink-glow);
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
+  --tone-glow: var(--tone-twilight-glow);
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -48,6 +48,18 @@
   --tone: var(--tone-cyan);
   --tone-soft: var(--tone-cyan-soft);
   --tone-glow: var(--tone-cyan-glow);
+}
+
+.prefs-page[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+  --tone-glow: var(--tone-aurora-glow);
+}
+
+.prefs-page[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
+  --tone-glow: var(--tone-twilight-glow);
 }
 
 .prefs-card,

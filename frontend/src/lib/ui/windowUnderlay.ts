@@ -18,6 +18,8 @@ const UNDERLAY: Record<"light" | "dark", Record<string, string>> = {
     indigo: "#e0e7ff",
     amber: "#fef3c7",
     teal: "#ccfbf1",
+    aurora: "#cffafe",
+    twilight: "#ede9fe",
     default: "#e9eef6",
   },
   dark: {
@@ -30,6 +32,8 @@ const UNDERLAY: Record<"light" | "dark", Record<string, string>> = {
     indigo: "#0c0c1a",
     amber: "#16120c",
     teal: "#071412",
+    aurora: "#07141a",
+    twilight: "#140818",
     default: "#100816",
   },
 };

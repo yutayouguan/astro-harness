@@ -10,10 +10,10 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  --tone: var(--tone-amber);
-  --tone-soft: var(--tone-amber-soft);
-  --tone-glow: var(--tone-amber-glow);
-  /* 图表/排行跟随 Tab 主题色（本页为 amber） */
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+  --tone-glow: var(--tone-aurora-glow);
+  /* 图表/排行跟随 Tab 主题色（本页为 aurora 极光） */
   --insights-series: var(--tone);
   --insights-series-soft: var(--tone-soft);
   --insights-warn: color-mix(in srgb, var(--tone) 72%, #7c2d12);

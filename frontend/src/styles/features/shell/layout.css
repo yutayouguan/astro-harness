@@ -180,6 +180,18 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   --tone-soft: var(--tone-teal-soft);
 }
 
+.nav-item[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-glow: var(--tone-aurora-glow);
+  --tone-soft: var(--tone-aurora-soft);
+}
+
+.nav-item[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-glow: var(--tone-twilight-glow);
+  --tone-soft: var(--tone-twilight-soft);
+}
+
 .nav-icon {
   position: relative;
   width: 18px;
@@ -504,6 +516,18 @@ html[data-theme="dark"] .page-title-icon {
   --tone-glow: var(--tone-teal-glow);
 }
 
+.page-title-icon[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+  --tone-glow: var(--tone-aurora-glow);
+}
+
+.page-title-icon[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
+  --tone-glow: var(--tone-twilight-glow);
+}
+
 .content-title[data-tone="blue"] {
   color: var(--tone-blue);
 }
@@ -538,6 +562,14 @@ html[data-theme="dark"] .page-title-icon {
 
 .content-title[data-tone="teal"] {
   color: var(--tone-teal);
+}
+
+.content-title[data-tone="aurora"] {
+  color: var(--tone-aurora);
+}
+
+.content-title[data-tone="twilight"] {
+  color: var(--tone-twilight);
 }
 
 .content-pane {
@@ -642,6 +674,16 @@ html[data-theme="dark"] .page-title-icon {
 .sidebar-toggle[data-tone="teal"] {
   --tone: var(--tone-teal);
   --tone-soft: var(--tone-teal-soft);
+}
+
+.sidebar-toggle[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+}
+
+.sidebar-toggle[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
 }
 
 .sidebar-toggle:hover {

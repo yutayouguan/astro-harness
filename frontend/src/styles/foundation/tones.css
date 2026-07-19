@@ -38,6 +38,14 @@ html[data-theme="light"][data-tone="teal"] {
   --window-underlay: #ccfbf1;
 }
 
+html[data-theme="light"][data-tone="aurora"] {
+  --window-underlay: #cffafe;
+}
+
+html[data-theme="light"][data-tone="twilight"] {
+  --window-underlay: #ede9fe;
+}
+
 
 /* 暗色 */
 html[data-theme="dark"] {
@@ -78,6 +86,14 @@ html[data-theme="dark"][data-tone="amber"] {
 
 html[data-theme="dark"][data-tone="teal"] {
   --window-underlay: #071412;
+}
+
+html[data-theme="dark"][data-tone="aurora"] {
+  --window-underlay: #07141a;
+}
+
+html[data-theme="dark"][data-tone="twilight"] {
+  --window-underlay: #140818;
 }
 
 /* 全局 --tone / --accent 映射：Portal 浮层与 Markdown 跟随当前 Tab 主题色。
@@ -144,6 +160,22 @@ html[data-tone="teal"] {
   --tone-glow: var(--tone-teal-glow);
   --accent: var(--tone-teal);
   --accent-2: var(--tone-teal);
+}
+
+html[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+  --tone-glow: var(--tone-aurora-glow);
+  --accent: var(--tone-aurora);
+  --accent-2: var(--tone-indigo);
+}
+
+html[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
+  --tone-glow: var(--tone-twilight-glow);
+  --accent: var(--tone-twilight);
+  --accent-2: var(--tone-pink);
 }
 
 /*
@@ -252,9 +284,9 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .insights-pa
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
-  --tone-amber: var(--unified-tone, var(--tone-blue));
-  --tone-amber-soft: var(--unified-tone-soft, var(--tone-blue-soft));
-  --tone-amber-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-aurora: var(--unified-tone, var(--tone-blue));
+  --tone-aurora-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-aurora-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .providers-page {
@@ -268,7 +300,7 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .preferences
   --tone: var(--unified-tone, var(--tone-blue));
   --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
   --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
-  --tone-pink: var(--unified-tone, var(--tone-blue));
-  --tone-pink-soft: var(--unified-tone-soft, var(--tone-blue-soft));
-  --tone-pink-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-twilight: var(--unified-tone, var(--tone-blue));
+  --tone-twilight-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-twilight-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }

@@ -139,6 +139,24 @@ html[data-theme="dark"] .app-shell[data-tone="teal"] {
     linear-gradient(160deg, #0a1a18 0%, #134e4a 45%, #071412 100%);
 }
 
+/* 极光：青→靛 双色 */
+html[data-theme="dark"] .app-shell[data-tone="aurora"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 14% 0%, rgba(34, 211, 238, 0.42), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 90% 20%, rgba(129, 140, 248, 0.28), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(6, 182, 212, 0.14), transparent 55%),
+    linear-gradient(160deg, #07141a 0%, #13243a 42%, #100e22 100%);
+}
+
+/* 暮光：紫→玫粉 双色 */
+html[data-theme="dark"] .app-shell[data-tone="twilight"] {
+  --shell-bg:
+    radial-gradient(ellipse 85% 70% at 14% 0%, rgba(167, 139, 250, 0.4), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 90% 20%, rgba(244, 114, 182, 0.26), transparent 50%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(192, 132, 252, 0.14), transparent 55%),
+    linear-gradient(160deg, #140818 0%, #241430 42%, #180c16 100%);
+}
+
 /* Tab 主题色驱动背景渐变（亮色） */
 html[data-theme="light"] .app-shell[data-tone="blue"] {
   --shell-bg:
@@ -210,6 +228,22 @@ html[data-theme="light"] .app-shell[data-tone="teal"] {
     radial-gradient(ellipse 70% 55% at 88% 18%, rgba(94, 234, 212, 0.38), transparent 50%),
     radial-gradient(ellipse 60% 50% at 50% 100%, rgba(153, 246, 228, 0.36), transparent 55%),
     linear-gradient(165deg, #f0fdfa 0%, #ccfbf1 48%, #e8faf6 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="aurora"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(34, 211, 238, 0.52), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(129, 140, 248, 0.42), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(165, 243, 252, 0.34), transparent 55%),
+    linear-gradient(165deg, #ecfeff 0%, #e0e7ff 48%, #f0f9ff 100%);
+}
+
+html[data-theme="light"] .app-shell[data-tone="twilight"] {
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(167, 139, 250, 0.5), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(244, 114, 182, 0.4), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(251, 207, 232, 0.36), transparent 55%),
+    linear-gradient(165deg, #f5f3ff 0%, #fce7f3 48%, #faf5ff 100%);
 }
 
 /* 统一模式自定义双色点渐变（位置与 RGB 由 JS 写入） */
@@ -390,6 +424,14 @@ html[data-theme="light"]:is([data-color-style="unified"], [data-color-style="dyn
   --tone-soft: var(--tone-teal-soft);
 }
 
+.app-shell[data-tone="aurora"] .sidebar {
+  --tone-soft: var(--tone-aurora-soft);
+}
+
+.app-shell[data-tone="twilight"] .sidebar {
+  --tone-soft: var(--tone-twilight-soft);
+}
+
 /* 内容区卡片继承当前 tab 主题色，与侧栏同色调 */
 .app-shell[data-tone="blue"] {
   --tone: var(--tone-blue);
@@ -445,6 +487,18 @@ html[data-theme="light"]:is([data-color-style="unified"], [data-color-style="dyn
   --shell-tone-soft: var(--tone-teal-soft);
 }
 
+.app-shell[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+  --shell-tone-soft: var(--tone-aurora-soft);
+}
+
+.app-shell[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
+  --shell-tone-soft: var(--tone-twilight-soft);
+}
+
 /* portal 到 body 的浮层（头像/图标抽屉等）同样跟随 html[data-tone] */
 html[data-tone="blue"] {
   --tone: var(--tone-blue);
@@ -490,6 +544,16 @@ html[data-tone="teal"] {
   --tone: var(--tone-teal);
   --tone-soft: var(--tone-teal-soft);
   --tone-glow: var(--tone-teal-glow);
+}
+html[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+  --tone-glow: var(--tone-aurora-glow);
+}
+html[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
+  --tone-glow: var(--tone-twilight-glow);
 }
 
 .sidebar>* {
@@ -608,6 +672,16 @@ html[data-tone="teal"] {
 .sidebar-pin-btn[data-tone="teal"] {
   --tone: var(--tone-teal);
   --tone-soft: var(--tone-teal-soft);
+}
+
+.sidebar-pin-btn[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+}
+
+.sidebar-pin-btn[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
 }
 
 .sidebar-pin-btn:hover {

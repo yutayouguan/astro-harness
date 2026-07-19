@@ -141,7 +141,7 @@ export default function PreferencesPanel({
   onCommitCustomGradient,
   onCancelCustomGradient,
   onReshuffleDynamic,
-  tone = "pink",
+  tone = "twilight",
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
   onChatToggleChange,

@@ -32,7 +32,9 @@ export type Tone =
   | "pink"
   | "indigo"
   | "amber"
-  | "teal";
+  | "teal"
+  | "aurora"
+  | "twilight";
 
 type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -63,13 +65,13 @@ export const NAV: {
     id: "insights",
     labelKey: "nav.insights",
     Icon: IconInsights,
-    tone: "amber",
+    tone: "aurora",
   },
   {
     id: "settings",
     labelKey: "nav.settings",
     Icon: IconSettings,
-    tone: "pink",
+    tone: "twilight",
   },
 ];
 
