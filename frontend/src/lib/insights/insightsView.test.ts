@@ -2,7 +2,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  aggregateByProvider,
   DEFAULT_INSIGHTS_VIEW,
+  inferProvider,
   INSIGHTS_VIEW_ORDER,
   needsUsageInsights,
   providerSpendTop,
@@ -39,4 +41,43 @@ test("providerSpendTop sorts by cost then tokens and caps length", () => {
   assert.equal(top.length, 2);
   assert.equal(top[0]?.name, "b"); // cost tie → higher tokens first
   assert.equal(top[1]?.name, "c");
+});
+
+test("inferProvider maps Google models/ resource path to google", () => {
+  assert.equal(inferProvider("models/gemini-3.5-flash"), "google");
+  assert.equal(inferProvider("models/gemini-2.0-flash"), "google");
+  assert.equal(inferProvider("gemini-2.5-pro"), "google");
+});
+
+test("inferProvider keeps OpenRouter vendor/model and bare prefixes", () => {
+  assert.equal(inferProvider("deepseek/deepseek-chat"), "deepseek");
+  assert.equal(inferProvider("openai/gpt-4o"), "openai");
+  assert.equal(inferProvider("gpt-4o-mini"), "openai");
+  assert.equal(inferProvider("claude-sonnet-4"), "anthropic");
+});
+
+test("aggregateByProvider does not create a fake models vendor", () => {
+  const rows = aggregateByProvider([
+    {
+      kind: "llm",
+      name: "models/gemini-3.5-flash",
+      calls: 2,
+      tokens: 100,
+      cost_usd: 0.01,
+    },
+    {
+      kind: "llm",
+      name: "deepseek/deepseek-chat",
+      calls: 1,
+      tokens: 50,
+      cost_usd: 0.02,
+    },
+  ]);
+  assert.deepEqual(
+    rows.map((r) => r.name).sort(),
+    ["deepseek", "google"],
+  );
+  const google = rows.find((r) => r.name === "google");
+  assert.equal(google?.calls, 2);
+  assert.equal(google?.tokens, 100);
 });

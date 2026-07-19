@@ -27,6 +27,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
 import {
+  aggregateByProvider,
   DEFAULT_INSIGHTS_VIEW,
   INSIGHTS_VIEW_ORDER,
   needsUsageInsights,
@@ -184,60 +185,6 @@ const VIEW_TABS = INSIGHTS_VIEW_ORDER.map((id) => ({
   id,
   ...VIEW_TAB_META[id],
 }));
-
-/** 从模型名推断厂商（OpenRouter `vendor/model` 或常见前缀）。 */
-function inferProvider(modelName: string): string {
-  const n = modelName.trim();
-  if (!n) return "unknown";
-  const lower = n.toLowerCase();
-  if (lower.includes("/")) {
-    return lower.split("/")[0] || "unknown";
-  }
-  if (
-    lower.startsWith("gpt") ||
-    lower.startsWith("o1") ||
-    lower.startsWith("o3") ||
-    lower.startsWith("o4") ||
-    lower.startsWith("chatgpt")
-  ) {
-    return "openai";
-  }
-  if (lower.startsWith("claude")) return "anthropic";
-  if (lower.startsWith("gemini")) return "google";
-  if (lower.startsWith("deepseek")) return "deepseek";
-  if (lower.startsWith("qwen")) return "bailian";
-  if (lower.startsWith("glm") || lower.startsWith("chatglm")) return "zhipu";
-  if (lower.startsWith("kimi") || lower.startsWith("moonshot")) return "moonshot";
-  if (lower.startsWith("minmax") || lower.startsWith("minimax")) return "minimax";
-  if (lower.startsWith("mimo")) return "mimo";
-  if (lower.startsWith("llama")) return "meta";
-  if (lower.startsWith("ep-")) return "volcengine";
-  return "other";
-}
-
-function aggregateByProvider(models: RankItem[]): RankItem[] {
-  const map = new Map<string, RankItem>();
-  for (const m of models) {
-    const provider = inferProvider(m.name);
-    const cur = map.get(provider);
-    if (cur) {
-      cur.calls += m.calls;
-      cur.tokens += m.tokens;
-      cur.cost_usd += m.cost_usd;
-    } else {
-      map.set(provider, {
-        kind: "provider",
-        name: provider,
-        calls: m.calls,
-        tokens: m.tokens,
-        cost_usd: m.cost_usd,
-      });
-    }
-  }
-  return [...map.values()].sort(
-    (a, b) => b.cost_usd - a.cost_usd || b.tokens - a.tokens || b.calls - a.calls,
-  );
-}
 
 function seriesValue(
   s: UsageInsights["series"][number],
