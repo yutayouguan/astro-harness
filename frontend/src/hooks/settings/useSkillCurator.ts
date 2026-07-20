@@ -2,11 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { CurateReportDto } from "../../types";
 
+type CuratorRunReport = {
+  report: CurateReportDto;
+  enqueued: number;
+};
+
 type UseSkillCurator = {
   loading: boolean;
   error: string | null;
   report: CurateReportDto | null;
-  run(): Promise<void>;
+  lastEnqueued: number;
+  run(enqueue?: boolean): Promise<void>;
+  enqueue(): Promise<void>;
   reload(): Promise<void>;
 };
 
@@ -18,6 +25,7 @@ export function useSkillCurator(active = true): UseSkillCurator {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<CurateReportDto | null>(null);
+  const [lastEnqueued, setLastEnqueued] = useState(0);
 
   const reload = useCallback(async () => {
     if (!active) return;
@@ -33,12 +41,13 @@ export function useSkillCurator(active = true): UseSkillCurator {
     void reload();
   }, [reload]);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (enqueue = false) => {
     setLoading(true);
     setError(null);
     try {
-      const next = await invoke<CurateReportDto>("run_skill_curator");
-      setReport(next);
+      const next = await invoke<CuratorRunReport>("run_skill_curator", { enqueue });
+      setReport(next.report);
+      setLastEnqueued(next.enqueued);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -46,5 +55,18 @@ export function useSkillCurator(active = true): UseSkillCurator {
     }
   }, []);
 
-  return { loading, error, report, run, reload };
+  const enqueue = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const n = await invoke<number>("enqueue_curator_proposals");
+      setLastEnqueued(n);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { loading, error, report, lastEnqueued, run, enqueue, reload };
 }

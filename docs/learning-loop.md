@@ -115,7 +115,7 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 
 **mock 自测**：`run_evolution_dspy(mock=true)` / CLI `--mock` 不调用 dspy、不需凭据，产确定性候选，用于验证「Rust 导出 → 子进程 → result.json → 提案入队」整条契约是否打通（UI「mock 自测」按钮）。
 
-学习闭环三阶段（评测集/交叉/DSPy）至此全部落地；另含 **技能策展（Curator）**：手动运行结构化健康报告（闲置 / 体积 / 进化采纳 / 评测 Fail），只建议不自动删改；可从建议跳转定向遗传搜索。
+学习闭环三阶段（评测集/交叉/DSPy）至此全部落地；另含 **技能策展（Curator）**：手动运行结构化健康报告（闲置 / 体积 / 进化采纳 / 评测 Fail / 描述重叠）；可选将 **Disable / Merge** 建议入待审队列（批准后才禁用或合并，绝不自动删改）；Rewrite 建议可跳转定向遗传搜索。`evolution.curator`（默认关）含 `interval_days` / `max_enqueue` / `llm_diagnose`（可选用 judge 路由增强 reason，预算 `max_llm_calls`）。
 
 **可观测**：进化运行与提案去向记入 `~/.astro/learning/evolution/history.jsonl`（`run` / `outcome` 事件）；「离线进化」页「进化历史」小节展示运行次数、生成提案数、采纳率、采纳均分、采纳/拒绝与近期事件。crate [`evolution::history`](../evolution/src/history.rs)；命令 `evolution_history`。
 **自动触发**（默认关）：Chat Done 后 fire-and-forget 调用 `maybe_run_evolution_auto`。需同时开启 `evolution.enabled` 与 `evolution.auto.enabled`；仅跑**单轮 reflect**（不跑遗传搜索/DSPy），产物只入待审。成本护栏：

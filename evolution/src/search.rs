@@ -58,11 +58,12 @@ pub fn effective_candidate_size(
     current_skill: Option<&str>,
 ) -> anyhow::Result<usize> {
     match candidate.kind {
-        CandidateKind::NewSkill => Ok(candidate
+        CandidateKind::NewSkill | CandidateKind::Merge => Ok(candidate
             .content
             .as_deref()
             .map(str::len)
             .unwrap_or(0)),
+        CandidateKind::Disable => Ok(1),
         CandidateKind::Patch => {
             let text = current_skill.ok_or_else(|| {
                 anyhow::anyhow!("patch 需要 current_skill 计算有效体积")
@@ -161,7 +162,7 @@ pub fn select_front_capped(mut front: Vec<ScoredVariant>, n: usize) -> Vec<Score
 /// 候选指纹：用于种群去重（相同 kind + skill_id + 内容 → 同一指纹）。
 pub fn candidate_fingerprint(c: &SkillCandidate) -> String {
     match c.kind {
-        CandidateKind::NewSkill => {
+        CandidateKind::NewSkill | CandidateKind::Merge => {
             format!(
                 "new:{}:{}",
                 c.skill_id,
@@ -176,6 +177,7 @@ pub fn candidate_fingerprint(c: &SkillCandidate) -> String {
                 c.new_string.as_deref().unwrap_or("")
             )
         }
+        CandidateKind::Disable => format!("disable:{}", c.skill_id),
     }
 }
 
@@ -254,7 +256,7 @@ pub fn build_mutation_prompt(
     ));
     s.push_str(&format!("skill_id: {}\n", seed.skill_id));
     match seed.kind {
-        CandidateKind::NewSkill => {
+        CandidateKind::NewSkill | CandidateKind::Merge => {
             s.push_str("kind: new_skill\n");
             if let Some(d) = &seed.description {
                 s.push_str(&format!("description: {d}\n"));
@@ -270,6 +272,9 @@ pub fn build_mutation_prompt(
                 seed.old_string.as_deref().unwrap_or(""),
                 seed.new_string.as_deref().unwrap_or("")
             ));
+        }
+        CandidateKind::Disable => {
+            s.push_str("kind: disable\n");
         }
     }
     if !critiques.is_empty() {
@@ -300,7 +305,7 @@ pub const CROSSOVER_SYSTEM_PROMPT: &str = r#"你是技能进化的交叉算子�
 fn describe_variant(label: &str, c: &SkillCandidate) -> String {
     let mut s = format!("### 父代 {label}\n");
     match c.kind {
-        CandidateKind::NewSkill => {
+        CandidateKind::NewSkill | CandidateKind::Merge => {
             s.push_str("kind: new_skill\ncontent:\n");
             s.push_str(c.content.as_deref().unwrap_or(""));
             s.push('\n');
@@ -311,6 +316,9 @@ fn describe_variant(label: &str, c: &SkillCandidate) -> String {
                 c.old_string.as_deref().unwrap_or(""),
                 c.new_string.as_deref().unwrap_or("")
             ));
+        }
+        CandidateKind::Disable => {
+            s.push_str("kind: disable\n");
         }
     }
     if let Some(sc) = c.judge_score {

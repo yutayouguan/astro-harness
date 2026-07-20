@@ -57,6 +57,7 @@ DecisionLog + Skills 索引 (+ transcript / evalset)
 | `evolution/src/judge.rs` | 泛化 judge 提示词与解析 |
 | `evolution/src/evalset.rs` | 标注评测集 + grounded 评分提示 |
 | `evolution/src/search.rs` | GEPA-lite：变异 / 交叉 / Pareto |
+| `evolution/src/curator.rs` | 技能策展：健康报告、Disable/Merge 入队、LLM 诊断提示 |
 | `evolution/src/proposal.rs` | 提案队列、批准写入、唯一 patch |
 | `evolution/src/history.rs` | run / outcome 可观测 JSONL |
 | [`evolution-dspy/`](../evolution-dspy/) | 外部 Python 包（**非** cargo）；DSPy+GEPA |
@@ -96,6 +97,12 @@ evolution:
     cooldown_secs: 3600
     min_new_decisions: 3
     max_runs_per_day: 3
+  curator:
+    enabled: false          # 仅间隔提示/报告；默认不自动入队
+    interval_days: 7
+    max_enqueue: 5          # 单次入队 Disable/Merge 上限
+    llm_diagnose: false     # 用 judge 路由增强建议 reason
+    max_llm_calls: 3
   dspy:
     enabled: false
     python_bin: ""          # 空 = 运行时解析 venv / 系统 python3
@@ -119,6 +126,11 @@ evolution:
 | `search.max_eval_examples` | `5` | 每候选 grounded 评测例上限；`0` = 不限 |
 | `search.max_llm_calls` | `40` | 单次搜索 LLM 调用硬顶；`0` = 不限 |
 | `auto.*` | 见上 | Chat Done 后自动单轮 reflect；默认关 |
+| `curator.enabled` | `false` | 策展提醒总开关；**不**自动删改技能 |
+| `curator.interval_days` | `7` | 间隔（天）；当前仅配置水位，报告需手动跑 |
+| `curator.max_enqueue` | `5` | 单次将 Disable/Merge 入待审上限 |
+| `curator.llm_diagnose` | `false` | 运行策展时用 judge 路由增强 reason |
+| `curator.max_llm_calls` | `3` | 单次策展诊断 LLM 调用上限 |
 | `dspy.*` | 见上 | 外部 Python 引擎；默认关 |
 
 模型角色不复用在线 `auxiliary.*`：
@@ -184,7 +196,7 @@ python -m evolution_dspy optimize --input <dir> --output <dir>/result.json
 | 字段 | 说明 |
 |------|------|
 | `id` | uuid，提案文件名 |
-| `kind` | `new_skill` \| `patch` |
+| `kind` | `new_skill` \| `patch` \| `disable` \| `merge` |
 | `skill_id` | kebab-case 等合法 id（无路径 / `..`） |
 | `content` / `description` | 新建 SKILL.md（可无 frontmatter，批准时自动补） |
 | `old_string` / `new_string` | patch：原文须在目标 SKILL.md 中**唯一**匹配 |
@@ -272,7 +284,8 @@ Agent skills 写入目标由 `skills` crate 的 agent skills 目录决定（通�
 | `run_evolution` | 单轮反思 |
 | `run_evolution_search` | GEPA-lite 搜索（可选 `skill_id` 定向；holdout；沙箱三维 Pareto；history 写 search_meta） |
 | `cancel_evolution_search` | 取消进行中的遗传搜索 |
-| `run_skill_curator` / `get_curator_last` | 技能策展报告（只建议） |
+| `run_skill_curator` / `get_curator_last` / `enqueue_curator_proposals` | 技能策展：报告（可选 LLM 诊断）/ 读取上次 / 将 Disable·Merge 入待审 |
+| `set_evolution_curator` | 读写 `evolution.curator`（enabled / interval / max_enqueue / llm_diagnose） |
 | `list_evolution_proposals` | 待审列表 |
 | `approve_evolution_proposal` | 批准写入 |
 | `approve_evolution_proposal_to_branch` | 批准到 git 分支 |

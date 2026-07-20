@@ -98,15 +98,24 @@ pub fn apply_patch_unique(text: &str, old: &str, new: &str) -> anyhow::Result<St
 
 /// 应用回滚令牌：写入失败或测试不过时恢复原状。
 enum Rollback {
+    /// 无写入，无需回滚（策展 Disable 等）。
+    Noop,
     /// 目录原本不存在：整树删除。
     RemoveDir(PathBuf),
     /// 目录已存在：把 SKILL.md 还原为原内容（None = 原本无此文件）。
     RestoreFile(PathBuf, Option<String>),
+    /// 合并：还原 keep 文件 + 重新启用 absorb。
+    Merge {
+        keep_md: PathBuf,
+        prev_keep: Option<String>,
+        absorb: Vec<String>,
+    },
 }
 
 impl Rollback {
     fn run(self) {
         match self {
+            Rollback::Noop => {}
             Rollback::RemoveDir(dir) => {
                 let _ = fs::remove_dir_all(&dir);
             }
@@ -118,6 +127,23 @@ impl Rollback {
                     let _ = fs::remove_file(&path);
                 }
             },
+            Rollback::Merge {
+                keep_md,
+                prev_keep,
+                absorb,
+            } => {
+                match prev_keep {
+                    Some(text) => {
+                        let _ = fs::write(&keep_md, text.as_bytes());
+                    }
+                    None => {
+                        let _ = fs::remove_file(&keep_md);
+                    }
+                }
+                for id in absorb {
+                    let _ = skills::set_enabled(&id, true);
+                }
+            }
         }
     }
 }
@@ -174,6 +200,61 @@ fn apply_candidate(cand: &SkillCandidate) -> anyhow::Result<(String, PathBuf, Ro
             let rollback = Rollback::RestoreFile(skill_md.clone(), Some(text));
             fs::write(&skill_md, updated.as_bytes())?;
             Ok((format!("已 patch 技能 `{}`", cand.skill_id), dest, rollback))
+        }
+        CandidateKind::Disable => {
+            skills::set_enabled(&cand.skill_id, false)
+                .map_err(|e| anyhow::anyhow!("禁用失败: {e}"))?;
+            Ok((
+                format!("已禁用技能 `{}`（文件保留）", cand.skill_id),
+                dest,
+                Rollback::Noop,
+            ))
+        }
+        CandidateKind::Merge => {
+            let absorb: Vec<String> = cand
+                .sources
+                .iter()
+                .filter_map(|s| s.strip_prefix("absorb:"))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect();
+            if absorb.is_empty() {
+                anyhow::bail!("merge 缺少 absorb 清单");
+            }
+            if !skill_md.is_file() {
+                anyhow::bail!("merge keep 目标不存在: {}", cand.skill_id);
+            }
+            let prev = fs::read_to_string(&skill_md)?;
+            let note = cand.content.as_deref().unwrap_or("").trim();
+            let updated = if note.is_empty() {
+                format!(
+                    "{}\n\n## Curator merge\n\n已合并自：{}\n",
+                    prev.trim_end(),
+                    absorb.join(", ")
+                )
+            } else if prev.contains(note) {
+                prev.clone()
+            } else {
+                format!("{}\n\n{}\n", prev.trim_end(), note)
+            };
+            fs::write(&skill_md, updated.as_bytes())?;
+            for id in &absorb {
+                let _ = skills::set_enabled(id, false);
+            }
+            Ok((
+                format!(
+                    "已合并到 `{}`，并禁用 {}",
+                    cand.skill_id,
+                    absorb.join(", ")
+                ),
+                dest,
+                Rollback::Merge {
+                    keep_md: skill_md,
+                    prev_keep: Some(prev),
+                    absorb,
+                },
+            ))
         }
     }
 }

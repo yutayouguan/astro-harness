@@ -219,7 +219,7 @@ pub fn build_eval_judge_prompt(cand: &SkillCandidate, ex: &EvalExample) -> Strin
     let mut s = String::new();
     s.push_str("## 技能内容\n");
     match cand.kind {
-        CandidateKind::NewSkill => {
+        CandidateKind::NewSkill | CandidateKind::Merge => {
             s.push_str(cand.content.as_deref().unwrap_or(""));
         }
         CandidateKind::Patch => {
@@ -228,6 +228,9 @@ pub fn build_eval_judge_prompt(cand: &SkillCandidate, ex: &EvalExample) -> Strin
                 cand.old_string.as_deref().unwrap_or(""),
                 cand.new_string.as_deref().unwrap_or("")
             ));
+        }
+        CandidateKind::Disable => {
+            s.push_str(&format!("（禁用技能 `{}`）", cand.skill_id));
         }
     }
     s.push_str(&format!("\n\n## 任务\n{}\n\n## 期望要点\n", ex.task));

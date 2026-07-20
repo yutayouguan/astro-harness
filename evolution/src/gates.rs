@@ -42,6 +42,16 @@ pub fn check_candidate(
     gates: &EvolutionGates,
     current_skill: Option<&str>,
 ) -> GateOutcome {
+    // 策展动作：不走体积/patch 校验
+    if matches!(c.kind, CandidateKind::Disable | CandidateKind::Merge) {
+        if c.kind == CandidateKind::Merge {
+            let has_absorb = c.sources.iter().any(|s| s.starts_with("absorb:"));
+            if !has_absorb {
+                return GateOutcome::fail("merge 缺少 absorb 清单");
+            }
+        }
+        return GateOutcome::pass();
+    }
     // 体积门禁（patch 用 effective_candidate_size，与搜索 Pareto 一致）
     let len = match effective_candidate_size(c, current_skill) {
         Ok(n) => n,
@@ -204,6 +214,7 @@ pub fn sandbox_test_candidate(
                 Err(e) => return TestOutcome::Failed(format!("patch 失败: {e}")),
             }
         }
+        CandidateKind::Disable | CandidateKind::Merge => return TestOutcome::NotApplicable,
     };
     if std::fs::write(skill_dir.join("SKILL.md"), md_content.as_bytes()).is_err() {
         return TestOutcome::Failed("写入 SKILL.md 失败".into());

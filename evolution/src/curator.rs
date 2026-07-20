@@ -364,6 +364,82 @@ pub fn run_curator_with_skills(
     }
 }
 
+// ---------------------------------------------------------------------------
+// LLM 辅助诊断（提示词 + 解析，调用方注入模型）
+// ---------------------------------------------------------------------------
+
+/// LLM 策展诊断的 system 指令。
+pub const CURATOR_DIAGNOSE_SYSTEM_PROMPT: &str = r#"你是技能库健康顾问。给定一个技能的当前状态（描述、健康信号、建议类型），用**一句话**给出可操作的诊断。只输出 JSON（不要 markdown 围栏）：
+{"diagnosis":"一句可操作的改进建议"}
+规则：不超过 80 字；不要复述已知信号；直接说该做什么。"#;
+
+/// 构造单条建议的 LLM 诊断 user prompt。
+pub fn build_diagnose_prompt(suggestion: &CurateSuggestion, rows: &[CurateSkillRow]) -> String {
+    let mut s = String::new();
+    match suggestion {
+        CurateSuggestion::Disable { skill_id, reason } => {
+            s.push_str(&format!("## 建议：禁用 `{skill_id}`\n理由: {reason}\n"));
+            if let Some(row) = rows.iter().find(|r| r.skill_id == *skill_id) {
+                s.push_str(&format!("描述: {}\n", row.description));
+                for r in &row.health_reasons {
+                    s.push_str(&format!("- {r}\n"));
+                }
+            }
+        }
+        CurateSuggestion::Merge { keep, absorb, reason } => {
+            s.push_str(&format!(
+                "## 建议：合并到 `{keep}`，吸收 {}\n理由: {reason}\n",
+                absorb.join(", ")
+            ));
+            for id in std::iter::once(keep.as_str()).chain(absorb.iter().map(|s| s.as_str())) {
+                if let Some(row) = rows.iter().find(|r| r.skill_id == id) {
+                    s.push_str(&format!("- {id}: {}\n", row.description));
+                }
+            }
+        }
+        CurateSuggestion::Rewrite { skill_id, reason } => {
+            s.push_str(&format!("## 建议：改写 `{skill_id}`\n理由: {reason}\n"));
+            if let Some(row) = rows.iter().find(|r| r.skill_id == *skill_id) {
+                s.push_str(&format!("描述: {}\n", row.description));
+                for r in &row.health_reasons {
+                    s.push_str(&format!("- {r}\n"));
+                }
+            }
+        }
+    }
+    s.push_str("\n请用一句话给出可操作的诊断（JSON）。");
+    s
+}
+
+/// 解析 LLM 诊断输出。
+pub fn parse_diagnose_output(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let start = trimmed.find('{')?;
+    let end = trimmed.rfind('}')?;
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        #[serde(default)]
+        diagnosis: String,
+    }
+    let parsed: Raw = serde_json::from_str(&trimmed[start..=end]).ok()?;
+    let d = parsed.diagnosis.trim().to_string();
+    if d.is_empty() { None } else { Some(d) }
+}
+
+/// 将 LLM 诊断回填到 suggestions（替换 reason，保留原因作前缀）。
+pub fn apply_diagnoses(suggestions: &mut [CurateSuggestion], diagnoses: &[(usize, String)]) {
+    for (idx, diagnosis) in diagnoses {
+        if let Some(sug) = suggestions.get_mut(*idx) {
+            let reason = match sug {
+                CurateSuggestion::Disable { reason, .. } => reason,
+                CurateSuggestion::Merge { reason, .. } => reason,
+                CurateSuggestion::Rewrite { reason, .. } => reason,
+            };
+            *reason = format!("{diagnosis}（{reason}）");
+        }
+    }
+}
+
 /// 运行策展并落盘上次报告。
 pub fn run_curator_and_save(base: &Path, unused_skill_days: u32) -> anyhow::Result<CurateReport> {
     let report = run_curator(base, unused_skill_days);
@@ -382,6 +458,87 @@ pub fn load_curator_last(base: &Path) -> Option<CurateReport> {
     let path = curator_last_path(base);
     let raw = fs::read_to_string(path).ok()?;
     serde_json::from_str(&raw).ok()
+}
+
+/// 将 Disable / Merge 建议转为待审候选（跳过 Rewrite；上限 `max`）。
+pub fn suggestions_to_candidates(
+    suggestions: &[CurateSuggestion],
+    max: usize,
+) -> Vec<crate::candidate::SkillCandidate> {
+    use crate::candidate::{CandidateKind, SkillCandidate};
+    use uuid::Uuid;
+
+    let mut out = Vec::new();
+    for s in suggestions {
+        if max > 0 && out.len() >= max {
+            break;
+        }
+        match s {
+            CurateSuggestion::Disable { skill_id, reason } => {
+                out.push(SkillCandidate {
+                    id: Uuid::new_v4().to_string(),
+                    kind: CandidateKind::Disable,
+                    skill_id: skill_id.clone(),
+                    description: None,
+                    content: Some(format!("# curator disable\n\n{reason}\n")),
+                    old_string: None,
+                    new_string: None,
+                    rationale: reason.clone(),
+                    sources: vec!["curator:disable".into()],
+                    judge_score: None,
+                    judge_reason: None,
+                    created_at: Utc::now().to_rfc3339(),
+                });
+            }
+            CurateSuggestion::Merge {
+                keep,
+                absorb,
+                reason,
+            } => {
+                let mut sources = vec!["curator:merge".into()];
+                for a in absorb {
+                    sources.push(format!("absorb:{a}"));
+                }
+                let note = format!(
+                    "## Curator merge\n\n{}  \nAbsorb: {}\n",
+                    reason,
+                    absorb.join(", ")
+                );
+                out.push(SkillCandidate {
+                    id: Uuid::new_v4().to_string(),
+                    kind: CandidateKind::Merge,
+                    skill_id: keep.clone(),
+                    description: None,
+                    content: Some(note),
+                    old_string: None,
+                    new_string: None,
+                    rationale: reason.clone(),
+                    sources,
+                    judge_score: None,
+                    judge_reason: None,
+                    created_at: Utc::now().to_rfc3339(),
+                });
+            }
+            CurateSuggestion::Rewrite { .. } => {
+                // Rewrite 不自动入队；UI 提供定向进化入口
+            }
+        }
+    }
+    out
+}
+
+/// 策展后可选入队：返回写入的提案数。
+pub fn enqueue_curator_suggestions(
+    base: &Path,
+    report: &CurateReport,
+    max: usize,
+) -> anyhow::Result<usize> {
+    let cands = suggestions_to_candidates(&report.suggestions, max);
+    if cands.is_empty() {
+        return Ok(0);
+    }
+    crate::proposal::save_proposals(base, &cands)?;
+    Ok(cands.len())
 }
 
 #[cfg(test)]
@@ -484,5 +641,127 @@ mod tests {
             }
             other => panic!("expected Merge, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn suggestions_to_candidates_skips_rewrite() {
+        let sugs = vec![
+            CurateSuggestion::Disable {
+                skill_id: "old".into(),
+                reason: "闲置".into(),
+            },
+            CurateSuggestion::Rewrite {
+                skill_id: "x".into(),
+                reason: "fail".into(),
+            },
+            CurateSuggestion::Merge {
+                keep: "a".into(),
+                absorb: vec!["b".into()],
+                reason: "重叠".into(),
+            },
+        ];
+        let cands = suggestions_to_candidates(&sugs, 5);
+        assert_eq!(cands.len(), 2);
+        assert!(cands.iter().any(|c| c.kind == crate::candidate::CandidateKind::Disable));
+        assert!(cands.iter().any(|c| c.kind == crate::candidate::CandidateKind::Merge));
+        let merge = cands
+            .iter()
+            .find(|c| c.kind == crate::candidate::CandidateKind::Merge)
+            .unwrap();
+        assert!(merge.sources.iter().any(|s| s == "absorb:b"));
+    }
+
+    #[test]
+    fn enqueue_respects_max() {
+        let dir = TempDir::new().unwrap();
+        let report = CurateReport {
+            generated_at: "now".into(),
+            unused_skill_days: 30,
+            enabled_count: 2,
+            stale: vec!["a".into()],
+            rows: vec![],
+            overlap_clusters: vec![],
+            suggestions: vec![
+                CurateSuggestion::Disable {
+                    skill_id: "a".into(),
+                    reason: "x".into(),
+                },
+                CurateSuggestion::Disable {
+                    skill_id: "b".into(),
+                    reason: "y".into(),
+                },
+            ],
+        };
+        let n = enqueue_curator_suggestions(dir.path(), &report, 1).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(crate::proposal::list_proposals(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn parse_diagnose_output_valid() {
+        let raw = r#"{"diagnosis":"建议拆分为两个独立技能，各管一个领域"}"#;
+        let d = parse_diagnose_output(raw).unwrap();
+        assert!(d.contains("拆分"));
+    }
+
+    #[test]
+    fn parse_diagnose_output_with_fence() {
+        let raw = "```json\n{\"diagnosis\":\"直接删除\"}\n```";
+        let d = parse_diagnose_output(raw).unwrap();
+        assert_eq!(d, "直接删除");
+    }
+
+    #[test]
+    fn parse_diagnose_output_empty_returns_none() {
+        assert!(parse_diagnose_output(r#"{"diagnosis":""}"#).is_none());
+        assert!(parse_diagnose_output("not json").is_none());
+    }
+
+    #[test]
+    fn apply_diagnoses_replaces_reason() {
+        let mut sugs = vec![
+            CurateSuggestion::Disable {
+                skill_id: "a".into(),
+                reason: "闲置 30 天".into(),
+            },
+            CurateSuggestion::Rewrite {
+                skill_id: "b".into(),
+                reason: "Fail 多".into(),
+            },
+        ];
+        apply_diagnoses(&mut sugs, &[(0, "直接禁用即可".into())]);
+        match &sugs[0] {
+            CurateSuggestion::Disable { reason, .. } => {
+                assert!(reason.contains("直接禁用即可"));
+                assert!(reason.contains("闲置 30 天"));
+            }
+            _ => panic!("wrong variant"),
+        }
+        // index 1 untouched
+        match &sugs[1] {
+            CurateSuggestion::Rewrite { reason, .. } => assert_eq!(reason, "Fail 多"),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn build_diagnose_prompt_includes_context() {
+        let rows = vec![CurateSkillRow {
+            skill_id: "pdf-merge".into(),
+            description: "合并 PDF 文件".into(),
+            last_loaded: None,
+            stale: true,
+            health_score: Some(0.3),
+            health_reasons: vec!["闲置".into()],
+            bytes: Some(5000),
+        }];
+        let sug = CurateSuggestion::Disable {
+            skill_id: "pdf-merge".into(),
+            reason: "从未加载".into(),
+        };
+        let p = build_diagnose_prompt(&sug, &rows);
+        assert!(p.contains("pdf-merge"));
+        assert!(p.contains("禁用"));
+        assert!(p.contains("合并 PDF"));
     }
 }

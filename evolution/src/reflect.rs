@@ -132,6 +132,7 @@ pub fn parse_candidates(raw: &str) -> anyhow::Result<Vec<SkillCandidate>> {
                     continue;
                 }
             }
+            CandidateKind::Disable | CandidateKind::Merge => continue, // 仅策展路径产出
         }
         out.push(SkillCandidate {
             id: Uuid::new_v4().to_string(),

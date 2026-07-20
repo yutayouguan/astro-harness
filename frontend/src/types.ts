@@ -297,6 +297,13 @@ export type EvolutionAutoDto = {
   maxRunsPerDay: number;
 };
 
+/** 技能策展参数 */
+export type EvolutionCuratorDto = {
+  enabled: boolean;
+  intervalDays: number;
+  maxEnqueue: number;
+};
+
 /** 自动触发运行时状态（护栏水位） */
 export type EvolutionAutoStatusDto = {
   enabled: boolean;
@@ -408,6 +415,7 @@ export type EvolutionSettingsDto = {
   gates: EvolutionGatesDto;
   search: EvolutionSearchDto;
   auto: EvolutionAutoDto;
+  curator: EvolutionCuratorDto;
   activeProviderId: string | null;
   activeModel: string;
 };
@@ -415,7 +423,7 @@ export type EvolutionSettingsDto = {
 /** 单条进化提案（待审） */
 export type EvolutionProposalDto = {
   id: string;
-  kind: "new_skill" | "patch";
+  kind: "new_skill" | "patch" | "disable" | "merge";
   skillId: string;
   description: string | null;
   content: string | null;

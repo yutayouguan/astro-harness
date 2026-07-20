@@ -10,6 +10,10 @@ pub enum CandidateKind {
     NewSkill,
     /// 对已有 Skill 的唯一字符串替换。
     Patch,
+    /// 策展：禁用技能（不删文件）。
+    Disable,
+    /// 策展：合并重叠技能（写 keep，禁用 absorb）。
+    Merge,
 }
 
 /// 一条进化候选（也是持久化的提案单元）。
@@ -52,8 +56,11 @@ impl SkillCandidate {
     /// 估算写入体积（字节）：新建取 content，patch 取 new_string。
     pub fn payload_len(&self) -> usize {
         match self.kind {
-            CandidateKind::NewSkill => self.content.as_deref().map(str::len).unwrap_or(0),
+            CandidateKind::NewSkill | CandidateKind::Merge => {
+                self.content.as_deref().map(str::len).unwrap_or(0)
+            }
             CandidateKind::Patch => self.new_string.as_deref().map(str::len).unwrap_or(0),
+            CandidateKind::Disable => 1, // 非空占位，避免体积门禁误杀
         }
     }
 }

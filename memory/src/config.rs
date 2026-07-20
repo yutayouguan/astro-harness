@@ -492,6 +492,51 @@ impl Default for EvolutionAuto {
     }
 }
 
+fn default_curator_interval_days() -> u32 {
+    7
+}
+
+fn default_curator_max_enqueue() -> usize {
+    5
+}
+
+/// 技能策展（`config.yaml` 的 `evolution.curator` 段）。
+///
+/// 默认关闭；手动可随时跑。开启后仅表示「允许按 interval 提示/自动报告」，
+/// **默认不自动入队提案**（入队需显式 enqueue）。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct EvolutionCurator {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_curator_interval_days")]
+    pub interval_days: u32,
+    /// 单次入队上限。
+    #[serde(default = "default_curator_max_enqueue")]
+    pub max_enqueue: usize,
+    /// LLM 辅助诊断开关（默认关）。
+    #[serde(default)]
+    pub llm_diagnose: bool,
+    /// 单次策展最多 LLM 诊断调用数（默认 3）。
+    #[serde(default = "default_curator_max_llm_calls")]
+    pub max_llm_calls: u32,
+}
+
+fn default_curator_max_llm_calls() -> u32 {
+    3
+}
+
+impl Default for EvolutionCurator {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_days: 7,
+            max_enqueue: 5,
+            llm_diagnose: false,
+            max_llm_calls: 3,
+        }
+    }
+}
+
 /// 外部 Python DSPy 引擎对接配置（`config.yaml` 的 `evolution.dspy` 段）。
 ///
 /// 默认关闭；需用户自备 Python + 依赖（见 `evolution-dspy/`）。
@@ -546,6 +591,9 @@ pub struct EvolutionConfig {
     /// 自动触发（默认关 + 成本护栏）。
     #[serde(default)]
     pub auto: EvolutionAuto,
+    /// Curator（技能库健康维护）。
+    #[serde(default)]
+    pub curator: EvolutionCurator,
 }
 
 /// 进化路由用途。
@@ -1074,6 +1122,39 @@ pub fn set_evolution_auto(base: &Path, auto: &EvolutionAuto) -> anyhow::Result<E
         &["evolution", "auto"],
         "max_runs_per_day",
         auto.max_runs_per_day as usize,
+    )?;
+    Ok(load_evolution_config(base))
+}
+
+/// 设置策展参数并返回最新配置。
+pub fn set_evolution_curator(
+    base: &Path,
+    curator: &EvolutionCurator,
+) -> anyhow::Result<EvolutionConfig> {
+    set_nested_bool(base, &["evolution", "curator"], "enabled", curator.enabled)?;
+    set_nested_usize(
+        base,
+        &["evolution", "curator"],
+        "interval_days",
+        curator.interval_days as usize,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "curator"],
+        "max_enqueue",
+        curator.max_enqueue,
+    )?;
+    set_nested_bool(
+        base,
+        &["evolution", "curator"],
+        "llm_diagnose",
+        curator.llm_diagnose,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "curator"],
+        "max_llm_calls",
+        curator.max_llm_calls as usize,
     )?;
     Ok(load_evolution_config(base))
 }

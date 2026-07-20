@@ -17,14 +17,15 @@ use evolution::{
     aggregate_critiques, apply_patch_unique, approve_proposal, approve_proposal_checked,
     build_auto_status, build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
     build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
-    default_holdout_percent, effective_candidate_size, examples_for_skill, list_examples,
-    list_proposals, load_auto_state, load_curator_last, mark_auto_run, pareto_front,
-    parse_candidates, parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
-    run_curator_and_save, sandbox_test_candidate, save_auto_state, save_proposals,
-    select_front_capped, select_population, split_eval_examples, weighted_eval_score, AutoGate,
-    AutoStatus, CandidateKind, CurateReport, EvalExample, EvalJudgement, ReflectionInput,
-    ScoredVariant, SearchBudget, SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT,
-    EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    default_holdout_percent, effective_candidate_size, enqueue_curator_suggestions,
+    examples_for_skill, list_examples, list_proposals, load_auto_state, load_curator_last,
+    mark_auto_run, pareto_front, parse_candidates, parse_eval_judgement, parse_judge_output,
+    parse_variants, reject_proposal, run_curator_and_save, sandbox_test_candidate, save_auto_state,
+    save_proposals, select_front_capped, select_population, split_eval_examples,
+    weighted_eval_score, AutoGate, AutoStatus, CandidateKind, CurateReport, EvalExample,
+    EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget, SearchRunMeta, SkillCandidate,
+    Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT,
+    MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
@@ -58,6 +59,8 @@ impl From<SkillCandidate> for EvolutionProposalDto {
         let kind = match c.kind {
             CandidateKind::NewSkill => "new_skill",
             CandidateKind::Patch => "patch",
+            CandidateKind::Disable => "disable",
+            CandidateKind::Merge => "merge",
         }
         .to_string();
         Self {
@@ -1177,6 +1180,8 @@ fn proposal_meta(base: &Path, id: &str) -> (String, String, Option<f32>) {
             let kind = match p.kind {
                 CandidateKind::NewSkill => "new_skill",
                 CandidateKind::Patch => "patch",
+                CandidateKind::Disable => "disable",
+                CandidateKind::Merge => "merge",
             }
             .to_string();
             (p.skill_id, kind, p.judge_score)
@@ -1189,7 +1194,8 @@ fn proposal_meta(base: &Path, id: &str) -> (String, String, Option<f32>) {
 pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
     let base = default_memory_dir();
     let (skill_id, kind, score) = proposal_meta(&base, &id);
-    let run_tests = memory::load_evolution_config(&base).gates.run_tests;
+    let skip_tests = matches!(kind.as_str(), "disable" | "merge");
+    let run_tests = !skip_tests && memory::load_evolution_config(&base).gates.run_tests;
     let res = if run_tests {
         approve_proposal_checked(&base, &id, run_skill_tests).map_err(|e| e.to_string())
     } else {
@@ -1861,21 +1867,90 @@ fn curate_report_dto(r: CurateReport) -> CurateReportDto {
     }
 }
 
-/// 运行技能策展（结构化报告，不自动删改）。
+/// 策展运行结果（含可选入队数）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CuratorRunReportDto {
+    pub report: CurateReportDto,
+    pub enqueued: usize,
+}
+
+/// 运行技能策展（结构化报告；可选将 Disable/Merge 建议入待审）。
+///
+/// 若 `curator.llm_diagnose` 开启且有可用 judge 路由，对低健康分或重叠簇
+/// 的建议调用 LLM 生成一句可操作诊断，替换 reason。失败静默回退启发式 reason。
 #[tauri::command]
-pub async fn run_skill_curator() -> Result<CurateReportDto, String> {
+pub async fn run_skill_curator(enqueue: Option<bool>) -> Result<CuratorRunReportDto, String> {
     let base = default_memory_dir();
     let unused = memory::load_learning_config(&base).unused_skill_days;
-    let report = run_curator_and_save(&base, unused).map_err(|e| e.to_string())?;
+    let cfg = memory::load_evolution_config(&base);
+    let mut report = run_curator_and_save(&base, unused).map_err(|e| e.to_string())?;
+
+    // LLM 辅助诊断
+    if cfg.curator.llm_diagnose && !report.suggestions.is_empty() {
+        if let Ok(primary) = active_primary_target() {
+            if let Ok(judge_targets) =
+                resolve_evolution_targets(memory::EvolutionRouteKind::Judge, &primary)
+            {
+                let max_calls = cfg.curator.max_llm_calls.max(1);
+                let mut diagnoses: Vec<(usize, String)> = Vec::new();
+                for (i, sug) in report.suggestions.iter().enumerate() {
+                    if diagnoses.len() as u32 >= max_calls {
+                        break;
+                    }
+                    let prompt =
+                        evolution::build_diagnose_prompt(sug, &report.rows);
+                    if let Ok(raw) = reflect_over_targets(
+                        &judge_targets,
+                        evolution::CURATOR_DIAGNOSE_SYSTEM_PROMPT,
+                        &prompt,
+                    )
+                    .await
+                    {
+                        if let Some(d) = evolution::parse_diagnose_output(&raw) {
+                            diagnoses.push((i, d));
+                        }
+                    }
+                }
+                if !diagnoses.is_empty() {
+                    evolution::apply_diagnoses(&mut report.suggestions, &diagnoses);
+                    // 重新落盘（带增强 reason）
+                    let path = evolution::curator_last_path(&base);
+                    if let Ok(json) = serde_json::to_string_pretty(&report) {
+                        let _ = std::fs::write(&path, json.as_bytes());
+                    }
+                }
+            }
+        }
+    }
+
+    let mut enqueued = 0usize;
+    if enqueue.unwrap_or(false) {
+        enqueued = enqueue_curator_suggestions(&base, &report, cfg.curator.max_enqueue)
+            .map_err(|e| e.to_string())?;
+    }
     evolution::record_run(
         &base,
         "curator",
         report.enabled_count,
         0,
         0,
-        report.suggestions.len(),
+        report.suggestions.len().max(enqueued),
     );
-    Ok(curate_report_dto(report))
+    Ok(CuratorRunReportDto {
+        report: curate_report_dto(report),
+        enqueued,
+    })
+}
+
+/// 将上次策展报告中的 Disable/Merge 建议入待审队列。
+#[tauri::command]
+pub async fn enqueue_curator_proposals() -> Result<usize, String> {
+    let base = default_memory_dir();
+    let report = load_curator_last(&base).ok_or_else(|| "尚无策展报告，请先运行策展".to_string())?;
+    let max = memory::load_evolution_config(&base).curator.max_enqueue;
+    let n = enqueue_curator_suggestions(&base, &report, max).map_err(|e| e.to_string())?;
+    Ok(n)
 }
 
 /// 读取上次策展报告（若有）。
@@ -1969,6 +2044,9 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
                 let updated = apply_patch_unique(&text, old, new).map_err(|e| e.to_string())?;
                 std::fs::write(&skill_md, updated.as_bytes()).map_err(|e| e.to_string())?;
             }
+            CandidateKind::Disable | CandidateKind::Merge => {
+                return Err("策展 Disable/Merge 请用「批准写入」，不支持批准到分支".into());
+            }
         }
         git(&["add", "-A"], &wt)?;
         let msg = format!("evolve: {} ({:?})", cand.skill_id, cand.kind);
@@ -1989,6 +2067,8 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
     let kind = match cand.kind {
         CandidateKind::NewSkill => "new_skill",
         CandidateKind::Patch => "patch",
+        CandidateKind::Disable => "disable",
+        CandidateKind::Merge => "merge",
     };
     evolution::record_outcome(&base, &id, &cand.skill_id, kind, cand.judge_score, "branch");
     reject_proposal(&base, &id).map_err(|e| e.to_string())?;

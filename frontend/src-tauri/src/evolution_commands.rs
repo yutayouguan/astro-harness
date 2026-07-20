@@ -51,6 +51,17 @@ pub struct EvolutionAutoDto {
     pub max_runs_per_day: u32,
 }
 
+/// 策展参数展示态。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvolutionCuratorDto {
+    pub enabled: bool,
+    pub interval_days: u32,
+    pub max_enqueue: u32,
+    pub llm_diagnose: bool,
+    pub max_llm_calls: u32,
+}
+
 /// 进化设置全量 DTO。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +71,7 @@ pub struct EvolutionSettingsDto {
     pub gates: EvolutionGatesDto,
     pub search: EvolutionSearchDto,
     pub auto: EvolutionAutoDto,
+    pub curator: EvolutionCuratorDto,
     pub active_provider_id: Option<String>,
     pub active_model: String,
 }
@@ -161,6 +173,13 @@ fn build_settings_dto() -> Result<EvolutionSettingsDto, String> {
             cooldown_secs: cfg.auto.cooldown_secs,
             min_new_decisions: cfg.auto.min_new_decisions as u32,
             max_runs_per_day: cfg.auto.max_runs_per_day,
+        },
+        curator: EvolutionCuratorDto {
+            enabled: cfg.curator.enabled,
+            interval_days: cfg.curator.interval_days,
+            max_enqueue: cfg.curator.max_enqueue as u32,
+            llm_diagnose: cfg.curator.llm_diagnose,
+            max_llm_calls: cfg.curator.max_llm_calls,
         },
         active_provider_id: state.active_provider_id,
         active_model,
@@ -270,6 +289,27 @@ pub async fn set_evolution_auto(
         max_runs_per_day: max_runs_per_day.clamp(1, 24),
     };
     memory::set_evolution_auto(&base, &auto).map_err(|e| e.to_string())?;
+    build_settings_dto()
+}
+
+/// 设置策展参数。
+#[tauri::command]
+pub async fn set_evolution_curator(
+    enabled: bool,
+    interval_days: u32,
+    max_enqueue: u32,
+    llm_diagnose: bool,
+    max_llm_calls: u32,
+) -> Result<EvolutionSettingsDto, String> {
+    let base = home::default_memory_dir();
+    let curator = memory::EvolutionCurator {
+        enabled,
+        interval_days: interval_days.clamp(1, 90),
+        max_enqueue: (max_enqueue.clamp(1, 20)) as usize,
+        llm_diagnose,
+        max_llm_calls: max_llm_calls.clamp(1, 20),
+    };
+    memory::set_evolution_curator(&base, &curator).map_err(|e| e.to_string())?;
     build_settings_dto()
 }
 

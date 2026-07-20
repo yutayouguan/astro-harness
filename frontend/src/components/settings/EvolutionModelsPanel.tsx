@@ -122,6 +122,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     setGates,
     setSearch,
     setAuto,
+    setCurator,
     reload,
   } = useEvolutionSettings(active);
   const {
@@ -172,8 +173,11 @@ export default function EvolutionModelsPanel({ active }: Props) {
     loading: curatorLoading,
     error: curatorError,
     report: curatorReport,
+    lastEnqueued,
     run: runCurator,
+    enqueue: enqueueCurator,
   } = useSkillCurator(active);
+  const [curatorEnqueue, setCuratorEnqueue] = useState(false);
   const [dspySkill, setDspySkill] = useState("");
   const { history, reload: reloadHistory } = useEvolutionHistory(active);
   const {
@@ -1094,28 +1098,40 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 const oldS = p.oldString ?? "";
                 const newS = p.newString ?? "";
                 const truncated =
-                  p.kind === "new_skill"
+                  p.kind === "new_skill" || p.kind === "disable" || p.kind === "merge"
                     ? newContent.length > 1200
                     : oldS.length > 400 || newS.length > 400;
                 const diffText =
-                  p.kind === "new_skill"
+                  p.kind === "patch"
                     ? expanded || !truncated
-                      ? newContent
-                      : `${newContent.slice(0, 1200)}…`
-                    : expanded || !truncated
                       ? `- ${oldS}\n+ ${newS}`
-                      : `- ${oldS.slice(0, 400)}…\n+ ${newS.slice(0, 400)}…`;
+                      : `- ${oldS.slice(0, 400)}…\n+ ${newS.slice(0, 400)}…`
+                    : expanded || !truncated
+                      ? newContent
+                      : `${newContent.slice(0, 1200)}…`;
+                const kindLabel =
+                  p.kind === "new_skill"
+                    ? t("evo.kindNew")
+                    : p.kind === "patch"
+                      ? t("evo.kindPatch")
+                      : p.kind === "disable"
+                        ? t("evo.kindDisable")
+                        : t("evo.kindMerge");
                 return (
                 <article className="aux-task-row evo-proposal-card" key={p.id}>
                   <div className="aux-task-icon">
-                    {p.kind === "new_skill" ? <FilePlus2 size={18} /> : <Pencil size={18} />}
+                    {p.kind === "new_skill" ? (
+                      <FilePlus2 size={18} />
+                    ) : p.kind === "patch" ? (
+                      <Pencil size={18} />
+                    ) : (
+                      <ClipboardList size={18} />
+                    )}
                   </div>
                   <div className="aux-task-main">
                     <div className="aux-task-titleline">
                       <h3>{p.skillId}</h3>
-                      <span className="aux-route-pill">
-                        {p.kind === "new_skill" ? t("evo.kindNew") : t("evo.kindPatch")}
-                      </span>
+                      <span className="aux-route-pill">{kindLabel}</span>
                       {p.judgeScore != null && (
                         <span className="evo-score-pill">
                           {t("evo.judgeScore")} {p.judgeScore.toFixed(2)}
@@ -1164,16 +1180,18 @@ export default function EvolutionModelsPanel({ active }: Props) {
                       <Trash2 size={15} />
                       {t("evo.reject")}
                     </button>
-                    <button
-                      type="button"
-                      className="aux-action aux-action-ghost"
-                      onClick={() =>
-                        void approveToBranch(p.id).then((m) => m && setBranchMsg(m))
-                      }
-                    >
-                      <GitBranch size={15} />
-                      {t("evo.approveToBranch")}
-                    </button>
+                    {(p.kind === "new_skill" || p.kind === "patch") && (
+                      <button
+                        type="button"
+                        className="aux-action aux-action-ghost"
+                        onClick={() =>
+                          void approveToBranch(p.id).then((m) => m && setBranchMsg(m))
+                        }
+                      >
+                        <GitBranch size={15} />
+                        {t("evo.approveToBranch")}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="aux-action"
@@ -1481,10 +1499,26 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 <p className="prefs-card-sub">{t("evo.curatorSub")}</p>
               </div>
               <div className="aux-list-head-actions">
+                <label className="evo-cfg-toggle" title={t("evo.curatorEnqueueDesc")}>
+                  {t("evo.curatorEnqueue")}
+                  <button
+                    type="button"
+                    role="switch"
+                    className="tool-toggle"
+                    aria-checked={curatorEnqueue}
+                    onClick={() => setCuratorEnqueue((v) => !v)}
+                  >
+                    <span className="tool-toggle-thumb" />
+                  </button>
+                </label>
                 <button
                   type="button"
                   className="aux-action"
-                  onClick={() => void runCurator()}
+                  onClick={() =>
+                    void runCurator(curatorEnqueue).then(() => {
+                      if (curatorEnqueue) void reloadProposals();
+                    })
+                  }
                   disabled={curatorLoading}
                 >
                   <RefreshCw size={15} />
@@ -1509,7 +1543,25 @@ export default function EvolutionModelsPanel({ active }: Props) {
                     .replace("{n}", String(curatorReport.enabledCount))
                     .replace("{stale}", String(curatorReport.stale.length))
                     .replace("{sug}", String(curatorReport.suggestions.length))}
+                  {lastEnqueued > 0
+                    ? ` · ${t("evo.curatorEnqueued").replace("{n}", String(lastEnqueued))}`
+                    : ""}
                 </p>
+                {curatorReport.suggestions.some(
+                  (s) => s.kind === "disable" || s.kind === "merge",
+                ) && (
+                  <div className="aux-task-actions" style={{ marginBottom: 8 }}>
+                    <button
+                      type="button"
+                      className="aux-action aux-action-ghost"
+                      onClick={() => void enqueueCurator().then(() => reloadProposals())}
+                      disabled={curatorLoading}
+                    >
+                      <Inbox size={15} />
+                      {t("evo.curatorEnqueueBtn")}
+                    </button>
+                  </div>
+                )}
                 {curatorReport.suggestions.length > 0 && (
                   <div className="aux-task-list">
                     {curatorReport.suggestions.map((s, i) => (

@@ -37,8 +37,9 @@ pub fn build_judge_user_prompt(
     }
     s.push_str("\n## 候选\n");
     match cand.kind {
-        CandidateKind::NewSkill => {
-            s.push_str(&format!("类型: 新建技能 `{}`\n", cand.skill_id));
+        CandidateKind::NewSkill | CandidateKind::Merge => {
+            let label = if cand.kind == CandidateKind::Merge { "合并技能" } else { "新建技能" };
+            s.push_str(&format!("类型: {label} `{}`\n", cand.skill_id));
             if let Some(d) = &cand.description {
                 s.push_str(&format!("描述: {d}\n"));
             }
@@ -52,6 +53,9 @@ pub fn build_judge_user_prompt(
                 cand.old_string.as_deref().unwrap_or(""),
                 cand.new_string.as_deref().unwrap_or("")
             ));
+        }
+        CandidateKind::Disable => {
+            s.push_str(&format!("类型: 禁用技能 `{}`\n", cand.skill_id));
         }
     }
     if !cand.rationale.trim().is_empty() {
