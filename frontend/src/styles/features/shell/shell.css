@@ -266,17 +266,17 @@ html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dyna
     ),
     radial-gradient(
       ellipse 85% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.34),
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.34 * var(--shell-grad-strength, 1))),
       transparent 55%
     ),
     radial-gradient(
       ellipse 70% 55% at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
-      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), 0.16),
+      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.16 * var(--shell-grad-strength, 1))),
       transparent 50%
     ),
     radial-gradient(
       ellipse 55% 45% at 50% 100%,
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.1),
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.1 * var(--shell-grad-strength, 1))),
       transparent 55%
     ),
     linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
@@ -301,20 +301,33 @@ html[data-theme="light"]:is([data-color-style="unified"], [data-color-style="dyn
     ),
     radial-gradient(
       ellipse 90% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.58),
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.58 * var(--shell-grad-strength, 1))),
       transparent 55%
     ),
     radial-gradient(
       ellipse 70% 55% at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
-      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), 0.42),
+      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.42 * var(--shell-grad-strength, 1))),
       transparent 50%
     ),
     radial-gradient(
       ellipse 60% 50% at 50% 100%,
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), 0.28),
+      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.28 * var(--shell-grad-strength, 1))),
       transparent 55%
     ),
     linear-gradient(165deg, #f0f7ff 0%, #e8eef8 48%, #f4f7fb 100%);
+}
+
+/* 统一色选白：压低渐变强度，保留可读玻璃描边（强调色由 JS 回退 slate） */
+html[data-theme="light"][data-unified-surface="light-neutral"]:is([data-color-style="unified"], [data-color-style="dynamic"]) {
+  --glass-edge: color-mix(in srgb, #64748b 16%, rgba(15, 23, 42, 0.1));
+  --glass-border: color-mix(in srgb, #64748b 12%, rgba(15, 23, 42, 0.08));
+  --header-chip-border: color-mix(in srgb, #64748b 20%, rgba(15, 23, 42, 0.12));
+}
+
+html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-style="unified"], [data-color-style="dynamic"]) {
+  --glass-edge: rgba(255, 255, 255, 0.14);
+  --glass-border: rgba(255, 255, 255, 0.11);
+  --header-chip-border: rgba(255, 255, 255, 0.16);
 }
 
 .body-row {

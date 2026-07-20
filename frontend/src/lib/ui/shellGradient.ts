@@ -91,9 +91,64 @@ export function underlayFromGradient(
     colors[0],
   );
   if (theme === "light") {
+    if (isNearWhite(mid)) {
+      return mixHex("#ffffff", "#e2e8f0", 0.28);
+    }
     return mixHex(mid, "#f8fafc", 0.72);
   }
+  if (isNearBlack(mid)) {
+    return mixHex("#0a1018", "#1e293b", 0.22);
+  }
   return mixHex(mid, "#0a1018", 0.82);
+}
+
+/** sRGB 相对亮度 0–1，用于极端白/黑检测 */
+export function relativeLuminance(hex: string): number {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return 0.5;
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * channel(rgb.r) +
+    0.7152 * channel(rgb.g) +
+    0.0722 * channel(rgb.b)
+  );
+}
+
+export function isNearWhite(hex: string, threshold = 0.9): boolean {
+  return relativeLuminance(hex) >= threshold;
+}
+
+export function isNearBlack(hex: string, threshold = 0.1): boolean {
+  return relativeLuminance(hex) <= threshold;
+}
+
+/** 统一色在亮/暗主题下的可读强调色（背景仍用用户选色） */
+export type UnifiedSurfaceMode = "default" | "light-neutral" | "dark-neutral";
+
+export function unifiedSurfaceMode(
+  theme: "light" | "dark",
+  primary: string,
+): UnifiedSurfaceMode {
+  if (theme === "light" && isNearWhite(primary)) return "light-neutral";
+  if (theme === "dark" && isNearBlack(primary)) return "dark-neutral";
+  return "default";
+}
+
+const UNIFIED_ACCENT_LIGHT_NEUTRAL = "#64748b";
+const UNIFIED_ACCENT_DARK_NEUTRAL = "#94a3b8";
+
+/** 壳层渐变保留用户色；UI 强调色在极端白/黑时回退为中性 slate */
+export function effectiveUnifiedTone(
+  theme: "light" | "dark",
+  primary: string,
+): string {
+  const mode = unifiedSurfaceMode(theme, primary);
+  if (mode === "light-neutral") return UNIFIED_ACCENT_LIGHT_NEUTRAL;
+  if (mode === "dark-neutral") return UNIFIED_ACCENT_DARK_NEUTRAL;
+  return primary;
 }
 
 export const SHELL_GRADIENT_PRESETS: {
@@ -314,6 +369,9 @@ export function normalizeGradient(raw: unknown): ShellGradient {
 export function applyShellGradientVars(
   el: HTMLElement,
   gradient: ShellGradient,
+  theme: "light" | "dark" = el.getAttribute("data-theme") === "dark"
+    ? "dark"
+    : "light",
 ): void {
   const p = hexToRgb(gradient.primary.color);
   const s = hexToRgb(gradient.secondary.color);
@@ -342,22 +400,28 @@ export function applyShellGradientVars(
   for (let index = gradient.extras.length; index < 3; index += 1) {
     el.style.setProperty(`--shell-grad-e${index + 1}a`, "0");
   }
-  el.style.setProperty("--unified-tone", gradient.primary.color);
-  // soft 稍提高：玻璃层在 WebKit 里可能滞后，实色染色要能立刻跟上
+
+  const surface = unifiedSurfaceMode(theme, gradient.primary.color);
+  if (surface === "default") {
+    el.removeAttribute("data-unified-surface");
+  } else {
+    el.setAttribute("data-unified-surface", surface);
+  }
+
+  const accent = effectiveUnifiedTone(theme, gradient.primary.color);
+  el.style.setProperty("--unified-tone", accent);
   el.style.setProperty(
     "--unified-tone-soft",
-    `color-mix(in srgb, ${gradient.primary.color} 28%, transparent)`,
+    `color-mix(in srgb, ${accent} 28%, transparent)`,
   );
   el.style.setProperty(
     "--unified-tone-glow",
-    `color-mix(in srgb, ${gradient.primary.color} 40%, transparent)`,
+    `color-mix(in srgb, ${accent} 40%, transparent)`,
   );
-  // html/body 底色跟渐变走，缩放露边时不闪默认白/蓝
-  const themeAttr =
-    (typeof document !== "undefined"
-      ? document.documentElement.getAttribute("data-theme")
-      : null) ?? el.getAttribute("data-theme");
-  const theme = themeAttr === "dark" ? "dark" : "light";
+  el.style.setProperty(
+    "--shell-grad-strength",
+    surface === "light-neutral" ? "0.42" : surface === "dark-neutral" ? "0.65" : "1",
+  );
   el.style.setProperty("--window-underlay", underlayFromGradient(theme, gradient));
 }
 
@@ -381,6 +445,7 @@ export function flushGlassBackdrop(root: HTMLElement = document.documentElement)
 }
 
 export function clearShellGradientVars(el: HTMLElement): void {
+  el.removeAttribute("data-unified-surface");
   for (const key of [
     "--shell-grad-pr",
     "--shell-grad-pg",
@@ -413,6 +478,7 @@ export function clearShellGradientVars(el: HTMLElement): void {
     "--unified-tone",
     "--unified-tone-soft",
     "--unified-tone-glow",
+    "--shell-grad-strength",
     "--window-underlay",
   ]) {
     el.style.removeProperty(key);

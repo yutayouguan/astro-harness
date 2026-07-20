@@ -277,13 +277,13 @@ export default function App() {
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);
     if (activeShellGradient) {
-      applyShellGradientVars(root, activeShellGradient);
+      applyShellGradientVars(root, activeShellGradient, resolved);
       flushGlassBackdrop(root);
     } else {
       clearShellGradientVars(root);
     }
     reassert();
-  }, [shellTone, colorStyle, activeShellGradient, reassert]);
+  }, [shellTone, colorStyle, activeShellGradient, resolved, reassert]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone, activeShellGradient);
   }, [resolved, shellTone, activeShellGradient]);
