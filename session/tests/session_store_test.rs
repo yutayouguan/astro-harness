@@ -1066,34 +1066,34 @@ fn fork_session_copies_bubbles_and_trailing_tools() {
     store.set_session_title("src", "hello").unwrap();
     store
         .append_message(NewMessage {
-            content: Some("u1".into()),
+            content: Some("u1"),
             ..NewMessage::empty("src", "user")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("a1".into()),
+            content: Some("a1"),
             tool_calls: Some(serde_json::json!([{ "id": "c1", "name": "x", "arguments": {} }])),
             ..NewMessage::empty("src", "assistant")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("tool-out".into()),
-            tool_call_id: Some("c1".into()),
-            tool_name: Some("x".into()),
+            content: Some("tool-out"),
+            tool_call_id: Some("c1"),
+            tool_name: Some("x"),
             ..NewMessage::empty("src", "tool")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("a1b".into()),
+            content: Some("a1b"),
             ..NewMessage::empty("src", "assistant")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("u2".into()),
+            content: Some("u2"),
             ..NewMessage::empty("src", "user")
         })
         .unwrap();
@@ -1122,34 +1122,34 @@ fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("u1".into()),
+            content: Some("u1"),
             ..NewMessage::empty("s1", "user")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("a1".into()),
+            content: Some("a1"),
             tool_calls: Some(serde_json::json!([{ "id": "c1", "name": "x", "arguments": {} }])),
             ..NewMessage::empty("s1", "assistant")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("tool-out".into()),
-            tool_call_id: Some("c1".into()),
-            tool_name: Some("x".into()),
+            content: Some("tool-out"),
+            tool_call_id: Some("c1"),
+            tool_name: Some("x"),
             ..NewMessage::empty("s1", "tool")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("u2".into()),
+            content: Some("u2"),
             ..NewMessage::empty("s1", "user")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("a2".into()),
+            content: Some("a2"),
             ..NewMessage::empty("s1", "assistant")
         })
         .unwrap();
@@ -1166,7 +1166,7 @@ fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
     // keep 0 → 清空
     store
         .append_message(NewMessage {
-            content: Some("again".into()),
+            content: Some("again"),
             ..NewMessage::empty("s1", "user")
         })
         .unwrap();
@@ -1186,40 +1186,40 @@ fn remove_chat_bubbles_splices_middle_user_and_tools() {
     // u0 a0(tool) u1 a1 u2
     store
         .append_message(NewMessage {
-            content: Some("u0".into()),
+            content: Some("u0"),
             ..NewMessage::empty("s1", "user")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("a0".into()),
+            content: Some("a0"),
             tool_calls: Some(serde_json::json!([{ "id": "c0", "name": "x", "arguments": {} }])),
             ..NewMessage::empty("s1", "assistant")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("tool0".into()),
-            tool_call_id: Some("c0".into()),
-            tool_name: Some("x".into()),
+            content: Some("tool0"),
+            tool_call_id: Some("c0"),
+            tool_name: Some("x"),
             ..NewMessage::empty("s1", "tool")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("u1".into()),
+            content: Some("u1"),
             ..NewMessage::empty("s1", "user")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("a1".into()),
+            content: Some("a1"),
             ..NewMessage::empty("s1", "assistant")
         })
         .unwrap();
     store
         .append_message(NewMessage {
-            content: Some("u2".into()),
+            content: Some("u2"),
             ..NewMessage::empty("s1", "user")
         })
         .unwrap();

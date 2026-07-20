@@ -74,6 +74,6 @@ mod tests {
             },
             "127.0.0.1:0"
         );
-        assert_eq!(grpc_bind_address(false).contains(':'), true);
+        assert!(grpc_bind_address(false).contains(':'));
     }
 }

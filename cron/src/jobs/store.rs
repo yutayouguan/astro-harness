@@ -36,7 +36,7 @@ impl CronStore {
 
     /// 打开默认 `~/.astro/cron`（会先确保工作区存在）
     pub fn open_default() -> anyhow::Result<Self> {
-        let _ = ensure_default_workspace_dirs()?;
+        ensure_default_workspace_dirs()?;
         Self::open(default_memory_dir().join("cron"))
     }
 

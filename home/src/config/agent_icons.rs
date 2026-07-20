@@ -242,7 +242,7 @@ fn upsert_identity_icon(ws: &Path, kind: AgentIconKind, rel_path: &str) -> anyho
     let text = if path.is_file() {
         fs::read_to_string(&path)?
     } else {
-        format!("# IDENTITY.md\n\n- **Name:**\n")
+        "# IDENTITY.md\n\n- **Name:**\n".to_string()
     };
     let key_lower = kind.as_str(); // emoji / avatar
     let label = kind.identity_key();

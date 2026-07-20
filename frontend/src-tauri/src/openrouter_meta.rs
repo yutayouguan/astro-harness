@@ -638,7 +638,7 @@ pub fn lookup(id: &str, kind: &str) -> Option<OpenRouterEntry> {
             score += 80;
         }
         if let Some((author, _)) = key.split_once('/') {
-            if authors.iter().any(|a| *a == author) {
+            if authors.contains(&author) {
                 score += 50;
             } else if !authors.is_empty() {
                 score -= 15;

@@ -227,7 +227,7 @@ fn validate_resume_payload(interrupt: &Interrupt, payload_json: &str) -> Result<
     }
     let schema: Value = serde_json::from_str(&interrupt.response_schema_json)
         .map_err(|e| format!("invalid response_schema_json: {e}"))?;
-    validate_against_schema(&schema, &payload).map_err(|e| e)
+    validate_against_schema(&schema, &payload)
 }
 
 /// 进程内 session → 活闸门。

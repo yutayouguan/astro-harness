@@ -455,7 +455,7 @@ mod tests {
         };
         let body = build_veo_predict_body("interp", &extras);
         let inst = &body["instances"][0];
-        assert!(inst["image"]["inlineData"]["data"].as_str().unwrap().len() > 0);
+        assert!(!inst["image"]["inlineData"]["data"].as_str().unwrap().is_empty());
         assert!(inst["lastFrame"]["inlineData"]["data"].is_string());
         assert_eq!(inst["referenceImages"].as_array().unwrap().len(), 2);
         assert_eq!(inst["referenceImages"][0]["referenceType"], "asset");

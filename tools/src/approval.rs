@@ -137,7 +137,7 @@ pub fn classify_dangerous_command(command: &str) -> Option<ApprovalDecision> {
         if re.is_match(cmd) {
             return Some(ApprovalDecision {
                 action: ApprovalAction::Auto,
-                description: *desc,
+                description: desc,
             });
         }
     }
@@ -145,7 +145,7 @@ pub fn classify_dangerous_command(command: &str) -> Option<ApprovalDecision> {
         if re.is_match(cmd) {
             return Some(ApprovalDecision {
                 action: ApprovalAction::Deny,
-                description: *desc,
+                description: desc,
             });
         }
     }
@@ -153,7 +153,7 @@ pub fn classify_dangerous_command(command: &str) -> Option<ApprovalDecision> {
         if re.is_match(cmd) {
             return Some(ApprovalDecision {
                 action: ApprovalAction::Ask,
-                description: *desc,
+                description: desc,
             });
         }
     }

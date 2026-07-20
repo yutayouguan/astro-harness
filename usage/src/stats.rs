@@ -97,7 +97,7 @@ pub fn load_usage_stats(agent_id: Option<&str>) -> AgentUsageStats {
 
 /// 原子写入用量统计（临时文件 + `rename`）。
 pub fn save_usage_stats(agent_id: Option<&str>, stats: &AgentUsageStats) -> anyhow::Result<()> {
-    let _ = ensure_default_workspace_dirs()?;
+    ensure_default_workspace_dirs()?;
     let id = normalize_key(agent_id);
     let path = usage_path(&id);
     if let Some(parent) = path.parent() {

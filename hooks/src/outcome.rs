@@ -21,7 +21,9 @@ pub struct HookPayload {
 
 /// 钩子返回值；观察型应返回 [`Continue`](Self::Continue)。
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum HookOutcome {
+    #[default]
     Continue,
     /// `pre_tool_call`：阻断工具执行。
     Block(String),
@@ -41,11 +43,6 @@ pub enum HookOutcome {
     KeepGoing(String),
 }
 
-impl Default for HookOutcome {
-    fn default() -> Self {
-        Self::Continue
-    }
-}
 
 impl HookOutcome {
     pub fn is_continue(&self) -> bool {

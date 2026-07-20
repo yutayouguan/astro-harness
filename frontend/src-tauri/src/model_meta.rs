@@ -236,7 +236,7 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         if let Some(n) = h.context_window {
             info.context_window = Some(n);
             context_locked_by_api = true;
-            if !sources.iter().any(|s| *s == "api") {
+            if !sources.contains(&"api") {
                 sources.push("api");
             }
         }
@@ -255,7 +255,7 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             let is_embed = methods.iter().any(|m| m.contains("embed"));
             if can_gen && !is_embed {
                 info.capabilities.tools = true;
-                if !sources.iter().any(|s| *s == "api") {
+                if !sources.contains(&"api") {
                     sources.push("api");
                 }
             }

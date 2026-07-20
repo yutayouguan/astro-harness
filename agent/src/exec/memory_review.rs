@@ -201,7 +201,7 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
         && output
             .daily_note
             .as_ref()
-            .map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
     {
         return Ok(vec![]);
     }

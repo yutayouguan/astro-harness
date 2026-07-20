@@ -26,18 +26,15 @@ pub enum MemoryAction {
 /// 记忆写入目标：`memory` → MEMORY.md；`user` → USER.md。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum MemoryTarget {
     /// 长期精炼记忆（`MEMORY.md`）。
+    #[default]
     Memory,
     /// 用户档案（`USER.md`）。
     User,
 }
 
-impl Default for MemoryTarget {
-    fn default() -> Self {
-        Self::Memory
-    }
-}
 
 /// 单一 `memory` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]

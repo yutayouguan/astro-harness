@@ -260,6 +260,13 @@ impl ToolRegistry {
     }
 }
 
+impl Default for ToolRegistry {
+    /// 等价于 [`ToolRegistry::new`]。
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -413,12 +420,5 @@ mod tests {
         assert!(!reg.any_exclusive_access(&["web_search"]));
         assert!(reg.get("create_agent").unwrap().exclusive_access);
         assert!(reg.get("session_search").unwrap().exclusive_access);
-    }
-}
-
-impl Default for ToolRegistry {
-    /// 等价于 [`ToolRegistry::new`]。
-    fn default() -> Self {
-        Self::new()
     }
 }

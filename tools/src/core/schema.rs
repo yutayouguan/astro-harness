@@ -240,6 +240,78 @@ pub fn schema_has_vendor_hazards(value: &Value) -> Option<&'static str> {
     }
 }
 
+/// 手写 JSON Schema 的便捷宏：语义同 `serde_json::json!`，但自动经 [`sanitize_tool_schema`] 清理。
+///
+/// 适用于字段较少、无需 `schemars` 派生的工具参数定义。
+#[macro_export]
+macro_rules! tool_schema {
+    ($($json:tt)+) => {{
+        $crate::schema::sanitize_tool_schema(serde_json::json!($($json)+))
+    }};
+}
+
+/// 用 `schemars` 派生的 Args 类型快速注册工具到 [`ToolRegistry`]。
+///
+/// 自动生成 `schema_for_args::<Args>()` 并构造 [`ToolEntry`]；`check_fn` 固定为 `None`。
+///
+/// ```ignore
+/// register_tool_schemars!(
+///     registry,
+///     name = "ask",
+///     toolset = "ask",
+///     description = "Ask the user a clarifying question",
+///     icon = "circle-help",
+///     args = AskArgs,
+/// );
+/// ```
+#[macro_export]
+macro_rules! register_tool_schemars {
+    (
+        $registry:expr,
+        name = $name:expr,
+        toolset = $toolset:expr,
+        description = $description:expr,
+        icon = $icon:expr,
+        args = $Args:ty $(,)?
+    ) => {{
+        $registry.register($crate::registry::ToolEntry {
+            name: ($name).to_string(),
+            toolset: ($toolset).to_string(),
+            description: ($description).to_string(),
+            schema: $crate::schema::schema_for_args::<$Args>(),
+            check_fn: None,
+            icon: $icon,
+            ..$crate::registry::ToolEntry::lifecycle_defaults()
+        });
+    }};
+}
+
+/// 定义工具参数结构体并自动派生 `JsonSchema`（Rig 风格精简宏）。
+///
+/// 展开后生成带 `Deserialize`、`Serialize`、`JsonSchema` 的 `pub struct`；
+/// 需配合 `register` 函数或 `register_tool_schemars!` 完成注册。
+#[macro_export]
+macro_rules! define_tool_args {
+    (
+        $(#[$meta:meta])*
+        pub struct $ArgsName:ident {
+            $(
+                $(#[$fmeta:meta])*
+                pub $field:ident : $ty:ty
+            ),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
+        pub struct $ArgsName {
+            $(
+                $(#[$fmeta])*
+                pub $field : $ty,
+            )*
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,76 +402,4 @@ mod tests {
         assert!(s.pointer("/properties/examples").is_some(), "{s}");
         assert_eq!(s["required"], json!(["title", "examples"]));
     }
-}
-
-/// 手写 JSON Schema 的便捷宏：语义同 `serde_json::json!`，但自动经 [`sanitize_tool_schema`] 清理。
-///
-/// 适用于字段较少、无需 `schemars` 派生的工具参数定义。
-#[macro_export]
-macro_rules! tool_schema {
-    ($($json:tt)+) => {{
-        $crate::schema::sanitize_tool_schema(serde_json::json!($($json)+))
-    }};
-}
-
-/// 用 `schemars` 派生的 Args 类型快速注册工具到 [`ToolRegistry`]。
-///
-/// 自动生成 `schema_for_args::<Args>()` 并构造 [`ToolEntry`]；`check_fn` 固定为 `None`。
-///
-/// ```ignore
-/// register_tool_schemars!(
-///     registry,
-///     name = "ask",
-///     toolset = "ask",
-///     description = "Ask the user a clarifying question",
-///     icon = "circle-help",
-///     args = AskArgs,
-/// );
-/// ```
-#[macro_export]
-macro_rules! register_tool_schemars {
-    (
-        $registry:expr,
-        name = $name:expr,
-        toolset = $toolset:expr,
-        description = $description:expr,
-        icon = $icon:expr,
-        args = $Args:ty $(,)?
-    ) => {{
-        $registry.register($crate::registry::ToolEntry {
-            name: ($name).to_string(),
-            toolset: ($toolset).to_string(),
-            description: ($description).to_string(),
-            schema: $crate::schema::schema_for_args::<$Args>(),
-            check_fn: None,
-            icon: $icon,
-            ..$crate::registry::ToolEntry::lifecycle_defaults()
-        });
-    }};
-}
-
-/// 定义工具参数结构体并自动派生 `JsonSchema`（Rig 风格精简宏）。
-///
-/// 展开后生成带 `Deserialize`、`Serialize`、`JsonSchema` 的 `pub struct`；
-/// 需配合 `register` 函数或 `register_tool_schemars!` 完成注册。
-#[macro_export]
-macro_rules! define_tool_args {
-    (
-        $(#[$meta:meta])*
-        pub struct $ArgsName:ident {
-            $(
-                $(#[$fmeta:meta])*
-                pub $field:ident : $ty:ty
-            ),* $(,)?
-        }
-    ) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
-        pub struct $ArgsName {
-            $(
-                $(#[$fmeta])*
-                pub $field : $ty,
-            )*
-        }
-    };
 }

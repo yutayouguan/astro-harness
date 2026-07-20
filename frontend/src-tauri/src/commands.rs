@@ -1843,7 +1843,7 @@ fn open_path_with_system(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|e| e.to_string())?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {
@@ -1884,7 +1884,7 @@ pub async fn reveal_in_folder(path: String) -> Result<(), String> {
             .arg(&p)
             .spawn()
             .map_err(|e| e.to_string())?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {

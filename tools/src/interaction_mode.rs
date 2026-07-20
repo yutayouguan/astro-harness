@@ -105,7 +105,7 @@ pub fn tool_visible_in_mode(mode: InteractionMode, name: &str) -> bool {
     if name == "memory" || name == "pin_context" {
         return false;
     }
-    READONLY_ALLOW.iter().any(|n| *n == name)
+    READONLY_ALLOW.contains(&name)
 }
 
 /// 执行前硬拦；`Ok(())` 放行，`Err(msg)` 为给模型看的拒绝文案。
@@ -136,7 +136,7 @@ pub fn check_tool_call(
                 .into(),
         );
     }
-    if !READONLY_ALLOW.iter().any(|n| *n == name) {
+    if !READONLY_ALLOW.contains(&name) {
         return Err(format!(
             "[blocked by {} mode] Tool `{name}` is not available. Stay read-only, or call request_mode_switch(to=\"agent\", …) after the plan is ready.",
             mode.as_str()

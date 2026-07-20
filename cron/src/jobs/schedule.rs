@@ -140,7 +140,7 @@ fn parse_five_field_cron(expr: &str, after: DateTime<Local>) -> anyhow::Result<D
         .unwrap_or(cursor);
 
     for _ in 0..(366 * 24 * 60) {
-        let ok_min = match_field(&minute, cursor.minute() as u32);
+        let ok_min = match_field(&minute, cursor.minute());
         let ok_hour = match_field(&hour, cursor.hour());
         let ok_day = match_field(&day, cursor.day());
         let ok_month = match_field(&month, cursor.month());

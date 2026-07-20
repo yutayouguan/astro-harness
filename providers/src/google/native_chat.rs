@@ -151,12 +151,12 @@ fn normalize_args(args: &Value) -> Value {
 
 /// 若最后一个 turn 是含 functionResponse 的 user turn，则追加 part 并返回 true。
 fn try_append_fn_response(contents: &mut Vec<Value>, part: Value) -> bool {
-    let is_fn_resp_turn = contents.last().map_or(false, |last| {
+    let is_fn_resp_turn = contents.last().is_some_and(|last| {
         last.get("role").and_then(|r| r.as_str()) == Some("user")
             && last
                 .get("parts")
                 .and_then(|p| p.as_array())
-                .map_or(false, |arr| {
+                .is_some_and(|arr| {
                     arr.iter().any(|p| p.get("functionResponse").is_some())
                 })
     });

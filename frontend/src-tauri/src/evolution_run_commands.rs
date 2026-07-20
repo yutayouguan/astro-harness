@@ -303,7 +303,7 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
     let targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
     if targets.preferred.provider.kind.requires_api_key()
         && targets.preferred.api_key.trim().is_empty()
-        && targets.fallback.as_ref().map_or(true, |fb| {
+        && targets.fallback.as_ref().is_none_or(|fb| {
             fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
         })
     {
@@ -802,7 +802,7 @@ pub async fn run_evolution_search(
     let refl_targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
     if refl_targets.preferred.provider.kind.requires_api_key()
         && refl_targets.preferred.api_key.trim().is_empty()
-        && refl_targets.fallback.as_ref().map_or(true, |fb| {
+        && refl_targets.fallback.as_ref().is_none_or(|fb| {
             fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
         })
     {
@@ -851,11 +851,10 @@ pub async fn run_evolution_search(
 
     // 定向且模型未产出：注入一条 patch 占位种子（空 patch 会被后续门禁/变异消化）
     // 更稳妥：若无种子，用当前技能内容作为 NewSkill 基线不可行；直接报错让用户重试。
-    if seeds.is_empty() {
-        if focus_skill.is_some() {
+    if seeds.is_empty()
+        && focus_skill.is_some() {
             return Err("定向技能未产出候选；可先积累 DecisionLog 失败信号后再试".into());
         }
-    }
 
     let evalset = list_examples(&base);
     let generations = cfg.search.generations.max(1);
@@ -908,7 +907,7 @@ pub async fn run_evolution_search(
             let skill_dir = std::path::Path::new(&s.path).parent()?;
             let scripts = skill_dir.join("scripts");
             (scripts.join("test.sh").is_file() || scripts.join("test.py").is_file())
-                .then(|| scripts)
+                .then_some(scripts)
         });
         let run_sandbox = cfg.gates.run_tests && test_scripts_dir.is_some();
         if run_sandbox {

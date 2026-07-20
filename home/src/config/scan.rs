@@ -27,12 +27,7 @@ pub fn scan_memory_content(content: &str) -> Result<(), String> {
 }
 
 fn find_invisible_unicode(content: &str) -> Option<char> {
-    for ch in content.chars() {
-        if is_blocked_invisible(ch) {
-            return Some(ch);
-        }
-    }
-    None
+    content.chars().find(|&ch| is_blocked_invisible(ch))
 }
 
 fn is_blocked_invisible(ch: char) -> bool {

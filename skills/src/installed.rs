@@ -356,7 +356,7 @@ fn scan_astro(agent_id: Option<&str>) -> Vec<InstalledSkill> {
         let _ = save_enabled_state(agent_id, &state);
     }
 
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
 
@@ -366,7 +366,7 @@ fn scan_machine(agent_id: Option<&str>) -> Vec<InstalledSkill> {
     let mut state = HashMap::new();
     let mut dirty = false;
     let mut out = scan_roots(&roots, agent_id, "machine", &mut state, &mut dirty, false);
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
 
@@ -385,7 +385,7 @@ pub fn list_installed_for_agent(
         "all" => {
             let mut all = scan_astro(agent_id);
             all.extend(scan_machine(agent_id));
-            all.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            all.sort_by_key(|a| a.name.to_lowercase());
             all
         }
         _ => scan_astro(agent_id),
@@ -456,7 +456,7 @@ fn create_skill_link(src: &Path, dest: &Path) -> Result<()> {
     {
         std::os::unix::fs::symlink(src, dest)
             .with_context(|| format!("symlink {} → {}", src.display(), dest.display()))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(windows)]
     {
@@ -848,7 +848,7 @@ fn open_path_with_system(path: &Path) -> Result<()> {
             .arg(path)
             .spawn()
             .with_context(|| format!("无法打开 {}", path.display()))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {
@@ -883,7 +883,7 @@ pub(crate) fn reveal_path_in_file_manager(path: &Path) -> Result<()> {
             .arg(path)
             .spawn()
             .with_context(|| format!("无法定位 {}", path.display()))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {

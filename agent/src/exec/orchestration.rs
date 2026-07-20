@@ -37,11 +37,10 @@ const PROVIDER_MAX_ROUNDS: usize = 5;
 pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result<()> {
     let db = OrchestrationDb::open_default()?;
     let claimed = db.try_claim_running(&req.orchestration_id)?;
-    if !claimed {
-        if !(req.allow_reclaim && db.reclaim_stale_running(&req.orchestration_id)?) {
+    if !claimed
+        && !(req.allow_reclaim && db.reclaim_stale_running(&req.orchestration_id)?) {
             return Ok(());
         }
-    }
     let steps = db.list_steps(&req.orchestration_id)?;
     let orch = db
         .get(&req.orchestration_id)?
@@ -440,23 +439,6 @@ pub(crate) fn is_orchestration_hitl_payload(result: &str) -> bool {
     value.get("astro_hitl").and_then(|v| v.as_bool()) == Some(true)
 }
 
-#[cfg(test)]
-mod hitl_skip_tests {
-    use super::is_orchestration_hitl_payload;
-
-    #[test]
-    fn detects_astro_hitl_confirm_payload() {
-        let raw = r#"{"astro_hitl":true,"kind":"confirm","message":"ok?"}"#;
-        assert!(is_orchestration_hitl_payload(raw));
-    }
-
-    #[test]
-    fn ignores_plain_tool_result() {
-        assert!(!is_orchestration_hitl_payload("ok"));
-        assert!(!is_orchestration_hitl_payload(r#"{"status":"done"}"#));
-    }
-}
-
 /// 写入 handoff 遥测边；`kind=orchestration` 不计入 Insights calls KPI。
 fn record_orchestration_edge(
     req: &OrchestrationSpawnRequest,
@@ -507,4 +489,21 @@ fn record_orchestration_edge(
         billing_mode: None,
         meta_json: Some(meta.to_string()),
     });
+}
+
+#[cfg(test)]
+mod hitl_skip_tests {
+    use super::is_orchestration_hitl_payload;
+
+    #[test]
+    fn detects_astro_hitl_confirm_payload() {
+        let raw = r#"{"astro_hitl":true,"kind":"confirm","message":"ok?"}"#;
+        assert!(is_orchestration_hitl_payload(raw));
+    }
+
+    #[test]
+    fn ignores_plain_tool_result() {
+        assert!(!is_orchestration_hitl_payload("ok"));
+        assert!(!is_orchestration_hitl_payload(r#"{"status":"done"}"#));
+    }
 }

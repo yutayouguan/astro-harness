@@ -32,7 +32,7 @@ where
     seen.insert(primary.provider_id.clone());
     for fr in fallbacks.iter().take(MAX_CHAT_FALLBACKS * 2) {
         // 多读一点以便跳过后仍能填满 3 条
-        if out.len() >= 1 + MAX_CHAT_FALLBACKS {
+        if out.len() > MAX_CHAT_FALLBACKS {
             break;
         }
         if fr.provider_id.is_empty() || !seen.insert(fr.provider_id.clone()) {

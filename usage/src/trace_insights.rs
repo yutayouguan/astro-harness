@@ -277,7 +277,7 @@ fn spans_from_chat_history(
 
                 if let Some(serde_json::Value::Array(calls)) = msg.tool_calls.as_ref() {
                     for call in calls {
-                        let Some((id, tool_name, input)) = parse_tool_call(&call) else {
+                        let Some((id, tool_name, input)) = parse_tool_call(call) else {
                             continue;
                         };
                         let (kind, name) = classify_activity(&tool_name, input.as_deref());

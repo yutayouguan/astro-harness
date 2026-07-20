@@ -60,10 +60,7 @@ pub fn list_skill_backups(agent_id: Option<&str>) -> Result<Vec<SkillBackupEntry
         return Ok(Vec::new());
     }
 
-    let filter_agent = match agent_id {
-        None => None,
-        Some(id) => Some(normalize_agent_id(Some(id))),
-    };
+    let filter_agent = agent_id.map(|id| normalize_agent_id(Some(id)));
 
     let mut entries = Vec::new();
 

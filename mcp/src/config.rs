@@ -218,7 +218,7 @@ pub fn load_mcp_servers(agent_id: Option<&str>) -> anyhow::Result<Vec<McpServerC
 
 /// 将服务器列表写回当前 Agent（或全局）的 `mcp.json`。
 pub fn save_mcp_servers(agent_id: Option<&str>, servers: &[McpServerConfig]) -> anyhow::Result<()> {
-    let _ = ensure_default_workspace_dirs()?;
+    ensure_default_workspace_dirs()?;
     let id = agent_id.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
         if s == "default" {
             DEFAULT_AGENT_ID.to_string()

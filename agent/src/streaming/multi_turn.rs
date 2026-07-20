@@ -800,7 +800,7 @@ async fn run_multi_turn_stream_inner(
             return;
         };
 
-        for (call, result) in calls.iter().zip(outcomes.into_iter()) {
+        for (call, result) in calls.iter().zip(outcomes) {
             if pause.is_cancelled() {
                 finish_usage_and_done(
                     &session,

@@ -20,6 +20,7 @@ const MAX_PINS: usize = 20;
 /// `search_context` 检索范围。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SearchScope {
     /// 会话历史 FTS。
     Session,
@@ -28,14 +29,10 @@ pub enum SearchScope {
     /// Knowledge Content DB。
     Knowledge,
     /// 以上全部（默认）。
+    #[default]
     All,
 }
 
-impl Default for SearchScope {
-    fn default() -> Self {
-        Self::All
-    }
-}
 
 /// `search_context` 参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]

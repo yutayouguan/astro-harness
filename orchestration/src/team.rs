@@ -11,18 +11,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TeamMode {
+    #[default]
     Coordinate,
     Route,
     Broadcast,
     Tasks,
 }
 
-impl Default for TeamMode {
-    fn default() -> Self {
-        Self::Coordinate
-    }
-}
 
 impl TeamMode {
     pub fn parse(s: &str) -> Result<Self> {

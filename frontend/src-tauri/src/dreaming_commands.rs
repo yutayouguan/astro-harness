@@ -353,8 +353,8 @@ pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
 
     let targets = resolve_dreaming_targets()?;
     let preferred = &targets.preferred;
-    if preferred.provider.kind.requires_api_key() && preferred.api_key.trim().is_empty() {
-        if targets.fallback.as_ref().map_or(true, |fb| {
+    if preferred.provider.kind.requires_api_key() && preferred.api_key.trim().is_empty()
+        && targets.fallback.as_ref().is_none_or(|fb| {
             fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
         }) {
             return Err(format!(
@@ -362,7 +362,6 @@ pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
                 preferred.provider.display_name
             ));
         }
-    }
     if preferred.model.trim().is_empty() {
         return Err("入梦模型未配置（auxiliary.dreaming.model 与激活提供商均无模型）".into());
     }

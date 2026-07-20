@@ -207,7 +207,7 @@ impl AgentLoop {
             });
         });
         let delegate_runner: delegate::DelegateRunner =
-            Arc::new(|req| crate::exec::delegate::run_delegate_blocking(req));
+            Arc::new(crate::exec::delegate::run_delegate_blocking);
         let async_spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, req| {
             tokio::spawn(async move {
                 let reg = delegate::AsyncDelegateRegistry::global();
@@ -579,7 +579,7 @@ impl AgentLoop {
         let mut seen = std::collections::HashSet::new();
         seen.insert(primary.provider_id.clone());
         for spec in specs.iter().take(common::MAX_CHAT_FALLBACKS * 2) {
-            if chain.len() >= 1 + common::MAX_CHAT_FALLBACKS {
+            if chain.len() > common::MAX_CHAT_FALLBACKS {
                 break;
             }
             let t = spec.apply_to(&primary);
@@ -612,7 +612,7 @@ impl AgentLoop {
                 let mut seen = std::collections::HashSet::new();
                 seen.insert(preferred.provider_id.clone());
                 for spec in specs.iter().take(common::MAX_CHAT_FALLBACKS * 2) {
-                    if chain.len() >= 1 + common::MAX_CHAT_FALLBACKS {
+                    if chain.len() > common::MAX_CHAT_FALLBACKS {
                         break;
                     }
                     let t = spec.apply_to(&preferred);

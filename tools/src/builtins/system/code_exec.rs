@@ -88,7 +88,7 @@ pub(crate) fn scrubbed_env(
     let mut out = HashMap::new();
     for (k, v) in parent {
         let key = k.as_ref();
-        if !SAFE_ENV_KEYS.iter().any(|safe| *safe == key) {
+        if !SAFE_ENV_KEYS.contains(&key) {
             continue;
         }
         if is_sensitive_env_key(key) {

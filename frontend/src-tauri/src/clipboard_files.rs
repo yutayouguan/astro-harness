@@ -24,7 +24,7 @@ pub fn write_paths(paths: &[PathBuf]) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        return write_macos(paths);
+        write_macos(paths)
     }
     #[cfg(target_os = "windows")]
     {
@@ -45,7 +45,7 @@ pub fn write_paths(paths: &[PathBuf]) -> Result<(), String> {
 pub fn read_paths() -> Result<Vec<PathBuf>, String> {
     #[cfg(target_os = "macos")]
     {
-        return read_macos();
+        read_macos()
     }
     #[cfg(target_os = "windows")]
     {

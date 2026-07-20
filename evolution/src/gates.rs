@@ -389,7 +389,7 @@ mod tests {
     fn patch_size_uses_post_image() {
         let mut c = cand(CandidateKind::Patch);
         c.old_string = Some("short".into());
-        c.new_string = Some("x".repeat(50).into());
+        c.new_string = Some("x".repeat(50));
         let gates = EvolutionGates {
             run_tests: false,
             max_skill_bytes: 20,

@@ -62,7 +62,7 @@ pub fn upload_url_from_start_headers(headers: &reqwest::header::HeaderMap) -> Re
         .ok_or_else(|| anyhow!("Files API start 响应缺少 x-goog-upload-url"))
 }
 
-fn file_object<'a>(v: &'a Value) -> &'a Value {
+fn file_object(v: &Value) -> &Value {
     v.get("file").unwrap_or(v)
 }
 

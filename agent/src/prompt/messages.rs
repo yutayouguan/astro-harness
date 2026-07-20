@@ -132,7 +132,7 @@ fn merge_media_parts(
                 | ChatContentPart::VideoUrl { url, .. } => Some(url.as_str()),
                 ChatContentPart::Text { .. } => None,
             };
-            let dup = url.map_or(false, |u| {
+            let dup = url.is_some_and(|u| {
                 parts.iter().any(|e| match e {
                     ChatContentPart::ImageUrl { url }
                     | ChatContentPart::AudioUrl { url, .. }
