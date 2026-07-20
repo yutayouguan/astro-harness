@@ -366,7 +366,7 @@ pub struct EvolutionGates {
     /// Skill 体积上限（字节，默认 ~15KB）。
     #[serde(default = "default_max_skill_bytes")]
     pub max_skill_bytes: usize,
-    /// 只允许开 PR，禁止直接落库。
+    /// 始终人工审批（产品不变量）；配置项保留兼容，读写时强制为 `true`。
     #[serde(default = "default_true")]
     pub require_pr: bool,
     /// judge 最低分（0–1）；`<= 0` 表示关闭 judge 评审。
@@ -405,6 +405,10 @@ fn default_population_size() -> u32 {
     3
 }
 
+fn default_max_llm_calls() -> u32 {
+    40
+}
+
 /// GEPA-lite 遗传搜索参数（`config.yaml` 的 `evolution.search` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct EvolutionSearch {
@@ -420,8 +424,8 @@ pub struct EvolutionSearch {
     /// 每技能最多参与 grounded 评分的评测例数（0 = 不限）。
     #[serde(default = "default_max_eval_examples")]
     pub max_eval_examples: usize,
-    /// 单次遗传搜索的 LLM 调用总上限（0 = 不限）。
-    #[serde(default)]
+    /// 单次遗传搜索的 LLM 调用总上限（0 = 不限；默认 40）。
+    #[serde(default = "default_max_llm_calls")]
     pub max_llm_calls: u32,
     /// 每代保留的种群大小（Pareto 选择后保留的最多个体数）。
     #[serde(default = "default_population_size")]
@@ -435,7 +439,7 @@ impl Default for EvolutionSearch {
             variants: 3,
             crossover: true,
             max_eval_examples: 5,
-            max_llm_calls: 0,
+            max_llm_calls: 40,
             population_size: 3,
         }
     }
@@ -635,7 +639,10 @@ pub fn load_learning_config(base: &Path) -> LearningConfig {
 
 /// 从 `{base}/config.yaml` 加载离线进化配置。
 pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
-    read_file_config(base).evolution.unwrap_or_default()
+    let mut cfg = read_file_config(base).evolution.unwrap_or_default();
+    // 产品不变量：进化产物只经人工审批，忽略 yaml 中的 false。
+    cfg.gates.require_pr = true;
+    cfg
 }
 
 /// 从 `{base}/config.yaml` 加载危险命令审批配置。
@@ -1074,12 +1081,8 @@ pub fn set_evolution_auto(base: &Path, auto: &EvolutionAuto) -> anyhow::Result<E
 /// 设置进化门禁并返回最新配置。
 pub fn set_evolution_gates(base: &Path, gates: &EvolutionGates) -> anyhow::Result<EvolutionConfig> {
     set_nested_bool(base, &["evolution", "gates"], "run_tests", gates.run_tests)?;
-    set_nested_bool(
-        base,
-        &["evolution", "gates"],
-        "require_pr",
-        gates.require_pr,
-    )?;
+    // 始终强制人审；忽略调用方传入的 false。
+    set_nested_bool(base, &["evolution", "gates"], "require_pr", true)?;
     set_nested_usize(
         base,
         &["evolution", "gates"],
@@ -1321,13 +1324,13 @@ compression:
             &EvolutionGates {
                 run_tests: false,
                 max_skill_bytes: 8192,
-                require_pr: false,
+                require_pr: false, // 调用方传 false 也应被强制为 true
                 min_judge_score: 0.75,
             },
         )
         .unwrap();
         assert!(!cfg.gates.run_tests);
-        assert!(!cfg.gates.require_pr);
+        assert!(cfg.gates.require_pr);
         assert_eq!(cfg.gates.max_skill_bytes, 8192);
         assert!((cfg.gates.min_judge_score - 0.75).abs() < 1e-6);
 

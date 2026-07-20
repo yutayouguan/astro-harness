@@ -137,6 +137,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [branchMsg, setBranchMsg] = useState<string | null>(null);
   const [genDraft, setGenDraft] = useState("");
   const [varDraft, setVarDraft] = useState("");
+  const [popDraft, setPopDraft] = useState("");
+  const [evalExDraft, setEvalExDraft] = useState("");
+  const [llmDraft, setLlmDraft] = useState("");
   const {
     examples: evalExamples,
     add: addEval,
@@ -208,6 +211,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
       setJudgeDraft(String(settings.gates.minJudgeScore));
       setGenDraft(String(settings.search.generations));
       setVarDraft(String(settings.search.variants));
+      setPopDraft(String(settings.search.populationSize));
+      setEvalExDraft(String(settings.search.maxEvalExamples));
+      setLlmDraft(String(settings.search.maxLlmCalls));
       setCooldownDraft(String(settings.auto.cooldownSecs));
       setMinDecDraft(String(settings.auto.minNewDecisions));
       setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
@@ -244,15 +250,43 @@ export default function EvolutionModelsPanel({ active }: Props) {
     if (!settings) return;
     const g = Number.parseInt(genDraft, 10);
     const v = Number.parseInt(varDraft, 10);
+    const p = Number.parseInt(popDraft, 10);
+    const e = Number.parseInt(evalExDraft, 10);
+    const l = Number.parseInt(llmDraft, 10);
     const gen = Number.isFinite(g) && g >= 1 && g <= 6 ? g : settings.search.generations;
     const vari = Number.isFinite(v) && v >= 1 && v <= 6 ? v : settings.search.variants;
-    if (gen !== settings.search.generations || vari !== settings.search.variants) {
-      void setSearch(gen, vari, settings.search.crossover);
+    const pop = Number.isFinite(p) && p >= 1 && p <= 8 ? p : settings.search.populationSize;
+    const evalEx =
+      Number.isFinite(e) && e >= 0 && e <= 32 ? e : settings.search.maxEvalExamples;
+    const llm = Number.isFinite(l) && l >= 0 && l <= 500 ? l : settings.search.maxLlmCalls;
+    if (
+      gen !== settings.search.generations ||
+      vari !== settings.search.variants ||
+      pop !== settings.search.populationSize ||
+      evalEx !== settings.search.maxEvalExamples ||
+      llm !== settings.search.maxLlmCalls
+    ) {
+      void setSearch(gen, vari, settings.search.crossover, pop, evalEx, llm);
     } else {
       setGenDraft(String(settings.search.generations));
       setVarDraft(String(settings.search.variants));
+      setPopDraft(String(settings.search.populationSize));
+      setEvalExDraft(String(settings.search.maxEvalExamples));
+      setLlmDraft(String(settings.search.maxLlmCalls));
     }
-  }, [settings, genDraft, varDraft, setSearch]);
+  }, [settings, genDraft, varDraft, popDraft, evalExDraft, llmDraft, setSearch]);
+
+  const toggleCrossover = useCallback(() => {
+    if (!settings) return;
+    void setSearch(
+      settings.search.generations,
+      settings.search.variants,
+      !settings.search.crossover,
+      settings.search.populationSize,
+      settings.search.maxEvalExamples,
+      settings.search.maxLlmCalls,
+    );
+  }, [settings, setSearch]);
 
   const providerOptions = useMemo(
     () => enabledProviders.map((p) => ({ value: p.id, label: p.display_name })),
@@ -631,29 +665,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 <div className="aux-task-main">
                   <div className="aux-task-titleline">
                     <h3>{t("evo.requirePr")}</h3>
+                    <span className="aux-route-pill">{t("evo.requirePrLocked")}</span>
                   </div>
                   <p>{t("evo.requirePrDesc")}</p>
-                </div>
-                <div className="aux-task-actions">
-                  <button
-                    type="button"
-                    role="switch"
-                    className="tool-toggle"
-                    aria-checked={gates?.requirePr ?? false}
-                    aria-label={t("evo.requirePr")}
-                    onClick={() =>
-                      gates &&
-                      void setGates(
-                        gates.runTests,
-                        gates.maxSkillBytes,
-                        !gates.requirePr,
-                        gates.minJudgeScore,
-                      )
-                    }
-                    disabled={!gates}
-                  >
-                    <span className="tool-toggle-thumb" />
-                  </button>
                 </div>
               </article>
 
@@ -864,7 +878,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
             </div>
           </div>
 
-          <div className="evo-run-panel">
+            <div className="evo-run-panel">
             <div className="evo-search-cfg evo-cfg-grid">
               <label>
                 {t("evo.generations")}
@@ -892,6 +906,45 @@ export default function EvolutionModelsPanel({ active }: Props) {
                   disabled={!settings}
                 />
               </label>
+              <label title={t("evo.populationSizeDesc")}>
+                {t("evo.populationSize")}
+                <input
+                  type="number"
+                  className="aux-number-input"
+                  min={1}
+                  max={8}
+                  value={popDraft}
+                  onChange={(e) => setPopDraft(e.target.value)}
+                  onBlur={commitSearch}
+                  disabled={!settings}
+                />
+              </label>
+              <label title={t("evo.maxEvalExamplesDesc")}>
+                {t("evo.maxEvalExamples")}
+                <input
+                  type="number"
+                  className="aux-number-input"
+                  min={0}
+                  max={32}
+                  value={evalExDraft}
+                  onChange={(e) => setEvalExDraft(e.target.value)}
+                  onBlur={commitSearch}
+                  disabled={!settings}
+                />
+              </label>
+              <label title={t("evo.maxLlmCallsDesc")}>
+                {t("evo.maxLlmCalls")}
+                <input
+                  type="number"
+                  className="aux-number-input"
+                  min={0}
+                  max={500}
+                  value={llmDraft}
+                  onChange={(e) => setLlmDraft(e.target.value)}
+                  onBlur={commitSearch}
+                  disabled={!settings}
+                />
+              </label>
               <label className="evo-cfg-toggle">
                 {t("evo.crossover")}
                 <button
@@ -900,14 +953,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
                   className="tool-toggle"
                   aria-checked={settings?.search.crossover ?? false}
                   aria-label={t("evo.crossover")}
-                  onClick={() =>
-                    settings &&
-                    void setSearch(
-                      settings.search.generations,
-                      settings.search.variants,
-                      !settings.search.crossover,
-                    )
-                  }
+                  onClick={toggleCrossover}
                   disabled={!settings}
                 >
                   <span className="tool-toggle-thumb" />

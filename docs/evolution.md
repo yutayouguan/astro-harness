@@ -13,7 +13,7 @@ Astro 将「可复用工作流」固化为 **Skills**。离线进化在**不改�
 | **定位** | 离线流水线：读轨迹 → 产出候选 → 门禁 / 打分 → 人工审批 → 写入 skills |
 | **入口** | 设置 → 模型服务 →「离线进化」子 Tab（`EvolutionModelsPanel`） |
 | **默认** | `evolution.enabled = false`；DSPy 另有独立开关且默认关 |
-| **非目标** | 运行时自动改 Skill、完整 GEPA/Pareto 遗传引擎内置、git/PR 全自动（「批准到分支」仅为可选辅助） |
+| **非目标** | 运行时自动改 Skill、完整外部 DSPy/GEPA 遗传引擎内置、git/PR 全自动（「批准到分支」仅为可选辅助）；产物始终人工审批 |
 
 LLM 调用**不在** `evolution` crate 内：crate 只负责提示词、解析、门禁、落盘与审批；Tauri 注入已解析的 reflection / judge 路由并执行模型调用。
 
@@ -82,12 +82,20 @@ evolution:
   gates:
     run_tests: true
     max_skill_bytes: 15360
-    require_pr: true        # 语义：必须人工审批，绝不自动应用
+    require_pr: true        # 始终人审（读写强制 true；不可关）
     min_judge_score: 0.6    # ≤0 关闭 judge 过滤
   search:
     generations: 2
     variants: 3
     crossover: true
+    population_size: 3      # 每代 Pareto 保留上限
+    max_eval_examples: 5    # 每候选评测例上限；0 = 不限
+    max_llm_calls: 40       # 单次搜索 LLM 硬预算；0 = 不限
+  auto:
+    enabled: false
+    cooldown_secs: 3600
+    min_new_decisions: 3
+    max_runs_per_day: 3
   dspy:
     enabled: false
     python_bin: ""          # 空 = 运行时解析 venv / 系统 python3
@@ -102,11 +110,15 @@ evolution:
 | `judge` | `auto/auto` | 候选评审路由 |
 | `gates.run_tests` | `true` | **批准写入后**若技能含 `scripts/test.sh` / `test.py` 则沙箱执行；失败回滚且保留提案 |
 | `gates.max_skill_bytes` | `15360` | 候选写入体积上限（字节） |
-| `gates.require_pr` | `true` | 强制人工审批（产品语义，非 git PR） |
+| `gates.require_pr` | `true` | **始终人工审批**（产品不变量；配置读写强制为 true） |
 | `gates.min_judge_score` | `0.6` | judge 阈值；`≤ 0` 关闭 |
 | `search.generations` | `2` | 遗传搜索代数 |
-| `search.variants` | `3` | 每代每目标变体数 |
+| `search.variants` | `3` | 每代变体目标数 |
 | `search.crossover` | `true` | Pareto 前沿 top-2 交叉 |
+| `search.population_size` | `3` | 每代保留种群上限 |
+| `search.max_eval_examples` | `5` | 每候选 grounded 评测例上限；`0` = 不限 |
+| `search.max_llm_calls` | `40` | 单次搜索 LLM 调用硬顶；`0` = 不限 |
+| `auto.*` | 见上 | Chat Done 后自动单轮 reflect；默认关 |
 | `dspy.*` | 见上 | 外部 Python 引擎；默认关 |
 
 模型角色不复用在线 `auxiliary.*`：
@@ -137,7 +149,7 @@ evolution:
 4. 适应度：`judge` 分↑ / 体积↓；有匹配评测集例子时用 grounded 客观评分
 5. `pareto_front` + `select_front_capped`（每目标取前 2）→ 门禁 → 待审
 
-成本粗估：≈ `目标数 × 代数 × 变体数` 次模型调用（交叉另计）。
+成本粗估：≈ `目标数 × 代数 × 变体数` 次模型调用（交叉与 judge 另计），并受 `max_llm_calls` 硬顶（默认 40）。
 
 ### 3. 外部 DSPy（`run_evolution_dspy`）
 

@@ -214,10 +214,11 @@ pub async fn set_evolution_gates(
     min_judge_score: f32,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
+    let _ = require_pr; // 产品不变量：始终人审
     let gates = memory::EvolutionGates {
         run_tests,
         max_skill_bytes: max_skill_bytes as usize,
-        require_pr,
+        require_pr: true,
         min_judge_score,
     };
     memory::set_evolution_gates(&base, &gates).map_err(|e| e.to_string())?;
@@ -241,8 +242,13 @@ pub async fn set_evolution_search(
         variants: variants.clamp(1, 6),
         crossover,
         population_size: population_size.unwrap_or(current.search.population_size).clamp(1, 8),
-        max_eval_examples: max_eval_examples.map(|v| v as usize).unwrap_or(current.search.max_eval_examples),
-        max_llm_calls: max_llm_calls.unwrap_or(current.search.max_llm_calls),
+        max_eval_examples: max_eval_examples
+            .map(|v| v as usize)
+            .unwrap_or(current.search.max_eval_examples)
+            .min(32),
+        max_llm_calls: max_llm_calls
+            .unwrap_or(current.search.max_llm_calls)
+            .min(500),
     };
     memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
     build_settings_dto()

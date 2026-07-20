@@ -6,7 +6,7 @@ Astro 将「可复用工作流」固化为 **Skills（程序性记忆）**，将
 |----|------|------|
 | **运行时闭环** | 本期已落地 | Agent 用 `skills` / `memory` 建改；回合后复杂任务 nudge；`curate` 修剪建议 |
 | **记忆 review** | 已有 | 回合后 `auxiliary.background_review` 精炼 MEMORY/USER（见 [`memory.md`](./memory.md)） |
-| **离线进化** | Phase 2（Rust 内置极简版已落地） | 读轨迹→反思模型提技能候选→门禁→应用内待审批；完整 GEPA 遗传搜索仍为后续 |
+| **离线进化** | 已落地（Rust GEPA-lite + 可选 DSPy） | 读轨迹→反思/搜索产候选→门禁/打分→应用内待审批；完整外部 GEPA 为可选扩展 |
 
 设计规格：[`docs/superpowers/specs/2026-07-17-agent-learning-loop-design.md`](./superpowers/specs/2026-07-17-agent-learning-loop-design.md)。
 
@@ -83,31 +83,31 @@ learning:
 
 ## Phase 2（离线进化）
 
-离线遗传优化：读取执行轨迹 → 生成 Skill/提示变体 → 测试与体积门禁 → 人工审 PR。独立流水线，不改变运行时默认行为。
+离线遗传优化：读取执行轨迹 → 生成 Skill/提示变体 → 测试与体积门禁 → **应用内人工审批**（始终人审，非 git PR 自动流）。独立流水线，不改变运行时默认行为。
 
 **专页文档**（架构 / 配置 / 三种模式 / 提案 / DSPy 契约 / 命令速查）：[`evolution.md`](./evolution.md)。
 
-**已落地（Rust 内置极简引擎）**：模型服务页「离线进化」子 Tab 可配置 `evolution.enabled`、`reflection` / `judge` 路由与门禁（run_tests / require_pr / max_skill_bytes，写入 `config.yaml` 的 `evolution:` 段），并新增：
+**已落地（Rust 内置引擎）**：模型服务页「离线进化」子 Tab 可配置 `evolution.enabled`、`reflection` / `judge` 路由与门禁（run_tests / max_skill_bytes / min_judge_score；`require_pr` 为始终人审不变量），并新增：
 
 - **运行进化**：读 `learning/decisions.jsonl`（工具失败/用户纠错/关键决策等）+ 已启用技能索引 + **相关会话精简 transcript**（按决策的 session_id，最多 3 个）→ `reflection` 模型产出技能候选（新建 / patch）→ 静态门禁 → **`judge` 模型打分**（`min_judge_score` 阈值，0 关闭）→ 存待审提案（`~/.astro/learning/evolution/proposals/`）。
-- **应用内审批**：提案在子 Tab 内以 diff + judge 评分展示，**批准**才写入 Agent skills 目录，**绝不自动应用**（`require_pr` 语义）。
+- **应用内审批**：提案在子 Tab 内以 diff + judge 评分展示，**批准**才写入 Agent skills 目录，**绝不自动应用**。
 - **批准到分支**（可选）：若技能目录在某 git 仓库内，可「批准到分支」——在**独立 worktree** 的新分支 `astro/evolution/<skill>-<id>` 写入并 commit，不动当前工作树，产出分支供 review / 推送 / 开 PR；不在 git 仓库则回退普通批准。
 
-实现：crate [`evolution`](../evolution)（candidate/reflect/gates/judge/proposal）+ Tauri `evolution_run_commands`（run/list/approve/reject）+ `EvolutionModelsPanel`。
+实现：crate [`evolution`](../evolution)（candidate/reflect/gates/judge/proposal/search）+ Tauri `evolution_run_commands`（run/search/list/approve/reject）+ `EvolutionModelsPanel`。
 
 `run_tests`（默认开）：**批准写入后**若技能含 `scripts/test.sh` / `test.py` 则沙箱执行（60s 超时），失败自动回滚且保留提案；无脚本则跳过。放在批准后执行，确保人已审阅内容再运行。
 
 DecisionLog 现覆盖：`ToolFailure`、`MemoryRejected`、`UserCorrection`（启发式识别用户纠错）、`KeyChoice`（`confirm` 决策闸口）。
 
-**遗传搜索（GEPA-lite）**：「离线进化」页可选「遗传搜索」——reflection 产种子（按 skill_id+kind 去重取前 3）→ 每目标多代变异（`generations`）+ 每代多变体（`variants`）→ judge 打分 → **Pareto 选择（judge 分↑ / 体积↓）** + 反思评语回喂下一代 → 每目标取 Pareto front 前 2 过门禁入待审。无标注评测集，适应度来自 judge 分与体积；仅变异+反思，不做交叉。参数与成本（≈ 目标×代数×变体 次调用）在页面可调。
+**遗传搜索（GEPA-lite）**：「离线进化」页可选「遗传搜索」——reflection 产种子（按 skill_id+kind 去重取前 3）→ 多代变异（`generations` × `variants`）→ 可选交叉 → judge / grounded 打分 → **Pareto 选择（分↑ / 体积↓）** + 结构化 critique 回喂 → 种群保留后过门禁入待审。页面可调代数、变体、种群、评测例上限与 **LLM 预算**（默认 `max_llm_calls=40`）。
 
 crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `select_front_capped` / 变异提示与解析）；命令 `run_evolution_search`。
 
-**评测集 + 客观适应度**（Phase 1）：「离线进化」页可标注评测例子（task + 期望要点 + 曾通过/失败，可关联 skill_id），存 `~/.astro/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配例子，则由 judge 针对具体 task+expectations 做 **grounded 客观评分**（各例子均值）；无匹配则回退泛化 judge。crate [`evolution::evalset`](../evolution/src/evalset.rs)；命令 `list/add/remove_eval_example`。
+**评测集 + 客观适应度**：「离线进化」页可标注评测例子（task + 期望要点 + 曾通过/失败，可关联 skill_id），存 `~/.astro/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配例子，则由 judge 针对具体 task+expectations 做 **grounded 客观评分**（Fail 加权）；无匹配则回退泛化 judge。crate [`evolution::evalset`](../evolution/src/evalset.rs)；命令 `list/add/remove_eval_example`。
 
-**交叉算子**（Phase 2）：遗传搜索每代对当前 Pareto 前沿 top-2 变体做交叉（`CROSSOVER_SYSTEM_PROMPT` 融合两父代为一个子代），评分后并入本代选择。可在页面开关（`evolution.search.crossover`，默认开）。
+**交叉算子**：遗传搜索每代对当前 Pareto 前沿 top-2 变体做交叉（`CROSSOVER_SYSTEM_PROMPT` 融合两父代为一个子代），评分后并入本代选择。可在页面开关（`evolution.search.crossover`，默认开）。
 
-**Python DSPy 对接**（Phase 3，默认关）：外部 Python 子项目 [`evolution-dspy/`](../evolution-dspy/)（独立包，非 cargo）通过「临时目录 + JSON 文件」契约被调用——Rust 导出 `skill.md` + `evalset.jsonl` + `config.json`（key 走环境变量）→ `python -m evolution_dspy optimize` 跑 DSPy+GEPA → 回写 `result.json` → 转成候选过门禁入待审队列。命令：`evolution_dspy_status` / `setup_evolution_dspy`（建 venv + pip install）/ `run_evolution_dspy(skill_id)`。配置 `evolution.dspy { enabled=false, python_bin, project_path, timeout_secs }`。
+**Python DSPy 对接**（默认关）：外部 Python 子项目 [`evolution-dspy/`](../evolution-dspy/)（独立包，非 cargo）通过「临时目录 + JSON 文件」契约被调用——Rust 导出 `skill.md` + `evalset.jsonl` + `config.json`（key 走环境变量）→ `python -m evolution_dspy optimize` 跑 DSPy+GEPA → 回写 `result.json` → 转成候选过门禁入待审队列。命令：`evolution_dspy_status` / `setup_evolution_dspy`（建 venv + pip install）/ `run_evolution_dspy(skill_id)`。配置 `evolution.dspy { enabled=false, python_bin, project_path, timeout_secs }`。
 
 打包形态：源码随 app 作 resource（只读），venv 与临时数据在用户可写的 `~/.astro/evolution-dspy/.venv` 与 `~/.astro/learning/evolution/dspy-run-*/`；首次用 UI「安装依赖」建 venv。DSPy/GEPA API 随版本变，Python 侧带回退（GEPA 不可用退化单轮反思），标 `# ADAPT:` 处按版本调整。
 
