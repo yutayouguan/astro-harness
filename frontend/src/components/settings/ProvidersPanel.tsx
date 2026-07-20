@@ -1634,6 +1634,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     }
                   />
                 </label>
+                {selected.kind === "google" && (
+                  <p className="providers-field-hint">{t("providers.googleEndpointHint")}</p>
+                )}
               </div>
 
               <div className="providers-fallback-block">

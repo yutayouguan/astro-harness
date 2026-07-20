@@ -361,6 +361,28 @@ impl ProvidersState {
                     p.endpoint = "https://api.minimax.io/v1".to_string();
                     changed = true;
                 }
+                ProviderKind::Google => {
+                    // 旧默认走 OpenAI 兼容；聊天已迁 Interactions，回写原生 host。
+                    let ep = p.endpoint.trim_end_matches('/');
+                    if ep.contains("/v1beta/openai")
+                        || (ep.ends_with("/openai")
+                            && ep.contains("generativelanguage.googleapis.com"))
+                    {
+                        p.endpoint = ProviderKind::Google.default_endpoint().to_string();
+                        changed = true;
+                    }
+                    // 仍停在旧时代默认模型名时升级到现行默认（不改 2.5 / 用户自定义）。
+                    match p.model.as_str() {
+                        "gemini-1.5-flash"
+                        | "gemini-1.5-pro"
+                        | "gemini-2.0-flash"
+                        | "gemini-2.0-flash-001" => {
+                            p.model = ProviderKind::Google.default_model().to_string();
+                            changed = true;
+                        }
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }
@@ -1801,12 +1823,31 @@ mod tests {
                     vision_model: String::new(),
                     music_model: String::new(),
                 },
+                ProviderConfig {
+                    id: "g1".into(),
+                    kind: ProviderKind::Google,
+                    display_name: "Google".into(),
+                    endpoint: "https://generativelanguage.googleapis.com/v1beta/openai".into(),
+                    model: "gemini-1.5-flash".into(),
+                    enabled: false,
+                    fallback: vec![],
+                    image_model: String::new(),
+                    video_model: String::new(),
+                    tts_model: String::new(),
+                    vision_model: String::new(),
+                    music_model: String::new(),
+                },
             ],
         };
         assert!(s.migrate_stale_defaults());
         assert_eq!(s.providers[0].model, "kimi-k2.5");
         assert_eq!(s.providers[1].model, "ep-");
         assert_eq!(s.providers[2].endpoint, "https://api.minimax.io/v1");
+        assert_eq!(
+            s.providers[3].endpoint,
+            "https://generativelanguage.googleapis.com"
+        );
+        assert_eq!(s.providers[3].model, "gemini-3.5-flash");
         assert!(!s.migrate_stale_defaults());
     }
 
