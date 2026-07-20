@@ -1,7 +1,7 @@
 # 聊天交互模式与调度设计
 
 > 日期：2026-07-20  
-> 状态：设计定稿；Step 1–4 已落地  
+> 状态：设计定稿；Step 1–4 已落地；增强：拒绝续跑 / checkpoint 出队 / Agent 会话 worktree  
 > 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、[`parallelTasks.ts`](../../../frontend/src/lib/chat/parallelTasks.ts)、编排 / delegate / worktree
 
 ## 1. 问题
@@ -45,20 +45,24 @@
 - 出队时机（巡检点）：
   1. **硬边界**：当前 turn 结束（`done` / 失败收束）；`turnInFlight` 置 false 后自动 drain；
   2. **软边界**：HITL / 审批停顿期间仍可入队（不新开 `start_chat`）；interrupt 解除后若回合未 Done 仍不出队；
-  3. **巡检点**（未做）：长任务周期性 checkpoint。
+  3. **巡检点**：长任务无 token/tool 活动约 60s 且队列非空时，暂停当前回合并出队。
 
-### 3.2 模式切换授权（Step 3）
+### 3.2 模式切换授权（Step 3 + 增强）
 
 结构化工具 `request_mode_switch({ to, reason, summary? })`（`stop_after_tool_call`）：
 
 - UI：授权条 + **倒计时**（默认 10s）+「立即切换」+「取消」；
-- 取消 = 留在当前模式；
+- 取消 = 留在当前模式，并**自动发送拒绝说明**让模型续跑；
 - 同轮禁止连环弹；流式结束再弹；
 - Plan→Agent 批准后自动发送带 `summary` 的续聊句。
 
 ### 3.3 Plan / Ask 工具 gate（Step 3）
 
 `interaction_mode` 经 `ChatRequest` 下传；`filter_schemas` + `check_tool_call`（含 `file_ops` 仅 read/list/search）。
+
+### 3.4 Agent 会话级 worktree（增强）
+
+Agent 模式下按 `session_id` 创建/复用 git worktree，经 `project_root` 下传；新会话时清理。MultiTask 仍为每 task 独立 worktree。
 
 ## 4. MultiTask（并行调度）
 
@@ -108,9 +112,13 @@
 - MultiTask 在 git 仓内各 task 独立 `.worktrees/…` 作为 `project_root`；非 git 降级不报错；
 - 不做周期性 checkpoint；不改 Agent 模式会话级 worktree。
 
-## 7. 非目标（Step 4 仍不含）
+## 6e. 增强验收（拒绝续跑 / checkpoint / Agent worktree）
 
-- 同 `session_id` 多 turn 并发；
-- 长任务周期性 checkpoint 出队；
-- 取消模式切换后把拒绝理由写回模型续跑；
+- 取消模式切换后自动注入拒绝说明并 `start_chat` 续跑；
+- 长任务空闲约 60s 且有排队：toast + 暂停回合 + 出队；
+- Agent 模式同 session 复用 worktree；新会话清理；非 git 降级。
+
+## 7. 非目标
+
+- 同 `session_id` 多 turn 真正并发（仍靠 pause 互斥）；
 - 不改全局专家切换语义。

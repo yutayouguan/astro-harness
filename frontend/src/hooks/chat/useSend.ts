@@ -133,6 +133,15 @@ export interface UseSendDeps {
   /** 主会话整轮未结束（含 HITL 停顿）；供队列软边界 */
   turnInFlightRef: MutableRefObject<boolean>;
   setTurnInFlight: Dispatch<SetStateAction<boolean>>;
+  /** 流式活动时间戳（token/tool）；供长任务 idle checkpoint */
+  lastStreamActivityAtRef: MutableRefObject<number>;
+  /** Agent 会话级 worktree（按 sessionId 复用） */
+  sessionWorktreeRef: MutableRefObject<{
+    sessionId: string;
+    path: string;
+    repoRoot: string;
+    branch: string;
+  } | null>;
   /** 本轮首次检测到模式切换请求时记录（流结束后再弹授权条） */
   onModeSwitchDetected?: (req: ModeSwitchRequest) => void;
   /** 流正常结束后，若本轮有模式切换请求则提示 UI */
@@ -213,6 +222,8 @@ export function useSend(deps: UseSendDeps) {
         showTransientToast,
         turnInFlightRef,
         setTurnInFlight,
+        lastStreamActivityAtRef,
+        sessionWorktreeRef,
         onModeSwitchDetected,
         onModeSwitchPrompt,
       } = depsRef.current;
@@ -220,6 +231,9 @@ export function useSend(deps: UseSendDeps) {
       const markTurnEnded = () => {
         turnInFlightRef.current = false;
         setTurnInFlight(false);
+      };
+      const touchActivity = () => {
+        lastStreamActivityAtRef.current = Date.now();
       };
 
       let pendingModeSwitch: ModeSwitchRequest | null = null;
@@ -380,6 +394,7 @@ export function useSend(deps: UseSendDeps) {
       setStreaming(true);
       turnInFlightRef.current = true;
       setTurnInFlight(true);
+      touchActivity();
       setStreamPaused(false);
       setTokenUsage(null);
       setContextUsage(null);
@@ -446,8 +461,10 @@ export function useSend(deps: UseSendDeps) {
           const payload = event.payload;
 
           if (payload.type === "token" && payload.content) {
+            touchActivity();
             enqueueStreamToken(assistantId, payload.content);
           } else if (payload.type === "reasoning" && payload.content) {
+            touchActivity();
             enqueueStreamReasoning(assistantId, payload.content);
             setStatusPhase("generating");
           } else if (payload.type === "usage") {
@@ -568,6 +585,7 @@ export function useSend(deps: UseSendDeps) {
               setSessionPendingInterrupts([]);
             }
           } else if (payload.type === "tool_call_delta") {
+            touchActivity();
             enqueueToolDelta(assistantId, {
               index: payload.index ?? 0,
               id: payload.id,
@@ -582,6 +600,7 @@ export function useSend(deps: UseSendDeps) {
             });
             setStatusPhase("generating");
           } else if (payload.type === "tool_call") {
+            touchActivity();
             if (toolDeltaRafRef.current != null) {
               cancelAnimationFrame(toolDeltaRafRef.current);
               flushToolDeltas();
@@ -881,6 +900,43 @@ export function useSend(deps: UseSendDeps) {
           : { thinkingEnabled: false, reasoningEffort: "high" as const };
 
         const keepChatBubbles = pendingKeepChatBubblesRef.current;
+
+        // Agent 模式：会话级 worktree（与 MultiTask 共用 prepare 命令）
+        let projectRoot: string | undefined;
+        if (effectiveMode === "agent") {
+          const existing = sessionWorktreeRef.current;
+          if (existing && existing.sessionId === sid) {
+            projectRoot = existing.path;
+          } else {
+            if (existing) {
+              void invoke("cleanup_multitask_worktree", {
+                path: existing.path,
+                repoRoot: existing.repoRoot,
+                branch: existing.branch,
+              }).catch(() => {});
+              sessionWorktreeRef.current = null;
+            }
+            try {
+              const prepared = await invoke<{
+                path: string;
+                repoRoot: string;
+                branch: string;
+              } | null>("prepare_multitask_worktree", { taskId: sid });
+              if (prepared?.path) {
+                sessionWorktreeRef.current = {
+                  sessionId: sid,
+                  path: prepared.path,
+                  repoRoot: prepared.repoRoot,
+                  branch: prepared.branch,
+                };
+                projectRoot = prepared.path;
+              }
+            } catch (e) {
+              console.warn("prepare session worktree failed", e);
+            }
+          }
+        }
+
         await invoke<string>("start_chat", {
           content: contentForModel,
           provider: chatProvider.backend_id,
@@ -893,6 +949,7 @@ export function useSend(deps: UseSendDeps) {
           resumeJson: resumeJson || undefined,
           keepChatBubbles: keepChatBubbles != null ? keepChatBubbles : undefined,
           interactionMode: effectiveMode,
+          projectRoot,
           attachments: pending.map((a) => ({
             name: a.name,
             mime: a.mime,

@@ -136,6 +136,14 @@ export function useChatSession({
   const [streaming, setStreaming] = useState(false);
   const [turnInFlight, setTurnInFlight] = useState(false);
   const turnInFlightRef = useRef(false);
+  const lastStreamActivityAtRef = useRef(0);
+  const sessionWorktreeRef = useRef<{
+    sessionId: string;
+    path: string;
+    repoRoot: string;
+    branch: string;
+  } | null>(null);
+  const checkpointFiredForTurnRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
@@ -293,6 +301,8 @@ export function useChatSession({
     showTransientToast,
     turnInFlightRef,
     setTurnInFlight,
+    lastStreamActivityAtRef,
+    sessionWorktreeRef,
     onModeSwitchDetected,
     onModeSwitchPrompt,
   });
@@ -306,11 +316,24 @@ export function useChatSession({
 
   const queueDrainLockRef = useRef(false);
   const queueFailedIdRef = useRef<string | null>(null);
+  const modeSwitchPromptRef = useRef(modeSwitchPrompt);
+  modeSwitchPromptRef.current = modeSwitchPrompt;
 
   const dismissModeSwitch = useCallback(() => {
+    const req = modeSwitchPromptRef.current;
+    modeSwitchPromptRef.current = null;
     setModeSwitchPrompt(null);
     modeSwitchArmedRef.current = false;
-  }, []);
+    if (!req) return;
+    const inject =
+      `[Mode switch declined]\n` +
+      `The user declined switching to "${req.to}". ` +
+      `Requested reason was: ${req.reason}\n` +
+      `Stay in the current interaction mode and continue. ` +
+      `Do not call request_mode_switch again for the same reason unless the user explicitly asks.`;
+    showTransientToast(t("chat.modeSwitch.declined"), { tone: "warning" });
+    void sendImmediateRef.current({ text: inject });
+  }, [showTransientToast, t]);
 
   const writeParallelSummary = useCallback(() => {
     if (parallelTasks.length === 0) return;
@@ -342,9 +365,6 @@ export function useChatSession({
     setFocusMessageId(id);
     showTransientToast(t("chat.task.summaryWritten"), { tone: "success" });
   }, [parallelTasks, messages, showTransientToast, t]);
-
-  const modeSwitchPromptRef = useRef(modeSwitchPrompt);
-  modeSwitchPromptRef.current = modeSwitchPrompt;
 
   const approveModeSwitch = useCallback(async () => {
     const req = modeSwitchPromptRef.current;
@@ -798,6 +818,15 @@ export function useChatSession({
     });
     setModeSwitchPrompt(null);
     modeSwitchArmedRef.current = false;
+    const wt = sessionWorktreeRef.current;
+    if (wt) {
+      void invoke("cleanup_multitask_worktree", {
+        path: wt.path,
+        repoRoot: wt.repoRoot,
+        branch: wt.branch,
+      }).catch(() => {});
+      sessionWorktreeRef.current = null;
+    }
     clearAllParallel();
   }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav, clearAllParallel]);
 
@@ -957,7 +986,7 @@ export function useChatSession({
       const running = parallelTasks.filter((t) => t.status === "running");
       await Promise.all(running.map((t) => cancelParallelTask(t.id)));
     }
-    if (!streaming) return;
+    if (!streaming && !turnInFlightRef.current) return;
     if (!sessionId) {
       setStreaming(false);
       setStreamPaused(false);
@@ -1036,6 +1065,38 @@ export function useChatSession({
     pendingUsageRef,
     firstTokenRef,
     streamStartRef,
+  ]);
+
+  /** 长任务空闲巡检：无 token/tool 活动超阈值且有排队时，暂停当前回合以出队 */
+  const QUEUE_CHECKPOINT_IDLE_MS = 60_000;
+  useEffect(() => {
+    if (!turnInFlight) {
+      checkpointFiredForTurnRef.current = false;
+      return;
+    }
+    if (chatModeRef.current === "multitask") return;
+    const timer = window.setInterval(() => {
+      if (!turnInFlightRef.current) return;
+      if (checkpointFiredForTurnRef.current) return;
+      if (sessionPendingInterrupts.length > 0) return;
+      if (queuedFollowUps.length === 0) return;
+      if (queueDrainLockRef.current) return;
+      const last = lastStreamActivityAtRef.current;
+      if (!last || Date.now() - last < QUEUE_CHECKPOINT_IDLE_MS) return;
+      checkpointFiredForTurnRef.current = true;
+      showTransientToast(t("chat.queue.checkpointDrain"), { tone: "warning" });
+      void stopStream().then(() => {
+        setQueueKick((k) => k + 1);
+      });
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [
+    turnInFlight,
+    queuedFollowUps.length,
+    sessionPendingInterrupts.length,
+    showTransientToast,
+    t,
+    stopStream,
   ]);
 
   // ── Message operations ────────────────────────────────────────────────────
