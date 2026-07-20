@@ -100,12 +100,6 @@ struct RawPricing {
     input_cache_write: Option<serde_json::Value>,
     #[serde(default)]
     cache_write: Option<serde_json::Value>,
-    #[serde(default)]
-    web_search: Option<serde_json::Value>,
-    #[serde(default)]
-    image: Option<serde_json::Value>,
-    #[serde(default)]
-    internal_reasoning: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -323,12 +317,7 @@ fn parse_reasoning_meta(
         mandatory: parsed.mandatory,
         supports_max_tokens: parsed.supports_max_tokens,
     };
-    if meta.supported_efforts.is_empty()
-        && meta.default_effort.is_none()
-        && meta.default_enabled.is_none()
-        && meta.mandatory.is_none()
-        && meta.supports_max_tokens.is_none()
-    {
+    if meta.is_empty() {
         // 空对象 `{}` 仍视为「支持推理」占位
         return Some(crate::model_meta::ModelReasoningMeta::default());
     }
