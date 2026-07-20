@@ -864,10 +864,12 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                 <button
                   type="button"
                   className={`mem-view-tab mem-view-tab--${item.id} ${view === item.id ? "active" : ""}`}
+                  title={item.label}
+                  aria-label={item.label}
                   onClick={() => void switchView(item.id)}
                 >
                   <item.Icon />
-                  <span>{item.label}</span>
+                  <span className="mem-view-tab-label">{item.label}</span>
                 </button>
               </Fragment>
             ))}
@@ -876,10 +878,20 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
           <button
             type="button"
             className={`mem-view-tab mem-view-tab--pending ${view === "pending" ? "active" : ""}`}
+            title={
+              pendingWrites.length > 0
+                ? `${t("memory.view.pending")} (${pendingWrites.length})`
+                : t("memory.view.pending")
+            }
+            aria-label={
+              pendingWrites.length > 0
+                ? `${t("memory.view.pending")} (${pendingWrites.length})`
+                : t("memory.view.pending")
+            }
             onClick={() => void switchView("pending")}
           >
             <IconPending />
-            <span>
+            <span className="mem-view-tab-label">
               {t("memory.view.pending")}
               {pendingWrites.length > 0 ? ` (${pendingWrites.length})` : ""}
             </span>
