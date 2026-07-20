@@ -5,6 +5,11 @@ import {
   effectiveUnifiedTone,
   isNearBlack,
   isNearWhite,
+  shellGradSpread,
+  shellGradStrength,
+  shellGradientPreviewBackground,
+  shellHaloForRole,
+  shellStopCountScale,
   underlayFromGradient,
   unifiedSurfaceMode,
 } from "./shellGradient.ts";
@@ -44,4 +49,32 @@ test("underlayFromGradient tints extreme colors", () => {
   const darkUnder = underlayFromGradient("dark", blackGrad);
   assert.notEqual(lightUnder, "#ffffff");
   assert.notEqual(darkUnder, "#0f172a");
+});
+
+test("stop count scales strength and spread automatically", () => {
+  assert.equal(shellStopCountScale(2), 1.08);
+  assert.equal(shellStopCountScale(5), 0.72);
+  assert.ok(shellGradSpread(2) > shellGradSpread(5));
+
+  const two = { ...DEFAULT_SHELL_GRADIENT, extras: [] };
+  const five = {
+    ...DEFAULT_SHELL_GRADIENT,
+    extras: [
+      { color: "#fb7185", x: 50, y: 50 },
+      { color: "#22c55e", x: 35, y: 65 },
+      { color: "#eab308", x: 68, y: 62 },
+    ],
+  };
+  assert.ok(shellGradStrength("light", two) > shellGradStrength("light", five));
+  assert.ok(
+    shellHaloForRole("primary", "light").alpha >
+      shellHaloForRole("extra", "light", 0).alpha,
+  );
+});
+
+test("preview background shares formula and has no opaque solid blobs", () => {
+  const css = shellGradientPreviewBackground(DEFAULT_SHELL_GRADIENT, "light");
+  assert.match(css, /rgba\(/);
+  assert.match(css, /transparent /);
+  assert.doesNotMatch(css, /#2563eb 0%/);
 });

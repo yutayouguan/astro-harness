@@ -246,38 +246,38 @@ html[data-theme="light"] .app-shell[data-tone="twilight"] {
     linear-gradient(165deg, #f5f3ff 0%, #fce7f3 48%, #faf5ff 100%);
 }
 
-/* 统一模式自定义双色点渐变（位置与 RGB 由 JS 写入） */
+/* 统一模式自定义渐变：位置/RGB 由 JS 写入；强度/扩散按色点数与主题自动算（无用户滑块） */
 html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
-      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.2)),
-      transparent 48%
+      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.2 * var(--shell-grad-strength, 1))),
+      transparent calc(48% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
-      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.18)),
-      transparent 46%
+      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.18 * var(--shell-grad-strength, 1))),
+      transparent calc(46% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
-      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.16)),
-      transparent 44%
+      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.16 * var(--shell-grad-strength, 1))),
+      transparent calc(44% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse 85% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
+      ellipse calc(85% * var(--shell-grad-spread, 1)) calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
       rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.34 * var(--shell-grad-strength, 1))),
-      transparent 55%
+      transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse 70% 55% at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
+      ellipse calc(70% * var(--shell-grad-spread, 1)) calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
       rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.16 * var(--shell-grad-strength, 1))),
-      transparent 50%
+      transparent calc(50% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse 55% 45% at 50% 100%,
+      ellipse calc(55% * var(--shell-grad-spread, 1)) calc(45% * var(--shell-grad-spread, 1)) at 50% 100%,
       rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.1 * var(--shell-grad-strength, 1))),
-      transparent 55%
+      transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
 }
@@ -286,33 +286,33 @@ html[data-theme="light"]:is([data-color-style="unified"], [data-color-style="dyn
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
-      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.38)),
-      transparent 48%
+      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.38 * var(--shell-grad-strength, 1))),
+      transparent calc(48% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
-      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.34)),
-      transparent 46%
+      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.34 * var(--shell-grad-strength, 1))),
+      transparent calc(46% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
-      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.3)),
-      transparent 44%
+      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.3 * var(--shell-grad-strength, 1))),
+      transparent calc(44% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse 90% 70% at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
+      ellipse calc(90% * var(--shell-grad-spread, 1)) calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
       rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.58 * var(--shell-grad-strength, 1))),
-      transparent 55%
+      transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse 70% 55% at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
+      ellipse calc(70% * var(--shell-grad-spread, 1)) calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
       rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.42 * var(--shell-grad-strength, 1))),
-      transparent 50%
+      transparent calc(50% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse 60% 50% at 50% 100%,
+      ellipse calc(60% * var(--shell-grad-spread, 1)) calc(50% * var(--shell-grad-spread, 1)) at 50% 100%,
       rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.28 * var(--shell-grad-strength, 1))),
-      transparent 55%
+      transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     linear-gradient(165deg, #f0f7ff 0%, #e8eef8 48%, #f4f7fb 100%);
 }

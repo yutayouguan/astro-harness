@@ -10,12 +10,14 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../../i18n/LocaleContext";
+import { useTheme } from "../../hooks/app/useTheme";
 import {
   clampPercent,
   cloneGradient,
   gradientStops,
   gradientWithStops,
   SHELL_GRADIENT_SWATCH_COLORS,
+  shellGradientPreviewBackground,
   type ShellGradient,
   type ShellGradientStop,
 } from "../../lib/ui/shellGradient";
@@ -36,6 +38,7 @@ export default function ShellGradientEditor({
   onCancel,
 }: Props) {
   const { t } = useI18n();
+  const { resolved } = useTheme();
   const titleId = useId();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<number | null>(null);
@@ -226,12 +229,7 @@ export default function ShellGradientEditor({
           ref={canvasRef}
           className="shell-grad-canvas"
           style={{
-            background: `${stops
-              .map(
-                (stop, index) =>
-                  `radial-gradient(circle at ${stop.x}% ${stop.y}%, ${stop.color} 0%, transparent ${index === 0 ? 42 : 48}%)`,
-              )
-              .join(", ")}, #e8edf5`,
+            background: shellGradientPreviewBackground(draft, resolved),
           }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onPointerMove}

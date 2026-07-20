@@ -151,6 +151,107 @@ export function effectiveUnifiedTone(
   return primary;
 }
 
+export type ShellHaloRole = "primary" | "secondary" | "extra";
+
+export function shellStopCount(gradient: ShellGradient): number {
+  return Math.min(5, Math.max(2, 2 + gradient.extras.length));
+}
+
+/** 色点越多整体越淡，避免糊成一片；2 点略加强 */
+export function shellStopCountScale(stopCount: number): number {
+  const n = Math.min(5, Math.max(2, stopCount));
+  // 2→1.08, 3→0.96, 4→0.84, 5→0.72
+  return Math.round((1.08 - (n - 2) * 0.12) * 1000) / 1000;
+}
+
+export function shellSurfaceScale(surface: UnifiedSurfaceMode): number {
+  if (surface === "light-neutral") return 0.42;
+  if (surface === "dark-neutral") return 0.65;
+  return 1;
+}
+
+/**
+ * 全局光晕强度：色点数 × 极端白/黑表面系数。
+ * 用户不调节；写入 `--shell-grad-strength`。
+ */
+export function shellGradStrength(
+  theme: "light" | "dark",
+  gradient: ShellGradient,
+): number {
+  const surface = unifiedSurfaceMode(theme, gradient.primary.color);
+  return (
+    Math.round(
+      shellStopCountScale(shellStopCount(gradient)) *
+        shellSurfaceScale(surface) *
+        1000,
+    ) / 1000
+  );
+}
+
+/** 光晕扩散：色点少略大，色点多略收 */
+export function shellGradSpread(stopCount: number): number {
+  const n = Math.min(5, Math.max(2, stopCount));
+  // 2→1.1, 3→1.0, 4→0.92, 5→0.86
+  return Math.round((1.1 - (n - 2) * 0.08) * 1000) / 1000;
+}
+
+/** 角色档位：主色更实更大，辅色次之，额外点更淡更小（与壳层 CSS 基线对齐） */
+export function shellHaloForRole(
+  role: ShellHaloRole,
+  theme: "light" | "dark",
+  extraIndex = 0,
+): { alpha: number; fadePct: number } {
+  if (theme === "light") {
+    if (role === "primary") return { alpha: 0.58, fadePct: 55 };
+    if (role === "secondary") return { alpha: 0.42, fadePct: 50 };
+    const extras = [
+      { alpha: 0.38, fadePct: 48 },
+      { alpha: 0.34, fadePct: 46 },
+      { alpha: 0.3, fadePct: 44 },
+    ];
+    return extras[Math.min(Math.max(0, extraIndex), 2)];
+  }
+  if (role === "primary") return { alpha: 0.34, fadePct: 55 };
+  if (role === "secondary") return { alpha: 0.16, fadePct: 50 };
+  const extras = [
+    { alpha: 0.2, fadePct: 48 },
+    { alpha: 0.18, fadePct: 46 },
+    { alpha: 0.16, fadePct: 44 },
+  ];
+  return extras[Math.min(Math.max(0, extraIndex), 2)];
+}
+
+/**
+ * 编辑器画布预览：与壳层同一套角色 / 点数 / 主题公式。
+ * 用户只改色与位置，不暴露大小/透明度滑块。
+ */
+export function shellGradientPreviewBackground(
+  gradient: ShellGradient,
+  theme: "light" | "dark",
+): string {
+  const stops = gradientStops(gradient);
+  const strength = shellGradStrength(theme, gradient);
+  const spread = shellGradSpread(stops.length);
+  const base = theme === "dark" ? "#0a1018" : "#e8edf5";
+  const layers = stops.map((stop, index) => {
+    const role: ShellHaloRole =
+      index === 0 ? "primary" : index === 1 ? "secondary" : "extra";
+    const { alpha, fadePct } = shellHaloForRole(
+      role,
+      theme,
+      Math.max(0, index - 2),
+    );
+    const a = Math.round(alpha * strength * 1000) / 1000;
+    const fade = Math.round(fadePct * spread * 10) / 10;
+    const rgb = hexToRgb(stop.color);
+    const color = rgb
+      ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`
+      : stop.color;
+    return `radial-gradient(circle at ${stop.x}% ${stop.y}%, ${color} 0%, transparent ${fade}%)`;
+  });
+  return `${layers.join(", ")}, ${base}`;
+}
+
 export const SHELL_GRADIENT_PRESETS: {
   id: ShellGradientPresetId;
   labelKey:
@@ -420,7 +521,11 @@ export function applyShellGradientVars(
   );
   el.style.setProperty(
     "--shell-grad-strength",
-    surface === "light-neutral" ? "0.42" : surface === "dark-neutral" ? "0.65" : "1",
+    String(shellGradStrength(theme, gradient)),
+  );
+  el.style.setProperty(
+    "--shell-grad-spread",
+    String(shellGradSpread(shellStopCount(gradient))),
   );
   el.style.setProperty("--window-underlay", underlayFromGradient(theme, gradient));
 }
@@ -479,6 +584,7 @@ export function clearShellGradientVars(el: HTMLElement): void {
     "--unified-tone-soft",
     "--unified-tone-glow",
     "--shell-grad-strength",
+    "--shell-grad-spread",
     "--window-underlay",
   ]) {
     el.style.removeProperty(key);
