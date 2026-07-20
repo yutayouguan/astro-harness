@@ -126,8 +126,9 @@ impl ScoredVariant {
 
         let (test_ge, test_strict) = match (self.test_pass, other.test_pass) {
             (Some(a), Some(b)) => (a >= b, a > b),
-            // 双方都无测试：该维度视为平手
-            _ => (true, false),
+            (None, None) => (true, false),
+            // 一方有测试一方无：不可比较，阻止支配
+            _ => (false, false),
         };
 
         let ge = score_ge && size_le && test_ge;
@@ -147,14 +148,30 @@ pub fn pareto_front(variants: &[ScoredVariant]) -> Vec<ScoredVariant> {
         .collect()
 }
 
-/// 从前沿按 score 降序（同分取更小 size）取前 `n`。
-pub fn select_front_capped(mut front: Vec<ScoredVariant>, n: usize) -> Vec<ScoredVariant> {
-    front.sort_by(|a, b| {
+fn cmp_test_pass(a: Option<f32>, b: Option<f32>) -> std::cmp::Ordering {
+    match (b, a) {
+        (Some(bv), Some(av)) => bv
+            .partial_cmp(&av)
+            .unwrap_or(std::cmp::Ordering::Equal),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+fn sort_scored(v: &mut [ScoredVariant]) {
+    v.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| cmp_test_pass(a.test_pass, b.test_pass))
             .then(a.size.cmp(&b.size))
     });
+}
+
+/// 从前沿按 score 降序、test_pass 降序、size 升序取前 `n`。
+pub fn select_front_capped(mut front: Vec<ScoredVariant>, n: usize) -> Vec<ScoredVariant> {
+    sort_scored(&mut front);
     front.truncate(n);
     front
 }
@@ -196,12 +213,7 @@ pub fn select_population(
 
     // 先从前沿取
     let mut front_sorted = front;
-    front_sorted.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.size.cmp(&b.size))
-    });
+    sort_scored(&mut front_sorted);
     for v in front_sorted {
         let fp = candidate_fingerprint(&v.candidate);
         if seen.insert(fp) {
@@ -217,12 +229,7 @@ pub fn select_population(
         .into_iter()
         .filter(|v| !seen.contains(&candidate_fingerprint(&v.candidate)))
         .collect();
-    rest.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.size.cmp(&b.size))
-    });
+    sort_scored(&mut rest);
     for v in rest {
         let fp = candidate_fingerprint(&v.candidate);
         if seen.insert(fp) {
@@ -622,5 +629,39 @@ mod tests {
         let front = pareto_front(&vs);
         // 两者互不支配
         assert_eq!(front.len(), 2);
+    }
+
+    #[test]
+    fn pareto_mixed_test_none_some_non_comparable() {
+        // A: score=0.9, size=50, test=None (untested)
+        // B: score=0.8, size=100, test=Some(1.0)
+        // A should NOT dominate B because test dimensions are non-comparable
+        let vs = vec![
+            ScoredVariant {
+                candidate: cand("s", "aaa"),
+                score: 0.9,
+                size: 50,
+                test_pass: None,
+            },
+            ScoredVariant {
+                candidate: cand("s", "bbb"),
+                score: 0.8,
+                size: 100,
+                test_pass: Some(1.0),
+            },
+        ];
+        let front = pareto_front(&vs);
+        assert_eq!(front.len(), 2, "mixed None/Some should be non-comparable");
+    }
+
+    #[test]
+    fn select_front_capped_prefers_test_passing() {
+        // Same score, same size, but one passes test and the other fails
+        let vs = vec![
+            ScoredVariant::with_size(cand("s", "fail"), 0.9, 100).with_test_pass(Some(0.0)),
+            ScoredVariant::with_size(cand("s", "pass"), 0.9, 100).with_test_pass(Some(1.0)),
+        ];
+        let top = select_front_capped(vs, 1);
+        assert_eq!(top[0].candidate.content.as_deref(), Some("pass"));
     }
 }
