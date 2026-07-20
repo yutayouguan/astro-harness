@@ -100,6 +100,10 @@ message ChatRequest {
   string interaction_mode = 31;
   // MultiTask / 委派隔离：非空则 AgentLoop 以该路径为 project_root（file_ops/terminal 沙箱根）
   string project_root = 32;
+  // OpenRouter default_parameters：未设置则沿用 Agent 默认温度
+  optional float temperature = 33;
+  // JSON object，合并进 ProviderConfig.additional_params（如 top_p / top_k）
+  string additional_params_json = 34;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

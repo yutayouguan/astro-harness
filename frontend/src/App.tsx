@@ -101,7 +101,12 @@ import {
   clearShellGradientVars,
   flushGlassBackdrop,
 } from "./lib/ui/shellGradient";
-import type { ModelCapabilities, ModelReasoningMeta, ProviderModelsResult } from "./types";
+import type {
+  ModelCapabilities,
+  ModelPricingMeta,
+  ModelReasoningMeta,
+  ProviderModelsResult,
+} from "./types";
 
 const NAV_ROW_PITCH_PX = 44;
 export default function App() {
@@ -154,6 +159,8 @@ export default function App() {
     useState<ModelCapabilities | null>(null);
   const [activeModelReasoning, setActiveModelReasoning] =
     useState<ModelReasoningMeta | null>(null);
+  const [activeModelPricing, setActiveModelPricing] =
+    useState<ModelPricingMeta | null>(null);
   const [memoryHeaderAgent, setMemoryHeaderAgent] =
     useState<MemoryHeaderAgentPicker | null>(null);
 
@@ -219,6 +226,7 @@ export default function App() {
       setModelContextWindow(null);
       setActiveModelCapabilities(null);
       setActiveModelReasoning(null);
+      setActiveModelPricing(null);
       return;
     }
     let cancelled = false;
@@ -233,6 +241,7 @@ export default function App() {
         const win = match?.context_window;
         setModelContextWindow(typeof win === "number" && win > 0 ? win : null);
         setActiveModelCapabilities(match?.capabilities ?? null);
+        setActiveModelPricing(match?.pricing ?? null);
         const reasoning = match?.reasoning ?? null;
         setActiveModelReasoning(reasoning);
         // 无本地偏好时，按 OpenRouter default_enabled / default_effort 播种
@@ -262,6 +271,7 @@ export default function App() {
           setModelContextWindow(null);
           setActiveModelCapabilities(null);
           setActiveModelReasoning(null);
+          setActiveModelPricing(null);
         }
       }
     })();
@@ -897,6 +907,8 @@ export default function App() {
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       modelId={activeProvider?.model ?? null}
+                      modelCapabilities={activeModelCapabilities}
+                      modelPricing={activeModelPricing}
                       contextUsagePercent={
                         chat.contextUsage && contextWindow > 0
                           ? usagePercent(chat.contextUsage.totalTokens, contextWindow)

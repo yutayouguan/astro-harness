@@ -36,6 +36,9 @@ pub struct OpenRouterEntry {
     pub canonical_slug: Option<String>,
     pub knowledge_cutoff: Option<String>,
     pub expiration_date: Option<String>,
+    pub created: Option<u64>,
+    pub hugging_face_id: Option<String>,
+    pub is_moderated: Option<bool>,
     pub pricing: Option<crate::model_meta::ModelPricingMeta>,
     pub default_parameters: Option<crate::model_meta::ModelDefaultParams>,
     pub reasoning: crate::model_meta::ModelReasoningMeta,
@@ -63,6 +66,10 @@ struct RawModel {
     knowledge_cutoff: Option<String>,
     #[serde(default)]
     expiration_date: Option<String>,
+    #[serde(default)]
+    created: Option<u64>,
+    #[serde(default)]
+    hugging_face_id: Option<String>,
     #[serde(default)]
     context_length: Option<u64>,
     #[serde(default)]
@@ -94,6 +101,12 @@ struct RawPricing {
     input_cache_write: Option<serde_json::Value>,
     #[serde(default)]
     cache_write: Option<serde_json::Value>,
+    #[serde(default)]
+    web_search: Option<serde_json::Value>,
+    #[serde(default)]
+    image: Option<serde_json::Value>,
+    #[serde(default)]
+    internal_reasoning: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -140,6 +153,8 @@ struct RawTopProvider {
     context_length: Option<u64>,
     #[serde(default)]
     max_completion_tokens: Option<u64>,
+    #[serde(default)]
+    is_moderated: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -197,6 +212,7 @@ impl RawModel {
 
         let top = self.top_provider.unwrap_or_default();
         let max_input = self.context_length.or(top.context_length);
+        let is_moderated = top.is_moderated;
 
         let pricing = self.pricing.as_ref().and_then(|p| {
             let prompt = per_token_to_per_million(parse_price_per_token(&p.prompt));
@@ -269,6 +285,9 @@ impl RawModel {
             canonical_slug: nonempty(self.canonical_slug),
             knowledge_cutoff: nonempty(self.knowledge_cutoff),
             expiration_date: nonempty(self.expiration_date),
+            created: self.created,
+            hugging_face_id: nonempty(self.hugging_face_id),
+            is_moderated,
             pricing,
             default_parameters,
             reasoning: reasoning_meta.unwrap_or_default(),

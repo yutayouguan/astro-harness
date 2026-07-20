@@ -1430,8 +1430,11 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
     })
 }
 
-/// 从 models.json 缓存读取某模型的 context_window（与前端展示同源，不做 128K 臆测）。
-pub fn cached_model_context_window(provider_id: &str, model_id: &str) -> Option<u32> {
+/// 从 models.json 缓存读取完整 [`ModelInfo`]（与前端展示同源）。
+pub fn cached_model_info(
+    provider_id: &str,
+    model_id: &str,
+) -> Option<crate::model_meta::ModelInfo> {
     let cache = load_models_cache();
     let entry = cache.providers.get(provider_id)?;
     let kind = if entry.kind.is_empty() {
@@ -1442,50 +1445,39 @@ pub fn cached_model_context_window(provider_id: &str, model_id: &str) -> Option<
     for m in &entry.models {
         match m {
             crate::model_meta::ModelEntryCompat::Full(info) if info.id == model_id => {
-                return info
-                    .context_window
-                    .and_then(|n| u32::try_from(n).ok())
-                    .filter(|n| *n > 0);
+                let mut info = info.clone();
+                crate::model_meta::enrich_model_info(&mut info, kind, None);
+                return Some(info);
             }
             crate::model_meta::ModelEntryCompat::Id(id) if id == model_id => {
-                return crate::model_meta::enrich_from_id(id, kind, None)
-                    .context_window
-                    .and_then(|n| u32::try_from(n).ok())
-                    .filter(|n| *n > 0);
+                return Some(crate::model_meta::enrich_from_id(id, kind, None));
             }
             _ => {}
         }
     }
-    None
+    // 缓存未命中时仍尝试 OpenRouter 表
+    let info = crate::model_meta::enrich_from_id(model_id, kind, None);
+    if info.meta_source.is_empty() {
+        None
+    } else {
+        Some(info)
+    }
+}
+
+/// 从 models.json 缓存读取某模型的 context_window（与前端展示同源，不做 128K 臆测）。
+pub fn cached_model_context_window(provider_id: &str, model_id: &str) -> Option<u32> {
+    cached_model_info(provider_id, model_id)
+        .and_then(|info| info.context_window)
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|n| *n > 0)
 }
 
 /// 从 models.json 缓存读取某模型的 max_output_tokens（与 context_window 同源）。
 pub fn cached_model_max_output_tokens(provider_id: &str, model_id: &str) -> Option<u32> {
-    let cache = load_models_cache();
-    let entry = cache.providers.get(provider_id)?;
-    let kind = if entry.kind.is_empty() {
-        "custom"
-    } else {
-        entry.kind.as_str()
-    };
-    for m in &entry.models {
-        match m {
-            crate::model_meta::ModelEntryCompat::Full(info) if info.id == model_id => {
-                return info
-                    .max_output_tokens
-                    .and_then(|n| u32::try_from(n).ok())
-                    .filter(|n| *n > 0);
-            }
-            crate::model_meta::ModelEntryCompat::Id(id) if id == model_id => {
-                return crate::model_meta::enrich_from_id(id, kind, None)
-                    .max_output_tokens
-                    .and_then(|n| u32::try_from(n).ok())
-                    .filter(|n| *n > 0);
-            }
-            _ => {}
-        }
-    }
-    None
+    cached_model_info(provider_id, model_id)
+        .and_then(|info| info.max_output_tokens)
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|n| *n > 0)
 }
 
 /// Tauri 命令：get_cached_provider_models。

@@ -83,9 +83,18 @@ import type {
   ChatMessage,
   InstalledSkill,
   MessageTokenUsage,
+  ModelCapabilities,
+  ModelPricingMeta,
   ModelReasoningMeta,
   PendingInterrupt,
 } from "../../types";
+import {
+  attachmentAcceptForCaps,
+  attachmentKindAllowed,
+  estimateTurnCostUsd,
+  formatEstimateCostUsd,
+} from "../../lib/model/modelCaps";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { AgentCreateGuide } from "../agents/AgentCreateGuide";
 import AgentAvatar from "../agents/AgentAvatar";
 import ChatMessageNav from "./ChatMessageNav";
@@ -257,6 +266,10 @@ type Props = {
   agentId?: string | null;
   /** 当前聊天模型 id：助手无自定义头像时用作品牌图标 */
   modelId?: string | null;
+  /** 当前模型输入能力（附件门禁） */
+  modelCapabilities?: ModelCapabilities | null;
+  /** 当前模型单价（估费预览） */
+  modelPricing?: ModelPricingMeta | null;
   /** 打开 Tools 面板 MCP tab */
   onOpenMcpSettings?: () => void;
   /** Agent / Plan / Ask / MultiTask */
@@ -571,6 +584,8 @@ export default function ChatView({
   onThinkingLevelChange,
   agentId = null,
   modelId = null,
+  modelCapabilities = null,
+  modelPricing = null,
   onOpenMcpSettings,
   chatMode,
   onChatModeChange,
@@ -586,6 +601,7 @@ export default function ChatView({
   onSlashAction,
 }: Props) {
   const { t } = useI18n();
+  const { showToast, toastHost } = useTransientToast();
   const dissolvingSet = useMemo(() => new Set(dissolvingIds), [dissolvingIds]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -1130,6 +1146,55 @@ export default function ChatView({
     if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
   };
 
+  const fileAccept = useMemo(
+    () => attachmentAcceptForCaps(modelCapabilities),
+    [modelCapabilities],
+  );
+
+  const estimateCostLabel = useMemo(() => {
+    const inChars =
+      input.length +
+      attachments.reduce((n, a) => n + (a.name?.length ?? 0) + 64, 0);
+    const outTokens = 1024;
+    const usd = estimateTurnCostUsd({
+      pricing: modelPricing,
+      inputChars: inChars,
+      expectedOutputTokens: outTokens,
+    });
+    const cost = formatEstimateCostUsd(usd);
+    if (!cost) return null;
+    const inTok = Math.max(0, Math.ceil(inChars / 4));
+    return {
+      short: t("chat.estimateCostShort", { cost }),
+      full: t("chat.estimateCost", {
+        cost,
+        in: String(inTok),
+        out: String(outTokens),
+      }),
+    };
+  }, [attachments, input.length, modelPricing, t]);
+
+  // 切换模型后丢掉不再支持的附件
+  useEffect(() => {
+    if (!modelCapabilities || attachments.length === 0) return;
+    const kept: ChatAttachment[] = [];
+    let dropped = 0;
+    for (const a of attachments) {
+      if (attachmentKindAllowed(a.kind, modelCapabilities)) kept.push(a);
+      else {
+        revokePreview(a);
+        dropped += 1;
+      }
+    }
+    if (dropped === 0) return;
+    onAttachmentsChange(kept);
+    showToast(t("chat.attachmentUnsupported", { n: String(dropped) }), {
+      error: true,
+    });
+    // 仅在能力变化时清理；attachments 本身由本 effect 更新
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [modelCapabilities]);
+
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const list = Array.from(files);
@@ -1138,9 +1203,22 @@ export default function ChatView({
       if (room <= 0) return;
       const nextBatch = list.slice(0, room);
       const created = await Promise.all(nextBatch.map((f) => fileToAttachment(f)));
-      onAttachmentsChange([...attachments, ...created]);
+      const allowed = created.filter((a) =>
+        attachmentKindAllowed(a.kind, modelCapabilities),
+      );
+      const skipped = created.length - allowed.length;
+      for (const a of created) {
+        if (!attachmentKindAllowed(a.kind, modelCapabilities)) revokePreview(a);
+      }
+      if (skipped > 0) {
+        showToast(t("chat.attachmentUnsupported", { n: String(skipped) }), {
+          error: true,
+        });
+      }
+      if (!allowed.length) return;
+      onAttachmentsChange([...attachments, ...allowed]);
     },
-    [attachments, onAttachmentsChange],
+    [attachments, modelCapabilities, onAttachmentsChange, showToast, t],
   );
 
   const addAttachments = useCallback(
@@ -1148,9 +1226,23 @@ export default function ChatView({
       if (!created.length) return;
       const room = MAX_ATTACHMENTS - attachments.length;
       if (room <= 0) return;
-      onAttachmentsChange([...attachments, ...created.slice(0, room)]);
+      const sliced = created.slice(0, room);
+      const allowed = sliced.filter((a) =>
+        attachmentKindAllowed(a.kind, modelCapabilities),
+      );
+      const skipped = sliced.length - allowed.length;
+      for (const a of sliced) {
+        if (!attachmentKindAllowed(a.kind, modelCapabilities)) revokePreview(a);
+      }
+      if (skipped > 0) {
+        showToast(t("chat.attachmentUnsupported", { n: String(skipped) }), {
+          error: true,
+        });
+      }
+      if (!allowed.length) return;
+      onAttachmentsChange([...attachments, ...allowed]);
     },
-    [attachments, onAttachmentsChange],
+    [attachments, modelCapabilities, onAttachmentsChange, showToast, t],
   );
 
   const addPaths = useCallback(
@@ -1472,6 +1564,7 @@ export default function ChatView({
       }}
       onDrop={(e) => void onDrop(e)}
     >
+      {toastHost}
       {emptyMode === "chat" ? (
         <ChatWelcome onPickCard={onPickWelcomePrompt} />
       ) : emptyMode === "agent" ? (
@@ -2103,9 +2196,11 @@ export default function ChatView({
             type="file"
             className="composer-file-input"
             multiple
-            accept="image/*,video/*,audio/*,.pdf,.txt,.md,.json,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rs,.ts,.tsx,.js,.py"
+            accept={fileAccept || undefined}
             onChange={(e) => void onFileChange(e)}
-            disabled={attachments.length >= MAX_ATTACHMENTS}
+            disabled={
+              attachments.length >= MAX_ATTACHMENTS || fileAccept === ""
+            }
           />
           {fileDragOver ? (
             <div className="composer-drop-hint" aria-live="polite">
@@ -2390,6 +2485,14 @@ export default function ChatView({
             </div>
 
             <div className="composer-bar-right">
+              {estimateCostLabel ? (
+                <span
+                  className="composer-cost-chip"
+                  title={estimateCostLabel.full}
+                >
+                  {estimateCostLabel.short}
+                </span>
+              ) : null}
               <div className="composer-context-wrap" ref={contextWrapRef}>
                 <button
                   type="button"
@@ -2433,8 +2536,14 @@ export default function ChatView({
                 type="button"
                 className="composer-icon-btn"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={attachments.length >= MAX_ATTACHMENTS}
-                title={t("chat.attach")}
+                disabled={
+                  attachments.length >= MAX_ATTACHMENTS || fileAccept === ""
+                }
+                title={
+                  fileAccept === ""
+                    ? t("chat.attachmentUnsupported", { n: "—" })
+                    : t("chat.attach")
+                }
                 aria-label={t("chat.attach")}
               >
                 <Paperclip size={17} strokeWidth={2} />

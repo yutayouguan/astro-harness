@@ -1373,6 +1373,8 @@ html[data-theme="dark"] .providers-badge--deprecated {
 
 .providers-model-price,
 .providers-model-cutoff,
+.providers-model-created,
+.providers-model-hf,
 .providers-model-badge {
   flex-shrink: 0;
   font-size: 10px;
@@ -1385,10 +1387,25 @@ html[data-theme="dark"] .providers-badge--deprecated {
   border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 }
 
+.providers-model-hf {
+  text-decoration: none;
+  color: var(--ink-mute);
+}
+
+.providers-model-hf:hover {
+  color: var(--ink);
+}
+
 .providers-model-badge.is-expiring {
   color: #b45309;
   background: color-mix(in srgb, #f59e0b 18%, transparent);
   border-color: color-mix(in srgb, #f59e0b 28%, transparent);
+}
+
+.providers-model-badge.is-moderated {
+  color: #0369a1;
+  background: color-mix(in srgb, #0ea5e9 14%, transparent);
+  border-color: color-mix(in srgb, #0ea5e9 24%, transparent);
 }
 
 .providers-model-row.is-expiring {

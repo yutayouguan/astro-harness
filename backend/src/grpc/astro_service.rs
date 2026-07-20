@@ -776,6 +776,19 @@ impl AstroService for AstroServiceImpl {
             } else {
                 agent.set_project_root(Some(std::path::PathBuf::from(project_root)));
             }
+            if let Some(t) = req.temperature {
+                if t.is_finite() && (0.0..=2.0).contains(&t) {
+                    agent.set_temperature(t);
+                }
+            }
+            let raw_params = req.additional_params_json.trim();
+            if !raw_params.is_empty() {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw_params) {
+                    if v.is_object() {
+                        agent.set_additional_params(v);
+                    }
+                }
+            }
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }

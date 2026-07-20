@@ -51,7 +51,7 @@ import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
 import AuxiliaryModelsPanel from "./AuxiliaryModelsPanel";
 import EvolutionModelsPanel from "./EvolutionModelsPanel";
-import { formatContextWindow, formatKnowledgeCutoff, formatModelPrice } from "../../lib/model/modelCaps";
+import { formatContextWindow, formatKnowledgeCutoff, formatModelCreated, formatModelPrice } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
   evaluateMediaModelsResult,
@@ -1089,8 +1089,24 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     }
   };
 
-  const useModel = (modelId: string) => {
+  const useModel = async (
+    modelId: string,
+    expirationDate?: string | null,
+  ): Promise<boolean> => {
+    const exp = expirationDate?.trim();
+    if (exp) {
+      const ok = await confirm({
+        title: t("providers.expiringConfirmTitle"),
+        message: t("providers.expiringConfirmMessage"),
+        emphasis: modelId,
+        emphasisLabel: `${t("providers.expiration")}: ${exp}`,
+        confirmLabel: t("providers.expiringConfirmOk"),
+        variant: "danger",
+      });
+      if (!ok) return false;
+    }
     setDraft((d) => (d ? { ...d, model: modelId } : d));
+    return true;
   };
 
   const addCustomModel = () => {
@@ -1119,7 +1135,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
             ...prev,
           ],
     );
-    useModel(id);
+    void useModel(id);
     setCustomModelInput("");
     setShowAddModel(false);
   };
@@ -2042,6 +2058,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                       const priceLabel = formatModelPrice(m.pricing);
                       const cutoffLabel = formatKnowledgeCutoff(m.knowledge_cutoff);
                       const expired = Boolean(m.expiration_date?.trim());
+                      const createdLabel = formatModelCreated(m.created);
+                      const hfId = m.hugging_face_id?.trim() || null;
+                      const moderated = m.is_moderated === true;
                       const rowTitle = [
                         m.display_name || m.id,
                         m.description?.trim() || null,
@@ -2052,6 +2071,11 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         m.expiration_date
                           ? `${t("providers.expiration")}: ${m.expiration_date}`
                           : null,
+                        createdLabel
+                          ? `${t("providers.created")}: ${createdLabel}`
+                          : null,
+                        hfId ? `${t("providers.huggingFace")}: ${hfId}` : null,
+                        moderated ? t("providers.moderated") : null,
                         priceLabel
                           ? `${t("providers.pricePerM")}: ${priceLabel}`
                           : null,
@@ -2070,7 +2094,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                               className="providers-model-radio"
                               name="providers-model-select"
                               checked={isCurrent}
-                              onChange={() => useModel(m.id)}
+                              onChange={() => void useModel(m.id, m.expiration_date)}
                               title={t("providers.useModel")}
                               aria-label={`${t("providers.useModel")}: ${m.id}`}
                             />
@@ -2084,6 +2108,34 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                                 title={`${t("providers.expiration")}: ${m.expiration_date}`}
                               >
                                 {t("providers.expiring")}
+                              </span>
+                            )}
+                            {moderated && (
+                              <span
+                                className="providers-model-badge is-moderated"
+                                title={t("providers.moderated")}
+                              >
+                                {t("providers.moderated")}
+                              </span>
+                            )}
+                            {hfId && (
+                              <a
+                                className="providers-model-hf"
+                                href={`https://huggingface.co/${hfId}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`${t("providers.huggingFace")}: ${hfId}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                HF
+                              </a>
+                            )}
+                            {createdLabel && (
+                              <span
+                                className="providers-model-created"
+                                title={`${t("providers.created")}: ${createdLabel}`}
+                              >
+                                {createdLabel}
                               </span>
                             )}
                             {cutoffLabel && (
@@ -2180,8 +2232,11 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                               title={t("providers.test")}
                               aria-label={`${t("providers.test")}: ${m.id}`}
                               onClick={() => {
-                                useModel(m.id);
-                                void testConnection(m.id);
+                                void (async () => {
+                                  const ok = await useModel(m.id, m.expiration_date);
+                                  if (!ok) return;
+                                  void testConnection(m.id);
+                                })();
                               }}
                             >
                               <IconStethoscope />

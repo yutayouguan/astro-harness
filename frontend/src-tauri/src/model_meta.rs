@@ -102,6 +102,12 @@ pub struct ModelInfo {
     pub knowledge_cutoff: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expiration_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hugging_face_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_moderated: Option<bool>,
     /// 输入上下文窗口（token）；未知为 null
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
@@ -160,6 +166,9 @@ pub fn enrich_from_id(id: &str, kind: &str, hints: Option<ApiModelHints>) -> Mod
         canonical_slug: None,
         knowledge_cutoff: None,
         expiration_date: None,
+        created: None,
+        hugging_face_id: None,
+        is_moderated: None,
         context_window: None,
         max_output_tokens: None,
         capabilities: ModelCapabilities::default(),
@@ -206,6 +215,9 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
     info.default_parameters = None;
     info.knowledge_cutoff = None;
     info.expiration_date = None;
+    info.created = None;
+    info.hugging_face_id = None;
+    info.is_moderated = None;
     info.description = retained_description;
     info.canonical_slug = retained_canonical;
     info.display_name = retained_display;
@@ -262,6 +274,9 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         }
         info.knowledge_cutoff = entry.knowledge_cutoff.clone();
         info.expiration_date = entry.expiration_date.clone();
+        info.created = entry.created;
+        info.hugging_face_id = entry.hugging_face_id.clone();
+        info.is_moderated = entry.is_moderated;
         info.pricing = entry.pricing.clone();
         info.default_parameters = entry.default_parameters.clone();
         if let Some(n) = entry.max_input_tokens {
@@ -458,6 +473,9 @@ mod tests {
                     canonical_slug: None,
                     knowledge_cutoff: None,
                     expiration_date: None,
+                    created: None,
+                    hugging_face_id: None,
+                    is_moderated: None,
                     context_window: Some(128_000),
                     max_output_tokens: None,
                     capabilities: ModelCapabilities {

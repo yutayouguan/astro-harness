@@ -11,6 +11,7 @@ import {
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   DEFAULT_MODEL_PREFS,
@@ -52,6 +53,7 @@ type ModelOption = {
   providerName: string;
   modelId: string;
   capabilities: ModelCapabilities;
+  expirationDate?: string | null;
 };
 
 /** 选中勾选图标 */
@@ -145,6 +147,7 @@ export default function ModelPicker({
   onActivePrefsChange,
 }: Props) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<ModelOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -221,6 +224,7 @@ export default function ModelPicker({
               ...EMPTY_MODEL_CAPABILITIES,
               tools: true,
             },
+            expirationDate: m.expiration_date ?? null,
           }));
         }),
       );
@@ -483,9 +487,28 @@ export default function ModelPicker({
                               selected ? "is-selected" : ""
                             } ${editingThis ? "is-editing" : ""}`}
                             onClick={() => {
-                              if (!selected) onChange(opt.providerId, opt.modelId);
-                              setOpen(false);
-                              setEditing(null);
+                              void (async () => {
+                                if (selected) {
+                                  setOpen(false);
+                                  setEditing(null);
+                                  return;
+                                }
+                                const exp = opt.expirationDate?.trim();
+                                if (exp) {
+                                  const ok = await confirm({
+                                    title: t("providers.expiringConfirmTitle"),
+                                    message: t("providers.expiringConfirmMessage"),
+                                    emphasis: opt.modelId,
+                                    emphasisLabel: `${t("providers.expiration")}: ${exp}`,
+                                    confirmLabel: t("providers.expiringConfirmOk"),
+                                    variant: "danger",
+                                  });
+                                  if (!ok) return;
+                                }
+                                onChange(opt.providerId, opt.modelId);
+                                setOpen(false);
+                                setEditing(null);
+                              })();
                             }}
                           >
                             <span className="model-picker-option-icon" aria-hidden>

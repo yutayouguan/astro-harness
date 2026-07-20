@@ -582,6 +582,10 @@ export type ModelInfo = {
   canonical_slug?: string | null;
   knowledge_cutoff?: string | null;
   expiration_date?: string | null;
+  /** Unix 秒：模型条目创建时间（OpenRouter） */
+  created?: number | null;
+  hugging_face_id?: string | null;
+  is_moderated?: boolean | null;
   context_window?: number | null;
   max_output_tokens?: number | null;
   capabilities: ModelCapabilities;

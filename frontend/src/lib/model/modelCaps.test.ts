@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   EMPTY_MODEL_CAPABILITIES,
+  attachmentAcceptForCaps,
+  attachmentKindAllowed,
+  estimateTurnCostUsd,
+  formatEstimateCostUsd,
   formatKnowledgeCutoff,
   formatModelPrice,
   inferModelCapabilities,
@@ -45,6 +49,36 @@ test("formatModelPrice formats per-million USD", () => {
 test("formatKnowledgeCutoff prefers YYYY-MM", () => {
   assert.equal(formatKnowledgeCutoff("2024-10-01"), "2024-10");
   assert.equal(formatKnowledgeCutoff(null), null);
+});
+
+test("attachmentAcceptForCaps gates by capabilities", () => {
+  assert.equal(
+    attachmentAcceptForCaps({
+      ...EMPTY_MODEL_CAPABILITIES,
+      vision: true,
+    }),
+    "image/*,video/*",
+  );
+  assert.equal(attachmentKindAllowed("image", { ...EMPTY_MODEL_CAPABILITIES }), false);
+  assert.equal(
+    attachmentKindAllowed("audio", {
+      ...EMPTY_MODEL_CAPABILITIES,
+      audio_in: true,
+    }),
+    true,
+  );
+  assert.ok(attachmentAcceptForCaps(null).includes("image/*"));
+});
+
+test("estimateTurnCostUsd uses per-million pricing", () => {
+  const usd = estimateTurnCostUsd({
+    pricing: { prompt_per_million: 1, completion_per_million: 2 },
+    inputChars: 4000,
+    expectedOutputTokens: 500,
+  });
+  // 1000 in * $1/M + 500 out * $2/M = 0.001 + 0.001
+  assert.equal(usd, 0.002);
+  assert.equal(formatEstimateCostUsd(0.002), "~$0.002");
 });
 
 test("inferModelCapabilities marks deepseek-v4 as reasoning", () => {

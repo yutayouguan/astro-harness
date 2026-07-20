@@ -1,5 +1,9 @@
 /** 模型能力展示辅助。 */
-import type { ModelCapabilities, ModelPricingMeta } from "../../types";
+import type {
+  ChatAttachmentKind,
+  ModelCapabilities,
+  ModelPricingMeta,
+} from "../../types";
 
 /** 能力位展示顺序（与 ModelPicker 图标一致）。 */
 export type ModelCapKey =
@@ -95,6 +99,102 @@ export function formatKnowledgeCutoff(
   if (!s) return null;
   const m = s.match(/^(\d{4}-\d{2})/);
   return m?.[1] ?? s;
+}
+
+/** Unix 秒 → YYYY-MM-DD（本地日历日）。 */
+export function formatModelCreated(created?: number | null): string | null {
+  if (created == null || !Number.isFinite(created) || created <= 0) return null;
+  const d = new Date(created * 1000);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${day}`;
+}
+
+const FILE_ACCEPT =
+  ".pdf,.txt,.md,.json,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rs,.ts,.tsx,.js,.py";
+
+/**
+ * 按模型输入能力生成 `<input accept>`。
+ * 能力未知（null）时放行全部常见类型，避免误伤。
+ */
+export function attachmentAcceptForCaps(
+  caps: ModelCapabilities | null | undefined,
+): string {
+  if (!caps) {
+    return `image/*,video/*,audio/*,${FILE_ACCEPT}`;
+  }
+  const parts: string[] = [];
+  if (caps.vision) parts.push("image/*", "video/*");
+  if (caps.audio_in) parts.push("audio/*");
+  if (caps.file) parts.push(FILE_ACCEPT);
+  return parts.length > 0 ? parts.join(",") : "";
+}
+
+/** 某附件 kind 是否被当前模型能力允许。 */
+export function attachmentKindAllowed(
+  kind: ChatAttachmentKind,
+  caps: ModelCapabilities | null | undefined,
+): boolean {
+  if (!caps) return true;
+  switch (kind) {
+    case "image":
+    case "video":
+      return Boolean(caps.vision);
+    case "audio":
+      return Boolean(caps.audio_in);
+    case "file":
+      return Boolean(caps.file);
+    default:
+      return false;
+  }
+}
+
+/**
+ * 粗估单轮费用（USD）：输入按字数/4，输出按预设 completion tokens。
+ * 缺单价时返回 null。
+ */
+export function estimateTurnCostUsd(opts: {
+  pricing?: ModelPricingMeta | null;
+  inputChars: number;
+  /** 缺省用 1024 */
+  expectedOutputTokens?: number | null;
+}): number | null {
+  const inp = opts.pricing?.prompt_per_million;
+  const out = opts.pricing?.completion_per_million;
+  if (
+    (inp == null || !Number.isFinite(inp)) &&
+    (out == null || !Number.isFinite(out))
+  ) {
+    return null;
+  }
+  const inTokens = Math.max(0, Math.ceil(opts.inputChars / 4));
+  const outTokens = Math.max(
+    0,
+    Math.round(
+      opts.expectedOutputTokens != null &&
+        Number.isFinite(opts.expectedOutputTokens) &&
+        opts.expectedOutputTokens > 0
+        ? opts.expectedOutputTokens
+        : 1024,
+    ),
+  );
+  const a = inp != null && Number.isFinite(inp) ? inp : 0;
+  const b = out != null && Number.isFinite(out) ? out : 0;
+  return (inTokens * a + outTokens * b) / 1_000_000;
+}
+
+/** 格式化估费为短标签（如 `~$0.012`）。 */
+export function formatEstimateCostUsd(usd: number | null | undefined): string | null {
+  if (usd == null || !Number.isFinite(usd) || usd < 0) return null;
+  if (usd === 0) return "~$0";
+  if (usd < 0.0001) return "<$0.0001";
+  const fmt = (n: number, digits: number) =>
+    Number(n.toFixed(digits)).toString();
+  if (usd < 0.01) return `~$${fmt(usd, 4)}`;
+  if (usd < 1) return `~$${fmt(usd, 3)}`;
+  return `~$${fmt(usd, 2)}`;
 }
 
 /** 根据模型 ID / 提供商启发式推断能力标签（API 通常不返回细粒度能力）。 */

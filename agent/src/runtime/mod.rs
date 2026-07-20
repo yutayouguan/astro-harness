@@ -369,9 +369,19 @@ impl AgentLoop {
         self.config.temperature
     }
 
+    /// 覆盖采样温度（OpenRouter default_parameters 等）。
+    pub fn set_temperature(&mut self, temperature: f32) {
+        self.config.temperature = temperature;
+    }
+
     /// 透传给 Provider 的额外 JSON 参数引用。
     pub fn additional_params(&self) -> &Value {
         &self.config.additional_params
+    }
+
+    /// 覆盖 Provider 扩展参数（与已有 map 合并由调用方决定）。
+    pub fn set_additional_params(&mut self, params: Value) {
+        self.config.additional_params = params;
     }
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。

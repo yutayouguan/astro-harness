@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::grpc::{default_grpc_address, endpoint_url};
 use crate::providers_commands::{
-    cached_model_context_window, cached_model_max_output_tokens, resolve_chat_targets,
-    resolve_image_gen_targets, ImageGenTarget,
+    cached_model_context_window, cached_model_info, cached_model_max_output_tokens,
+    resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
 };
 
 fn open_sessions() -> Result<session::SessionStore, String> {
@@ -790,6 +790,54 @@ pub async fn start_chat(
         })
         .unwrap_or(0);
 
+    // OpenRouter default_parameters → 采样温度 + 扩展参数（top_p 等）
+    let (temperature, additional_params_json) = {
+        let info = cached_model_info(&primary.provider_id, &primary.model).or_else(|| {
+            let enriched =
+                crate::model_meta::enrich_from_id(&primary.model, &primary.backend_id, None);
+            if enriched.meta_source.is_empty() {
+                None
+            } else {
+                Some(enriched)
+            }
+        });
+        match info.as_ref().and_then(|m| m.default_parameters.as_ref()) {
+            Some(dp) => {
+                let temperature = dp.temperature.and_then(|t| {
+                    let f = t as f32;
+                    if f.is_finite() && (0.0..=2.0).contains(&f) {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                });
+                let mut obj = serde_json::Map::new();
+                if let Some(v) = dp.top_p.filter(|n| n.is_finite()) {
+                    obj.insert("top_p".into(), serde_json::json!(v));
+                }
+                if let Some(v) = dp.top_k {
+                    obj.insert("top_k".into(), serde_json::json!(v));
+                }
+                if let Some(v) = dp.frequency_penalty.filter(|n| n.is_finite()) {
+                    obj.insert("frequency_penalty".into(), serde_json::json!(v));
+                }
+                if let Some(v) = dp.presence_penalty.filter(|n| n.is_finite()) {
+                    obj.insert("presence_penalty".into(), serde_json::json!(v));
+                }
+                if let Some(v) = dp.repetition_penalty.filter(|n| n.is_finite()) {
+                    obj.insert("repetition_penalty".into(), serde_json::json!(v));
+                }
+                let additional_params_json = if obj.is_empty() {
+                    String::new()
+                } else {
+                    serde_json::Value::Object(obj).to_string()
+                };
+                (temperature, additional_params_json)
+            }
+            None => (None, String::new()),
+        }
+    };
+
     let app2 = app.clone();
     let sid2 = sid.clone();
     let event_name2 = event_name.clone();
@@ -817,6 +865,8 @@ pub async fn start_chat(
             max_output_tokens,
             &interaction_mode,
             &project_root,
+            temperature,
+            &additional_params_json,
         )
         .await;
 
@@ -989,6 +1039,8 @@ async fn run_chat_stream(
     max_output_tokens: u32,
     interaction_mode: &str,
     project_root: &str,
+    temperature: Option<f32>,
+    additional_params_json: &str,
 ) -> Result<(), String> {
     let endpoint = endpoint_url(grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
@@ -1034,6 +1086,8 @@ async fn run_chat_stream(
             max_output_tokens,
             interaction_mode: interaction_mode.to_string(),
             project_root: project_root.to_string(),
+            temperature,
+            additional_params_json: additional_params_json.to_string(),
         })
         .await
         .map_err(|e| e.to_string())?
