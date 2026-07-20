@@ -354,6 +354,20 @@ html[data-theme="dark"] .providers-page-tab.is-active {
   color: var(--tone);
 }
 
+.providers-badge--deprecated {
+  margin-left: 0;
+  vertical-align: middle;
+  background: color-mix(in srgb, #b45309 16%, transparent);
+  color: color-mix(in srgb, #b45309 85%, var(--ink));
+  border: 1px solid color-mix(in srgb, #b45309 28%, transparent);
+}
+
+html[data-theme="dark"] .providers-badge--deprecated {
+  background: color-mix(in srgb, #fbbf24 18%, transparent);
+  color: color-mix(in srgb, #fbbf24 90%, var(--ink));
+  border-color: color-mix(in srgb, #fbbf24 32%, transparent);
+}
+
 .providers-add-row {
   margin-top: 12px;
   display: flex;

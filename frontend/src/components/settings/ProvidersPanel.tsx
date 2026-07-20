@@ -1623,6 +1623,15 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                   <span className="providers-field-label">
                     <IconLink />
                     {t("providers.endpoint")}
+                    {selected.kind === "google" &&
+                      /\/v1beta\/openai(?:\/|$)/.test(draft.endpoint.trim()) && (
+                        <span
+                          className="providers-badge providers-badge--deprecated"
+                          title={t("providers.googleEndpointHint")}
+                        >
+                          {t("providers.googleOpenaiCompatDeprecated")}
+                        </span>
+                      )}
                   </span>
                   <input
                     type="url"
