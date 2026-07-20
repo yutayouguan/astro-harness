@@ -1,8 +1,8 @@
 //! 离线进化设置 Tauri 命令：`evolution.*`（enabled + reflection/judge 路由 + gates）。
 //!
 //! 与 `auxiliary_commands` 同构：`provider=auto` 跟随会话主模型，显式值保存
-//! **UI Provider ID**。进化引擎（GEPA/DSPy 流水线）为 Phase 2，未实现；这里只
-//! 承载配置读写，无网络/凭据副作用。
+//! **UI Provider ID**。本模块只承载配置读写（无网络/凭据副作用）；
+//! 实际运行 / 搜索 / 审批见 `evolution_run_commands`。
 
 use serde::Serialize;
 
