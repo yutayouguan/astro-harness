@@ -1981,12 +1981,17 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                       </span>
                     )}
                     {modelsLatency != null && (
-                      <span className="providers-models-latency">
-                        {t("providers.modelsLatency", {
+                      <span
+                        className="providers-models-latency"
+                        title={t("providers.modelsLatency", {
                           ms: String(modelsLatency),
                         })}
+                      >
+                        {modelsLatency} ms
                       </span>
                     )}
+                  </div>
+                  <div className="providers-models-toolbar">
                     <button
                       type="button"
                       className={`providers-icon-btn ${testingAll ? "is-busy" : ""}`}
@@ -2036,8 +2041,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     >
                       <IconThisWeek />
                     </button>
-                  </div>
-                  <div className="providers-models-toolbar">
                     {!needsKey && (
                       <button
                         type="button"

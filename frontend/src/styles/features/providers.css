@@ -1021,17 +1021,19 @@ html[data-theme="dark"] .providers-badge--deprecated {
 
 .providers-models-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px 10px;
   flex-shrink: 0;
 }
 
 .providers-models-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  margin-left: auto;
   height: 36px;
 }
 
@@ -1040,7 +1042,13 @@ html[data-theme="dark"] .providers-badge--deprecated {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  flex-wrap: wrap;
+  flex: 1 1 12rem;
+  flex-wrap: nowrap;
+}
+
+.providers-models-title-row .providers-block-title,
+.providers-models-title-row .providers-models-count {
+  flex-shrink: 0;
 }
 
 /* 与 ExpandableSearch / skills-icon-btn 同套玻璃液态图标钮；色跟随页内 --tone（providers tab = blue） */
@@ -1184,6 +1192,11 @@ html[data-theme="dark"] .providers-badge--deprecated {
 .providers-models-latency {
   font-size: 11px;
   color: var(--ink-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 .providers-model-filter {
