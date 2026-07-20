@@ -52,7 +52,7 @@
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--card-tone) 42%, rgba(255, 255, 255, 0.5));
   box-shadow:
-    0 6px 14px color-mix(in srgb, var(--card-tone) 10%, transparent),
+    0 3px 10px color-mix(in srgb, var(--card-tone) 8%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
@@ -63,7 +63,7 @@ html[data-theme="dark"] .empty-mode-card {
     linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
     color-mix(in srgb, var(--card-tone-soft) 40%, rgba(8, 6, 18, 0.55));
   box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.35),
+    0 3px 10px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -71,6 +71,6 @@ html[data-theme="dark"] .tool-card:hover,
 html[data-theme="dark"] .empty-mode-card:hover {
   border-color: color-mix(in srgb, var(--card-tone) 48%, rgba(255, 255, 255, 0.14));
   box-shadow:
-    0 8px 18px color-mix(in srgb, var(--card-tone) 12%, rgba(0, 0, 0, 0.32)),
+    0 3px 10px color-mix(in srgb, var(--card-tone) 10%, rgba(0, 0, 0, 0.22)),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }

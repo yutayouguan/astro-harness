@@ -1292,6 +1292,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "common",
+ "fastrand",
  "home",
  "memory",
  "serde",

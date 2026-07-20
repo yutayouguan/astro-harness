@@ -1482,7 +1482,7 @@ html[data-theme="dark"] .providers-icon-btn {
     linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.5));
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, #fff 12%, var(--tone, var(--ink-soft)));
 }
@@ -1511,7 +1511,7 @@ html[data-theme="dark"] .providers-icon-btn.is-danger {
     linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
     rgba(244, 63, 94, 0.18);
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 

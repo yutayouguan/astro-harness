@@ -85,7 +85,7 @@ html[data-theme="dark"] .agent-tools-body {
     rgba(8, 6, 18, 0.58);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.45),
+    0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -320,7 +320,7 @@ html[data-theme="dark"] .mcp-add-btn {
     linear-gradient(165deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)),
     color-mix(in srgb, var(--tone-soft) 38%, rgba(8, 6, 18, 0.58));
   box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 

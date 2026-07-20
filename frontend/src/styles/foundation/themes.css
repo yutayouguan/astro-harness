@@ -35,8 +35,8 @@ html[data-theme="dark"] {
   --assist-fill: rgba(255, 255, 255, 0.05);
   --danger: #fb7185;
   --danger-bg: rgba(244, 63, 94, 0.16);
-  --shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
-    --shadow-card: 0 14px 36px rgba(0, 0, 0, 0.42);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.16);
     --rim: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --scroll-thumb: rgba(255, 255, 255, 0.1);
     --chip-bg: rgba(255, 255, 255, 0.06);
@@ -167,8 +167,8 @@ html[data-theme="light"] {
   --assist-fill: rgba(255, 255, 255, 0.32);
   --danger: #e11d48;
   --danger-bg: rgba(244, 63, 94, 0.1);
-  --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
-  --shadow-card: 0 2px 12px rgba(15, 23, 42, 0.05), 0 0 1px rgba(15, 23, 42, 0.04);
+  --shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 1px 6px rgba(15, 23, 42, 0.04), 0 0 1px rgba(15, 23, 42, 0.03);
   --rim: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 0.5px rgba(255, 255, 255, 0.6);
   --scroll-thumb: rgba(148, 163, 184, 0.16);
   --chip-bg: rgba(255, 255, 255, 0.42);

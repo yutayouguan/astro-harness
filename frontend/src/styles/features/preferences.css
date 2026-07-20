@@ -1390,7 +1390,7 @@ html[data-theme="dark"] .shell-dynamic-reshuffle {
     ),
     color-mix(in srgb, var(--glass-panel, #fff) 55%, transparent);
   box-shadow:
-    0 10px 28px color-mix(in srgb, #0f172a 8%, transparent),
+    0 3px 10px color-mix(in srgb, #0f172a 6%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent),
     inset 0 -1px 0 color-mix(in srgb, #94a3b8 10%, transparent);
   backdrop-filter: blur(16px) saturate(1.25);
@@ -1411,7 +1411,7 @@ html[data-theme="dark"] .shell-color-presets {
     ),
     color-mix(in srgb, #111827 62%, transparent);
   box-shadow:
-    0 12px 30px color-mix(in srgb, #000 28%, transparent),
+    0 3px 10px color-mix(in srgb, #000 22%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 
@@ -1664,7 +1664,7 @@ html[data-theme="dark"] .shell-grad-stop-btn {
     ),
     color-mix(in srgb, var(--glass-panel, #fff) 55%, transparent);
   box-shadow:
-    0 8px 22px color-mix(in srgb, #0f172a 8%, transparent),
+    0 2px 8px color-mix(in srgb, #0f172a 6%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent),
     inset 0 -1px 0 color-mix(in srgb, #94a3b8 10%, transparent);
   backdrop-filter: blur(14px) saturate(1.2);
@@ -1685,7 +1685,7 @@ html[data-theme="dark"] .shell-grad-palette {
     ),
     color-mix(in srgb, #111827 62%, transparent);
   box-shadow:
-    0 10px 24px color-mix(in srgb, #000 28%, transparent),
+    0 3px 10px color-mix(in srgb, #000 22%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
 }
 

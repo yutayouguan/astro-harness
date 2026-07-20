@@ -189,7 +189,7 @@ html[data-theme="dark"] .skills-pane {
     rgba(8, 6, 18, 0.58);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.45),
+    0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -576,7 +576,7 @@ html[data-theme="dark"] .skills-icon-btn {
     linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(8, 6, 18, 0.5));
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, #fff 12%, var(--tone, var(--ink-soft)));
 }

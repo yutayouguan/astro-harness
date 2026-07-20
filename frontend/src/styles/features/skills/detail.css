@@ -380,14 +380,14 @@ html[data-theme="dark"] .tool-card.skill-card {
     rgba(8, 6, 18, 0.62);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.4),
+    0 3px 10px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 html[data-theme="dark"] .tool-card.skill-card:hover {
   border-color: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1));
   box-shadow:
-    0 8px 18px rgba(0, 0, 0, 0.34),
+    0 3px 10px rgba(0, 0, 0, 0.24),
     0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent) inset,
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -1022,7 +1022,7 @@ html[data-theme="dark"] .skillhub-md pre {
       linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(16, 185, 129, 0.14)),
       rgba(255, 255, 255, 0.04);
     border-color: rgba(45, 212, 191, 0.36);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   }
 
   .skillhub-install-card h3 {
@@ -1405,7 +1405,7 @@ html[data-theme="dark"] .skills-header-search-input {
     linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
     color-mix(in srgb, var(--tone-soft) 35%, rgba(8, 6, 18, 0.5));
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -1554,7 +1554,7 @@ html[data-theme="dark"] .skills-load-more {
     color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.55));
   border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.1));
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.35),
+    0 3px 10px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
