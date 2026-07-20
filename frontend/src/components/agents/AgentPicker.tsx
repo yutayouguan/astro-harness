@@ -9,6 +9,7 @@ import {
   type SVGProps,
 } from "react";
 import { createPortal } from "react-dom";
+import { Users } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
@@ -31,6 +32,8 @@ type Props = {
   onCreateNew?: () => void;
   /** 新建项文案；默认 chat.newAgent */
   createLabelKey?: MessageKey;
+  /** 可选「全部」项（菜单顶部）；选中时 value 为其 value */
+  allOption?: { value: string; labelKey: MessageKey };
 };
 
 function agentSubline(
@@ -71,6 +74,7 @@ export default function AgentPicker({
   menuAlign = "start",
   onCreateNew,
   createLabelKey = "chat.newAgent",
+  allOption,
 }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -79,16 +83,20 @@ export default function AgentPicker({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
   const listId = useId();
-  const active = agents.find((a) => a.id === value) ?? agents[0];
+  const allSelected = Boolean(allOption && value === allOption.value);
+  const active = allSelected ? undefined : agents.find((a) => a.id === value) ?? agents[0];
   const defaultLabel = t("workspace.defaultAgent");
-  const itemCount = agents.length + (onCreateNew ? 1 : 0);
-  const createIndex = onCreateNew ? agents.length : -1;
+  const allOffset = allOption ? 1 : 0;
+  const allIndex = allOption ? 0 : -1;
+  const itemCount = agents.length + allOffset + (onCreateNew ? 1 : 0);
+  const createIndex = onCreateNew ? agents.length + allOffset : -1;
+  const agentMenuIndex = (i: number) => i + allOffset;
 
   const pos = useAnchoredMenu({
     open,
     anchorRef: triggerRef,
     menuRef,
-    sizeKey: `${agents.length}:${value}:${onCreateNew ? 1 : 0}`,
+    sizeKey: `${agents.length}:${value}:${onCreateNew ? 1 : 0}:${allOption?.value ?? ""}`,
     minWidth: 220,
     maxWidth: 340,
     maxHeightCap: 300,
@@ -99,10 +107,14 @@ export default function AgentPicker({
 
   const optionId = (i: number) => `${listId}-opt-${i}`;
 
+  const indexForValue = () => {
+    if (allOption && value === allOption.value) return allIndex;
+    const idx = agents.findIndex((a) => a.id === value);
+    return idx >= 0 ? agentMenuIndex(idx) : allOffset;
+  };
+
   const openMenu = (initialIndex?: number) => {
-    const idx =
-      initialIndex ?? agents.findIndex((a) => a.id === value);
-    setHighlightedIndex(idx >= 0 ? idx : 0);
+    setHighlightedIndex(initialIndex ?? indexForValue());
     setOpen(true);
   };
 
@@ -119,14 +131,19 @@ export default function AgentPicker({
       onCreateNew?.();
       return;
     }
-    const agent = agents[highlightedIndex];
+    if (highlightedIndex === allIndex && allOption) {
+      closeMenu(true);
+      if (value !== allOption.value) onChange(allOption.value);
+      return;
+    }
+    const agent = agents[highlightedIndex - allOffset];
     if (!agent) return;
     closeMenu(true);
     if (agent.id !== value) onChange(agent.id);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
-    if (disabled || agents.length === 0) return;
+    if (disabled || (agents.length === 0 && !allOption)) return;
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
@@ -209,7 +226,7 @@ export default function AgentPicker({
         })()
       : undefined;
 
-  if (agents.length === 0) {
+  if (agents.length === 0 && !allOption) {
     return (
       <div className={`agent-picker ${className}`.trim()} ref={rootRef}>
         <button
@@ -228,6 +245,8 @@ export default function AgentPicker({
   }
 
   const activeSub = active ? agentSubline(active, defaultLabel) : null;
+  const allLabel = allOption ? t(allOption.labelKey) : "";
+  const triggerLabel = allSelected ? allLabel : active?.name ?? "—";
 
   const menu =
     open && typeof document !== "undefined"
@@ -250,22 +269,51 @@ export default function AgentPicker({
                 : { visibility: "hidden" as const }),
             }}
           >
+            {allOption ? (
+              <li
+                id={optionId(allIndex)}
+                role="option"
+                aria-selected={allSelected}
+                data-menu-index={allIndex}
+              >
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className={`agent-picker-option${allSelected ? " is-active" : ""}${
+                    highlightedIndex === allIndex ? " is-highlighted" : ""
+                  }`}
+                  onMouseEnter={() => setHighlightedIndex(allIndex)}
+                  onClick={() => {
+                    closeMenu(true);
+                    if (value !== allOption.value) onChange(allOption.value);
+                  }}
+                >
+                  <span className="agent-picker-all-icon" aria-hidden>
+                    <Users size={14} strokeWidth={2.1} />
+                  </span>
+                  <span className="agent-picker-option-text">
+                    <span className="agent-picker-option-name">{allLabel}</span>
+                  </span>
+                </button>
+              </li>
+            ) : null}
             {agents.map((a, i) => {
+              const menuIdx = agentMenuIndex(i);
               const sub = agentSubline(a, defaultLabel);
-              const highlighted = i === highlightedIndex;
+              const highlighted = menuIdx === highlightedIndex;
               return (
                 <li
                   key={a.id}
-                  id={optionId(i)}
+                  id={optionId(menuIdx)}
                   role="option"
                   aria-selected={a.id === value}
-                  data-menu-index={i}
+                  data-menu-index={menuIdx}
                 >
                   <button
                     type="button"
                     tabIndex={-1}
                     className={`agent-picker-option ${a.id === value ? "is-active" : ""}${highlighted ? " is-highlighted" : ""}`}
-                    onMouseEnter={() => setHighlightedIndex(i)}
+                    onMouseEnter={() => setHighlightedIndex(menuIdx)}
                     onClick={() => {
                       closeMenu(true);
                       if (a.id !== value) onChange(a.id);
@@ -332,6 +380,7 @@ export default function AgentPicker({
           open && highlightedIndex >= 0 ? optionId(highlightedIndex) : undefined
         }
         aria-label={t(labelKey)}
+        title={triggerLabel}
         onClick={() => {
           if (disabled) return;
           if (open) closeMenu();
@@ -339,7 +388,16 @@ export default function AgentPicker({
         }}
         onKeyDown={handleKeyDown}
       >
-        {active ? (
+        {allSelected && allOption ? (
+          <>
+            <span className="agent-picker-all-icon agent-picker-all-icon--chip" aria-hidden>
+              <Users size={14} strokeWidth={2.1} />
+            </span>
+            <span className="agent-picker-meta">
+              <span className="agent-picker-name">{allLabel}</span>
+            </span>
+          </>
+        ) : active ? (
           <>
             <AgentAvatar agent={active} size={24} />
             <span className="agent-picker-meta">

@@ -25,6 +25,7 @@ import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import AgentAvatar from "../agents/AgentAvatar";
+import AgentPicker from "../agents/AgentPicker";
 import { EmptyIllustration } from "../../illustrations";
 import type { AgentInfo } from "../../types/agent";
 
@@ -593,26 +594,29 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     setSaveMsg(null);
     setError(null);
     setShowArchives(false);
-    if (next === "longterm" && filterAgentId === ALL_AGENTS && activeAgentId) {
-      setFilterAgentId(activeAgentId);
-      void (async () => {
-        setLoading(true);
-        try {
-          await setActiveAgent(activeAgentId);
-          const cfg = await invoke<{
-            memory_dir: string;
-            workspace_dir: string;
-          }>("get_config");
-          setMemoryDir(cfg.memory_dir);
-          setWorkspaceDir(cfg.workspace_dir);
-          await loadMemoryMd(cfg.workspace_dir);
-          await loadArchive(cfg.workspace_dir, archiveId);
-        } catch (e) {
-          setError(String(e));
-        } finally {
-          setLoading(false);
-        }
-      })();
+    if (next === "longterm" && filterAgentId === ALL_AGENTS) {
+      const target = activeAgentId || agents[0]?.id;
+      if (target) {
+        setFilterAgentId(target);
+        void (async () => {
+          setLoading(true);
+          try {
+            await setActiveAgent(target);
+            const cfg = await invoke<{
+              memory_dir: string;
+              workspace_dir: string;
+            }>("get_config");
+            setMemoryDir(cfg.memory_dir);
+            setWorkspaceDir(cfg.workspace_dir);
+            await loadMemoryMd(cfg.workspace_dir);
+            await loadArchive(cfg.workspace_dir, archiveId);
+          } catch (e) {
+            setError(String(e));
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }
     }
   };
 
@@ -793,43 +797,6 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
 
   const diaryEmpty = !dailyDraft.trim();
 
-  const renderAgentList = (opts?: { hideAll?: boolean }) => (
-    <section className="mem-card mem-agents-card" aria-label={t("memory.agents")}>
-      <div className="mem-card-title">{t("memory.expertCategories")}</div>
-      <div className="mem-agent-rows">
-        {!opts?.hideAll && (
-          <button
-            type="button"
-            className={`mem-agent-row ${filterAgentId === ALL_AGENTS ? "active" : ""}`}
-            onClick={() => void switchFilterAgent(ALL_AGENTS)}
-          >
-            <span className="mem-agent-avatar mem-agent-avatar--all" aria-hidden>
-              <Users size={16} strokeWidth={2.1} />
-            </span>
-            <span className="mem-agent-row-name">{t("memory.allExperts")}</span>
-          </button>
-        )}
-        {agents.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            className={`mem-agent-row ${filterAgentId === a.id ? "active" : ""}`}
-            onClick={() => void switchFilterAgent(a.id)}
-            title={a.path}
-          >
-            <span className="mem-agent-avatar" aria-hidden>
-              <AgentAvatar agent={a} size={28} />
-            </span>
-            <span className="mem-agent-row-name">{a.name}</span>
-            {a.is_default && (
-              <span className="mem-agent-badge">{t("memory.defaultAgent")}</span>
-            )}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-
   return (
     <aside className="side-panel memory-panel">
       <div className="mem-top">
@@ -897,6 +864,21 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
             </span>
           </button>
         </nav>
+
+        {(view === "diary" || view === "longterm") && (
+          <AgentPicker
+            className="mem-agent-picker"
+            agents={agents}
+            value={filterAgentId}
+            onChange={(id) => void switchFilterAgent(id)}
+            labelKey="memory.agents"
+            allOption={
+              view === "diary"
+                ? { value: ALL_AGENTS, labelKey: "memory.allExperts" }
+                : undefined
+            }
+          />
+        )}
 
         <div className="mem-top-stats">
           {view === "diary" && (
@@ -999,7 +981,6 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                 )}
               </div>
             </section>
-            {renderAgentList()}
           </aside>
 
           <section className="mem-main mem-card">
@@ -1194,8 +1175,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
       )}
 
       {view === "longterm" && (
-        <div className="mem-split">
-          <aside className="mem-sidebar">{renderAgentList({ hideAll: true })}</aside>
+        <div className="mem-longterm">
           <section className="mem-card mem-main">
             <div className="mem-main-header">
               <h3>{showArchives ? t("memory.archives") : t("memory.view.longterm")}</h3>

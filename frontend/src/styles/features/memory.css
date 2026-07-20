@@ -1319,6 +1319,48 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
     width: 10px;
     font-size: 12px;
   }
+
+  .mem-top .mem-agent-picker {
+    max-width: none;
+  }
+
+  .mem-top .mem-agent-picker .agent-picker-chip {
+    min-width: 0;
+    padding: 4px 8px 4px 4px;
+  }
+
+  .mem-top .mem-agent-picker .agent-picker-meta {
+    display: none;
+  }
+}
+
+.mem-agent-picker {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(200px, 36vw);
+  height: var(--mem-top-ctrl-h);
+  display: inline-flex;
+  align-items: center;
+}
+
+.mem-top .mem-agent-picker .agent-picker-chip {
+  min-height: 34px;
+  height: 34px;
+  min-width: 0;
+  border-radius: 11px;
+  padding: 3px 10px 3px 3px;
+}
+
+.mem-longterm {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 14px;
+}
+
+.mem-longterm .mem-main {
+  flex: 1;
 }
 
 .mem-top-stats {
@@ -1482,15 +1524,6 @@ html[data-theme="dark"] .mem-stat-label {
   border: 1px solid var(--chip-border);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   padding: 12px;
-}
-
-/* 专家分类卡片占满侧栏剩余高度 */
-.mem-agents-card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: auto;
 }
 
 .mem-card-title {
@@ -1662,38 +1695,6 @@ html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:di
   color: var(--tone-green);
 }
 
-.mem-agent-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 10px;
-}
-
-.mem-agent-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  border: none;
-  border-radius: 12px;
-  padding: 8px 10px;
-  text-align: left;
-  cursor: pointer;
-  color: var(--ink-soft);
-  background: transparent;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.mem-agent-row:hover {
-  background: var(--glass);
-}
-
-.mem-agent-row.active {
-  color: var(--tone-green);
-  background: var(--tone-green-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-green) 22%, transparent);
-}
-
 .mem-agent-avatar {
   width: 28px;
   height: 28px;
@@ -1712,14 +1713,6 @@ html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:di
   overflow: hidden;
 }
 
-.mem-agent-avatar--all {
-  color: var(--tone-green);
-  background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55) 0%, transparent 62%),
-    color-mix(in srgb, var(--tone-green-soft) 80%, var(--chip-bg));
-  border-color: color-mix(in srgb, var(--tone-green) 22%, var(--chip-border));
-}
-
 .mem-agent-avatar .agent-avatar {
   display: inline-grid;
   place-items: center;
@@ -1734,22 +1727,6 @@ html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:di
   width: 36px;
   height: 36px;
   font-size: 14px;
-}
-
-.mem-agent-row-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
-  font-weight: 650;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mem-agent-badge {
-  font-size: 10px;
-  opacity: 0.75;
-  flex-shrink: 0;
 }
 
 .mem-create-agent {
