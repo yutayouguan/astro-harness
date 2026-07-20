@@ -386,6 +386,24 @@ export type EvolutionSearchReport = {
   error: string | null;
 };
 
+/** 搜索每代实时进度事件（Tauri `evolution-search-progress`） */
+export type SearchProgressEvent = {
+  seedSkill: string;
+  seedIndex: number;
+  seedTotal: number;
+  generation: number;
+  generationTotal: number;
+  populationScores: number[];
+  populationBest: number;
+  populationSize: number;
+  variantsEvaluated: number;
+  budgetUsed: number;
+  budgetLimit: number;
+  gatedOut: number;
+  judgedOut: number;
+  critiques: string[];
+};
+
 /** 技能策展报告（Tauri `run_skill_curator`） */
 export type CurateReportDto = {
   generatedAt: string;

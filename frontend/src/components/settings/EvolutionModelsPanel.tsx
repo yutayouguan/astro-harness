@@ -37,6 +37,7 @@ import { useDspy } from "../../hooks/settings/useDspy";
 import { useEvolutionHistory } from "../../hooks/settings/useEvolutionHistory";
 import { useEvolutionAuto } from "../../hooks/settings/useEvolutionAuto";
 import { useSkillCurator } from "../../hooks/settings/useSkillCurator";
+import { useEvolutionSearchProgress } from "../../hooks/settings/useEvolutionSearchProgress";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -140,6 +141,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     reject,
     reload: reloadProposals,
   } = useEvolutionProposals(active);
+  const searchProgress = useEvolutionSearchProgress(active && running && runMode === "search");
   const [branchMsg, setBranchMsg] = useState<string | null>(null);
   const [genDraft, setGenDraft] = useState("");
   const [varDraft, setVarDraft] = useState("");
@@ -1114,9 +1116,10 @@ export default function EvolutionModelsPanel({ active }: Props) {
               <button
                 type="button"
                 className="aux-action"
-                onClick={() =>
-                  void runSearch(searchFocusSkill.trim() || null).then(() => reloadHistory())
-                }
+                onClick={() => {
+                  searchProgress.reset();
+                  void runSearch(searchFocusSkill.trim() || null).then(() => reloadHistory());
+                }}
                 disabled={running || !settings?.enabled}
                 title={t("evo.searchRunHint")}
               >
@@ -1140,6 +1143,121 @@ export default function EvolutionModelsPanel({ active }: Props) {
               {runMode === "search" ? t("evo.runningSearchHint") : t("evo.runningReflectHint")}
             </p>
           )}
+
+          {/* 搜索实时进度面板 */}
+          {searchProgress.events.length > 0 && (() => {
+            const ev = searchProgress.latest!;
+            const budgetPct = ev.budgetLimit > 0
+              ? Math.min(1, ev.budgetUsed / ev.budgetLimit)
+              : 0;
+            const bestByStep = searchProgress.events.map((e) => e.populationBest);
+            const chartW = 240;
+            const chartH = 56;
+            const maxScore = Math.max(...bestByStep, 0.01);
+            const points = bestByStep
+              .map((s, i) => {
+                const x = bestByStep.length === 1
+                  ? chartW / 2
+                  : (i / (bestByStep.length - 1)) * chartW;
+                const y = chartH - (s / maxScore) * (chartH - 4) - 2;
+                return `${x},${y}`;
+              })
+              .join(" ");
+            const lastX = bestByStep.length === 1
+              ? chartW / 2
+              : chartW;
+
+            return (
+              <div className="evo-search-progress">
+                <div className="evo-progress-header">
+                  <span>
+                    {t("evo.searchProgressGen" as MessageKey)
+                      .replace("{seed}", String(ev.seedIndex + 1))
+                      .replace("{total}", String(ev.seedTotal))
+                      .replace("{gen}", String(ev.generation + 1))
+                      .replace("{gens}", String(ev.generationTotal))}
+                  </span>
+                  <strong>
+                    {t("evo.searchProgressBest" as MessageKey)
+                      .replace("{score}", ev.populationBest.toFixed(2))}
+                  </strong>
+                  {ev.budgetLimit > 0 && (
+                    <span>
+                      {t("evo.searchProgressBudget" as MessageKey)
+                        .replace("{used}", String(ev.budgetUsed))
+                        .replace("{limit}", String(ev.budgetLimit))}
+                    </span>
+                  )}
+                </div>
+
+                {ev.budgetLimit > 0 && (
+                  <div className="evo-budget-bar">
+                    <span style={{ width: `${budgetPct * 100}%` }} />
+                  </div>
+                )}
+
+                <svg
+                  className="evo-progress-chart"
+                  viewBox={`0 0 ${chartW} ${chartH}`}
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <linearGradient id="evoProgressFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--tone)" stopOpacity="0.2" />
+                      <stop offset="100%" stopColor="var(--tone)" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {bestByStep.length > 1 && (
+                    <polygon
+                      points={`0,${chartH} ${points} ${lastX},${chartH}`}
+                      fill="url(#evoProgressFill)"
+                    />
+                  )}
+                  <polyline points={points} />
+                  {/* 当代种群各个体散点 */}
+                  {ev.populationScores.map((s, i) => {
+                    const cy = chartH - (s / maxScore) * (chartH - 4) - 2;
+                    return (
+                      <circle
+                        key={i}
+                        cx={lastX}
+                        cy={cy}
+                        r={s === ev.populationBest ? 3.5 : 2.5}
+                        className={s === ev.populationBest ? "evo-best-dot" : "evo-pop-dot"}
+                      />
+                    );
+                  })}
+                </svg>
+
+                <div className="evo-progress-counts">
+                  <span>
+                    {t("evo.searchProgressEvaluated" as MessageKey)
+                      .replace("{n}", String(ev.variantsEvaluated))}
+                  </span>
+                  {ev.gatedOut > 0 && (
+                    <span>
+                      {t("evo.searchProgressGated" as MessageKey)
+                        .replace("{n}", String(ev.gatedOut))}
+                    </span>
+                  )}
+                  {ev.judgedOut > 0 && (
+                    <span>
+                      {t("evo.searchProgressJudged" as MessageKey)
+                        .replace("{n}", String(ev.judgedOut))}
+                    </span>
+                  )}
+                </div>
+
+                {ev.critiques.length > 0 && (
+                  <div className="evo-critique-pills">
+                    {ev.critiques.map((c, i) => (
+                      <span key={i} title={c}>{c}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="evo-run-panel">
             <div className="evo-focus-row">

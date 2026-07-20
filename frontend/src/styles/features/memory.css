@@ -908,6 +908,103 @@ html[data-theme="dark"] .evo-stat {
   stroke: none !important;
 }
 
+/* --- Search progress panel --- */
+
+.evo-search-progress {
+  padding: 10px 12px;
+  margin: 6px 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+.evo-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--ink) 60%, transparent);
+}
+
+.evo-progress-header strong {
+  color: var(--tone);
+  font-variant-numeric: tabular-nums;
+}
+
+.evo-budget-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+
+.evo-budget-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--tone), color-mix(in srgb, var(--tone) 70%, #f59e0b));
+  transition: width 0.3s ease;
+}
+
+.evo-progress-chart {
+  height: 64px;
+  width: 100%;
+}
+
+.evo-progress-chart polyline {
+  fill: none;
+  stroke: var(--tone);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.evo-progress-chart .evo-pop-dot {
+  fill: var(--tone);
+  opacity: 0.5;
+}
+
+.evo-progress-chart .evo-best-dot {
+  fill: var(--tone);
+}
+
+.evo-progress-counts {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--ink) 50%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+.evo-progress-counts strong {
+  color: var(--ink);
+}
+
+.evo-critique-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.evo-critique-pills > span {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .evo-eval-form {
   display: flex;
   flex-direction: column;

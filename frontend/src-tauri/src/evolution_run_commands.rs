@@ -885,7 +885,8 @@ pub async fn run_evolution_search(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or(CROSSOVER_SYSTEM_PROMPT);
 
-    'seed: for seed in seeds {
+    let seed_count = seeds.len();
+    'seed: for (seed_idx, seed) in seeds.into_iter().enumerate() {
         if search_cancelled() {
             termination = "cancelled".into();
             break;
@@ -1076,6 +1077,26 @@ pub async fn run_evolution_search(
                 .into_iter()
                 .take(8)
                 .collect();
+
+            let _ = app.emit(
+                "evolution-search-progress",
+                serde_json::json!({
+                    "seedSkill": seed.skill_id,
+                    "seedIndex": seed_idx,
+                    "seedTotal": seed_count,
+                    "generation": gen,
+                    "generationTotal": generations,
+                    "populationScores": population.iter().map(|v| v.score).collect::<Vec<_>>(),
+                    "populationBest": population.iter().map(|v| v.score).fold(0.0f32, f32::max),
+                    "populationSize": population.len(),
+                    "variantsEvaluated": variants_evaluated,
+                    "budgetUsed": budget.used(),
+                    "budgetLimit": cfg.search.max_llm_calls,
+                    "gatedOut": search_gated_out,
+                    "judgedOut": search_judged_out,
+                    "critiques": critiques.iter().take(3).cloned().collect::<Vec<_>>(),
+                }),
+            );
         }
 
         // 从最终种群中取前 2 个，holdout 复验后过门禁
