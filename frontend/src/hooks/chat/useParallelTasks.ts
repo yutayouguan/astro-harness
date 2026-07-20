@@ -371,6 +371,7 @@ export function useParallelTasks(deps: Deps) {
         useMemory: true,
         thinkingEnabled: modelApi.thinkingEnabled,
         reasoningEffort: modelApi.reasoningEffort,
+        interactionMode: "multitask",
         attachments: pending.map((a) => ({
           name: a.name,
           mime: a.mime,

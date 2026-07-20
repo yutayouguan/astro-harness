@@ -81,7 +81,7 @@ pub async fn run_headless_multi_turn(
             )));
         }
         let messages = to_provider_messages(&system_prompt, &history);
-        let tools_schema = agent.tool_registry().schemas_for_api();
+        let tools_schema = agent.schemas_for_api();
 
         let (mut stream, _meta) = try_stream_completion_with_fallback(
             &targets,

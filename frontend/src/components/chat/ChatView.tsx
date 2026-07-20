@@ -56,7 +56,9 @@ import {
 } from "../../lib/agent/agentCreateTemplate";
 import {
   CHAT_MODES,
+  MODE_SWITCH_COUNTDOWN_SEC,
   type ChatInteractionMode,
+  type ModeSwitchRequest,
 } from "../../lib/chat/chatMode";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
@@ -213,6 +215,10 @@ type Props = {
   onRemoveQueuedFollowUp?: (id: string) => void;
   onUpdateQueuedFollowUpText?: (id: string, text: string) => void;
   onMoveQueuedFollowUp?: (id: string, dir: -1 | 1) => void;
+  /** `request_mode_switch` 流结束后的授权请求 */
+  modeSwitchPrompt?: ModeSwitchRequest | null;
+  onApproveModeSwitch?: () => void;
+  onDismissModeSwitch?: () => void;
   /** MultiTask 并行任务 */
   parallelTasks?: ParallelChatTask[];
   onCancelParallelTask?: (id: string) => void;
@@ -533,6 +539,9 @@ export default function ChatView({
   onRemoveQueuedFollowUp,
   onUpdateQueuedFollowUpText,
   onMoveQueuedFollowUp,
+  modeSwitchPrompt = null,
+  onApproveModeSwitch,
+  onDismissModeSwitch,
   parallelTasks = [],
   onCancelParallelTask,
   pendingInterrupts = [],
@@ -578,6 +587,7 @@ export default function ChatView({
   const [queueOpen, setQueueOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
+  const [modeSwitchSecLeft, setModeSwitchSecLeft] = useState(MODE_SWITCH_COUNTDOWN_SEC);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
@@ -635,6 +645,28 @@ export default function ChatView({
   useEffect(() => {
     void loadMentionSources();
   }, [loadMentionSources]);
+
+  useEffect(() => {
+    if (!modeSwitchPrompt) {
+      setModeSwitchSecLeft(MODE_SWITCH_COUNTDOWN_SEC);
+      return;
+    }
+    setModeSwitchSecLeft(MODE_SWITCH_COUNTDOWN_SEC);
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const left =
+        MODE_SWITCH_COUNTDOWN_SEC -
+        Math.floor((Date.now() - startedAt) / 1000);
+      if (left <= 0) {
+        window.clearInterval(timer);
+        setModeSwitchSecLeft(0);
+        onApproveModeSwitch?.();
+        return;
+      }
+      setModeSwitchSecLeft(left);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [modeSwitchPrompt, onApproveModeSwitch]);
 
   const welcomeHints = useMemo(
     () => [
@@ -1697,6 +1729,48 @@ export default function ChatView({
           trySubmitComposer();
         }}
       >
+        {modeSwitchPrompt && (
+          <div
+            className="composer-queue composer-mode-switch"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="composer-mode-switch-body">
+              <span className="composer-mode-switch-title">
+                {t("chat.modeSwitch.title", {
+                  to:
+                    modeSwitchPrompt.to === "plan"
+                      ? t("chat.modePlan")
+                      : t("chat.modeAgent"),
+                })}
+              </span>
+              <span className="composer-mode-switch-reason">
+                {modeSwitchPrompt.reason}
+              </span>
+              <span className="composer-mode-switch-countdown">
+                {t("chat.modeSwitch.countdown", {
+                  sec: String(modeSwitchSecLeft),
+                })}
+              </span>
+            </div>
+            <span className="composer-queue-actions">
+              <button
+                type="button"
+                className="composer-queue-btn"
+                onClick={() => onApproveModeSwitch?.()}
+              >
+                {t("chat.modeSwitch.now")}
+              </button>
+              <button
+                type="button"
+                className="composer-queue-btn"
+                onClick={() => onDismissModeSwitch?.()}
+              >
+                {t("chat.modeSwitch.cancel")}
+              </button>
+            </span>
+          </div>
+        )}
         {queuedFollowUps.length > 0 && (
           <div className="composer-queue" aria-label={t("chat.queue.title", { count: String(queuedFollowUps.length) })}>
             <button

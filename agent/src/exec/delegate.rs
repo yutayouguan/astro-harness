@@ -455,7 +455,7 @@ async fn run_provider_loop(
         apply_toolsets_filter(agent.tool_registry_mut(), toolsets);
 
         let messages = to_provider_messages(&system_prompt, &agent.session_messages);
-        let tools = agent.tool_registry().schemas_for_api();
+        let tools = agent.schemas_for_api();
 
         let (mut stream, _meta) = try_stream_completion_with_fallback(
             &targets,

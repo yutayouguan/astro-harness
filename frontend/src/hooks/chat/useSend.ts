@@ -9,7 +9,12 @@ import {
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
-import { chatModeHint, type ChatInteractionMode } from "../../lib/chat/chatMode";
+import {
+  chatModeHint,
+  parseModeSwitchResult,
+  type ChatInteractionMode,
+  type ModeSwitchRequest,
+} from "../../lib/chat/chatMode";
 import { resolveComposerTurn } from "../../lib/chat/composerResolve";
 import {
   loadPickerGlobals,
@@ -51,6 +56,8 @@ export interface SendOpts {
   reuseUserId?: string;
   resumeJson?: string;
   allowEmpty?: boolean;
+  /** 覆盖当前 UI 模式（例如刚批准 Plan→Agent 时） */
+  interactionMode?: ChatInteractionMode;
 }
 
 export interface UseSendDeps {
@@ -123,6 +130,10 @@ export interface UseSendDeps {
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setDissolvingIds: Dispatch<SetStateAction<string[]>>;
   showTransientToast: ShowToastFn;
+  /** 本轮首次检测到模式切换请求时记录（流结束后再弹授权条） */
+  onModeSwitchDetected?: (req: ModeSwitchRequest) => void;
+  /** 流正常结束后，若本轮有模式切换请求则提示 UI */
+  onModeSwitchPrompt?: (req: ModeSwitchRequest) => void;
 }
 
 function calcTokensPerSec(completionTokens: number, durationMs: number): number | undefined {
@@ -197,8 +208,11 @@ export function useSend(deps: UseSendDeps) {
         setCurrentTurnId,
         setDissolvingIds,
         showTransientToast,
+        onModeSwitchDetected,
+        onModeSwitchPrompt,
       } = depsRef.current;
 
+      let pendingModeSwitch: ModeSwitchRequest | null = null;
       const text = (opts?.text ?? input).trim();
       const pending = opts?.attachments ?? attachments;
       const resumeJson = opts?.resumeJson?.trim() ?? "";
@@ -367,11 +381,12 @@ export function useSend(deps: UseSendDeps) {
       firstTokenRef.current.delete(assistantId);
       pendingUsageRef.current.delete(assistantId);
 
+      const effectiveMode = opts?.interactionMode ?? chatMode;
       const contentForModel = `${
         isCreatingAgent
           ? `${modelBody}\n\n---\n${t("chat.agentCreateHint")}`
           : modelBody
-      }${chatModeHint(chatMode)}`;
+      }${chatModeHint(effectiveMode)}`;
 
       try {
         unlistenRef.current?.();
@@ -601,6 +616,13 @@ export function useSend(deps: UseSendDeps) {
               arguments_json: payload.arguments_json,
               result: payload.result,
             });
+            if (!pendingModeSwitch && payload.result) {
+              const sw = parseModeSwitchResult(payload.result);
+              if (sw) {
+                pendingModeSwitch = sw;
+                onModeSwitchDetected?.(sw);
+              }
+            }
             const activity: ChatActivity = {
               id,
               kind,
@@ -746,6 +768,9 @@ export function useSend(deps: UseSendDeps) {
             setStatus("ready");
             setStatusPhase("ready");
             setStatusDetail(null);
+            if (pendingModeSwitch) {
+              onModeSwitchPrompt?.(pendingModeSwitch);
+            }
           } else if (payload.type === "error") {
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);
@@ -853,6 +878,7 @@ export function useSend(deps: UseSendDeps) {
           reasoningEffort: modelApi.reasoningEffort,
           resumeJson: resumeJson || undefined,
           keepChatBubbles: keepChatBubbles != null ? keepChatBubbles : undefined,
+          interactionMode: effectiveMode,
           attachments: pending.map((a) => ({
             name: a.name,
             mime: a.mime,

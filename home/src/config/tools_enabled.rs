@@ -34,6 +34,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "search_context",
     "pin_context",
     "ask",
+    "request_mode_switch",
     "request_user_location",
     "present_ui",
     "delegate",
@@ -209,6 +210,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "music_gen" => "music_gen",
         "skills" => "skills",
         "ask" => "ask",
+        "request_mode_switch" => "request_mode_switch",
         "request_user_location" => "request_user_location",
         "present_ui" => "present_ui",
         "delegate" | "delegate_async" | "delegate_status" | "delegate_collect"

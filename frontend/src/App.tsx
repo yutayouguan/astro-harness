@@ -164,6 +164,7 @@ export default function App() {
     activeProvider,
     providers,
     chatMode,
+    onChatModeChange,
     chatDisplayPrefsRef,
     locale,
     t,
@@ -811,6 +812,9 @@ export default function App() {
                       onRemoveQueuedFollowUp={chat.removeQueuedFollowUp}
                       onUpdateQueuedFollowUpText={chat.updateQueuedFollowUpText}
                       onMoveQueuedFollowUp={chat.moveQueuedFollowUp}
+                      modeSwitchPrompt={chat.modeSwitchPrompt}
+                      onApproveModeSwitch={chat.approveModeSwitch}
+                      onDismissModeSwitch={chat.dismissModeSwitch}
                       parallelTasks={chat.parallelTasks}
                       onCancelParallelTask={chat.cancelParallelTask}
                       pendingInterrupts={chat.sessionPendingInterrupts}

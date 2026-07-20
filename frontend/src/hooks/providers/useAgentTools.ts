@@ -50,6 +50,7 @@ export type AgentToolId =
   | "memory"
   | "session_search"
   | "ask"
+  | "request_mode_switch"
   | "request_user_location"
   | "present_ui"
   | "delegate"
@@ -331,6 +332,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "questions", type: "array", optional: true },
       { name: "title", type: "string", optional: true },
       { name: "body", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "request_mode_switch",
+    titleKey: "agentTools.requestModeSwitch.title",
+    descKey: "agentTools.requestModeSwitch.desc",
+    Icon: IconClarify,
+    tone: "indigo",
+    params: [
+      { name: "to", type: "string" },
+      { name: "reason", type: "string" },
+      { name: "summary", type: "string", optional: true },
     ],
   },
   {

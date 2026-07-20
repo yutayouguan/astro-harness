@@ -361,7 +361,7 @@ async fn run_multi_turn_stream_inner(
                     "[astro:hook-context]\n{ctx}"
                 )));
             }
-            let tools = agent.tool_registry().schemas_for_api();
+            let tools = agent.schemas_for_api();
             (messages, tools)
         };
 

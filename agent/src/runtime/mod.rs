@@ -154,6 +154,8 @@ pub struct AgentLoop {
     pending_recommend_compact: bool,
     /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
     pending_learning_nudge: Option<String>,
+    /// 当前聊天交互模式（Plan/Ask 只读门禁）；由 ChatRequest 下传。
+    interaction_mode: tools::InteractionMode,
 }
 
 impl AgentLoop {
@@ -279,6 +281,7 @@ impl AgentLoop {
             mid_run_summary_done: false,
             pending_recommend_compact: false,
             pending_learning_nudge: None,
+            interaction_mode: tools::InteractionMode::Agent,
         })
     }
 
@@ -830,6 +833,20 @@ impl AgentLoop {
         };
     }
 
+    /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
+    pub fn set_interaction_mode(&mut self, mode: tools::InteractionMode) {
+        self.interaction_mode = mode;
+    }
+
+    pub fn interaction_mode(&self) -> tools::InteractionMode {
+        self.interaction_mode
+    }
+
+    /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
+    pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
+        tools::filter_schemas(self.interaction_mode, self.tool_registry.schemas_for_api())
+    }
+
     pub fn context_window(&self) -> u32 {
         if self.context_window == 0 {
             crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW
@@ -1290,6 +1307,9 @@ impl AgentLoop {
         } else {
             (name, args_owned)
         };
+        if let Err(msg) = tools::check_tool_call(self.interaction_mode, exec_name, &exec_args) {
+            return Ok(msg);
+        }
         let raw_result = self.dispatch_named_tool(exec_name, &exec_args).await?;
         if exec_name == "skills" {
             self.activate_skill_toolsets_from_args(&exec_args);

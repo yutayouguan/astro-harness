@@ -688,6 +688,7 @@ pub async fn start_chat(
     reasoning_effort: Option<String>,
     resume_json: Option<String>,
     keep_chat_bubbles: Option<i32>,
+    interaction_mode: Option<String>,
 ) -> Result<String, String> {
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
@@ -707,6 +708,14 @@ pub async fn start_chat(
     let reasoning_effort = match reasoning_effort.as_str() {
         "max" | "xhigh" => "max".to_string(),
         _ => "high".to_string(),
+    };
+    let interaction_mode = interaction_mode
+        .unwrap_or_else(|| "agent".to_string())
+        .trim()
+        .to_ascii_lowercase();
+    let interaction_mode = match interaction_mode.as_str() {
+        "plan" | "ask" | "multitask" => interaction_mode,
+        _ => "agent".to_string(),
     };
 
     // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
@@ -801,6 +810,7 @@ pub async fn start_chat(
             &resume_json,
             context_window,
             max_output_tokens,
+            &interaction_mode,
         )
         .await;
 
@@ -923,6 +933,7 @@ async fn run_chat_stream(
     resume_json: &str,
     context_window: u32,
     max_output_tokens: u32,
+    interaction_mode: &str,
 ) -> Result<(), String> {
     let endpoint = endpoint_url(grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
@@ -966,6 +977,7 @@ async fn run_chat_stream(
             auxiliary_targets: auxiliary_targets.to_vec(),
             context_window,
             max_output_tokens,
+            interaction_mode: interaction_mode.to_string(),
         })
         .await
         .map_err(|e| e.to_string())?

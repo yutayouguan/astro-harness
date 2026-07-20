@@ -769,6 +769,7 @@ impl AstroService for AstroServiceImpl {
             if req.context_window > 0 {
                 agent.set_context_window(req.context_window);
             }
+            agent.set_interaction_mode(tools::InteractionMode::parse(&req.interaction_mode));
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }

@@ -13,7 +13,10 @@ import {
   sealOpenReasoning,
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
-import { type ChatInteractionMode } from "../../lib/chat/chatMode";
+import {
+  type ChatInteractionMode,
+  type ModeSwitchRequest,
+} from "../../lib/chat/chatMode";
 import {
   MAX_QUEUED_FOLLOWUPS,
   newQueuedFollowUpId,
@@ -89,6 +92,7 @@ export interface UseChatSessionDeps {
   activeProvider: ProviderDto | undefined;
   providers: ProviderDto[];
   chatMode: ChatInteractionMode;
+  onChatModeChange: (mode: ChatInteractionMode) => void;
   chatDisplayPrefsRef: RefObject<ChatDisplayPrefs>;
   locale: string;
   t: TFn;
@@ -101,6 +105,7 @@ export function useChatSession({
   activeProvider,
   providers,
   chatMode,
+  onChatModeChange,
   chatDisplayPrefsRef,
   locale,
   t,
@@ -122,6 +127,8 @@ export function useChatSession({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [queuedFollowUps, setQueuedFollowUps] = useState<QueuedFollowUp[]>([]);
   const [queueKick, setQueueKick] = useState(0);
+  const [modeSwitchPrompt, setModeSwitchPrompt] = useState<ModeSwitchRequest | null>(null);
+  const modeSwitchArmedRef = useRef(false);
   const [streaming, setStreaming] = useState(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
@@ -212,6 +219,15 @@ export function useChatSession({
   });
 
   // ── Send ──────────────────────────────────────────────────────────────────
+  const onModeSwitchDetected = useCallback((_req: ModeSwitchRequest) => {
+    modeSwitchArmedRef.current = true;
+  }, []);
+  const onModeSwitchPrompt = useCallback((req: ModeSwitchRequest) => {
+    if (!modeSwitchArmedRef.current) return;
+    modeSwitchArmedRef.current = false;
+    setModeSwitchPrompt(req);
+  }, []);
+
   const { send: sendImmediate } = useSend({
     input,
     attachments,
@@ -268,12 +284,44 @@ export function useChatSession({
     setCurrentTurnId,
     setDissolvingIds,
     showTransientToast,
+    onModeSwitchDetected,
+    onModeSwitchPrompt,
   });
+
+  const chatModeRef = useRef(chatMode);
+  chatModeRef.current = chatMode;
+  const onChatModeChangeRef = useRef(onChatModeChange);
+  onChatModeChangeRef.current = onChatModeChange;
+  const sendImmediateRef = useRef(sendImmediate);
+  sendImmediateRef.current = sendImmediate;
 
   const queueDrainLockRef = useRef(false);
   const queueFailedIdRef = useRef<string | null>(null);
-  const chatModeRef = useRef(chatMode);
-  chatModeRef.current = chatMode;
+
+  const dismissModeSwitch = useCallback(() => {
+    setModeSwitchPrompt(null);
+    modeSwitchArmedRef.current = false;
+  }, []);
+
+  const modeSwitchPromptRef = useRef(modeSwitchPrompt);
+  modeSwitchPromptRef.current = modeSwitchPrompt;
+
+  const approveModeSwitch = useCallback(async () => {
+    const req = modeSwitchPromptRef.current;
+    if (!req) return;
+    modeSwitchPromptRef.current = null;
+    setModeSwitchPrompt(null);
+    modeSwitchArmedRef.current = false;
+    onChatModeChangeRef.current(req.to);
+    if (req.to === "agent" && req.summary) {
+      const inject =
+        `[Authorized mode switch: Plan → Agent]\n\nConfirmed plan:\n${req.summary}`;
+      void sendImmediateRef.current({
+        text: inject,
+        interactionMode: "agent",
+      });
+    }
+  }, []);
 
   /** 单线程：流式中入队；MultiTask：立即开独立 session 并行 */
   const send = useCallback(
@@ -708,6 +756,8 @@ export function useChatSession({
       }
       return [];
     });
+    setModeSwitchPrompt(null);
+    modeSwitchArmedRef.current = false;
     clearAllParallel();
   }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav, clearAllParallel]);
 
@@ -1468,6 +1518,7 @@ export function useChatSession({
     queuedFollowUps,
     parallelTasks,
     parallelRunning,
+    modeSwitchPrompt,
     streaming: streaming || parallelRunning > 0,
     primaryStreaming: streaming,
     streamPaused,
@@ -1498,6 +1549,8 @@ export function useChatSession({
     setStatusDetail,
     // callbacks
     send,
+    approveModeSwitch,
+    dismissModeSwitch,
     removeQueuedFollowUp,
     updateQueuedFollowUpText,
     moveQueuedFollowUp,

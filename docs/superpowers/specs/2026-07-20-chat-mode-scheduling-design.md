@@ -1,8 +1,8 @@
 # 聊天交互模式与调度设计
 
 > 日期：2026-07-20  
-> 状态：设计定稿；Step 1 / Step 2 已落地；Step 3（Plan gate + 模式切换授权）待做  
-> 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、编排 / delegate / worktree
+> 状态：设计定稿；Step 1 / Step 2 / Step 3 已落地；Step 4 待做  
+> 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、编排 / delegate / worktree
 
 ## 1. 问题
 
@@ -47,18 +47,18 @@
   2. **软边界**：HITL、工具审批等天然停顿（后续可扩展）；
   3. **巡检点**（可选）：长任务周期性 checkpoint（后续）。
 
-### 3.2 模式切换授权（后续 Step）
+### 3.2 模式切换授权（Step 3）
 
-结构化请求，例如 `request_mode_switch({ to, reason, summary? })`：
+结构化工具 `request_mode_switch({ to, reason, summary? })`（`stop_after_tool_call`）：
 
-- UI：授权条 + **可配置倒计时**（默认约 10s）+「立即切换」+「取消」；
-- 取消 = 留在当前模式，并告知模型用户拒绝；
+- UI：授权条 + **倒计时**（默认 10s）+「立即切换」+「取消」；
+- 取消 = 留在当前模式；
 - 同轮禁止连环弹；流式结束再弹；
-- Plan→Agent 时注入已确认计划摘要，避免失忆。
+- Plan→Agent 批准后自动发送带 `summary` 的续聊句。
 
-### 3.3 Plan 工具 gate（后续 Step）
+### 3.3 Plan / Ask 工具 gate（Step 3）
 
-后端 / 工具层对 Plan 禁用写文件、有副作用终端等；仅靠 hint 不够。
+`interaction_mode` 经 `ChatRequest` 下传；`filter_schemas` + `check_tool_call`（含 `file_ops` 仅 read/list/search）。
 
 ## 4. MultiTask（并行调度）
 
@@ -75,8 +75,8 @@
 ## 5. 落地顺序
 
 1. **Step 1（已完成）**：Agent / Plan / Ask 的 follow-up 队列 + Queued UI；流结束后自动 dequeue 发送；
-2. **Step 2（本迭代）**：MultiTask 每消息 spawn 独立 session + 并行监听 + Task 面板（MVP 暂不强制 worktree）；
-3. **Step 3**：Plan 工具 gate + `request_mode_switch` 授权条（倒计时 / 立即 / 取消）；
+2. **Step 2（已完成）**：MultiTask 每消息 spawn 独立 session + 并行监听 + Task 面板（MVP 暂不强制 worktree）；
+3. **Step 3（已完成）**：Plan/Ask 工具 gate + `request_mode_switch` 授权条（倒计时 / 立即 / 取消）；
 4. **Step 4**：队列软边界巡检、task 汇总与 worktree 隔离增强。
 
 ## 6. Step 1 验收
@@ -94,9 +94,16 @@
 - Agent/Plan/Ask 队列行为不变；
 - MVP 不强制 git worktree（并行写同一工作区仍有冲突风险，后续 Step 增强）。
 
-## 7. 非目标（Step 2 仍不含）
+## 6c. Step 3 验收
+
+- Plan/Ask：schema 不含 terminal/code_exec/delegate/MCP；`file_ops(write)` 硬拦；
+- `request_mode_switch` 流结束后弹授权条；倒计时或立即切换；取消不改模式；
+- Plan→Agent 注入 summary；同轮只弹一次；
+- MultiTask 仍传 `interaction_mode=multitask`（不做只读门禁）。
+
+## 7. 非目标（Step 3 仍不含）
 
 - 同 `session_id` 多 turn 并发；
-- 模式自动切换与倒计时授权；
 - MultiTask 强制 worktree / delegate_async 作为主路径；
+- 取消后自动把拒绝理由写回模型续跑（当前仅 UI 取消）；
 - 不改全局专家切换语义。
