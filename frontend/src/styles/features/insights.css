@@ -153,7 +153,9 @@
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 85%, transparent);
-  box-shadow: var(--shadow-card);
+  box-shadow:
+    0 2px 8px rgba(15, 23, 42, 0.06),
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.35));
   overflow: hidden;
 }
 
@@ -163,8 +165,8 @@
     linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.35)),
     color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.5));
   box-shadow:
-    var(--shadow-card),
-    0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
+    0 2px 8px color-mix(in srgb, var(--tone) 8%, rgba(15, 23, 42, 0.05)),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
 }
 
 .insights-kpi--primary::before {
@@ -326,6 +328,9 @@
       transparent 42%
     ),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+  box-shadow:
+    0 2px 8px rgba(15, 23, 42, 0.05),
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.28));
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }
@@ -370,7 +375,7 @@
     color-mix(in srgb, var(--tone) 72%, white),
     var(--tone)
   );
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 28%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--tone) 18%, transparent);
   transition: height 0.2s ease;
 }
 
@@ -766,6 +771,9 @@ html.dark .insights-unpriced {
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 80%, transparent);
+  box-shadow:
+    0 2px 8px rgba(15, 23, 42, 0.05),
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.28));
 }
 
 .insights-collab-list-panel {
@@ -1069,6 +1077,9 @@ html.dark .insights-collab-label {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow:
+    0 2px 8px rgba(15, 23, 42, 0.05),
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.28));
 }
 
 .insights-trace-list-panel .insights-collab-list,
