@@ -3223,7 +3223,7 @@ html[data-theme="dark"] .cron-run-drawer {
 
   .cron-history-filters {
     gap: 6px;
-    padding: 6px;
+    padding: 4px;
   }
 
   .cron-timeline-card {
