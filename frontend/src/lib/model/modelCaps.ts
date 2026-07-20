@@ -112,6 +112,48 @@ export function formatModelCreated(created?: number | null): string | null {
   return `${y}-${mo}-${day}`;
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** `created`（Unix 秒）是否落在最近 `days` 天内（含未来极小误差）。 */
+export function isModelCreatedWithinDays(
+  created: number | null | undefined,
+  days: number,
+  nowMs: number = Date.now(),
+): boolean {
+  if (
+    created == null ||
+    !Number.isFinite(created) ||
+    created <= 0 ||
+    !Number.isFinite(days) ||
+    days <= 0
+  ) {
+    return false;
+  }
+  const ageMs = nowMs - created * 1000;
+  return ageMs >= -MS_PER_DAY && ageMs <= days * MS_PER_DAY;
+}
+
+/** 按 `created` 降序；无时间戳的排最后，同秒再比 id。 */
+export function compareModelsByCreatedDesc(
+  a: { id?: string; created?: number | null },
+  b: { id?: string; created?: number | null },
+): number {
+  const ac =
+    a.created != null && Number.isFinite(a.created) && a.created > 0
+      ? a.created
+      : 0;
+  const bc =
+    b.created != null && Number.isFinite(b.created) && b.created > 0
+      ? b.created
+      : 0;
+  if (ac !== bc) {
+    if (ac === 0) return 1;
+    if (bc === 0) return -1;
+    return bc - ac;
+  }
+  return (a.id ?? "").localeCompare(b.id ?? "");
+}
+
 const FILE_ACCEPT =
   ".pdf,.txt,.md,.json,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rs,.ts,.tsx,.js,.py";
 

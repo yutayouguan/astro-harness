@@ -4,11 +4,13 @@ import {
   EMPTY_MODEL_CAPABILITIES,
   attachmentAcceptForCaps,
   attachmentKindAllowed,
+  compareModelsByCreatedDesc,
   estimateTurnCostUsd,
   formatEstimateCostUsd,
   formatKnowledgeCutoff,
   formatModelPrice,
   inferModelCapabilities,
+  isModelCreatedWithinDays,
   listActiveModelCaps,
 } from "./modelCaps.ts";
 
@@ -49,6 +51,25 @@ test("formatModelPrice formats per-million USD", () => {
 test("formatKnowledgeCutoff prefers YYYY-MM", () => {
   assert.equal(formatKnowledgeCutoff("2024-10-01"), "2024-10");
   assert.equal(formatKnowledgeCutoff(null), null);
+});
+
+test("isModelCreatedWithinDays / compareModelsByCreatedDesc", () => {
+  const now = Date.parse("2026-07-20T12:00:00Z");
+  const threeDaysAgo = Math.floor((now - 3 * 86400_000) / 1000);
+  const tenDaysAgo = Math.floor((now - 10 * 86400_000) / 1000);
+  assert.equal(isModelCreatedWithinDays(threeDaysAgo, 7, now), true);
+  assert.equal(isModelCreatedWithinDays(tenDaysAgo, 7, now), false);
+  assert.equal(isModelCreatedWithinDays(null, 7, now), false);
+
+  const sorted = [
+    { id: "old", created: tenDaysAgo },
+    { id: "new", created: threeDaysAgo },
+    { id: "none", created: null },
+  ].sort(compareModelsByCreatedDesc);
+  assert.deepEqual(
+    sorted.map((m) => m.id),
+    ["new", "old", "none"],
+  );
 });
 
 test("attachmentAcceptForCaps gates by capabilities", () => {

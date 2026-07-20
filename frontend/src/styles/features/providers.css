@@ -1408,6 +1408,12 @@ html[data-theme="dark"] .providers-badge--deprecated {
   border-color: color-mix(in srgb, #0ea5e9 24%, transparent);
 }
 
+.providers-model-badge.is-new {
+  color: #15803d;
+  background: color-mix(in srgb, #22c55e 16%, transparent);
+  border-color: color-mix(in srgb, #22c55e 28%, transparent);
+}
+
 .providers-model-row.is-expiring {
   opacity: 0.92;
 }

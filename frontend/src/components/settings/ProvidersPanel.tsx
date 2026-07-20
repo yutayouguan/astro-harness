@@ -9,6 +9,7 @@ import {
   type SVGProps,
 } from "react";
 import {
+  ArrowUpDown,
   Box,
   Brain,
   Dna,
@@ -31,6 +32,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Sparkles,
   Star,
   Stethoscope,
   Tag,
@@ -51,7 +53,14 @@ import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
 import AuxiliaryModelsPanel from "./AuxiliaryModelsPanel";
 import EvolutionModelsPanel from "./EvolutionModelsPanel";
-import { formatContextWindow, formatKnowledgeCutoff, formatModelCreated, formatModelPrice } from "../../lib/model/modelCaps";
+import {
+  compareModelsByCreatedDesc,
+  formatContextWindow,
+  formatKnowledgeCutoff,
+  formatModelCreated,
+  formatModelPrice,
+  isModelCreatedWithinDays,
+} from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
   evaluateMediaModelsResult,
@@ -219,6 +228,16 @@ function IconSearch(props: SVGProps<SVGSVGElement>) {
   return <Search size={16} strokeWidth={2} aria-hidden {...props} />;
 }
 
+/** 按新上架排序 */
+function IconSortNewest(props: SVGProps<SVGSVGElement>) {
+  return <ArrowUpDown size={16} strokeWidth={2} aria-hidden {...props} />;
+}
+
+/** 本周新增筛选 */
+function IconThisWeek(props: SVGProps<SVGSVGElement>) {
+  return <Sparkles size={16} strokeWidth={2} aria-hidden {...props} />;
+}
+
 /** 显示密钥图标 */
 function IconEye(props: SVGProps<SVGSVGElement>) {
   return <Eye size={14} strokeWidth={2} aria-hidden {...props} />;
@@ -341,6 +360,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
   const [modelFilter, setModelFilter] = useState("");
   const [showFilter, setShowFilter] = useState(false);
+  /** 按 OpenRouter created 降序（新上架优先） */
+  const [sortByNewest, setSortByNewest] = useState(false);
+  /** 仅显示近 7 天内上架的模型 */
+  const [onlyThisWeek, setOnlyThisWeek] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
   const [drag, setDrag] = useState<{
@@ -497,6 +520,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     setTestResult(null);
     setModelFilter("");
     setShowFilter(false);
+    setSortByNewest(false);
+    setOnlyThisWeek(false);
     setShowAddModel(false);
     setCustomModelInput("");
     setError(null);
@@ -1158,14 +1183,21 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const total = state?.providers.length ?? 0;
   const isActive = state?.active_provider_id === selected?.id;
   const needsKey = selected?.kind !== "ollama";
-  const filteredModels = models.filter((m) => {
+  const filteredModels = useMemo(() => {
     const q = modelFilter.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      m.id.toLowerCase().includes(q) ||
-      (m.display_name?.toLowerCase().includes(q) ?? false)
-    );
-  });
+    let list = models.filter((m) => {
+      if (onlyThisWeek && !isModelCreatedWithinDays(m.created, 7)) return false;
+      if (!q) return true;
+      return (
+        m.id.toLowerCase().includes(q) ||
+        (m.display_name?.toLowerCase().includes(q) ?? false)
+      );
+    });
+    if (sortByNewest) {
+      list = [...list].sort(compareModelsByCreatedDesc);
+    }
+    return list;
+  }, [modelFilter, models, onlyThisWeek, sortByNewest]);
   const apiKeyDisplayValue = apiKeyDirty
     ? apiKeyInput
     : storedApiKey
@@ -1939,6 +1971,28 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     >
                       <IconSearch />
                     </button>
+                    <button
+                      type="button"
+                      className={`providers-icon-btn ${sortByNewest ? "is-active" : ""}`}
+                      disabled={models.length === 0}
+                      title={t("providers.sortNewest")}
+                      aria-label={t("providers.sortNewest")}
+                      aria-pressed={sortByNewest}
+                      onClick={() => setSortByNewest((v) => !v)}
+                    >
+                      <IconSortNewest />
+                    </button>
+                    <button
+                      type="button"
+                      className={`providers-icon-btn ${onlyThisWeek ? "is-active" : ""}`}
+                      disabled={models.length === 0}
+                      title={t("providers.filterThisWeek")}
+                      aria-label={t("providers.filterThisWeek")}
+                      aria-pressed={onlyThisWeek}
+                      onClick={() => setOnlyThisWeek((v) => !v)}
+                    >
+                      <IconThisWeek />
+                    </button>
                   </div>
                   <div className="providers-models-toolbar">
                     {!needsKey && (
@@ -2059,6 +2113,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                       const cutoffLabel = formatKnowledgeCutoff(m.knowledge_cutoff);
                       const expired = Boolean(m.expiration_date?.trim());
                       const createdLabel = formatModelCreated(m.created);
+                      const isNewThisWeek = isModelCreatedWithinDays(m.created, 7);
                       const hfId = m.hugging_face_id?.trim() || null;
                       const moderated = m.is_moderated === true;
                       const rowTitle = [
@@ -2108,6 +2163,18 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                                 title={`${t("providers.expiration")}: ${m.expiration_date}`}
                               >
                                 {t("providers.expiring")}
+                              </span>
+                            )}
+                            {isNewThisWeek && (
+                              <span
+                                className="providers-model-badge is-new"
+                                title={
+                                  createdLabel
+                                    ? `${t("providers.created")}: ${createdLabel}`
+                                    : t("providers.newThisWeek")
+                                }
+                              >
+                                {t("providers.newThisWeek")}
                               </span>
                             )}
                             {moderated && (
