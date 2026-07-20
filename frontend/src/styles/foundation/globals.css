@@ -23,11 +23,24 @@ html[data-theme="dark"] select:-webkit-autofill {
 
 
 
-/* 窗口缩放动画期间：关过渡 + 关磨砂，避免透明窗白边与卡片闪白 */
+/* 窗口缩放动画期间：关过渡；暂停（不取消）CSS 动画 */
 html.zooming,
 html.zooming * {
-  animation: none !important;
+  /*
+   * 用 paused 而非 animation:none：none 会取消并重置动画，zoom 结束时入场动画重播（闪烁）。
+   * paused 只冻结当前帧；恢复后已完成的动画停在终态，进行中的动画从暂停点继续。
+   */
+  animation-play-state: paused !important;
   transition: none !important;
+}
+
+/*
+ * 仅对随窗口边界变形的结构性磨砂层禁用 backdrop-filter，避免每帧 GPU 重采样闪烁。
+ * 不用 html.zooming * 通配符：动画首尾会触发全树重绘，内容区看起来像重新加载。
+ * 滚动内容（聊天消息等）的边界不随窗口同步变化，无需处理。
+ */
+html.zooming .sidebar,
+html.zooming .sidebar-nav-indicator {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
