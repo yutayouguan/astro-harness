@@ -2459,12 +2459,12 @@ html[data-theme="dark"] .cron-history-date:focus {
 
 html[data-theme="dark"] .cron-timeline-card {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
-    rgba(8, 6, 18, 0.55);
-  border-color: rgba(255, 255, 255, 0.08);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%),
+    color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.08));
+  border-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.14));
   box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 10px 24px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .cron-timeline-card-top {
@@ -3055,7 +3055,7 @@ html[data-theme="dark"] .cron-run-drawer {
   }
 }
 
-/* 按面板内容区宽度适配（侧栏/半宽窗口也生效），日期始终横排 */
+/* 中等宽度：筛选可落到 Tab 下一整行，但内部仍单行横排 */
 @container cron-pane (max-width: 900px) {
   .cron-toolbar-end.cron-history-filters {
     flex: 1 1 100%;
@@ -3063,22 +3063,23 @@ html[data-theme="dark"] .cron-run-drawer {
     width: 100%;
     max-width: 100%;
     justify-content: flex-start;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     height: auto;
-    min-height: 36px;
+    min-height: 0;
+    gap: 6px;
   }
 
   .cron-history-filter {
-    flex: 1 1 calc(50% - 4px);
+    flex: 1 1 0;
     width: auto;
-    min-width: 0;
+    min-width: 96px;
     max-width: none;
   }
 
   .cron-history-dates {
-    flex: 1 1 100%;
-    width: 100%;
+    flex: 1 1 0;
     min-width: 0;
+    width: auto;
   }
 
   .cron-history-date {
@@ -3089,8 +3090,18 @@ html[data-theme="dark"] .cron-run-drawer {
 }
 
 @container cron-pane (max-width: 560px) {
+  .cron-toolbar-end.cron-history-filters {
+    flex-wrap: wrap;
+  }
+
   .cron-history-filter {
+    flex: 1 1 calc(50% - 3px);
+    min-width: 0;
+  }
+
+  .cron-history-dates {
     flex: 1 1 100%;
+    width: 100%;
   }
 
   .cron-history-filters {
@@ -3135,24 +3146,25 @@ html[data-theme="dark"] .cron-run-drawer {
     .cron-toolbar-end.cron-history-filters {
       flex: 1 1 100%;
       margin-left: 0;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       height: auto;
-      min-height: 36px;
+      min-height: 0;
       justify-content: flex-start;
       width: 100%;
       max-width: 100%;
+      gap: 6px;
     }
 
     .cron-history-filter {
-      flex: 1 1 calc(50% - 4px);
+      flex: 1 1 0;
       max-width: none;
       width: auto;
-      min-width: 0;
+      min-width: 96px;
     }
 
     .cron-history-dates {
-      flex: 1 1 100%;
-      width: 100%;
+      flex: 1 1 0;
+      width: auto;
       min-width: 0;
     }
 
@@ -3164,8 +3176,18 @@ html[data-theme="dark"] .cron-run-drawer {
   }
 
   @media (max-width: 560px) {
+    .cron-toolbar-end.cron-history-filters {
+      flex-wrap: wrap;
+    }
+
     .cron-history-filter {
+      flex: 1 1 calc(50% - 3px);
+      min-width: 0;
+    }
+
+    .cron-history-dates {
       flex: 1 1 100%;
+      width: 100%;
     }
 
     .cron-timeline-card-foot {
