@@ -1486,6 +1486,14 @@ export default function CronPanel({
                       <ListTree size={12} strokeWidth={2.3} aria-hidden />
                       {t("cron.history.traceTitle")}
                     </h3>
+                    {(() => {
+                      const copyText =
+                        drawerMessages
+                          .filter((m) => m.role === "assistant" && (m.content || "").trim())
+                          .map((m) => (m.content || "").trim())
+                          .at(-1) || drawerRun.output;
+                      return copyText ? <CopyLogButton text={copyText} /> : null;
+                    })()}
                   </div>
                   {(() => {
                     const activities = drawerMessages.flatMap((m) => m.activities ?? []);
@@ -1527,7 +1535,11 @@ export default function CronPanel({
                   })()}
                 </section>
 
-                {drawerRun.output && (
+                {/* 会话里已有助手终稿时，output 字段是同一份快照，不再重复渲染 */}
+                {drawerRun.output &&
+                  !drawerMessages.some(
+                    (m) => m.role === "assistant" && (m.content || "").trim(),
+                  ) && (
                   <section className="cron-run-drawer-block">
                     <div className="cron-run-drawer-block-head">
                       <h3 className="cron-run-drawer-label">
