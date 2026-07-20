@@ -245,6 +245,30 @@ impl CronRunDb {
         Ok(count > 0)
     }
 
+    /// 列出全部仍为 `running` 的记录（进程崩溃后可能残留孤儿行）
+    pub fn list_running(&self) -> anyhow::Result<Vec<CronRunRow>> {
+        let sql = format!(
+            "SELECT {SELECT_COLS} FROM cron_runs WHERE status = 'running' ORDER BY fired_at DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map([], row_from_query)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// 列出因指定错误文案失败的记录（用于「应用退出中断」事后升级）
+    pub fn list_failure_with_error(&self, error: &str) -> anyhow::Result<Vec<CronRunRow>> {
+        let sql = format!(
+            "SELECT {SELECT_COLS} FROM cron_runs WHERE status = 'failure' AND error = ?1 ORDER BY fired_at DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(params![error], row_from_query)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     /// 按过滤条件列表，按 `fired_at` 降序
     pub fn list_filtered(&self, f: CronRunFilters) -> anyhow::Result<Vec<CronRunRow>> {
         let mut sql = format!("SELECT {SELECT_COLS} FROM cron_runs WHERE 1=1");

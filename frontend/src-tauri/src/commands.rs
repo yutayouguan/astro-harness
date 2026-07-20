@@ -2733,6 +2733,7 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
 #[tauri::command]
 pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
     bootstrap_workspace()?;
+    let _ = agent::exec::cron::reconcile_orphaned_runs();
     let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
     let row = db.get(&id).map_err(|e| e.to_string())?;
     Ok(row.map(run_to_dto))
@@ -2750,6 +2751,7 @@ pub async fn delete_cron_run(id: String) -> Result<bool, String> {
 #[tauri::command]
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {
     bootstrap_workspace()?;
+    let _ = agent::exec::cron::reconcile_orphaned_runs();
     let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
     let rows = db
         .list_filtered(cron::run_db::CronRunFilters {

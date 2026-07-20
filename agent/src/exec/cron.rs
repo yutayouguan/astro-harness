@@ -3,8 +3,13 @@
 //! 负责并发互斥（同一 job 不重叠执行）、可选会话创建、600 秒超时兜底，以及成功/失败
 //! 状态写入 `CronRunDb`。任务文案经 [`AgentLoop::run_turn`] 完成初始化后，由
 //! [`super::headless::run_headless_multi_turn`] 驱动完整的 LLM → 工具 → LLM 多轮循环。
+//!
+//! 进程退出后残留的 `running` 行由 [`reconcile_orphaned_runs`] 回收：本进程未登记为活跃的
+//! 记录会按关联会话终态收尾；若之后在聊天中重新生成出结果，失败的「应用退出中断」亦可升级为成功。
 
+use std::collections::HashSet;
 use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
@@ -13,13 +18,165 @@ use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
 use providers::streaming::Usage;
-use session::SessionStore;
+use session::{SessionStore, StoredMessage};
 use uuid::Uuid;
 
 use crate::runtime::usage::apply_llm_usage_dual_write;
 use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 
 use super::headless::run_headless_multi_turn;
+
+/// 进程退出后孤儿 run 的失败文案；会话事后补全时可据此升级为 success。
+const CRON_INTERRUPTED_BY_EXIT: &str = "应用退出，执行中断";
+
+static ACTIVE_CRON_RUNS: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+fn mark_active_cron_run(run_id: &str) {
+    if let Ok(mut g) = ACTIVE_CRON_RUNS.lock() {
+        g.insert(run_id.to_string());
+    }
+}
+
+fn is_active_cron_run(run_id: &str) -> bool {
+    ACTIVE_CRON_RUNS
+        .lock()
+        .map(|g| g.contains(run_id))
+        .unwrap_or(false)
+}
+
+/// 作用域结束时从活跃表移除（panic / 正常返回均会清理）。
+struct ActiveCronRunGuard(String);
+
+impl ActiveCronRunGuard {
+    fn acquire(run_id: &str) -> Self {
+        mark_active_cron_run(run_id);
+        Self(run_id.to_string())
+    }
+}
+
+impl Drop for ActiveCronRunGuard {
+    fn drop(&mut self) {
+        if let Ok(mut g) = ACTIVE_CRON_RUNS.lock() {
+            g.remove(&self.0);
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SessionRunOutcome {
+    Success { output: String },
+    Incomplete,
+    NoSession,
+}
+
+fn assistant_has_tool_calls(m: &StoredMessage) -> bool {
+    match &m.tool_calls {
+        Some(serde_json::Value::Array(arr)) => !arr.is_empty(),
+        Some(_) => true,
+        None => false,
+    }
+}
+
+fn outcome_from_messages(msgs: &[StoredMessage]) -> SessionRunOutcome {
+    for m in msgs.iter().rev() {
+        match m.role.as_str() {
+            "tool" => continue,
+            "assistant" => {
+                if assistant_has_tool_calls(m) {
+                    return SessionRunOutcome::Incomplete;
+                }
+                let text = m.content.as_deref().unwrap_or("").trim();
+                if text.is_empty() {
+                    continue;
+                }
+                return SessionRunOutcome::Success {
+                    output: text.to_string(),
+                };
+            }
+            "user" => return SessionRunOutcome::Incomplete,
+            _ => continue,
+        }
+    }
+    SessionRunOutcome::Incomplete
+}
+
+fn session_run_outcome(
+    sessions: Option<&SessionStore>,
+    session_id: Option<&str>,
+) -> SessionRunOutcome {
+    let Some(sid) = session_id.filter(|s| !s.is_empty()) else {
+        return SessionRunOutcome::NoSession;
+    };
+    let Some(store) = sessions else {
+        return SessionRunOutcome::NoSession;
+    };
+    match store.get_messages(sid) {
+        Ok(msgs) => outcome_from_messages(&msgs),
+        Err(_) => SessionRunOutcome::NoSession,
+    }
+}
+
+fn apply_session_outcome(
+    db: &CronRunDb,
+    run_id: &str,
+    outcome: &SessionRunOutcome,
+    finished_at: &str,
+) -> anyhow::Result<bool> {
+    match outcome {
+        SessionRunOutcome::Success { output } => {
+            let summary = summary_from_output(output);
+            db.finish_success(run_id, &summary, output, finished_at)?;
+            Ok(true)
+        }
+        SessionRunOutcome::Incomplete | SessionRunOutcome::NoSession => {
+            db.finish_failure(run_id, CRON_INTERRUPTED_BY_EXIT, "", finished_at)?;
+            Ok(true)
+        }
+    }
+}
+
+/// 回收本进程未在执行的孤儿 `running` 行，并尝试把「应用退出中断」失败升级为成功。
+///
+/// 供后端启动、ticker 与前端 list/get 调用；无孤儿时开销很小。
+pub fn reconcile_orphaned_runs() -> anyhow::Result<u32> {
+    reconcile_orphaned_runs_with_roots(cron_dir(), default_memory_dir())
+}
+
+/// 同 [`reconcile_orphaned_runs`]，可指定 cron / memory 根目录（测试用）。
+pub fn reconcile_orphaned_runs_with_roots(
+    cron_root: impl AsRef<Path>,
+    memory_dir: impl AsRef<Path>,
+) -> anyhow::Result<u32> {
+    let db = CronRunDb::new(cron_db_path(cron_root.as_ref()))?;
+    let sessions =
+        SessionStore::open_sessions_dir(&memory_dir.as_ref().join("sessions")).ok();
+    let finished_at = now_rfc3339();
+    let mut changed = 0u32;
+
+    for row in db.list_running()? {
+        if is_active_cron_run(&row.id) {
+            continue;
+        }
+        let outcome = session_run_outcome(sessions.as_ref(), row.session_id.as_deref());
+        if apply_session_outcome(&db, &row.id, &outcome, &finished_at)? {
+            changed += 1;
+        }
+    }
+
+    // 启动时已标成「应用退出中断」的记录：用户在聊天里重新生成出结果后升级为成功。
+    for row in db.list_failure_with_error(CRON_INTERRUPTED_BY_EXIT)? {
+        if let SessionRunOutcome::Success { output } =
+            session_run_outcome(sessions.as_ref(), row.session_id.as_deref())
+        {
+            let summary = summary_from_output(&output);
+            db.finish_success(&row.id, &summary, &output, &finished_at)?;
+            changed += 1;
+        }
+    }
+
+    Ok(changed)
+}
 
 /// 执行定时任务所需的 LLM 凭据与路由信息。
 ///
@@ -183,6 +340,7 @@ async fn execute_job_with_roots_local(
         trigger: trigger.to_string(),
         session_id: session_id.clone(),
     })?;
+    let _active = ActiveCronRunGuard::acquire(&run_id);
 
     if creds.api_key.trim().is_empty() {
         db.finish_failure(
@@ -380,6 +538,8 @@ async fn begin_job_local(
         trigger: trigger.to_string(),
         session_id: session_id.clone(),
     })?;
+    // 在 complete 接手前先占住，避免 list/get 把刚插入的行当孤儿回收。
+    mark_active_cron_run(&run_id);
 
     db.get(&run_id)?
         .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))
@@ -394,6 +554,7 @@ async fn complete_job_local(
     run_id: &str,
     session_id: Option<String>,
 ) -> anyhow::Result<cron::CronRunRow> {
+    let _active = ActiveCronRunGuard::acquire(run_id);
     let db = CronRunDb::new(cron_db_path(cron_root))?;
     let memory_dir = default_memory_dir();
     let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
@@ -570,4 +731,186 @@ fn summary_from_output(output: &str) -> String {
         .chars()
         .take(200)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use session::NewMessage;
+    use tempfile::TempDir;
+
+    fn stored(
+        role: &str,
+        content: Option<&str>,
+        tool_calls: Option<serde_json::Value>,
+    ) -> StoredMessage {
+        StoredMessage {
+            id: 0,
+            session_id: "s".into(),
+            role: role.into(),
+            content: content.map(str::to_string),
+            compressed_content: None,
+            tool_call_id: None,
+            tool_calls,
+            tool_name: None,
+            timestamp: 0.0,
+            token_count: None,
+            finish_reason: None,
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            codex_reasoning_items: None,
+            codex_message_items: None,
+            media_json: None,
+        }
+    }
+
+    #[test]
+    fn outcome_prefers_final_assistant_without_tools() {
+        let msgs = vec![
+            stored("user", Some("task"), None),
+            stored(
+                "assistant",
+                Some("calling"),
+                Some(json!([{"id": "1", "function": {"name": "x"}}])),
+            ),
+            stored("tool", Some("ok"), None),
+            stored("assistant", Some("最终报告"), None),
+        ];
+        assert_eq!(
+            outcome_from_messages(&msgs),
+            SessionRunOutcome::Success {
+                output: "最终报告".into()
+            }
+        );
+    }
+
+    #[test]
+    fn outcome_incomplete_when_last_assistant_has_tools() {
+        let msgs = vec![
+            stored("user", Some("task"), None),
+            stored(
+                "assistant",
+                Some(""),
+                Some(json!([{"id": "1"}])),
+            ),
+        ];
+        assert_eq!(outcome_from_messages(&msgs), SessionRunOutcome::Incomplete);
+    }
+
+    #[test]
+    fn reconcile_marks_orphan_running_from_session_or_interrupt() {
+        let cron_dir = TempDir::new().unwrap();
+        let mem_dir = TempDir::new().unwrap();
+        let sessions_dir = mem_dir.path().join("sessions");
+        std::fs::create_dir_all(&sessions_dir).unwrap();
+        let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
+        store.ensure_session("sess-ok", "cron").unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "sess-ok",
+                role: "user",
+                content: Some("do it"),
+                ..NewMessage::empty("sess-ok", "user")
+            })
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "sess-ok",
+                role: "assistant",
+                content: Some("晨报完成"),
+                ..NewMessage::empty("sess-ok", "assistant")
+            })
+            .unwrap();
+
+        let db = CronRunDb::new(cron_dir.path().join("cron.db")).unwrap();
+        let ok_id = db
+            .insert_running(NewCronRun {
+                job_id: "j1".into(),
+                title: "ok".into(),
+                agent_id: "workspace".into(),
+                schedule: "every:1d".into(),
+                task: "t".into(),
+                fired_at: "2026-07-20T10:00:00+08:00".into(),
+                trigger: "manual".into(),
+                session_id: Some("sess-ok".into()),
+            })
+            .unwrap();
+        let bare_id = db
+            .insert_running(NewCronRun {
+                job_id: "j2".into(),
+                title: "bare".into(),
+                agent_id: "workspace".into(),
+                schedule: "every:1d".into(),
+                task: "t".into(),
+                fired_at: "2026-07-20T10:01:00+08:00".into(),
+                trigger: "manual".into(),
+                session_id: None,
+            })
+            .unwrap();
+
+        let n = reconcile_orphaned_runs_with_roots(cron_dir.path(), mem_dir.path()).unwrap();
+        assert_eq!(n, 2);
+        let ok = db.get(&ok_id).unwrap().unwrap();
+        assert_eq!(ok.status, "success");
+        assert!(ok.output.contains("晨报完成"));
+        let bare = db.get(&bare_id).unwrap().unwrap();
+        assert_eq!(bare.status, "failure");
+        assert_eq!(bare.error.as_deref(), Some(CRON_INTERRUPTED_BY_EXIT));
+    }
+
+    #[test]
+    fn reconcile_upgrades_interrupted_after_session_completes() {
+        let cron_dir = TempDir::new().unwrap();
+        let mem_dir = TempDir::new().unwrap();
+        let sessions_dir = mem_dir.path().join("sessions");
+        std::fs::create_dir_all(&sessions_dir).unwrap();
+        let store = SessionStore::open_sessions_dir(&sessions_dir).unwrap();
+        store.ensure_session("sess-later", "cron").unwrap();
+
+        let db = CronRunDb::new(cron_dir.path().join("cron.db")).unwrap();
+        let id = db
+            .insert_running(NewCronRun {
+                job_id: "j".into(),
+                title: "t".into(),
+                agent_id: "workspace".into(),
+                schedule: "every:1d".into(),
+                task: "task".into(),
+                fired_at: "2026-07-20T10:00:00+08:00".into(),
+                trigger: "manual".into(),
+                session_id: Some("sess-later".into()),
+            })
+            .unwrap();
+        db.finish_failure(
+            &id,
+            CRON_INTERRUPTED_BY_EXIT,
+            "",
+            "2026-07-20T10:05:00+08:00",
+        )
+        .unwrap();
+
+        store
+            .append_message(NewMessage {
+                session_id: "sess-later",
+                role: "user",
+                content: Some("retry"),
+                ..NewMessage::empty("sess-later", "user")
+            })
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "sess-later",
+                role: "assistant",
+                content: Some("重新生成后的结果"),
+                ..NewMessage::empty("sess-later", "assistant")
+            })
+            .unwrap();
+
+        let n = reconcile_orphaned_runs_with_roots(cron_dir.path(), mem_dir.path()).unwrap();
+        assert_eq!(n, 1);
+        let row = db.get(&id).unwrap().unwrap();
+        assert_eq!(row.status, "success");
+        assert!(row.output.contains("重新生成"));
+    }
 }

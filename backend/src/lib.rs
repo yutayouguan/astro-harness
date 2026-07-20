@@ -98,6 +98,10 @@ pub async fn serve(
                 }
             };
             rt.block_on(async move {
+                // 启动时回收上次进程残留的 running 记录。
+                if let Err(err) = agent::exec::cron::reconcile_orphaned_runs() {
+                    tracing::warn!(error = %err, "cron: reconcile orphaned runs failed");
+                }
                 let mut interval = tokio::time::interval(Duration::from_secs(30));
                 loop {
                     interval.tick().await;
