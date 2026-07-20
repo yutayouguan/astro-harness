@@ -23,6 +23,15 @@ pub struct SearchRunMeta {
     pub optimize_examples: usize,
     pub holdout_examples: usize,
     pub holdout_enabled: bool,
+    /// 搜索期是否对至少一项目标技能跑了沙箱测试。
+    #[serde(default)]
+    pub sandbox_used: bool,
+    /// 搜索期实际跑过沙箱的技能数。
+    #[serde(default)]
+    pub sandbox_skills: usize,
+    /// 定向目标技能（空 = 未定向）。
+    #[serde(default)]
+    pub focus_skill: String,
     pub reflection_model: String,
     pub judge_model: String,
     #[serde(default)]

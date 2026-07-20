@@ -437,6 +437,8 @@ pub fn run() {
             evolution_run_commands::import_eval_from_session,
             evolution_run_commands::add_eval_example,
             evolution_run_commands::remove_eval_example,
+            evolution_run_commands::run_skill_curator,
+            evolution_run_commands::get_curator_last,
             evolution_run_commands::evolution_dspy_status,
             evolution_run_commands::setup_evolution_dspy,
             evolution_run_commands::run_evolution_dspy,

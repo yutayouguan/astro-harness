@@ -370,8 +370,35 @@ export type EvolutionSearchReport = {
   proposals: EvolutionProposalDto[];
   budgetUsed: number;
   holdoutEnabled: boolean;
+  sandboxUsed: boolean;
+  sandboxSkills: number;
+  focusSkill: string | null;
   termination: string;
   error: string | null;
+};
+
+/** 技能策展报告（Tauri `run_skill_curator`） */
+export type CurateReportDto = {
+  generatedAt: string;
+  unusedSkillDays: number;
+  enabledCount: number;
+  stale: string[];
+  overlapClusters?: string[][];
+  rows: Array<{
+    skillId: string;
+    description: string;
+    lastLoaded: string | null;
+    stale: boolean;
+    healthScore: number | null;
+    healthReasons: string[];
+    bytes: number | null;
+  }>;
+  suggestions: Array<{
+    kind: string;
+    skillId: string;
+    reason: string;
+    absorb?: string[];
+  }>;
 };
 
 /** 离线进化设置全量（enabled + reflection/judge 路由 + gates） */

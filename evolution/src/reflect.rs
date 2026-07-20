@@ -19,6 +19,8 @@ pub struct ReflectionInput {
     pub enabled_skills: Vec<(String, String)>,
     /// 相关会话的精简 transcript `(session_id, 文本)`；由调用方构建。
     pub transcripts: Vec<(String, String)>,
+    /// 定向进化目标技能（若有则只应产出该 skill 的候选）。
+    pub focus_skill: Option<String>,
 }
 
 /// 供 reflection 模型的 system 指令：只输出 JSON。
@@ -33,6 +35,11 @@ pub const REFLECTION_SYSTEM_PROMPT: &str = r#"你是 Agent 技能进化助手。
 /// 构造 user 提示词（轨迹 + 技能索引）。
 pub fn build_reflection_user_prompt(input: &ReflectionInput) -> String {
     let mut s = String::new();
+    if let Some(focus) = input.focus_skill.as_deref().filter(|f| !f.is_empty()) {
+        s.push_str(&format!(
+            "## 定向目标\n只针对技能 `{focus}` 提出 patch（或确有必要时 new_skill 且 skill_id=`{focus}`）；不要改其他技能。\n\n"
+        ));
+    }
     s.push_str("## 已启用技能\n");
     if input.enabled_skills.is_empty() {
         s.push_str("（无）\n");
@@ -196,6 +203,7 @@ mod tests {
                 "sess1234abcd".into(),
                 "user: 帮我合并 PDF\ntool: pdf_merge ok".into(),
             )],
+            focus_skill: None,
         };
         let p = build_reflection_user_prompt(&input);
         assert!(p.contains("aihot"));

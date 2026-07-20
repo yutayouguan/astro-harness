@@ -885,6 +885,18 @@ html[data-theme="dark"] .evo-stat {
   margin: 2px 0 8px;
 }
 
+.evo-focus-row {
+  margin: 0 0 10px;
+}
+
+.evo-focus-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted, var(--ink));
+}
+
 .evo-eval-import {
   margin: 4px 0 12px;
 }

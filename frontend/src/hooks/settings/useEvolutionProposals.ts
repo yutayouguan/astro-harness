@@ -15,7 +15,7 @@ type UseEvolutionProposals = {
   lastSearch: EvolutionSearchReport | null;
   proposals: EvolutionProposalDto[];
   run(): Promise<void>;
-  runSearch(): Promise<void>;
+  runSearch(skillId?: string | null): Promise<void>;
   cancelSearch(): Promise<void>;
   approve(id: string): Promise<void>;
   approveToBranch(id: string): Promise<string | null>;
@@ -70,21 +70,26 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
     }
   }, [reload]);
 
-  const runSearch = useCallback(async () => {
-    setRunning(true);
-    setRunMode("search");
-    setError(null);
-    try {
-      const report = await invoke<EvolutionSearchReport>("run_evolution_search");
-      setLastSearch(report);
-      await reload();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setRunning(false);
-      setRunMode(null);
-    }
-  }, [reload]);
+  const runSearch = useCallback(
+    async (skillId?: string | null) => {
+      setRunning(true);
+      setRunMode("search");
+      setError(null);
+      try {
+        const report = await invoke<EvolutionSearchReport>("run_evolution_search", {
+          skillId: skillId?.trim() || null,
+        });
+        setLastSearch(report);
+        await reload();
+      } catch (err) {
+        setError(errorMessage(err));
+      } finally {
+        setRunning(false);
+        setRunMode(null);
+      }
+    },
+    [reload],
+  );
 
   const cancelSearch = useCallback(async () => {
     try {

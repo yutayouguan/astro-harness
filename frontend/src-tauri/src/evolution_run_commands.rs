@@ -18,13 +18,13 @@ use evolution::{
     build_auto_status, build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
     build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
     default_holdout_percent, effective_candidate_size, examples_for_skill, list_examples,
-    list_proposals, load_auto_state, mark_auto_run, pareto_front, parse_candidates,
-    parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
-    save_auto_state, save_proposals, sandbox_test_candidate, select_front_capped,
-    select_population, split_eval_examples, weighted_eval_score, AutoGate, AutoStatus,
-    CandidateKind, EvalExample, EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget,
-    SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
-    JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    list_proposals, load_auto_state, load_curator_last, mark_auto_run, pareto_front,
+    parse_candidates, parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
+    run_curator_and_save, sandbox_test_candidate, save_auto_state, save_proposals,
+    select_front_capped, select_population, split_eval_examples, weighted_eval_score, AutoGate,
+    AutoStatus, CandidateKind, CurateReport, EvalExample, EvalJudgement, ReflectionInput,
+    ScoredVariant, SearchBudget, SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT,
+    EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
@@ -99,6 +99,9 @@ pub struct EvolutionSearchReport {
     pub proposals: Vec<EvolutionProposalDto>,
     pub budget_used: u32,
     pub holdout_enabled: bool,
+    pub sandbox_used: bool,
+    pub sandbox_skills: usize,
+    pub focus_skill: Option<String>,
     pub termination: String,
     pub error: Option<String>,
 }
@@ -312,6 +315,7 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
         decisions,
         enabled_skills,
         transcripts,
+        focus_skill: None,
     };
     let user = build_reflection_user_prompt(&input);
 
@@ -693,14 +697,23 @@ async fn holdout_fitness_score(
 }
 
 /// GEPA-lite 遗传搜索：种子 → 每目标多代变异 + judge 打分 + Pareto 选择 → 待审提案。
+///
+/// `skill_id` 非空时定向进化：reflection 聚焦该技能，并只保留该 skill 的种子。
 #[tauri::command]
-pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchReport, String> {
+pub async fn run_evolution_search(
+    app: AppHandle,
+    skill_id: Option<String>,
+) -> Result<EvolutionSearchReport, String> {
     search_cancel_flag().store(false, Ordering::SeqCst);
     let base = default_memory_dir();
     let cfg = memory::load_evolution_config(&base);
     if !cfg.enabled {
         return Err("请先在「离线进化」中开启进化".into());
     }
+
+    let focus_skill = skill_id
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
 
     let primary = active_primary_target()?;
     let refl_targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
@@ -716,27 +729,48 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
 
     // 种子：reflection 产候选
     let decisions = memory::list_recent_decisions(&base, 20).unwrap_or_default();
-    let enabled_skills = skills::list_enabled_for_prompt();
+    let mut enabled_skills = skills::list_enabled_for_prompt();
+    if let Some(ref focus) = focus_skill {
+        // 定向：把目标技能提到前面，便于模型聚焦
+        enabled_skills.sort_by_key(|(name, _)| if name == focus { 0 } else { 1 });
+        if !enabled_skills.iter().any(|(n, _)| n == focus) {
+            return Err(format!("定向技能 `{focus}` 未启用或不存在"));
+        }
+    }
     let transcripts = build_transcripts(&base, &decisions);
     let seed_user = build_reflection_user_prompt(&ReflectionInput {
         decisions,
         enabled_skills: enabled_skills.clone(),
         transcripts,
+        focus_skill: focus_skill.clone(),
     });
     let seed_raw =
         reflect_over_targets(&refl_targets, REFLECTION_SYSTEM_PROMPT, &seed_user).await?;
     let seeds_all = parse_candidates(&seed_raw).map_err(|e| e.to_string())?;
 
-    // 按 (skill_id, kind) 去重，最多 3 个目标
+    // 按 (skill_id, kind) 去重，最多 3 个目标；定向时只保留 focus
     let mut seen: HashSet<String> = HashSet::new();
     let mut seeds: Vec<SkillCandidate> = Vec::new();
     for c in seeds_all {
+        if let Some(ref focus) = focus_skill {
+            if &c.skill_id != focus {
+                continue;
+            }
+        }
         let key = format!("{}::{:?}", c.skill_id, c.kind);
         if seen.insert(key) {
             seeds.push(c);
         }
         if seeds.len() >= 3 {
             break;
+        }
+    }
+
+    // 定向且模型未产出：注入一条 patch 占位种子（空 patch 会被后续门禁/变异消化）
+    // 更稳妥：若无种子，用当前技能内容作为 NewSkill 基线不可行；直接报错让用户重试。
+    if seeds.is_empty() {
+        if focus_skill.is_some() {
+            return Err("定向技能未产出候选；可先积累 DecisionLog 失败信号后再试".into());
         }
     }
 
@@ -758,6 +792,7 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
     };
     let mut holdout_ids_by_skill: HashMap<String, Vec<String>> = HashMap::new();
     let mut termination = "completed".to_string();
+    let mut sandbox_skill_ids: HashSet<String> = HashSet::new();
 
     let pop_size = cfg.search.population_size.max(1) as usize;
     let no_seeds = seeds.is_empty();
@@ -779,6 +814,9 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                 .then(|| scripts)
         });
         let run_sandbox = cfg.gates.run_tests && test_scripts_dir.is_some();
+        if run_sandbox {
+            sandbox_skill_ids.insert(seed.skill_id.clone());
+        }
 
         let mut strengths: Vec<String> = Vec::new();
 
@@ -1031,6 +1069,9 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
             optimize_examples: split_stats.optimize_examples,
             holdout_examples: split_stats.holdout_examples,
             holdout_enabled: split_stats.holdout_enabled,
+            sandbox_used: !sandbox_skill_ids.is_empty(),
+            sandbox_skills: sandbox_skill_ids.len(),
+            focus_skill: focus_skill.clone().unwrap_or_default(),
             reflection_model: format!(
                 "{} / {}",
                 refl_targets.preferred.provider.id, refl_targets.preferred.model
@@ -1058,6 +1099,9 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         proposals,
         budget_used: budget.used(),
         holdout_enabled: split_stats.holdout_enabled,
+        sandbox_used: !sandbox_skill_ids.is_empty(),
+        sandbox_skills: sandbox_skill_ids.len(),
+        focus_skill: focus_skill.clone(),
         termination,
         error: None,
     })
@@ -1733,6 +1777,112 @@ pub async fn remove_eval_example(id: String) -> Result<Vec<EvalExampleDto>, Stri
     let base = default_memory_dir();
     evolution::remove_example(&base, &id).map_err(|e| e.to_string())?;
     list_eval_examples().await
+}
+
+/// 策展报告 DTO（camelCase）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurateReportDto {
+    pub generated_at: String,
+    pub unused_skill_days: u32,
+    pub enabled_count: usize,
+    pub stale: Vec<String>,
+    pub rows: Vec<CurateSkillRowDto>,
+    pub overlap_clusters: Vec<Vec<String>>,
+    pub suggestions: Vec<CurateSuggestionDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurateSkillRowDto {
+    pub skill_id: String,
+    pub description: String,
+    pub last_loaded: Option<String>,
+    pub stale: bool,
+    pub health_score: Option<f32>,
+    pub health_reasons: Vec<String>,
+    pub bytes: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurateSuggestionDto {
+    pub kind: String,
+    pub skill_id: String,
+    pub reason: String,
+}
+
+fn curate_report_dto(r: CurateReport) -> CurateReportDto {
+    let suggestions = r
+        .suggestions
+        .into_iter()
+        .map(|s| match s {
+            evolution::CurateSuggestion::Disable { skill_id, reason } => CurateSuggestionDto {
+                kind: "disable".into(),
+                skill_id,
+                reason,
+            },
+            evolution::CurateSuggestion::Merge {
+                keep,
+                absorb,
+                reason,
+            } => CurateSuggestionDto {
+                kind: "merge".into(),
+                skill_id: format!("{keep} ← {}", absorb.join(", ")),
+                reason,
+            },
+            evolution::CurateSuggestion::Rewrite { skill_id, reason } => CurateSuggestionDto {
+                kind: "rewrite".into(),
+                skill_id,
+                reason,
+            },
+        })
+        .collect();
+    CurateReportDto {
+        generated_at: r.generated_at,
+        unused_skill_days: r.unused_skill_days,
+        enabled_count: r.enabled_count,
+        stale: r.stale,
+        rows: r
+            .rows
+            .into_iter()
+            .map(|row| CurateSkillRowDto {
+                skill_id: row.skill_id,
+                description: row.description,
+                last_loaded: row.last_loaded,
+                stale: row.stale,
+                health_score: row.health_score,
+                health_reasons: row.health_reasons,
+                bytes: row.bytes,
+            })
+            .collect(),
+        overlap_clusters: r.overlap_clusters,
+        suggestions,
+    }
+}
+
+/// 运行技能策展（结构化报告，不自动删改）。
+#[tauri::command]
+pub async fn run_skill_curator() -> Result<CurateReportDto, String> {
+    let base = default_memory_dir();
+    let unused = memory::load_learning_config(&base).unused_skill_days;
+    let report = run_curator_and_save(&base, unused).map_err(|e| e.to_string())?;
+    evolution::record_run(
+        &base,
+        "curator",
+        report.enabled_count,
+        0,
+        0,
+        report.suggestions.len(),
+    );
+    Ok(curate_report_dto(report))
+}
+
+/// 读取上次策展报告（若有）。
+#[tauri::command]
+pub async fn get_curator_last() -> Result<Option<CurateReportDto>, String> {
+    let base = default_memory_dir();
+    Ok(load_curator_last(&base).map(curate_report_dto))
 }
 
 fn git(args: &[&str], cwd: &Path) -> Result<String, String> {

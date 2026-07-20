@@ -13,6 +13,7 @@
 
 pub mod auto;
 pub mod candidate;
+pub mod curator;
 pub mod evalset;
 pub mod gates;
 pub mod history;
@@ -26,6 +27,10 @@ pub use auto::{
     mark_auto_run, save_auto_state, AutoGate, AutoState, AutoStatus, SkipReason,
 };
 pub use candidate::{CandidateKind, SkillCandidate};
+pub use curator::{
+    curator_last_path, find_overlap_clusters, load_curator_last, run_curator,
+    run_curator_and_save, run_curator_with_skills, CurateReport, CurateSkillRow, CurateSuggestion,
+};
 pub use evalset::{
     aggregate_critiques, append_example, build_eval_judge_prompt, default_holdout_percent,
     evalset_path, examples_for_skill, list_examples, parse_eval_judgement, parse_eval_score,

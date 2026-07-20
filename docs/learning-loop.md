@@ -95,11 +95,13 @@ learning:
 
 实现：crate [`evolution`](../evolution)（candidate/reflect/gates/judge/proposal/search）+ Tauri `evolution_run_commands`（run/search/list/approve/reject）+ `EvolutionModelsPanel`。
 
-`run_tests`（默认开）：**批准写入后**若技能含 `scripts/test.sh` / `test.py` 则沙箱执行（60s 超时），失败自动回滚且保留提案；无脚本则跳过。放在批准后执行，确保人已审阅内容再运行。
+`run_tests`（默认开）：
+- **批准写入后**：若技能含 `scripts/test.sh` / `test.py` 则沙箱执行（60s 超时），失败自动回滚且保留提案；无脚本则跳过。
+- **遗传搜索期间**：同一开关开启且目标技能含测试脚本时，候选在 tempdir 预跑，结果作为 Pareto 第三维（score↑ / test↑ / size↓）；无脚本记为 `not_applicable`，不视为失败。
 
 DecisionLog 现覆盖：`ToolFailure`、`MemoryRejected`、`UserCorrection`（启发式识别用户纠错）、`KeyChoice`（`confirm` 决策闸口）。
 
-**遗传搜索（GEPA-lite）**：「离线进化」页可选「遗传搜索」——reflection 产种子（按 skill_id+kind 去重取前 3）→ 多代变异（`generations` × `variants`）→ 可选交叉 → judge / grounded 打分 → **Pareto 选择（分↑ / 体积↓）** + 结构化 critique 回喂 → 种群保留后过门禁入待审。页面可调代数、变体、种群、评测例上限与 **LLM 预算**（默认 `max_llm_calls=40`）。
+**遗传搜索（GEPA-lite）**：「离线进化」页可选「遗传搜索」——reflection 产种子（按 skill_id+kind 去重取前 3）→ 多代变异（`generations` × `variants`）→ 可选交叉 → judge / grounded 打分 → **Pareto 选择（分↑ / 体积↓ / 可选测试↑）** + 结构化 critique 回喂 → 种群保留后过门禁入待审。页面可调代数、变体、种群、评测例上限与 **LLM 预算**（默认 `max_llm_calls=40`），并可 **定向某一技能**。
 
 crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `select_front_capped` / 变异提示与解析）；命令 `run_evolution_search`。
 
@@ -113,7 +115,7 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 
 **mock 自测**：`run_evolution_dspy(mock=true)` / CLI `--mock` 不调用 dspy、不需凭据，产确定性候选，用于验证「Rust 导出 → 子进程 → result.json → 提案入队」整条契约是否打通（UI「mock 自测」按钮）。
 
-学习闭环三阶段（评测集/交叉/DSPy）至此全部落地。
+学习闭环三阶段（评测集/交叉/DSPy）至此全部落地；另含 **技能策展（Curator）**：手动运行结构化健康报告（闲置 / 体积 / 进化采纳 / 评测 Fail），只建议不自动删改；可从建议跳转定向遗传搜索。
 
 **可观测**：进化运行与提案去向记入 `~/.astro/learning/evolution/history.jsonl`（`run` / `outcome` 事件）；「离线进化」页「进化历史」小节展示运行次数、生成提案数、采纳率、采纳均分、采纳/拒绝与近期事件。crate [`evolution::history`](../evolution/src/history.rs)；命令 `evolution_history`。
 **自动触发**（默认关）：Chat Done 后 fire-and-forget 调用 `maybe_run_evolution_auto`。需同时开启 `evolution.enabled` 与 `evolution.auto.enabled`；仅跑**单轮 reflect**（不跑遗传搜索/DSPy），产物只入待审。成本护栏：

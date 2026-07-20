@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Beaker,
   Check,
+  ClipboardList,
   Dna,
   FilePlus2,
   FlaskConical,
@@ -35,6 +36,7 @@ import { useEvalExamples } from "../../hooks/settings/useEvalExamples";
 import { useDspy } from "../../hooks/settings/useDspy";
 import { useEvolutionHistory } from "../../hooks/settings/useEvolutionHistory";
 import { useEvolutionAuto } from "../../hooks/settings/useEvolutionAuto";
+import { useSkillCurator } from "../../hooks/settings/useSkillCurator";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type {
@@ -157,6 +159,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [evalSkill, setEvalSkill] = useState("");
   const [evalExpect, setEvalExpect] = useState("");
   const [evalVerdict, setEvalVerdict] = useState<"fail" | "pass">("fail");
+  const [searchFocusSkill, setSearchFocusSkill] = useState("");
   const {
     status: dspyStatus,
     busy: dspyBusy,
@@ -165,6 +168,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
     setup: setupDspy,
     run: runDspy,
   } = useDspy(active);
+  const {
+    loading: curatorLoading,
+    error: curatorError,
+    report: curatorReport,
+    run: runCurator,
+  } = useSkillCurator(active);
   const [dspySkill, setDspySkill] = useState("");
   const { history, reload: reloadHistory } = useEvolutionHistory(active);
   const {
@@ -210,7 +219,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
   }, [active, section, reloadImportCandidates]);
 
   useEffect(() => {
-    if (!active || section !== "lab") return;
+    if (!active || (section !== "lab" && section !== "run")) return;
     void invoke<InstalledSkill[]>("list_installed_skills", { agentId: null, scope: null })
       .then(setInstalledSkills)
       .catch(() => setInstalledSkills([]));
@@ -219,6 +228,16 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const evalSkillOptions = useMemo(
     () => [
       { value: "", label: t("evo.evalSkillGeneric") },
+      ...installedSkills
+        .filter((s) => s.enabled)
+        .map((s) => ({ value: s.id, label: s.name ? `${s.name} · ${s.id}` : s.id })),
+    ],
+    [installedSkills, t],
+  );
+
+  const searchFocusOptions = useMemo(
+    () => [
+      { value: "", label: t("evo.focusSkillAny") },
       ...installedSkills
         .filter((s) => s.enabled)
         .map((s) => ({ value: s.id, label: s.name ? `${s.name} · ${s.id}` : s.id })),
@@ -899,7 +918,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
               <button
                 type="button"
                 className="aux-action"
-                onClick={() => void runSearch().then(() => reloadHistory())}
+                onClick={() =>
+                  void runSearch(searchFocusSkill.trim() || null).then(() => reloadHistory())
+                }
                 disabled={running || !settings?.enabled}
                 title={t("evo.searchRunHint")}
               >
@@ -925,6 +946,17 @@ export default function EvolutionModelsPanel({ active }: Props) {
           )}
 
           <div className="evo-run-panel">
+            <div className="evo-focus-row">
+              <label className="evo-focus-label" title={t("evo.focusSkillDesc")}>
+                {t("evo.focusSkill")}
+                <SelectMenu
+                  value={searchFocusSkill}
+                  options={searchFocusOptions}
+                  onChange={setSearchFocusSkill}
+                  aria-label={t("evo.focusSkill")}
+                />
+              </label>
+            </div>
             <div className="evo-search-cfg evo-cfg-grid">
               <label>
                 {t("evo.generations")}
@@ -1020,6 +1052,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 ? ` · LLM ${lastSearch.budgetUsed}${lastSearch.termination ? ` · ${lastSearch.termination}` : ""}`
                 : ""}
               {lastSearch.holdoutEnabled ? ` · ${t("evo.holdoutUsed")}` : ""}
+              {lastSearch.sandboxUsed
+                ? ` · ${t("evo.sandboxUsed").replace("{n}", String(lastSearch.sandboxSkills))}`
+                : ""}
+              {lastSearch.focusSkill
+                ? ` · ${t("evo.focusUsed").replace("{skill}", lastSearch.focusSkill)}`
+                : ""}
             </p>
           )}
 
@@ -1428,6 +1466,87 @@ export default function EvolutionModelsPanel({ active }: Props) {
                   </article>
                 ))}
               </div>
+            )}
+          </section>
+
+          <section className="prefs-card aux-list-card evo-card">
+            <div className="aux-list-head">
+              <div>
+                <h2 className="prefs-card-title evo-card-title">
+                  <span className="evo-card-title-icon" aria-hidden>
+                    <ClipboardList size={15} />
+                  </span>
+                  {t("evo.curatorTitle")}
+                </h2>
+                <p className="prefs-card-sub">{t("evo.curatorSub")}</p>
+              </div>
+              <div className="aux-list-head-actions">
+                <button
+                  type="button"
+                  className="aux-action"
+                  onClick={() => void runCurator()}
+                  disabled={curatorLoading}
+                >
+                  <RefreshCw size={15} />
+                  {curatorLoading ? t("evo.curatorRunning") : t("evo.curatorRun")}
+                </button>
+              </div>
+            </div>
+
+            {curatorError && (
+              <div className="aux-error">
+                <AlertTriangle size={16} />
+                {curatorError}
+              </div>
+            )}
+
+            {!curatorReport ? (
+              <p className="aux-muted evo-inline-hint">{t("evo.curatorEmpty")}</p>
+            ) : (
+              <>
+                <p className="evo-run-summary">
+                  {t("evo.curatorSummary")
+                    .replace("{n}", String(curatorReport.enabledCount))
+                    .replace("{stale}", String(curatorReport.stale.length))
+                    .replace("{sug}", String(curatorReport.suggestions.length))}
+                </p>
+                {curatorReport.suggestions.length > 0 && (
+                  <div className="aux-task-list">
+                    {curatorReport.suggestions.map((s, i) => (
+                      <article className="aux-task-row evo-compact-row" key={`${s.kind}-${s.skillId}-${i}`}>
+                        <div className="aux-task-main">
+                          <div className="aux-task-titleline">
+                            <h3>{s.skillId}</h3>
+                            <span className="aux-route-pill">
+                              {s.kind === "disable"
+                                ? t("evo.curatorDisable")
+                                : s.kind === "merge"
+                                  ? t("evo.curatorMerge")
+                                  : t("evo.curatorRewrite")}
+                            </span>
+                          </div>
+                          <p className="aux-muted">{s.reason}</p>
+                        </div>
+                        {s.kind === "rewrite" && (
+                          <div className="aux-task-actions">
+                            <button
+                              type="button"
+                              className="aux-action aux-action-ghost"
+                              onClick={() => {
+                                setSearchFocusSkill(s.skillId);
+                                setSection("run");
+                              }}
+                            >
+                              <Dna size={15} />
+                              {t("evo.curatorEvolve")}
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </section>
 
