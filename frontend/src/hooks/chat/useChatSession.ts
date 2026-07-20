@@ -1050,12 +1050,16 @@ export function useChatSession({
       const running = parallelTasks.filter((t) => t.status === "running");
       await Promise.all(running.map((t) => cancelParallelTask(t.id)));
     }
-    if (!streaming && !turnInFlightRef.current) return;
+    if (!streaming && !turnInFlightRef.current) {
+      setSessionPendingInterrupts([]);
+      return;
+    }
     if (!sessionId) {
       setStreaming(false);
       setStreamPaused(false);
       turnInFlightRef.current = false;
       setTurnInFlight(false);
+      setSessionPendingInterrupts([]);
       return;
     }
     streamGenRef.current += 1;
@@ -1111,6 +1115,7 @@ export function useChatSession({
     setStreamPaused(false);
     turnInFlightRef.current = false;
     setTurnInFlight(false);
+    setSessionPendingInterrupts([]);
     setStatus("ready");
     setStatusPhase("ready");
   }, [

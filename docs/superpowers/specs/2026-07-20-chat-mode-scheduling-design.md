@@ -1,7 +1,7 @@
 # 聊天交互模式与调度设计
 
 > 日期：2026-07-20  
-> 状态：设计定稿；Step 1–4 已落地；增强：拒绝续跑 / checkpoint 出队 / Agent 会话 worktree  
+> 状态：设计定稿；Step 1–4 + 增强 + High/Medium 修复已落地  
 > 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、[`parallelTasks.ts`](../../../frontend/src/lib/chat/parallelTasks.ts)、编排 / delegate / worktree
 
 ## 1. 问题
@@ -118,7 +118,20 @@ Agent 模式下按 `session_id` 创建/复用 git worktree，经 `project_root` 
 - 长任务空闲约 60s 且有排队：toast + 暂停回合 + 出队；
 - Agent 模式同 session 复用 worktree；新会话清理；非 git 降级。
 
+## 6f. High / Medium 修复验收
+
+- 授权条展示期间禁止队列 drain；批准/拒绝后 `queueKick`；
+- Plan/Ask 拦 `memory` / `pin_context` / `skills` 写操作；Ask 禁 `task_plan`；
+- 切入 MultiTask 清空队列；离开 MultiTask 清理并行；开历史会话 reset 调度表面；
+- MultiTask 始终可 Send；有并行时亦可 Stop（停全部）；Pause 仅主会话 streaming；
+- HITL / `turnInFlight` 时保留 Stop，并清空 pending interrupts；
+- 空 `project_root` → 后端清除；非 Agent 发送显式传空；
+- mode pill：streaming / turnInFlight / HITL / 并行 running 时锁定；Plan/Ask 只读徽章 + 菜单说明；
+- `chatModeHint` 中英 i18n；Plan/Ask 专用 placeholder；
+- 并行 task 遇 HITL：toast + cancel session（暂不提供完整审批 UI）。
+
 ## 7. 非目标
 
 - 同 `session_id` 多 turn 真正并发（仍靠 pause 互斥）；
-- 不改全局专家切换语义。
+- 不改全局专家切换语义；
+- MultiTask 并行 task 内完整 HITL / 澄清 UI（后续增强）。

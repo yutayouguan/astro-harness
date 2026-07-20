@@ -342,7 +342,18 @@ export function useParallelTasks(deps: Deps) {
             payload.outcome_type === "hitl_waiting")
         ) {
           showTransientToast(t("chat.task.hitlUnsupported"), { tone: "warning" });
+          void invoke("chat_control", {
+            sessionId,
+            action: "cancel",
+          }).catch(() => {});
           finish("error", t("chat.task.hitlUnsupported"));
+          if (worktree) {
+            void invoke("cleanup_multitask_worktree", {
+              path: worktree.path,
+              repoRoot: worktree.repoRoot,
+              branch: worktree.branch,
+            }).catch(() => {});
+          }
         } else if (payload.type === "tool_call") {
           const name = payload.name ?? "tool";
           const activity: ChatActivity = {

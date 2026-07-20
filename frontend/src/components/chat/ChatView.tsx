@@ -1316,15 +1316,17 @@ export default function ChatView({
     (input.trim().length > 0 || attachments.length > 0) &&
     (!streaming || canQueueWhileBusy || chatMode === "multitask") &&
     (queueEnabled || !interruptBlocked);
-  /** 主会话流式或 HITL/`turnInFlight` 等待中：可 Stop；Pause 仅 streaming */
-  const showStopControl =
-    streaming || (turnInFlight && chatMode !== "multitask");
-  const showPauseResume = streaming;
-  const showSendButton = chatMode === "multitask" || !streaming;
   const parallelRunningCount = useMemo(
     () => countRunningParallel(parallelTasks),
     [parallelTasks],
   );
+  /** 主会话流式 / HITL 等待 / MultiTask 有并行：显示 Stop；Pause 仅主会话 streaming */
+  const showStopControl =
+    streaming ||
+    (turnInFlight && chatMode !== "multitask") ||
+    (chatMode === "multitask" && parallelRunningCount > 0);
+  const showPauseResume = streaming;
+  const showSendButton = chatMode === "multitask" || !streaming;
   const modeSwitchLocked =
     streaming || turnInFlight || interruptBlocked || parallelRunningCount > 0;
   const parallelRunningIds = useMemo(
@@ -1415,6 +1417,8 @@ export default function ChatView({
         : queueEnabled
           ? t("chat.placeholderStreaming")
           : t("chat.placeholderStreamingBusy")
+      : chatMode === "multitask" && parallelRunningCount > 0
+        ? t("chat.placeholderMultitask")
       : sendBlocked && sendBlockedReason
         ? sendBlockedReason
         : interruptBlocked && !queueEnabled
@@ -1423,7 +1427,11 @@ export default function ChatView({
             ? ""
             : attachments.length
               ? t("chat.placeholderWithAttach")
-              : t("chat.placeholder");
+              : chatMode === "plan"
+                ? t("chat.placeholderPlan")
+                : chatMode === "ask"
+                  ? t("chat.placeholderAsk")
+                  : t("chat.placeholder");
 
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
