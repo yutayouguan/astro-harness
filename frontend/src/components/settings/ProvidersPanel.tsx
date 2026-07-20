@@ -1627,7 +1627,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                       /\/v1beta\/openai(?:\/|$)/.test(draft.endpoint.trim()) && (
                         <span
                           className="providers-badge providers-badge--deprecated"
-                          title={t("providers.googleEndpointHint")}
+                          title={t("providers.googleOpenaiCompatDeprecated")}
                         >
                           {t("providers.googleOpenaiCompatDeprecated")}
                         </span>
@@ -1643,9 +1643,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     }
                   />
                 </label>
-                {selected.kind === "google" && (
-                  <p className="providers-field-hint">{t("providers.googleEndpointHint")}</p>
-                )}
               </div>
 
               <div className="providers-fallback-block">
