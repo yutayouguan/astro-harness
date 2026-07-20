@@ -14,6 +14,10 @@ import { useI18n } from "../../i18n/LocaleContext";
 export type ConfirmOptions = {
   title: string;
   message: string;
+  /** 醒目展示的对象名（如待删会话标题），渲染在正文上方。 */
+  emphasis?: string;
+  /** emphasis 上方的短标签，例如「会话」。 */
+  emphasisLabel?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "default" | "danger";
@@ -136,6 +140,12 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             request.kind === "confirm"
               ? request.options.message
               : request.options.message
+          }
+          emphasis={
+            request.kind === "confirm" ? request.options.emphasis : undefined
+          }
+          emphasisLabel={
+            request.kind === "confirm" ? request.options.emphasisLabel : undefined
           }
           variant={
             request.kind === "prompt"

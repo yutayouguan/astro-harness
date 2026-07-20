@@ -119,6 +119,37 @@ html[data-theme="dark"] .app-dialog.is-danger .app-dialog-icon {
   color: color-mix(in srgb, var(--ink) 78%, transparent);
 }
 
+.app-dialog-emphasis {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 4px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #c44) 28%, var(--glass-edge));
+  background: color-mix(in srgb, var(--danger, #c44) 8%, var(--surface));
+}
+
+.app-dialog-emphasis-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-mute);
+}
+
+.app-dialog-emphasis-value {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.app-dialog.is-danger .app-dialog-emphasis-value {
+  color: color-mix(in srgb, var(--danger, #b33) 35%, var(--ink));
+}
+
 .app-dialog-body {
   margin-top: 14px;
 }

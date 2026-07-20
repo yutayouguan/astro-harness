@@ -417,7 +417,9 @@ export default function ChatSessionList({
         const title = sessionTitle(item, t("chat.rightPanel.untitledSession"));
         const ok = await confirm({
           title: t("sessions.deleteTitle"),
-          message: t("sessions.deleteConfirm", { title }),
+          emphasisLabel: t("sessions.deleteTargetLabel"),
+          emphasis: title,
+          message: t("sessions.deleteConfirm"),
           confirmLabel: t("sessions.deletePermanently"),
           cancelLabel: t("sessions.cancel"),
           variant: "danger",

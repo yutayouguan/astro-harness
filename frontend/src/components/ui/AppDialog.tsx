@@ -9,6 +9,9 @@ export type AppDialogProps = {
   open: boolean;
   title: string;
   message?: string;
+  /** 醒目对象名（如待删会话标题），显示在标题与说明之间。 */
+  emphasis?: string;
+  emphasisLabel?: string;
   variant?: AppDialogVariant;
   confirmLabel: string;
   cancelLabel: string;
@@ -22,6 +25,8 @@ export default function AppDialog({
   open,
   title,
   message,
+  emphasis,
+  emphasisLabel,
   variant = "default",
   confirmLabel,
   cancelLabel,
@@ -111,6 +116,14 @@ export default function AppDialog({
           </span>
           <div className="app-dialog-copy">
             <h3 id={titleId}>{title}</h3>
+            {emphasis ? (
+              <div className="app-dialog-emphasis">
+                {emphasisLabel ? (
+                  <span className="app-dialog-emphasis-label">{emphasisLabel}</span>
+                ) : null}
+                <strong className="app-dialog-emphasis-value">{emphasis}</strong>
+              </div>
+            ) : null}
             {message ? <p>{message}</p> : null}
           </div>
         </div>
