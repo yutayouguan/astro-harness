@@ -15,17 +15,17 @@ use std::collections::{HashMap, HashSet};
 
 use evolution::{
     aggregate_critiques, apply_patch_unique, approve_proposal, approve_proposal_checked,
-    build_auto_status, build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
-    build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
-    default_holdout_percent, effective_candidate_size, enqueue_curator_suggestions,
-    examples_for_skill, list_examples, list_proposals, load_auto_state, load_curator_last,
-    mark_auto_run, pareto_front, parse_candidates, parse_eval_judgement, parse_judge_output,
-    parse_variants, reject_proposal, run_curator_and_save, sandbox_test_candidate, save_auto_state,
-    save_proposals, select_front_capped, select_population, split_eval_examples,
-    weighted_eval_score, AutoGate, AutoStatus, CandidateKind, CurateReport, EvalExample,
-    EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget, SearchRunMeta, SkillCandidate,
-    Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT,
-    MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    build_auto_status, build_crossover_prompt, build_curator_status, build_eval_judge_prompt,
+    build_judge_user_prompt, build_mutation_prompt, build_reflection_user_prompt,
+    candidate_new_markdown, check_candidate, default_holdout_percent, effective_candidate_size,
+    enqueue_curator_suggestions, examples_for_skill, list_examples, list_proposals, load_auto_state,
+    load_curator_last, mark_auto_run, pareto_front, parse_candidates, parse_eval_judgement,
+    parse_judge_output, parse_variants, reject_proposal, run_curator_and_save,
+    sandbox_test_candidate, save_auto_state, save_proposals, select_front_capped, select_population,
+    split_eval_examples, weighted_eval_score, AutoGate, AutoStatus, CandidateKind, CurateReport,
+    CuratorStatus, EvalExample, EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget,
+    SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
+    JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
@@ -425,6 +425,11 @@ fn auto_inflight() -> &'static AtomicBool {
     FLAG.get_or_init(|| AtomicBool::new(false))
 }
 
+fn curator_inflight() -> &'static AtomicBool {
+    static FLAG: OnceLock<AtomicBool> = OnceLock::new();
+    FLAG.get_or_init(|| AtomicBool::new(false))
+}
+
 fn search_cancel_flag() -> &'static AtomicBool {
     static FLAG: OnceLock<AtomicBool> = OnceLock::new();
     FLAG.get_or_init(|| AtomicBool::new(false))
@@ -574,6 +579,36 @@ pub fn spawn_maybe_auto_evolution(app: AppHandle) {
                 }
             }
             Err(e) => tracing::warn!(error = %e, "auto evolution command failed"),
+        }
+    });
+}
+
+/// fire-and-forget：启动或 Chat Done 后尝试到期策展（仅报告，不入队、不调 LLM）。
+pub fn spawn_maybe_curator(_app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        match maybe_run_skill_curator().await {
+            Ok(dto) if dto.ran => {
+                tracing::info!(
+                    suggestions = dto
+                        .report
+                        .as_ref()
+                        .map(|r| r.suggestions.len())
+                        .unwrap_or(0),
+                    "auto curator report refreshed"
+                );
+            }
+            Ok(dto) if dto.skipped => {
+                tracing::debug!(
+                    reason = dto.skip_reason.as_deref().unwrap_or("-"),
+                    "auto curator skipped"
+                );
+            }
+            Ok(dto) => {
+                if let Some(err) = dto.error {
+                    tracing::warn!(error = %err, "auto curator error");
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "auto curator command failed"),
         }
     });
 }
@@ -1958,6 +1993,112 @@ pub async fn enqueue_curator_proposals() -> Result<usize, String> {
 pub async fn get_curator_last() -> Result<Option<CurateReportDto>, String> {
     let base = default_memory_dir();
     Ok(load_curator_last(&base).map(curate_report_dto))
+}
+
+/// 策展调度状态（是否到期、距上次天数）。
+#[tauri::command]
+pub async fn curator_status() -> Result<CuratorStatus, String> {
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base);
+    let last = load_curator_last(&base);
+    Ok(build_curator_status(
+        cfg.curator.enabled,
+        cfg.curator.interval_days,
+        last.as_ref(),
+        chrono::Utc::now(),
+    ))
+}
+
+/// 自动策展探测结果（到期才跑；永不入队、不调 LLM 诊断）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CuratorMaybeRunDto {
+    pub ran: bool,
+    pub skipped: bool,
+    pub skip_reason: Option<String>,
+    pub skip_message: Option<String>,
+    pub report: Option<CurateReportDto>,
+    pub error: Option<String>,
+}
+
+/// 若 `curator.enabled` 且已过 `interval_days`（或从未跑过），生成启发式报告并落盘。
+///
+/// **不**入队、**不**调用 LLM（避免静默烧钱）；入队与诊断仍走手动 `run_skill_curator`。
+#[tauri::command]
+pub async fn maybe_run_skill_curator() -> Result<CuratorMaybeRunDto, String> {
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base);
+    let last = load_curator_last(&base);
+    let status = build_curator_status(
+        cfg.curator.enabled,
+        cfg.curator.interval_days,
+        last.as_ref(),
+        chrono::Utc::now(),
+    );
+    if !status.due {
+        return Ok(CuratorMaybeRunDto {
+            ran: false,
+            skipped: true,
+            skip_reason: status.skip_reason,
+            skip_message: status.skip_message,
+            report: last.map(curate_report_dto),
+            error: None,
+        });
+    }
+
+    if curator_inflight()
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Ok(CuratorMaybeRunDto {
+            ran: false,
+            skipped: true,
+            skip_reason: Some("inflight".into()),
+            skip_message: Some("已有策展任务在运行".into()),
+            report: last.map(curate_report_dto),
+            error: None,
+        });
+    }
+
+    let unused = memory::load_learning_config(&base).unused_skill_days;
+    let result = run_curator_and_save(&base, unused);
+    curator_inflight().store(false, Ordering::SeqCst);
+
+    match result {
+        Ok(report) => {
+            evolution::record_run(
+                &base,
+                "curator",
+                report.enabled_count,
+                0,
+                0,
+                report.suggestions.len(),
+            );
+            tracing::info!(
+                suggestions = report.suggestions.len(),
+                "scheduled curator report saved (no enqueue)"
+            );
+            Ok(CuratorMaybeRunDto {
+                ran: true,
+                skipped: false,
+                skip_reason: None,
+                skip_message: None,
+                report: Some(curate_report_dto(report)),
+                error: None,
+            })
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "scheduled curator failed");
+            Ok(CuratorMaybeRunDto {
+                ran: false,
+                skipped: false,
+                skip_reason: None,
+                skip_message: None,
+                report: None,
+                error: Some(e.to_string()),
+            })
+        }
+    }
 }
 
 fn git(args: &[&str], cwd: &Path) -> Result<String, String> {

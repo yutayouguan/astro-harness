@@ -1158,6 +1158,8 @@ async fn run_chat_stream(
                 let _ = app.emit(event_name, ChatStreamEvent::Done);
                 // 自动进化：默认关；命令内自守冷却/日限额/最低新决策，仅生成待审提案
                 crate::evolution_run_commands::spawn_maybe_auto_evolution(app.clone());
+                // 策展到期：仅报告，不入队
+                crate::evolution_run_commands::spawn_maybe_curator(app.clone());
             }
             Some(proto::chat_event::Payload::Error(err)) => {
                 let _ = app.emit(

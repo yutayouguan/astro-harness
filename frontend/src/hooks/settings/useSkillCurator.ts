@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CurateReportDto } from "../../types";
+import type { CurateReportDto, CuratorStatusDto } from "../../types";
 
 type CuratorRunReport = {
   report: CurateReportDto;
@@ -11,6 +11,7 @@ type UseSkillCurator = {
   loading: boolean;
   error: string | null;
   report: CurateReportDto | null;
+  status: CuratorStatusDto | null;
   lastEnqueued: number;
   run(enqueue?: boolean): Promise<void>;
   enqueue(): Promise<void>;
@@ -25,13 +26,18 @@ export function useSkillCurator(active = true): UseSkillCurator {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<CurateReportDto | null>(null);
+  const [status, setStatus] = useState<CuratorStatusDto | null>(null);
   const [lastEnqueued, setLastEnqueued] = useState(0);
 
   const reload = useCallback(async () => {
     if (!active) return;
     try {
-      const last = await invoke<CurateReportDto | null>("get_curator_last");
+      const [last, st] = await Promise.all([
+        invoke<CurateReportDto | null>("get_curator_last"),
+        invoke<CuratorStatusDto>("curator_status"),
+      ]);
       setReport(last);
+      setStatus(st);
     } catch {
       // 无历史报告时忽略
     }
@@ -41,19 +47,24 @@ export function useSkillCurator(active = true): UseSkillCurator {
     void reload();
   }, [reload]);
 
-  const run = useCallback(async (enqueue = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await invoke<CuratorRunReport>("run_skill_curator", { enqueue });
-      setReport(next.report);
-      setLastEnqueued(next.enqueued);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const run = useCallback(
+    async (enqueue = false) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const next = await invoke<CuratorRunReport>("run_skill_curator", { enqueue });
+        setReport(next.report);
+        setLastEnqueued(next.enqueued);
+        const st = await invoke<CuratorStatusDto>("curator_status");
+        setStatus(st);
+      } catch (err) {
+        setError(errorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   const enqueue = useCallback(async () => {
     setLoading(true);
@@ -68,5 +79,5 @@ export function useSkillCurator(active = true): UseSkillCurator {
     }
   }, []);
 
-  return { loading, error, report, lastEnqueued, run, enqueue, reload };
+  return { loading, error, report, status, lastEnqueued, run, enqueue, reload };
 }

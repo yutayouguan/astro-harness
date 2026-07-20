@@ -28,10 +28,11 @@ pub use auto::{
 };
 pub use candidate::{CandidateKind, SkillCandidate};
 pub use curator::{
-    apply_diagnoses, build_diagnose_prompt, curator_last_path, enqueue_curator_suggestions,
-    find_overlap_clusters, load_curator_last, parse_diagnose_output, run_curator,
-    run_curator_and_save, run_curator_with_skills, suggestions_to_candidates, CurateReport,
-    CurateSkillRow, CurateSuggestion, CURATOR_DIAGNOSE_SYSTEM_PROMPT,
+    apply_diagnoses, build_curator_status, build_diagnose_prompt, curator_last_path,
+    enqueue_curator_suggestions, evaluate_curator_due, find_overlap_clusters, load_curator_last,
+    parse_diagnose_output, parse_generated_at, run_curator, run_curator_and_save,
+    run_curator_with_skills, suggestions_to_candidates, CurateReport, CurateSkillRow,
+    CurateSuggestion, CuratorDue, CuratorDueReason, CuratorStatus, CURATOR_DIAGNOSE_SYSTEM_PROMPT,
 };
 pub use evalset::{
     aggregate_critiques, append_example, build_eval_judge_prompt, default_holdout_percent,

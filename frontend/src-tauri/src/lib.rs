@@ -443,6 +443,8 @@ pub fn run() {
             evolution_run_commands::run_skill_curator,
             evolution_run_commands::enqueue_curator_proposals,
             evolution_run_commands::get_curator_last,
+            evolution_run_commands::curator_status,
+            evolution_run_commands::maybe_run_skill_curator,
             evolution_run_commands::evolution_dspy_status,
             evolution_run_commands::setup_evolution_dspy,
             evolution_run_commands::run_evolution_dspy,
@@ -509,6 +511,9 @@ pub fn run() {
             app_icon::apply_app_icon(app.handle(), &app_icon::load_variant());
 
             notify::install(app.handle());
+
+            // 策展到期：仅刷新启发式报告，不入队、不调 LLM
+            crate::evolution_run_commands::spawn_maybe_curator(app.handle().clone());
 
             let config = app
                 .config()

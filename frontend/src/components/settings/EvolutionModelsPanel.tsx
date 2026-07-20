@@ -173,6 +173,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     loading: curatorLoading,
     error: curatorError,
     report: curatorReport,
+    status: curatorStatus,
     lastEnqueued,
     run: runCurator,
     enqueue: enqueueCurator,
@@ -1062,6 +1063,23 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 </label>
               </div>
               <p className="aux-muted evo-inline-hint">{t("evo.curatorCfgHint")}</p>
+              {curatorStatus?.due && (
+                <div className="evo-auto-banner is-ready" role="status">
+                  {t("evo.curatorDueBanner")
+                    .replace(
+                      "{detail}",
+                      curatorStatus.skipMessage ?? t("evo.curatorDueDefault"),
+                    )}
+                </div>
+              )}
+              {curatorStatus && !curatorStatus.due && curatorStatus.enabled && (
+                <p className="aux-muted evo-inline-hint">
+                  {curatorStatus.skipMessage ??
+                    t("evo.curatorNotDue")
+                      .replace("{days}", String(curatorStatus.daysSinceLast ?? 0))
+                      .replace("{interval}", String(curatorStatus.intervalDays))}
+                </p>
+              )}
             </section>
           </div>
         </>
@@ -1701,6 +1719,15 @@ export default function EvolutionModelsPanel({ active }: Props) {
               <div className="aux-error">
                 <AlertTriangle size={16} />
                 {curatorError}
+              </div>
+            )}
+
+            {curatorStatus?.due && (
+              <div className="evo-auto-banner is-ready" role="status">
+                {t("evo.curatorDueBanner").replace(
+                  "{detail}",
+                  curatorStatus.skipMessage ?? t("evo.curatorDueDefault"),
+                )}
               </div>
             )}
 

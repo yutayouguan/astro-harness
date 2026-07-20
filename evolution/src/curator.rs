@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::evalset::{list_examples, Verdict};
@@ -440,6 +440,171 @@ pub fn apply_diagnoses(suggestions: &mut [CurateSuggestion], diagnoses: &[(usize
     }
 }
 
+// ---------------------------------------------------------------------------
+// 周期到期（仅报告，不自动入队）
+// ---------------------------------------------------------------------------
+
+/// 策展周期门禁结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CuratorDue {
+    /// `evolution.curator.enabled` 关闭。
+    Disabled,
+    /// 距上次报告未满 `interval_days`。
+    NotDue {
+        days_since: u32,
+        interval_days: u32,
+    },
+    /// 到期：从未跑过，或已超过间隔。
+    Due {
+        /// 距上次报告天数；从未跑过为 `None`。
+        days_since: Option<u32>,
+        reason: CuratorDueReason,
+    },
+}
+
+/// 到期原因。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CuratorDueReason {
+    NeverRan,
+    IntervalElapsed,
+}
+
+impl CuratorDueReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NeverRan => "never_ran",
+            Self::IntervalElapsed => "interval_elapsed",
+        }
+    }
+
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::NeverRan => "尚未运行过策展",
+            Self::IntervalElapsed => "已超过策展间隔",
+        }
+    }
+}
+
+impl CuratorDue {
+    pub fn is_due(&self) -> bool {
+        matches!(self, Self::Due { .. })
+    }
+}
+
+/// 策展调度状态（供 UI / Tauri）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CuratorStatus {
+    pub enabled: bool,
+    pub interval_days: u32,
+    pub due: bool,
+    pub days_since_last: Option<u32>,
+    pub last_generated_at: Option<String>,
+    pub suggestion_count: usize,
+    pub skip_reason: Option<String>,
+    pub skip_message: Option<String>,
+}
+
+/// 解析报告 `generated_at`（RFC3339）；失败视为无有效时间。
+pub fn parse_generated_at(raw: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(raw.trim())
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+/// 评估是否应自动跑一次策展报告（**不**决定入队）。
+pub fn evaluate_curator_due(
+    enabled: bool,
+    interval_days: u32,
+    last_generated_at: Option<&str>,
+    now: DateTime<Utc>,
+) -> CuratorDue {
+    if !enabled {
+        return CuratorDue::Disabled;
+    }
+    let interval = interval_days.max(1);
+    let Some(raw) = last_generated_at.filter(|s| !s.trim().is_empty()) else {
+        return CuratorDue::Due {
+            days_since: None,
+            reason: CuratorDueReason::NeverRan,
+        };
+    };
+    let Some(last) = parse_generated_at(raw) else {
+        // 时间戳损坏：视为需重跑，避免卡死。
+        return CuratorDue::Due {
+            days_since: None,
+            reason: CuratorDueReason::NeverRan,
+        };
+    };
+    let elapsed = now.signed_duration_since(last);
+    let days_since = elapsed.num_days().max(0) as u32;
+    if days_since >= interval {
+        CuratorDue::Due {
+            days_since: Some(days_since),
+            reason: CuratorDueReason::IntervalElapsed,
+        }
+    } else {
+        CuratorDue::NotDue {
+            days_since,
+            interval_days: interval,
+        }
+    }
+}
+
+/// 组装策展调度状态。
+pub fn build_curator_status(
+    enabled: bool,
+    interval_days: u32,
+    last: Option<&CurateReport>,
+    now: DateTime<Utc>,
+) -> CuratorStatus {
+    let last_generated_at = last.map(|r| r.generated_at.clone());
+    let suggestion_count = last.map(|r| r.suggestions.len()).unwrap_or(0);
+    let due = evaluate_curator_due(
+        enabled,
+        interval_days,
+        last_generated_at.as_deref(),
+        now,
+    );
+    match due {
+        CuratorDue::Disabled => CuratorStatus {
+            enabled: false,
+            interval_days,
+            due: false,
+            days_since_last: None,
+            last_generated_at,
+            suggestion_count,
+            skip_reason: Some("disabled".into()),
+            skip_message: Some("策展提醒未开启".into()),
+        },
+        CuratorDue::NotDue {
+            days_since,
+            interval_days: interval,
+        } => CuratorStatus {
+            enabled: true,
+            interval_days: interval,
+            due: false,
+            days_since_last: Some(days_since),
+            last_generated_at,
+            suggestion_count,
+            skip_reason: Some("not_due".into()),
+            skip_message: Some(format!(
+                "距上次 {days_since}/{interval} 天，尚未到期"
+            )),
+        },
+        CuratorDue::Due { days_since, reason } => CuratorStatus {
+            enabled: true,
+            interval_days,
+            due: true,
+            days_since_last: days_since,
+            last_generated_at,
+            suggestion_count,
+            skip_reason: Some(reason.as_str().into()),
+            skip_message: Some(reason.message().into()),
+        },
+    }
+}
+
 /// 运行策展并落盘上次报告。
 pub fn run_curator_and_save(base: &Path, unused_skill_days: u32) -> anyhow::Result<CurateReport> {
     let report = run_curator(base, unused_skill_days);
@@ -763,5 +928,64 @@ mod tests {
         assert!(p.contains("pdf-merge"));
         assert!(p.contains("禁用"));
         assert!(p.contains("合并 PDF"));
+    }
+
+    #[test]
+    fn curator_due_disabled() {
+        let now = Utc::now();
+        assert_eq!(
+            evaluate_curator_due(false, 7, None, now),
+            CuratorDue::Disabled
+        );
+    }
+
+    #[test]
+    fn curator_due_never_ran() {
+        let now = Utc::now();
+        match evaluate_curator_due(true, 7, None, now) {
+            CuratorDue::Due {
+                days_since: None,
+                reason: CuratorDueReason::NeverRan,
+            } => {}
+            other => panic!("expected never_ran, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn curator_due_within_interval() {
+        let now = DateTime::parse_from_rfc3339("2026-07-20T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let last = "2026-07-18T12:00:00Z";
+        match evaluate_curator_due(true, 7, Some(last), now) {
+            CuratorDue::NotDue {
+                days_since: 2,
+                interval_days: 7,
+            } => {}
+            other => panic!("expected not_due, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn curator_due_interval_elapsed() {
+        let now = DateTime::parse_from_rfc3339("2026-07-20T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let last = "2026-07-10T12:00:00Z";
+        match evaluate_curator_due(true, 7, Some(last), now) {
+            CuratorDue::Due {
+                days_since: Some(10),
+                reason: CuratorDueReason::IntervalElapsed,
+            } => {}
+            other => panic!("expected interval_elapsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_curator_status_due_flag() {
+        let now = Utc::now();
+        let st = build_curator_status(true, 7, None, now);
+        assert!(st.due);
+        assert_eq!(st.skip_reason.as_deref(), Some("never_ran"));
     }
 }

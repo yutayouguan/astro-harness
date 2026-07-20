@@ -410,6 +410,18 @@ export type CurateReportDto = {
   }>;
 };
 
+/** 策展调度状态（`curator_status`） */
+export type CuratorStatusDto = {
+  enabled: boolean;
+  intervalDays: number;
+  due: boolean;
+  daysSinceLast: number | null;
+  lastGeneratedAt: string | null;
+  suggestionCount: number;
+  skipReason: string | null;
+  skipMessage: string | null;
+};
+
 /** 离线进化设置全量（enabled + reflection/judge 路由 + gates） */
 export type EvolutionSettingsDto = {
   enabled: boolean;

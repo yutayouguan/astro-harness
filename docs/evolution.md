@@ -127,9 +127,9 @@ evolution:
 | `search.max_llm_calls` | `40` | 单次搜索 LLM 调用硬顶；`0` = 不限 |
 | `auto.*` | 见上 | Chat Done 后自动单轮 reflect；默认关 |
 | `curator.enabled` | `false` | 策展提醒总开关；**不**自动删改技能 |
-| `curator.interval_days` | `7` | 间隔（天）；当前仅配置水位，报告需手动跑 |
+| `curator.interval_days` | `7` | 间隔（天）；到期后启动 / Chat Done 自动刷新**启发式报告**（不入队、不调 LLM） |
 | `curator.max_enqueue` | `5` | 单次将 Disable/Merge 入待审上限 |
-| `curator.llm_diagnose` | `false` | 运行策展时用 judge 路由增强 reason |
+| `curator.llm_diagnose` | `false` | 手动运行策展时用 judge 路由增强 reason |
 | `curator.max_llm_calls` | `3` | 单次策展诊断 LLM 调用上限 |
 | `dspy.*` | 见上 | 外部 Python 引擎；默认关 |
 
@@ -285,6 +285,7 @@ Agent skills 写入目标由 `skills` crate 的 agent skills 目录决定（通�
 | `run_evolution_search` | GEPA-lite 搜索（可选 `skill_id` 定向；holdout；沙箱三维 Pareto；history 写 search_meta） |
 | `cancel_evolution_search` | 取消进行中的遗传搜索 |
 | `run_skill_curator` / `get_curator_last` / `enqueue_curator_proposals` | 技能策展：报告（可选 LLM 诊断）/ 读取上次 / 将 Disable·Merge 入待审 |
+| `curator_status` / `maybe_run_skill_curator` | 调度状态 / 到期自动刷新启发式报告（不入队） |
 | `set_evolution_curator` | 读写 `evolution.curator`（enabled / interval / max_enqueue / llm_diagnose） |
 | `list_evolution_proposals` | 待审列表 |
 | `approve_evolution_proposal` | 批准写入 |
