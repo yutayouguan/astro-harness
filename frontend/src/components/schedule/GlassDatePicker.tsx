@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
+import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -175,6 +176,8 @@ export function GlassDatePicker({
     closePop();
   };
 
+  const toneStyle = open ? toneStyleFromElement(triggerRef.current) : {};
+
   const pop = open
     ? createPortal(
         <div
@@ -190,8 +193,9 @@ export function GlassDatePicker({
                   left: pos.left,
                   width: pos.width,
                   maxHeight: pos.maxHeight,
+                  ...toneStyle,
                 }
-              : { visibility: "hidden", width: 248 }
+              : { visibility: "hidden", width: 248, ...toneStyle }
           }
         >
           <div className="cron-dt-pop-head">

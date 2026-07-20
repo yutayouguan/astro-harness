@@ -25,6 +25,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { SelectMenu } from "../ui/SelectMenu";
+import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 
 /** 调度表达式编辑器入参 */
 type Props = {
@@ -360,6 +361,8 @@ function OnceDateTimePicker({
     );
   };
 
+  const toneStyle = open ? toneStyleFromElement(triggerRef.current) : {};
+
   const pop =
     open
       ? createPortal(
@@ -376,8 +379,9 @@ function OnceDateTimePicker({
                     left: pos.left,
                     width: pos.width,
                     maxHeight: pos.maxHeight,
+                    ...toneStyle,
                   }
-                : { visibility: "hidden", width: 248 }
+                : { visibility: "hidden", width: 248, ...toneStyle }
             }
           >
             <div className="cron-dt-pop-head">
