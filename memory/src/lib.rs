@@ -12,9 +12,6 @@ pub mod protocol;
 pub mod review;
 pub mod session;
 
-#[cfg(test)]
-pub(crate) mod test_env;
-
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::workspace;
 pub use config::{
