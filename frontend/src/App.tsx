@@ -93,7 +93,7 @@ import {
   clearShellGradientVars,
   flushGlassBackdrop,
 } from "./lib/ui/shellGradient";
-import type { ProviderModelsResult } from "./types";
+import type { ModelCapabilities, ProviderModelsResult } from "./types";
 
 const NAV_ROW_PITCH_PX = 44;
 export default function App() {
@@ -142,6 +142,8 @@ export default function App() {
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
+  const [activeModelCapabilities, setActiveModelCapabilities] =
+    useState<ModelCapabilities | null>(null);
   const [memoryHeaderAgent, setMemoryHeaderAgent] =
     useState<MemoryHeaderAgentPicker | null>(null);
 
@@ -199,12 +201,13 @@ export default function App() {
     clearDeletedCurrentSession,
   } = chat;
 
-  // ── Model context window ──────────────────────────────────────────────────
+  // ── Model context window + capabilities ───────────────────────────────────
   useEffect(() => {
     const providerId = activeProvider?.id;
     const modelId = activeProvider?.model;
     if (!providerId || !modelId) {
       setModelContextWindow(null);
+      setActiveModelCapabilities(null);
       return;
     }
     let cancelled = false;
@@ -218,8 +221,12 @@ export default function App() {
         const match = cached?.models?.find((m) => m.id === modelId);
         const win = match?.context_window;
         setModelContextWindow(typeof win === "number" && win > 0 ? win : null);
+        setActiveModelCapabilities(match?.capabilities ?? null);
       } catch {
-        if (!cancelled) setModelContextWindow(null);
+        if (!cancelled) {
+          setModelContextWindow(null);
+          setActiveModelCapabilities(null);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -299,7 +306,7 @@ export default function App() {
     chat.contextUsage?.contextWindow,
   );
   const showThinking = shouldShowThinkingControls({
-    capabilities: null,
+    capabilities: activeModelCapabilities,
     backendId: activeProvider?.backend_id,
   });
   const statusText = chat.statusDetail ?? t(`status.${chat.statusPhase}` as MessageKey);

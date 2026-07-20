@@ -37,9 +37,13 @@ test("uses explicit capabilities.reasoning when present", () => {
   );
 });
 
-test("falls back to deepseek whitelist when capabilities unknown", () => {
+test("falls back to deepseek/google whitelist when capabilities unknown", () => {
   assert.equal(
     shouldShowThinkingControls({ capabilities: null, backendId: "deepseek" }),
+    true,
+  );
+  assert.equal(
+    shouldShowThinkingControls({ capabilities: undefined, backendId: "google" }),
     true,
   );
   assert.equal(
