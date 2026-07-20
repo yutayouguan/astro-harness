@@ -29,7 +29,13 @@ type UseEvolutionSettings = {
     minNewDecisions: number,
     maxRunsPerDay: number,
   ): Promise<void>;
-  setCurator(enabled: boolean, intervalDays: number, maxEnqueue: number): Promise<void>;
+  setCurator(
+    enabled: boolean,
+    intervalDays: number,
+    maxEnqueue: number,
+    llmDiagnose: boolean,
+    maxLlmCalls: number,
+  ): Promise<void>;
   reload(): Promise<void>;
 };
 
@@ -171,13 +177,21 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
   );
 
   const setCurator = useCallback(
-    async (enabled: boolean, intervalDays: number, maxEnqueue: number) => {
+    async (
+      enabled: boolean,
+      intervalDays: number,
+      maxEnqueue: number,
+      llmDiagnose: boolean,
+      maxLlmCalls: number,
+    ) => {
       setError(null);
       try {
         const next = await invoke<EvolutionSettingsDto>("set_evolution_curator", {
           enabled,
           intervalDays,
           maxEnqueue,
+          llmDiagnose,
+          maxLlmCalls,
         });
         setSettings(next);
       } catch (err) {

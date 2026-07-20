@@ -302,6 +302,8 @@ export type EvolutionCuratorDto = {
   enabled: boolean;
   intervalDays: number;
   maxEnqueue: number;
+  llmDiagnose: boolean;
+  maxLlmCalls: number;
 };
 
 /** 自动触发运行时状态（护栏水位） */

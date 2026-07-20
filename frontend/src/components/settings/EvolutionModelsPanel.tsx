@@ -188,6 +188,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [cooldownDraft, setCooldownDraft] = useState("");
   const [minDecDraft, setMinDecDraft] = useState("");
   const [maxRunsDraft, setMaxRunsDraft] = useState("");
+  const [curatorIntervalDraft, setCuratorIntervalDraft] = useState("");
+  const [curatorMaxEnqueueDraft, setCuratorMaxEnqueueDraft] = useState("");
+  const [curatorMaxLlmDraft, setCuratorMaxLlmDraft] = useState("");
   const [section, setSection] = useState<EvoSection>("setup");
   const [expandedProposals, setExpandedProposals] = useState<Set<string>>(() => new Set());
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
@@ -271,6 +274,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
       setCooldownDraft(String(settings.auto.cooldownSecs));
       setMinDecDraft(String(settings.auto.minNewDecisions));
       setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
+      setCuratorIntervalDraft(String(settings.curator.intervalDays));
+      setCuratorMaxEnqueueDraft(String(settings.curator.maxEnqueue));
+      setCuratorMaxLlmDraft(String(settings.curator.maxLlmCalls));
     }
   }, [settings]);
 
@@ -299,6 +305,42 @@ export default function EvolutionModelsPanel({ active }: Props) {
       setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
     }
   }, [settings, cooldownDraft, minDecDraft, maxRunsDraft, setAuto, reloadAutoStatus]);
+
+  const commitCuratorNums = useCallback(() => {
+    if (!settings) return;
+    const id = Number.parseInt(curatorIntervalDraft, 10);
+    const me = Number.parseInt(curatorMaxEnqueueDraft, 10);
+    const ml = Number.parseInt(curatorMaxLlmDraft, 10);
+    const interval =
+      Number.isFinite(id) && id >= 1 && id <= 90 ? id : settings.curator.intervalDays;
+    const maxEnqueue =
+      Number.isFinite(me) && me >= 1 && me <= 20 ? me : settings.curator.maxEnqueue;
+    const maxLlm =
+      Number.isFinite(ml) && ml >= 1 && ml <= 20 ? ml : settings.curator.maxLlmCalls;
+    if (
+      interval !== settings.curator.intervalDays ||
+      maxEnqueue !== settings.curator.maxEnqueue ||
+      maxLlm !== settings.curator.maxLlmCalls
+    ) {
+      void setCurator(
+        settings.curator.enabled,
+        interval,
+        maxEnqueue,
+        settings.curator.llmDiagnose,
+        maxLlm,
+      );
+    } else {
+      setCuratorIntervalDraft(String(settings.curator.intervalDays));
+      setCuratorMaxEnqueueDraft(String(settings.curator.maxEnqueue));
+      setCuratorMaxLlmDraft(String(settings.curator.maxLlmCalls));
+    }
+  }, [
+    settings,
+    curatorIntervalDraft,
+    curatorMaxEnqueueDraft,
+    curatorMaxLlmDraft,
+    setCurator,
+  ]);
 
   const commitSearch = useCallback(() => {
     if (!settings) return;
@@ -892,6 +934,134 @@ export default function EvolutionModelsPanel({ active }: Props) {
                     )}
                 </div>
               )}
+            </section>
+
+            <section className="prefs-card aux-list-card evo-card">
+              <div className="aux-list-head">
+                <div>
+                  <h2 className="prefs-card-title evo-card-title">
+                    <span className="evo-card-title-icon" aria-hidden>
+                      <ClipboardList size={15} />
+                    </span>
+                    {t("evo.curatorCfgTitle")}
+                  </h2>
+                  <p className="prefs-card-sub">{t("evo.curatorCfgSub")}</p>
+                </div>
+              </div>
+
+              <article className="aux-task-row evo-compact-row">
+                <div className="aux-task-icon">
+                  <ClipboardList size={18} />
+                </div>
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{t("evo.curatorCfgEnabled")}</h3>
+                  </div>
+                  <p>{t("evo.curatorCfgEnabledDesc")}</p>
+                </div>
+                <div className="aux-task-actions">
+                  <button
+                    type="button"
+                    role="switch"
+                    className="tool-toggle"
+                    aria-checked={settings?.curator.enabled ?? false}
+                    aria-label={t("evo.curatorCfgEnabled")}
+                    onClick={() =>
+                      settings &&
+                      void setCurator(
+                        !settings.curator.enabled,
+                        settings.curator.intervalDays,
+                        settings.curator.maxEnqueue,
+                        settings.curator.llmDiagnose,
+                        settings.curator.maxLlmCalls,
+                      )
+                    }
+                    disabled={loading || !settings}
+                  >
+                    <span className="tool-toggle-thumb" />
+                  </button>
+                </div>
+              </article>
+
+              <article className="aux-task-row evo-compact-row">
+                <div className="aux-task-icon">
+                  <Sparkles size={18} />
+                </div>
+                <div className="aux-task-main">
+                  <div className="aux-task-titleline">
+                    <h3>{t("evo.curatorLlmDiagnose")}</h3>
+                  </div>
+                  <p>{t("evo.curatorLlmDiagnoseDesc")}</p>
+                </div>
+                <div className="aux-task-actions">
+                  <button
+                    type="button"
+                    role="switch"
+                    className="tool-toggle"
+                    aria-checked={settings?.curator.llmDiagnose ?? false}
+                    aria-label={t("evo.curatorLlmDiagnose")}
+                    onClick={() =>
+                      settings &&
+                      void setCurator(
+                        settings.curator.enabled,
+                        settings.curator.intervalDays,
+                        settings.curator.maxEnqueue,
+                        !settings.curator.llmDiagnose,
+                        settings.curator.maxLlmCalls,
+                      )
+                    }
+                    disabled={loading || !settings}
+                  >
+                    <span className="tool-toggle-thumb" />
+                  </button>
+                </div>
+              </article>
+
+              <div className="evo-search-cfg evo-cfg-grid">
+                <label>
+                  {t("evo.curatorInterval")}
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={1}
+                    max={90}
+                    value={curatorIntervalDraft}
+                    onChange={(e) => setCuratorIntervalDraft(e.target.value)}
+                    onBlur={commitCuratorNums}
+                    disabled={!settings}
+                    aria-label={t("evo.curatorInterval")}
+                  />
+                </label>
+                <label>
+                  {t("evo.curatorMaxEnqueue")}
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={1}
+                    max={20}
+                    value={curatorMaxEnqueueDraft}
+                    onChange={(e) => setCuratorMaxEnqueueDraft(e.target.value)}
+                    onBlur={commitCuratorNums}
+                    disabled={!settings}
+                    aria-label={t("evo.curatorMaxEnqueue")}
+                  />
+                </label>
+                <label>
+                  {t("evo.curatorMaxLlm")}
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={1}
+                    max={20}
+                    value={curatorMaxLlmDraft}
+                    onChange={(e) => setCuratorMaxLlmDraft(e.target.value)}
+                    onBlur={commitCuratorNums}
+                    disabled={!settings}
+                    aria-label={t("evo.curatorMaxLlm")}
+                  />
+                </label>
+              </div>
+              <p className="aux-muted evo-inline-hint">{t("evo.curatorCfgHint")}</p>
             </section>
           </div>
         </>
