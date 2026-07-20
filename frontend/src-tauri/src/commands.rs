@@ -841,31 +841,31 @@ pub async fn start_chat(
     let event_name2 = event_name.clone();
 
     tauri::async_runtime::spawn(async move {
-        let result = run_chat_stream(
-            &app2,
-            &event_name2,
-            &grpc_address,
-            &sid2,
-            &merged,
-            &images,
-            &primary.backend_id,
-            &primary.model,
+        let result = run_chat_stream(ChatStreamParams {
+            app: &app2,
+            event_name: &event_name2,
+            grpc_address: &grpc_address,
+            session_id: &sid2,
+            content: &merged,
+            images: &images,
+            provider: &primary.backend_id,
+            model: &primary.model,
             use_memory,
-            &primary.api_key,
-            &primary.base_url,
-            &image_targets,
-            &chat_fallbacks,
-            &auxiliary_targets,
+            api_key: &primary.api_key,
+            base_url: &primary.base_url,
+            image_targets: &image_targets,
+            chat_fallbacks: &chat_fallbacks,
+            auxiliary_targets: &auxiliary_targets,
             thinking_enabled,
-            &reasoning_effort,
-            &resume_json,
+            reasoning_effort: &reasoning_effort,
+            resume_json: &resume_json,
             context_window,
             max_output_tokens,
-            &interaction_mode,
-            &project_root,
+            interaction_mode: &interaction_mode,
+            project_root: &project_root,
             temperature,
-            &additional_params_json,
-        )
+            additional_params_json: &additional_params_json,
+        })
         .await;
 
         if let Err(err) = result {
@@ -1014,51 +1014,53 @@ fn resolve_chat_credentials(
     Ok((t.api_key.clone(), t.base_url.clone()))
 }
 
-/// 执行本地流式聊天主循环并向窗口发事件。
-#[allow(clippy::too_many_arguments)]
-async fn run_chat_stream(
-    app: &AppHandle,
-    event_name: &str,
-    grpc_address: &str,
-    session_id: &str,
-    content: &str,
-    images: &[proto::ChatImageAttachment],
-    provider: &str,
-    model: &str,
+/// 本地流式聊天主循环参数（由 `start_chat` 组装后传入）。
+struct ChatStreamParams<'a> {
+    app: &'a AppHandle,
+    event_name: &'a str,
+    grpc_address: &'a str,
+    session_id: &'a str,
+    content: &'a str,
+    images: &'a [proto::ChatImageAttachment],
+    provider: &'a str,
+    model: &'a str,
     use_memory: bool,
-    api_key: &str,
-    base_url: &str,
-    image_targets: &[ImageGenTarget],
-    chat_fallbacks: &[proto::ChatFallbackTarget],
-    auxiliary_targets: &[proto::AuxiliaryModelTarget],
+    api_key: &'a str,
+    base_url: &'a str,
+    image_targets: &'a [ImageGenTarget],
+    chat_fallbacks: &'a [proto::ChatFallbackTarget],
+    auxiliary_targets: &'a [proto::AuxiliaryModelTarget],
     thinking_enabled: bool,
-    reasoning_effort: &str,
-    resume_json: &str,
+    reasoning_effort: &'a str,
+    resume_json: &'a str,
     context_window: u32,
     max_output_tokens: u32,
-    interaction_mode: &str,
-    project_root: &str,
+    interaction_mode: &'a str,
+    project_root: &'a str,
     temperature: Option<f32>,
-    additional_params_json: &str,
-) -> Result<(), String> {
-    let endpoint = endpoint_url(grpc_address);
+    additional_params_json: &'a str,
+}
+
+/// 执行本地流式聊天主循环并向窗口发事件。
+async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
+    let endpoint = endpoint_url(p.grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
         .await
         .map_err(|e| e.to_string())?;
 
-    let primary = image_targets.first();
-    let fallback = image_targets.get(1);
+    let primary = p.image_targets.first();
+    let fallback = p.image_targets.get(1);
 
     let mut stream = client
         .chat(ChatRequest {
-            session_id: session_id.to_string(),
-            content: content.to_string(),
-            provider: provider.to_string(),
-            model: model.to_string(),
+            session_id: p.session_id.to_string(),
+            content: p.content.to_string(),
+            provider: p.provider.to_string(),
+            model: p.model.to_string(),
             tool_names: vec![],
-            use_memory,
-            api_key: api_key.to_string(),
-            base_url: base_url.to_string(),
+            use_memory: p.use_memory,
+            api_key: p.api_key.to_string(),
+            base_url: p.base_url.to_string(),
             image_gen_provider: primary.map(|t| t.provider.clone()).unwrap_or_default(),
             image_gen_model: primary.map(|t| t.model.clone()).unwrap_or_default(),
             image_gen_api_key: primary.map(|t| t.api_key.clone()).unwrap_or_default(),
@@ -1075,18 +1077,18 @@ async fn run_chat_stream(
             image_gen_fallback_vision_model: fallback
                 .map(|t| t.vision_model.clone())
                 .unwrap_or_default(),
-            thinking_enabled,
-            reasoning_effort: reasoning_effort.to_string(),
-            resume_json: resume_json.to_string(),
-            chat_fallbacks: chat_fallbacks.to_vec(),
-            images: images.to_vec(),
-            auxiliary_targets: auxiliary_targets.to_vec(),
-            context_window,
-            max_output_tokens,
-            interaction_mode: interaction_mode.to_string(),
-            project_root: project_root.to_string(),
-            temperature,
-            additional_params_json: additional_params_json.to_string(),
+            thinking_enabled: p.thinking_enabled,
+            reasoning_effort: p.reasoning_effort.to_string(),
+            resume_json: p.resume_json.to_string(),
+            chat_fallbacks: p.chat_fallbacks.to_vec(),
+            images: p.images.to_vec(),
+            auxiliary_targets: p.auxiliary_targets.to_vec(),
+            context_window: p.context_window,
+            max_output_tokens: p.max_output_tokens,
+            interaction_mode: p.interaction_mode.to_string(),
+            project_root: p.project_root.to_string(),
+            temperature: p.temperature,
+            additional_params_json: p.additional_params_json.to_string(),
         })
         .await
         .map_err(|e| e.to_string())?
@@ -1095,17 +1097,17 @@ async fn run_chat_stream(
     while let Some(event) = stream.message().await.map_err(|e| e.to_string())? {
         match event.payload {
             Some(proto::chat_event::Payload::Token(token)) => {
-                let _ = app.emit(event_name, ChatStreamEvent::Token { content: token });
+                let _ = p.app.emit(p.event_name, ChatStreamEvent::Token { content: token });
             }
             Some(proto::chat_event::Payload::Reasoning(reasoning)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::Reasoning { content: reasoning },
                 );
             }
             Some(proto::chat_event::Payload::ToolCall(tc)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::ToolCall {
                         id: tc.id,
                         name: tc.name,
@@ -1116,8 +1118,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::ToolCallDelta(d)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::ToolCallDelta {
                         index: d.index,
                         id: d.id,
@@ -1127,8 +1129,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::MemoryUpdate(mu)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::MemoryUpdate {
                         operation: mu.operation,
                         content: mu.content,
@@ -1136,8 +1138,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::Hook(h)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::Hook {
                         name: h.name,
                         detail: h.detail,
@@ -1146,8 +1148,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::Usage(u)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::Usage {
                         prompt_tokens: u.prompt_tokens,
                         completion_tokens: u.completion_tokens,
@@ -1156,8 +1158,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::ContextUsage(cu)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::ContextUsage {
                         context_window: cu.context_window,
                         total_tokens: cu.total_tokens,
@@ -1176,8 +1178,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::RunStarted(rs)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::RunStarted {
                         thread_id: rs.thread_id,
                         run_id: rs.run_id,
@@ -1185,8 +1187,8 @@ async fn run_chat_stream(
                 );
             }
             Some(proto::chat_event::Payload::Activity(a)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::Activity {
                         message_id: a.message_id,
                         activity_type: a.activity_type,
@@ -1197,8 +1199,8 @@ async fn run_chat_stream(
             }
             Some(proto::chat_event::Payload::RunFinished(rf)) => {
                 let interrupts_json = serialize_interrupts(&rf.interrupts);
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::RunFinished {
                         run_id: rf.run_id,
                         outcome_type: rf.outcome_type,
@@ -1208,15 +1210,15 @@ async fn run_chat_stream(
             }
             Some(proto::chat_event::Payload::Done(true)) => {
                 // 不立即结束：Done 之后仍可能有 background review 的 MemoryUpdate
-                let _ = app.emit(event_name, ChatStreamEvent::Done);
+                let _ = p.app.emit(p.event_name, ChatStreamEvent::Done);
                 // 自动进化：默认关；命令内自守冷却/日限额/最低新决策，仅生成待审提案
-                crate::evolution_run_commands::spawn_maybe_auto_evolution(app.clone());
+                crate::evolution_run_commands::spawn_maybe_auto_evolution(p.app.clone());
                 // 策展到期：仅报告，不入队
-                crate::evolution_run_commands::spawn_maybe_curator(app.clone());
+                crate::evolution_run_commands::spawn_maybe_curator(p.app.clone());
             }
             Some(proto::chat_event::Payload::Error(err)) => {
-                let _ = app.emit(
-                    event_name,
+                let _ = p.app.emit(
+                    p.event_name,
                     ChatStreamEvent::Error {
                         message: friendly_error(&err),
                     },

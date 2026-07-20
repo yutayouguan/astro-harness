@@ -731,22 +731,22 @@ impl AstroService for AstroServiceImpl {
         } else {
             req.reasoning_effort
         };
-        let image_targets = tools::ImageGenTargets::from_parts(
-            &req.image_gen_provider,
-            &req.image_gen_model,
-            &req.image_gen_api_key,
-            &req.image_gen_base_url,
-            &req.image_gen_fallback_provider,
-            &req.image_gen_fallback_model,
-            &req.image_gen_fallback_api_key,
-            &req.image_gen_fallback_base_url,
-            &req.image_gen_video_model,
-            &req.image_gen_music_model,
-            &req.image_gen_tts_model,
-            &req.image_gen_fallback_tts_model,
-            &req.image_gen_vision_model,
-            &req.image_gen_fallback_vision_model,
-        );
+        let image_targets = tools::ImageGenTargets::from_parts(tools::ImageGenParts {
+            provider: &req.image_gen_provider,
+            model: &req.image_gen_model,
+            api_key: &req.image_gen_api_key,
+            base_url: &req.image_gen_base_url,
+            fb_provider: &req.image_gen_fallback_provider,
+            fb_model: &req.image_gen_fallback_model,
+            fb_api_key: &req.image_gen_fallback_api_key,
+            fb_base_url: &req.image_gen_fallback_base_url,
+            video_model: &req.image_gen_video_model,
+            music_model: &req.image_gen_music_model,
+            tts_model: &req.image_gen_tts_model,
+            fb_tts_model: &req.image_gen_fallback_tts_model,
+            vision_model: &req.image_gen_vision_model,
+            fb_vision_model: &req.image_gen_fallback_vision_model,
+        });
 
         let session = self.get_session(&session_id).await?;
         if is_new_session {

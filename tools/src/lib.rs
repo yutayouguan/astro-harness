@@ -30,7 +30,7 @@ pub use catalog::{
     builtin_catalog, catalog_for_ui, params_from_schema, ToolCatalogItem, ToolFunctionInfo,
     ToolParamInfo,
 };
-pub use context::{ImageGenCreds, ImageGenTargets, ToolContext};
+pub use context::{ImageGenCreds, ImageGenParts, ImageGenTargets, ToolContext};
 pub use dispatch::{builtin_handler_names, dispatch_tool};
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,

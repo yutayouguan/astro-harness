@@ -43,60 +43,63 @@ pub struct ImageGenTargets {
     pub fallback: Option<ImageGenCreds>,
 }
 
+/// `ImageGenTargets::from_parts` 的扁平字符串入参（Tauri / gRPC 注入字段）。
+#[derive(Debug, Clone, Copy)]
+pub struct ImageGenParts<'a> {
+    pub provider: &'a str,
+    pub model: &'a str,
+    pub api_key: &'a str,
+    pub base_url: &'a str,
+    pub fb_provider: &'a str,
+    pub fb_model: &'a str,
+    pub fb_api_key: &'a str,
+    pub fb_base_url: &'a str,
+    pub video_model: &'a str,
+    pub music_model: &'a str,
+    pub tts_model: &'a str,
+    pub fb_tts_model: &'a str,
+    pub vision_model: &'a str,
+    pub fb_vision_model: &'a str,
+}
+
 impl ImageGenTargets {
     /// 从 Tauri / gRPC 注入的字符串字段构建主备凭证。
     ///
     /// Provider 或 API Key 为空时，对应槽位为 `None`；
     /// 图片 model 为空则使用 Provider 默认图片模型。
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_parts(
-        provider: &str,
-        model: &str,
-        api_key: &str,
-        base_url: &str,
-        fb_provider: &str,
-        fb_model: &str,
-        fb_api_key: &str,
-        fb_base_url: &str,
-        video_model: &str,
-        music_model: &str,
-        tts_model: &str,
-        fb_tts_model: &str,
-        vision_model: &str,
-        fb_vision_model: &str,
-    ) -> Self {
-        let primary = if !provider.is_empty() && !api_key.is_empty() {
+    pub fn from_parts(p: ImageGenParts<'_>) -> Self {
+        let primary = if !p.provider.is_empty() && !p.api_key.is_empty() {
             Some(ImageGenCreds {
-                provider: provider.to_string(),
-                model: if model.is_empty() {
-                    providers::image_gen::default_image_model(provider).to_string()
+                provider: p.provider.to_string(),
+                model: if p.model.is_empty() {
+                    providers::image_gen::default_image_model(p.provider).to_string()
                 } else {
-                    model.to_string()
+                    p.model.to_string()
                 },
-                api_key: api_key.to_string(),
-                base_url: base_url.to_string(),
-                video_model: video_model.trim().to_string(),
-                music_model: music_model.trim().to_string(),
-                tts_model: tts_model.trim().to_string(),
-                vision_model: vision_model.trim().to_string(),
+                api_key: p.api_key.to_string(),
+                base_url: p.base_url.to_string(),
+                video_model: p.video_model.trim().to_string(),
+                music_model: p.music_model.trim().to_string(),
+                tts_model: p.tts_model.trim().to_string(),
+                vision_model: p.vision_model.trim().to_string(),
             })
         } else {
             None
         };
-        let fallback = if !fb_provider.is_empty() && !fb_api_key.is_empty() {
+        let fallback = if !p.fb_provider.is_empty() && !p.fb_api_key.is_empty() {
             Some(ImageGenCreds {
-                provider: fb_provider.to_string(),
-                model: if fb_model.is_empty() {
-                    providers::image_gen::default_image_model(fb_provider).to_string()
+                provider: p.fb_provider.to_string(),
+                model: if p.fb_model.is_empty() {
+                    providers::image_gen::default_image_model(p.fb_provider).to_string()
                 } else {
-                    fb_model.to_string()
+                    p.fb_model.to_string()
                 },
-                api_key: fb_api_key.to_string(),
-                base_url: fb_base_url.to_string(),
+                api_key: p.fb_api_key.to_string(),
+                base_url: p.fb_base_url.to_string(),
                 video_model: String::new(),
                 music_model: String::new(),
-                tts_model: fb_tts_model.trim().to_string(),
-                vision_model: fb_vision_model.trim().to_string(),
+                tts_model: p.fb_tts_model.trim().to_string(),
+                vision_model: p.fb_vision_model.trim().to_string(),
             })
         } else {
             None
@@ -197,22 +200,22 @@ mod tests {
 
     #[test]
     fn from_parts_writes_primary_music_model_and_leaves_fallback_music_model_empty() {
-        let targets = ImageGenTargets::from_parts(
-            "google",
-            "image-model",
-            "primary-key",
-            "primary-base",
-            "openai",
-            "fallback-image-model",
-            "fallback-key",
-            "fallback-base",
-            "",
-            "  configured-music-model  ",
-            "",
-            "",
-            "",
-            "",
-        );
+        let targets = ImageGenTargets::from_parts(ImageGenParts {
+            provider: "google",
+            model: "image-model",
+            api_key: "primary-key",
+            base_url: "primary-base",
+            fb_provider: "openai",
+            fb_model: "fallback-image-model",
+            fb_api_key: "fallback-key",
+            fb_base_url: "fallback-base",
+            video_model: "",
+            music_model: "  configured-music-model  ",
+            tts_model: "",
+            fb_tts_model: "",
+            vision_model: "",
+            fb_vision_model: "",
+        });
 
         let primary = targets.primary.as_ref().expect("primary credentials");
         assert_eq!(primary.music_model, "configured-music-model");

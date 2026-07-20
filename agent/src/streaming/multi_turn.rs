@@ -981,19 +981,19 @@ async fn run_multi_turn_stream_inner(
     }
 
     if need_summary {
-        match run_max_iterations_summary(
-            &session,
-            &streamer,
-            &system_prompt,
-            &pause,
-            &tx,
-            &mut timeline,
-            &mut total_usage,
-            &mut saw_usage,
-            &run_id,
-            budget.used(),
-            budget.max_total(),
-        )
+        match run_max_iterations_summary(crate::streaming::summary::MaxIterationsSummaryArgs {
+            session: &session,
+            streamer: &streamer,
+            system_prompt: &system_prompt,
+            pause: &pause,
+            tx: &tx,
+            timeline: &mut timeline,
+            total_usage: &mut total_usage,
+            saw_usage: &mut saw_usage,
+            run_id: &run_id,
+            used: budget.used(),
+            max_total: budget.max_total(),
+        })
         .await
         {
             SummaryOutcome::Finished => {}

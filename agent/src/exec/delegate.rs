@@ -299,16 +299,16 @@ async fn run_one_child_inner(
         let output = match turn_result {
             TurnResult::Finished(message) => message,
             TurnResult::Continue { system_prompt, .. } => {
-                let (out, _) = run_provider_loop(
-                    &mut agent,
-                    &creds,
-                    &system_prompt,
+                let (out, _) = run_provider_loop(ProviderLoopArgs {
+                    agent: &mut agent,
+                    creds: &creds,
+                    initial_system_prompt: &system_prompt,
                     depth_ctx,
                     role,
-                    task.toolsets.as_deref(),
+                    toolsets: task.toolsets.as_deref(),
                     max_rounds,
-                    &creds.parent_session_id,
-                )
+                    parent_session_id: &creds.parent_session_id,
+                })
                 .await?;
                 out
             }
@@ -431,32 +431,33 @@ pub fn apply_toolsets_filter(registry: &mut tools::ToolRegistry, toolsets: Optio
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn run_provider_loop(
-    agent: &mut AgentLoop,
-    creds: &DelegateRunRequest,
-    initial_system_prompt: &str,
+struct ProviderLoopArgs<'a> {
+    agent: &'a mut AgentLoop,
+    creds: &'a DelegateRunRequest,
+    initial_system_prompt: &'a str,
     depth_ctx: home::SpawnDepthCtx,
     role: DelegateRole,
-    toolsets: Option<&[String]>,
+    toolsets: Option<&'a [String]>,
     max_rounds: usize,
-    parent_session_id: &str,
-) -> anyhow::Result<(String, Usage)> {
+    parent_session_id: &'a str,
+}
+
+async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, Usage)> {
     let providers = ProviderRegistry::new();
-    let targets = effective_chat_targets(creds, &providers);
+    let targets = effective_chat_targets(a.creds, &providers);
     let base_config = ProviderConfig::default();
 
-    let mut system_prompt = initial_system_prompt.to_string();
+    let mut system_prompt = a.initial_system_prompt.to_string();
     let mut last_response = String::new();
     let mut total_usage = Usage::default();
 
-    for _round in 0..max_rounds {
-        agent.reload_tools_and_mcp().await;
-        apply_nested_agent_tool_strips(agent.tool_registry_mut(), depth_ctx, role);
-        apply_toolsets_filter(agent.tool_registry_mut(), toolsets);
+    for _round in 0..a.max_rounds {
+        a.agent.reload_tools_and_mcp().await;
+        apply_nested_agent_tool_strips(a.agent.tool_registry_mut(), a.depth_ctx, a.role);
+        apply_toolsets_filter(a.agent.tool_registry_mut(), a.toolsets);
 
-        let messages = to_provider_messages(&system_prompt, &agent.session_messages);
-        let tools = agent.schemas_for_api();
+        let messages = to_provider_messages(&system_prompt, &a.agent.session_messages);
+        let tools = a.agent.schemas_for_api();
 
         let (mut stream, _meta) = try_stream_completion_with_fallback(
             &targets,
@@ -513,21 +514,23 @@ async fn run_provider_loop(
                     .collect(),
             )
         };
-        agent.record_assistant_message_with_tools(&full_response, tc, None, None)?;
+        a.agent
+            .record_assistant_message_with_tools(&full_response, tc, None, None)?;
 
         if calls.is_empty() {
             return Ok((last_response, total_usage));
         }
 
         for call in calls {
-            let mut result =
-                tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
-                    .unwrap_or_else(|e| format!("工具错误: {e}"));
+            let mut result = tokio::task::block_in_place(|| {
+                a.agent.handle_tool_call(&call.name, &call.arguments)
+            })
+            .unwrap_or_else(|e| format!("工具错误: {e}"));
             if let Some(hitl) = crate::streaming::parse_astro_hitl(&result) {
                 result = match crate::streaming::try_park_parent_hitl(
                     &call.id,
                     hitl,
-                    Some(parent_session_id),
+                    Some(a.parent_session_id),
                 )
                 .await
                 {
@@ -538,14 +541,15 @@ async fn run_provider_loop(
                     }
                 };
             }
-            agent.record_tool_result_with_id(
+            a.agent.record_tool_result_with_id(
                 Some(&call.id),
                 Some(&call.name),
                 &format!("tool={} result={}", call.name, result),
             )?;
         }
 
-        let turn_result = agent
+        let turn_result = a
+            .agent
             .run_turn("", "delegate-tool-followup")
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;

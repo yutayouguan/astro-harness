@@ -27,20 +27,37 @@ pub(crate) enum SummaryOutcome {
 }
 
 /// 预算耗尽后：注入总结提示，再发一轮 **无 tools** 的 completion（对齐 Hermes）。
-#[allow(clippy::too_many_arguments)]
+pub(crate) struct MaxIterationsSummaryArgs<'a> {
+    pub session: &'a Arc<Mutex<AgentLoop>>,
+    pub streamer: &'a ProviderStreamer,
+    pub system_prompt: &'a str,
+    pub pause: &'a Arc<PauseControl>,
+    pub tx: &'a mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    pub timeline: &'a mut crate::timeline::TimelineBuilder,
+    pub total_usage: &'a mut Usage,
+    pub saw_usage: &'a mut bool,
+    pub run_id: &'a str,
+    pub used: usize,
+    pub max_total: usize,
+}
+
 pub(crate) async fn run_max_iterations_summary(
-    session: &Arc<Mutex<AgentLoop>>,
-    streamer: &ProviderStreamer,
-    system_prompt: &str,
-    pause: &Arc<PauseControl>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    timeline: &mut crate::timeline::TimelineBuilder,
-    total_usage: &mut Usage,
-    saw_usage: &mut bool,
-    run_id: &str,
-    used: usize,
-    max_total: usize,
+    a: MaxIterationsSummaryArgs<'_>,
 ) -> SummaryOutcome {
+
+    let MaxIterationsSummaryArgs {
+        session,
+        streamer,
+        system_prompt,
+        pause,
+        tx,
+        timeline,
+        total_usage,
+        saw_usage,
+        run_id,
+        used,
+        max_total,
+    } = a;
     let notice =
         format!("⚠️ 迭代预算已用尽（{used}/{max_total}），正在请求模型总结（不再调用工具）…\n\n");
     if !emit(

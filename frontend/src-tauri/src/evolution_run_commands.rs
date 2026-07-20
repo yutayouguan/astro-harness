@@ -353,17 +353,17 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
             };
             let mut kept: Vec<SkillCandidate> = Vec::new();
             for mut c in passed.into_iter() {
-                if let Some(fr) = fitness_score(
-                    &judge_targets,
-                    &c,
-                    &enabled_now,
-                    &evalset,
-                    cfg.search.max_eval_examples,
-                    &mut reflect_budget,
-                    Some(&mut split_stats),
-                    "fixed",
-                    0,
-                )
+                if let Some(fr) = fitness_score(FitnessScoreArgs {
+                    targets: &judge_targets,
+                    cand: &c,
+                    enabled_skills: &enabled_now,
+                    evalset: &evalset,
+                    max_eval_examples: cfg.search.max_eval_examples,
+                    budget: &mut reflect_budget,
+                    split_stats: Some(&mut split_stats),
+                    eval_sampling: "fixed",
+                    generation: 0,
+                })
                 .await
                 {
                     c.judge_score = Some(fr.score);
@@ -674,24 +674,25 @@ async fn score_grounded_examples(
 ///
 /// 返回结构化 `FitnessResult`（对标 GEPA 的 `(score, side_info)`）。
 /// `None` 表示预算耗尽或 judge 失败（fail-closed）。
-#[allow(clippy::too_many_arguments)]
-async fn fitness_score(
-    targets: &AuxiliaryTargets,
-    cand: &SkillCandidate,
-    enabled_skills: &[(String, String)],
-    evalset: &[EvalExample],
+struct FitnessScoreArgs<'a> {
+    targets: &'a AuxiliaryTargets,
+    cand: &'a SkillCandidate,
+    enabled_skills: &'a [(String, String)],
+    evalset: &'a [EvalExample],
     max_eval_examples: usize,
-    budget: &mut SearchBudget,
-    split_stats: Option<&mut SearchSplitStats>,
-    eval_sampling: &str,
+    budget: &'a mut SearchBudget,
+    split_stats: Option<&'a mut SearchSplitStats>,
+    eval_sampling: &'a str,
     generation: u32,
-) -> Option<FitnessResult> {
-    let all_matched = examples_for_skill(evalset, &cand.skill_id);
+}
+
+async fn fitness_score(a: FitnessScoreArgs<'_>) -> Option<FitnessResult> {
+    let all_matched = examples_for_skill(a.evalset, &a.cand.skill_id);
     if all_matched.is_empty() {
-        if !budget.try_reserve_one() {
+        if !a.budget.try_reserve_one() {
             return None;
         }
-        let (s, r) = judge_candidate(targets, cand, enabled_skills).await?;
+        let (s, r) = judge_candidate(a.targets, a.cand, a.enabled_skills).await?;
         return Some(FitnessResult {
             score: s,
             reason: r,
@@ -706,20 +707,20 @@ async fn fitness_score(
     }
 
     let split = split_eval_examples(&all_matched, default_holdout_percent());
-    if let Some(stats) = split_stats {
+    if let Some(stats) = a.split_stats {
         stats.holdout_enabled |= split.holdout_enabled;
         stats.optimize_examples = stats.optimize_examples.max(split.optimize.len());
         stats.holdout_examples = stats.holdout_examples.max(split.holdout.len());
     }
 
     let (verdict_scores, judgements) = score_grounded_examples(
-        targets,
-        cand,
+        a.targets,
+        a.cand,
         &split.optimize,
-        max_eval_examples,
-        budget,
-        eval_sampling,
-        generation,
+        a.max_eval_examples,
+        a.budget,
+        a.eval_sampling,
+        a.generation,
     )
     .await;
 
@@ -960,17 +961,17 @@ pub async fn run_evolution_search(
                     }
                 };
 
-                if let Some(fr) = fitness_score(
-                    &judge_targets,
-                    &c,
-                    &enabled_skills,
-                    &evalset,
+                if let Some(fr) = fitness_score(FitnessScoreArgs {
+                    targets: &judge_targets,
+                    cand: &c,
+                    enabled_skills: &enabled_skills,
+                    evalset: &evalset,
                     max_eval_examples,
-                    &mut budget,
-                    Some(&mut split_stats),
-                    &eval_sampling,
-                    gen,
-                )
+                    budget: &mut budget,
+                    split_stats: Some(&mut split_stats),
+                    eval_sampling: &eval_sampling,
+                    generation: gen,
+                })
                 .await
                 {
                     if split_stats.holdout_enabled {
@@ -1030,17 +1031,17 @@ pub async fn run_evolution_search(
                                     continue;
                                 }
                             };
-                            if let Some(fr) = fitness_score(
-                                &judge_targets,
-                                &child,
-                                &enabled_skills,
-                                &evalset,
+                            if let Some(fr) = fitness_score(FitnessScoreArgs {
+                                targets: &judge_targets,
+                                cand: &child,
+                                enabled_skills: &enabled_skills,
+                                evalset: &evalset,
                                 max_eval_examples,
-                                &mut budget,
-                                Some(&mut split_stats),
-                                &eval_sampling,
-                                gen,
-                            )
+                                budget: &mut budget,
+                                split_stats: Some(&mut split_stats),
+                                eval_sampling: &eval_sampling,
+                                generation: gen,
+                            })
                             .await
                             {
                                 child.judge_score = Some(fr.score);
