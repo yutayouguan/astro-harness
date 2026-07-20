@@ -11,19 +11,20 @@ use tauri::{AppHandle, Emitter, Manager};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use evolution::{
     aggregate_critiques, apply_patch_unique, approve_proposal, approve_proposal_checked,
     build_auto_status, build_crossover_prompt, build_eval_judge_prompt, build_judge_user_prompt,
     build_mutation_prompt, build_reflection_user_prompt, candidate_new_markdown, check_candidate,
-    effective_candidate_size, examples_for_skill, list_examples, list_proposals, load_auto_state,
-    mark_auto_run, pareto_front, parse_candidates, parse_eval_judgement, parse_judge_output,
-    parse_variants, reject_proposal, save_auto_state, save_proposals,
-    select_front_capped, select_population, weighted_eval_score, AutoGate, AutoStatus,
-    CandidateKind, EvalExample, EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget,
-    SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
-    JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    default_holdout_percent, effective_candidate_size, examples_for_skill, list_examples,
+    list_proposals, load_auto_state, mark_auto_run, pareto_front, parse_candidates,
+    parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
+    save_auto_state, save_proposals, select_front_capped, select_population, split_eval_examples,
+    weighted_eval_score, AutoGate, AutoStatus, CandidateKind, EvalExample, EvalJudgement,
+    ReflectionInput, ScoredVariant, SearchBudget, SearchRunMeta, SkillCandidate, Verdict,
+    CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
+    REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
@@ -95,6 +96,9 @@ pub struct EvolutionSearchReport {
     pub variants_evaluated: usize,
     pub pareto_kept: usize,
     pub proposals: Vec<EvolutionProposalDto>,
+    pub budget_used: u32,
+    pub holdout_enabled: bool,
+    pub termination: String,
     pub error: Option<String>,
 }
 
@@ -283,7 +287,7 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
         }
     }
 
-    // judge 评审（min_judge_score <= 0 时关闭）；judge 调用失败对该候选 fail-open 保留。
+    // judge 评审（min_judge_score <= 0 时关闭）；judge / 评分失败对该候选 fail-closed。
     let mut judged_out = 0usize;
     if cfg.gates.min_judge_score > 0.0 && !passed.is_empty() {
         if let Ok(judge_targets) =
@@ -291,12 +295,24 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
         {
             let enabled_now = skills::list_enabled_for_prompt();
             let evalset = list_examples(&base);
-            // reflect 模式不限预算（max_llm_calls 仅约束 search）
             let mut reflect_budget = SearchBudget::new(0);
+            let mut split_stats = SearchSplitStats {
+                holdout_enabled: false,
+                optimize_examples: 0,
+                holdout_examples: 0,
+            };
             let mut kept: Vec<SkillCandidate> = Vec::new();
             for mut c in passed.into_iter() {
-                if let Some((score, reason, _)) =
-                    fitness_score(&judge_targets, &c, &enabled_now, &evalset, cfg.search.max_eval_examples, &mut reflect_budget).await
+                if let Some((score, reason, _)) = fitness_score(
+                    &judge_targets,
+                    &c,
+                    &enabled_now,
+                    &evalset,
+                    cfg.search.max_eval_examples,
+                    &mut reflect_budget,
+                    Some(&mut split_stats),
+                )
+                .await
                 {
                     c.judge_score = Some(score);
                     c.judge_reason = Some(reason);
@@ -306,6 +322,9 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
                         judged_out += 1;
                         tracing::info!(skill = %c.skill_id, score, "候选被适应度评分拒绝");
                     }
+                } else {
+                    judged_out += 1;
+                    tracing::info!(skill = %c.skill_id, "候选评分失败或未评分，丢弃");
                 }
             }
             passed = kept;
@@ -353,6 +372,27 @@ pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String>
 fn auto_inflight() -> &'static AtomicBool {
     static FLAG: OnceLock<AtomicBool> = OnceLock::new();
     FLAG.get_or_init(|| AtomicBool::new(false))
+}
+
+fn search_cancel_flag() -> &'static AtomicBool {
+    static FLAG: OnceLock<AtomicBool> = OnceLock::new();
+    FLAG.get_or_init(|| AtomicBool::new(false))
+}
+
+/// 请求取消进行中的遗传搜索（best-effort，下轮循环生效）。
+#[tauri::command]
+pub fn cancel_evolution_search() {
+    search_cancel_flag().store(true, Ordering::SeqCst);
+}
+
+fn search_cancelled() -> bool {
+    search_cancel_flag().load(Ordering::SeqCst)
+}
+
+struct SearchSplitStats {
+    holdout_enabled: bool,
+    optimize_examples: usize,
+    holdout_examples: usize,
 }
 
 /// 自动触发结果（含跳过原因；不抛错以免打断 Chat Done）。
@@ -487,51 +527,32 @@ pub fn spawn_maybe_auto_evolution(app: AppHandle) {
     });
 }
 
-/// 用 judge 给单个候选打分：失败回退中性分 0.5。
+/// 用 judge 给单个候选打分；失败返回 None（fail-closed）。
 async fn judge_candidate(
     targets: &AuxiliaryTargets,
     cand: &SkillCandidate,
     enabled_skills: &[(String, String)],
-) -> (f32, String) {
+) -> Option<(f32, String)> {
     let user = build_judge_user_prompt(cand, enabled_skills);
-    match reflect_over_targets(targets, JUDGE_SYSTEM_PROMPT, &user).await {
-        Ok(raw) => match parse_judge_output(&raw) {
-            Ok(v) => (v.score, v.reason),
-            Err(_) => (0.5, "judge 解析失败（中性分）".into()),
-        },
-        Err(_) => (0.5, "judge 调用失败（中性分）".into()),
-    }
+    let raw = reflect_over_targets(targets, JUDGE_SYSTEM_PROMPT, &user).await.ok()?;
+    let v = parse_judge_output(&raw).ok()?;
+    Some((v.score, v.reason))
 }
 
-/// 客观适应度：若候选技能有匹配评测例子，则对每个例子做 grounded 评分后
-/// 以 Fail/Pass 加权均值聚合（Fail 权重 2×，修复失败比维持通过率更有价值）；
-/// 否则回退泛化 judge。
-///
-/// 返回 `(score, reason, judgements)` — judgements 收集结构化 critique 供后续聚合。
-/// 返回 `None` 表示预算耗尽且无任何分数——该候选不应进入 Pareto front。
-async fn fitness_score(
+async fn score_grounded_examples(
     targets: &AuxiliaryTargets,
     cand: &SkillCandidate,
-    enabled_skills: &[(String, String)],
-    evalset: &[EvalExample],
+    examples: &[&EvalExample],
     max_eval_examples: usize,
     budget: &mut SearchBudget,
-) -> Option<(f32, String, Vec<EvalJudgement>)> {
-    let all_matched = examples_for_skill(evalset, &cand.skill_id);
-    if all_matched.is_empty() {
-        if !budget.try_reserve_one() {
-            return None;
-        }
-        let (s, r) = judge_candidate(targets, cand, enabled_skills).await;
-        return Some((s, r, Vec::new()));
-    }
-    let capped: Vec<&&EvalExample> = if max_eval_examples > 0 && all_matched.len() > max_eval_examples {
-        let mut sorted = all_matched.iter().collect::<Vec<_>>();
+) -> (Vec<(Verdict, f32)>, Vec<EvalJudgement>) {
+    let capped: Vec<&&EvalExample> = if max_eval_examples > 0 && examples.len() > max_eval_examples {
+        let mut sorted = examples.iter().collect::<Vec<_>>();
         sorted.sort_by_key(|e| if e.verdict == Verdict::Fail { 0u8 } else { 1u8 });
         sorted.truncate(max_eval_examples);
         sorted
     } else {
-        all_matched.iter().collect()
+        examples.iter().collect()
     };
 
     let mut verdict_scores: Vec<(Verdict, f32)> = Vec::new();
@@ -548,30 +569,89 @@ async fn fitness_score(
             }
         }
     }
+    (verdict_scores, judgements)
+}
+
+/// 客观适应度：匹配评测集时用 optimize 分区 grounded 评分；否则泛化 judge。
+///
+/// 返回 `None` 表示预算耗尽且无任何分数，或 judge 失败（fail-closed）。
+async fn fitness_score(
+    targets: &AuxiliaryTargets,
+    cand: &SkillCandidate,
+    enabled_skills: &[(String, String)],
+    evalset: &[EvalExample],
+    max_eval_examples: usize,
+    budget: &mut SearchBudget,
+    split_stats: Option<&mut SearchSplitStats>,
+) -> Option<(f32, String, Vec<EvalJudgement>)> {
+    let all_matched = examples_for_skill(evalset, &cand.skill_id);
+    if all_matched.is_empty() {
+        if !budget.try_reserve_one() {
+            return None;
+        }
+        let (s, r) = judge_candidate(targets, cand, enabled_skills).await?;
+        return Some((s, r, Vec::new()));
+    }
+
+    let split = split_eval_examples(&all_matched, default_holdout_percent());
+    if let Some(stats) = split_stats {
+        stats.holdout_enabled |= split.holdout_enabled;
+        stats.optimize_examples = stats.optimize_examples.max(split.optimize.len());
+        stats.holdout_examples = stats.holdout_examples.max(split.holdout.len());
+    }
+
+    let (verdict_scores, judgements) = score_grounded_examples(
+        targets,
+        cand,
+        &split.optimize,
+        max_eval_examples,
+        budget,
+    )
+    .await;
+
     match weighted_eval_score(&verdict_scores) {
         Some(avg) => {
             let n = verdict_scores.len();
-            let fail_n = verdict_scores.iter().filter(|(v, _)| *v == Verdict::Fail).count();
-            let reason = if fail_n > 0 {
+            let fail_n = verdict_scores
+                .iter()
+                .filter(|(v, _)| *v == Verdict::Fail)
+                .count();
+            let reason = if split.holdout_enabled {
+                if fail_n > 0 {
+                    format!("optimize 评分（{n} 例，{fail_n} Fail 双权重；holdout 待最终验证）")
+                } else {
+                    format!("optimize 评分（{n} 例；holdout 待最终验证）")
+                }
+            } else if fail_n > 0 {
                 format!("grounded 评分（{n} 例，其中 {fail_n} 例 Fail 双权重）")
             } else {
                 format!("grounded 评分（{n} 例）")
             };
             Some((avg, reason, judgements))
         }
-        None => {
-            if !budget.try_reserve_one() {
-                return None;
-            }
-            let (s, r) = judge_candidate(targets, cand, enabled_skills).await;
-            Some((s, r, judgements))
-        }
+        None => None,
     }
+}
+
+async fn holdout_fitness_score(
+    targets: &AuxiliaryTargets,
+    cand: &SkillCandidate,
+    holdout: &[&EvalExample],
+    max_eval_examples: usize,
+    budget: &mut SearchBudget,
+) -> Option<f32> {
+    if holdout.is_empty() {
+        return None;
+    }
+    let (verdict_scores, _) =
+        score_grounded_examples(targets, cand, holdout, max_eval_examples, budget).await;
+    weighted_eval_score(&verdict_scores)
 }
 
 /// GEPA-lite 遗传搜索：种子 → 每目标多代变异 + judge 打分 + Pareto 选择 → 待审提案。
 #[tauri::command]
 pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchReport, String> {
+    search_cancel_flag().store(false, Ordering::SeqCst);
     let base = default_memory_dir();
     let cfg = memory::load_evolution_config(&base);
     if !cfg.enabled {
@@ -627,10 +707,22 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
     let mut search_gated_out = 0usize;
     let mut search_judged_out = 0usize;
     let mut final_props: Vec<SkillCandidate> = Vec::new();
+    let mut split_stats = SearchSplitStats {
+        holdout_enabled: false,
+        optimize_examples: 0,
+        holdout_examples: 0,
+    };
+    let mut holdout_ids_by_skill: HashMap<String, Vec<String>> = HashMap::new();
+    let mut termination = "completed".to_string();
 
     let pop_size = cfg.search.population_size.max(1) as usize;
+    let no_seeds = seeds.is_empty();
 
     'seed: for seed in seeds {
+        if search_cancelled() {
+            termination = "cancelled".into();
+            break;
+        }
         let mut population: Vec<ScoredVariant> = vec![ScoredVariant::new(seed.clone(), 0.0)];
         let mut critiques: Vec<String> = Vec::new();
 
@@ -642,12 +734,17 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         let mut strengths: Vec<String> = Vec::new();
 
         for gen in 0..generations {
+            if search_cancelled() {
+                termination = "cancelled".into();
+                break 'seed;
+            }
             if !budget.try_reserve_one() {
                 tracing::info!(
                     skill = %seed.skill_id,
                     used = budget.used(),
                     "LLM 预算耗尽，停止搜索"
                 );
+                termination = "budget_exhausted".into();
                 break 'seed;
             }
 
@@ -681,16 +778,37 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                     }
                 };
 
-                if let Some((score, reason, js)) =
-                    fitness_score(&judge_targets, &c, &enabled_skills, &evalset, max_eval_examples, &mut budget).await
+                if let Some((score, reason, js)) = fitness_score(
+                    &judge_targets,
+                    &c,
+                    &enabled_skills,
+                    &evalset,
+                    max_eval_examples,
+                    &mut budget,
+                    Some(&mut split_stats),
+                )
+                .await
                 {
+                    if split_stats.holdout_enabled {
+                        let split = split_eval_examples(
+                            &examples_for_skill(&evalset, &c.skill_id),
+                            default_holdout_percent(),
+                        );
+                        if split.holdout_enabled {
+                            holdout_ids_by_skill
+                                .entry(c.skill_id.clone())
+                                .or_insert_with(|| {
+                                    split.holdout.iter().map(|e| e.id.clone()).collect()
+                                });
+                        }
+                    }
                     c.judge_score = Some(score);
                     c.judge_reason = Some(reason);
                     gen_judgements.extend(js);
                     variants_evaluated += 1;
                     scored.push(ScoredVariant::with_size(c, score, eff_size));
                 } else {
-                    tracing::debug!(skill = %c.skill_id, "预算不足，跳过该候选评分");
+                    tracing::debug!(skill = %c.skill_id, "预算不足或评分失败，跳过该候选");
                 }
             }
 
@@ -710,8 +828,16 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                                     continue;
                                 }
                             };
-                            if let Some((score, reason, js)) =
-                                fitness_score(&judge_targets, &child, &enabled_skills, &evalset, max_eval_examples, &mut budget).await
+                            if let Some((score, reason, js)) = fitness_score(
+                                &judge_targets,
+                                &child,
+                                &enabled_skills,
+                                &evalset,
+                                max_eval_examples,
+                                &mut budget,
+                                Some(&mut split_stats),
+                            )
+                            .await
                             {
                                 child.judge_score = Some(score);
                                 child.judge_reason = Some(format!("[交叉] {reason}"));
@@ -742,9 +868,30 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                 .collect();
         }
 
-        // 从最终种群中取前 2 个，依次过门禁
-        for v in select_front_capped(population, 2) {
+        // 从最终种群中取前 2 个，holdout 复验后过门禁
+        for mut v in select_front_capped(population, 2) {
             pareto_kept += 1;
+            if let Some(ids) = holdout_ids_by_skill.get(&v.candidate.skill_id) {
+                let holdout_refs: Vec<&EvalExample> = evalset
+                    .iter()
+                    .filter(|e| ids.contains(&e.id))
+                    .collect();
+                if let Some(hs) = holdout_fitness_score(
+                    &judge_targets,
+                    &v.candidate,
+                    &holdout_refs,
+                    max_eval_examples,
+                    &mut budget,
+                )
+                .await
+                {
+                    v.candidate.judge_score = Some(hs);
+                    v.candidate.judge_reason = Some(format!(
+                        "holdout 验证 {hs:.2}（optimize {:.2}）",
+                        v.score
+                    ));
+                }
+            }
             if !check_candidate(&v.candidate, &cfg.gates).passed {
                 search_gated_out += 1;
                 continue;
@@ -766,6 +913,10 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         }
     }
 
+    if no_seeds && termination == "completed" {
+        termination = "no_candidates".into();
+    }
+
     save_proposals(&base, &final_props).map_err(|e| e.to_string())?;
     let proposals: Vec<EvolutionProposalDto> = final_props
         .into_iter()
@@ -781,13 +932,33 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         proposals = proposals.len(),
         "GEPA-lite 搜索完成"
     );
-    evolution::record_run(
+    evolution::record_run_meta(
         &base,
         "search",
         variants_evaluated,
         search_gated_out,
         search_judged_out,
         proposals.len(),
+        Some(SearchRunMeta {
+            generations,
+            variants,
+            population_size: cfg.search.population_size,
+            crossover: cfg.search.crossover,
+            budget_limit: cfg.search.max_llm_calls,
+            budget_used: budget.used(),
+            optimize_examples: split_stats.optimize_examples,
+            holdout_examples: split_stats.holdout_examples,
+            holdout_enabled: split_stats.holdout_enabled,
+            reflection_model: format!(
+                "{} / {}",
+                refl_targets.preferred.provider.id, refl_targets.preferred.model
+            ),
+            judge_model: format!(
+                "{} / {}",
+                judge_targets.preferred.provider.id, judge_targets.preferred.model
+            ),
+            termination: termination.clone(),
+        }),
     );
     let _ = app.emit(
         "evolution-updated",
@@ -803,6 +974,9 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         variants_evaluated,
         pareto_kept,
         proposals,
+        budget_used: budget.used(),
+        holdout_enabled: split_stats.holdout_enabled,
+        termination,
         error: None,
     })
 }

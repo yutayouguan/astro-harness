@@ -40,6 +40,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type {
   EvolutionRouteDto,
   EvolutionRouteId,
+  InstalledSkill,
   ModelInfo,
   ProviderDto,
   ProviderModelsResult,
@@ -123,12 +124,14 @@ export default function EvolutionModelsPanel({ active }: Props) {
   } = useEvolutionSettings(active);
   const {
     running,
+    runMode,
     error: evoError,
     lastReport,
     lastSearch,
     proposals,
     run: runEvolution,
     runSearch,
+    cancelSearch,
     approve,
     approveToBranch,
     reject,
@@ -169,6 +172,8 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [minDecDraft, setMinDecDraft] = useState("");
   const [maxRunsDraft, setMaxRunsDraft] = useState("");
   const [section, setSection] = useState<EvoSection>("setup");
+  const [expandedProposals, setExpandedProposals] = useState<Set<string>>(() => new Set());
+  const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
 
   const submitEval = () => {
     if (!evalTask.trim()) return;
@@ -194,6 +199,23 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [loadingModelsFor, setLoadingModelsFor] = useState<string | null>(null);
   const [maxBytesDraft, setMaxBytesDraft] = useState("");
   const [judgeDraft, setJudgeDraft] = useState("");
+
+  useEffect(() => {
+    if (!active || section !== "lab") return;
+    void invoke<InstalledSkill[]>("list_installed_skills", { agentId: null, scope: null })
+      .then(setInstalledSkills)
+      .catch(() => setInstalledSkills([]));
+  }, [active, section]);
+
+  const evalSkillOptions = useMemo(
+    () => [
+      { value: "", label: t("evo.evalSkillGeneric") },
+      ...installedSkills
+        .filter((s) => s.enabled)
+        .map((s) => ({ value: s.id, label: s.name ? `${s.name} · ${s.id}` : s.id })),
+    ],
+    [installedSkills, t],
+  );
 
   const enabledProviders = useMemo(
     () => (providersState?.providers ?? []).filter((p) => p.enabled),
@@ -873,12 +895,27 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 title={t("evo.searchRunHint")}
               >
                 <Dna size={15} />
-                {running ? t("evo.running") : t("evo.searchRun")}
+                {running && runMode === "search" ? t("evo.runningSearch") : t("evo.searchRun")}
               </button>
+              {running && runMode === "search" && (
+                <button
+                  type="button"
+                  className="aux-action aux-action-ghost"
+                  onClick={() => void cancelSearch()}
+                >
+                  {t("evo.cancelSearch")}
+                </button>
+              )}
             </div>
           </div>
 
-            <div className="evo-run-panel">
+          {running && (
+            <p className="aux-muted evo-running-banner" role="status">
+              {runMode === "search" ? t("evo.runningSearchHint") : t("evo.runningReflectHint")}
+            </p>
+          )}
+
+          <div className="evo-run-panel">
             <div className="evo-search-cfg evo-cfg-grid">
               <label>
                 {t("evo.generations")}
@@ -970,6 +1007,10 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 .replace("{evaluated}", String(lastSearch.variantsEvaluated))
                 .replace("{kept}", String(lastSearch.paretoKept))
                 .replace("{proposals}", String(lastSearch.proposals.length))}
+              {lastSearch.budgetUsed > 0
+                ? ` · LLM ${lastSearch.budgetUsed}${lastSearch.termination ? ` · ${lastSearch.termination}` : ""}`
+                : ""}
+              {lastSearch.holdoutEnabled ? ` · ${t("evo.holdoutUsed")}` : ""}
             </p>
           )}
 
@@ -1000,7 +1041,24 @@ export default function EvolutionModelsPanel({ active }: Props) {
             </div>
           ) : (
             <div className="aux-task-list evo-proposal-list">
-              {proposals.map((p) => (
+              {proposals.map((p) => {
+                const expanded = expandedProposals.has(p.id);
+                const newContent = p.content ?? "";
+                const oldS = p.oldString ?? "";
+                const newS = p.newString ?? "";
+                const truncated =
+                  p.kind === "new_skill"
+                    ? newContent.length > 1200
+                    : oldS.length > 400 || newS.length > 400;
+                const diffText =
+                  p.kind === "new_skill"
+                    ? expanded || !truncated
+                      ? newContent
+                      : `${newContent.slice(0, 1200)}…`
+                    : expanded || !truncated
+                      ? `- ${oldS}\n+ ${newS}`
+                      : `- ${oldS.slice(0, 400)}…\n+ ${newS.slice(0, 400)}…`;
+                return (
                 <article className="aux-task-row evo-proposal-card" key={p.id}>
                   <div className="aux-task-icon">
                     {p.kind === "new_skill" ? <FilePlus2 size={18} /> : <Pencil size={18} />}
@@ -1032,11 +1090,23 @@ export default function EvolutionModelsPanel({ active }: Props) {
                         <span />
                       </div>
                     )}
-                    <pre className="evo-proposal-diff">
-                      {p.kind === "new_skill"
-                        ? (p.content ?? "").slice(0, 1200)
-                        : `- ${(p.oldString ?? "").slice(0, 400)}\n+ ${(p.newString ?? "").slice(0, 400)}`}
-                    </pre>
+                    <pre className="evo-proposal-diff">{diffText}</pre>
+                    {truncated && (
+                      <button
+                        type="button"
+                        className="aux-action aux-action-ghost evo-diff-toggle"
+                        onClick={() =>
+                          setExpandedProposals((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(p.id)) next.delete(p.id);
+                            else next.add(p.id);
+                            return next;
+                          })
+                        }
+                      >
+                        {expanded ? t("evo.collapseDiff") : t("evo.expandDiff")}
+                      </button>
+                    )}
                   </div>
                   <div className="aux-task-actions evo-proposal-actions">
                     <button
@@ -1067,7 +1137,8 @@ export default function EvolutionModelsPanel({ active }: Props) {
                     </button>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -1159,11 +1230,23 @@ export default function EvolutionModelsPanel({ active }: Props) {
             <div className="aux-task-list evo-history-list">
               {history.recent.slice(0, 12).map((ev, i) => {
                 const type = String(ev.type ?? "");
+                const meta = ev.search_meta as Record<string, unknown> | undefined;
                 const line =
                   type === "run"
-                    ? `run · ${String(ev.mode ?? "")} · gen ${Number(ev.generated ?? 0)} → 提案 ${Number(
-                        ev.proposals ?? 0,
-                      )}`
+                    ? meta && String(ev.mode ?? "") === "search"
+                      ? t("evo.historySearchLine")
+                          .replace("{mode}", String(ev.mode ?? ""))
+                          .replace("{proposals}", String(ev.proposals ?? 0))
+                          .replace("{budget}", String(meta.budget_used ?? "?"))
+                          .replace("{limit}", String(meta.budget_limit ?? "?"))
+                          .replace("{term}", String(meta.termination ?? ""))
+                          .replace(
+                            "{holdout}",
+                            meta.holdout_enabled ? t("evo.holdoutOn") : t("evo.holdoutOff"),
+                          )
+                      : `run · ${String(ev.mode ?? "")} · gen ${Number(ev.generated ?? 0)} → 提案 ${Number(
+                          ev.proposals ?? 0,
+                        )}`
                     : `${String(ev.outcome ?? "")} · ${String(ev.skill_id ?? "")}${
                         ev.score != null ? ` · ${Number(ev.score).toFixed(2)}` : ""
                       }`;
@@ -1220,11 +1303,11 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 value={evalTask}
                 onChange={(e) => setEvalTask(e.target.value)}
               />
-              <input
-                className="evo-eval-input"
-                placeholder={t("evo.evalSkillPlaceholder")}
+              <SelectMenu
                 value={evalSkill}
-                onChange={(e) => setEvalSkill(e.target.value)}
+                options={evalSkillOptions}
+                onChange={setEvalSkill}
+                aria-label={t("evo.evalSkillPlaceholder")}
               />
               <textarea
                 className="evo-eval-input evo-eval-textarea"

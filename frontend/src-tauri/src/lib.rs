@@ -427,6 +427,7 @@ pub fn run() {
             evolution_commands::set_evolution_auto,
             evolution_run_commands::run_evolution,
             evolution_run_commands::run_evolution_search,
+            evolution_run_commands::cancel_evolution_search,
             evolution_run_commands::list_evolution_proposals,
             evolution_run_commands::approve_evolution_proposal,
             evolution_run_commands::approve_evolution_proposal_to_branch,

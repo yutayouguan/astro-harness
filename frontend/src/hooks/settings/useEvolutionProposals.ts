@@ -9,12 +9,14 @@ import type {
 type UseEvolutionProposals = {
   loading: boolean;
   running: boolean;
+  runMode: "reflect" | "search" | null;
   error: string | null;
   lastReport: EvolutionRunReport | null;
   lastSearch: EvolutionSearchReport | null;
   proposals: EvolutionProposalDto[];
   run(): Promise<void>;
   runSearch(): Promise<void>;
+  cancelSearch(): Promise<void>;
   approve(id: string): Promise<void>;
   approveToBranch(id: string): Promise<string | null>;
   reject(id: string): Promise<void>;
@@ -28,6 +30,7 @@ function errorMessage(err: unknown): string {
 export function useEvolutionProposals(active = true): UseEvolutionProposals {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
+  const [runMode, setRunMode] = useState<"reflect" | "search" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<EvolutionRunReport | null>(null);
   const [lastSearch, setLastSearch] = useState<EvolutionSearchReport | null>(null);
@@ -53,6 +56,7 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
 
   const run = useCallback(async () => {
     setRunning(true);
+    setRunMode("reflect");
     setError(null);
     try {
       const report = await invoke<EvolutionRunReport>("run_evolution");
@@ -62,11 +66,13 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
       setError(errorMessage(err));
     } finally {
       setRunning(false);
+      setRunMode(null);
     }
   }, [reload]);
 
   const runSearch = useCallback(async () => {
     setRunning(true);
+    setRunMode("search");
     setError(null);
     try {
       const report = await invoke<EvolutionSearchReport>("run_evolution_search");
@@ -76,8 +82,17 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
       setError(errorMessage(err));
     } finally {
       setRunning(false);
+      setRunMode(null);
     }
   }, [reload]);
+
+  const cancelSearch = useCallback(async () => {
+    try {
+      await invoke("cancel_evolution_search");
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, []);
 
   const approve = useCallback(async (id: string) => {
     setError(null);
@@ -114,12 +129,14 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
   return {
     loading,
     running,
+    runMode,
     error,
     lastReport,
     lastSearch,
     proposals,
     run,
     runSearch,
+    cancelSearch,
     approve,
     approveToBranch,
     reject,

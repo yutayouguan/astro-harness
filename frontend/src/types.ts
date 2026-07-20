@@ -360,6 +360,9 @@ export type EvolutionSearchReport = {
   variantsEvaluated: number;
   paretoKept: number;
   proposals: EvolutionProposalDto[];
+  budgetUsed: number;
+  holdoutEnabled: boolean;
+  termination: string;
   error: string | null;
 };
 

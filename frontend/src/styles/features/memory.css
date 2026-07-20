@@ -1002,8 +1002,23 @@ html[data-theme="dark"] .evo-stat {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 220px;
+  max-height: 420px;
   overflow: auto;
+}
+
+.evo-diff-toggle {
+  margin-top: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+
+.evo-running-banner {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--tone) 24%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft) 35%, transparent);
 }
 
 .aux-task-list {

@@ -146,8 +146,8 @@ evolution:
 1. reflection 产种子，按 `skill_id`+`kind` 去重取前 3
 2. 每目标多代变异（`generations` × `variants`）
 3. 可选交叉：当前 Pareto 前沿 top-2 融合为子代
-4. 适应度：`judge` 分↑ / 体积↓；有匹配评测集例子时用 grounded 客观评分
-5. `pareto_front` + `select_front_capped`（每目标取前 2）→ 门禁 → 待审
+4. 适应度：`judge` 分↑ / 体积↓；有匹配评测集时用 **optimize 分区** grounded 评分，最终候选可选 **holdout 复验**
+5. `pareto_front` + `select_front_capped` → 门禁 → 待审；`history.jsonl` 记录 `search_meta`（预算、holdout、路由、终止原因）
 
 成本粗估：≈ `目标数 × 代数 × 变体数` 次模型调用（交叉与 judge 另计），并受 `max_llm_calls` 硬顶（默认 40）。
 
@@ -266,7 +266,8 @@ Agent skills 写入目标由 `skills` crate 的 agent skills 目录决定（通�
 | 命令 | 用途 |
 |------|------|
 | `run_evolution` | 单轮反思 |
-| `run_evolution_search` | GEPA-lite 搜索 |
+| `run_evolution_search` | GEPA-lite 搜索（holdout 验证；history 写 search_meta） |
+| `cancel_evolution_search` | 取消进行中的遗传搜索 |
 | `list_evolution_proposals` | 待审列表 |
 | `approve_evolution_proposal` | 批准写入 |
 | `approve_evolution_proposal_to_branch` | 批准到 git 分支 |

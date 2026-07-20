@@ -131,6 +131,84 @@ pub fn examples_for_skill<'a>(all: &'a [EvalExample], skill_id: &str) -> Vec<&'a
         .collect()
 }
 
+/// optimize / holdout 划分结果（稳定哈希，按 example id 分区）。
+#[derive(Debug, Clone)]
+pub struct EvalSplit<'a> {
+    pub optimize: Vec<&'a EvalExample>,
+    pub holdout: Vec<&'a EvalExample>,
+    pub holdout_enabled: bool,
+}
+
+const MIN_HOLDOUT_TOTAL: usize = 5;
+const DEFAULT_HOLDOUT_PERCENT: u8 = 20;
+
+fn stable_bucket(id: &str) -> u8 {
+    (id.bytes()
+        .fold(0u64, |h, b| h.wrapping_mul(31).wrapping_add(b as u64))
+        % 100) as u8
+}
+
+/// 将匹配例子划分为 optimize（搜索适应度）与 holdout（最终验证）。
+///
+/// - 少于 5 条：全部 optimize，holdout 关闭；
+/// - 按 example id 稳定哈希分区（增删其它例子不改变已有 id 的分区）；
+/// - holdout 尽量同时含 Pass/Fail，避免单一 verdict。
+pub fn split_eval_examples<'a>(
+    examples: &[&'a EvalExample],
+    holdout_percent: u8,
+) -> EvalSplit<'a> {
+    if examples.len() < MIN_HOLDOUT_TOTAL {
+        return EvalSplit {
+            optimize: examples.to_vec(),
+            holdout: Vec::new(),
+            holdout_enabled: false,
+        };
+    }
+    let pct = holdout_percent.clamp(5, 40);
+    let mut optimize: Vec<&'a EvalExample> = Vec::new();
+    let mut holdout: Vec<&'a EvalExample> = Vec::new();
+    for ex in examples {
+        if stable_bucket(&ex.id) < pct {
+            holdout.push(*ex);
+        } else {
+            optimize.push(*ex);
+        }
+    }
+    if optimize.is_empty() || holdout.is_empty() {
+        return EvalSplit {
+            optimize: examples.to_vec(),
+            holdout: Vec::new(),
+            holdout_enabled: false,
+        };
+    }
+    if !holdout.iter().any(|e| e.verdict == Verdict::Fail) {
+        if let Some(i) = optimize.iter().position(|e| e.verdict == Verdict::Fail) {
+            holdout.push(optimize.remove(i));
+        }
+    }
+    if !holdout.iter().any(|e| e.verdict == Verdict::Pass) {
+        if let Some(i) = optimize.iter().position(|e| e.verdict == Verdict::Pass) {
+            holdout.push(optimize.remove(i));
+        }
+    }
+    if optimize.is_empty() || holdout.is_empty() {
+        return EvalSplit {
+            optimize: examples.to_vec(),
+            holdout: Vec::new(),
+            holdout_enabled: false,
+        };
+    }
+    EvalSplit {
+        optimize,
+        holdout,
+        holdout_enabled: true,
+    }
+}
+
+pub fn default_holdout_percent() -> u8 {
+    DEFAULT_HOLDOUT_PERCENT
+}
+
 /// eval judge 的 system 指令：针对具体 task+expectations 评分，输出结构化 JSON。
 pub const EVAL_JUDGE_SYSTEM_PROMPT: &str = r#"你是技能评测器。给定一个技能内容、一个任务与该任务的期望要点，判断「若用该技能执行此任务，能在多大程度上满足期望」。只输出 JSON（不要 markdown 围栏）：
 {"score":0.0,"satisfied":["已满足的要点"],"unmet":["未满足的要点"],"reason":"简述"}
@@ -289,6 +367,62 @@ mod tests {
         let left = list_examples(dir.path());
         assert_eq!(left.len(), 1);
         assert_eq!(left[0].id, b.id);
+    }
+
+    #[test]
+    fn split_is_stable_for_same_ids() {
+        let mk = |id: &str, v: Verdict| EvalExample {
+            id: id.into(),
+            skill_id: Some("pdf".into()),
+            task: id.into(),
+            expectations: vec![],
+            verdict: v,
+            source_session: None,
+            created_at: "t".into(),
+        };
+        let a = mk("a", Verdict::Fail);
+        let b = mk("b", Verdict::Pass);
+        let c = mk("c", Verdict::Fail);
+        let d = mk("d", Verdict::Pass);
+        let e = mk("e", Verdict::Fail);
+        let refs: Vec<&EvalExample> = vec![&a, &b, &c, &d, &e];
+        let s1 = split_eval_examples(&refs, 20);
+        let s2 = split_eval_examples(&refs, 20);
+        assert_eq!(s1.optimize.len(), s2.optimize.len());
+        assert_eq!(s1.holdout.len(), s2.holdout.len());
+        assert_eq!(s1.holdout_enabled, s2.holdout_enabled);
+    }
+
+    #[test]
+    fn split_disabled_when_few_examples() {
+        let ex = EvalExample::new(Some("s".into()), "t", vec![], Verdict::Pass);
+        let refs = vec![&ex];
+        let s = split_eval_examples(&refs, 20);
+        assert!(!s.holdout_enabled);
+        assert_eq!(s.optimize.len(), 1);
+        assert!(s.holdout.is_empty());
+    }
+
+    #[test]
+    fn split_enables_with_five_mixed() {
+        let mut all = Vec::new();
+        for i in 0..5 {
+            all.push(EvalExample::new(
+                Some("s".into()),
+                format!("t{i}"),
+                vec![],
+                if i % 2 == 0 {
+                    Verdict::Fail
+                } else {
+                    Verdict::Pass
+                },
+            ));
+        }
+        let refs: Vec<&EvalExample> = all.iter().collect();
+        let s = split_eval_examples(&refs, 20);
+        assert!(s.holdout_enabled);
+        assert!(!s.optimize.is_empty());
+        assert!(!s.holdout.is_empty());
     }
 
     #[test]

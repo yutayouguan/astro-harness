@@ -27,14 +27,15 @@ pub use auto::{
 };
 pub use candidate::{CandidateKind, SkillCandidate};
 pub use evalset::{
-    aggregate_critiques, append_example, build_eval_judge_prompt, evalset_path,
-    examples_for_skill, list_examples, parse_eval_judgement, parse_eval_score, remove_example,
-    weighted_eval_score, EvalExample, EvalJudgement, Verdict, EVAL_JUDGE_SYSTEM_PROMPT,
+    aggregate_critiques, append_example, build_eval_judge_prompt, default_holdout_percent,
+    evalset_path, examples_for_skill, list_examples, parse_eval_judgement, parse_eval_score,
+    remove_example, split_eval_examples, weighted_eval_score, EvalExample, EvalJudgement,
+    EvalSplit, Verdict, EVAL_JUDGE_SYSTEM_PROMPT,
 };
 pub use gates::{check_candidate, GateOutcome};
 pub use history::{
-    history_path, list_all as list_history, record_outcome, record_run,
-    summarize as summarize_history, HistoryEvent, HistorySummary,
+    history_path, list_all as list_history, record_outcome, record_run, record_run_meta,
+    summarize as summarize_history, HistoryEvent, HistorySummary, SearchRunMeta,
 };
 pub use judge::{build_judge_user_prompt, parse_judge_output, JudgeVerdict, JUDGE_SYSTEM_PROMPT};
 pub use proposal::{

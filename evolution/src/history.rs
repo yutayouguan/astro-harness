@@ -11,6 +11,24 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// 遗传搜索可复现实验摘要（仅 `mode=search` 时有值）。
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct SearchRunMeta {
+    pub generations: u32,
+    pub variants: u32,
+    pub population_size: u32,
+    pub crossover: bool,
+    pub budget_limit: u32,
+    pub budget_used: u32,
+    pub optimize_examples: usize,
+    pub holdout_examples: usize,
+    pub holdout_enabled: bool,
+    pub reflection_model: String,
+    pub judge_model: String,
+    #[serde(default)]
+    pub termination: String,
+}
+
 /// 一条历史事件。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -25,6 +43,8 @@ pub enum HistoryEvent {
         gated_out: usize,
         judged_out: usize,
         proposals: usize,
+        #[serde(default)]
+        search_meta: Option<SearchRunMeta>,
     },
     /// 一条提案的最终去向。
     Outcome {
@@ -64,6 +84,27 @@ pub fn record_run(
     judged_out: usize,
     proposals: usize,
 ) {
+    record_run_meta(
+        base,
+        mode,
+        generated,
+        gated_out,
+        judged_out,
+        proposals,
+        None,
+    );
+}
+
+/// 记录一次 run，可选附带 search 摘要。
+pub fn record_run_meta(
+    base: &Path,
+    mode: &str,
+    generated: usize,
+    gated_out: usize,
+    judged_out: usize,
+    proposals: usize,
+    search_meta: Option<SearchRunMeta>,
+) {
     let ev = HistoryEvent::Run {
         id: new_id(),
         ts: now(),
@@ -72,6 +113,7 @@ pub fn record_run(
         gated_out,
         judged_out,
         proposals,
+        search_meta,
     };
     let _ = append(base, &ev);
 }
@@ -211,6 +253,16 @@ pub fn summarize(base: &Path) -> HistorySummary {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn old_run_json_without_search_meta_still_parses() {
+        let raw = r#"{"type":"run","id":"1","ts":"t","mode":"search","generated":1,"gated_out":0,"judged_out":0,"proposals":1}"#;
+        let ev: HistoryEvent = serde_json::from_str(raw).unwrap();
+        match ev {
+            HistoryEvent::Run { search_meta, .. } => assert!(search_meta.is_none()),
+            _ => panic!("expected run"),
+        }
+    }
 
     #[test]
     fn records_and_summarizes() {
