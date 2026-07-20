@@ -169,17 +169,100 @@ pub fn run_skill_tests_in_dir(skill_dir: &Path, timeout: Duration) -> TestOutcom
     }
 }
 
+/// Docker 容器内运行测试（对标 GEPA gskill 的 Docker harness）。
+///
+/// `--network=none` 阻止网络访问；`--rm` 自动清理容器。
+/// Docker 不可用时返回 `Failed`（调用方负责 fallback）。
+pub fn docker_run_skill_tests(
+    skill_dir: &Path,
+    image: &str,
+    timeout: Duration,
+) -> TestOutcome {
+    let scripts = skill_dir.join("scripts");
+    let (_, script_name) = if scripts.join("test.sh").is_file() {
+        ("sh", "test.sh")
+    } else if scripts.join("test.py").is_file() {
+        ("python3", "test.py")
+    } else {
+        return TestOutcome::NotApplicable;
+    };
+
+    if std::process::Command::new("docker")
+        .args(["info"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| !s.success())
+        .unwrap_or(true)
+    {
+        return TestOutcome::Failed("Docker 不可用".into());
+    }
+
+    let dir_str = skill_dir.to_string_lossy();
+    let mut child = match std::process::Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            "--network=none",
+            "-v",
+            &format!("{dir_str}:/skill:ro"),
+            "-w",
+            "/skill",
+            image,
+            "sh",
+            &format!("scripts/{script_name}"),
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return TestOutcome::Failed(format!("启动 Docker 失败: {e}")),
+    };
+
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if status.success() {
+                    return TestOutcome::Passed;
+                }
+                let tail = child
+                    .wait_with_output()
+                    .ok()
+                    .map(|o| {
+                        String::from_utf8_lossy(&o.stderr)
+                            .chars()
+                            .take(500)
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default();
+                return TestOutcome::Failed(format!("Docker 测试退出码非零: {tail}"));
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    return TestOutcome::Failed("Docker 测试超时".into());
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(e) => return TestOutcome::Failed(format!("Docker 执行出错: {e}")),
+        }
+    }
+}
+
 /// 将候选 apply 到 tempdir 并跑测试，返回测试结果。
 ///
-/// - `current_skill_content`：当前技能 SKILL.md 全文（patch 时必需，new_skill 可 None）
-/// - `test_scripts_dir`：现有技能的 `scripts/` 目录路径（若存在则复制到 tempdir）
-///
-/// 不修改真实技能目录；tempdir 由调用方管理或函数自行清理。
+/// `sandbox_mode`：`"tempdir"`（默认）或 `"docker"`（容器隔离）。
+/// Docker 不可用时自动 fallback 到 tempdir。
 pub fn sandbox_test_candidate(
     cand: &SkillCandidate,
     current_skill_content: Option<&str>,
     test_scripts_dir: Option<&Path>,
     timeout: Duration,
+    sandbox_mode: &str,
+    docker_image: &str,
 ) -> TestOutcome {
     let test_dir = test_scripts_dir.filter(|p| {
         p.join("test.sh").is_file() || p.join("test.py").is_file()
@@ -228,7 +311,18 @@ pub fn sandbox_test_candidate(
         }
     }
 
-    run_skill_tests_in_dir(skill_dir, timeout)
+    if sandbox_mode == "docker" {
+        let result = docker_run_skill_tests(skill_dir, docker_image, timeout);
+        match &result {
+            TestOutcome::Failed(msg) if msg.contains("Docker 不可用") => {
+                tracing::warn!("Docker 不可用，回退到 tempdir 模式");
+                run_skill_tests_in_dir(skill_dir, timeout)
+            }
+            _ => result,
+        }
+    } else {
+        run_skill_tests_in_dir(skill_dir, timeout)
+    }
 }
 
 fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {
@@ -277,6 +371,7 @@ mod tests {
             max_skill_bytes: 10,
             require_pr: true,
             min_judge_score: 0.6,
+            ..EvolutionGates::default()
         };
         let out = check_candidate(&c, &gates, None);
         assert!(!out.passed);
@@ -307,6 +402,7 @@ mod tests {
             max_skill_bytes: 20,
             require_pr: true,
             min_judge_score: 0.6,
+            ..EvolutionGates::default()
         };
         // post-image 全文超 20 字节，应被体积门禁拦截
         assert!(!check_candidate(&c, &gates, Some("# demo\nshort tail")).passed);
@@ -349,7 +445,7 @@ mod tests {
     #[test]
     fn sandbox_no_test_dir_returns_not_applicable() {
         let c = cand(CandidateKind::NewSkill);
-        let r = sandbox_test_candidate(&c, None, None, Duration::from_secs(5));
+        let r = sandbox_test_candidate(&c, None, None, Duration::from_secs(5), "tempdir", "");
         assert_eq!(r, TestOutcome::NotApplicable);
     }
 
@@ -367,7 +463,30 @@ mod tests {
             None,
             Some(scripts_dir.path()),
             Duration::from_secs(5),
+            "tempdir",
+            "",
         );
         assert_eq!(r, TestOutcome::Passed);
+    }
+
+    #[test]
+    fn sandbox_docker_fallback_when_unavailable() {
+        let scripts_dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            scripts_dir.path().join("test.sh"),
+            "#!/bin/sh\n[ -f SKILL.md ]\n",
+        )
+        .unwrap();
+        let c = cand(CandidateKind::NewSkill);
+        let r = sandbox_test_candidate(
+            &c,
+            None,
+            Some(scripts_dir.path()),
+            Duration::from_secs(5),
+            "docker",
+            "nonexistent-image:v999",
+        );
+        // Docker may or may not be available; either way should not panic
+        assert!(matches!(r, TestOutcome::Passed | TestOutcome::Failed(_)));
     }
 }

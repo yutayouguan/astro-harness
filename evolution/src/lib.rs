@@ -37,8 +37,8 @@ pub use curator::{
 pub use evalset::{
     aggregate_critiques, append_example, build_eval_judge_prompt, default_holdout_percent,
     evalset_path, examples_for_skill, list_examples, parse_eval_judgement, parse_eval_score,
-    remove_example, split_eval_examples, weighted_eval_score, EvalExample, EvalJudgement,
-    EvalSplit, Verdict, EVAL_JUDGE_SYSTEM_PROMPT,
+    remove_example, sample_eval_examples, split_eval_examples, weighted_eval_score, EvalExample,
+    EvalJudgement, EvalSplit, FitnessResult, FitnessSideInfo, Verdict, EVAL_JUDGE_SYSTEM_PROMPT,
 };
 pub use gates::{
     check_candidate, run_skill_tests_in_dir, sandbox_test_candidate, GateOutcome, TestOutcome,

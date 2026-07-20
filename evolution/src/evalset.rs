@@ -209,6 +209,36 @@ pub fn default_holdout_percent() -> u8 {
     DEFAULT_HOLDOUT_PERCENT
 }
 
+/// 按代数种子随机采样评测例（对标 GEPA epoch-shuffled batch sampler）。
+///
+/// 每代看到不同随机子集，减少过拟合。Fail 例有 2x 采样概率（sort key 减半）。
+/// 同一 `generation_seed` 保证可复现。
+pub fn sample_eval_examples<'a>(
+    examples: &[&'a EvalExample],
+    max_examples: usize,
+    generation_seed: u64,
+) -> Vec<&'a EvalExample> {
+    if max_examples == 0 || examples.len() <= max_examples {
+        return examples.to_vec();
+    }
+    let mut rng = fastrand::Rng::with_seed(generation_seed);
+    let mut keyed: Vec<(u64, &'a EvalExample)> = examples
+        .iter()
+        .map(|ex| {
+            let key = rng.u64(..);
+            let biased = if ex.verdict == Verdict::Fail {
+                key / 2
+            } else {
+                key
+            };
+            (biased, *ex)
+        })
+        .collect();
+    keyed.sort_by_key(|(k, _)| *k);
+    keyed.truncate(max_examples);
+    keyed.into_iter().map(|(_, ex)| ex).collect()
+}
+
 /// eval judge 的 system 指令：针对具体 task+expectations 评分，输出结构化 JSON。
 pub const EVAL_JUDGE_SYSTEM_PROMPT: &str = r#"你是技能评测器。给定一个技能内容、一个任务与该任务的期望要点，判断「若用该技能执行此任务，能在多大程度上满足期望」。只输出 JSON（不要 markdown 围栏）：
 {"score":0.0,"satisfied":["已满足的要点"],"unmet":["未满足的要点"],"reason":"简述"}
@@ -270,6 +300,25 @@ pub fn weighted_eval_score(verdicts: &[(Verdict, f32)]) -> Option<f32> {
 pub fn parse_eval_score(raw: &str) -> anyhow::Result<f32> {
     let j = parse_eval_judgement(raw)?;
     Ok(j.score)
+}
+
+/// 适应度评分附带的诊断信息（对标 GEPA optimize_anything 的 side_info）。
+#[derive(Debug, Clone)]
+pub struct FitnessSideInfo {
+    /// `"grounded"` | `"generic_judge"`
+    pub eval_mode: &'static str,
+    pub examples_scored: usize,
+    pub fail_examples: usize,
+    pub holdout_enabled: bool,
+}
+
+/// 结构化适应度评分结果（对标 GEPA evaluator 的 `(score, side_info)` 返回）。
+#[derive(Debug, Clone)]
+pub struct FitnessResult {
+    pub score: f32,
+    pub reason: String,
+    pub judgements: Vec<EvalJudgement>,
+    pub side_info: FitnessSideInfo,
 }
 
 /// 结构化 eval judge 结果（grounded eval 路径专用）。

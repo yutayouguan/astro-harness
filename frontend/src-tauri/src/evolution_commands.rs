@@ -234,11 +234,14 @@ pub async fn set_evolution_gates(
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
     let _ = require_pr; // 产品不变量：始终人审
+    let current = memory::load_evolution_config(&base);
     let gates = memory::EvolutionGates {
         run_tests,
         max_skill_bytes: max_skill_bytes as usize,
         require_pr: true,
         min_judge_score,
+        sandbox_mode: current.gates.sandbox_mode,
+        sandbox_docker_image: current.gates.sandbox_docker_image,
     };
     memory::set_evolution_gates(&base, &gates).map_err(|e| e.to_string())?;
     build_settings_dto()
@@ -268,6 +271,9 @@ pub async fn set_evolution_search(
         max_llm_calls: max_llm_calls
             .unwrap_or(current.search.max_llm_calls)
             .min(500),
+        mutation_system_prompt: current.search.mutation_system_prompt,
+        crossover_system_prompt: current.search.crossover_system_prompt,
+        eval_sampling: current.search.eval_sampling,
     };
     memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
     build_settings_dto()

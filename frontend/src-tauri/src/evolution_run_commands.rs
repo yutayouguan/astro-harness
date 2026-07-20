@@ -23,7 +23,8 @@ use evolution::{
     parse_judge_output, parse_variants, reject_proposal, run_curator_and_save,
     sandbox_test_candidate, save_auto_state, save_proposals, select_front_capped, select_population,
     split_eval_examples, weighted_eval_score, AutoGate, AutoStatus, CandidateKind, CurateReport,
-    CuratorStatus, EvalExample, EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget,
+    CuratorStatus, EvalExample, EvalJudgement, FitnessResult, FitnessSideInfo, ReflectionInput,
+    ScoredVariant, SearchBudget,
     SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
     JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
@@ -354,7 +355,7 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
             };
             let mut kept: Vec<SkillCandidate> = Vec::new();
             for mut c in passed.into_iter() {
-                if let Some((score, reason, _)) = fitness_score(
+                if let Some(fr) = fitness_score(
                     &judge_targets,
                     &c,
                     &enabled_now,
@@ -362,16 +363,18 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
                     cfg.search.max_eval_examples,
                     &mut reflect_budget,
                     Some(&mut split_stats),
+                    "fixed",
+                    0,
                 )
                 .await
                 {
-                    c.judge_score = Some(score);
-                    c.judge_reason = Some(reason);
-                    if score >= cfg.gates.min_judge_score {
+                    c.judge_score = Some(fr.score);
+                    c.judge_reason = Some(fr.reason);
+                    if fr.score >= cfg.gates.min_judge_score {
                         kept.push(c);
                     } else {
                         judged_out += 1;
-                        tracing::info!(skill = %c.skill_id, score, "候选被适应度评分拒绝");
+                        tracing::info!(skill = %c.skill_id, score = fr.score, "候选被适应度评分拒绝");
                     }
                 } else {
                     judged_out += 1;
@@ -636,19 +639,23 @@ async fn score_grounded_examples(
     examples: &[&EvalExample],
     max_eval_examples: usize,
     budget: &mut SearchBudget,
+    eval_sampling: &str,
+    generation: u32,
 ) -> (Vec<(Verdict, f32)>, Vec<EvalJudgement>) {
-    let capped: Vec<&&EvalExample> = if max_eval_examples > 0 && examples.len() > max_eval_examples {
-        let mut sorted = examples.iter().collect::<Vec<_>>();
+    let selected: Vec<&EvalExample> = if eval_sampling == "shuffle" && max_eval_examples > 0 {
+        evolution::sample_eval_examples(examples, max_eval_examples, generation as u64)
+    } else if max_eval_examples > 0 && examples.len() > max_eval_examples {
+        let mut sorted: Vec<&EvalExample> = examples.to_vec();
         sorted.sort_by_key(|e| if e.verdict == Verdict::Fail { 0u8 } else { 1u8 });
         sorted.truncate(max_eval_examples);
         sorted
     } else {
-        examples.iter().collect()
+        examples.to_vec()
     };
 
     let mut verdict_scores: Vec<(Verdict, f32)> = Vec::new();
     let mut judgements: Vec<EvalJudgement> = Vec::new();
-    for ex in &capped {
+    for ex in &selected {
         if !budget.try_reserve_one() {
             break;
         }
@@ -665,7 +672,8 @@ async fn score_grounded_examples(
 
 /// 客观适应度：匹配评测集时用 optimize 分区 grounded 评分；否则泛化 judge。
 ///
-/// 返回 `None` 表示预算耗尽且无任何分数，或 judge 失败（fail-closed）。
+/// 返回结构化 `FitnessResult`（对标 GEPA 的 `(score, side_info)`）。
+/// `None` 表示预算耗尽或 judge 失败（fail-closed）。
 async fn fitness_score(
     targets: &AuxiliaryTargets,
     cand: &SkillCandidate,
@@ -674,14 +682,26 @@ async fn fitness_score(
     max_eval_examples: usize,
     budget: &mut SearchBudget,
     split_stats: Option<&mut SearchSplitStats>,
-) -> Option<(f32, String, Vec<EvalJudgement>)> {
+    eval_sampling: &str,
+    generation: u32,
+) -> Option<FitnessResult> {
     let all_matched = examples_for_skill(evalset, &cand.skill_id);
     if all_matched.is_empty() {
         if !budget.try_reserve_one() {
             return None;
         }
         let (s, r) = judge_candidate(targets, cand, enabled_skills).await?;
-        return Some((s, r, Vec::new()));
+        return Some(FitnessResult {
+            score: s,
+            reason: r,
+            judgements: Vec::new(),
+            side_info: FitnessSideInfo {
+                eval_mode: "generic_judge",
+                examples_scored: 1,
+                fail_examples: 0,
+                holdout_enabled: false,
+            },
+        });
     }
 
     let split = split_eval_examples(&all_matched, default_holdout_percent());
@@ -697,6 +717,8 @@ async fn fitness_score(
         &split.optimize,
         max_eval_examples,
         budget,
+        eval_sampling,
+        generation,
     )
     .await;
 
@@ -718,7 +740,17 @@ async fn fitness_score(
             } else {
                 format!("grounded 评分（{n} 例）")
             };
-            Some((avg, reason, judgements))
+            Some(FitnessResult {
+                score: avg,
+                reason,
+                judgements,
+                side_info: FitnessSideInfo {
+                    eval_mode: "grounded",
+                    examples_scored: n,
+                    fail_examples: fail_n,
+                    holdout_enabled: split.holdout_enabled,
+                },
+            })
         }
         None => None,
     }
@@ -735,7 +767,7 @@ async fn holdout_fitness_score(
         return None;
     }
     let (verdict_scores, _) =
-        score_grounded_examples(targets, cand, holdout, max_eval_examples, budget).await;
+        score_grounded_examples(targets, cand, holdout, max_eval_examples, budget, "fixed", 0).await;
     weighted_eval_score(&verdict_scores)
 }
 
@@ -821,6 +853,7 @@ pub async fn run_evolution_search(
     let generations = cfg.search.generations.max(1);
     let variants = cfg.search.variants.max(1);
     let max_eval_examples = cfg.search.max_eval_examples;
+    let eval_sampling = cfg.search.eval_sampling.clone();
     let mut budget = SearchBudget::new(cfg.search.max_llm_calls);
     budget.try_reserve_one(); // seed reflection 调用已消费
     let mut variants_evaluated = 0usize;
@@ -839,6 +872,18 @@ pub async fn run_evolution_search(
 
     let pop_size = cfg.search.population_size.max(1) as usize;
     let no_seeds = seeds.is_empty();
+    let mutation_prompt = cfg
+        .search
+        .mutation_system_prompt
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or(MUTATION_SYSTEM_PROMPT);
+    let crossover_prompt = cfg
+        .search
+        .crossover_system_prompt
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or(CROSSOVER_SYSTEM_PROMPT);
 
     'seed: for seed in seeds {
         if search_cancelled() {
@@ -880,7 +925,7 @@ pub async fn run_evolution_search(
 
             let parent = &population[gen as usize % population.len()].candidate;
             let muser = build_mutation_prompt(parent, variants, &critiques, &strengths);
-            let raw = match reflect_over_targets(&refl_targets, MUTATION_SYSTEM_PROMPT, &muser)
+            let raw = match reflect_over_targets(&refl_targets, mutation_prompt, &muser)
                 .await
             {
                 Ok(r) => r,
@@ -908,7 +953,7 @@ pub async fn run_evolution_search(
                     }
                 };
 
-                if let Some((score, reason, js)) = fitness_score(
+                if let Some(fr) = fitness_score(
                     &judge_targets,
                     &c,
                     &enabled_skills,
@@ -916,6 +961,8 @@ pub async fn run_evolution_search(
                     max_eval_examples,
                     &mut budget,
                     Some(&mut split_stats),
+                    &eval_sampling,
+                    gen,
                 )
                 .await
                 {
@@ -932,9 +979,9 @@ pub async fn run_evolution_search(
                                 });
                         }
                     }
-                    c.judge_score = Some(score);
-                    c.judge_reason = Some(reason);
-                    gen_judgements.extend(js);
+                    c.judge_score = Some(fr.score);
+                    c.judge_reason = Some(fr.reason);
+                    gen_judgements.extend(fr.judgements);
                     variants_evaluated += 1;
                     let test_pass = if run_sandbox {
                         sandbox_test_candidate(
@@ -942,13 +989,15 @@ pub async fn run_evolution_search(
                             current_skill_text.as_deref(),
                             test_scripts_dir.as_deref(),
                             Duration::from_secs(60),
+                            &cfg.gates.sandbox_mode,
+                            &cfg.gates.sandbox_docker_image,
                         )
                         .fitness()
                     } else {
                         None
                     };
                     scored.push(
-                        ScoredVariant::with_size(c, score, eff_size).with_test_pass(test_pass),
+                        ScoredVariant::with_size(c, fr.score, eff_size).with_test_pass(test_pass),
                     );
                 } else {
                     tracing::debug!(skill = %c.skill_id, "预算不足或评分失败，跳过该候选");
@@ -961,7 +1010,7 @@ pub async fn run_evolution_search(
                 if top.len() == 2 && budget.try_reserve_one() {
                     let cx = build_crossover_prompt(&top[0].candidate, &top[1].candidate);
                     if let Ok(raw) =
-                        reflect_over_targets(&refl_targets, CROSSOVER_SYSTEM_PROMPT, &cx).await
+                        reflect_over_targets(&refl_targets, crossover_prompt, &cx).await
                     {
                         for mut child in parse_variants(&raw, &seed).unwrap_or_default() {
                             let eff_size = match effective_candidate_size(&child, current_skill_text.as_deref()) {
@@ -971,7 +1020,7 @@ pub async fn run_evolution_search(
                                     continue;
                                 }
                             };
-                            if let Some((score, reason, js)) = fitness_score(
+                            if let Some(fr) = fitness_score(
                                 &judge_targets,
                                 &child,
                                 &enabled_skills,
@@ -979,12 +1028,14 @@ pub async fn run_evolution_search(
                                 max_eval_examples,
                                 &mut budget,
                                 Some(&mut split_stats),
+                                &eval_sampling,
+                                gen,
                             )
                             .await
                             {
-                                child.judge_score = Some(score);
-                                child.judge_reason = Some(format!("[交叉] {reason}"));
-                                gen_judgements.extend(js);
+                                child.judge_score = Some(fr.score);
+                                child.judge_reason = Some(format!("[交叉] {}", fr.reason));
+                                gen_judgements.extend(fr.judgements);
                                 variants_evaluated += 1;
                                 let test_pass = if run_sandbox {
                                     sandbox_test_candidate(
@@ -992,13 +1043,15 @@ pub async fn run_evolution_search(
                                         current_skill_text.as_deref(),
                                         test_scripts_dir.as_deref(),
                                         Duration::from_secs(60),
+                                        &cfg.gates.sandbox_mode,
+                                        &cfg.gates.sandbox_docker_image,
                                     )
                                     .fitness()
                                 } else {
                                     None
                                 };
                                 scored.push(
-                                    ScoredVariant::with_size(child, score, eff_size)
+                                    ScoredVariant::with_size(child, fr.score, eff_size)
                                         .with_test_pass(test_pass),
                                 );
                             }

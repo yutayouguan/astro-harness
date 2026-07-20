@@ -372,6 +372,21 @@ pub struct EvolutionGates {
     /// judge 最低分（0–1）；`<= 0` 表示关闭 judge 评审。
     #[serde(default = "default_min_judge_score")]
     pub min_judge_score: f32,
+    /// 沙箱模式：`"tempdir"`（默认）| `"docker"`（容器隔离）。
+    /// 对标 GEPA gskill 的 Docker harness。
+    #[serde(default = "default_sandbox_mode")]
+    pub sandbox_mode: String,
+    /// Docker 沙箱镜像名（sandbox_mode="docker" 时使用）。
+    #[serde(default = "default_sandbox_docker_image")]
+    pub sandbox_docker_image: String,
+}
+
+fn default_sandbox_mode() -> String {
+    "tempdir".to_string()
+}
+
+fn default_sandbox_docker_image() -> String {
+    "astro-skill-test:latest".to_string()
 }
 
 impl Default for EvolutionGates {
@@ -381,6 +396,8 @@ impl Default for EvolutionGates {
             max_skill_bytes: 15_360,
             require_pr: true,
             min_judge_score: 0.6,
+            sandbox_mode: "tempdir".to_string(),
+            sandbox_docker_image: "astro-skill-test:latest".to_string(),
         }
     }
 }
@@ -430,6 +447,21 @@ pub struct EvolutionSearch {
     /// 每代保留的种群大小（Pareto 选择后保留的最多个体数）。
     #[serde(default = "default_population_size")]
     pub population_size: u32,
+    /// 自定义变异 system prompt（空/None = 使用内置 MUTATION_SYSTEM_PROMPT）。
+    /// 对标 GEPA ProposalFn：让用户注入领域知识到变异过程。
+    #[serde(default)]
+    pub mutation_system_prompt: Option<String>,
+    /// 自定义交叉 system prompt（空/None = 使用内置 CROSSOVER_SYSTEM_PROMPT）。
+    #[serde(default)]
+    pub crossover_system_prompt: Option<String>,
+    /// 评测例采样模式：`"fixed"`（默认，Fail 优先截断）| `"shuffle"`（每代随机采样）。
+    /// 对标 GEPA batch_sampler / epoch_shuffled。
+    #[serde(default = "default_eval_sampling")]
+    pub eval_sampling: String,
+}
+
+fn default_eval_sampling() -> String {
+    "fixed".to_string()
 }
 
 impl Default for EvolutionSearch {
@@ -441,6 +473,9 @@ impl Default for EvolutionSearch {
             max_eval_examples: 5,
             max_llm_calls: 40,
             population_size: 3,
+            mutation_system_prompt: None,
+            crossover_system_prompt: None,
+            eval_sampling: "fixed".to_string(),
         }
     }
 }
@@ -1099,6 +1134,18 @@ pub fn set_evolution_search(
         "population_size",
         search.population_size as usize,
     )?;
+    if let Some(ref p) = search.mutation_system_prompt {
+        set_nested_string(base, &["evolution", "search"], "mutation_system_prompt", p)?;
+    }
+    if let Some(ref p) = search.crossover_system_prompt {
+        set_nested_string(base, &["evolution", "search"], "crossover_system_prompt", p)?;
+    }
+    set_nested_string(
+        base,
+        &["evolution", "search"],
+        "eval_sampling",
+        &search.eval_sampling,
+    )?;
     Ok(load_evolution_config(base))
 }
 
@@ -1175,6 +1222,18 @@ pub fn set_evolution_gates(base: &Path, gates: &EvolutionGates) -> anyhow::Resul
         &["evolution", "gates"],
         "min_judge_score",
         gates.min_judge_score as f64,
+    )?;
+    set_nested_string(
+        base,
+        &["evolution", "gates"],
+        "sandbox_mode",
+        &gates.sandbox_mode,
+    )?;
+    set_nested_string(
+        base,
+        &["evolution", "gates"],
+        "sandbox_docker_image",
+        &gates.sandbox_docker_image,
     )?;
     Ok(load_evolution_config(base))
 }
@@ -1367,6 +1426,7 @@ compression:
                 max_eval_examples: 8,
                 max_llm_calls: 20,
                 population_size: 2,
+                ..EvolutionSearch::default()
             },
         )
         .unwrap();
@@ -1407,6 +1467,7 @@ compression:
                 max_skill_bytes: 8192,
                 require_pr: false, // 调用方传 false 也应被强制为 true
                 min_judge_score: 0.75,
+                ..EvolutionGates::default()
             },
         )
         .unwrap();
