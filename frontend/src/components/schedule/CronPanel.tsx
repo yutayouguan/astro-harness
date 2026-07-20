@@ -35,6 +35,7 @@ import type { ChatHistoryDto, ChatMessage } from "../../types";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgActivity from "../chat/MsgActivity";
+import { ChatMarkdown } from "../chat/ChatMarkdown";
 import {
   CreateCronDialog,
   type ProviderOpt,
@@ -698,11 +699,54 @@ export default function CronPanel({
     setError(null);
     try {
       await invoke("remove_cron_job", { id: job.id });
+      if (drawerRun?.job_id === job.id) {
+        setDrawerRun(null);
+        setDrawerMessages([]);
+      }
+      if (selectedDetailId === job.id) {
+        setSelectedDetailId(null);
+      }
       await loadJobs();
+      if (activeTab === "history") {
+        void loadHistoryRuns();
+      }
     } catch (err) {
       setError(String(err));
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const deleteRun = async (run: CronRunDto) => {
+    if (!isTauri()) return;
+    if (runStatusKind(run.status) === "running") {
+      setError(t("cron.history.deleteRunRunning"));
+      return;
+    }
+    const ok = await confirm({
+      title: t("dialog.deleteTitle"),
+      message: t("cron.history.deleteRunConfirm"),
+      confirmLabel: t("cron.history.deleteRun"),
+      variant: "danger",
+    });
+    if (!ok) return;
+    setError(null);
+    try {
+      await invoke("delete_cron_run", { id: run.id });
+      if (drawerRun?.id === run.id) {
+        setDrawerRun(null);
+        setDrawerMessages([]);
+      }
+      setDetailRuns((prev) => prev.filter((r) => r.id !== run.id));
+      setHistoryRuns((prev) => prev.filter((r) => r.id !== run.id));
+      if (jobsView === "detail" && selectedDetailId === run.job_id) {
+        void loadDetailRuns(run.job_id);
+      }
+      if (activeTab === "history") {
+        void loadHistoryRuns();
+      }
+    } catch (err) {
+      setError(String(err));
     }
   };
 
@@ -1031,14 +1075,27 @@ export default function CronPanel({
                       {run.summary && (
                         <p className="cron-history-task">{run.summary}</p>
                       )}
-                      <button
-                        type="button"
-                        className="cron-timeline-log-btn"
-                        onClick={() => openRunDrawer(run)}
-                      >
-                        <ListTree size={13} strokeWidth={2.2} aria-hidden />
-                        {t("cron.history.viewLog")}
-                      </button>
+                      <div className="cron-history-item-actions">
+                        <button
+                          type="button"
+                          className="cron-timeline-log-btn"
+                          onClick={() => openRunDrawer(run)}
+                        >
+                          <ListTree size={13} strokeWidth={2.2} aria-hidden />
+                          {t("cron.history.viewLog")}
+                        </button>
+                        <button
+                          type="button"
+                          className="cron-timeline-log-btn is-danger"
+                          disabled={runStatusKind(run.status) === "running"}
+                          onClick={() => void deleteRun(run)}
+                          title={t("cron.history.deleteRun")}
+                          aria-label={t("cron.history.deleteRun")}
+                        >
+                          <IconTrash width={13} height={13} />
+                          {t("cron.history.deleteRun")}
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -1110,14 +1167,26 @@ export default function CronPanel({
                         </span>
                       ) : null}
                     </span>
-                    <button
-                      type="button"
-                      className="cron-timeline-log-btn"
-                      onClick={() => openRunDrawer(run)}
-                    >
-                      <ListTree size={13} strokeWidth={2.2} aria-hidden />
-                      {t("cron.history.viewLog")}
-                    </button>
+                    <span className="cron-history-item-actions">
+                      <button
+                        type="button"
+                        className="cron-timeline-log-btn"
+                        onClick={() => openRunDrawer(run)}
+                      >
+                        <ListTree size={13} strokeWidth={2.2} aria-hidden />
+                        {t("cron.history.viewLog")}
+                      </button>
+                      <button
+                        type="button"
+                        className="cron-timeline-log-btn is-danger"
+                        disabled={runStatusKind(run.status) === "running"}
+                        onClick={() => void deleteRun(run)}
+                        title={t("cron.history.deleteRun")}
+                        aria-label={t("cron.history.deleteRun")}
+                      >
+                        <IconTrash width={13} height={13} />
+                      </button>
+                    </span>
                   </div>
                 </article>
               ))}
@@ -1368,14 +1437,27 @@ export default function CronPanel({
                     </span>
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="cron-dialog-close"
-                  onClick={() => setDrawerRun(null)}
-                  aria-label={t("cron.cancel")}
-                >
-                  <X size={16} strokeWidth={2.5} aria-hidden />
-                </button>
+                <div className="cron-run-drawer-head-actions">
+                  <button
+                    type="button"
+                    className="cron-timeline-log-btn is-danger"
+                    disabled={runStatusKind(drawerRun.status) === "running"}
+                    onClick={() => void deleteRun(drawerRun)}
+                    title={t("cron.history.deleteRun")}
+                    aria-label={t("cron.history.deleteRun")}
+                  >
+                    <IconTrash width={14} height={14} />
+                    <span>{t("cron.history.deleteRun")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="cron-dialog-close"
+                    onClick={() => setDrawerRun(null)}
+                    aria-label={t("cron.cancel")}
+                  >
+                    <X size={16} strokeWidth={2.5} aria-hidden />
+                  </button>
+                </div>
               </header>
               <div className="cron-run-drawer-body">
                 <div className="cron-run-drawer-meta">
@@ -1430,7 +1512,9 @@ export default function CronPanel({
                         ))}
                         {assistantTexts.map((text, i) => (
                           <div key={`asst-${i}`} className="cron-run-assistant-chunk">
-                            <pre className="cron-run-drawer-log">{text}</pre>
+                            <div className="cron-run-md">
+                              <ChatMarkdown content={text} compact />
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1447,7 +1531,9 @@ export default function CronPanel({
                       </h3>
                       <CopyLogButton text={drawerRun.output} />
                     </div>
-                    <pre className="cron-run-drawer-log">{drawerRun.output}</pre>
+                    <div className="cron-run-md">
+                      <ChatMarkdown content={drawerRun.output} compact />
+                    </div>
                   </section>
                 )}
                 {drawerRun.error && (
@@ -1459,7 +1545,9 @@ export default function CronPanel({
                       </h3>
                       <CopyLogButton text={drawerRun.error} />
                     </div>
-                    <pre className="cron-run-drawer-log">{drawerRun.error}</pre>
+                    <div className="cron-run-md">
+                      <ChatMarkdown content={drawerRun.error} plain compact />
+                    </div>
                   </section>
                 )}
               </div>

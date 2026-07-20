@@ -357,6 +357,7 @@ pub fn run() {
             commands::set_cron_job_enabled,
             commands::run_cron_job_now,
             commands::get_cron_run,
+            commands::delete_cron_run,
             commands::list_cron_runs,
             commands::list_cron_job_runs,
             config_commands::get_tools_enabled,

@@ -2738,6 +2738,14 @@ pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
     Ok(row.map(run_to_dto))
 }
 
+/// 删除单条定时任务运行记录。
+#[tauri::command]
+pub async fn delete_cron_run(id: String) -> Result<bool, String> {
+    bootstrap_workspace()?;
+    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
+    db.delete(&id).map_err(|e| e.to_string())
+}
+
 /// 列出定时任务运行记录。
 #[tauri::command]
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {

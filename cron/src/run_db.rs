@@ -227,6 +227,14 @@ impl CronRunDb {
         Ok(row)
     }
 
+    /// 删除单条运行记录；返回是否删到行。运行中的记录也可删（用于用户取消展示）。
+    pub fn delete(&self, id: &str) -> anyhow::Result<bool> {
+        let changed = self
+            .conn
+            .execute("DELETE FROM cron_runs WHERE id = ?1", params![id])?;
+        Ok(changed > 0)
+    }
+
     /// 该 job 是否仍有 `status = running` 的记录
     pub fn has_running_for_job(&self, job_id: &str) -> anyhow::Result<bool> {
         let count: i64 = self.conn.query_row(
@@ -316,6 +324,27 @@ mod tests {
         let got = db.get(&id).unwrap().unwrap();
         assert!(got.summary.len() <= MAX_SUMMARY_BYTES);
         assert!(got.output.len() <= MAX_OUTPUT_BYTES);
+    }
+
+    #[test]
+    fn delete_removes_run() {
+        let dir = TempDir::new().unwrap();
+        let db = CronRunDb::new(dir.path().join("cron.db")).unwrap();
+        let id = db
+            .insert_running(NewCronRun {
+                job_id: "j".into(),
+                title: "t".into(),
+                agent_id: "workspace".into(),
+                schedule: "every:1d".into(),
+                task: "task".into(),
+                fired_at: "2026-07-11T11:00:00+08:00".into(),
+                trigger: "manual".into(),
+                session_id: None,
+            })
+            .unwrap();
+        assert!(db.delete(&id).unwrap());
+        assert!(db.get(&id).unwrap().is_none());
+        assert!(!db.delete(&id).unwrap());
     }
 
     #[test]
