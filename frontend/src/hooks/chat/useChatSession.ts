@@ -221,6 +221,7 @@ export function useChatSession({
     parallelRunning,
     startParallelTask,
     cancelParallelTask,
+    resumeParallelHitl,
     clearAllParallel,
     clearSettledParallel,
   } = useParallelTasks({
@@ -1047,8 +1048,10 @@ export function useChatSession({
 
   const stopStream = useCallback(async () => {
     if (parallelRunning > 0) {
-      const running = parallelTasks.filter((t) => t.status === "running");
-      await Promise.all(running.map((t) => cancelParallelTask(t.id)));
+      const active = parallelTasks.filter(
+        (t) => t.status === "running" || t.status === "waiting",
+      );
+      await Promise.all(active.map((t) => cancelParallelTask(t.id)));
     }
     if (!streaming && !turnInFlightRef.current) {
       setSessionPendingInterrupts([]);
@@ -1417,10 +1420,18 @@ export function useChatSession({
   // ── HITL UI action ────────────────────────────────────────────────────────
   const onUiAction = useCallback(
     async (messageId: string, name: string, context: Record<string, unknown>) => {
-      if (!activeProvider || sessionPendingInterrupts.length === 0) return;
-      const isLocationHitl = sessionPendingInterrupts.some(
-        (p) => p.reason === "location_required",
+      const parallelTask = parallelTasks.find(
+        (t) =>
+          t.assistantMessageId === messageId &&
+          t.status === "waiting" &&
+          (t.pendingInterrupts?.length ?? 0) > 0,
       );
+      const interrupts = parallelTask?.pendingInterrupts?.length
+        ? parallelTask.pendingInterrupts
+        : sessionPendingInterrupts;
+      if (!activeProvider || interrupts.length === 0) return;
+
+      const isLocationHitl = interrupts.some((p) => p.reason === "location_required");
 
       let payload: Record<string, unknown>;
       if (name === "share_location") {
@@ -1481,6 +1492,11 @@ export function useChatSession({
         payload = { ...context };
       }
 
+      if (parallelTask) {
+        await resumeParallelHitl(messageId, payload);
+        return;
+      }
+
       const resumeJson = JSON.stringify(
         sessionPendingInterrupts.map((p) => ({
           interrupt_id: p.id,
@@ -1513,7 +1529,19 @@ export function useChatSession({
         showTransientToast(e instanceof Error ? e.message : String(e ?? "HITL resume failed"));
       }
     },
-    [activeProvider, sessionPendingInterrupts, sessionId, showTransientToast, t, setStreaming, setStreamPaused, setStatus, setStatusPhase],
+    [
+      activeProvider,
+      parallelTasks,
+      resumeParallelHitl,
+      sessionPendingInterrupts,
+      sessionId,
+      showTransientToast,
+      t,
+      setStreaming,
+      setStreamPaused,
+      setStatus,
+      setStatusPhase,
+    ],
   );
 
   // ── Reset / New session ───────────────────────────────────────────────────

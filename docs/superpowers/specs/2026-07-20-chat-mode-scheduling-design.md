@@ -128,10 +128,10 @@ Agent 模式下按 `session_id` 创建/复用 git worktree，经 `project_root` 
 - 空 `project_root` → 后端清除；非 Agent 发送显式传空；
 - mode pill：streaming / turnInFlight / HITL / 并行 running 时锁定；Plan/Ask 只读徽章 + 菜单说明；
 - `chatModeHint` 中英 i18n；Plan/Ask 专用 placeholder；
-- 并行 task 遇 HITL：toast + cancel session（暂不提供完整审批 UI）。
+- MultiTask 并行 HITL：`activity` → A2UI surface；`waiting` 状态；气泡内审批/澄清；`interrupt_resume` 走 task.sessionId；不写入主会话 pending（不误锁新并行发送）。
 
 ## 7. 非目标
 
 - 同 `session_id` 多 turn 真正并发（仍靠 pause 互斥）；
 - 不改全局专家切换语义；
-- MultiTask 并行 task 内完整 HITL / 澄清 UI（后续增强）。
+- MultiTask 并行 HITL 跨刷新恢复（内存态；主会话有 store）。

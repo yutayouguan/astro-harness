@@ -62,7 +62,7 @@ import {
 } from "../../lib/chat/chatMode";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
-import { countRunningParallel, countSettledByStatus } from "../../lib/chat/parallelTasks";
+import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
 import {
@@ -1333,7 +1333,7 @@ export default function ChatView({
     () =>
       new Set(
         parallelTasks
-          .filter((task) => task.status === "running")
+          .filter((task) => isParallelTaskActive(task.status))
           .map((task) => task.assistantMessageId),
       ),
     [parallelTasks],
@@ -1915,7 +1915,7 @@ export default function ChatView({
           <div
             className="composer-queue composer-tasks"
             aria-label={t("chat.task.title", {
-              running: String(parallelTasks.filter((x) => x.status === "running").length),
+              running: String(parallelRunningCount),
               total: String(parallelTasks.length),
             })}
           >
@@ -1933,9 +1933,7 @@ export default function ChatView({
               />
               <span>
                 {t("chat.task.title", {
-                  running: String(
-                    parallelTasks.filter((x) => x.status === "running").length,
-                  ),
+                  running: String(parallelRunningCount),
                   total: String(parallelTasks.length),
                 })}
               </span>
@@ -1955,11 +1953,13 @@ export default function ChatView({
                       <span className="composer-task-status">
                         {task.status === "running"
                           ? t("chat.task.status.running")
-                          : task.status === "done"
-                            ? t("chat.task.status.done")
-                            : task.status === "error"
-                              ? t("chat.task.status.error")
-                              : t("chat.task.status.cancelled")}
+                          : task.status === "waiting"
+                            ? t("chat.task.status.waiting")
+                            : task.status === "done"
+                              ? t("chat.task.status.done")
+                              : task.status === "error"
+                                ? t("chat.task.status.error")
+                                : t("chat.task.status.cancelled")}
                       </span>
                       {task.prompt.trim() || t("chat.queue.emptyText")}
                       {task.worktree?.path ? (
@@ -1968,7 +1968,7 @@ export default function ChatView({
                         </span>
                       ) : null}
                     </span>
-                    {task.status === "running" && (
+                    {isParallelTaskActive(task.status) && (
                       <span className="composer-queue-actions">
                         <button
                           type="button"

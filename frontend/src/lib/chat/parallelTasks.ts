@@ -3,7 +3,14 @@
  * 同 session 禁止并发（后端 pause 重入会 cancel）。
  */
 
-export type ParallelTaskStatus = "running" | "done" | "error" | "cancelled";
+import type { PendingInterrupt } from "../../types";
+
+export type ParallelTaskStatus =
+  | "running"
+  | "waiting"
+  | "done"
+  | "error"
+  | "cancelled";
 
 export type ParallelWorktreeInfo = {
   path: string;
@@ -23,17 +30,24 @@ export type ParallelChatTask = {
   finishedAt?: number;
   /** MultiTask git worktree；无仓时为空 */
   worktree?: ParallelWorktreeInfo;
+  /** 该 task 会话内未决 HITL（不写入主会话 sessionPendingInterrupts） */
+  pendingInterrupts?: PendingInterrupt[];
 };
 
-/** 同时 running 的上限（不含已结束） */
+/** 同时占用槽位的上限（running + waiting） */
 export const MAX_PARALLEL_RUNNING = 5;
 
 export function newParallelTaskId(): string {
   return `pt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** 仍占用并发槽：执行中或等待用户审批/澄清 */
 export function countRunningParallel(tasks: ParallelChatTask[]): number {
-  return tasks.filter((t) => t.status === "running").length;
+  return tasks.filter((t) => t.status === "running" || t.status === "waiting").length;
+}
+
+export function isParallelTaskActive(status: ParallelTaskStatus): boolean {
+  return status === "running" || status === "waiting";
 }
 
 export function countSettledByStatus(tasks: ParallelChatTask[]): {

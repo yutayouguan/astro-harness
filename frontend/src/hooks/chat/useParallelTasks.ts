@@ -4,10 +4,11 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { applyActivityUpsert, sealOpenReasoning } from "../../lib/chat/chatTimeline";
+import { applyActivityUpsert, applySurfaceUpsert, sealOpenReasoning } from "../../lib/chat/chatTimeline";
 import { chatModeHint } from "../../lib/chat/chatMode";
 import {
   countRunningParallel,
+  isParallelTaskActive,
   MAX_PARALLEL_RUNNING,
   newParallelTaskId,
   type ParallelChatTask,
@@ -22,7 +23,9 @@ import type {
   ChatActivity,
   ChatAttachment,
   ChatMessage,
+  PendingInterrupt,
   ProviderDto,
+  UiSurface,
 } from "../../types";
 import type { MessageKey } from "../../i18n/messages";
 import type { ShowToastOptions } from "../ui/useTransientToast";
@@ -50,6 +53,8 @@ export function useParallelTasks(deps: Deps) {
   depsRef.current = deps;
 
   const [parallelTasks, setParallelTasks] = useState<ParallelChatTask[]>([]);
+  const parallelTasksRef = useRef(parallelTasks);
+  parallelTasksRef.current = parallelTasks;
   const unlistenMapRef = useRef<Map<string, { unlisten: UnlistenFn; sessionId: string }>>(
     new Map(),
   );
@@ -139,8 +144,8 @@ export function useParallelTasks(deps: Deps) {
 
   const cancelParallelTask = useCallback(
     async (taskId: string) => {
-      const task = parallelTasks.find((t) => t.id === taskId);
-      if (!task) return;
+      const task = parallelTasksRef.current.find((t) => t.id === taskId);
+      if (!task || !isParallelTaskActive(task.status)) return;
       cleanupTaskStream(taskId, task.assistantMessageId);
       try {
         await invoke("chat_control", { sessionId: task.sessionId, action: "cancel" });
@@ -150,7 +155,12 @@ export function useParallelTasks(deps: Deps) {
       setParallelTasks((prev) =>
         prev.map((t) =>
           t.id === taskId
-            ? { ...t, status: "cancelled", finishedAt: Date.now() }
+            ? {
+                ...t,
+                status: "cancelled",
+                finishedAt: Date.now(),
+                pendingInterrupts: undefined,
+              }
             : t,
         ),
       );
@@ -169,13 +179,87 @@ export function useParallelTasks(deps: Deps) {
               ...m,
               content: (m.content || "").trim() || depsRef.current.t("chat.task.cancelled"),
               generationStartedAt: undefined,
+              uiSurfaces: m.uiSurfaces?.map((s) => ({
+                ...s,
+                status: "cancelled" as const,
+              })),
             },
             Date.now(),
           );
         }),
       );
     },
-    [parallelTasks, cleanupTaskStream],
+    [cleanupTaskStream],
+  );
+
+  /** 并行气泡 HITL 批准/澄清：按 task.sessionId resume，不碰主会话 streaming */
+  const resumeParallelHitl = useCallback(
+    async (
+      assistantMessageId: string,
+      payload: Record<string, unknown>,
+    ): Promise<boolean> => {
+      const task = parallelTasksRef.current.find(
+        (t) =>
+          t.assistantMessageId === assistantMessageId &&
+          t.status === "waiting" &&
+          (t.pendingInterrupts?.length ?? 0) > 0,
+      );
+      if (!task?.pendingInterrupts?.length) return false;
+
+      const resumeJson = JSON.stringify(
+        task.pendingInterrupts.map((p) => ({
+          interrupt_id: p.id,
+          status: "resolved",
+          payload,
+        })),
+      );
+
+      depsRef.current.setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== assistantMessageId) return m;
+          return {
+            ...m,
+            uiSurfaces: m.uiSurfaces?.map((s) => ({
+              ...s,
+              status: "resolved" as const,
+            })),
+          };
+        }),
+      );
+      setParallelTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? { ...t, status: "running", pendingInterrupts: undefined }
+            : t,
+        ),
+      );
+
+      try {
+        await invoke("interrupt_resume", {
+          sessionId: task.sessionId,
+          resumeJson,
+        });
+        return true;
+      } catch (e) {
+        depsRef.current.showTransientToast(
+          e instanceof Error ? e.message : String(e ?? "HITL resume failed"),
+          { tone: "error" },
+        );
+        setParallelTasks((prev) =>
+          prev.map((t) =>
+            t.id === task.id
+              ? {
+                  ...t,
+                  status: "waiting",
+                  pendingInterrupts: task.pendingInterrupts,
+                }
+              : t,
+          ),
+        );
+        return true; // 已路由到并行，勿再走主会话
+      }
+    },
+    [],
   );
 
   const startParallelTask = useCallback(async (opts: StartParallelTaskOpts) => {
@@ -302,7 +386,13 @@ export function useParallelTasks(deps: Deps) {
       setParallelTasks((prev) =>
         prev.map((t) =>
           t.id === taskId
-            ? { ...t, status, error, finishedAt: Date.now() }
+            ? {
+                ...t,
+                status,
+                error,
+                finishedAt: Date.now(),
+                pendingInterrupts: undefined,
+              }
             : t,
         ),
       );
@@ -320,6 +410,10 @@ export function useParallelTasks(deps: Deps) {
         result?: string;
         index?: number;
         outcome_type?: string;
+        interrupts_json?: string;
+        message_id?: string;
+        activity_type?: string;
+        content_json?: string;
         media?: Array<{
           kind?: string;
           ref_value?: string;
@@ -336,24 +430,99 @@ export function useParallelTasks(deps: Deps) {
                 : m,
             ),
           );
+        } else if (payload.type === "activity") {
+          let operations: unknown[] = [];
+          try {
+            const parsed = JSON.parse(payload.content_json || "{}") as {
+              operations?: unknown;
+            };
+            if (Array.isArray(parsed.operations)) {
+              operations = parsed.operations;
+            }
+          } catch {
+            /* ignore malformed activity */
+          }
+          const surface: UiSurface = {
+            messageId: payload.message_id || `surf-${Date.now()}`,
+            activityType: payload.activity_type || "a2ui-surface",
+            operations,
+            status: "active",
+          };
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantId) return m;
+              return applySurfaceUpsert(m, surface);
+            }),
+          );
         } else if (
           payload.type === "run_finished" &&
           (payload.outcome_type === "interrupt" ||
             payload.outcome_type === "hitl_waiting")
         ) {
-          showTransientToast(t("chat.task.hitlUnsupported"), { tone: "warning" });
-          void invoke("chat_control", {
-            sessionId,
-            action: "cancel",
-          }).catch(() => {});
-          finish("error", t("chat.task.hitlUnsupported"));
-          if (worktree) {
-            void invoke("cleanup_multitask_worktree", {
-              path: worktree.path,
-              repoRoot: worktree.repoRoot,
-              branch: worktree.branch,
-            }).catch(() => {});
+          let interrupts: PendingInterrupt[] = [];
+          try {
+            const arr = JSON.parse(payload.interrupts_json || "[]") as unknown;
+            if (Array.isArray(arr)) {
+              interrupts = arr
+                .map((raw) => {
+                  const i = raw as Record<string, unknown>;
+                  let responseSchema: unknown;
+                  const schemaRaw = i.response_schema_json;
+                  if (typeof schemaRaw === "string" && schemaRaw.trim()) {
+                    try {
+                      responseSchema = JSON.parse(schemaRaw);
+                    } catch {
+                      responseSchema = undefined;
+                    }
+                  }
+                  return {
+                    id: String(i.id ?? ""),
+                    reason: String(i.reason ?? ""),
+                    message: typeof i.message === "string" ? i.message : undefined,
+                    responseSchema,
+                    assistantMessageId: assistantId,
+                  } satisfies PendingInterrupt;
+                })
+                .filter((i) => i.id);
+            }
+          } catch {
+            interrupts = [];
           }
+          setParallelTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId
+                ? { ...t, status: "waiting", pendingInterrupts: interrupts }
+                : t,
+            ),
+          );
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantId) return m;
+              let next = m;
+              const surfaces = [...(m.uiSurfaces ?? [])];
+              if (surfaces.length > 0) {
+                const last = surfaces[surfaces.length - 1]!;
+                next = applySurfaceUpsert(next, {
+                  ...last,
+                  interrupts: interrupts.map(
+                    ({ id, reason, message, responseSchema }) => ({
+                      id,
+                      reason,
+                      message,
+                      responseSchema,
+                    }),
+                  ),
+                });
+              }
+              return sealOpenReasoning(next, Date.now());
+            }),
+          );
+        } else if (payload.type === "run_finished" && payload.outcome_type === "success") {
+          setParallelTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId ? { ...t, pendingInterrupts: undefined } : t,
+            ),
+          );
         } else if (payload.type === "tool_call") {
           const name = payload.name ?? "tool";
           const activity: ChatActivity = {
@@ -479,7 +648,7 @@ export function useParallelTasks(deps: Deps) {
   const clearSettledParallel = useCallback(() => {
     setParallelTasks((prev) => {
       for (const task of prev) {
-        if (task.status === "running") continue;
+        if (isParallelTaskActive(task.status)) continue;
         if (task.worktree) {
           void invoke("cleanup_multitask_worktree", {
             path: task.worktree.path,
@@ -488,7 +657,7 @@ export function useParallelTasks(deps: Deps) {
           }).catch(() => {});
         }
       }
-      return prev.filter((t) => t.status === "running");
+      return prev.filter((t) => isParallelTaskActive(t.status));
     });
   }, []);
 
@@ -499,6 +668,7 @@ export function useParallelTasks(deps: Deps) {
     parallelRunning,
     startParallelTask,
     cancelParallelTask,
+    resumeParallelHitl,
     clearAllParallel,
     clearSettledParallel,
     setParallelTasks,

@@ -532,6 +532,7 @@ export const zh = {
   "chat.task.limit": "并行任务已满（最多 {max} 个同时运行）",
   "chat.task.hitlUnsupported": "并行任务暂不支持审批/澄清，已结束该任务",
   "chat.task.status.running": "进行中",
+  "chat.task.status.waiting": "待确认",
   "chat.task.status.done": "完成",
   "chat.task.status.error": "失败",
   "chat.task.status.cancelled": "已停",
@@ -2186,6 +2187,7 @@ export const en: Record<MessageKey, string> = {
   "chat.task.hitlUnsupported":
     "Parallel tasks do not support approval/clarify yet; this task was ended",
   "chat.task.status.running": "Running",
+  "chat.task.status.waiting": "Waiting",
   "chat.task.status.done": "Done",
   "chat.task.status.error": "Failed",
   "chat.task.status.cancelled": "Stopped",
