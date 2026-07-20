@@ -10,7 +10,6 @@ import {
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import {
-  chatModeHint,
   parseModeSwitchResult,
   type ChatInteractionMode,
   type ModeSwitchRequest,
@@ -409,11 +408,10 @@ export function useSend(deps: UseSendDeps) {
       pendingUsageRef.current.delete(assistantId);
 
       const effectiveMode = opts?.interactionMode ?? chatMode;
-      const contentForModel = `${
-        isCreatingAgent
-          ? `${modelBody}\n\n---\n${t("chat.agentCreateHint")}`
-          : modelBody
-      }${chatModeHint(effectiveMode, t)}`;
+      // 交互模式说明由后端写入 system prompt，不拼进用户消息（避免污染历史/UI）
+      const contentForModel = isCreatingAgent
+        ? `${modelBody}\n\n---\n${t("chat.agentCreateHint")}`
+        : modelBody;
 
       try {
         unlistenRef.current?.();

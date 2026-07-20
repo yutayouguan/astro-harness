@@ -1102,7 +1102,11 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
+        let guidance = format!(
+            "{}\n\n{}",
+            crate::prompt::prompt_builder::TOOL_GUIDANCE,
+            self.interaction_mode.system_guidance()
+        );
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
         let timestamp = format!("# 当前时间\n{now}");
         let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
@@ -1112,7 +1116,7 @@ impl AgentLoop {
             None, // inject 走 take_inject_context / user 消息，不进 system
             &skill_index,
             &dynamic_ctx,
-            guidance,
+            &guidance,
             &timestamp,
         )
     }
@@ -1130,6 +1134,8 @@ impl AgentLoop {
             .with_tool_guidance()
             .with_timestamp()
             .build();
+        guidance_ts.push_str("\n\n");
+        guidance_ts.push_str(self.interaction_mode.system_guidance());
         let mut system_chars = guidance_ts.len();
         for part in [&static_ctx.soul, &static_ctx.identity, &static_ctx.agent_md] {
             system_chars += part.trim().len();

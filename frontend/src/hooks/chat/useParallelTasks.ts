@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { applyActivityUpsert, applySurfaceUpsert, sealOpenReasoning } from "../../lib/chat/chatTimeline";
-import { chatModeHint } from "../../lib/chat/chatMode";
 import {
   countRunningParallel,
   isParallelTaskActive,
@@ -368,7 +367,8 @@ export function useParallelTasks(deps: Deps) {
     setInput("");
     setAttachments([]);
 
-    const contentForModel = `${text}${chatModeHint("multitask", t)}`;
+    // 交互模式说明由后端写入 system prompt，不拼进用户消息
+    const contentForModel = text;
     const globals = loadPickerGlobals();
     const sendSupportsThinking = shouldShowThinkingControls({
       capabilities: null,

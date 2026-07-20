@@ -520,14 +520,6 @@ export const zh = {
   "chat.modeSwitch.cancel": "取消",
   "chat.modeSwitch.declined": "已取消模式切换，正在告知模型继续",
   "chat.mode.clearedQueueForMultitask": "已切换到 MultiTask，排队消息已清空（请重新发送以并行启动）",
-  "chat.mode.hint.agent":
-    "[Mode: Agent] 可执行工具。复杂多步任务可先 request_mode_switch(to=\"plan\", reason=…) 进入规划。",
-  "chat.mode.hint.plan":
-    "[Mode: Plan] 只读规划：可用 file_ops(read/list/search)、web_search、task_plan 等。禁止写文件、terminal、code_exec、delegate、memory。计划就绪后调用 request_mode_switch(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。",
-  "chat.mode.hint.ask":
-    "[Mode: Ask] 只读问答：解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 request_mode_switch(to=\"agent\", …)。",
-  "chat.mode.hint.multitask":
-    "[Mode: MultiTask] 将目标拆成可并行子任务，协调完成并汇总结果。",
   "chat.mode.desc.agent": "全工具，单线程队列",
   "chat.mode.desc.plan": "只读规划，确认后再执行",
   "chat.mode.desc.ask": "只读问答，不改文件",
@@ -2233,14 +2225,6 @@ export const en: Record<MessageKey, string> = {
   "chat.modeSwitch.declined": "Mode switch cancelled; telling the model to continue",
   "chat.mode.clearedQueueForMultitask":
     "Switched to MultiTask; queued messages were cleared (resend to start in parallel)",
-  "chat.mode.hint.agent":
-    "[Mode: Agent] Tools enabled. For complex multi-step work, call request_mode_switch(to=\"plan\", reason=…) first.",
-  "chat.mode.hint.plan":
-    "[Mode: Plan] Read-only planning: file_ops(read/list/search), web_search, task_plan. No writes, terminal, code_exec, delegate, or memory. When ready, call request_mode_switch(to=\"agent\", reason=…, summary=plan summary).",
-  "chat.mode.hint.ask":
-    "[Mode: Ask] Read-only Q&A: explain and retrieve; do not modify files or run side effects. To implement, call request_mode_switch(to=\"agent\", …).",
-  "chat.mode.hint.multitask":
-    "[Mode: MultiTask] Split the goal into parallel subtasks, coordinate, and summarize.",
   "chat.mode.desc.agent": "Full tools, single-thread queue",
   "chat.mode.desc.plan": "Read-only plan, then execute",
   "chat.mode.desc.ask": "Read-only Q&A, no file changes",

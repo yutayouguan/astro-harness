@@ -1,8 +1,9 @@
 /**
- * 聊天交互模式（Agent / Plan / Ask / MultiTask）及发送前附加提示。
+ * 聊天交互模式（Agent / Plan / Ask / MultiTask）。
+ *
+ * 模式行为说明由后端写入 system prompt（`InteractionMode::system_guidance`），
+ * 前端只负责 UI 选择与 `interactionMode` 传参。
  */
-
-import type { MessageKey } from "../../i18n/messages";
 
 export type ChatInteractionMode = "agent" | "plan" | "ask" | "multitask";
 
@@ -77,21 +78,3 @@ export function parseModeSwitchResult(
   }
 }
 
-/** 发送前附加的模式提示（由调用方传入 i18n `t`） */
-export function chatModeHint(
-  mode: ChatInteractionMode,
-  t: (key: MessageKey) => string,
-): string {
-  switch (mode) {
-    case "plan":
-      return `\n\n---\n${t("chat.mode.hint.plan")}`;
-    case "ask":
-      return `\n\n---\n${t("chat.mode.hint.ask")}`;
-    case "multitask":
-      return `\n\n---\n${t("chat.mode.hint.multitask")}`;
-    case "agent":
-      return `\n\n---\n${t("chat.mode.hint.agent")}`;
-    default:
-      return "";
-  }
-}
