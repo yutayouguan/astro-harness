@@ -715,6 +715,14 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   color: #1a9e8f;
 }
 
+.model-picker-cap-icon.is-file {
+  color: #0d9488;
+}
+
+.model-picker-cap-icon.is-audio-in {
+  color: #db2777;
+}
+
 .model-picker-cap-icon.is-web {
   color: #2f80ed;
 }
@@ -729,6 +737,10 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 
 .model-picker-cap-icon.is-audio-gen {
   color: #16a085;
+}
+
+.model-picker-cap-icon.is-music-gen {
+  color: #c026d3;
 }
 
 .model-picker-option-check {
