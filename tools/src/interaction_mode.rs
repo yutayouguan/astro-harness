@@ -1,6 +1,7 @@
 //! 聊天交互模式（Agent / Plan / Ask / MultiTask）的工具能力档。
 //!
 //! Plan / Ask：只读向；写文件、有副作用终端、委派等硬拦。
+//! Ask 比 Plan 更严（禁 task_plan）。
 //! Agent / MultiTask：不额外限制（仍受 tools_enabled 约束）。
 
 use serde::{Deserialize, Serialize};
@@ -43,27 +44,27 @@ impl InteractionMode {
 }
 
 /// Plan / Ask 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
+/// `memory` 全写，不在此列；`skills` / `file_ops` / `task_plan` 另有 action 级限制。
 const READONLY_ALLOW: &[&str] = &[
     "file_ops", // action 级再拦写
     "web_search",
     "web_extract",
     "browser",
     "session_search",
-    "search_tools",
-    "search_skills",
     "search_context",
-    "memory",
-    "skills",
+    "skills", // action 级仅 list/load/view/curate
     "ask",
-    "task_plan",
+    "task_plan", // Ask 模式下硬拦
     "request_mode_switch",
     "request_user_location",
     "present_metrics",
-    "context_tools",
 ];
 
 /// `file_ops` 只读 operation。
 const FILE_OPS_READ: &[&str] = &["read", "list", "search"];
+
+/// `skills` 只读 / 加载类 action（禁 manage 写盘）。
+const SKILLS_READ: &[&str] = &["list", "load", "view", "curate", "search"];
 
 /// 工具是否出现在 API schema 中（只读门禁下）。
 pub fn tool_visible_in_mode(mode: InteractionMode, name: &str) -> bool {
@@ -71,6 +72,12 @@ pub fn tool_visible_in_mode(mode: InteractionMode, name: &str) -> bool {
         return true;
     }
     if name.starts_with("mcp__") {
+        return false;
+    }
+    if mode == InteractionMode::Ask && name == "task_plan" {
+        return false;
+    }
+    if name == "memory" || name == "pin_context" {
         return false;
     }
     READONLY_ALLOW.iter().any(|n| *n == name)
@@ -92,6 +99,18 @@ pub fn check_tool_call(
             mode.as_str()
         ));
     }
+    if name == "memory" || name == "pin_context" {
+        return Err(format!(
+            "[blocked by {} mode] `{name}` writes persistent memory/context. Call request_mode_switch(to=\"agent\") if needed.",
+            mode.as_str()
+        ));
+    }
+    if mode == InteractionMode::Ask && name == "task_plan" {
+        return Err(
+            "[blocked by ask mode] task_plan writes plan files. Stay read-only, or switch to Plan/Agent."
+                .into(),
+        );
+    }
     if !READONLY_ALLOW.iter().any(|n| *n == name) {
         return Err(format!(
             "[blocked by {} mode] Tool `{name}` is not available. Stay read-only, or call request_mode_switch(to=\"agent\", …) after the plan is ready.",
@@ -111,6 +130,36 @@ pub fn check_tool_call(
                 "[blocked by {} mode] file_ops operation `{op}` writes or mutates the workspace. Only read/list/search are allowed. Call request_mode_switch(to=\"agent\") to execute.",
                 mode.as_str()
             ));
+        }
+    }
+    if name == "skills" {
+        let action = args
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("load")
+            .trim()
+            .to_ascii_lowercase();
+        // manage / create / update / patch / delete 等写盘
+        if action == "manage"
+            || action == "create"
+            || action == "update"
+            || action == "patch"
+            || action == "delete"
+            || action == "write"
+        {
+            return Err(format!(
+                "[blocked by {} mode] skills action `{action}` mutates skill files. Only list/load/view/curate are allowed.",
+                mode.as_str()
+            ));
+        }
+        if !SKILLS_READ.iter().any(|a| *a == action) && !action.is_empty() {
+            // 未知 action：保守拦截写类
+            if action.contains("write") || action.contains("edit") || action.contains("remove") {
+                return Err(format!(
+                    "[blocked by {} mode] skills action `{action}` is not allowed in read-only mode.",
+                    mode.as_str()
+                ));
+            }
         }
     }
     if name == "terminal" {
@@ -164,6 +213,40 @@ mod tests {
     }
 
     #[test]
+    fn plan_blocks_memory_and_skills_manage() {
+        assert!(check_tool_call(
+            InteractionMode::Plan,
+            "memory",
+            &json!({ "action": "add", "content": "x" }),
+        )
+        .is_err());
+        assert!(check_tool_call(
+            InteractionMode::Plan,
+            "skills",
+            &json!({ "action": "manage", "op": "create" }),
+        )
+        .is_err());
+        assert!(check_tool_call(
+            InteractionMode::Plan,
+            "skills",
+            &json!({ "action": "load", "skill_id": "x" }),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn ask_blocks_task_plan() {
+        assert!(check_tool_call(
+            InteractionMode::Ask,
+            "task_plan",
+            &json!({ "title": "t" }),
+        )
+        .is_err());
+        assert!(!tool_visible_in_mode(InteractionMode::Ask, "task_plan"));
+        assert!(tool_visible_in_mode(InteractionMode::Plan, "task_plan"));
+    }
+
+    #[test]
     fn agent_allows_write() {
         assert!(check_tool_call(
             InteractionMode::Agent,
@@ -181,5 +264,6 @@ mod tests {
             InteractionMode::Plan,
             "request_mode_switch"
         ));
+        assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));
     }
 }

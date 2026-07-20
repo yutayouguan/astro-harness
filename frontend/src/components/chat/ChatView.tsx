@@ -1300,6 +1300,9 @@ export default function ChatView({
     (input.trim().length > 0 || attachments.length > 0) &&
     (!streaming || canQueueWhileBusy || chatMode === "multitask") &&
     (queueEnabled || !interruptBlocked);
+  /** MultiTask：并行/残留主会话流时仍显示 Send；Pause/Stop 仅在主会话 streaming 时出现 */
+  const showMainStreamControls = streaming;
+  const showSendButton = chatMode === "multitask" || !streaming;
   const parallelRunningIds = useMemo(
     () =>
       new Set(
@@ -2126,7 +2129,10 @@ export default function ChatView({
                     ? t("chat.welcomePlaceholder")
                     : composerPlaceholder || t("chat.placeholder")
               }
-              disabled={streaming || (interruptBlocked && !queueEnabled)}
+              disabled={
+                (streaming && chatMode !== "multitask") ||
+                (interruptBlocked && !queueEnabled)
+              }
               autoFocus
             />
           </div>
@@ -2136,7 +2142,7 @@ export default function ChatView({
                 <button
                   type="button"
                   className={`composer-mode-pill ${modeMenuOpen ? "is-open" : ""}`}
-                  disabled={streaming}
+                  disabled={streaming || turnInFlight}
                   aria-haspopup="listbox"
                   aria-expanded={modeMenuOpen}
                   aria-label={t("chat.modeMenu")}
@@ -2354,7 +2360,7 @@ export default function ChatView({
               >
                 <Paperclip size={17} strokeWidth={2} />
               </button>
-              {streaming ? (
+              {showMainStreamControls ? (
                 <>
                   {streamPaused ? (
                     <button
@@ -2387,7 +2393,8 @@ export default function ChatView({
                     <Square size={14} strokeWidth={2.4} fill="currentColor" />
                   </button>
                 </>
-              ) : (
+              ) : null}
+              {showSendButton ? (
                 <button
                   className="send-btn send-btn--round"
                   type="submit"
@@ -2395,9 +2402,9 @@ export default function ChatView({
                   aria-label={t("chat.send")}
                   title={t("chat.send")}
                 >
-                    <SendHorizontal size={17} strokeWidth={2.2} />
-                  </button>
-              )}
+                  <SendHorizontal size={17} strokeWidth={2.2} />
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

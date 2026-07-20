@@ -901,8 +901,8 @@ export function useSend(deps: UseSendDeps) {
 
         const keepChatBubbles = pendingKeepChatBubblesRef.current;
 
-        // Agent 模式：会话级 worktree（与 MultiTask 共用 prepare 命令）
-        let projectRoot: string | undefined;
+        // Agent：会话级 worktree；其它模式显式传空串，避免后端粘住上一轮 project_root
+        let projectRoot = "";
         if (effectiveMode === "agent") {
           const existing = sessionWorktreeRef.current;
           if (existing && existing.sessionId === sid) {
@@ -935,6 +935,14 @@ export function useSend(deps: UseSendDeps) {
               console.warn("prepare session worktree failed", e);
             }
           }
+        } else if (sessionWorktreeRef.current) {
+          const existing = sessionWorktreeRef.current;
+          void invoke("cleanup_multitask_worktree", {
+            path: existing.path,
+            repoRoot: existing.repoRoot,
+            branch: existing.branch,
+          }).catch(() => {});
+          sessionWorktreeRef.current = null;
         }
 
         await invoke<string>("start_chat", {

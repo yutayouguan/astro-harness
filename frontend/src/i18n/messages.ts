@@ -510,6 +510,7 @@ export const zh = {
   "chat.modeSwitch.now": "立即切换",
   "chat.modeSwitch.cancel": "取消",
   "chat.modeSwitch.declined": "已取消模式切换，正在告知模型继续",
+  "chat.mode.clearedQueueForMultitask": "已切换到 MultiTask，排队消息已清空（请重新发送以并行启动）",
   "chat.task.title": "{running}/{total} 并行任务",
   "chat.task.cancel": "停止此任务",
   "chat.task.cancelled": "（已停止）",
@@ -2145,6 +2146,8 @@ export const en: Record<MessageKey, string> = {
   "chat.modeSwitch.now": "Switch now",
   "chat.modeSwitch.cancel": "Cancel",
   "chat.modeSwitch.declined": "Mode switch cancelled; telling the model to continue",
+  "chat.mode.clearedQueueForMultitask":
+    "Switched to MultiTask; queued messages were cleared (resend to start in parallel)",
   "chat.task.title": "{running}/{total} parallel tasks",
   "chat.task.cancel": "Stop this task",
   "chat.task.cancelled": "(stopped)",

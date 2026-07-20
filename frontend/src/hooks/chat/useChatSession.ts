@@ -309,6 +309,48 @@ export function useChatSession({
 
   const chatModeRef = useRef(chatMode);
   chatModeRef.current = chatMode;
+  const prevChatModeRef = useRef(chatMode);
+  useEffect(() => {
+    const prev = prevChatModeRef.current;
+    if (prev === chatMode) return;
+    prevChatModeRef.current = chatMode;
+
+    if (chatMode === "multitask" && prev !== "multitask") {
+      let hadQueue = false;
+      setQueuedFollowUps((q) => {
+        hadQueue = q.length > 0;
+        for (const item of q) {
+          for (const a of item.attachments) {
+            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+          }
+        }
+        return [];
+      });
+      setModeSwitchPrompt(null);
+      modeSwitchArmedRef.current = false;
+      modeSwitchPromptRef.current = null;
+      if (hadQueue) {
+        showTransientToast(t("chat.mode.clearedQueueForMultitask"), {
+          tone: "warning",
+        });
+      }
+    }
+    if (prev === "multitask" && chatMode !== "multitask") {
+      clearAllParallel();
+    }
+    if (prev === "agent" && chatMode !== "agent") {
+      const wt = sessionWorktreeRef.current;
+      if (wt) {
+        void invoke("cleanup_multitask_worktree", {
+          path: wt.path,
+          repoRoot: wt.repoRoot,
+          branch: wt.branch,
+        }).catch(() => {});
+        sessionWorktreeRef.current = null;
+      }
+    }
+  }, [chatMode, clearAllParallel, showTransientToast, t]);
+
   const onChatModeChangeRef = useRef(onChatModeChange);
   onChatModeChangeRef.current = onChatModeChange;
   const sendImmediateRef = useRef(sendImmediate);
@@ -324,7 +366,10 @@ export function useChatSession({
     modeSwitchPromptRef.current = null;
     setModeSwitchPrompt(null);
     modeSwitchArmedRef.current = false;
-    if (!req) return;
+    if (!req) {
+      setQueueKick((k) => k + 1);
+      return;
+    }
     const inject =
       `[Mode switch declined]\n` +
       `The user declined switching to "${req.to}". ` +
@@ -332,7 +377,10 @@ export function useChatSession({
       `Stay in the current interaction mode and continue. ` +
       `Do not call request_mode_switch again for the same reason unless the user explicitly asks.`;
     showTransientToast(t("chat.modeSwitch.declined"), { tone: "warning" });
-    void sendImmediateRef.current({ text: inject });
+    void (async () => {
+      await sendImmediateRef.current({ text: inject });
+      setQueueKick((k) => k + 1);
+    })();
   }, [showTransientToast, t]);
 
   const writeParallelSummary = useCallback(() => {
@@ -368,7 +416,11 @@ export function useChatSession({
 
   const approveModeSwitch = useCallback(async () => {
     const req = modeSwitchPromptRef.current;
-    if (!req) return;
+    if (!req) {
+      setModeSwitchPrompt(null);
+      setQueueKick((k) => k + 1);
+      return;
+    }
     modeSwitchPromptRef.current = null;
     setModeSwitchPrompt(null);
     modeSwitchArmedRef.current = false;
@@ -376,11 +428,21 @@ export function useChatSession({
     if (req.to === "agent" && req.summary) {
       const inject =
         `[Authorized mode switch: Plan → Agent]\n\nConfirmed plan:\n${req.summary}`;
-      void sendImmediateRef.current({
+      await sendImmediateRef.current({
         text: inject,
         interactionMode: "agent",
       });
+    } else if (req.to === "plan") {
+      const inject =
+        `[Authorized mode switch: Agent → Plan]\n` +
+        `Reason: ${req.reason}\n` +
+        `Stay in Plan mode: produce a clear step-by-step plan. Do not write files or run side-effect tools until switched back to Agent.`;
+      await sendImmediateRef.current({
+        text: inject,
+        interactionMode: "plan",
+      });
     }
+    setQueueKick((k) => k + 1);
   }, []);
 
   /** 单线程：流式中入队；MultiTask：立即开独立 session 并行 */
@@ -471,6 +533,7 @@ export function useChatSession({
   useEffect(() => {
     if (streaming || turnInFlight || isCompacting || sessionReadOnly) return;
     if (sessionPendingInterrupts.length > 0) return;
+    if (modeSwitchPrompt) return;
     if (chatModeRef.current === "multitask") return;
     if (queueDrainLockRef.current) return;
 
@@ -509,6 +572,7 @@ export function useChatSession({
     isCompacting,
     sessionReadOnly,
     sessionPendingInterrupts.length,
+    modeSwitchPrompt,
     queuedFollowUps,
     queueKick,
     sendImmediate,
@@ -1434,12 +1498,17 @@ export function useChatSession({
         return;
       }
       try {
+        setStreaming(true);
+        setStreamPaused(false);
+        setStatus("busy");
+        setStatusPhase("generating");
         await invoke("interrupt_resume", { sessionId, resumeJson });
       } catch (e) {
+        setStreaming(false);
         showTransientToast(e instanceof Error ? e.message : String(e ?? "HITL resume failed"));
       }
     },
-    [activeProvider, sessionPendingInterrupts, sessionId, showTransientToast, t],
+    [activeProvider, sessionPendingInterrupts, sessionId, showTransientToast, t, setStreaming, setStreamPaused, setStatus, setStatusPhase],
   );
 
   // ── Reset / New session ───────────────────────────────────────────────────
@@ -1454,12 +1523,12 @@ export function useChatSession({
   }, [sessionId, clearLocalChatSurface]);
 
   const confirmIfStreaming = useCallback(async () => {
-    if (!streaming) return true;
+    if (!streaming && !turnInFlight && parallelRunning === 0) return true;
     return confirm({
       title: t("chat.newSession"),
       message: t("chat.newSessionStreamingConfirm"),
     });
-  }, [streaming, t, confirm]);
+  }, [streaming, turnInFlight, parallelRunning, t, confirm]);
 
   const startNewChat = useCallback(async () => {
     if (!(await confirmIfStreaming())) return;
@@ -1487,10 +1556,41 @@ export function useChatSession({
     }
   }, []);
 
+  const resetSchedulingSurface = useCallback(() => {
+    setQueuedFollowUps((prev) => {
+      for (const q of prev) {
+        for (const a of q.attachments) {
+          if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+        }
+      }
+      return [];
+    });
+    setModeSwitchPrompt(null);
+    modeSwitchArmedRef.current = false;
+    modeSwitchPromptRef.current = null;
+    turnInFlightRef.current = false;
+    setTurnInFlight(false);
+    checkpointFiredForTurnRef.current = false;
+    queueFailedIdRef.current = null;
+    setStreaming(false);
+    setStreamPaused(false);
+    const wt = sessionWorktreeRef.current;
+    if (wt) {
+      void invoke("cleanup_multitask_worktree", {
+        path: wt.path,
+        repoRoot: wt.repoRoot,
+        branch: wt.branch,
+      }).catch(() => {});
+      sessionWorktreeRef.current = null;
+    }
+    clearAllParallel();
+  }, [clearAllParallel]);
+
   // ── Open session from file space ──────────────────────────────────────────
   const openSessionFromFilespace = useCallback(
     async (targetSessionId: string, messageId?: string | null) => {
       try {
+        resetSchedulingSurface();
         const hist = await invoke<ChatHistoryDto>("get_chat_history", {
           sessionId: targetSessionId,
           limit: 200,
@@ -1516,7 +1616,7 @@ export function useChatSession({
         setStatusDetail(String(e));
       }
     },
-    [applyRestoredHistory, currentRunIdRef, setNav],
+    [applyRestoredHistory, currentRunIdRef, setNav, resetSchedulingSurface],
   );
 
   // ── Attach artifacts ──────────────────────────────────────────────────────

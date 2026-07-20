@@ -55,6 +55,8 @@ export function useParallelTasks(deps: Deps) {
   );
   const streamBufRef = useRef<Map<string, string>>(new Map());
   const rafMapRef = useRef<Map<string, number>>(new Map());
+  /** 已占槽但尚未写入 running task 的并发启动数（防 TOCTOU） */
+  const pendingStartsRef = useRef(0);
 
   const flushToken = useCallback((assistantId: string) => {
     const pending = streamBufRef.current.get(assistantId) ?? "";
@@ -197,10 +199,11 @@ export function useParallelTasks(deps: Deps) {
 
     let blocked = false;
     setParallelTasks((prev) => {
-      if (countRunningParallel(prev) >= MAX_PARALLEL_RUNNING) {
+      if (countRunningParallel(prev) + pendingStartsRef.current >= MAX_PARALLEL_RUNNING) {
         blocked = true;
         return prev;
       }
+      pendingStartsRef.current += 1;
       return prev;
     });
     if (blocked) {
@@ -211,6 +214,10 @@ export function useParallelTasks(deps: Deps) {
       return false;
     }
 
+    const releasePendingSlot = () => {
+      pendingStartsRef.current = Math.max(0, pendingStartsRef.current - 1);
+    };
+
     const taskId = newParallelTaskId();
     const sessionId = crypto.randomUUID();
     const userId = `u-${taskId}`;
@@ -218,6 +225,7 @@ export function useParallelTasks(deps: Deps) {
     const createdAt = Date.now();
 
     let worktree: ParallelChatTask["worktree"];
+    let slotted = true;
     try {
       const prepared = await invoke<{
         path: string;
@@ -246,7 +254,14 @@ export function useParallelTasks(deps: Deps) {
       worktree,
     };
 
-    setParallelTasks((prev) => [task, ...prev]);
+    try {
+      setParallelTasks((prev) => [task, ...prev]);
+      releasePendingSlot();
+      slotted = false;
+    } finally {
+      if (slotted) releasePendingSlot();
+    }
+
     setMessages((prev) => [
       ...prev,
       {
