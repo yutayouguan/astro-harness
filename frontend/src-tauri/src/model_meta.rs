@@ -1,4 +1,7 @@
-//! 模型能力与上下文窗口：仅来自提供商 API 字段与 LiteLLM 表，不做名称硬编码猜测。
+//! 模型能力与上下文窗口：主要来自提供商 API 与 LiteLLM 表。
+//!
+//! 对目录已知漏标（如 DeepSeek V4 的 `supports_reasoning`）可做有限的 known 补丁，
+//! 不做泛化名称猜测。
 
 use serde::{Deserialize, Serialize};
 
@@ -212,9 +215,45 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         sources.push("litellm");
     }
 
+    if apply_known_capability_overrides(&kind, &id_lower, info) {
+        sources.push("known");
+    }
+
     sources.sort();
     sources.dedup();
     info.meta_source = sources.join("+");
+}
+
+/// 目录漏标补丁：仅覆盖已核实、且运行时协议已支持的能力。
+///
+/// DeepSeek V4 的 thinking 是请求级参数（`thinking` / `reasoning_effort`），官方
+/// LiteLLM `deepseek-v4-*` 条目的 `supports_reasoning` 仍为 null；Azure 等镜像已标 true。
+fn apply_known_capability_overrides(kind: &str, id_lower: &str, info: &mut ModelInfo) -> bool {
+    let is_deepseek_family = kind == "deepseek" || id_lower.contains("deepseek");
+    if !is_deepseek_family {
+        return false;
+    }
+    // 非 chat（embed 等）不打补丁
+    if info.capabilities.image_gen
+        || info.capabilities.video_gen
+        || info.capabilities.audio_gen
+        || info.capabilities.music_gen
+    {
+        return false;
+    }
+    if id_lower.contains("embed") || id_lower.contains("tts") || id_lower.contains("whisper") {
+        return false;
+    }
+
+    let supports_thinking = id_lower.contains("deepseek-v4")
+        || id_lower.contains("deepseek-reasoner")
+        || id_lower.contains("deepseek-r1")
+        || id_lower.contains("deepseek-r");
+    if supports_thinking && !info.capabilities.reasoning {
+        info.capabilities.reasoning = true;
+        return true;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -291,7 +330,29 @@ mod tests {
                 assert_eq!(stale.context_window, Some(1_000_000));
                 assert!(!stale.capabilities.vision);
                 assert!(stale.capabilities.tools);
-                assert_eq!(stale.meta_source, "litellm");
+                // LiteLLM 未标 supports_reasoning 时，known 补丁补上 V4 thinking
+                assert!(stale.capabilities.reasoning);
+                assert_eq!(stale.meta_source, "known+litellm");
+            },
+        );
+    }
+
+    #[test]
+    fn deepseek_v4_known_reasoning_without_litellm_flag() {
+        crate::litellm_meta::with_fixture(
+            r#"{
+              "deepseek-v4-pro": {
+                "max_input_tokens": 1000000,
+                "supports_function_calling": true,
+                "mode": "chat",
+                "litellm_provider": "deepseek"
+              }
+            }"#,
+            || {
+                let info = enrich_from_id("deepseek-v4-pro", "deepseek", None);
+                assert!(info.capabilities.tools);
+                assert!(info.capabilities.reasoning);
+                assert!(info.meta_source.contains("known"));
             },
         );
     }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   EMPTY_MODEL_CAPABILITIES,
+  inferModelCapabilities,
   listActiveModelCaps,
 } from "./modelCaps.ts";
 
@@ -24,4 +25,10 @@ test("listActiveModelCaps keeps fixed order", () => {
     }),
     ["tools", "reasoning", "web", "image_gen", "audio_gen", "music_gen"],
   );
+});
+
+test("inferModelCapabilities marks deepseek-v4 as reasoning", () => {
+  const caps = inferModelCapabilities("deepseek-v4-flash", "deepseek");
+  assert.equal(caps.reasoning, true);
+  assert.equal(caps.tools, true);
 });

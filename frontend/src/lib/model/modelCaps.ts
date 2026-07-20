@@ -84,7 +84,10 @@ export function inferModelCapabilities(
 
   const reasoning =
     !isNonChat &&
-    /o1|o3|o4|r1|reason|thinking|opus|deepseek-r|qwq|glm-z1/.test(m);
+    (/o1|o3|o4|r1|reason|thinking|opus|deepseek-r|deepseek-v4|qwq|glm-z1/.test(
+      m,
+    ) ||
+      (k === "deepseek" && /v4|reasoner|r1/.test(m)));
 
   const tools = !isNonChat;
 
