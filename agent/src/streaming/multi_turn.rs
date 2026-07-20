@@ -20,7 +20,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::run_state::{RunPhase, RunState};
 use crate::control::hitl::HitlGate;
-use crate::runtime::usage::apply_llm_usage_dual_write;
+use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::AgentLoop;
 
 use super::hitl_bridge::{
@@ -82,14 +82,16 @@ async fn record_llm_usage(
 
     // 持锁写入，确保账单落在与消息相同的 SessionStore（非 default_memory_dir 另开库）。
     apply_llm_usage_dual_write(
-        &agent_id,
-        Some(&session_id),
-        turn_id.as_deref(),
-        &model,
-        usage,
-        &provider,
-        &base_url,
-        &api_key,
+        &LlmUsageWrite {
+            agent_id: &agent_id,
+            session_id: Some(&session_id),
+            turn_id: turn_id.as_deref(),
+            model: &model,
+            usage,
+            provider: &provider,
+            base_url: &base_url,
+            api_key: &api_key,
+        },
         None,
         Some(agent.sessions()),
     );

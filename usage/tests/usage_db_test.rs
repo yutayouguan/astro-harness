@@ -9,39 +9,40 @@ use usage::db::{
 /// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-#[allow(clippy::too_many_arguments)]
-fn zero_billing_event(
-    ts: &str,
-    kind: &str,
-    name: &str,
-    agent_id: &str,
+struct ZeroBillingEvent<'a> {
+    ts: &'a str,
+    kind: &'a str,
+    name: &'a str,
+    agent_id: &'a str,
     session_id: Option<String>,
     input_tokens: i64,
     output_tokens: i64,
     total_tokens: i64,
     cost_usd: f64,
     meta_json: Option<String>,
-) -> NewUsageEvent {
+}
+
+fn zero_billing_event(e: ZeroBillingEvent<'_>) -> NewUsageEvent {
     NewUsageEvent {
-        ts: ts.into(),
-        kind: kind.into(),
-        name: name.into(),
-        agent_id: agent_id.into(),
-        session_id,
-        input_tokens,
-        output_tokens,
+        ts: e.ts.into(),
+        kind: e.kind.into(),
+        name: e.name.into(),
+        agent_id: e.agent_id.into(),
+        session_id: e.session_id,
+        input_tokens: e.input_tokens,
+        output_tokens: e.output_tokens,
         cache_read_tokens: 0,
         cache_write_tokens: 0,
         reasoning_tokens: 0,
-        total_tokens,
-        cost_usd,
+        total_tokens: e.total_tokens,
+        cost_usd: e.cost_usd,
         cost_status: None,
         cost_source: None,
         pricing_version: None,
         billing_provider: None,
         billing_base_url: None,
         billing_mode: None,
-        meta_json,
+        meta_json: e.meta_json,
         turn_id: None,
     }
 }
@@ -197,31 +198,31 @@ fn usage_db_path_under_memory_dir() {
 fn insert_and_count_events() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-    db.insert(zero_billing_event(
-        "2026-07-13T02:00:00Z",
-        "tool",
-        "terminal",
-        "workspace",
-        None,
-        0,
-        0,
-        0,
-        0.0,
-        None,
-    ))
+    db.insert(zero_billing_event(ZeroBillingEvent {
+        ts: "2026-07-13T02:00:00Z",
+        kind: "tool",
+        name: "terminal",
+        agent_id: "workspace",
+        session_id: None,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        meta_json: None,
+    }))
     .unwrap();
-    db.insert(zero_billing_event(
-        "2026-07-13T03:00:00Z",
-        "llm",
-        "gpt-4o-mini",
-        "workspace",
-        Some("s1".into()),
-        100,
-        50,
-        150,
-        0.001,
-        None,
-    ))
+    db.insert(zero_billing_event(ZeroBillingEvent {
+        ts: "2026-07-13T03:00:00Z",
+        kind: "llm",
+        name: "gpt-4o-mini",
+        agent_id: "workspace",
+        session_id: Some("s1".into()),
+        input_tokens: 100,
+        output_tokens: 50,
+        total_tokens: 150,
+        cost_usd: 0.001,
+        meta_json: None,
+    }))
     .unwrap();
     let insights = db
         .query_insights(UsageInsightsQuery {
@@ -245,9 +246,18 @@ fn filters_by_agent_and_excludes_out_of_range() {
         ("2026-07-02T10:00:00Z", "research", "tool", "web_search"),
         ("2026-06-01T10:00:00Z", "workspace", "tool", "terminal"), // 上月
     ] {
-        db.insert(zero_billing_event(
-            ts, kind, name, agent, None, 0, 0, 0, 0.0, None,
-        ))
+        db.insert(zero_billing_event(ZeroBillingEvent {
+            ts,
+            kind,
+            name,
+            agent_id: agent,
+            session_id: None,
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            meta_json: None,
+        }))
         .unwrap();
     }
     let all = db
@@ -275,31 +285,31 @@ fn filters_by_agent_and_excludes_out_of_range() {
 fn skill_events_do_not_inflate_kpi_calls() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-    db.insert(zero_billing_event(
-        "2026-07-13T01:00:00Z",
-        "tool",
-        "skills",
-        "workspace",
-        None,
-        0,
-        0,
-        0,
-        0.0,
-        None,
-    ))
+    db.insert(zero_billing_event(ZeroBillingEvent {
+        ts: "2026-07-13T01:00:00Z",
+        kind: "tool",
+        name: "skills",
+        agent_id: "workspace",
+        session_id: None,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        meta_json: None,
+    }))
     .unwrap();
-    db.insert(zero_billing_event(
-        "2026-07-13T01:00:01Z",
-        "skill",
-        "demo",
-        "workspace",
-        None,
-        0,
-        0,
-        0,
-        0.0,
-        None,
-    ))
+    db.insert(zero_billing_event(ZeroBillingEvent {
+        ts: "2026-07-13T01:00:01Z",
+        kind: "skill",
+        name: "demo",
+        agent_id: "workspace",
+        session_id: None,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        meta_json: None,
+    }))
     .unwrap();
     let insights = db
         .query_insights(UsageInsightsQuery {
@@ -321,18 +331,18 @@ fn offset_timestamp_normalized_and_counted_in_month() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
     // `+00:00` 若不规范化为 `…Z`，会因字典序落在 `2026-07-01T00:00:00Z` 之前而被排除
-    db.insert(zero_billing_event(
-        "2026-07-01T00:00:00+00:00",
-        "tool",
-        "terminal",
-        "workspace",
-        None,
-        0,
-        0,
-        0,
-        0.0,
-        None,
-    ))
+    db.insert(zero_billing_event(ZeroBillingEvent {
+        ts: "2026-07-01T00:00:00+00:00",
+        kind: "tool",
+        name: "terminal",
+        agent_id: "workspace",
+        session_id: None,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cost_usd: 0.0,
+        meta_json: None,
+    }))
     .unwrap();
     let insights = db
         .query_insights(UsageInsightsQuery {

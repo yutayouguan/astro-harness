@@ -9,6 +9,17 @@ use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 use std::collections::HashSet;
 
+/// FTS 命中收集参数（一次查询的表、过滤与输出缓冲）。
+struct FtsCollect<'a> {
+    fts_table: &'a str,
+    fts_query: &'a str,
+    source_filter: Option<&'a str>,
+    role_filter: Option<&'a str>,
+    limit: i64,
+    hits: &'a mut Vec<SearchHit>,
+    seen: &'a mut HashSet<i64>,
+}
+
 impl SessionStore {
     /// 跨会话消息 FTS：优先 `messages_fts`，再合并 `messages_fts_trigram`（CJK / 子串）。
     pub fn search_messages(
@@ -26,25 +37,25 @@ impl SessionStore {
         let mut hits = Vec::new();
         let mut seen = HashSet::new();
 
-        self.collect_fts_hits(
-            "messages_fts",
-            &fts_query,
+        self.collect_fts_hits(FtsCollect {
+            fts_table: "messages_fts",
+            fts_query: &fts_query,
             source_filter,
             role_filter,
             limit,
-            &mut hits,
-            &mut seen,
-        )?;
+            hits: &mut hits,
+            seen: &mut seen,
+        })?;
         if (hits.len() as i64) < limit {
-            self.collect_fts_hits(
-                "messages_fts_trigram",
-                &fts_query,
+            self.collect_fts_hits(FtsCollect {
+                fts_table: "messages_fts_trigram",
+                fts_query: &fts_query,
                 source_filter,
                 role_filter,
                 limit,
-                &mut hits,
-                &mut seen,
-            )?;
+                hits: &mut hits,
+                seen: &mut seen,
+            })?;
         }
 
         for hit in &mut hits {
@@ -338,18 +349,8 @@ impl SessionStore {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn collect_fts_hits(
-        &self,
-        fts_table: &str,
-        fts_query: &str,
-        source_filter: Option<&str>,
-        role_filter: Option<&str>,
-        limit: i64,
-        hits: &mut Vec<SearchHit>,
-        seen: &mut HashSet<i64>,
-    ) -> Result<()> {
-        let remaining = limit - hits.len() as i64;
+    fn collect_fts_hits(&self, q: FtsCollect<'_>) -> Result<()> {
+        let remaining = q.limit - q.hits.len() as i64;
         if remaining <= 0 {
             return Ok(());
         }
@@ -367,12 +368,12 @@ impl SessionStore {
                AND (?3 IS NULL OR m.role = ?3)
              ORDER BY m.timestamp DESC, m.id DESC
              LIMIT ?4",
-            fts = fts_table
+            fts = q.fts_table
         );
 
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(
-            params![fts_query, source_filter, role_filter, remaining],
+            params![q.fts_query, q.source_filter, q.role_filter, remaining],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
@@ -386,10 +387,10 @@ impl SessionStore {
 
         for row in rows {
             let (id, session_id, role, snippet, tool_name) = row?;
-            if !seen.insert(id) {
+            if !q.seen.insert(id) {
                 continue;
             }
-            hits.push(SearchHit {
+            q.hits.push(SearchHit {
                 id,
                 session_id,
                 role,
@@ -397,7 +398,7 @@ impl SessionStore {
                 context: String::new(),
                 tool_name,
             });
-            if hits.len() as i64 >= limit {
+            if q.hits.len() as i64 >= q.limit {
                 break;
             }
         }

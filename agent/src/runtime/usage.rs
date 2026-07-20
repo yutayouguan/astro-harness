@@ -4,18 +4,21 @@ use ::session::{BillingDelta, SessionStore};
 use ::usage::{estimate_usage_cost, CostStatus, NewUsageEvent, UsageDb, UsageTokens};
 use providers::streaming::Usage;
 
+/// 一次 LLM 用量写入所需的上下文（身份 + 端点 + usage）。
+pub(crate) struct LlmUsageWrite<'a> {
+    pub agent_id: &'a str,
+    pub session_id: Option<&'a str>,
+    pub turn_id: Option<&'a str>,
+    pub model: &'a str,
+    pub usage: &'a Usage,
+    pub provider: &'a str,
+    pub base_url: &'a str,
+    pub api_key: &'a str,
+}
+
 /// 从一次 LLM 调用构造用量事件与会话账单增量。
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn build_llm_usage_event(
-    agent_id: &str,
-    session_id: Option<&str>,
-    turn_id: Option<&str>,
-    model: &str,
-    usage: &Usage,
-    provider: &str,
-    base_url: &str,
-    api_key: &str,
-) -> (NewUsageEvent, BillingDelta) {
+pub(crate) fn build_llm_usage_event(ctx: &LlmUsageWrite<'_>) -> (NewUsageEvent, BillingDelta) {
+    let usage = ctx.usage;
     let tokens = UsageTokens {
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
@@ -28,11 +31,12 @@ pub(crate) fn build_llm_usage_event(
         },
     };
 
-    let provider_opt = (!provider.is_empty()).then_some(provider);
-    let base_url_opt = (!base_url.is_empty()).then_some(base_url);
-    let api_key_opt = (!api_key.is_empty()).then_some(api_key);
+    let provider_opt = (!ctx.provider.is_empty()).then_some(ctx.provider);
+    let base_url_opt = (!ctx.base_url.is_empty()).then_some(ctx.base_url);
+    let api_key_opt = (!ctx.api_key.is_empty()).then_some(ctx.api_key);
 
-    let cost_result = estimate_usage_cost(model, &tokens, provider_opt, base_url_opt, api_key_opt);
+    let cost_result =
+        estimate_usage_cost(ctx.model, &tokens, provider_opt, base_url_opt, api_key_opt);
 
     let status_str = match cost_result.status {
         CostStatus::Estimated => "estimated",
@@ -57,10 +61,10 @@ pub(crate) fn build_llm_usage_event(
     let event = NewUsageEvent {
         ts: chrono::Utc::now().to_rfc3339(),
         kind: "llm".into(),
-        name: model.to_string(),
-        agent_id: agent_id.to_string(),
-        session_id: session_id.map(str::to_string),
-        turn_id: turn_id.map(str::to_string),
+        name: ctx.model.to_string(),
+        agent_id: ctx.agent_id.to_string(),
+        session_id: ctx.session_id.map(str::to_string),
+        turn_id: ctx.turn_id.map(str::to_string),
         input_tokens: i64::from(usage.input_tokens),
         output_tokens: i64::from(usage.output_tokens),
         cache_read_tokens: i64::from(usage.cache_read_tokens),
@@ -91,7 +95,7 @@ pub(crate) fn build_llm_usage_event(
         cost_status: Some(status_str.to_string()),
         cost_source: Some(cost_result.source),
         pricing_version: cost_result.pricing_version,
-        model: Some(model.to_string()),
+        model: Some(ctx.model.to_string()),
     };
 
     (event, delta)
@@ -101,30 +105,20 @@ pub(crate) fn build_llm_usage_event(
 ///
 /// `sessions` 应与写入消息的同一 [`SessionStore`]（通常来自 `AgentLoop`），
 /// 避免再按 `default_memory_dir` 另开库导致自定义 `memory_dir` 下账单分叉。
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_llm_usage_dual_write(
-    agent_id: &str,
-    session_id: Option<&str>,
-    turn_id: Option<&str>,
-    model: &str,
-    usage: &Usage,
-    provider: &str,
-    base_url: &str,
-    api_key: &str,
+    ctx: &LlmUsageWrite<'_>,
     meta_json: Option<String>,
     sessions: Option<&SessionStore>,
 ) {
-    if usage.is_empty() {
+    if ctx.usage.is_empty() {
         return;
     }
-    let (mut event, delta) = build_llm_usage_event(
-        agent_id, session_id, turn_id, model, usage, provider, base_url, api_key,
-    );
+    let (mut event, delta) = build_llm_usage_event(ctx);
     if let Some(meta) = meta_json {
         event.meta_json = Some(meta);
     }
     UsageDb::try_record(event);
-    let Some(sid) = session_id else {
+    let Some(sid) = ctx.session_id else {
         return;
     };
     let Some(store) = sessions else {
@@ -151,16 +145,16 @@ mod tests {
             request_count: 1,
             ..Default::default()
         };
-        let (event, delta) = build_llm_usage_event(
-            "agent-1",
-            Some("sess-1"),
-            None,
-            "gpt-4o-mini",
-            &usage,
-            "openai",
-            "",
-            "",
-        );
+        let (event, delta) = build_llm_usage_event(&LlmUsageWrite {
+            agent_id: "agent-1",
+            session_id: Some("sess-1"),
+            turn_id: None,
+            model: "gpt-4o-mini",
+            usage: &usage,
+            provider: "openai",
+            base_url: "",
+            api_key: "",
+        });
         assert_eq!(event.kind, "llm");
         assert_eq!(event.name, "gpt-4o-mini");
         assert_eq!(event.agent_id, "agent-1");
@@ -184,16 +178,16 @@ mod tests {
             request_count: 1,
             ..Default::default()
         };
-        let (event, _) = build_llm_usage_event(
-            "agent-1",
-            Some("sess-1"),
-            Some("t1"),
-            "gpt-4o-mini",
-            &usage,
-            "openai",
-            "",
-            "",
-        );
+        let (event, _) = build_llm_usage_event(&LlmUsageWrite {
+            agent_id: "agent-1",
+            session_id: Some("sess-1"),
+            turn_id: Some("t1"),
+            model: "gpt-4o-mini",
+            usage: &usage,
+            provider: "openai",
+            base_url: "",
+            api_key: "",
+        });
         assert_eq!(event.turn_id.as_deref(), Some("t1"));
     }
 }

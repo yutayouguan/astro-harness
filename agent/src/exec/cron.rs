@@ -21,7 +21,7 @@ use providers::streaming::Usage;
 use session::{SessionStore, StoredMessage};
 use uuid::Uuid;
 
-use crate::runtime::usage::apply_llm_usage_dual_write;
+use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 
 use super::headless::run_headless_multi_turn;
@@ -429,14 +429,16 @@ async fn execute_job_with_roots_local(
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
     if !llm_usage.is_empty() {
         apply_llm_usage_dual_write(
-            &agent_id,
-            row.session_id.as_deref(),
-            None,
-            &model_for_usage,
-            &llm_usage,
-            billing_provider.as_deref().unwrap_or(""),
-            billing_base_url.as_deref().unwrap_or(""),
-            billing_api_key.as_deref().unwrap_or(""),
+            &LlmUsageWrite {
+                agent_id: &agent_id,
+                session_id: row.session_id.as_deref(),
+                turn_id: None,
+                model: &model_for_usage,
+                usage: &llm_usage,
+                provider: billing_provider.as_deref().unwrap_or(""),
+                base_url: billing_base_url.as_deref().unwrap_or(""),
+                api_key: billing_api_key.as_deref().unwrap_or(""),
+            },
             Some(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),
@@ -646,14 +648,16 @@ async fn complete_job_local(
 
     if !llm_usage.is_empty() {
         apply_llm_usage_dual_write(
-            &agent_id,
-            row.session_id.as_deref(),
-            None,
-            &model_for_usage,
-            &llm_usage,
-            billing_provider.as_deref().unwrap_or(""),
-            billing_base_url.as_deref().unwrap_or(""),
-            billing_api_key.as_deref().unwrap_or(""),
+            &LlmUsageWrite {
+                agent_id: &agent_id,
+                session_id: row.session_id.as_deref(),
+                turn_id: None,
+                model: &model_for_usage,
+                usage: &llm_usage,
+                provider: billing_provider.as_deref().unwrap_or(""),
+                base_url: billing_base_url.as_deref().unwrap_or(""),
+                api_key: billing_api_key.as_deref().unwrap_or(""),
+            },
             Some(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),

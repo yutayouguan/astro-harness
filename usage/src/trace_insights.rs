@@ -524,32 +524,33 @@ mod tests {
 
     use home::test_env::AstroMemoryDirGuard;
 
-    #[allow(clippy::too_many_arguments)]
-    fn evt(
-        ts: &str,
-        kind: &str,
-        name: &str,
-        agent_id: &str,
-        session_id: &str,
+    struct Evt<'a> {
+        ts: &'a str,
+        kind: &'a str,
+        name: &'a str,
+        agent_id: &'a str,
+        session_id: &'a str,
         input_tokens: i64,
         output_tokens: i64,
         total_tokens: i64,
         cost_usd: f64,
-    ) -> NewUsageEvent {
+    }
+
+    fn evt(e: Evt<'_>) -> NewUsageEvent {
         NewUsageEvent {
-            ts: ts.into(),
-            kind: kind.into(),
-            name: name.into(),
-            agent_id: agent_id.into(),
-            session_id: Some(session_id.into()),
+            ts: e.ts.into(),
+            kind: e.kind.into(),
+            name: e.name.into(),
+            agent_id: e.agent_id.into(),
+            session_id: Some(e.session_id.into()),
             turn_id: None,
-            input_tokens,
-            output_tokens,
+            input_tokens: e.input_tokens,
+            output_tokens: e.output_tokens,
             cache_read_tokens: 0,
             cache_write_tokens: 0,
             reasoning_tokens: 0,
-            total_tokens,
-            cost_usd,
+            total_tokens: e.total_tokens,
+            cost_usd: e.cost_usd,
             cost_status: None,
             cost_source: None,
             pricing_version: None,
@@ -678,41 +679,41 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-        db.insert(evt(
-            "2026-07-13T10:00:00Z",
-            "llm",
-            "gpt-5.6",
-            "workspace",
-            "s1",
-            10,
-            5,
-            15,
-            0.01,
-        ))
+        db.insert(evt(Evt {
+            ts: "2026-07-13T10:00:00Z",
+            kind: "llm",
+            name: "gpt-5.6",
+            agent_id: "workspace",
+            session_id: "s1",
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+            cost_usd: 0.01,
+        }))
         .unwrap();
-        db.insert(evt(
-            "2026-07-13T10:00:01Z",
-            "tool",
-            "terminal",
-            "workspace",
-            "s1",
-            0,
-            0,
-            0,
-            0.0,
-        ))
+        db.insert(evt(Evt {
+            ts: "2026-07-13T10:00:01Z",
+            kind: "tool",
+            name: "terminal",
+            agent_id: "workspace",
+            session_id: "s1",
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+        }))
         .unwrap();
-        db.insert(evt(
-            "2026-07-13T11:00:00Z",
-            "llm",
-            "gpt-5.6",
-            "other",
-            "s2",
-            1,
-            1,
-            2,
-            0.0,
-        ))
+        db.insert(evt(Evt {
+            ts: "2026-07-13T11:00:00Z",
+            kind: "llm",
+            name: "gpt-5.6",
+            agent_id: "other",
+            session_id: "s2",
+            input_tokens: 1,
+            output_tokens: 1,
+            total_tokens: 2,
+            cost_usd: 0.0,
+        }))
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {
@@ -782,30 +783,30 @@ mod tests {
             .unwrap();
 
         let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
-        db.insert(evt(
-            "2026-07-13T10:00:00Z",
-            "llm",
-            "gpt-test",
-            "workspace",
-            "s-io",
-            100,
-            40,
-            140,
-            0.02,
-        ))
+        db.insert(evt(Evt {
+            ts: "2026-07-13T10:00:00Z",
+            kind: "llm",
+            name: "gpt-test",
+            agent_id: "workspace",
+            session_id: "s-io",
+            input_tokens: 100,
+            output_tokens: 40,
+            total_tokens: 140,
+            cost_usd: 0.02,
+        }))
         .unwrap();
         // 第二轮 assistant 也对应一条 llm usage
-        db.insert(evt(
-            "2026-07-13T10:00:05Z",
-            "llm",
-            "gpt-test",
-            "workspace",
-            "s-io",
-            50,
-            20,
-            70,
-            0.01,
-        ))
+        db.insert(evt(Evt {
+            ts: "2026-07-13T10:00:05Z",
+            kind: "llm",
+            name: "gpt-test",
+            agent_id: "workspace",
+            session_id: "s-io",
+            input_tokens: 50,
+            output_tokens: 20,
+            total_tokens: 70,
+            cost_usd: 0.01,
+        }))
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {
