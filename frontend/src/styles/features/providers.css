@@ -1983,6 +1983,19 @@ html[data-theme="dark"] .providers-add-row {
 @media (max-width: 860px) {
   .providers-layout {
     grid-template-columns: 1fr;
+    /* 详情行给足高度，避免 models 区 flex:1 + min-height:0 塌成 0 */
+    grid-template-rows: auto minmax(360px, 1fr);
+    overflow-y: auto;
+    align-content: stretch;
+  }
+
+  .providers-pane-list {
+    max-height: 42vh;
+  }
+
+  .providers-models-panel,
+  .providers-models-block {
+    min-height: 180px;
   }
 
   .providers-form-grid {
