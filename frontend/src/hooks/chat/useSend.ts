@@ -138,8 +138,9 @@ export function useSend(deps: UseSendDeps) {
   const setActiveAgentRef = useRef(setActiveAgent);
   setActiveAgentRef.current = setActiveAgent;
 
+  /** @returns 是否已开始流式（`setStreaming(true)` 之后）；供 follow-up 队列判断是否出队成功 */
   const send = useCallback(
-    async (opts?: SendOpts) => {
+    async (opts?: SendOpts): Promise<boolean> => {
       const {
         input,
         attachments,
@@ -204,11 +205,11 @@ export function useSend(deps: UseSendDeps) {
 
       if (sessionPendingInterrupts.length > 0 && !resumeJson) {
         showTransientToast(t("chat.interrupt.pending"));
-        return;
+        return false;
       }
       if (isCompacting || compactingRef.current) {
         showTransientToast(t("chat.compactInProgress"), { tone: "warning" });
-        return;
+        return false;
       }
       if (sessionReadOnly) {
         showTransientToast(
@@ -217,14 +218,14 @@ export function useSend(deps: UseSendDeps) {
             : t("chat.sessionEndedReadOnly"),
           { tone: "warning" },
         );
-        return;
+        return false;
       }
       if (
         (!text && pending.length === 0 && !opts?.allowEmpty && !resumeJson) ||
         streaming ||
         !activeProvider
       ) {
-        return;
+        return false;
       }
 
       // flush any pending dissolve before sending
@@ -266,7 +267,7 @@ export function useSend(deps: UseSendDeps) {
           });
 
           if (resolved === null) {
-            return;
+            return false;
           }
 
           displayText = resolved.displayText || text;
@@ -876,6 +877,7 @@ export function useSend(deps: UseSendDeps) {
         setStatusPhase("error");
         setStatusDetail(null);
       }
+      return true;
     },
     // depsRef always holds the latest values, so send never needs to be recreated
     [],

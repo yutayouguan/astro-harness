@@ -14,6 +14,11 @@ import {
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { type ChatInteractionMode } from "../../lib/chat/chatMode";
+import {
+  MAX_QUEUED_FOLLOWUPS,
+  newQueuedFollowUpId,
+  type QueuedFollowUp,
+} from "../../lib/chat/followUpQueue";
 import { templateForLocale } from "../../lib/agent/agentCreateTemplate";
 import {
   clearChatSession,
@@ -43,7 +48,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatRightTab } from "../../components/chat/ChatRightPanel";
 import { useChatStreamBuffers } from "./useChatStreamBuffers";
 import { useGeneratingPreview } from "./useGeneratingPreview";
-import { useSend } from "./useSend";
+import { useSend, type SendOpts } from "./useSend";
 import { useConfirm } from "../ui/DialogContext";
 
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
@@ -114,6 +119,8 @@ export function useChatSession({
   });
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [queuedFollowUps, setQueuedFollowUps] = useState<QueuedFollowUp[]>([]);
+  const [queueKick, setQueueKick] = useState(0);
   const [streaming, setStreaming] = useState(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
@@ -188,7 +195,7 @@ export function useChatSession({
   } = useChatStreamBuffers(setMessages);
 
   // ── Send ──────────────────────────────────────────────────────────────────
-  const { send } = useSend({
+  const { send: sendImmediate } = useSend({
     input,
     attachments,
     streaming,
@@ -245,6 +252,161 @@ export function useChatSession({
     setDissolvingIds,
     showTransientToast,
   });
+
+  const queueDrainLockRef = useRef(false);
+  const queueFailedIdRef = useRef<string | null>(null);
+  const chatModeRef = useRef(chatMode);
+  chatModeRef.current = chatMode;
+
+  /** 单线程模式：流式中入队；MultiTask 本步仍走原门闩（不入队） */
+  const send = useCallback(
+    async (opts?: SendOpts) => {
+      const mode = chatModeRef.current;
+      if (streaming && mode !== "multitask") {
+        const text = (opts?.text ?? input).trim();
+        const pending = opts?.attachments ?? attachments;
+        if (!text && pending.length === 0) return;
+        if (sessionPendingInterrupts.length > 0) {
+          showTransientToast(t("chat.interrupt.pending"));
+          return;
+        }
+        if (sessionReadOnly || isCompacting) {
+          showTransientToast(
+            isCompacting
+              ? t("chat.compactInProgress")
+              : sessionEndReason === "compacted" || !sessionEndReason
+                ? t("chat.sessionCompactedReadOnly")
+                : t("chat.sessionEndedReadOnly"),
+            { tone: "warning" },
+          );
+          return;
+        }
+        let overflow = false;
+        setQueuedFollowUps((prev) => {
+          if (prev.length >= MAX_QUEUED_FOLLOWUPS) {
+            overflow = true;
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: newQueuedFollowUpId(),
+              text,
+              attachments: pending.map((a) => ({ ...a })),
+              createdAt: Date.now(),
+            },
+          ];
+        });
+        if (overflow) {
+          showTransientToast(t("chat.queue.full", { max: String(MAX_QUEUED_FOLLOWUPS) }), {
+            tone: "warning",
+          });
+          return;
+        }
+        if (opts?.text == null) setInput("");
+        if (opts?.attachments == null) setAttachments([]);
+        return;
+      }
+      await sendImmediate(opts);
+    },
+    [
+      streaming,
+      input,
+      attachments,
+      sessionPendingInterrupts,
+      sessionReadOnly,
+      isCompacting,
+      sessionEndReason,
+      sendImmediate,
+      showTransientToast,
+      t,
+    ],
+  );
+
+  useEffect(() => {
+    if (streaming || isCompacting || sessionReadOnly) return;
+    if (sessionPendingInterrupts.length > 0) return;
+    if (chatModeRef.current === "multitask") return;
+    if (queueDrainLockRef.current) return;
+
+    const head = queuedFollowUps[0];
+    if (!head) return;
+    if (queueFailedIdRef.current === head.id) return;
+
+    queueDrainLockRef.current = true;
+    setQueuedFollowUps((prev) =>
+      prev[0]?.id === head.id ? prev.slice(1) : prev,
+    );
+
+    void (async () => {
+      try {
+        const started = await sendImmediate({
+          text: head.text,
+          attachments: head.attachments,
+        });
+        if (!started) {
+          queueFailedIdRef.current = head.id;
+          setQueuedFollowUps((prev) => [head, ...prev]);
+          showTransientToast(t("chat.queue.drainFailed"), { tone: "warning" });
+        } else {
+          queueFailedIdRef.current = null;
+        }
+      } catch {
+        queueFailedIdRef.current = head.id;
+        setQueuedFollowUps((prev) => [head, ...prev]);
+      } finally {
+        queueDrainLockRef.current = false;
+      }
+    })();
+  }, [
+    streaming,
+    isCompacting,
+    sessionReadOnly,
+    sessionPendingInterrupts.length,
+    queuedFollowUps,
+    queueKick,
+    sendImmediate,
+    showTransientToast,
+    t,
+  ]);
+
+  const removeQueuedFollowUp = useCallback((id: string) => {
+    if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
+    setQueuedFollowUps((prev) => {
+      const hit = prev.find((q) => q.id === id);
+      if (hit) {
+        for (const a of hit.attachments) {
+          if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+        }
+      }
+      return prev.filter((q) => q.id !== id);
+    });
+    setQueueKick((k) => k + 1);
+  }, []);
+
+  const updateQueuedFollowUpText = useCallback((id: string, text: string) => {
+    if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
+    setQueuedFollowUps((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, text } : q)),
+    );
+    setQueueKick((k) => k + 1);
+  }, []);
+
+  const moveQueuedFollowUp = useCallback((id: string, dir: -1 | 1) => {
+    if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
+    setQueuedFollowUps((prev) => {
+      const i = prev.findIndex((q) => q.id === id);
+      if (i < 0) return prev;
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      const tmp = next[i]!;
+      next[i] = next[j]!;
+      next[j] = tmp;
+      return next;
+    });
+    setQueueKick((k) => k + 1);
+  }, []);
 
   // ── Persist session ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -498,6 +660,14 @@ export function useChatSession({
     setInput("");
     setEmptyMode("chat");
     setNav("chat");
+    setQueuedFollowUps((prev) => {
+      for (const q of prev) {
+        for (const a of q.attachments) {
+          if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+        }
+      }
+      return [];
+    });
   }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
 
   /** 永久删除当前会话前：先取消流并丢弃本地监听，避免 ghost token。 */
@@ -1242,6 +1412,7 @@ export function useChatSession({
     emptyMode,
     input,
     attachments,
+    queuedFollowUps,
     streaming,
     streamPaused,
     tokenUsage,
@@ -1271,6 +1442,9 @@ export function useChatSession({
     setStatusDetail,
     // callbacks
     send,
+    removeQueuedFollowUp,
+    updateQueuedFollowUpText,
+    moveQueuedFollowUp,
     pauseStream,
     resumeStream,
     stopStream,

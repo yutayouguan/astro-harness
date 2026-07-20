@@ -807,6 +807,10 @@ export default function App() {
                       onInputChange={setInput}
                       onAttachmentsChange={chat.setAttachments}
                       onSend={send}
+                      queuedFollowUps={chat.queuedFollowUps}
+                      onRemoveQueuedFollowUp={chat.removeQueuedFollowUp}
+                      onUpdateQueuedFollowUpText={chat.updateQueuedFollowUpText}
+                      onMoveQueuedFollowUp={chat.moveQueuedFollowUp}
                       pendingInterrupts={chat.sessionPendingInterrupts}
                       onUiAction={onUiAction}
                       onPauseStream={pauseStream}
