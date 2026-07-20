@@ -2320,7 +2320,7 @@ html[data-theme="dark"] .cron-job-detail-task {
   margin-bottom: 0;
   height: auto;
   min-height: 0;
-  padding: 4px;
+  padding: 6px;
   flex: 0 1 auto;
   justify-content: flex-end;
   max-width: none;
@@ -2330,10 +2330,10 @@ html[data-theme="dark"] .cron-job-detail-task {
 
 html[data-theme="dark"] .cron-history-filters {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.42);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+    color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.28));
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .cron-history-filter {
@@ -2343,7 +2343,7 @@ html[data-theme="dark"] .cron-history-filters {
   max-width: 180px;
 }
 
-/* 筛选内 Select：36px，玻璃对齐 tabs 内控件 */
+/* 筛选内 Select：36px；暗色走 skills 工具条同款浅玻璃，避免发黑 */
 .cron-history-filters .select-menu-trigger {
   min-height: 36px;
   height: 36px;
@@ -2362,22 +2362,26 @@ html[data-theme="dark"] .cron-history-filters {
 
 html[data-theme="dark"] .cron-history-filters .select-menu {
   --select-glass-fill:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.35);
-  --select-glass-fill-hover:
     linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    rgba(8, 6, 18, 0.42);
-  --select-glass-edge: rgba(255, 255, 255, 0.09);
-  --select-glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    color-mix(in srgb, var(--tone) 14%, transparent);
+  --select-glass-fill-hover:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
+    color-mix(in srgb, var(--tone) 22%, transparent);
+  --select-glass-edge: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.14));
+  --select-glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.1);
   --select-glass-shadow: none;
+}
+
+html[data-theme="dark"] .cron-history-filters .select-menu-trigger {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
 }
 
 html[data-theme="dark"] .cron-history-filters .select-menu-trigger:hover:not(:disabled),
 html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-trigger {
-  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.14));
-  color: color-mix(in srgb, #fff 14%, var(--tone));
+  border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.16));
+  color: color-mix(in srgb, #fff 36%, var(--tone));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 0 0 2px color-mix(in srgb, var(--tone) 16%, transparent);
 }
 
@@ -2428,11 +2432,11 @@ html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-
 
 html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.35);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  color: var(--ink);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    color-mix(in srgb, var(--tone) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.14));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: color-mix(in srgb, #fff 28%, var(--tone));
 }
 
 .cron-history-date-btn.is-open,
@@ -2539,7 +2543,9 @@ html[data-theme="dark"] .cron-dt-clear {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
-  box-shadow: var(--shadow-card), var(--glass-rim);
+  box-shadow:
+    var(--glass-rim),
+    0 4px 12px color-mix(in srgb, var(--tone) 6%, transparent);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   overflow: hidden;
@@ -2561,7 +2567,7 @@ html[data-theme="dark"] .cron-timeline-card {
     rgba(8, 6, 18, 0.55);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.35),
+    0 4px 14px rgba(0, 0, 0, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
