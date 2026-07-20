@@ -405,9 +405,10 @@ mod tests {
 
     #[test]
     fn split_enables_with_five_mixed() {
+        let ids = ["alpha", "bravo", "charlie", "delta", "echo"];
         let mut all = Vec::new();
-        for i in 0..5 {
-            all.push(EvalExample::new(
+        for (i, id) in ids.iter().enumerate() {
+            let mut ex = EvalExample::new(
                 Some("s".into()),
                 format!("t{i}"),
                 vec![],
@@ -416,11 +417,13 @@ mod tests {
                 } else {
                     Verdict::Pass
                 },
-            ));
+            );
+            ex.id = id.to_string();
+            all.push(ex);
         }
         let refs: Vec<&EvalExample> = all.iter().collect();
         let s = split_eval_examples(&refs, 20);
-        assert!(s.holdout_enabled);
+        assert!(s.holdout_enabled, "stable_bucket should place at least one id < 20");
         assert!(!s.optimize.is_empty());
         assert!(!s.holdout.is_empty());
     }
