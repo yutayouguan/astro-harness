@@ -76,7 +76,7 @@ fn usage_path(agent_id: &str) -> PathBuf {
 /// 规范化 Agent 键：`None`、空白、`"default"` 均映射为 [`DEFAULT_AGENT_ID`]。
 fn normalize_key(agent_id: Option<&str>) -> String {
     match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(id) if id == "default" => DEFAULT_AGENT_ID.to_string(),
+        Some("default") => DEFAULT_AGENT_ID.to_string(),
         Some(id) => normalize_agent_id(id),
         None => DEFAULT_AGENT_ID.to_string(),
     }

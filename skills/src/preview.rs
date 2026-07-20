@@ -47,10 +47,9 @@ mod tests {
     use crate::models::SkillOriginRecord;
     use crate::origins::upsert_origin;
     use std::io::Write;
-    use std::sync::Mutex;
-    use tempfile::tempdir;
+        use tempfile::tempdir;
 
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn write_skill_md(dir: &std::path::Path, body: &str) {
         std::fs::create_dir_all(dir).unwrap();
@@ -78,7 +77,7 @@ mod tests {
 
     #[test]
     fn preview_no_baseline_digest_reports_no_local_changes() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -96,7 +95,7 @@ mod tests {
 
     #[test]
     fn preview_equal_digests_reports_no_local_changes() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -116,7 +115,7 @@ mod tests {
 
     #[test]
     fn preview_different_digests_reports_local_changes() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

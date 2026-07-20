@@ -9,6 +9,7 @@ use usage::db::{
 /// 串行化依赖 `ASTRO_MEMORY_DIR` 的用例，避免并行污染。
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+#[allow(clippy::too_many_arguments)]
 fn zero_billing_event(
     ts: &str,
     kind: &str,

@@ -155,6 +155,7 @@ pub(crate) async fn finish_usage_and_done(
 /// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
 /// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
 /// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
+#[allow(clippy::too_many_arguments)]
 pub async fn run_multi_turn_stream(
     session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
@@ -232,6 +233,7 @@ pub async fn run_multi_turn_stream_from_provider(
     .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_multi_turn_stream_inner(
     session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,

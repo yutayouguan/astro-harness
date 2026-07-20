@@ -431,6 +431,7 @@ pub fn apply_toolsets_filter(registry: &mut tools::ToolRegistry, toolsets: Optio
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_provider_loop(
     agent: &mut AgentLoop,
     creds: &DelegateRunRequest,

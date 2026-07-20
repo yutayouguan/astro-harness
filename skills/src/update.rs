@@ -212,10 +212,9 @@ mod tests {
     use crate::models::SkillOriginRecord;
     use crate::origins::upsert_origin;
     use std::io::Write;
-    use std::sync::Mutex;
-    use tempfile::tempdir;
+        use tempfile::tempdir;
 
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn write_skill_md(dir: &Path, body: &str) {
         fs::create_dir_all(dir).unwrap();
@@ -243,7 +242,7 @@ mod tests {
 
     #[test]
     fn backup_skill_dir_creates_copy() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -267,7 +266,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_ex_dirty_without_force_errors() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -295,7 +294,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_all_skips_missing_local_folder() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -324,7 +323,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_without_origin_errors() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -336,7 +335,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_all_empty_ok() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -346,7 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_outdated_skills_empty_when_none_outdated() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

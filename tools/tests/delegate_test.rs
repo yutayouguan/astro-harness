@@ -1,11 +1,12 @@
 //! 异步委派参数与 registry 冒烟测试。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use std::time::Duration;
 
 use tools::{ToolContext, ToolRegistry};
 
-static ASYNC_TEST_LOCK: Mutex<()> = Mutex::new(());
+static ASYNC_TEST_LOCK: Mutex<()> = Mutex::const_new(());
 
 fn make_ctx<'a>(
     memory: &'a mut memory::MemoryManager,
@@ -78,7 +79,7 @@ async fn delegate_goal_hits_runner_or_key() {
 
 #[tokio::test]
 async fn delegate_async_status_collect_cancel_flow() {
-    let _guard = ASYNC_TEST_LOCK.lock().unwrap();
+    let _guard = ASYNC_TEST_LOCK.blocking_lock();
     let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
@@ -140,7 +141,7 @@ async fn delegate_async_status_collect_cancel_flow() {
 
 #[tokio::test]
 async fn delegate_async_cancel_marks_cancelled() {
-    let _guard = ASYNC_TEST_LOCK.lock().unwrap();
+    let _guard = ASYNC_TEST_LOCK.blocking_lock();
     let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
@@ -185,7 +186,7 @@ async fn delegate_async_cancel_marks_cancelled() {
 
 #[tokio::test]
 async fn delegate_blocked_at_max_spawn_depth() {
-    let _guard = ASYNC_TEST_LOCK.lock().unwrap();
+    let _guard = ASYNC_TEST_LOCK.blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let providers = providers::registry::ProviderRegistry::new();

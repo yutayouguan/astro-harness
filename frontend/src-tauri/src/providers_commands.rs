@@ -576,7 +576,7 @@ fn persist_provider_models(
             models: models
                 .iter()
                 .cloned()
-                .map(crate::model_meta::ModelEntryCompat::Full)
+                .map(|info| crate::model_meta::ModelEntryCompat::Full(Box::new(info)))
                 .collect(),
             source: source.to_string(),
             latency_ms,
@@ -1445,7 +1445,7 @@ pub fn cached_model_info(
     for m in &entry.models {
         match m {
             crate::model_meta::ModelEntryCompat::Full(info) if info.id == model_id => {
-                let mut info = info.clone();
+                let mut info = info.as_ref().clone();
                 crate::model_meta::enrich_model_info(&mut info, kind, None);
                 return Some(info);
             }

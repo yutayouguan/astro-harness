@@ -71,7 +71,7 @@ mod tests {
     #[test]
     fn expand_skips_missing_dedups_and_caps() {
         let primary = t("p0", "openai", "gpt");
-        let catalog = vec![
+        let catalog = [
             t("p0", "openai", "gpt"),
             t("p1", "claude", "opus"),
             t("p2", "deepseek", "chat"),

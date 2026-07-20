@@ -524,7 +524,7 @@ mod tests {
         let file = dir.join("sample.png");
         std::fs::write(&file, b"PNG").unwrap();
 
-        write_paths(&[file.clone()]).expect("write clipboard");
+        write_paths(std::slice::from_ref(&file)).expect("write clipboard");
         let got = read_paths().expect("read clipboard");
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].canonicalize().unwrap(), file.canonicalize().unwrap());

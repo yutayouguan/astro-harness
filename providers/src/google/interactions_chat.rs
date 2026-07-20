@@ -1139,10 +1139,12 @@ mod tests {
     #[test]
     fn build_body_sets_thinking_and_defaults_store() {
         let messages = vec![ChatMessage::text("user", "hi")];
-        let mut config = ProviderConfig::default();
-        config.model = "models/gemini-3.5-flash".into();
-        config.thinking_enabled = true;
-        config.reasoning_effort = "high".into();
+        let config = ProviderConfig {
+            model: "models/gemini-3.5-flash".into(),
+            thinking_enabled: true,
+            reasoning_effort: "high".into(),
+            ..Default::default()
+        };
         let body = build_interactions_chat_body(&messages, &[], &config);
         assert_eq!(body["stream"], true);
         assert_eq!(body["model"], "gemini-3.5-flash");
@@ -1154,10 +1156,12 @@ mod tests {
     #[test]
     fn build_body_disables_thinking_with_minimal_level() {
         let messages = vec![ChatMessage::text("user", "hi")];
-        let mut config = ProviderConfig::default();
-        config.model = "gemini-3.5-flash".into();
-        config.thinking_enabled = false;
-        config.max_tokens = 64;
+        let config = ProviderConfig {
+            model: "gemini-3.5-flash".into(),
+            thinking_enabled: false,
+            max_tokens: 64,
+            ..Default::default()
+        };
         let body = build_interactions_chat_body(&messages, &[], &config);
         assert_eq!(body["generation_config"]["thinking_level"], "minimal");
         assert_eq!(body["generation_config"]["max_output_tokens"], 64);
@@ -1265,9 +1269,11 @@ mod tests {
                 thought_signature: None,
             },
         ];
-        let mut config = ProviderConfig::default();
-        config.model = "gemini-3.5-flash".into();
-        config.previous_interaction_id = Some("ix_prev".into());
+        let config = ProviderConfig {
+            model: "gemini-3.5-flash".into(),
+            previous_interaction_id: Some("ix_prev".into()),
+            ..Default::default()
+        };
         let body = build_interactions_chat_body(&messages, &[], &config);
         assert_eq!(body["previous_interaction_id"], "ix_prev");
         let input = body["input"].as_array().unwrap();
@@ -1286,9 +1292,11 @@ mod tests {
             ChatMessage::text("assistant", "hello"),
             ChatMessage::text("user", "what about Paris?"),
         ];
-        let mut config = ProviderConfig::default();
-        config.model = "gemini-3.5-flash".into();
-        config.previous_interaction_id = Some("ix_prev".into());
+        let config = ProviderConfig {
+            model: "gemini-3.5-flash".into(),
+            previous_interaction_id: Some("ix_prev".into()),
+            ..Default::default()
+        };
         let body = build_interactions_chat_body(&messages, &[], &config);
         assert_eq!(body["previous_interaction_id"], "ix_prev");
         let input = body["input"].as_array().unwrap();

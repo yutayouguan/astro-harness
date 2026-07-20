@@ -408,9 +408,11 @@ pub(crate) async fn check_response_status(
     Err(anyhow!("上游 HTTP {status}: {msg}"))
 }
 
+type ChatChunkExtract = Arc<dyn Fn(&str) -> Option<ChatChunk> + Send + Sync>;
+
 pub(crate) async fn sse_chat_stream(
     response: reqwest::Response,
-    extract: Arc<dyn Fn(&str) -> Option<ChatChunk> + Send + Sync>,
+    extract: ChatChunkExtract,
 ) -> Result<ChatStream> {
     let response = check_response_status(response).await?;
     let byte_stream = response.bytes_stream();

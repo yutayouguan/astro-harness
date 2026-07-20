@@ -214,7 +214,6 @@ pub async fn openai_audio_transcriptions(
 /// 仅 OpenAI 兼容 base（默认 `https://api.openai.com/v1`）；Google 请用
 /// [`crate::interactions_http::google_interactions_vision`]。
 /// `image_url` 可为 `data:image/...;base64,...` 或 `http(s)://`。
-
 pub(crate) fn build_openai_vision_body(
     model: &str,
     prompt: &str,

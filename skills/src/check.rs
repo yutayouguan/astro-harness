@@ -135,10 +135,9 @@ mod tests {
     use super::*;
     use crate::models::SkillUpdateStatus;
     use crate::origins::{load_origins, upsert_origin};
-    use std::sync::Mutex;
-    use tempfile::tempdir;
+        use tempfile::tempdir;
 
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn sample_origin(
         remote_version: Option<&str>,
@@ -344,7 +343,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_updates_skips_orphan_without_origin_mutation() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

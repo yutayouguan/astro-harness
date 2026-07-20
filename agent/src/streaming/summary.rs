@@ -27,6 +27,7 @@ pub(crate) enum SummaryOutcome {
 }
 
 /// 预算耗尽后：注入总结提示，再发一轮 **无 tools** 的 completion（对齐 Hermes）。
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_max_iterations_summary(
     session: &Arc<Mutex<AgentLoop>>,
     streamer: &ProviderStreamer,

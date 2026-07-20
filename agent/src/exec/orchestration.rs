@@ -37,10 +37,9 @@ const PROVIDER_MAX_ROUNDS: usize = 5;
 pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result<()> {
     let db = OrchestrationDb::open_default()?;
     let claimed = db.try_claim_running(&req.orchestration_id)?;
-    if !claimed
-        && !(req.allow_reclaim && db.reclaim_stale_running(&req.orchestration_id)?) {
-            return Ok(());
-        }
+    if !(claimed || (req.allow_reclaim && db.reclaim_stale_running(&req.orchestration_id)?)) {
+        return Ok(());
+    }
     let steps = db.list_steps(&req.orchestration_id)?;
     let orch = db
         .get(&req.orchestration_id)?

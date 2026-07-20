@@ -38,7 +38,7 @@ impl AgentIconKind {
     }
 
     /// 从字符串解析图标类型；大小写不敏感，未知值返回 `None`。
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "emoji" => Some(Self::Emoji),
             "avatar" => Some(Self::Avatar),

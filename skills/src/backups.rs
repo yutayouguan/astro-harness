@@ -148,10 +148,9 @@ pub fn reveal_skill_backup(path: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-    use tempfile::tempdir;
+        use tempfile::tempdir;
 
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn mkdir_backup(base: &Path, agent: &str, folder: &str, timestamp: &str) {
         let p = base
@@ -165,7 +164,7 @@ mod tests {
 
     #[test]
     fn list_skill_backups_filters_and_sorts() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -194,7 +193,7 @@ mod tests {
 
     #[test]
     fn list_skill_backups_empty_when_missing_root() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -204,7 +203,7 @@ mod tests {
 
     #[test]
     fn reveal_skill_backup_rejects_outside_root() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

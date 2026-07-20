@@ -244,14 +244,13 @@ pub async fn fill_origin_remote_baseline(agent_id: Option<&str>, folder: &str) -
 mod tests {
     use super::*;
     use crate::models::SkillOriginRecord;
-    use std::sync::Mutex;
-    use tempfile::tempdir;
+        use tempfile::tempdir;
 
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     #[test]
     fn upsert_same_folder_updates_not_duplicates() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -304,7 +303,7 @@ mod tests {
 
     #[test]
     fn missing_file_returns_empty_origins() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -315,7 +314,7 @@ mod tests {
 
     #[test]
     fn upsert_none_agent_id_matches_workspace() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -432,7 +431,7 @@ mod tests {
 
     #[tokio::test]
     async fn fill_origin_remote_baseline_fetch_failure_leaves_remote_none() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -467,7 +466,7 @@ mod tests {
     async fn record_after_install_upserts() {
         use crate::install::{record_after_install, InstallOriginHint};
 
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -496,7 +495,7 @@ mod tests {
         use crate::install::{agent_skills_dir, record_after_install, InstallOriginHint};
         use std::io::Write;
 
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

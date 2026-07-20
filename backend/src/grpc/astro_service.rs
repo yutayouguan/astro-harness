@@ -50,7 +50,7 @@ fn parse_auxiliary_targets(
     let mut grouped: HashMap<common::AuxiliaryTask, Vec<(u32, common::ChatTarget)>> =
         HashMap::new();
     for item in items {
-        let Some(task) = common::AuxiliaryTask::from_str(item.task.trim()) else {
+        let Some(task) = common::AuxiliaryTask::parse(item.task.trim()) else {
             continue;
         };
         grouped.entry(task).or_default().push((
@@ -1432,14 +1432,9 @@ impl AstroService for AstroServiceImpl {
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         tokio::spawn(async move {
             let mut filtered = hub.subscribe(filter);
-            loop {
-                match filtered.recv().await {
-                    Some(ev) => {
-                        if tx.send(Ok(to_proto(&ev))).await.is_err() {
-                            break;
-                        }
-                    }
-                    None => break,
+            while let Some(ev) = filtered.recv().await {
+                if tx.send(Ok(to_proto(&ev))).await.is_err() {
+                    break;
                 }
             }
         });

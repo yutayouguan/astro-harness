@@ -374,7 +374,7 @@ pub fn aggregate_critiques(judgements: &[EvalJudgement], max_items: usize) -> Ve
     items.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     items
         .into_iter()
-        .take(max_items.max(1).min(8))
+        .take(max_items.clamp(1, 8))
         .map(|(s, _)| s)
         .collect()
 }

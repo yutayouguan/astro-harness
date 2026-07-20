@@ -338,6 +338,7 @@ impl SessionStore {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn collect_fts_hits(
         &self,
         fts_table: &str,

@@ -556,8 +556,7 @@ fn list_dir_capped(
 
     let total = names.len();
     let mut out = String::new();
-    let mut shown = 0usize;
-    for name in &names {
+    for (shown, name) in names.iter().enumerate() {
         let line = if out.is_empty() {
             name.clone()
         } else {
@@ -571,7 +570,6 @@ fn list_dir_capped(
             return Ok(out);
         }
         out.push_str(&line);
-        shown += 1;
     }
     Ok(out)
 }

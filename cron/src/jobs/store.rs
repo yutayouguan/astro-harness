@@ -330,10 +330,6 @@ impl CronStore {
     }
 }
 
-/// 计算 `schedule` 在 `after` 之后的下一次触发时刻（本地时区）
-///
-/// 支持 `once:RFC3339`、`every:Nm|h|d`（可选 `;wd=`）与五段 cron。
-
 /// 默认 cron 根目录：`~/.astro/cron`
 pub fn cron_dir() -> PathBuf {
     default_memory_dir().join("cron")

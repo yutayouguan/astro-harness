@@ -100,8 +100,10 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
     let store = SessionStore::open_sessions_dir(&sessions_dir).ok();
 
     let mut traces = Vec::with_capacity(summaries.len());
-    let mut kpi = TraceKpis::default();
-    kpi.traces = summaries.len() as i64;
+    let mut kpi = TraceKpis {
+        traces: summaries.len() as i64,
+        ..Default::default()
+    };
 
     for s in summaries {
         let usage_rows = db.list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)?;
@@ -522,6 +524,7 @@ mod tests {
 
     use home::test_env::AstroMemoryDirGuard;
 
+    #[allow(clippy::too_many_arguments)]
     fn evt(
         ts: &str,
         kind: &str,

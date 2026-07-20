@@ -5,6 +5,7 @@ use ::usage::{estimate_usage_cost, CostStatus, NewUsageEvent, UsageDb, UsageToke
 use providers::streaming::Usage;
 
 /// 从一次 LLM 调用构造用量事件与会话账单增量。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_llm_usage_event(
     agent_id: &str,
     session_id: Option<&str>,
@@ -100,6 +101,7 @@ pub(crate) fn build_llm_usage_event(
 ///
 /// `sessions` 应与写入消息的同一 [`SessionStore`]（通常来自 `AgentLoop`），
 /// 避免再按 `default_memory_dir` 另开库导致自定义 `memory_dir` 下账单分叉。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_llm_usage_dual_write(
     agent_id: &str,
     session_id: Option<&str>,

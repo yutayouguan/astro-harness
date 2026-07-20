@@ -430,10 +430,12 @@ mod tests {
 
     #[test]
     fn explicit_route_to_different_provider_adds_primary_as_fallback() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.compaction = AuxiliaryRoute {
-            provider: "prov-cheap".into(),
-            model: "gpt-mini".into(),
+        let aux = AuxiliaryConfig {
+            compaction: AuxiliaryRoute {
+                provider: "prov-cheap".into(),
+                model: "gpt-mini".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",
@@ -466,10 +468,12 @@ mod tests {
 
     #[test]
     fn explicit_route_to_same_provider_different_model_falls_back() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.smart_approval = AuxiliaryRoute {
-            provider: "prov-primary".into(),
-            model: "gpt-mini".into(),
+        let aux = AuxiliaryConfig {
+            smart_approval: AuxiliaryRoute {
+                provider: "prov-primary".into(),
+                model: "gpt-mini".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",
@@ -497,10 +501,12 @@ mod tests {
 
     #[test]
     fn explicit_route_identical_to_primary_has_no_fallback() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.smart_approval = AuxiliaryRoute {
-            provider: "prov-primary".into(),
-            model: "gpt-5.6".into(),
+        let aux = AuxiliaryConfig {
+            smart_approval: AuxiliaryRoute {
+                provider: "prov-primary".into(),
+                model: "gpt-5.6".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",
@@ -524,10 +530,12 @@ mod tests {
 
     #[test]
     fn explicit_route_falls_back_to_primary_when_provider_missing() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.dreaming = AuxiliaryRoute {
-            provider: "prov-deleted".into(),
-            model: "m".into(),
+        let aux = AuxiliaryConfig {
+            dreaming: AuxiliaryRoute {
+                provider: "prov-deleted".into(),
+                model: "m".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",
@@ -551,10 +559,12 @@ mod tests {
 
     #[test]
     fn explicit_route_falls_back_to_primary_when_provider_disabled() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.title_generation = AuxiliaryRoute {
-            provider: "prov-disabled".into(),
-            model: "m".into(),
+        let aux = AuxiliaryConfig {
+            title_generation: AuxiliaryRoute {
+                provider: "prov-disabled".into(),
+                model: "m".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",
@@ -584,10 +594,12 @@ mod tests {
 
     #[test]
     fn explicit_route_falls_back_to_primary_when_no_api_key() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.background_review = AuxiliaryRoute {
-            provider: "prov-nokey".into(),
-            model: "m".into(),
+        let aux = AuxiliaryConfig {
+            background_review: AuxiliaryRoute {
+                provider: "prov-nokey".into(),
+                model: "m".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",
@@ -617,10 +629,12 @@ mod tests {
 
     #[test]
     fn explicit_route_allows_empty_key_for_ollama() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.compaction = AuxiliaryRoute {
-            provider: "prov-ollama".into(),
-            model: "llama".into(),
+        let aux = AuxiliaryConfig {
+            compaction: AuxiliaryRoute {
+                provider: "prov-ollama".into(),
+                model: "llama".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",
@@ -650,10 +664,12 @@ mod tests {
 
     #[test]
     fn to_chat_targets_includes_fallback_when_present() {
-        let mut aux = AuxiliaryConfig::default();
-        aux.dreaming = AuxiliaryRoute {
-            provider: "prov-cheap".into(),
-            model: "m".into(),
+        let aux = AuxiliaryConfig {
+            dreaming: AuxiliaryRoute {
+                provider: "prov-cheap".into(),
+                model: "m".into(),
+            },
+            ..Default::default()
         };
         let primary_ui = ui_provider(
             "prov-primary",

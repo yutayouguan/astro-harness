@@ -132,7 +132,7 @@ pub struct ModelInfo {
 #[serde(untagged)]
 pub enum ModelEntryCompat {
     Id(String),
-    Full(ModelInfo),
+    Full(Box<ModelInfo>),
 }
 
 impl ModelEntryCompat {
@@ -141,7 +141,7 @@ impl ModelEntryCompat {
         match self {
             Self::Full(mut info) => {
                 enrich_model_info(&mut info, kind, None);
-                info
+                *info
             }
             Self::Id(id) => enrich_from_id(&id, kind, None),
         }

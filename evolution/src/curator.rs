@@ -173,12 +173,9 @@ pub fn find_overlap_clusters(skills: &[(String, String)], threshold: f32) -> Vec
 
     let mut clusters: std::collections::HashMap<usize, Vec<String>> =
         std::collections::HashMap::new();
-    for i in 0..n {
+    for (i, (id, _)) in tokenized.iter().enumerate() {
         let root = find(&mut parent, i);
-        clusters
-            .entry(root)
-            .or_default()
-            .push(tokenized[i].0.clone());
+        clusters.entry(root).or_default().push(id.clone());
     }
     clusters.into_values().filter(|c| c.len() >= 2).collect()
 }

@@ -674,6 +674,7 @@ async fn score_grounded_examples(
 ///
 /// 返回结构化 `FitnessResult`（对标 GEPA 的 `(score, side_info)`）。
 /// `None` 表示预算耗尽或 judge 失败（fail-closed）。
+#[allow(clippy::too_many_arguments)]
 async fn fitness_score(
     targets: &AuxiliaryTargets,
     cand: &SkillCandidate,

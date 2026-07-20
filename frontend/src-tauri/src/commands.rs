@@ -603,7 +603,7 @@ pub async fn set_pending_agent_icon(
     data_base64: String,
     file_name: String,
 ) -> Result<(), String> {
-    let kind = home::config::agent_icons::AgentIconKind::from_str(&kind)
+    let kind = home::config::agent_icons::AgentIconKind::parse(&kind)
         .ok_or_else(|| format!("未知图标类型: {kind}"))?;
     let bytes = {
         use base64::Engine as _;
@@ -621,7 +621,7 @@ pub async fn clear_pending_agent_icon(kind: Option<String>) -> Result<(), String
     let kind = match kind.as_deref() {
         None => None,
         Some(s) => Some(
-            home::config::agent_icons::AgentIconKind::from_str(s)
+            home::config::agent_icons::AgentIconKind::parse(s)
                 .ok_or_else(|| format!("未知图标类型: {s}"))?,
         ),
     };
@@ -675,6 +675,7 @@ pub async fn write_daily_memory(
 /// `keep_chat_bubbles`：若提供，则在开跑前将会话 DB 截断到该数量的 user/assistant 气泡
 ///（编辑重发 / 再生用；缺失则不截断）。
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn start_chat(
     app: AppHandle,
     content: String,
@@ -1014,6 +1015,7 @@ fn resolve_chat_credentials(
 }
 
 /// 执行本地流式聊天主循环并向窗口发事件。
+#[allow(clippy::too_many_arguments)]
 async fn run_chat_stream(
     app: &AppHandle,
     event_name: &str,

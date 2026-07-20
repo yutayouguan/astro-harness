@@ -1,7 +1,7 @@
 //! 有界精炼记忆存储：§ 分隔条目、live/snapshot 双态、超限报错（无 FIFO 淘汰）。
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use home::scan_memory_content;
 
@@ -241,7 +241,7 @@ impl MemoryStore {
     }
 }
 
-fn store_name_from_path(path: &PathBuf) -> String {
+fn store_name_from_path(path: &Path) -> String {
     path.file_stem()
         .and_then(|s| s.to_str())
         .map(str::to_ascii_uppercase)

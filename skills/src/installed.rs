@@ -187,9 +187,9 @@ pub fn parse_skill_frontmatter_full(content: &str) -> SkillMetadata {
                 } else if let Some(v) = trimmed.strip_prefix("description:") {
                     description = v.trim().trim_matches('"').to_string();
                     in_astro_tools = false;
-                } else if trimmed.starts_with("astro_tools:") {
+                } else if let Some(rest) = trimmed.strip_prefix("astro_tools:") {
                     in_astro_tools = true;
-                    let rest = trimmed["astro_tools:".len()..].trim();
+                    let rest = rest.trim();
                     if rest.starts_with('[') {
                         // inline: astro_tools: [a, b]
                         for part in rest.trim_matches(|c| c == '[' || c == ']').split(',') {
@@ -928,14 +928,13 @@ pub fn open_skill_file_externally(name: &str, relative_path: &str, id: Option<&s
 mod tests {
     use super::*;
     use std::fs;
-    use std::sync::Mutex;
     use tempfile::tempdir;
 
-    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     #[test]
     fn scan_and_load_skill_by_name() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("skills/demo-skill-xyz");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -963,7 +962,7 @@ mod tests {
 
     #[test]
     fn load_skill_by_name_rejects_disabled() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("skills/off-skill");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -992,7 +991,7 @@ mod tests {
 
     #[test]
     fn list_skill_files_groups_categories() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("skills/bundle-skill");
         fs::create_dir_all(skill_dir.join("scripts")).unwrap();
@@ -1042,7 +1041,7 @@ mod tests {
 
     #[test]
     fn machine_scope_excludes_astro_skills() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let astro_skill = dir.path().join("skills/astro-only");
         fs::create_dir_all(&astro_skill).unwrap();
@@ -1074,7 +1073,7 @@ mod tests {
 
     #[test]
     fn recent_astro_tools_reused_after_load() {
-        let _guard = ENV_TEST_LOCK.lock().unwrap();
+        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("skills/recent-skill");
         fs::create_dir_all(&skill_dir).unwrap();

@@ -39,7 +39,7 @@ impl AuxiliaryTask {
     }
 
     /// 从字符串 id 解析；未知值返回 `None`（调用方按需跳过，不 panic）。
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "title_generation" => Some(Self::TitleGeneration),
             "compaction" => Some(Self::Compaction),
@@ -66,14 +66,14 @@ mod tests {
     fn task_strings_round_trip() {
         for task in AuxiliaryTask::ALL {
             let s = task.as_str();
-            assert_eq!(AuxiliaryTask::from_str(s), Some(task));
+            assert_eq!(AuxiliaryTask::parse(s), Some(task));
         }
     }
 
     #[test]
-    fn from_str_rejects_unknown() {
-        assert_eq!(AuxiliaryTask::from_str("nope"), None);
-        assert_eq!(AuxiliaryTask::from_str(""), None);
+    fn parse_rejects_unknown() {
+        assert_eq!(AuxiliaryTask::parse("nope"), None);
+        assert_eq!(AuxiliaryTask::parse(""), None);
     }
 
     #[test]

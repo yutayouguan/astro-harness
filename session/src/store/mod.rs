@@ -215,8 +215,6 @@ pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
     }
 }
 
-/// 当前目标 schema 版本。
-
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
 pub struct SessionStore {
     pub(crate) conn: Connection,

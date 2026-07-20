@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn remote_download_cap_is_slightly_above_inline_max() {
-        assert!(MAX_REMOTE_DOWNLOAD_BYTES > INLINE_MAX_BYTES);
+        const _: () = assert!(MAX_REMOTE_DOWNLOAD_BYTES > INLINE_MAX_BYTES);
     }
 
     /// 读掉客户端请求行/头，避免关闭连接时因内核接收缓冲区里还有未读数据而触发 RST（而非正常 FIN），

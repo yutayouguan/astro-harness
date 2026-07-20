@@ -415,14 +415,16 @@ mod tests {
 
     #[test]
     fn from_config_overrides_ratios_and_budgets() {
-        let mut cfg = CompressionConfig::default();
-        cfg.soft_ratio = 0.30;
-        cfg.medium_ratio = 0.50;
-        cfg.hard_ratio = 0.70;
-        cfg.soft_max_chars = 1_000;
-        cfg.soft_head_chars = 700;
-        cfg.soft_tail_chars = 200;
-        cfg.tool_results_limit = 0;
+        let cfg = CompressionConfig {
+            soft_ratio: 0.30,
+            medium_ratio: 0.50,
+            hard_ratio: 0.70,
+            soft_max_chars: 1_000,
+            soft_head_chars: 700,
+            soft_tail_chars: 200,
+            tool_results_limit: 0,
+            ..Default::default()
+        };
         let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(1_000);
         // ~1600 chars → ~400 tokens → 40% → Soft (30%)
         let mid = "x".repeat(1_600);
@@ -434,8 +436,10 @@ mod tests {
 
     #[test]
     fn disabled_config_never_compresses() {
-        let mut cfg = CompressionConfig::default();
-        cfg.enabled = false;
+        let cfg = CompressionConfig {
+            enabled: false,
+            ..Default::default()
+        };
         let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(100);
         let huge = "x".repeat(10_000);
         assert!(!mgr.should_compress(&[Message::tool(&huge)]));
