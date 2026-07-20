@@ -163,9 +163,9 @@ pub fn find_overlap_clusters(skills: &[(String, String)], threshold: f32) -> Vec
         }
     }
 
-    for i in 0..n {
-        for j in (i + 1)..n {
-            if jaccard(&tokenized[i].1, &tokenized[j].1) >= threshold {
+    for (i, (_, ti)) in tokenized.iter().enumerate() {
+        for (j, (_, tj)) in tokenized.iter().enumerate().skip(i + 1) {
+            if jaccard(ti, tj) >= threshold {
                 union(&mut parent, i, j);
             }
         }
