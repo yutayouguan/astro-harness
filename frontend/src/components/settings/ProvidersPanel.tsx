@@ -10,9 +10,13 @@ import {
 } from "react";
 import {
   ArrowUpDown,
+  BookOpen,
   Box,
   Brain,
+  Calendar,
+  CircleDollarSign,
   Dna,
+  ExternalLink,
   Eye,
   EyeOff,
   FileText,
@@ -33,10 +37,12 @@ import {
   RefreshCw,
   Save,
   Search,
+  ShieldCheck,
   Sparkles,
   Star,
   Stethoscope,
   Tag,
+  Timer,
   Trash2,
   Video,
   Waypoints,
@@ -61,6 +67,7 @@ import {
   formatModelCreated,
   formatModelPrice,
   isModelCreatedWithinDays,
+  listActiveModelCaps,
 } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
@@ -2154,6 +2161,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                       const moderated = m.is_moderated === true;
                       const expanded = expandedModelId === m.id;
                       const displayName = m.display_name?.trim() || null;
+                      const activeCaps = listActiveModelCaps(caps);
                       const hasDetail =
                         Boolean(m.description?.trim()) ||
                         Boolean(createdLabel) ||
@@ -2163,7 +2171,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         Boolean(priceLabel) ||
                         Boolean(hfId) ||
                         moderated ||
-                        Boolean(latency);
+                        Boolean(latency) ||
+                        activeCaps.length > 0;
                       const capIcons = (
                         <span className="providers-model-caps" aria-label="capabilities">
                           {caps.vision && (
@@ -2322,78 +2331,211 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                                   {m.description.trim()}
                                 </p>
                               ) : null}
-                              <dl className="providers-model-meta">
+
+                              <div className="providers-model-meta-grid">
                                 {createdLabel ? (
-                                  <>
-                                    <dt>{t("providers.created")}</dt>
-                                    <dd>{createdLabel}</dd>
-                                  </>
+                                  <div className="providers-meta-chip">
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <Calendar size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.created")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">
+                                        {createdLabel}
+                                      </span>
+                                    </span>
+                                  </div>
                                 ) : null}
                                 {cutoffLabel ? (
-                                  <>
-                                    <dt>{t("providers.knowledgeCutoff")}</dt>
-                                    <dd title={m.knowledge_cutoff ?? undefined}>
-                                      {cutoffLabel}
-                                    </dd>
-                                  </>
+                                  <div
+                                    className="providers-meta-chip"
+                                    title={m.knowledge_cutoff ?? undefined}
+                                  >
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <BookOpen size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.knowledgeCutoff")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">
+                                        {cutoffLabel}
+                                      </span>
+                                    </span>
+                                  </div>
                                 ) : null}
                                 {m.expiration_date?.trim() ? (
-                                  <>
-                                    <dt>{t("providers.expiration")}</dt>
-                                    <dd>{m.expiration_date}</dd>
-                                  </>
+                                  <div className="providers-meta-chip is-warn">
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <Timer size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.expiration")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">
+                                        {m.expiration_date}
+                                      </span>
+                                    </span>
+                                  </div>
                                 ) : null}
                                 {ctxLabel ? (
-                                  <>
-                                    <dt>{t("providers.contextWindow")}</dt>
-                                    <dd>{ctxLabel}</dd>
-                                  </>
+                                  <div className="providers-meta-chip">
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <Layers size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.contextWindow")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">
+                                        {ctxLabel}
+                                      </span>
+                                    </span>
+                                  </div>
                                 ) : null}
                                 {priceLabel ? (
-                                  <>
-                                    <dt>{t("providers.pricePerM")}</dt>
-                                    <dd>{priceLabel}</dd>
-                                  </>
+                                  <div className="providers-meta-chip">
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <CircleDollarSign size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.pricePerM")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">
+                                        {priceLabel}
+                                      </span>
+                                    </span>
+                                  </div>
                                 ) : null}
                                 {moderated ? (
-                                  <>
-                                    <dt>{t("providers.moderated")}</dt>
-                                    <dd>{t("providers.yes")}</dd>
-                                  </>
+                                  <div className="providers-meta-chip">
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <ShieldCheck size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.moderated")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">
+                                        {t("providers.yes")}
+                                      </span>
+                                    </span>
+                                  </div>
                                 ) : null}
                                 {hfId ? (
-                                  <>
-                                    <dt>{t("providers.huggingFace")}</dt>
-                                    <dd>
-                                      <a
-                                        className="providers-model-hf"
-                                        href={`https://huggingface.co/${hfId}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        {hfId}
-                                      </a>
-                                    </dd>
-                                  </>
+                                  <a
+                                    className="providers-meta-chip is-link"
+                                    href={`https://huggingface.co/${hfId}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={`${t("providers.huggingFace")}: ${hfId}`}
+                                  >
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <ExternalLink size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.huggingFace")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">{hfId}</span>
+                                    </span>
+                                  </a>
                                 ) : null}
                                 {latency ? (
-                                  <>
-                                    <dt>{t("providers.test")}</dt>
-                                    <dd
-                                      className={
-                                        latency.ok
-                                          ? "providers-model-latency ok"
-                                          : "providers-model-latency fail"
-                                      }
-                                    >
-                                      {latency.latency_ms < 0
-                                        ? "—"
-                                        : `${latency.latency_ms} ms`}
-                                    </dd>
-                                  </>
+                                  <div
+                                    className={`providers-meta-chip ${latency.ok ? "is-ok" : "is-fail"}`}
+                                  >
+                                    <span className="providers-meta-chip-icon" aria-hidden>
+                                      <Stethoscope size={14} strokeWidth={2} />
+                                    </span>
+                                    <span className="providers-meta-chip-body">
+                                      <span className="providers-meta-chip-label">
+                                        {t("providers.test")}
+                                      </span>
+                                      <span className="providers-meta-chip-value">
+                                        {latency.latency_ms < 0
+                                          ? "—"
+                                          : `${latency.latency_ms} ms`}
+                                      </span>
+                                    </span>
+                                  </div>
                                 ) : null}
-                              </dl>
+                              </div>
+
+                              {activeCaps.length > 0 ? (
+                                <div className="providers-model-cap-section">
+                                  <div className="providers-model-cap-heading">
+                                    {t("providers.capabilities")}
+                                  </div>
+                                  <div className="providers-model-cap-pills">
+                                    {caps.tools ? (
+                                      <span className="providers-cap-pill tools">
+                                        <Wrench size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.tools")}
+                                      </span>
+                                    ) : null}
+                                    {caps.reasoning ? (
+                                      <span className="providers-cap-pill reasoning">
+                                        <Lightbulb size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.reasoning")}
+                                      </span>
+                                    ) : null}
+                                    {caps.vision ? (
+                                      <span className="providers-cap-pill vision">
+                                        <Eye size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.vision")}
+                                      </span>
+                                    ) : null}
+                                    {caps.file ? (
+                                      <span className="providers-cap-pill file">
+                                        <FileText size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.file")}
+                                      </span>
+                                    ) : null}
+                                    {caps.audio_in ? (
+                                      <span className="providers-cap-pill audio-in">
+                                        <Mic size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.audioIn")}
+                                      </span>
+                                    ) : null}
+                                    {caps.web ? (
+                                      <span className="providers-cap-pill web">
+                                        <Globe size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.web")}
+                                      </span>
+                                    ) : null}
+                                    {caps.image_gen ? (
+                                      <span className="providers-cap-pill image-gen">
+                                        <Image size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.imageGen")}
+                                      </span>
+                                    ) : null}
+                                    {caps.video_gen ? (
+                                      <span className="providers-cap-pill video-gen">
+                                        <Video size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.videoGen")}
+                                      </span>
+                                    ) : null}
+                                    {caps.audio_gen ? (
+                                      <span className="providers-cap-pill audio-gen">
+                                        <Mic size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.audioGen")}
+                                      </span>
+                                    ) : null}
+                                    {caps.music_gen ? (
+                                      <span className="providers-cap-pill music-gen">
+                                        <Music size={13} strokeWidth={2} aria-hidden />
+                                        {t("providers.cap.musicGen")}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </li>
