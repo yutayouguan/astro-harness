@@ -1319,36 +1319,6 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
     width: 10px;
     font-size: 12px;
   }
-
-  .mem-top .mem-agent-picker {
-    max-width: none;
-  }
-
-  .mem-top .mem-agent-picker .agent-picker-chip {
-    min-width: 0;
-    padding: 4px 8px 4px 4px;
-  }
-
-  .mem-top .mem-agent-picker .agent-picker-meta {
-    display: none;
-  }
-}
-
-.mem-agent-picker {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: min(200px, 36vw);
-  height: var(--mem-top-ctrl-h);
-  display: inline-flex;
-  align-items: center;
-}
-
-.mem-top .mem-agent-picker .agent-picker-chip {
-  min-height: 34px;
-  height: 34px;
-  min-width: 0;
-  border-radius: 11px;
-  padding: 3px 10px 3px 3px;
 }
 
 .mem-longterm {

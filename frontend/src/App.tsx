@@ -17,7 +17,9 @@ import ChatView from "./components/chat/ChatView";
 import CronPanel from "./components/schedule/CronPanel";
 import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
-import MemoryPanel from "./components/settings/MemoryPanel";
+import MemoryPanel, {
+  type MemoryHeaderAgentPicker,
+} from "./components/settings/MemoryPanel";
 import AgentPicker from "./components/agents/AgentPicker";
 import ModelPicker from "./components/agents/ModelPicker";
 import PreferencesPanel from "./components/settings/PreferencesPanel";
@@ -140,6 +142,8 @@ export default function App() {
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
+  const [memoryHeaderAgent, setMemoryHeaderAgent] =
+    useState<MemoryHeaderAgentPicker | null>(null);
 
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
@@ -686,20 +690,32 @@ export default function App() {
                 <span className={`status-dot ${chat.status}`} />
                 {activeProvider?.display_name ?? t("status.none")} · {statusText}
               </span>
-              {showsHeaderAgentPicker(nav) && (
-                <AgentPicker
-                  className="header-agent-picker"
-                  agents={agents}
-                  value={activeAgentId}
-                  onChange={(id) => {
-                    void setActiveAgent(id).catch((e) => {
-                      console.warn("set_active_agent failed", e);
-                    });
-                  }}
-                  onCreateNew={nav === "chat" ? startNewAgent : undefined}
-                  menuAlign="end"
-                />
-              )}
+              {nav === "memory"
+                ? memoryHeaderAgent?.show && (
+                    <AgentPicker
+                      className="header-agent-picker"
+                      agents={agents}
+                      value={memoryHeaderAgent.value}
+                      onChange={memoryHeaderAgent.onChange}
+                      allOption={memoryHeaderAgent.allOption}
+                      labelKey="memory.agents"
+                      menuAlign="end"
+                    />
+                  )
+                : showsHeaderAgentPicker(nav) && (
+                    <AgentPicker
+                      className="header-agent-picker"
+                      agents={agents}
+                      value={activeAgentId}
+                      onChange={(id) => {
+                        void setActiveAgent(id).catch((e) => {
+                          console.warn("set_active_agent failed", e);
+                        });
+                      }}
+                      onCreateNew={nav === "chat" ? startNewAgent : undefined}
+                      menuAlign="end"
+                    />
+                  )}
               {nav === "files" && (
                 <div
                   className="files-mode-switch"
@@ -853,7 +869,11 @@ export default function App() {
                 </div>
               )}
               {nav === "memory" && (
-                <MemoryPanel onClose={() => setNav("chat")} sessionId={chat.sessionId} />
+                <MemoryPanel
+                  onClose={() => setNav("chat")}
+                  sessionId={chat.sessionId}
+                  onHeaderAgentPickerChange={setMemoryHeaderAgent}
+                />
               )}
               {nav === "files" && (
                 <FilesPage

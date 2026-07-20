@@ -23,9 +23,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import AgentAvatar from "../agents/AgentAvatar";
-import AgentPicker from "../agents/AgentPicker";
 import { EmptyIllustration } from "../../illustrations";
 import type { AgentInfo } from "../../types/agent";
 
@@ -34,6 +34,16 @@ type Props = {
   onClose?: () => void;
   /** 当前聊天会话 id；批准写入后用于刷新活会话 frozen snapshot */
   sessionId?: string | null;
+  /** 向页面顶栏同步专家选择器（日记/长期记忆） */
+  onHeaderAgentPickerChange?: (ctrl: MemoryHeaderAgentPicker | null) => void;
+};
+
+/** 记忆页顶栏 AgentPicker 控制态 */
+export type MemoryHeaderAgentPicker = {
+  show: boolean;
+  value: string;
+  allOption?: { value: string; labelKey: MessageKey };
+  onChange: (agentId: string) => void;
 };
 
 /** `config.yaml` 记忆开关（Tauri camelCase） */
@@ -178,7 +188,11 @@ function IconSave(props: { width?: number; height?: number }) {
   return <Save size={props.width ?? 16} strokeWidth={1.8} aria-hidden />;
 }
 
-export default function MemoryPanel({ onClose, sessionId = null }: Props) {
+export default function MemoryPanel({
+  onClose,
+  sessionId = null,
+  onHeaderAgentPickerChange,
+}: Props) {
   const { t, locale } = useI18n();
   const confirm = useConfirm();
   const {
@@ -664,6 +678,26 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
     }
   };
 
+  const switchFilterAgentRef = useRef(switchFilterAgent);
+  switchFilterAgentRef.current = switchFilterAgent;
+
+  useEffect(() => {
+    if (!onHeaderAgentPickerChange) return;
+    const show = view === "diary" || view === "longterm";
+    onHeaderAgentPickerChange({
+      show,
+      value: filterAgentId,
+      allOption:
+        view === "diary"
+          ? { value: ALL_AGENTS, labelKey: "memory.allExperts" }
+          : undefined,
+      onChange: (agentId) => {
+        void switchFilterAgentRef.current(agentId);
+      },
+    });
+    return () => onHeaderAgentPickerChange(null);
+  }, [view, filterAgentId, onHeaderAgentPickerChange]);
+
   const preferAgentForDate = useCallback(
     (ymd: string): string | null => {
       const idsWithDiary = agents
@@ -864,21 +898,6 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
             </span>
           </button>
         </nav>
-
-        {(view === "diary" || view === "longterm") && (
-          <AgentPicker
-            className="mem-agent-picker"
-            agents={agents}
-            value={filterAgentId}
-            onChange={(id) => void switchFilterAgent(id)}
-            labelKey="memory.agents"
-            allOption={
-              view === "diary"
-                ? { value: ALL_AGENTS, labelKey: "memory.allExperts" }
-                : undefined
-            }
-          />
-        )}
 
         <div className="mem-top-stats">
           {view === "diary" && (

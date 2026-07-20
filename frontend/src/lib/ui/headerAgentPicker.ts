@@ -7,6 +7,7 @@ export const HEADER_AGENT_PICKER_NAV_IDS = [
   "tools",
   "cron",
   "insights",
+  "memory",
 ] as const;
 
 export type HeaderAgentPickerNavId =
