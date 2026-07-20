@@ -226,6 +226,13 @@
   --tone: var(--tone-purple);
   --tone-soft: var(--tone-purple-soft);
   --tone-glow: var(--tone-purple-glow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 2px 18px;
 }
 
 .aux-hero {
@@ -348,7 +355,8 @@ html[data-theme="dark"] .aux-error {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-/* Offline evolution — instrument / lab panel */
+/* Offline evolution — instrument / lab panel
+ * 不要套 prefs-page：后者默认横向 flex（侧栏+主栏），会把卡片挤成竖条。 */
 .evo-page {
   gap: 14px;
 }
