@@ -12,6 +12,7 @@ pub use async_reg::{
     AsyncDelegateRegistry, AsyncDelegateStatus, DelegateAsyncSpawner,
 };
 pub use git_worktree::{
-    cleanup_task_worktree, create_task_worktree, find_git_root, resolve_project_root, WorktreeHandle,
+    cleanup_task_worktree, create_task_worktree, find_git_root, resolve_project_root,
+    WorktreeHandle,
 };
 pub use spawn::{DelegateRole, DelegateRunRequest, DelegateRunner, DelegateTaskSpec};

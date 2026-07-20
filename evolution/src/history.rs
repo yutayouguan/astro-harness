@@ -94,13 +94,7 @@ pub fn record_run(
     proposals: usize,
 ) {
     record_run_meta(
-        base,
-        mode,
-        generated,
-        gated_out,
-        judged_out,
-        proposals,
-        None,
+        base, mode, generated, gated_out, judged_out, proposals, None,
     );
 }
 

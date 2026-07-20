@@ -196,12 +196,7 @@ fn ensure_worktrees_gitignore(repo: &Path) -> anyhow::Result<()> {
 }
 
 /// 清理任务工作树。`clean_only=true`（默认）时脏树保留。
-pub fn cleanup_task_worktree(
-    repo: &Path,
-    path: &Path,
-    branch: &str,
-    clean_only: bool,
-) {
+pub fn cleanup_task_worktree(repo: &Path, path: &Path, branch: &str, clean_only: bool) {
     cleanup_worktree(repo, path, branch, clean_only);
 }
 

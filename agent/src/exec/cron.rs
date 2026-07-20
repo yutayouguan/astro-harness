@@ -149,8 +149,7 @@ pub fn reconcile_orphaned_runs_with_roots(
     memory_dir: impl AsRef<Path>,
 ) -> anyhow::Result<u32> {
     let db = CronRunDb::new(cron_db_path(cron_root.as_ref()))?;
-    let sessions =
-        SessionStore::open_sessions_dir(&memory_dir.as_ref().join("sessions")).ok();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.as_ref().join("sessions")).ok();
     let finished_at = now_rfc3339();
     let mut changed = 0u32;
 
@@ -790,11 +789,7 @@ mod tests {
     fn outcome_incomplete_when_last_assistant_has_tools() {
         let msgs = vec![
             stored("user", Some("task"), None),
-            stored(
-                "assistant",
-                Some(""),
-                Some(json!([{"id": "1"}])),
-            ),
+            stored("assistant", Some(""), Some(json!([{"id": "1"}]))),
         ];
         assert_eq!(outcome_from_messages(&msgs), SessionRunOutcome::Incomplete);
     }

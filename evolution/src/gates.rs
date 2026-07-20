@@ -173,11 +173,7 @@ pub fn run_skill_tests_in_dir(skill_dir: &Path, timeout: Duration) -> TestOutcom
 ///
 /// `--network=none` 阻止网络访问；`--rm` 自动清理容器。
 /// Docker 不可用时返回 `Failed`（调用方负责 fallback）。
-pub fn docker_run_skill_tests(
-    skill_dir: &Path,
-    image: &str,
-    timeout: Duration,
-) -> TestOutcome {
+pub fn docker_run_skill_tests(skill_dir: &Path, image: &str, timeout: Duration) -> TestOutcome {
     let scripts = skill_dir.join("scripts");
     let (_, script_name) = if scripts.join("test.sh").is_file() {
         ("sh", "test.sh")
@@ -264,9 +260,8 @@ pub fn sandbox_test_candidate(
     sandbox_mode: &str,
     docker_image: &str,
 ) -> TestOutcome {
-    let test_dir = test_scripts_dir.filter(|p| {
-        p.join("test.sh").is_file() || p.join("test.py").is_file()
-    });
+    let test_dir =
+        test_scripts_dir.filter(|p| p.join("test.sh").is_file() || p.join("test.py").is_file());
     if test_dir.is_none() {
         return TestOutcome::NotApplicable;
     }
@@ -279,12 +274,10 @@ pub fn sandbox_test_candidate(
 
     // 写 SKILL.md
     let md_content = match cand.kind {
-        CandidateKind::NewSkill => {
-            match crate::proposal::candidate_new_markdown(cand) {
-                Ok(md) => md,
-                Err(e) => return TestOutcome::Failed(format!("生成 SKILL.md 失败: {e}")),
-            }
-        }
+        CandidateKind::NewSkill => match crate::proposal::candidate_new_markdown(cand) {
+            Ok(md) => md,
+            Err(e) => return TestOutcome::Failed(format!("生成 SKILL.md 失败: {e}")),
+        },
         CandidateKind::Patch => {
             let base_text = match current_skill_content {
                 Some(t) => t,

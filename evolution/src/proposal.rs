@@ -243,11 +243,7 @@ fn apply_candidate(cand: &SkillCandidate) -> anyhow::Result<(String, PathBuf, Ro
                 let _ = skills::set_enabled(id, false);
             }
             Ok((
-                format!(
-                    "已合并到 `{}`，并禁用 {}",
-                    cand.skill_id,
-                    absorb.join(", ")
-                ),
+                format!("已合并到 `{}`，并禁用 {}", cand.skill_id, absorb.join(", ")),
                 dest,
                 Rollback::Merge {
                     keep_md: skill_md,

@@ -263,7 +263,9 @@ pub async fn set_evolution_search(
         generations: generations.clamp(1, 6),
         variants: variants.clamp(1, 6),
         crossover,
-        population_size: population_size.unwrap_or(current.search.population_size).clamp(1, 8),
+        population_size: population_size
+            .unwrap_or(current.search.population_size)
+            .clamp(1, 8),
         max_eval_examples: max_eval_examples
             .map(|v| v as usize)
             .unwrap_or(current.search.max_eval_examples)

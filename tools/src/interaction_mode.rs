@@ -197,7 +197,10 @@ pub fn check_tool_call(
 }
 
 /// 过滤 OpenAI 风格 tools schema 列表。
-pub fn filter_schemas(mode: InteractionMode, schemas: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+pub fn filter_schemas(
+    mode: InteractionMode,
+    schemas: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
     if !mode.is_readonly_gate() {
         return schemas;
     }
@@ -261,12 +264,9 @@ mod tests {
 
     #[test]
     fn ask_blocks_task_plan() {
-        assert!(check_tool_call(
-            InteractionMode::Ask,
-            "task_plan",
-            &json!({ "title": "t" }),
-        )
-        .is_err());
+        assert!(
+            check_tool_call(InteractionMode::Ask, "task_plan", &json!({ "title": "t" }),).is_err()
+        );
         assert!(!tool_visible_in_mode(InteractionMode::Ask, "task_plan"));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "task_plan"));
     }

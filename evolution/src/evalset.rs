@@ -153,10 +153,7 @@ fn stable_bucket(id: &str) -> u8 {
 /// - 少于 5 条：全部 optimize，holdout 关闭；
 /// - 按 example id 稳定哈希分区（增删其它例子不改变已有 id 的分区）；
 /// - holdout 尽量同时含 Pass/Fail，避免单一 verdict。
-pub fn split_eval_examples<'a>(
-    examples: &[&'a EvalExample],
-    holdout_percent: u8,
-) -> EvalSplit<'a> {
+pub fn split_eval_examples<'a>(examples: &[&'a EvalExample], holdout_percent: u8) -> EvalSplit<'a> {
     if examples.len() < MIN_HOLDOUT_TOTAL {
         return EvalSplit {
             optimize: examples.to_vec(),
@@ -282,13 +279,15 @@ pub fn build_eval_judge_prompt(cand: &SkillCandidate, ex: &EvalExample) -> Strin
 ///
 /// 返回 `None` 当 `verdicts` 为空或权重和为 0。
 pub fn weighted_eval_score(verdicts: &[(Verdict, f32)]) -> Option<f32> {
-    let (w_sum, w_total) = verdicts.iter().fold((0.0f32, 0.0f32), |(s, w), (v, score)| {
-        let weight = match v {
-            Verdict::Fail => 2.0,
-            Verdict::Pass => 1.0,
-        };
-        (s + score * weight, w + weight)
-    });
+    let (w_sum, w_total) = verdicts
+        .iter()
+        .fold((0.0f32, 0.0f32), |(s, w), (v, score)| {
+            let weight = match v {
+                Verdict::Fail => 2.0,
+                Verdict::Pass => 1.0,
+            };
+            (s + score * weight, w + weight)
+        });
     if w_total == 0.0 {
         None
     } else {
@@ -475,7 +474,10 @@ mod tests {
         }
         let refs: Vec<&EvalExample> = all.iter().collect();
         let s = split_eval_examples(&refs, 20);
-        assert!(s.holdout_enabled, "stable_bucket should place at least one id < 20");
+        assert!(
+            s.holdout_enabled,
+            "stable_bucket should place at least one id < 20"
+        );
         assert!(!s.optimize.is_empty());
         assert!(!s.holdout.is_empty());
     }

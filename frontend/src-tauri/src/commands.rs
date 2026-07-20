@@ -718,10 +718,7 @@ pub async fn start_chat(
         "plan" | "ask" | "multitask" => interaction_mode,
         _ => "agent".to_string(),
     };
-    let project_root = project_root
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let project_root = project_root.unwrap_or_default().trim().to_string();
 
     // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
     {

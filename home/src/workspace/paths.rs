@@ -187,9 +187,7 @@ pub fn is_generated_agent_id(id: &str) -> bool {
     let Some((head, hex)) = id.rsplit_once(AGENT_ID_SUFFIX_SEP) else {
         return false;
     };
-    !head.is_empty()
-        && hex.len() == AGENT_ID_HEX_LEN
-        && hex.chars().all(|c| c.is_ascii_hexdigit())
+    !head.is_empty() && hex.len() == AGENT_ID_HEX_LEN && hex.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// 规范化已有 agent id（查找路径 / 激活 / 兼容旧数据）。

@@ -38,7 +38,11 @@ pub fn build_judge_user_prompt(
     s.push_str("\n## 候选\n");
     match cand.kind {
         CandidateKind::NewSkill | CandidateKind::Merge => {
-            let label = if cand.kind == CandidateKind::Merge { "合并技能" } else { "新建技能" };
+            let label = if cand.kind == CandidateKind::Merge {
+                "合并技能"
+            } else {
+                "新建技能"
+            };
             s.push_str(&format!("类型: {label} `{}`\n", cand.skill_id));
             if let Some(d) = &cand.description {
                 s.push_str(&format!("描述: {d}\n"));

@@ -58,16 +58,13 @@ pub fn effective_candidate_size(
     current_skill: Option<&str>,
 ) -> anyhow::Result<usize> {
     match candidate.kind {
-        CandidateKind::NewSkill | CandidateKind::Merge => Ok(candidate
-            .content
-            .as_deref()
-            .map(str::len)
-            .unwrap_or(0)),
+        CandidateKind::NewSkill | CandidateKind::Merge => {
+            Ok(candidate.content.as_deref().map(str::len).unwrap_or(0))
+        }
         CandidateKind::Disable => Ok(1),
         CandidateKind::Patch => {
-            let text = current_skill.ok_or_else(|| {
-                anyhow::anyhow!("patch 需要 current_skill 计算有效体积")
-            })?;
+            let text = current_skill
+                .ok_or_else(|| anyhow::anyhow!("patch 需要 current_skill 计算有效体积"))?;
             let old = candidate.old_string.as_deref().unwrap_or("");
             let new = candidate.new_string.as_deref().unwrap_or("");
             let post = crate::proposal::apply_patch_unique(text, old, new)?;
@@ -132,9 +129,7 @@ impl ScoredVariant {
         };
 
         let ge = score_ge && size_le && test_ge;
-        let strictly = self.score > other.score
-            || self.size < other.size
-            || test_strict;
+        let strictly = self.score > other.score || self.size < other.size || test_strict;
         ge && strictly
     }
 }
@@ -150,9 +145,7 @@ pub fn pareto_front(variants: &[ScoredVariant]) -> Vec<ScoredVariant> {
 
 fn cmp_test_pass(a: Option<f32>, b: Option<f32>) -> std::cmp::Ordering {
     match (b, a) {
-        (Some(bv), Some(av)) => bv
-            .partial_cmp(&av)
-            .unwrap_or(std::cmp::Ordering::Equal),
+        (Some(bv), Some(av)) => bv.partial_cmp(&av).unwrap_or(std::cmp::Ordering::Equal),
         (Some(_), None) => std::cmp::Ordering::Less,
         (None, Some(_)) => std::cmp::Ordering::Greater,
         (None, None) => std::cmp::Ordering::Equal,
@@ -180,11 +173,7 @@ pub fn select_front_capped(mut front: Vec<ScoredVariant>, n: usize) -> Vec<Score
 pub fn candidate_fingerprint(c: &SkillCandidate) -> String {
     match c.kind {
         CandidateKind::NewSkill | CandidateKind::Merge => {
-            format!(
-                "new:{}:{}",
-                c.skill_id,
-                c.content.as_deref().unwrap_or("")
-            )
+            format!("new:{}:{}", c.skill_id, c.content.as_deref().unwrap_or(""))
         }
         CandidateKind::Patch => {
             format!(
@@ -200,10 +189,7 @@ pub fn candidate_fingerprint(c: &SkillCandidate) -> String {
 
 /// 从评分变体中选出种群：Pareto 前沿优先，不足时从被支配集按 score 降序
 /// （同分取更小 size）补齐。去重后最多保留 `population_size` 个。
-pub fn select_population(
-    scored: Vec<ScoredVariant>,
-    population_size: usize,
-) -> Vec<ScoredVariant> {
+pub fn select_population(scored: Vec<ScoredVariant>, population_size: usize) -> Vec<ScoredVariant> {
     if population_size == 0 || scored.is_empty() {
         return Vec::new();
     }
@@ -605,8 +591,12 @@ mod tests {
         ];
         let front = pareto_front(&vs);
         assert_eq!(front.len(), 2);
-        assert!(front.iter().any(|v| v.candidate.content.as_deref() == Some("aaa")));
-        assert!(front.iter().any(|v| v.candidate.content.as_deref() == Some("ccc")));
+        assert!(front
+            .iter()
+            .any(|v| v.candidate.content.as_deref() == Some("aaa")));
+        assert!(front
+            .iter()
+            .any(|v| v.candidate.content.as_deref() == Some("ccc")));
     }
 
     #[test]

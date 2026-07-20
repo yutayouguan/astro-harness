@@ -57,7 +57,11 @@ pub async fn run_headless_multi_turn(
 
     let max_rounds = {
         let n = agent.multi_turn();
-        if n == 0 { DEFAULT_MAX_ITERATIONS } else { n }
+        if n == 0 {
+            DEFAULT_MAX_ITERATIONS
+        } else {
+            n
+        }
     };
     let budget = IterationBudget::new(max_rounds);
 

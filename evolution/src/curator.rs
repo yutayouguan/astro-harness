@@ -134,10 +134,7 @@ fn jaccard(a: &std::collections::HashSet<String>, b: &std::collections::HashSet<
 ///
 /// `threshold`：相似度阈值（建议 0.5），达到则视为重叠对。
 /// 使用单链接聚合（任意两成员相似即合并），返回 ≥2 个成员的簇。
-pub fn find_overlap_clusters(
-    skills: &[(String, String)],
-    threshold: f32,
-) -> Vec<Vec<String>> {
+pub fn find_overlap_clusters(skills: &[(String, String)], threshold: f32) -> Vec<Vec<String>> {
     let tokenized: Vec<(String, std::collections::HashSet<String>)> = skills
         .iter()
         .map(|(id, desc)| {
@@ -183,10 +180,7 @@ pub fn find_overlap_clusters(
             .or_default()
             .push(tokenized[i].0.clone());
     }
-    clusters
-        .into_values()
-        .filter(|c| c.len() >= 2)
-        .collect()
+    clusters.into_values().filter(|c| c.len() >= 2).collect()
 }
 
 /// 为重叠簇生成 `Merge` 建议。
@@ -215,15 +209,15 @@ fn merge_suggestions_for_clusters(
                     // non-stale first
                     stale_b
                         .cmp(&stale_a)
-                        .then(health_a.partial_cmp(&health_b).unwrap_or(std::cmp::Ordering::Equal))
+                        .then(
+                            health_a
+                                .partial_cmp(&health_b)
+                                .unwrap_or(std::cmp::Ordering::Equal),
+                        )
                         .then(b.cmp(a))
                 })?
                 .clone();
-            let absorb: Vec<String> = cluster
-                .iter()
-                .filter(|id| **id != keep)
-                .cloned()
-                .collect();
+            let absorb: Vec<String> = cluster.iter().filter(|id| **id != keep).cloned().collect();
             Some(CurateSuggestion::Merge {
                 keep: keep.clone(),
                 absorb,
@@ -386,7 +380,11 @@ pub fn build_diagnose_prompt(suggestion: &CurateSuggestion, rows: &[CurateSkillR
                 }
             }
         }
-        CurateSuggestion::Merge { keep, absorb, reason } => {
+        CurateSuggestion::Merge {
+            keep,
+            absorb,
+            reason,
+        } => {
             s.push_str(&format!(
                 "## 建议：合并到 `{keep}`，吸收 {}\n理由: {reason}\n",
                 absorb.join(", ")
@@ -423,7 +421,11 @@ pub fn parse_diagnose_output(raw: &str) -> Option<String> {
     }
     let parsed: Raw = serde_json::from_str(&trimmed[start..=end]).ok()?;
     let d = parsed.diagnosis.trim().to_string();
-    if d.is_empty() { None } else { Some(d) }
+    if d.is_empty() {
+        None
+    } else {
+        Some(d)
+    }
 }
 
 /// 将 LLM 诊断回填到 suggestions（替换 reason，保留原因作前缀）。
@@ -450,10 +452,7 @@ pub enum CuratorDue {
     /// `evolution.curator.enabled` 关闭。
     Disabled,
     /// 距上次报告未满 `interval_days`。
-    NotDue {
-        days_since: u32,
-        interval_days: u32,
-    },
+    NotDue { days_since: u32, interval_days: u32 },
     /// 到期：从未跑过，或已超过间隔。
     Due {
         /// 距上次报告天数；从未跑过为 `None`。
@@ -560,12 +559,7 @@ pub fn build_curator_status(
 ) -> CuratorStatus {
     let last_generated_at = last.map(|r| r.generated_at.clone());
     let suggestion_count = last.map(|r| r.suggestions.len()).unwrap_or(0);
-    let due = evaluate_curator_due(
-        enabled,
-        interval_days,
-        last_generated_at.as_deref(),
-        now,
-    );
+    let due = evaluate_curator_due(enabled, interval_days, last_generated_at.as_deref(), now);
     match due {
         CuratorDue::Disabled => CuratorStatus {
             enabled: false,
@@ -588,9 +582,7 @@ pub fn build_curator_status(
             last_generated_at,
             suggestion_count,
             skip_reason: Some("not_due".into()),
-            skip_message: Some(format!(
-                "距上次 {days_since}/{interval} 天，尚未到期"
-            )),
+            skip_message: Some(format!("距上次 {days_since}/{interval} 天，尚未到期")),
         },
         CuratorDue::Due { days_since, reason } => CuratorStatus {
             enabled: true,
@@ -827,8 +819,12 @@ mod tests {
         ];
         let cands = suggestions_to_candidates(&sugs, 5);
         assert_eq!(cands.len(), 2);
-        assert!(cands.iter().any(|c| c.kind == crate::candidate::CandidateKind::Disable));
-        assert!(cands.iter().any(|c| c.kind == crate::candidate::CandidateKind::Merge));
+        assert!(cands
+            .iter()
+            .any(|c| c.kind == crate::candidate::CandidateKind::Disable));
+        assert!(cands
+            .iter()
+            .any(|c| c.kind == crate::candidate::CandidateKind::Merge));
         let merge = cands
             .iter()
             .find(|c| c.kind == crate::candidate::CandidateKind::Merge)

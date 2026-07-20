@@ -18,14 +18,14 @@ use evolution::{
     build_auto_status, build_crossover_prompt, build_curator_status, build_eval_judge_prompt,
     build_judge_user_prompt, build_mutation_prompt, build_reflection_user_prompt,
     candidate_new_markdown, check_candidate, default_holdout_percent, effective_candidate_size,
-    enqueue_curator_suggestions, examples_for_skill, list_examples, list_proposals, load_auto_state,
-    load_curator_last, mark_auto_run, pareto_front, parse_candidates, parse_eval_judgement,
-    parse_judge_output, parse_variants, reject_proposal, run_curator_and_save,
-    sandbox_test_candidate, save_auto_state, save_proposals, select_front_capped, select_population,
-    split_eval_examples, weighted_eval_score, AutoGate, AutoStatus, CandidateKind, CurateReport,
-    CuratorStatus, EvalExample, EvalJudgement, FitnessResult, FitnessSideInfo, ReflectionInput,
-    ScoredVariant, SearchBudget,
-    SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
+    enqueue_curator_suggestions, examples_for_skill, list_examples, list_proposals,
+    load_auto_state, load_curator_last, mark_auto_run, pareto_front, parse_candidates,
+    parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
+    run_curator_and_save, sandbox_test_candidate, save_auto_state, save_proposals,
+    select_front_capped, select_population, split_eval_examples, weighted_eval_score, AutoGate,
+    AutoStatus, CandidateKind, CurateReport, CuratorStatus, EvalExample, EvalJudgement,
+    FitnessResult, FitnessSideInfo, ReflectionInput, ScoredVariant, SearchBudget, SearchRunMeta,
+    SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
     JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
@@ -251,9 +251,7 @@ fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(S
 }
 
 fn load_skill_text(skill_id: &str) -> Option<String> {
-    skills::load_skill_by_name(skill_id)
-        .ok()
-        .map(|s| s.content)
+    skills::load_skill_by_name(skill_id).ok().map(|s| s.content)
 }
 
 fn skill_text_for_candidate(c: &SkillCandidate) -> Option<String> {
@@ -628,7 +626,9 @@ async fn judge_candidate(
     enabled_skills: &[(String, String)],
 ) -> Option<(f32, String)> {
     let user = build_judge_user_prompt(cand, enabled_skills);
-    let raw = reflect_over_targets(targets, JUDGE_SYSTEM_PROMPT, &user).await.ok()?;
+    let raw = reflect_over_targets(targets, JUDGE_SYSTEM_PROMPT, &user)
+        .await
+        .ok()?;
     let v = parse_judge_output(&raw).ok()?;
     Some((v.score, v.reason))
 }
@@ -766,8 +766,16 @@ async fn holdout_fitness_score(
     if holdout.is_empty() {
         return None;
     }
-    let (verdict_scores, _) =
-        score_grounded_examples(targets, cand, holdout, max_eval_examples, budget, "fixed", 0).await;
+    let (verdict_scores, _) = score_grounded_examples(
+        targets,
+        cand,
+        holdout,
+        max_eval_examples,
+        budget,
+        "fixed",
+        0,
+    )
+    .await;
     weighted_eval_score(&verdict_scores)
 }
 
@@ -926,9 +934,7 @@ pub async fn run_evolution_search(
 
             let parent = &population[gen as usize % population.len()].candidate;
             let muser = build_mutation_prompt(parent, variants, &critiques, &strengths);
-            let raw = match reflect_over_targets(&refl_targets, mutation_prompt, &muser)
-                .await
-            {
+            let raw = match reflect_over_targets(&refl_targets, mutation_prompt, &muser).await {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::warn!(skill = %seed.skill_id, error = %e, "变异调用失败，停止该目标");
@@ -1014,7 +1020,10 @@ pub async fn run_evolution_search(
                         reflect_over_targets(&refl_targets, crossover_prompt, &cx).await
                     {
                         for mut child in parse_variants(&raw, &seed).unwrap_or_default() {
-                            let eff_size = match effective_candidate_size(&child, current_skill_text.as_deref()) {
+                            let eff_size = match effective_candidate_size(
+                                &child,
+                                current_skill_text.as_deref(),
+                            ) {
                                 Ok(s) => s,
                                 Err(_) => {
                                     search_gated_out += 1;
@@ -1103,10 +1112,8 @@ pub async fn run_evolution_search(
         for mut v in select_front_capped(population, 2) {
             pareto_kept += 1;
             if let Some(ids) = holdout_ids_by_skill.get(&v.candidate.skill_id) {
-                let holdout_refs: Vec<&EvalExample> = evalset
-                    .iter()
-                    .filter(|e| ids.contains(&e.id))
-                    .collect();
+                let holdout_refs: Vec<&EvalExample> =
+                    evalset.iter().filter(|e| ids.contains(&e.id)).collect();
                 if let Some(hs) = holdout_fitness_score(
                     &judge_targets,
                     &v.candidate,
@@ -1117,19 +1124,11 @@ pub async fn run_evolution_search(
                 .await
                 {
                     v.candidate.judge_score = Some(hs);
-                    v.candidate.judge_reason = Some(format!(
-                        "holdout 验证 {hs:.2}（optimize {:.2}）",
-                        v.score
-                    ));
+                    v.candidate.judge_reason =
+                        Some(format!("holdout 验证 {hs:.2}（optimize {:.2}）", v.score));
                 }
             }
-            if !check_candidate(
-                &v.candidate,
-                &cfg.gates,
-                current_skill_text.as_deref(),
-            )
-            .passed
-            {
+            if !check_candidate(&v.candidate, &cfg.gates, current_skill_text.as_deref()).passed {
                 search_gated_out += 1;
                 continue;
             }
@@ -1660,8 +1659,12 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
     };
 
     let mut proposals = Vec::new();
-    let gated = if check_candidate(&cand, &cfg.gates, skill_text_for_candidate(&cand).as_deref())
-        .passed
+    let gated = if check_candidate(
+        &cand,
+        &cfg.gates,
+        skill_text_for_candidate(&cand).as_deref(),
+    )
+    .passed
     {
         save_proposals(&base, std::slice::from_ref(&cand)).map_err(|e| e.to_string())?;
         proposals.push(EvolutionProposalDto::from(cand));
@@ -1697,9 +1700,12 @@ pub struct EvalImportCandidateDto {
     pub fail_count: usize,
 }
 
-fn collect_eval_import_candidates(base: &Path, limit: usize) -> Result<Vec<EvalImportCandidateDto>, String> {
-    let decisions =
-        memory::list_recent_decisions(base, 200).map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;
+fn collect_eval_import_candidates(
+    base: &Path,
+    limit: usize,
+) -> Result<Vec<EvalImportCandidateDto>, String> {
+    let decisions = memory::list_recent_decisions(base, 200)
+        .map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;
     let existing = list_examples(base);
     let imported: HashSet<String> = existing
         .iter()
@@ -1711,7 +1717,10 @@ fn collect_eval_import_candidates(base: &Path, limit: usize) -> Result<Vec<EvalI
 
     let mut by_session: HashMap<String, Vec<String>> = HashMap::new();
     for d in decisions {
-        if !matches!(d.kind, DecisionKind::ToolFailure | DecisionKind::UserCorrection) {
+        if !matches!(
+            d.kind,
+            DecisionKind::ToolFailure | DecisionKind::UserCorrection
+        ) {
             continue;
         }
         let Some(sid) = d.session_id.as_deref().filter(|s| !s.is_empty()) else {
@@ -1789,12 +1798,17 @@ pub async fn import_eval_from_session(
     let task = session_user_task(&store, &session_id)
         .ok_or_else(|| "无法从会话提取任务文本".to_string())?;
 
-    let decisions =
-        memory::list_recent_decisions(&base, 200).map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;
+    let decisions = memory::list_recent_decisions(&base, 200)
+        .map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;
     let mut expectations: Vec<String> = decisions
         .iter()
         .filter(|d| d.session_id.as_deref() == Some(session_id.as_str()))
-        .filter(|d| matches!(d.kind, DecisionKind::ToolFailure | DecisionKind::UserCorrection))
+        .filter(|d| {
+            matches!(
+                d.kind,
+                DecisionKind::ToolFailure | DecisionKind::UserCorrection
+            )
+        })
         .map(|d| d.summary.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect();
@@ -2015,8 +2029,7 @@ pub async fn run_skill_curator(
                     if diagnoses.len() as u32 >= max_calls {
                         break;
                     }
-                    let prompt =
-                        evolution::build_diagnose_prompt(sug, &report.rows);
+                    let prompt = evolution::build_diagnose_prompt(sug, &report.rows);
                     if let Ok(raw) = reflect_over_targets(
                         &judge_targets,
                         evolution::CURATOR_DIAGNOSE_SYSTEM_PROMPT,
@@ -2073,7 +2086,8 @@ pub async fn run_skill_curator(
 #[tauri::command]
 pub async fn enqueue_curator_proposals() -> Result<usize, String> {
     let base = default_memory_dir();
-    let report = load_curator_last(&base).ok_or_else(|| "尚无策展报告，请先运行策展".to_string())?;
+    let report =
+        load_curator_last(&base).ok_or_else(|| "尚无策展报告，请先运行策展".to_string())?;
     let max = memory::load_evolution_config(&base).curator.max_enqueue;
     let n = enqueue_curator_suggestions(&base, &report, max).map_err(|e| e.to_string())?;
     Ok(n)

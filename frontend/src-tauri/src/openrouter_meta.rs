@@ -10,8 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
-const OPENROUTER_MODELS_URL: &str =
-    "https://openrouter.ai/api/v1/models?output_modalities=all";
+const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models?output_modalities=all";
 
 /// 缓存超过该时长则在下次刷新模型时重新拉取
 const CACHE_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
@@ -262,10 +261,8 @@ impl RawModel {
             }
         });
 
-        let nonempty = |s: Option<String>| {
-            s.map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-        };
+        let nonempty =
+            |s: Option<String>| s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
 
         OpenRouterEntry {
             max_input_tokens: max_input,
@@ -302,7 +299,9 @@ impl RawModel {
 }
 
 /// 解析 OpenRouter 顶层 `reasoning` 对象。
-fn parse_reasoning_meta(raw: Option<&serde_json::Value>) -> Option<crate::model_meta::ModelReasoningMeta> {
+fn parse_reasoning_meta(
+    raw: Option<&serde_json::Value>,
+) -> Option<crate::model_meta::ModelReasoningMeta> {
     let v = raw?;
     if v.is_null() {
         return None;
@@ -603,11 +602,7 @@ pub fn lookup(id: &str, kind: &str) -> Option<OpenRouterEntry> {
     let bare = strip_variant_suffix(&bare).to_string();
     let kind = kind.to_lowercase();
     let stripped = strip_date_suffix(&bare);
-    let slug = bare
-        .rsplit('/')
-        .next()
-        .unwrap_or(&bare)
-        .to_string();
+    let slug = bare.rsplit('/').next().unwrap_or(&bare).to_string();
     let slug_stripped = strip_date_suffix(&slug);
 
     let mut candidates: Vec<String> = Vec::new();

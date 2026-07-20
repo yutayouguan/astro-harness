@@ -495,7 +495,10 @@ mod tests {
                 assert!(info.capabilities.file);
                 assert!(!info.capabilities.reasoning);
                 assert_eq!(info.description.as_deref(), Some("A chat model"));
-                assert_eq!(info.canonical_slug.as_deref(), Some("deepseek/deepseek-chat"));
+                assert_eq!(
+                    info.canonical_slug.as_deref(),
+                    Some("deepseek/deepseek-chat")
+                );
                 assert_eq!(info.knowledge_cutoff.as_deref(), Some("2024-07-01"));
                 let p = info.pricing.expect("pricing");
                 assert!((p.prompt_per_million.unwrap() - 0.2).abs() < 1e-9);

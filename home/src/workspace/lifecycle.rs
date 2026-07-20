@@ -726,7 +726,9 @@ mod tests {
 
         let agents = list_agents(dir.path());
         assert!(agents.iter().any(|a| a.is_default));
-        assert!(agents.iter().any(|a| a.id == info.id && a.name == "PPT Expert"));
+        assert!(agents
+            .iter()
+            .any(|a| a.id == info.id && a.name == "PPT Expert"));
 
         let ws = PathBuf::from(&info.path);
         assert!(ws.join("AGENT.md").is_file());

@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use home::{default_memory_dir, ensure_default_workspace_dirs};
 
-use super::model::{default_agent_id, normalize_cron_agent_id, title_from_task, CronJob, NewCronJob};
+use super::model::{
+    default_agent_id, normalize_cron_agent_id, title_from_task, CronJob, NewCronJob,
+};
 use super::schedule::compute_next_run;
 
 /// `jobs.json` 顶层结构
