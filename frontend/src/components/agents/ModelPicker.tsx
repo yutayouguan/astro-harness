@@ -15,20 +15,28 @@ import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   DEFAULT_MODEL_PREFS,
+  clampPrefsToModelConfig,
+  contextChoicesForWindow,
+  effortChoicesFromMeta,
   loadAllModelPrefs,
   loadModelPrefs,
   loadPickerGlobals,
   modelPrefsKey,
+  modelSupportsReasoning,
   upsertModelPrefs,
   type ModelContextSize,
   type ModelEffort,
   type ModelPickerGlobals,
   type ModelRuntimePrefs,
 } from "../../lib/model/modelPrefs";
-import { EMPTY_MODEL_CAPABILITIES } from "../../lib/model/modelCaps";
+import {
+  EMPTY_MODEL_CAPABILITIES,
+  compareModelsByCreatedDesc,
+} from "../../lib/model/modelCaps";
 import type {
   ModelCapabilities,
   ModelInfo,
+  ModelReasoningMeta,
   ProviderDto,
   ProviderModelsResult,
 } from "../../types";
@@ -54,6 +62,9 @@ type ModelOption = {
   modelId: string;
   capabilities: ModelCapabilities;
   expirationDate?: string | null;
+  created?: number | null;
+  contextWindow?: number | null;
+  reasoning?: ModelReasoningMeta | null;
 };
 
 /** 选中勾选图标 */
@@ -114,8 +125,6 @@ function ToggleSwitch({
   );
 }
 
-const EFFORTS: ModelEffort[] = ["low", "medium", "high", "xhigh", "max"];
-const CONTEXTS: ModelContextSize[] = ["300k", "1m"];
 const COLLAPSED_GROUPS_KEY = "astro.modelPicker.collapsedGroups";
 
 function loadCollapsedGroups(): Set<string> {
@@ -216,6 +225,7 @@ export default function ModelPicker({
           }
 
           models = ensureDefaultModel(models, p.model);
+          models = [...models].sort(compareModelsByCreatedDesc);
           return models.map((m) => ({
             providerId: p.id,
             providerName: p.display_name,
@@ -225,6 +235,9 @@ export default function ModelPicker({
               tools: true,
             },
             expirationDate: m.expiration_date ?? null,
+            created: m.created ?? null,
+            contextWindow: m.context_window ?? null,
+            reasoning: m.reasoning ?? null,
           }));
         }),
       );
@@ -322,14 +335,34 @@ export default function ModelPicker({
   const openEdit = (opt: ModelOption, e: ReactMouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    const prefs = loadModelPrefs(opt.providerId, opt.modelId);
+    const prefs = clampPrefsToModelConfig(
+      loadModelPrefs(opt.providerId, opt.modelId),
+      {
+        capsReasoning: opt.capabilities.reasoning,
+        reasoning: opt.reasoning,
+        contextWindow: opt.contextWindow,
+      },
+    );
     setEditPrefs(prefs);
     setEditing(opt);
   };
 
   const patchEdit = (patch: Partial<ModelRuntimePrefs>) => {
     if (!editing) return;
-    const next = upsertModelPrefs(editing.providerId, editing.modelId, patch);
+    const raw = upsertModelPrefs(editing.providerId, editing.modelId, patch);
+    const next = clampPrefsToModelConfig(raw, {
+      capsReasoning: editing.capabilities.reasoning,
+      reasoning: editing.reasoning,
+      contextWindow: editing.contextWindow,
+    });
+    if (
+      next.thinking !== raw.thinking ||
+      next.effort !== raw.effort ||
+      next.context !== raw.context ||
+      next.fast !== raw.fast
+    ) {
+      upsertModelPrefs(editing.providerId, editing.modelId, next);
+    }
     setEditPrefs(next);
     setPrefsTick((n) => n + 1);
     if (
@@ -340,8 +373,26 @@ export default function ModelPicker({
     }
   };
 
+  const editEfforts = editing
+    ? effortChoicesFromMeta(editing.reasoning, editing.capabilities.reasoning)
+    : [];
+  const editContexts = editing
+    ? contextChoicesForWindow(editing.contextWindow)
+    : [];
+  const editSupportsReasoning = editing
+    ? modelSupportsReasoning(
+        editing.capabilities.reasoning,
+        editing.reasoning,
+      )
+    : false;
+  const editThinkingMandatory = Boolean(editing?.reasoning?.mandatory);
+
   const effortLabel = (e: ModelEffort) => {
     switch (e) {
+      case "none":
+        return t("modelEdit.effortNone");
+      case "minimal":
+        return t("modelEdit.effortMinimal");
       case "low":
         return t("modelEdit.effortLow");
       case "medium":
@@ -353,6 +404,12 @@ export default function ModelPicker({
       case "max":
         return t("modelEdit.effortMax");
     }
+  };
+
+  const contextLabel = (c: ModelContextSize) => {
+    if (c === "300k") return "300K";
+    if (c === "1m") return "1M";
+    return c;
   };
 
   if (providers.length === 0) {
@@ -585,63 +642,71 @@ export default function ModelPicker({
                 </button>
               </div>
 
-              <div className="mp-edit-section">
-                <ToggleSwitch
-                  label={t("modelEdit.thinking")}
-                  checked={editPrefs.thinking}
-                  onChange={(v) => patchEdit({ thinking: v })}
-                />
-                <ToggleSwitch
-                  label={t("modelEdit.fast")}
-                  checked={editPrefs.fast}
-                  onChange={(v) => patchEdit({ fast: v })}
-                />
-              </div>
-
-              <div className="mp-edit-section">
-                <div className="mp-edit-section-label">
-                  {t("modelEdit.context")}
+              {editSupportsReasoning ? (
+                <div className="mp-edit-section">
+                  <ToggleSwitch
+                    label={t("modelEdit.thinking")}
+                    checked={editPrefs.thinking}
+                    disabled={editThinkingMandatory}
+                    onChange={(v) => patchEdit({ thinking: v })}
+                  />
                 </div>
-                {CONTEXTS.map((c) => {
-                  const selected = editPrefs.context === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`mp-edit-choice ${selected ? "is-selected" : ""}`}
-                      onClick={() =>
-                        patchEdit({
-                          context: selected ? "default" : c,
-                        })
-                      }
-                    >
-                      <span>{c === "300k" ? "300K" : "1M"}</span>
-                      {selected ? <IconCheck /> : null}
-                    </button>
-                  );
-                })}
-              </div>
+              ) : null}
 
-              <div className="mp-edit-section">
-                <div className="mp-edit-section-label">
-                  {t("modelEdit.effort")}
+              {editContexts.length > 0 ? (
+                <div className="mp-edit-section">
+                  <div className="mp-edit-section-label">
+                    {t("modelEdit.context")}
+                  </div>
+                  {editContexts.map((c) => {
+                    const selected = editPrefs.context === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`mp-edit-choice ${selected ? "is-selected" : ""}`}
+                        onClick={() =>
+                          patchEdit({
+                            context: selected ? "default" : c,
+                          })
+                        }
+                      >
+                        <span>{contextLabel(c)}</span>
+                        {selected ? <IconCheck /> : null}
+                      </button>
+                    );
+                  })}
                 </div>
-                {EFFORTS.map((e) => {
-                  const selected = editPrefs.effort === e;
-                  return (
-                    <button
-                      key={e}
-                      type="button"
-                      className={`mp-edit-choice ${selected ? "is-selected" : ""}`}
-                      disabled={!editPrefs.thinking}
-                      onClick={() => patchEdit({ effort: e })}
-                    >
-                      <span>{effortLabel(e)}</span>
-                      {selected ? <IconCheck /> : null}
-                    </button>
-                  );
-                })}
-              </div>
+              ) : null}
+
+              {editEfforts.length > 0 ? (
+                <div className="mp-edit-section">
+                  <div className="mp-edit-section-label">
+                    {t("modelEdit.effort")}
+                  </div>
+                  {editEfforts.map((e) => {
+                    const selected = editPrefs.effort === e;
+                    return (
+                      <button
+                        key={e}
+                        type="button"
+                        className={`mp-edit-choice ${selected ? "is-selected" : ""}`}
+                        disabled={!editPrefs.thinking}
+                        onClick={() => patchEdit({ effort: e })}
+                      >
+                        <span>{effortLabel(e)}</span>
+                        {selected ? <IconCheck /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {!editSupportsReasoning &&
+              editContexts.length === 0 &&
+              editEfforts.length === 0 ? (
+                <p className="mp-edit-empty">{t("modelEdit.noOptions")}</p>
+              ) : null}
             </div>
           ) : null}
         </div>

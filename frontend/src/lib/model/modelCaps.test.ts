@@ -70,6 +70,15 @@ test("isModelCreatedWithinDays / compareModelsByCreatedDesc", () => {
     sorted.map((m) => m.id),
     ["new", "old", "none"],
   );
+  // 均无 created 时保持相对顺序（稳定排序）
+  const noCreated = [
+    { id: "b", created: null },
+    { id: "a", created: null },
+  ].sort(compareModelsByCreatedDesc);
+  assert.deepEqual(
+    noCreated.map((m) => m.id),
+    ["b", "a"],
+  );
 });
 
 test("attachmentAcceptForCaps gates by capabilities", () => {

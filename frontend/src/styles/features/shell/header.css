@@ -454,6 +454,14 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   border-bottom: none;
 }
 
+.mp-edit-empty {
+  margin: 0;
+  padding: 10px 8px 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-mute);
+}
+
 .mp-edit-section-label {
   padding: 4px 8px 6px;
   font-size: 10px;

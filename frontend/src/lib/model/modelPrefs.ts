@@ -4,7 +4,7 @@ import {
   defaultThinkingLevelFromMeta,
   parseEffortLevel,
   type ThinkingLevel,
-} from "../chat/thinkingPrefs";
+} from "../chat/thinkingPrefs.ts";
 
 export type ModelContextSize = "default" | "300k" | "1m";
 /** 与后端 ReasoningEffort / OpenRouter supported_efforts 一致 */
@@ -195,4 +195,101 @@ export function thinkingLevelToModelPatch(
     return { thinking: false };
   }
   return { thinking: true, effort: level };
+}
+
+/** 模型是否具备可配置的推理能力（能力位或 OpenRouter reasoning 元数据）。 */
+export function modelSupportsReasoning(
+  capsReasoning?: boolean | null,
+  meta?: ModelReasoningMeta | null,
+): boolean {
+  if (capsReasoning) return true;
+  if (!meta) return false;
+  if (meta.mandatory) return true;
+  if (meta.default_enabled === true) return true;
+  return (meta.supported_efforts ?? []).some((e) => Boolean(parseEffortLevel(e)));
+}
+
+/**
+ * 编辑面板 Effort 选项：优先 OpenRouter `supported_efforts`；
+ * 仅当明确支持推理但无档位列表时回退 low/high/max。
+ */
+export function effortChoicesFromMeta(
+  meta?: ModelReasoningMeta | null,
+  capsReasoning?: boolean | null,
+): ModelEffort[] {
+  if (!modelSupportsReasoning(capsReasoning, meta)) return [];
+  const raw = (meta?.supported_efforts ?? [])
+    .map((e) => parseEffortLevel(e))
+    .filter((e): e is ThinkingLevel => e != null && e !== "off");
+  if (raw.length > 0) {
+    return EFFORT_ORDER_FOR_PICKER.filter((e) => raw.includes(e));
+  }
+  return ["low", "high", "max"];
+}
+
+const EFFORT_ORDER_FOR_PICKER: ModelEffort[] = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+/**
+ * 按模型 context_window 生成可选上下文档位（不可超过窗口）。
+ * 无窗口或不足 300K 时不展示可选项。
+ */
+export function contextChoicesForWindow(
+  tokens?: number | null,
+): ModelContextSize[] {
+  if (tokens == null || !Number.isFinite(tokens) || tokens <= 0) return [];
+  const out: ModelContextSize[] = [];
+  if (tokens >= 300_000) out.push("300k");
+  if (tokens >= 1_000_000) out.push("1m");
+  return out;
+}
+
+/** 将已存偏好钳到模型真实可选项。 */
+export function clampPrefsToModelConfig(
+  prefs: ModelRuntimePrefs,
+  opts: {
+    capsReasoning?: boolean | null;
+    reasoning?: ModelReasoningMeta | null;
+    contextWindow?: number | null;
+  },
+): ModelRuntimePrefs {
+  const efforts = effortChoicesFromMeta(opts.reasoning, opts.capsReasoning);
+  const contexts = contextChoicesForWindow(opts.contextWindow);
+  let thinking = prefs.thinking;
+  let effort = prefs.effort;
+
+  if (opts.reasoning?.mandatory) {
+    thinking = true;
+  }
+  if (efforts.length === 0) {
+    thinking = false;
+  } else if (thinking && !efforts.includes(effort)) {
+    const preferred = parseEffortLevel(opts.reasoning?.default_effort);
+    if (preferred && preferred !== "off" && efforts.includes(preferred)) {
+      effort = preferred;
+    } else if (efforts.includes("high")) {
+      effort = "high";
+    } else {
+      effort = efforts[0]!;
+    }
+  }
+
+  let context = prefs.context;
+  if (context !== "default" && !contexts.includes(context)) {
+    context = "default";
+  }
+
+  return {
+    thinking,
+    fast: false,
+    context,
+    effort,
+  };
 }

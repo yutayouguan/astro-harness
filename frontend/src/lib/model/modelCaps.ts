@@ -133,7 +133,7 @@ export function isModelCreatedWithinDays(
   return ageMs >= -MS_PER_DAY && ageMs <= days * MS_PER_DAY;
 }
 
-/** 按 `created` 降序；无时间戳的排最后，同秒再比 id。 */
+/** 按 `created` 降序；无时间戳的相对顺序保持稳定（返回 0），同秒再比 id。 */
 export function compareModelsByCreatedDesc(
   a: { id?: string; created?: number | null },
   b: { id?: string; created?: number | null },
@@ -146,11 +146,10 @@ export function compareModelsByCreatedDesc(
     b.created != null && Number.isFinite(b.created) && b.created > 0
       ? b.created
       : 0;
-  if (ac !== bc) {
-    if (ac === 0) return 1;
-    if (bc === 0) return -1;
-    return bc - ac;
-  }
+  if (ac === 0 && bc === 0) return 0;
+  if (ac === 0) return 1;
+  if (bc === 0) return -1;
+  if (ac !== bc) return bc - ac;
   return (a.id ?? "").localeCompare(b.id ?? "");
 }
 
