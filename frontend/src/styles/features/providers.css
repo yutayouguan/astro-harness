@@ -1983,14 +1983,24 @@ html[data-theme="dark"] .providers-add-row {
 @media (max-width: 860px) {
   .providers-layout {
     grid-template-columns: 1fr;
-    /* 详情行需容纳：表头 + tab + 可用模型面板（约 5 行） */
-    grid-template-rows: auto minmax(540px, 1fr);
+    /* 列表行保底可见；详情按内容增高，整体滚动，避免 1fr 挤掉列表 */
+    grid-template-rows: minmax(200px, 36vh) auto;
     overflow-y: auto;
-    align-content: stretch;
+    align-content: start;
   }
 
   .providers-pane-list {
-    max-height: 42vh;
+    max-height: none;
+  }
+
+  .providers-pane-list .providers-list {
+    /* 列表区内至少约 3 条供应商高度，多的可滚 */
+    min-height: calc(3 * 52px + 2 * 6px);
+  }
+
+  .providers-pane-detail {
+    /* 表头 + tab + 可用模型面板（约 5 行） */
+    min-height: calc(56px + 52px + 40px + 80px + 10px + (5 * 48px + 4 * 6px) + 28px);
   }
 
   .providers-models-list {
