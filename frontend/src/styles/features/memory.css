@@ -885,6 +885,28 @@ html[data-theme="dark"] .evo-stat {
   margin: 2px 0 8px;
 }
 
+.evo-eval-import {
+  margin: 4px 0 12px;
+}
+
+.evo-eval-import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.evo-eval-import-list {
+  margin-top: 8px;
+}
+
+.evo-eval-import-session {
+  font-size: 11px;
+  opacity: 0.72;
+  word-break: break-all;
+}
+
 .evo-eval-input {
   width: 100%;
   padding: 8px 11px;

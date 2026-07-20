@@ -433,6 +433,8 @@ pub fn run() {
             evolution_run_commands::approve_evolution_proposal_to_branch,
             evolution_run_commands::reject_evolution_proposal,
             evolution_run_commands::list_eval_examples,
+            evolution_run_commands::list_eval_import_candidates,
+            evolution_run_commands::import_eval_from_session,
             evolution_run_commands::add_eval_example,
             evolution_run_commands::remove_eval_example,
             evolution_run_commands::evolution_dspy_status,

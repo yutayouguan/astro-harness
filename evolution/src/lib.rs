@@ -32,7 +32,9 @@ pub use evalset::{
     remove_example, split_eval_examples, weighted_eval_score, EvalExample, EvalJudgement,
     EvalSplit, Verdict, EVAL_JUDGE_SYSTEM_PROMPT,
 };
-pub use gates::{check_candidate, GateOutcome};
+pub use gates::{
+    check_candidate, run_skill_tests_in_dir, sandbox_test_candidate, GateOutcome, TestOutcome,
+};
 pub use history::{
     history_path, list_all as list_history, record_outcome, record_run, record_run_meta,
     summarize as summarize_history, HistoryEvent, HistorySummary, SearchRunMeta,

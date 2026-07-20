@@ -225,7 +225,9 @@ UI 展示 diff + judge 分；**绝不自动应用**。
 - 候选 `skill_id` 有匹配例子 → judge 按 task+expectations **grounded** 评分（多例取均值）
 - 无匹配 → 回退泛化 judge
 
-命令：`list_eval_examples` / `add_eval_example` / `remove_eval_example`。
+命令：`list_eval_examples` / `add_eval_example` / `remove_eval_example`；`list_eval_import_candidates` / `import_eval_from_session`（从含工具失败或用户纠错的会话一键导入，verdict 固定为 fail）。
+
+匹配例子 ≥5 条时启用 **holdout**（约 20%，稳定 id 哈希）：搜索适应度仅用 optimize 分区，终选候选在 holdout 复验。
 
 ---
 
@@ -274,6 +276,7 @@ Agent skills 写入目标由 `skills` crate 的 agent skills 目录决定（通�
 | `reject_evolution_proposal` | 拒绝 |
 | `evolution_history` | 历史汇总 |
 | `list_eval_examples` / `add_eval_example` / `remove_eval_example` | 评测集 CRUD |
+| `list_eval_import_candidates` / `import_eval_from_session` | 从失败会话导入评测例 |
 | `evolution_dspy_status` / `setup_evolution_dspy` / `run_evolution_dspy` | DSPy 状态 / 装依赖 / 运行 |
 
 配置读写经 `memory` crate 的 `load_evolution_config` / `set_evolution_*`，由 `evolution_commands` 暴露给前端。

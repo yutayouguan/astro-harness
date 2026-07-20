@@ -20,13 +20,14 @@ use evolution::{
     default_holdout_percent, effective_candidate_size, examples_for_skill, list_examples,
     list_proposals, load_auto_state, mark_auto_run, pareto_front, parse_candidates,
     parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
-    save_auto_state, save_proposals, select_front_capped, select_population, split_eval_examples,
-    weighted_eval_score, AutoGate, AutoStatus, CandidateKind, EvalExample, EvalJudgement,
-    ReflectionInput, ScoredVariant, SearchBudget, SearchRunMeta, SkillCandidate, Verdict,
-    CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
-    REFLECTION_SYSTEM_PROMPT,
+    save_auto_state, save_proposals, sandbox_test_candidate, select_front_capped,
+    select_population, split_eval_examples, weighted_eval_score, AutoGate, AutoStatus,
+    CandidateKind, EvalExample, EvalJudgement, ReflectionInput, ScoredVariant, SearchBudget,
+    SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
+    JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
+use memory::DecisionKind;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -242,6 +243,49 @@ fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(S
     out
 }
 
+fn load_skill_text(skill_id: &str) -> Option<String> {
+    skills::load_skill_by_name(skill_id)
+        .ok()
+        .map(|s| s.content)
+}
+
+fn skill_text_for_candidate(c: &SkillCandidate) -> Option<String> {
+    if c.kind == CandidateKind::Patch {
+        load_skill_text(&c.skill_id)
+    } else {
+        None
+    }
+}
+
+fn truncate_task(text: &str, max_chars: usize) -> String {
+    let t = text.trim();
+    if t.chars().count() <= max_chars {
+        t.to_string()
+    } else {
+        format!("{}…", t.chars().take(max_chars).collect::<String>())
+    }
+}
+
+fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<String> {
+    let msgs = store.get_messages(session_id).ok()?;
+    for m in msgs {
+        if m.role != "user" {
+            continue;
+        }
+        let content = m.content.as_deref()?.trim();
+        if !content.is_empty() {
+            return Some(truncate_task(content, 500));
+        }
+    }
+    store
+        .get_session(session_id)
+        .ok()
+        .flatten()
+        .and_then(|s| s.title)
+        .map(|t| truncate_task(&t, 500))
+        .filter(|t| !t.is_empty())
+}
+
 /// 运行一次离线进化（生成待审提案）。`mode` 写入历史（`reflect` / `auto`）。
 async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunReport, String> {
     let base = default_memory_dir();
@@ -278,7 +322,7 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
     let mut passed: Vec<SkillCandidate> = Vec::new();
     let mut gated_out = 0usize;
     for c in candidates {
-        let outcome = check_candidate(&c, &cfg.gates);
+        let outcome = check_candidate(&c, &cfg.gates, skill_text_for_candidate(&c).as_deref());
         if outcome.passed {
             passed.push(c);
         } else {
@@ -726,10 +770,15 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
         let mut population: Vec<ScoredVariant> = vec![ScoredVariant::new(seed.clone(), 0.0)];
         let mut critiques: Vec<String> = Vec::new();
 
-        let current_skill_text: Option<String> =
-            skills::load_skill_by_name(&seed.skill_id)
-                .ok()
-                .map(|s| s.content);
+        let loaded_skill = skills::load_skill_by_name(&seed.skill_id).ok();
+        let current_skill_text: Option<String> = loaded_skill.as_ref().map(|s| s.content.clone());
+        let test_scripts_dir: Option<PathBuf> = loaded_skill.as_ref().and_then(|s| {
+            let skill_dir = std::path::Path::new(&s.path).parent()?;
+            let scripts = skill_dir.join("scripts");
+            (scripts.join("test.sh").is_file() || scripts.join("test.py").is_file())
+                .then(|| scripts)
+        });
+        let run_sandbox = cfg.gates.run_tests && test_scripts_dir.is_some();
 
         let mut strengths: Vec<String> = Vec::new();
 
@@ -806,7 +855,20 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                     c.judge_reason = Some(reason);
                     gen_judgements.extend(js);
                     variants_evaluated += 1;
-                    scored.push(ScoredVariant::with_size(c, score, eff_size));
+                    let test_pass = if run_sandbox {
+                        sandbox_test_candidate(
+                            &c,
+                            current_skill_text.as_deref(),
+                            test_scripts_dir.as_deref(),
+                            Duration::from_secs(60),
+                        )
+                        .fitness()
+                    } else {
+                        None
+                    };
+                    scored.push(
+                        ScoredVariant::with_size(c, score, eff_size).with_test_pass(test_pass),
+                    );
                 } else {
                     tracing::debug!(skill = %c.skill_id, "预算不足或评分失败，跳过该候选");
                 }
@@ -843,7 +905,21 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                                 child.judge_reason = Some(format!("[交叉] {reason}"));
                                 gen_judgements.extend(js);
                                 variants_evaluated += 1;
-                                scored.push(ScoredVariant::with_size(child, score, eff_size));
+                                let test_pass = if run_sandbox {
+                                    sandbox_test_candidate(
+                                        &child,
+                                        current_skill_text.as_deref(),
+                                        test_scripts_dir.as_deref(),
+                                        Duration::from_secs(60),
+                                    )
+                                    .fitness()
+                                } else {
+                                    None
+                                };
+                                scored.push(
+                                    ScoredVariant::with_size(child, score, eff_size)
+                                        .with_test_pass(test_pass),
+                                );
                             }
                         }
                     }
@@ -892,7 +968,13 @@ pub async fn run_evolution_search(app: AppHandle) -> Result<EvolutionSearchRepor
                     ));
                 }
             }
-            if !check_candidate(&v.candidate, &cfg.gates).passed {
+            if !check_candidate(
+                &v.candidate,
+                &cfg.gates,
+                current_skill_text.as_deref(),
+            )
+            .passed
+            {
                 search_gated_out += 1;
                 continue;
             }
@@ -1414,7 +1496,9 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
     };
 
     let mut proposals = Vec::new();
-    let gated = if check_candidate(&cand, &cfg.gates).passed {
+    let gated = if check_candidate(&cand, &cfg.gates, skill_text_for_candidate(&cand).as_deref())
+        .passed
+    {
         save_proposals(&base, std::slice::from_ref(&cand)).map_err(|e| e.to_string())?;
         proposals.push(EvolutionProposalDto::from(cand));
         0
@@ -1437,6 +1521,134 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
         proposals,
         error: None,
     })
+}
+
+/// 可从失败会话导入的评测例候选。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvalImportCandidateDto {
+    pub session_id: String,
+    pub task: String,
+    pub expectations: Vec<String>,
+    pub fail_count: usize,
+}
+
+fn collect_eval_import_candidates(base: &Path, limit: usize) -> Result<Vec<EvalImportCandidateDto>, String> {
+    let decisions =
+        memory::list_recent_decisions(base, 200).map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;
+    let existing = list_examples(base);
+    let imported: HashSet<String> = existing
+        .iter()
+        .filter_map(|e| e.source_session.clone())
+        .collect();
+
+    let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
+        .map_err(|e| format!("打开会话库失败: {e}"))?;
+
+    let mut by_session: HashMap<String, Vec<String>> = HashMap::new();
+    for d in decisions {
+        if !matches!(d.kind, DecisionKind::ToolFailure | DecisionKind::UserCorrection) {
+            continue;
+        }
+        let Some(sid) = d.session_id.as_deref().filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        if imported.contains(sid) {
+            continue;
+        }
+        let summary = d.summary.trim();
+        if summary.is_empty() {
+            continue;
+        }
+        by_session
+            .entry(sid.to_string())
+            .or_default()
+            .push(summary.to_string());
+    }
+
+    let mut out: Vec<EvalImportCandidateDto> = Vec::new();
+    for (session_id, mut expectations) in by_session {
+        expectations.sort();
+        expectations.dedup();
+        let Some(task) = session_user_task(&store, &session_id) else {
+            continue;
+        };
+        let fail_count = expectations.len();
+        out.push(EvalImportCandidateDto {
+            session_id,
+            task,
+            expectations,
+            fail_count,
+        });
+    }
+    out.sort_by(|a, b| {
+        b.fail_count
+            .cmp(&a.fail_count)
+            .then_with(|| b.session_id.cmp(&a.session_id))
+    });
+    if limit > 0 {
+        out.truncate(limit);
+    }
+    Ok(out)
+}
+
+/// 列出可从失败会话导入的评测例（未导入且含 ToolFailure / UserCorrection）。
+#[tauri::command]
+pub async fn list_eval_import_candidates(
+    limit: Option<u32>,
+) -> Result<Vec<EvalImportCandidateDto>, String> {
+    let base = default_memory_dir();
+    collect_eval_import_candidates(&base, limit.unwrap_or(12) as usize)
+}
+
+/// 从指定会话导入一条失败评测例。
+#[tauri::command]
+pub async fn import_eval_from_session(
+    session_id: String,
+    skill_id: Option<String>,
+) -> Result<Vec<EvalExampleDto>, String> {
+    let session_id = session_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err("session_id 不能为空".into());
+    }
+    let base = default_memory_dir();
+    let existing = list_examples(&base);
+    if existing
+        .iter()
+        .any(|e| e.source_session.as_deref() == Some(session_id.as_str()))
+    {
+        return Err("该会话已导入评测集".into());
+    }
+
+    let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
+        .map_err(|e| format!("打开会话库失败: {e}"))?;
+    let task = session_user_task(&store, &session_id)
+        .ok_or_else(|| "无法从会话提取任务文本".to_string())?;
+
+    let decisions =
+        memory::list_recent_decisions(&base, 200).map_err(|e| format!("读取 DecisionLog 失败: {e}"))?;
+    let mut expectations: Vec<String> = decisions
+        .iter()
+        .filter(|d| d.session_id.as_deref() == Some(session_id.as_str()))
+        .filter(|d| matches!(d.kind, DecisionKind::ToolFailure | DecisionKind::UserCorrection))
+        .map(|d| d.summary.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    expectations.sort();
+    expectations.dedup();
+    if expectations.is_empty() {
+        return Err("该会话无工具失败或用户纠错记录".into());
+    }
+
+    let mut ex = EvalExample::new(
+        skill_id.filter(|s| !s.trim().is_empty()),
+        task,
+        expectations,
+        Verdict::Fail,
+    );
+    ex.source_session = Some(session_id);
+    evolution::append_example(&base, &ex).map_err(|e| e.to_string())?;
+    list_eval_examples().await
 }
 
 /// 评测例子展示态。

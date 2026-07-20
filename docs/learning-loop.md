@@ -103,7 +103,7 @@ DecisionLog 现覆盖：`ToolFailure`、`MemoryRejected`、`UserCorrection`（�
 
 crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `select_front_capped` / 变异提示与解析）；命令 `run_evolution_search`。
 
-**评测集 + 客观适应度**：「离线进化」页可标注评测例子（task + 期望要点 + 曾通过/失败，可关联 skill_id），存 `~/.astro/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配例子，则由 judge 针对具体 task+expectations 做 **grounded 客观评分**（Fail 加权）；无匹配则回退泛化 judge。crate [`evolution::evalset`](../evolution/src/evalset.rs)；命令 `list/add/remove_eval_example`。
+**评测集 + 客观适应度**：「离线进化」页可标注评测例子（task + 期望要点 + 曾通过/失败，可关联 skill_id），存 `~/.astro/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配例子，则由 judge 针对具体 task+expectations 做 **grounded 客观评分**（Fail 加权）；无匹配则回退泛化 judge。同一技能匹配例子 **≥5 条**时，稳定哈希划分约 **20% holdout**：遗传搜索仅在 optimize 分区上打分选型，最终候选在 holdout 上复验，降低过拟合评测集风险。支持从 DecisionLog 关联的**失败会话一键导入**（工具失败 / 用户纠错）。crate [`evolution::evalset`](../evolution/src/evalset.rs)；命令 `list/add/remove_eval_example`、`list_eval_import_candidates` / `import_eval_from_session`。
 
 **交叉算子**：遗传搜索每代对当前 Pareto 前沿 top-2 变体做交叉（`CROSSOVER_SYSTEM_PROMPT` 融合两父代为一个子代），评分后并入本代选择。可在页面开关（`evolution.search.crossover`，默认开）。
 

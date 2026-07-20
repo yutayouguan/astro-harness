@@ -353,6 +353,14 @@ export type EvalExampleDto = {
   createdAt: string;
 };
 
+/** 可导入的失败会话候选（Tauri `list_eval_import_candidates`） */
+export type EvalImportCandidateDto = {
+  sessionId: string;
+  task: string;
+  expectations: string[];
+  failCount: number;
+};
+
 /** GEPA-lite 遗传搜索运行结果（Tauri `run_evolution_search`） */
 export type EvolutionSearchReport = {
   ok: boolean;

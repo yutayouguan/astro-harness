@@ -83,15 +83,18 @@ pub struct ScoredVariant {
     pub score: f32,
     /// 有效体积字节（越小越好）。
     pub size: usize,
+    /// 测试通过率（0–1，越高越好）；`None` = 该技能无测试脚本，不参与 Pareto 比较。
+    pub test_pass: Option<f32>,
 }
 
 impl ScoredVariant {
-    /// 使用调用方已计算的 `effective_size` 构造。
+    /// 使用调用方已计算的 `effective_size` 构造（测试不适用）。
     pub fn with_size(candidate: SkillCandidate, score: f32, effective_size: usize) -> Self {
         Self {
             candidate,
             score,
             size: effective_size,
+            test_pass: None,
         }
     }
 
@@ -102,13 +105,34 @@ impl ScoredVariant {
             candidate,
             score,
             size,
+            test_pass: None,
         }
     }
 
-    /// 自身是否支配 `other`：score≥ 且 size≤，且至少一维严格更优。
+    /// 设置测试通过率。
+    pub fn with_test_pass(mut self, test_pass: Option<f32>) -> Self {
+        self.test_pass = test_pass;
+        self
+    }
+
+    /// 自身是否支配 `other`：所有维度 ≥ 且至少一维严格更优。
+    ///
+    /// 三维：score↑, test_pass↑, size↓。
+    /// `test_pass` 均为 `None` 时该维度不参与比较（退化到二维）。
     fn dominates(&self, other: &ScoredVariant) -> bool {
-        let ge = self.score >= other.score && self.size <= other.size;
-        let strictly = self.score > other.score || self.size < other.size;
+        let score_ge = self.score >= other.score;
+        let size_le = self.size <= other.size;
+
+        let (test_ge, test_strict) = match (self.test_pass, other.test_pass) {
+            (Some(a), Some(b)) => (a >= b, a > b),
+            // 双方都无测试：该维度视为平手
+            _ => (true, false),
+        };
+
+        let ge = score_ge && size_le && test_ge;
+        let strictly = self.score > other.score
+            || self.size < other.size
+            || test_strict;
         ge && strictly
     }
 }
@@ -347,16 +371,19 @@ mod tests {
                 candidate: cand("s", "x"),
                 score: 0.9,
                 size: 100,
+                test_pass: None,
             },
             ScoredVariant {
                 candidate: cand("s", "x"),
                 score: 0.8,
                 size: 200,
+                test_pass: None,
             },
             ScoredVariant {
                 candidate: cand("s", "x"),
                 score: 0.7,
                 size: 50,
+                test_pass: None,
             },
         ];
         let front = pareto_front(&vs);
@@ -372,11 +399,13 @@ mod tests {
                 candidate: cand("s", "x"),
                 score: 0.7,
                 size: 50,
+                test_pass: None,
             },
             ScoredVariant {
                 candidate: cand("s", "x"),
                 score: 0.9,
                 size: 100,
+                test_pass: None,
             },
         ];
         let top = select_front_capped(front, 1);
@@ -532,5 +561,58 @@ mod tests {
         assert!(!budget.try_reserve(2));
         assert_eq!(budget.used(), 2);
         assert_eq!(budget.remaining(), Some(1));
+    }
+
+    #[test]
+    fn pareto_three_dim_test_pass() {
+        // A: score=0.9, size=100, test=1.0
+        // B: score=0.9, size=100, test=0.0 — A 支配 B（test 严格更优）
+        // C: score=0.7, size=50,  test=1.0 — 不被 A 支配（size 更优）
+        let vs = vec![
+            ScoredVariant {
+                candidate: cand("s", "aaa"),
+                score: 0.9,
+                size: 100,
+                test_pass: Some(1.0),
+            },
+            ScoredVariant {
+                candidate: cand("s", "bbb"),
+                score: 0.9,
+                size: 100,
+                test_pass: Some(0.0),
+            },
+            ScoredVariant {
+                candidate: cand("s", "ccc"),
+                score: 0.7,
+                size: 50,
+                test_pass: Some(1.0),
+            },
+        ];
+        let front = pareto_front(&vs);
+        assert_eq!(front.len(), 2);
+        assert!(front.iter().any(|v| v.candidate.content.as_deref() == Some("aaa")));
+        assert!(front.iter().any(|v| v.candidate.content.as_deref() == Some("ccc")));
+    }
+
+    #[test]
+    fn pareto_no_test_degrades_to_two_dim() {
+        // 双方都 None → test 维度不参与，退化二维
+        let vs = vec![
+            ScoredVariant {
+                candidate: cand("s", "aaa"),
+                score: 0.9,
+                size: 100,
+                test_pass: None,
+            },
+            ScoredVariant {
+                candidate: cand("s", "bbb"),
+                score: 0.7,
+                size: 50,
+                test_pass: None,
+            },
+        ];
+        let front = pareto_front(&vs);
+        // 两者互不支配
+        assert_eq!(front.len(), 2);
     }
 }

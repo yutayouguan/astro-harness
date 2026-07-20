@@ -145,8 +145,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [llmDraft, setLlmDraft] = useState("");
   const {
     examples: evalExamples,
+    importCandidates,
+    importLoading,
     add: addEval,
     remove: removeEval,
+    reloadImportCandidates,
+    importFromSession,
     error: evalError,
   } = useEvalExamples(active);
   const [evalTask, setEvalTask] = useState("");
@@ -199,6 +203,11 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [loadingModelsFor, setLoadingModelsFor] = useState<string | null>(null);
   const [maxBytesDraft, setMaxBytesDraft] = useState("");
   const [judgeDraft, setJudgeDraft] = useState("");
+
+  useEffect(() => {
+    if (!active || section !== "lab") return;
+    void reloadImportCandidates();
+  }, [active, section, reloadImportCandidates]);
 
   useEffect(() => {
     if (!active || section !== "lab") return;
@@ -1336,6 +1345,52 @@ export default function EvolutionModelsPanel({ active }: Props) {
                   {t("evo.evalAdd")}
                 </button>
               </div>
+            </div>
+
+            <div className="evo-eval-import">
+              <div className="evo-eval-import-head">
+                <p className="aux-muted evo-inline-hint">{t("evo.evalImportHint")}</p>
+                <button
+                  type="button"
+                  className="aux-action aux-action-ghost"
+                  onClick={() => void reloadImportCandidates()}
+                  disabled={importLoading}
+                >
+                  {importLoading ? t("evo.evalImportScanning") : t("evo.evalImportScan")}
+                </button>
+              </div>
+              {importCandidates.length > 0 && (
+                <div className="aux-task-list evo-eval-import-list">
+                  {importCandidates.map((cand) => (
+                    <article className="aux-task-row evo-compact-row" key={cand.sessionId}>
+                      <div className="aux-task-main">
+                        <div className="aux-task-titleline">
+                          <h3>{cand.task}</h3>
+                          <span className="aux-route-pill is-auto">
+                            {t("evo.evalImportFailCount").replace("{n}", String(cand.failCount))}
+                          </span>
+                        </div>
+                        {cand.expectations.length > 0 && (
+                          <p className="aux-muted">{cand.expectations.join(" · ")}</p>
+                        )}
+                        <p className="aux-muted evo-eval-import-session">{cand.sessionId}</p>
+                      </div>
+                      <div className="aux-task-actions">
+                        <button
+                          type="button"
+                          className="aux-action"
+                          onClick={() =>
+                            void importFromSession(cand.sessionId, evalSkill.trim() || null)
+                          }
+                        >
+                          <Check size={15} />
+                          {t("evo.evalImportBtn")}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
 
             {evalExamples.length === 0 ? (
