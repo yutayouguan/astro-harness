@@ -174,10 +174,11 @@ async fn execute_job_with_roots_local(
     }
 
     let fired_at = now_rfc3339();
+    let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
     let run_id = db.insert_running(NewCronRun {
         job_id: job.id.clone(),
         title: job.title.clone(),
-        agent_id: job.agent_id.clone(),
+        agent_id: agent_id.clone(),
         schedule: job.schedule.clone(),
         task: job.task.clone(),
         fired_at,
@@ -248,7 +249,7 @@ async fn execute_job_with_roots_local(
             ts: Utc::now().to_rfc3339(),
             kind: "cron".into(),
             name: job.id.clone(),
-            agent_id: job.agent_id.clone(),
+            agent_id: agent_id.clone(),
             session_id: row.session_id.clone(),
             turn_id: None,
             input_tokens: 0,
@@ -273,7 +274,7 @@ async fn execute_job_with_roots_local(
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
     if !llm_usage.is_empty() {
         apply_llm_usage_dual_write(
-            &job.agent_id,
+            &agent_id,
             row.session_id.as_deref(),
             None,
             &model_for_usage,

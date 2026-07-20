@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use home::{default_memory_dir, ensure_default_workspace_dirs};
 
-use super::model::{default_agent_id, title_from_task, CronJob, NewCronJob};
+use super::model::{default_agent_id, normalize_cron_agent_id, title_from_task, CronJob, NewCronJob};
 use super::schedule::compute_next_run;
 
 /// `jobs.json` 顶层结构
@@ -76,11 +76,7 @@ impl CronStore {
         } else {
             input.title.trim().to_string()
         };
-        let agent_id = if input.agent_id.trim().is_empty() {
-            default_agent_id()
-        } else {
-            input.agent_id.trim().to_string()
-        };
+        let agent_id = normalize_cron_agent_id(&input.agent_id);
         // 校验表达式
         let next = compute_next_run(schedule, Local::now())?
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
@@ -124,11 +120,7 @@ impl CronStore {
         } else {
             input.title.trim().to_string()
         };
-        let agent_id = if input.agent_id.trim().is_empty() {
-            default_agent_id()
-        } else {
-            input.agent_id.trim().to_string()
-        };
+        let agent_id = normalize_cron_agent_id(&input.agent_id);
         let next = compute_next_run(schedule, Local::now())?
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
@@ -303,9 +295,7 @@ impl CronStore {
             if job.title.trim().is_empty() {
                 job.title = title_from_task(&job.task);
             }
-            if job.agent_id.trim().is_empty() {
-                job.agent_id = default_agent_id();
-            }
+            job.agent_id = normalize_cron_agent_id(&job.agent_id);
         }
         Ok(file)
     }

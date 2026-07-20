@@ -114,9 +114,25 @@ pub(crate) fn default_true() -> bool {
     true
 }
 
-/// 旧版 jobs.json 缺省 agent_id
+/// 缺省 agent_id（默认工作区）。
 pub(crate) fn default_agent_id() -> String {
-    "default".into()
+    home::DEFAULT_AGENT_ID.to_string()
+}
+
+/// 规范化 cron 任务的 agent_id。
+///
+/// - 空 / `"default"` → [`home::DEFAULT_AGENT_ID`]（`workspace`）
+/// - 其余走 [`home::normalize_agent_id`]
+///
+/// 旧版 `jobs.json` 与部分工具路径曾写入 `"default"`；执行侧必须映射到真实默认工作区，
+/// 否则会落到 `workspace-default/` 并静默建仓。
+pub fn normalize_cron_agent_id(raw: &str) -> String {
+    let t = raw.trim();
+    if t.is_empty() || t.eq_ignore_ascii_case("default") {
+        home::DEFAULT_AGENT_ID.to_string()
+    } else {
+        home::normalize_agent_id(t)
+    }
 }
 
 /// 从 task 首行截取最多 40 字符作为默认标题
