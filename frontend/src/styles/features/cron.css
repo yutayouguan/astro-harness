@@ -2934,6 +2934,20 @@ html[data-theme="dark"] .cron-run-drawer {
   overflow: auto;
 }
 
+.cron-run-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.cron-run-assistant-chunk {
+  margin-top: 0.35rem;
+}
+
+.cron-run-assistant-chunk .cron-run-drawer-log {
+  max-height: min(28vh, 220px);
+}
+
 .cron-run-drawer-block.is-error .cron-run-drawer-log {
   border-color: color-mix(in srgb, var(--danger, #e11d48) 28%, transparent);
   background: color-mix(in srgb, var(--danger, #e11d48) 6%, transparent);

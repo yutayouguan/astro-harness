@@ -25,6 +25,7 @@ use super::headless::run_headless_multi_turn;
 ///
 /// 字段允许部分为空字符串，执行路径会在 Provider 层回落到默认 model 或内置 base URL。
 /// `targets` 为空时由 primary 四字段合成单目标；非空时走 chat fallback 链。
+#[derive(Clone)]
 pub struct CronExecCredentials {
     /// Provider 注册名（如 `openai`）；空白时 `run_provider_loop` 使用 `openai`。
     pub provider: String,
@@ -155,13 +156,10 @@ async fn execute_job_with_roots_local(
         anyhow::bail!("job already running");
     }
 
-    let session_id = if job.show_in_chat {
-        Some(Uuid::new_v4().to_string())
-    } else {
-        None
-    };
+    let session_id = Some(Uuid::new_v4().to_string());
 
     // 与 run_agent_job / AgentLoop 共用同一 memory_dir 下的 SessionStore。
+    // show_in_chat 仅影响侧栏展示；执行记录 / Tracing 始终需要 session。
     let memory_dir = default_memory_dir();
     let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
 
@@ -272,6 +270,220 @@ async fn execute_job_with_roots_local(
     }
 
     // 有真实 usage 时额外记 llm（成功或失败均尽力写，与聊天错误路径一致）
+    if !llm_usage.is_empty() {
+        apply_llm_usage_dual_write(
+            &agent_id,
+            row.session_id.as_deref(),
+            None,
+            &model_for_usage,
+            &llm_usage,
+            billing_provider.as_deref().unwrap_or(""),
+            billing_base_url.as_deref().unwrap_or(""),
+            billing_api_key.as_deref().unwrap_or(""),
+            Some(
+                serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
+                    .to_string(),
+            ),
+            sessions.as_ref(),
+        );
+    }
+
+    Ok(row)
+}
+
+/// 插入 `running` 行后立即返回，并在后台跑完 Agent（供 UI「立即执行」边跑边看）。
+///
+/// 调度器到期触发仍应使用 [`execute_job`]（同步等到终态）。
+pub async fn spawn_job(
+    job: &CronJob,
+    creds: CronExecCredentials,
+    trigger: &str,
+) -> anyhow::Result<cron::CronRunRow> {
+    let cron_root = cron_dir().to_path_buf();
+    let job = job.clone();
+    let trigger = trigger.to_string();
+    let creds_bg = creds.clone();
+    let job_bg = job.clone();
+    let trigger_bg = trigger.clone();
+    let cron_root_bg = cron_root.clone();
+
+    let row = tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| anyhow::anyhow!("cron runtime: {e}"))?;
+        rt.block_on(begin_job_local(&cron_root, &job, &trigger))
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("cron join: {e}"))??;
+
+    let run_id = row.id.clone();
+    let session_id = row.session_id.clone();
+    tokio::task::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| anyhow::anyhow!("cron runtime: {e}"))?;
+            rt.block_on(complete_job_local(
+                &cron_root_bg,
+                &job_bg,
+                creds_bg,
+                &trigger_bg,
+                &run_id,
+                session_id,
+            ))
+        })
+        .await;
+        match result {
+            Err(e) => tracing::error!(error = %e, "cron spawn_job background join failed"),
+            Ok(Err(e)) => tracing::error!(error = %e, "cron spawn_job background failed"),
+            Ok(Ok(_)) => {}
+        }
+    });
+
+    Ok(row)
+}
+
+/// 仅创建 running 行与 session（不跑 Agent）。
+async fn begin_job_local(
+    cron_root: &Path,
+    job: &CronJob,
+    trigger: &str,
+) -> anyhow::Result<cron::CronRunRow> {
+    let db = CronRunDb::new(cron_db_path(cron_root))?;
+
+    if db.has_running_for_job(&job.id)? {
+        anyhow::bail!("job already running");
+    }
+
+    let session_id = Some(Uuid::new_v4().to_string());
+    let memory_dir = default_memory_dir();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
+    if let Some(ref sid) = session_id {
+        let summary = format!("定时任务 · {}", job.title);
+        if let Some(ref store) = sessions {
+            let _ = store.ensure_session(sid, "cron");
+            let _ = store.set_session_title(sid, &summary);
+        }
+    }
+
+    let fired_at = now_rfc3339();
+    let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
+    let run_id = db.insert_running(NewCronRun {
+        job_id: job.id.clone(),
+        title: job.title.clone(),
+        agent_id: agent_id.clone(),
+        schedule: job.schedule.clone(),
+        task: job.task.clone(),
+        fired_at,
+        trigger: trigger.to_string(),
+        session_id: session_id.clone(),
+    })?;
+
+    db.get(&run_id)?
+        .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))
+}
+
+/// 对已存在的 running 行执行 Agent 并 `finish_*`。
+async fn complete_job_local(
+    cron_root: &Path,
+    job: &CronJob,
+    creds: CronExecCredentials,
+    trigger: &str,
+    run_id: &str,
+    session_id: Option<String>,
+) -> anyhow::Result<cron::CronRunRow> {
+    let db = CronRunDb::new(cron_db_path(cron_root))?;
+    let memory_dir = default_memory_dir();
+    let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
+    let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
+
+    if creds.api_key.trim().is_empty() {
+        db.finish_failure(
+            run_id,
+            "未配置 API Key，无法执行定时任务",
+            "",
+            &now_rfc3339(),
+        )?;
+        return db
+            .get(run_id)?
+            .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"));
+    }
+
+    let model_for_usage = if creds.model.trim().is_empty() {
+        "unknown".to_string()
+    } else {
+        creds.model.clone()
+    };
+    let billing_provider = if creds.provider.trim().is_empty() {
+        None
+    } else {
+        Some(creds.provider.clone())
+    };
+    let billing_base_url = if creds.base_url.trim().is_empty() {
+        None
+    } else {
+        Some(creds.base_url.clone())
+    };
+    let billing_api_key = if creds.api_key.trim().is_empty() {
+        None
+    } else {
+        Some(creds.api_key.clone())
+    };
+
+    let exec_result = tokio::time::timeout(
+        Duration::from_secs(600),
+        run_agent_job(job, creds, session_id.as_deref()),
+    )
+    .await;
+
+    let mut llm_usage = Usage::default();
+    match exec_result {
+        Ok(Ok((output, usage))) => {
+            llm_usage = usage;
+            let summary = summary_from_output(&output);
+            db.finish_success(run_id, &summary, &output, &now_rfc3339())?;
+        }
+        Ok(Err(err)) => {
+            db.finish_failure(run_id, &err.to_string(), "", &now_rfc3339())?;
+        }
+        Err(_) => {
+            db.finish_failure(run_id, "执行超时（600s）", "", &now_rfc3339())?;
+        }
+    }
+
+    let row = db
+        .get(run_id)?
+        .ok_or_else(|| anyhow::anyhow!("cron run vanished: {run_id}"))?;
+
+    if row.status == "success" {
+        usage::UsageDb::try_record(usage::NewUsageEvent {
+            ts: Utc::now().to_rfc3339(),
+            kind: "cron".into(),
+            name: job.id.clone(),
+            agent_id: agent_id.clone(),
+            session_id: row.session_id.clone(),
+            turn_id: None,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            cost_status: None,
+            cost_source: None,
+            pricing_version: None,
+            billing_provider: None,
+            billing_base_url: None,
+            billing_mode: None,
+            meta_json: Some(
+                serde_json::json!({ "title": job.title, "trigger": trigger }).to_string(),
+            ),
+        });
+    }
+
     if !llm_usage.is_empty() {
         apply_llm_usage_dual_write(
             &agent_id,

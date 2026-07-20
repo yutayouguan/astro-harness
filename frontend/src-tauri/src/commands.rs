@@ -2632,7 +2632,7 @@ pub async fn set_cron_job_enabled(id: String, enabled: bool) -> Result<bool, Str
     store.set_enabled(&id, enabled).map_err(|e| e.to_string())
 }
 
-/// 立即执行一次定时任务。
+/// 立即执行一次定时任务（后台跑完；立即返回 running 记录以便 UI 边跑边看）。
 #[tauri::command]
 pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
     bootstrap_workspace()?;
@@ -2659,7 +2659,7 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
             }
         }
     };
-    let row = match agent::exec::cron::execute_job(&job, creds, "manual").await {
+    let row = match agent::exec::cron::spawn_job(&job, creds, "manual").await {
         Ok(row) => row,
         Err(err) => {
             common::notify_kind(
@@ -2670,35 +2670,72 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
         }
     };
     let _ = store.touch_last_run(&job.id, Some(row.fired_at.clone()));
-    if row.status == "success" {
-        let body = if row.summary.trim().is_empty() {
-            label
-        } else {
-            format!("{label}\n{}", common::truncate_notify(&row.summary, 120))
-        };
-        common::notify_kind(common::ImportantKind::CronSuccess, body);
-    } else {
-        let detail = row
-            .error
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(|s| common::truncate_notify(s, 120))
-            .or_else(|| {
-                let s = row.summary.trim();
-                if s.is_empty() {
-                    None
+
+    // 后台结束后再通知；轮询 get_cron_run 拿终态
+    let run_id = row.id.clone();
+    let label_bg = label.clone();
+    let job_id = job.id.clone();
+    tauri::async_runtime::spawn(async move {
+        // 轮询直到非 running（最长约 10 分钟 + 余量）
+        for _ in 0..650 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let Ok(db) = cron::CronRunDb::open_default() else {
+                continue;
+            };
+            let Ok(Some(finished)) = db.get(&run_id) else {
+                continue;
+            };
+            if finished.status == "running" {
+                continue;
+            }
+            if let Ok(store) = cron::CronStore::open_default() {
+                let _ = store.touch_last_run(&job_id, Some(finished.fired_at.clone()));
+            }
+            if finished.status == "success" {
+                let body = if finished.summary.trim().is_empty() {
+                    label_bg
                 } else {
-                    Some(common::truncate_notify(s, 120))
-                }
-            })
-            .unwrap_or_else(|| row.status.clone());
-        common::notify_kind(
-            common::ImportantKind::CronFailure,
-            format!("{label}\n{detail}"),
-        );
-    }
+                    format!(
+                        "{label_bg}\n{}",
+                        common::truncate_notify(&finished.summary, 120)
+                    )
+                };
+                common::notify_kind(common::ImportantKind::CronSuccess, body);
+            } else {
+                let detail = finished
+                    .error
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| common::truncate_notify(s, 120))
+                    .or_else(|| {
+                        let s = finished.summary.trim();
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(common::truncate_notify(s, 120))
+                        }
+                    })
+                    .unwrap_or_else(|| finished.status.clone());
+                common::notify_kind(
+                    common::ImportantKind::CronFailure,
+                    format!("{label_bg}\n{detail}"),
+                );
+            }
+            break;
+        }
+    });
+
     Ok(run_to_dto(row))
+}
+
+/// 按 id 取单条定时任务运行记录（供执行记录抽屉轮询）。
+#[tauri::command]
+pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
+    bootstrap_workspace()?;
+    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
+    let row = db.get(&id).map_err(|e| e.to_string())?;
+    Ok(row.map(run_to_dto))
 }
 
 /// 列出定时任务运行记录。

@@ -28,10 +28,13 @@ import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
+import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { normalizeAgentId } from "../../types/agent";
+import type { ChatHistoryDto, ChatMessage } from "../../types";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
+import MsgActivity from "../chat/MsgActivity";
 import {
   CreateCronDialog,
   type ProviderOpt,
@@ -390,6 +393,8 @@ export default function CronPanel({
   const [historyRuns, setHistoryRuns] = useState<CronRunDto[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [drawerRun, setDrawerRun] = useState<CronRunDto | null>(null);
+  const [drawerMessages, setDrawerMessages] = useState<ChatMessage[]>([]);
+  const [drawerTraceLoading, setDrawerTraceLoading] = useState(false);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const moreBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -662,7 +667,9 @@ export default function CronPanel({
     closeMenu();
     setError(null);
     try {
-      await invoke("run_cron_job_now", { id: job.id });
+      const row = await invoke<CronRunDto>("run_cron_job_now", { id: job.id });
+      setDrawerMessages([]);
+      setDrawerRun(row);
       await loadJobs();
       if (jobsView === "detail" && selectedDetailId === job.id) {
         void loadDetailRuns(job.id);
@@ -704,6 +711,59 @@ export default function CronPanel({
     setFilterJobId(job.id);
     setActiveTab("history");
   };
+
+  const openRunDrawer = useCallback((run: CronRunDto) => {
+    setDrawerMessages([]);
+    setDrawerRun(run);
+  }, []);
+
+  // 执行记录抽屉：轮询 run 状态 + session 历史（对齐 Tracing 步骤）
+  useEffect(() => {
+    if (!drawerRun || !isTauri()) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const sid = drawerRun.session_id;
+    const runId = drawerRun.id;
+
+    const refresh = async () => {
+      try {
+        const latest = await invoke<CronRunDto | null>("get_cron_run", { id: runId });
+        if (cancelled) return;
+        if (latest) setDrawerRun(latest);
+
+        const sessionId = latest?.session_id ?? sid;
+        if (sessionId) {
+          setDrawerTraceLoading(true);
+          const hist = await invoke<ChatHistoryDto>("get_chat_history", {
+            sessionId,
+            limit: 200,
+          });
+          if (cancelled) return;
+          setDrawerMessages(mapHistoryMessages(hist.messages ?? []));
+          setDrawerTraceLoading(false);
+        }
+
+        const stillRunning =
+          (latest?.status || "").toLowerCase() === "running";
+        if (!stillRunning && timer != null) {
+          window.clearInterval(timer);
+          timer = null;
+        }
+      } catch (e) {
+        console.warn("cron drawer refresh failed", e);
+        if (!cancelled) setDrawerTraceLoading(false);
+      }
+    };
+
+    void refresh();
+    timer = window.setInterval(() => {
+      void refresh();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearInterval(timer);
+    };
+  }, [drawerRun?.id]);
 
   const runStatusLabel = (status: string) => {
     const kind = runStatusKind(status);
@@ -974,7 +1034,7 @@ export default function CronPanel({
                       <button
                         type="button"
                         className="cron-timeline-log-btn"
-                        onClick={() => setDrawerRun(run)}
+                        onClick={() => openRunDrawer(run)}
                       >
                         <ListTree size={13} strokeWidth={2.2} aria-hidden />
                         {t("cron.history.viewLog")}
@@ -1053,7 +1113,7 @@ export default function CronPanel({
                     <button
                       type="button"
                       className="cron-timeline-log-btn"
-                      onClick={() => setDrawerRun(run)}
+                      onClick={() => openRunDrawer(run)}
                     >
                       <ListTree size={13} strokeWidth={2.2} aria-hidden />
                       {t("cron.history.viewLog")}
@@ -1332,6 +1392,52 @@ export default function CronPanel({
                     </p>
                   )}
                 </div>
+
+                <section className="cron-run-drawer-block">
+                  <div className="cron-run-drawer-block-head">
+                    <h3 className="cron-run-drawer-label">
+                      <ListTree size={12} strokeWidth={2.3} aria-hidden />
+                      {t("cron.history.traceTitle")}
+                    </h3>
+                  </div>
+                  {(() => {
+                    const activities = drawerMessages.flatMap((m) => m.activities ?? []);
+                    const assistantTexts = drawerMessages
+                      .filter((m) => m.role === "assistant" && (m.content || "").trim())
+                      .map((m) => (m.content || "").trim());
+                    const isRunning =
+                      runStatusKind(drawerRun.status) === "running";
+                    if (activities.length === 0 && assistantTexts.length === 0) {
+                      return (
+                        <p className="cron-history-empty">
+                          {isRunning
+                            ? t("cron.history.runningWait")
+                            : drawerTraceLoading
+                              ? t("cron.history.loadingTrace")
+                              : t("cron.history.empty")}
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="cron-run-trace">
+                        {activities.map((act, i) => (
+                          <MsgActivity
+                            key={act.id || `act-${i}`}
+                            activity={act}
+                            defaultOpen={act.status === "running"}
+                            showTimestamp
+                          />
+                        ))}
+                        {assistantTexts.map((text, i) => (
+                          <div key={`asst-${i}`} className="cron-run-assistant-chunk">
+                            <pre className="cron-run-drawer-log">{text}</pre>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </section>
+
                 {drawerRun.output && (
                   <section className="cron-run-drawer-block">
                     <div className="cron-run-drawer-block-head">
@@ -1355,9 +1461,6 @@ export default function CronPanel({
                     </div>
                     <pre className="cron-run-drawer-log">{drawerRun.error}</pre>
                   </section>
-                )}
-                {!drawerRun.output && !drawerRun.error && (
-                  <p className="cron-history-empty">{t("cron.history.empty")}</p>
                 )}
               </div>
             </aside>
