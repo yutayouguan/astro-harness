@@ -31,6 +31,10 @@ frontend/*.tsbuildinfo
 *.tmp
 .cache/
 
+# Local model catalog dumps (use ~/.astro/openrouter-model-meta.json)
+/openrouter-models.json
+/litellm-model-meta.json
+
 # Brainstorm visual companion
 .superpowers/
 

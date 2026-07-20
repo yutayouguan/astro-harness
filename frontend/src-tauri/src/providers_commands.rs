@@ -1215,9 +1215,9 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
     let provider = find_provider(&id)?;
     validate_http_endpoint(&provider.endpoint)?;
     let api_key = require_api_key(&provider)?;
-    // 刷新模型前确保 LiteLLM 上下文/能力表可用（失败不阻断，走回落）
-    if let Err(err) = crate::litellm_meta::ensure_cache(false).await {
-        tracing::warn!(error = %err, "LiteLLM 模型表不可用，将使用 API/回落");
+    // 刷新模型前确保 OpenRouter 上下文/能力表可用（失败不阻断，走回落）
+    if let Err(err) = crate::openrouter_meta::ensure_cache(false).await {
+        tracing::warn!(error = %err, "OpenRouter 模型表不可用，将使用 API/回落");
     }
     let client = http_client()?;
     let started = std::time::Instant::now();

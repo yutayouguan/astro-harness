@@ -1,7 +1,6 @@
-//! 模型能力与上下文窗口：主要来自提供商 API 与 LiteLLM 表。
+//! 模型能力与上下文窗口：主要来自提供商 API 与 OpenRouter Models 表。
 //!
-//! 对目录已知漏标（如 DeepSeek V4 的 `supports_reasoning`）可做有限的 known 补丁，
-//! 不做泛化名称猜测。
+//! 对目录漏标且运行时已支持的能力，可做有限的 known 补丁（不作泛化名称猜测）。
 
 use serde::{Deserialize, Serialize};
 
@@ -39,7 +38,7 @@ pub struct ModelInfo {
     pub max_output_tokens: Option<u64>,
     #[serde(default)]
     pub capabilities: ModelCapabilities,
-    /// 元数据来源：api / litellm（可组合）
+    /// 元数据来源：api / openrouter / known（可组合）
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub meta_source: String,
 }
@@ -88,18 +87,18 @@ pub fn enrich_from_id(id: &str, kind: &str, hints: Option<ApiModelHints>) -> Mod
     info
 }
 
-/// `meta_source` 是否已包含指定来源标记（`api` / `litellm` 等）。
+/// `meta_source` 是否已包含指定来源标记（`api` / `openrouter` 等）。
 fn prior_has_source(meta_source: &str, needle: &str) -> bool {
     meta_source.split('+').any(|s| s == needle)
 }
 
-/// 合并 API hints 与 LiteLLM 表，刷新能力位与上下文窗口。
+/// 合并 API hints 与 OpenRouter 表，刷新能力位与上下文窗口。
 pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiModelHints>) {
     let id_lower = info.id.to_lowercase();
     let kind = kind.to_lowercase();
     let prior_meta = info.meta_source.clone();
 
-    // 只保留先前由 API 写入的上下文；能力一律按本次 API + LiteLLM 重算（清掉 heuristic 等）
+    // 只保留先前由 API 写入的上下文；能力一律按本次 API + OpenRouter 重算
     let retained_api_ctx = if prior_has_source(&prior_meta, "api") {
         info.context_window
     } else {
@@ -157,7 +156,10 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         }
     }
 
-    if let Some(entry) = crate::litellm_meta::lookup(&id_lower, &kind) {
+    if let Some(entry) = crate::openrouter_meta::lookup(&id_lower, &kind) {
+        if info.display_name.is_none() {
+            info.display_name = entry.display_name.clone();
+        }
         if let Some(n) = entry.max_input_tokens {
             if !context_locked_by_api {
                 info.context_window = Some(n);
@@ -171,34 +173,22 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             }
         }
 
-        let mode = entry.mode.as_deref().unwrap_or("").to_lowercase();
-        let mode_image = mode.contains("image");
-        let mode_video = mode.contains("video");
-        let mode_music = mode.contains("music") || mode == "audio_generation";
-        let audio_only_chat = mode == "chat"
-            && entry.supports_audio_output
-            && !entry.supports_function_calling
-            && entry.supported_output_modalities.len() == 1
-            && entry.supported_output_modalities[0].eq_ignore_ascii_case("audio");
-        let is_music = mode_music || audio_only_chat;
-        let mode_audio = mode.contains("audio") && !is_music;
-        let non_chat = mode.contains("embed")
-            || mode_image
-            || mode_audio
-            || mode_video
-            || is_music
-            || mode.contains("moderation");
+        let media_only = (entry.supports_image_generation
+            || entry.supports_video_generation
+            || entry.supports_audio_output
+            || entry.supports_music_generation)
+            && !entry.supports_function_calling;
 
-        if non_chat {
-            info.capabilities.vision = false;
+        if media_only {
+            info.capabilities.vision = entry.supports_vision;
             info.capabilities.web = false;
             info.capabilities.reasoning = false;
             info.capabilities.tools = false;
-            info.capabilities.image_gen |= mode_image || entry.supports_image_generation;
-            info.capabilities.video_gen |= mode_video || entry.supports_video_generation;
-            info.capabilities.music_gen |= is_music;
-            if !is_music {
-                info.capabilities.audio_gen |= mode_audio || entry.supports_audio_output;
+            info.capabilities.image_gen |= entry.supports_image_generation;
+            info.capabilities.video_gen |= entry.supports_video_generation;
+            info.capabilities.music_gen |= entry.supports_music_generation;
+            if !entry.supports_music_generation {
+                info.capabilities.audio_gen |= entry.supports_audio_output;
             }
         } else {
             info.capabilities.vision |= entry.supports_vision;
@@ -207,12 +197,12 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             info.capabilities.tools |= entry.supports_function_calling;
             info.capabilities.image_gen |= entry.supports_image_generation;
             info.capabilities.video_gen |= entry.supports_video_generation;
-            info.capabilities.music_gen |= is_music;
-            if !is_music {
+            info.capabilities.music_gen |= entry.supports_music_generation;
+            if !entry.supports_music_generation {
                 info.capabilities.audio_gen |= entry.supports_audio_output;
             }
         }
-        sources.push("litellm");
+        sources.push("openrouter");
     }
 
     if apply_known_capability_overrides(&kind, &id_lower, info) {
@@ -226,14 +216,12 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
 
 /// 目录漏标补丁：仅覆盖已核实、且运行时协议已支持的能力。
 ///
-/// DeepSeek V4 的 thinking 是请求级参数（`thinking` / `reasoning_effort`），官方
-/// LiteLLM `deepseek-v4-*` 条目的 `supports_reasoning` 仍为 null；Azure 等镜像已标 true。
+/// DeepSeek V4：官方 API 支持 thinking；若 OpenRouter 未命中仍可补上。
 fn apply_known_capability_overrides(kind: &str, id_lower: &str, info: &mut ModelInfo) -> bool {
     let is_deepseek_family = kind == "deepseek" || id_lower.contains("deepseek");
     if !is_deepseek_family {
         return false;
     }
-    // 非 chat（embed 等）不打补丁
     if info.capabilities.image_gen
         || info.capabilities.video_gen
         || info.capabilities.audio_gen
@@ -261,8 +249,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn google_api_only_without_litellm() {
-        crate::litellm_meta::with_fixture("{}", || {
+    fn google_api_only_without_openrouter() {
+        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id(
                 "gemini-2.5-flash",
                 "google",
@@ -282,37 +270,48 @@ mod tests {
     }
 
     #[test]
-    fn litellm_enriches_deepseek() {
-        crate::litellm_meta::with_fixture(
+    fn openrouter_enriches_deepseek() {
+        crate::openrouter_meta::with_fixture(
             r#"{
-              "deepseek-chat": {
-                "max_input_tokens": 131072,
-                "max_output_tokens": 8192,
-                "supports_function_calling": true,
-                "mode": "chat",
-                "litellm_provider": "deepseek"
-              }
+              "data": [{
+                "id": "deepseek/deepseek-chat",
+                "name": "DeepSeek Chat",
+                "context_length": 131072,
+                "architecture": {
+                  "input_modalities": ["text"],
+                  "output_modalities": ["text"]
+                },
+                "supported_parameters": ["tools", "tool_choice"],
+                "top_provider": { "max_completion_tokens": 8192 },
+                "reasoning": null
+              }]
             }"#,
             || {
                 let info = enrich_from_id("deepseek-chat", "deepseek", None);
                 assert_eq!(info.context_window, Some(131072));
                 assert_eq!(info.max_output_tokens, Some(8192));
                 assert!(info.capabilities.tools);
-                assert_eq!(info.meta_source, "litellm");
+                assert!(!info.capabilities.reasoning);
+                assert_eq!(info.meta_source, "openrouter");
             },
         );
     }
 
     #[test]
-    fn clears_stale_heuristic_when_litellm_hits() {
-        crate::litellm_meta::with_fixture(
+    fn clears_stale_caps_when_openrouter_hits() {
+        crate::openrouter_meta::with_fixture(
             r#"{
-              "deepseek-v4-flash": {
-                "max_input_tokens": 1000000,
-                "supports_function_calling": true,
-                "mode": "chat",
-                "litellm_provider": "deepseek"
-              }
+              "data": [{
+                "id": "deepseek/deepseek-v4-flash",
+                "name": "DeepSeek V4 Flash",
+                "context_length": 1000000,
+                "architecture": {
+                  "input_modalities": ["text"],
+                  "output_modalities": ["text"]
+                },
+                "supported_parameters": ["tools", "reasoning", "reasoning_effort"],
+                "reasoning": { "mandatory": false, "default_effort": "high" }
+              }]
             }"#,
             || {
                 let mut stale = ModelInfo {
@@ -330,36 +329,24 @@ mod tests {
                 assert_eq!(stale.context_window, Some(1_000_000));
                 assert!(!stale.capabilities.vision);
                 assert!(stale.capabilities.tools);
-                // LiteLLM 未标 supports_reasoning 时，known 补丁补上 V4 thinking
                 assert!(stale.capabilities.reasoning);
-                assert_eq!(stale.meta_source, "known+litellm");
+                assert_eq!(stale.meta_source, "openrouter");
             },
         );
     }
 
     #[test]
-    fn deepseek_v4_known_reasoning_without_litellm_flag() {
-        crate::litellm_meta::with_fixture(
-            r#"{
-              "deepseek-v4-pro": {
-                "max_input_tokens": 1000000,
-                "supports_function_calling": true,
-                "mode": "chat",
-                "litellm_provider": "deepseek"
-              }
-            }"#,
-            || {
-                let info = enrich_from_id("deepseek-v4-pro", "deepseek", None);
-                assert!(info.capabilities.tools);
-                assert!(info.capabilities.reasoning);
-                assert!(info.meta_source.contains("known"));
-            },
-        );
+    fn deepseek_v4_known_reasoning_when_openrouter_misses() {
+        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+            let info = enrich_from_id("deepseek-v4-pro", "deepseek", None);
+            assert!(info.capabilities.reasoning);
+            assert_eq!(info.meta_source, "known");
+        });
     }
 
     #[test]
     fn no_hardcode_when_both_miss() {
-        crate::litellm_meta::with_fixture("{}", || {
+        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("gpt-4o-2024-08-06", "openai", None);
             assert_eq!(info.context_window, None);
             assert!(!info.capabilities.vision);
@@ -369,8 +356,8 @@ mod tests {
     }
 
     #[test]
-    fn api_without_litellm_keeps_api_only() {
-        crate::litellm_meta::with_fixture("{}", || {
+    fn api_without_openrouter_keeps_api_only() {
+        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id(
                 "some-unknown-model",
                 "openai",
@@ -389,53 +376,71 @@ mod tests {
     }
 
     #[test]
-    fn litellm_image_mode_sets_image_gen() {
-        crate::litellm_meta::with_fixture(
+    fn openrouter_image_output_sets_image_gen() {
+        crate::openrouter_meta::with_fixture(
             r#"{
-              "dall-e-3": {
-                "mode": "image_generation",
-                "litellm_provider": "openai"
-              }
+              "data": [{
+                "id": "openai/dall-e-3",
+                "name": "DALL-E 3",
+                "context_length": 4000,
+                "architecture": {
+                  "input_modalities": ["text"],
+                  "output_modalities": ["image"]
+                },
+                "supported_parameters": [],
+                "reasoning": null
+              }]
             }"#,
             || {
                 let info = enrich_from_id("dall-e-3", "openai", None);
                 assert!(info.capabilities.image_gen);
                 assert!(!info.capabilities.tools);
                 assert!(!info.capabilities.vision);
-                assert_eq!(info.meta_source, "litellm");
+                assert_eq!(info.meta_source, "openrouter");
             },
         );
     }
 
     #[test]
-    fn litellm_audio_output_sets_audio_gen() {
-        crate::litellm_meta::with_fixture(
+    fn openrouter_audio_output_sets_audio_gen() {
+        crate::openrouter_meta::with_fixture(
             r#"{
-              "gpt-4o-mini-tts": {
-                "mode": "audio_speech",
-                "supports_audio_output": true,
-                "litellm_provider": "openai"
-              }
+              "data": [{
+                "id": "openai/gpt-4o-mini-tts",
+                "name": "GPT-4o mini TTS",
+                "context_length": 8000,
+                "architecture": {
+                  "input_modalities": ["text"],
+                  "output_modalities": ["audio"]
+                },
+                "supported_parameters": [],
+                "reasoning": null
+              }]
             }"#,
             || {
                 let info = enrich_from_id("gpt-4o-mini-tts", "openai", None);
                 assert!(info.capabilities.audio_gen);
                 assert!(!info.capabilities.tools);
+                assert!(!info.capabilities.music_gen);
             },
         );
     }
 
     #[test]
-    fn litellm_chat_explicit_media_flags() {
-        crate::litellm_meta::with_fixture(
+    fn openrouter_chat_multimodal_flags() {
+        crate::openrouter_meta::with_fixture(
             r#"{
-              "gemini-2.0-flash": {
-                "mode": "chat",
-                "supports_function_calling": true,
-                "supports_vision": true,
-                "supports_image_generation": true,
-                "litellm_provider": "gemini"
-              }
+              "data": [{
+                "id": "google/gemini-2.0-flash",
+                "name": "Gemini 2.0 Flash",
+                "context_length": 1048576,
+                "architecture": {
+                  "input_modalities": ["text", "image"],
+                  "output_modalities": ["text", "image"]
+                },
+                "supported_parameters": ["tools", "tool_choice"],
+                "reasoning": null
+              }]
             }"#,
             || {
                 let info = enrich_from_id("gemini-2.0-flash", "google", None);
@@ -448,13 +453,20 @@ mod tests {
     }
 
     #[test]
-    fn litellm_video_mode_sets_video_gen() {
-        crate::litellm_meta::with_fixture(
+    fn openrouter_video_output_sets_video_gen() {
+        crate::openrouter_meta::with_fixture(
             r#"{
-              "sora-2": {
-                "mode": "video_generation",
-                "litellm_provider": "openai"
-              }
+              "data": [{
+                "id": "openai/sora-2",
+                "name": "Sora 2",
+                "context_length": 8000,
+                "architecture": {
+                  "input_modalities": ["text"],
+                  "output_modalities": ["video"]
+                },
+                "supported_parameters": [],
+                "reasoning": null
+              }]
             }"#,
             || {
                 let info = enrich_from_id("sora-2", "openai", None);
@@ -465,38 +477,27 @@ mod tests {
     }
 
     #[test]
-    fn litellm_music_mode_sets_music_gen_only() {
-        crate::litellm_meta::with_fixture(
-            r#"{"lyria-test":{"mode":"music_generation","litellm_provider":"gemini"}}"#,
+    fn openrouter_lyria_sets_music_gen_only() {
+        crate::openrouter_meta::with_fixture(
+            r#"{
+              "data": [{
+                "id": "google/lyria-3-pro-preview",
+                "name": "Lyria 3 Pro",
+                "context_length": 1048576,
+                "architecture": {
+                  "input_modalities": ["text", "image"],
+                  "output_modalities": ["text", "audio"]
+                },
+                "supported_parameters": [],
+                "reasoning": null
+              }]
+            }"#,
             || {
-                let info = enrich_from_id("lyria-test", "google", None);
+                let info = enrich_from_id("lyria-3-pro-preview", "google", None);
                 assert!(info.capabilities.music_gen);
                 assert!(!info.capabilities.audio_gen);
                 assert!(!info.capabilities.tools);
-            },
-        );
-    }
-
-    #[test]
-    fn litellm_audio_only_chat_sets_music_gen() {
-        crate::litellm_meta::with_fixture(
-            r#"{"gemini/lyria-test":{"mode":"chat","supports_audio_output":true,"supports_function_calling":false,"supported_output_modalities":["audio"],"litellm_provider":"gemini"}}"#,
-            || {
-                let info = enrich_from_id("lyria-test", "google", None);
-                assert!(info.capabilities.music_gen);
-                assert!(!info.capabilities.audio_gen);
-            },
-        );
-    }
-
-    #[test]
-    fn litellm_tts_mode_does_not_set_music_gen() {
-        crate::litellm_meta::with_fixture(
-            r#"{"tts-test":{"mode":"audio_speech","supports_audio_output":true,"litellm_provider":"gemini"}}"#,
-            || {
-                let info = enrich_from_id("tts-test", "google", None);
-                assert!(info.capabilities.audio_gen);
-                assert!(!info.capabilities.music_gen);
+                assert!(info.capabilities.vision);
             },
         );
     }
