@@ -1130,7 +1130,7 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let guidance_ts = PromptBuilder::new()
+        let mut guidance_ts = PromptBuilder::new()
             .with_tool_guidance()
             .with_timestamp()
             .build();
