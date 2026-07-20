@@ -2303,7 +2303,7 @@ html[data-theme="dark"] .cron-job-detail-task {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
-  padding: 4px;
+  padding: 6px;
   border-radius: 14px;
   z-index: 40;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
