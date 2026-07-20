@@ -722,12 +722,28 @@ export default function ChatView({
   const modeMeta = useMemo(() => {
     const map: Record<
       ChatInteractionMode,
-      { label: string; Icon: typeof InfinityIcon }
+      { label: string; desc: string; Icon: typeof InfinityIcon }
     > = {
-      agent: { label: t("chat.modeAgent"), Icon: InfinityIcon },
-      plan: { label: t("chat.modePlan"), Icon: ListTree },
-      ask: { label: t("chat.modeAsk"), Icon: MessageCircle },
-      multitask: { label: t("chat.modeMultitask"), Icon: Layers2 },
+      agent: {
+        label: t("chat.modeAgent"),
+        desc: t("chat.mode.desc.agent"),
+        Icon: InfinityIcon,
+      },
+      plan: {
+        label: t("chat.modePlan"),
+        desc: t("chat.mode.desc.plan"),
+        Icon: ListTree,
+      },
+      ask: {
+        label: t("chat.modeAsk"),
+        desc: t("chat.mode.desc.ask"),
+        Icon: MessageCircle,
+      },
+      multitask: {
+        label: t("chat.modeMultitask"),
+        desc: t("chat.mode.desc.multitask"),
+        Icon: Layers2,
+      },
     };
     return map;
   }, [t]);
@@ -1300,9 +1316,17 @@ export default function ChatView({
     (input.trim().length > 0 || attachments.length > 0) &&
     (!streaming || canQueueWhileBusy || chatMode === "multitask") &&
     (queueEnabled || !interruptBlocked);
-  /** MultiTask：并行/残留主会话流时仍显示 Send；Pause/Stop 仅在主会话 streaming 时出现 */
-  const showMainStreamControls = streaming;
+  /** 主会话流式或 HITL/`turnInFlight` 等待中：可 Stop；Pause 仅 streaming */
+  const showStopControl =
+    streaming || (turnInFlight && chatMode !== "multitask");
+  const showPauseResume = streaming;
   const showSendButton = chatMode === "multitask" || !streaming;
+  const parallelRunningCount = useMemo(
+    () => countRunningParallel(parallelTasks),
+    [parallelTasks],
+  );
+  const modeSwitchLocked =
+    streaming || turnInFlight || interruptBlocked || parallelRunningCount > 0;
   const parallelRunningIds = useMemo(
     () =>
       new Set(
@@ -2142,11 +2166,15 @@ export default function ChatView({
                 <button
                   type="button"
                   className={`composer-mode-pill ${modeMenuOpen ? "is-open" : ""}`}
-                  disabled={streaming || turnInFlight}
+                  disabled={modeSwitchLocked}
                   aria-haspopup="listbox"
                   aria-expanded={modeMenuOpen}
                   aria-label={t("chat.modeMenu")}
-                  title={t("chat.modeMenu")}
+                  title={
+                    modeSwitchLocked
+                      ? t("chat.modeMenu")
+                      : `${modeMeta[chatMode].label} — ${modeMeta[chatMode].desc}`
+                  }
                   onClick={() => {
                     setMcpOpen(false);
                     setContextPopoverOpen(false);
@@ -2160,6 +2188,11 @@ export default function ChatView({
                       <>
                         <Icon size={15} strokeWidth={2.2} />
                         <span>{Meta.label}</span>
+                        {(chatMode === "plan" || chatMode === "ask") && (
+                          <span className="composer-mode-readonly">
+                            {t("chat.mode.readonlyBadge")}
+                          </span>
+                        )}
                         <ChevronDown size={14} strokeWidth={2} />
                       </>
                     );
@@ -2190,7 +2223,10 @@ export default function ChatView({
                               }}
                             >
                               <Icon size={16} strokeWidth={2} />
-                              <span>{Meta.label}</span>
+                              <span className="composer-mode-item-text">
+                                <span className="composer-mode-item-label">{Meta.label}</span>
+                                <span className="composer-mode-item-desc">{Meta.desc}</span>
+                              </span>
                               {selected ? (
                                 <Check size={14} strokeWidth={2.4} />
                               ) : null}
@@ -2360,29 +2396,31 @@ export default function ChatView({
               >
                 <Paperclip size={17} strokeWidth={2} />
               </button>
-              {showMainStreamControls ? (
+              {showStopControl ? (
                 <>
-                  {streamPaused ? (
-                    <button
-                      type="button"
-                      className="composer-icon-btn"
-                      onClick={() => onResumeStream?.()}
-                      title={t("chat.streamResume")}
-                      aria-label={t("chat.streamResume")}
-                    >
-                      <Play size={17} strokeWidth={2.2} />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="composer-icon-btn"
-                      onClick={() => onPauseStream?.()}
-                      title={t("chat.streamPause")}
-                      aria-label={t("chat.streamPause")}
-                    >
-                      <Pause size={17} strokeWidth={2.2} />
-                    </button>
-                  )}
+                  {showPauseResume ? (
+                    streamPaused ? (
+                      <button
+                        type="button"
+                        className="composer-icon-btn"
+                        onClick={() => onResumeStream?.()}
+                        title={t("chat.streamResume")}
+                        aria-label={t("chat.streamResume")}
+                      >
+                        <Play size={17} strokeWidth={2.2} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="composer-icon-btn"
+                        onClick={() => onPauseStream?.()}
+                        title={t("chat.streamPause")}
+                        aria-label={t("chat.streamPause")}
+                      >
+                        <Pause size={17} strokeWidth={2.2} />
+                      </button>
+                    )
+                  ) : null}
                   <button
                     type="button"
                     className="send-btn send-btn--round send-btn--stop"

@@ -724,8 +724,34 @@ html[data-theme="light"] .composer-mode-menu {
   text-align: left;
 }
 
-.composer-mode-item span:nth-child(2) {
+.composer-mode-item-text {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.composer-mode-item-label {
+  line-height: 1.2;
+}
+
+.composer-mode-item-desc {
+  font-size: 0.72rem;
+  font-weight: 450;
+  color: var(--ink-mute);
+  line-height: 1.25;
+}
+
+.composer-mode-readonly {
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--tone, var(--accent)) 88%, var(--ink));
+  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 18%, transparent);
 }
 
 .composer-mode-item:hover,

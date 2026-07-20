@@ -284,7 +284,7 @@ export function useParallelTasks(deps: Deps) {
     setInput("");
     setAttachments([]);
 
-    const contentForModel = `${text}${chatModeHint("multitask")}`;
+    const contentForModel = `${text}${chatModeHint("multitask", t)}`;
     const globals = loadPickerGlobals();
     const sendSupportsThinking = shouldShowThinkingControls({
       capabilities: null,
@@ -319,6 +319,7 @@ export function useParallelTasks(deps: Deps) {
         arguments?: string;
         result?: string;
         index?: number;
+        outcome_type?: string;
         media?: Array<{
           kind?: string;
           ref_value?: string;
@@ -335,6 +336,13 @@ export function useParallelTasks(deps: Deps) {
                 : m,
             ),
           );
+        } else if (
+          payload.type === "run_finished" &&
+          (payload.outcome_type === "interrupt" ||
+            payload.outcome_type === "hitl_waiting")
+        ) {
+          showTransientToast(t("chat.task.hitlUnsupported"), { tone: "warning" });
+          finish("error", t("chat.task.hitlUnsupported"));
         } else if (payload.type === "tool_call") {
           const name = payload.name ?? "tool";
           const activity: ChatActivity = {

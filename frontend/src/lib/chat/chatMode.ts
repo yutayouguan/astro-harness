@@ -2,6 +2,8 @@
  * 聊天交互模式（Agent / Plan / Ask / MultiTask）及发送前附加提示。
  */
 
+import type { MessageKey } from "../../i18n/messages";
+
 export type ChatInteractionMode = "agent" | "plan" | "ask" | "multitask";
 
 const STORAGE_KEY = "astro.chat.mode";
@@ -75,26 +77,20 @@ export function parseModeSwitchResult(
   }
 }
 
-/** 发送前附加的模式提示（空则不加） */
-export function chatModeHint(mode: ChatInteractionMode): string {
+/** 发送前附加的模式提示（由调用方传入 i18n `t`） */
+export function chatModeHint(
+  mode: ChatInteractionMode,
+  t: (key: MessageKey) => string,
+): string {
   switch (mode) {
     case "plan":
-      return (
-        "\n\n---\n[Mode: Plan] 只读规划：可用 file_ops(read/list/search)、web_search、task_plan 等。" +
-        "禁止写文件、terminal、code_exec、delegate。" +
-        "计划就绪后调用 request_mode_switch(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
-      );
+      return `\n\n---\n${t("chat.mode.hint.plan")}`;
     case "ask":
-      return (
-        "\n\n---\n[Mode: Ask] 只读问答：解释与检索为主，不要修改文件或执行有副作用的操作。" +
-        "若需落地实现，可 request_mode_switch(to=\"agent\", …)。"
-      );
+      return `\n\n---\n${t("chat.mode.hint.ask")}`;
     case "multitask":
-      return "\n\n---\n[Mode: MultiTask] 将目标拆成可并行子任务，协调完成并汇总结果。";
+      return `\n\n---\n${t("chat.mode.hint.multitask")}`;
     case "agent":
-      return (
-        "\n\n---\n[Mode: Agent] 可执行工具。复杂多步任务可先 request_mode_switch(to=\"plan\", reason=…) 进入规划。"
-      );
+      return `\n\n---\n${t("chat.mode.hint.agent")}`;
     default:
       return "";
   }

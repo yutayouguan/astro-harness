@@ -413,7 +413,7 @@ export function useSend(deps: UseSendDeps) {
         isCreatingAgent
           ? `${modelBody}\n\n---\n${t("chat.agentCreateHint")}`
           : modelBody
-      }${chatModeHint(effectiveMode)}`;
+      }${chatModeHint(effectiveMode, t)}`;
 
       try {
         unlistenRef.current?.();
