@@ -2301,7 +2301,7 @@ html[data-theme="dark"] .cron-job-detail-task {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
-  padding: 6px 8px;
+  padding: 6px 10px;
   border-radius: 14px;
   z-index: 40;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
@@ -2311,16 +2311,20 @@ html[data-theme="dark"] .cron-job-detail-task {
   box-shadow: var(--glass-rim), inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  box-sizing: border-box;
 }
 
 .cron-toolbar-end.cron-history-filters {
   margin-bottom: 0;
-  height: 36px;
-  min-height: 36px;
+  /* 勿锁死 36px：内控已是 36px，固定高度会把上下 padding 挤没 */
+  height: auto;
+  min-height: 0;
+  padding: 6px 10px;
   flex: 0 1 auto;
   justify-content: flex-end;
   max-width: none;
   overflow: visible;
+  align-self: center;
 }
 
 html[data-theme="dark"] .cron-history-filters {
