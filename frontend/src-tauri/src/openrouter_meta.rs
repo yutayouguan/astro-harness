@@ -275,7 +275,12 @@ impl RawModel {
             supports_audio_input: has_mod(&inns, "audio"),
             supports_function_calling: has_param("tools") || has_param("tool_choice"),
             supports_reasoning,
-            supports_web_search: has_param("web_search_options"),
+            supports_web_search: has_param("web_search_options")
+                || params.iter().any(|p| p.contains("web_search"))
+                || id_lower.contains(":online")
+                || id_lower.contains("search-preview")
+                || id_lower.contains("sonar")
+                || id_lower.starts_with("perplexity/"),
             supports_image_generation: image_out,
             supports_video_generation: video_out,
             supports_audio_output: audio_out && !supports_music,

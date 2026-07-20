@@ -343,40 +343,95 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
 
 /// 目录漏标补丁：仅覆盖已核实、且运行时协议已支持的能力。
 ///
-/// DeepSeek V4：官方 API 支持 thinking；若 OpenRouter 未命中仍可补上。
+/// - DeepSeek V4：官方 API 支持 thinking；若 OpenRouter 未命中仍可补上。
+/// - Google Gemini/Gemma 聊天模型：支持 Search grounding，OpenRouter 常不标 web。
 fn apply_known_capability_overrides(kind: &str, id_lower: &str, info: &mut ModelInfo) -> bool {
+    let mut changed = false;
+
     let is_deepseek_family = kind == "deepseek" || id_lower.contains("deepseek");
-    if !is_deepseek_family {
+    if is_deepseek_family
+        && !info.capabilities.image_gen
+        && !info.capabilities.video_gen
+        && !info.capabilities.audio_gen
+        && !info.capabilities.music_gen
+        && !id_lower.contains("embed")
+        && !id_lower.contains("tts")
+        && !id_lower.contains("whisper")
+    {
+        let supports_thinking = id_lower.contains("deepseek-v4")
+            || id_lower.contains("deepseek-reasoner")
+            || id_lower.contains("deepseek-r1")
+            || id_lower.contains("deepseek-r");
+        if supports_thinking && !info.capabilities.reasoning {
+            info.capabilities.reasoning = true;
+            if info.reasoning.is_none() {
+                info.reasoning = Some(ModelReasoningMeta {
+                    supported_efforts: vec!["high".into(), "xhigh".into()],
+                    default_effort: Some("high".into()),
+                    default_enabled: Some(true),
+                    mandatory: Some(false),
+                    supports_max_tokens: None,
+                });
+            }
+            changed = true;
+        }
+    }
+
+    if !info.capabilities.web && looks_like_native_web_model(kind, id_lower, info) {
+        info.capabilities.web = true;
+        changed = true;
+    }
+
+    changed
+}
+
+/// Google Gemini/Gemma 聊天、Perplexity / OpenAI search 等原生联网模型。
+fn looks_like_native_web_model(kind: &str, id_lower: &str, info: &ModelInfo) -> bool {
+    if info.capabilities.image_gen
+        && !info.capabilities.tools
+        && !info.capabilities.vision
+        && !info.capabilities.reasoning
+    {
+        // 纯媒体输出模型不标联网
         return false;
     }
-    if info.capabilities.image_gen
-        || info.capabilities.video_gen
-        || info.capabilities.audio_gen
-        || info.capabilities.music_gen
+    if id_lower.contains("embed")
+        || id_lower.contains("tts")
+        || id_lower.contains("whisper")
+        || id_lower.contains("veo")
+        || id_lower.contains("lyria")
+        || id_lower.contains("imagen")
+        || id_lower.contains("robotics")
+        || id_lower.contains("dall-e")
+        || id_lower.contains("sora")
     {
         return false;
     }
-    if id_lower.contains("embed") || id_lower.contains("tts") || id_lower.contains("whisper") {
+    // 生图专用（如 gemini-*-flash-image）
+    if id_lower.contains("image")
+        && !id_lower.contains("vision")
+        && (id_lower.contains("-image") || id_lower.ends_with("image"))
+    {
         return false;
     }
 
-    let supports_thinking = id_lower.contains("deepseek-v4")
-        || id_lower.contains("deepseek-reasoner")
-        || id_lower.contains("deepseek-r1")
-        || id_lower.contains("deepseek-r");
-    if supports_thinking && !info.capabilities.reasoning {
-        info.capabilities.reasoning = true;
-        if info.reasoning.is_none() {
-            info.reasoning = Some(ModelReasoningMeta {
-                supported_efforts: vec!["high".into(), "xhigh".into()],
-                default_effort: Some("high".into()),
-                default_enabled: Some(true),
-                mandatory: Some(false),
-                supports_max_tokens: None,
-            });
-        }
+    if id_lower.contains("sonar")
+        || id_lower.contains("search-preview")
+        || id_lower.contains(":online")
+        || id_lower.contains("perplexity")
+        || kind == "perplexity"
+    {
         return true;
     }
+
+    let googleish = kind == "google"
+        || id_lower.contains("gemini")
+        || id_lower.contains("gemma")
+        || id_lower.starts_with("google/");
+    if googleish {
+        return id_lower.contains("gemini") || id_lower.contains("gemma");
+    }
+
     false
 }
 
@@ -399,9 +454,10 @@ mod tests {
             );
             assert_eq!(info.context_window, Some(1_048_576));
             assert!(info.capabilities.tools);
-            assert_eq!(info.meta_source, "api");
+            assert!(info.meta_source.contains("api"));
+            assert!(info.meta_source.contains("known"));
             assert!(!info.capabilities.vision);
-            assert!(!info.capabilities.web);
+            assert!(info.capabilities.web);
         });
     }
 
@@ -612,7 +668,40 @@ mod tests {
                 assert!(info.capabilities.tools);
                 assert!(info.capabilities.vision);
                 assert!(info.capabilities.image_gen);
+                assert!(info.capabilities.web);
                 assert!(!info.capabilities.video_gen);
+            },
+        );
+    }
+
+    #[test]
+    fn google_image_model_does_not_get_web() {
+        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+            let info = enrich_from_id("gemini-2.5-flash-image", "google", None);
+            assert!(!info.capabilities.web);
+        });
+    }
+
+    #[test]
+    fn openrouter_web_search_options_sets_web() {
+        crate::openrouter_meta::with_fixture(
+            r#"{
+              "data": [{
+                "id": "openai/gpt-4o",
+                "name": "GPT-4o",
+                "context_length": 128000,
+                "architecture": {
+                  "input_modalities": ["text", "image"],
+                  "output_modalities": ["text"]
+                },
+                "supported_parameters": ["tools", "web_search_options"],
+                "reasoning": null
+              }]
+            }"#,
+            || {
+                let info = enrich_from_id("gpt-4o", "openai", None);
+                assert!(info.capabilities.web);
+                assert!(info.capabilities.vision);
             },
         );
     }
