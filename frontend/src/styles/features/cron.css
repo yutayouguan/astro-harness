@@ -2330,10 +2330,10 @@ html[data-theme="dark"] .cron-job-detail-task {
 
 html[data-theme="dark"] .cron-history-filters {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.28));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 18%, rgba(8, 6, 18, 0.32));
   border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .cron-history-filter {
@@ -2343,21 +2343,19 @@ html[data-theme="dark"] .cron-history-filters {
   max-width: 180px;
 }
 
-/* 筛选内 Select：36px；暗色走 skills 工具条同款浅玻璃，避免发黑 */
+/* 筛选内 Select：与日期按钮同款玻璃，无顶部白色描边 */
 .cron-history-filters .select-menu-trigger {
   min-height: 36px;
   height: 36px;
   padding: 0 10px;
   border-radius: 10px;
   font-size: 12.5px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: none;
 }
 
 .cron-history-filters .select-menu-trigger:hover:not(:disabled),
 .cron-history-filters .select-menu.is-open .select-menu-trigger {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 0 0 2px color-mix(in srgb, var(--tone) 12%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
 html[data-theme="dark"] .cron-history-filters .select-menu {
@@ -2365,24 +2363,23 @@ html[data-theme="dark"] .cron-history-filters .select-menu {
     linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
     color-mix(in srgb, var(--tone) 14%, transparent);
   --select-glass-fill-hover:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
-    color-mix(in srgb, var(--tone) 22%, transparent);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    color-mix(in srgb, var(--tone) 18%, transparent);
   --select-glass-edge: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.14));
-  --select-glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --select-glass-rim: none;
   --select-glass-shadow: none;
 }
 
 html[data-theme="dark"] .cron-history-filters .select-menu-trigger {
   color: color-mix(in srgb, #fff 28%, var(--tone));
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .cron-history-filters .select-menu-trigger:hover:not(:disabled),
 html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-trigger {
   border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.16));
   color: color-mix(in srgb, #fff 36%, var(--tone));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 2px color-mix(in srgb, var(--tone) 16%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 16%, transparent);
 }
 
 .cron-history-dates {
@@ -2421,7 +2418,7 @@ html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-
     linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
     rgba(255, 255, 255, 0.38);
   border-color: color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: none;
 }
 
 .cron-history-date-btn.cron-sched-field-shell > svg {
@@ -2435,25 +2432,21 @@ html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell {
     linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
     color-mix(in srgb, var(--tone) 14%, transparent);
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.14));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: none;
   color: color-mix(in srgb, #fff 28%, var(--tone));
 }
 
 .cron-history-date-btn.is-open,
 .cron-history-date-btn.cron-sched-field-shell:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
   outline: none;
 }
 
 html[data-theme="dark"] .cron-history-date-btn.is-open,
 html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.16));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent);
 }
 
 .cron-history-date-label {
@@ -3229,7 +3222,7 @@ html[data-theme="dark"] .cron-run-drawer {
 
   .cron-history-filters {
     gap: 6px;
-    padding: 4px;
+    padding: 6px;
   }
 
   .cron-timeline-card {
