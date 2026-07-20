@@ -584,17 +584,22 @@ pub fn spawn_maybe_auto_evolution(app: AppHandle) {
 }
 
 /// fire-and-forget：启动或 Chat Done 后尝试到期策展（仅报告，不入队、不调 LLM）。
-pub fn spawn_maybe_curator(_app: AppHandle) {
+pub fn spawn_maybe_curator(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         match maybe_run_skill_curator().await {
             Ok(dto) if dto.ran => {
-                tracing::info!(
-                    suggestions = dto
-                        .report
-                        .as_ref()
-                        .map(|r| r.suggestions.len())
-                        .unwrap_or(0),
-                    "auto curator report refreshed"
+                let n = dto
+                    .report
+                    .as_ref()
+                    .map(|r| r.suggestions.len())
+                    .unwrap_or(0);
+                tracing::info!(suggestions = n, "auto curator report refreshed");
+                let _ = app.emit(
+                    "curator-updated",
+                    serde_json::json!({
+                        "suggestionCount": n,
+                        "auto": true,
+                    }),
                 );
             }
             Ok(dto) if dto.skipped => {
@@ -1915,7 +1920,10 @@ pub struct CuratorRunReportDto {
 /// 若 `curator.llm_diagnose` 开启且有可用 judge 路由，对低健康分或重叠簇
 /// 的建议调用 LLM 生成一句可操作诊断，替换 reason。失败静默回退启发式 reason。
 #[tauri::command]
-pub async fn run_skill_curator(enqueue: Option<bool>) -> Result<CuratorRunReportDto, String> {
+pub async fn run_skill_curator(
+    app: AppHandle,
+    enqueue: Option<bool>,
+) -> Result<CuratorRunReportDto, String> {
     let base = default_memory_dir();
     let unused = memory::load_learning_config(&base).unused_skill_days;
     let cfg = memory::load_evolution_config(&base);
@@ -1972,10 +1980,19 @@ pub async fn run_skill_curator(enqueue: Option<bool>) -> Result<CuratorRunReport
         0,
         report.suggestions.len().max(enqueued),
     );
-    Ok(CuratorRunReportDto {
+    let suggestion_count = report.suggestions.len();
+    let dto = CuratorRunReportDto {
         report: curate_report_dto(report),
         enqueued,
-    })
+    };
+    let _ = app.emit(
+        "curator-updated",
+        serde_json::json!({
+            "suggestionCount": suggestion_count,
+            "auto": false,
+        }),
+    );
+    Ok(dto)
 }
 
 /// 将上次策展报告中的 Disable/Merge 建议入待审队列。

@@ -175,8 +175,11 @@ export default function EvolutionModelsPanel({ active }: Props) {
     report: curatorReport,
     status: curatorStatus,
     lastEnqueued,
+    autoNotice: curatorAutoNotice,
+    clearAutoNotice: clearCuratorAutoNotice,
     run: runCurator,
     enqueue: enqueueCurator,
+    reload: reloadCurator,
   } = useSkillCurator(active);
   const [curatorEnqueue, setCuratorEnqueue] = useState(false);
   const [dspySkill, setDspySkill] = useState("");
@@ -329,7 +332,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
         maxEnqueue,
         settings.curator.llmDiagnose,
         maxLlm,
-      );
+      ).then(() => reloadCurator());
     } else {
       setCuratorIntervalDraft(String(settings.curator.intervalDays));
       setCuratorMaxEnqueueDraft(String(settings.curator.maxEnqueue));
@@ -341,6 +344,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
     curatorMaxEnqueueDraft,
     curatorMaxLlmDraft,
     setCurator,
+    reloadCurator,
   ]);
 
   const commitSearch = useCallback(() => {
@@ -975,7 +979,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
                         settings.curator.maxEnqueue,
                         settings.curator.llmDiagnose,
                         settings.curator.maxLlmCalls,
-                      )
+                      ).then(() => reloadCurator())
                     }
                     disabled={loading || !settings}
                   >
@@ -1009,7 +1013,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
                         settings.curator.maxEnqueue,
                         !settings.curator.llmDiagnose,
                         settings.curator.maxLlmCalls,
-                      )
+                      ).then(() => reloadCurator())
                     }
                     disabled={loading || !settings}
                   >
@@ -1386,7 +1390,11 @@ export default function EvolutionModelsPanel({ active }: Props) {
                       onClick={() => void approve(p.id)}
                     >
                       <Check size={15} />
-                      {t("evo.approve")}
+                      {p.kind === "disable"
+                        ? t("evo.approveDisable")
+                        : p.kind === "merge"
+                          ? t("evo.approveMerge")
+                          : t("evo.approve")}
                     </button>
                   </div>
                 </article>
@@ -1722,6 +1730,21 @@ export default function EvolutionModelsPanel({ active }: Props) {
               </div>
             )}
 
+            {curatorAutoNotice != null && (
+              <div className="evo-auto-banner is-ready evo-curator-notice" role="status">
+                <span>
+                  {t("evo.curatorAutoRefreshed").replace("{n}", curatorAutoNotice)}
+                </span>
+                <button
+                  type="button"
+                  className="aux-action aux-action-ghost"
+                  onClick={() => clearCuratorAutoNotice()}
+                >
+                  {t("evo.dismiss")}
+                </button>
+              </div>
+            )}
+
             {curatorStatus?.due && (
               <div className="evo-auto-banner is-ready" role="status">
                 {t("evo.curatorDueBanner").replace(
@@ -1744,6 +1767,74 @@ export default function EvolutionModelsPanel({ active }: Props) {
                     ? ` · ${t("evo.curatorEnqueued").replace("{n}", String(lastEnqueued))}`
                     : ""}
                 </p>
+                {(curatorReport.overlapClusters?.length ?? 0) > 0 && (
+                  <div className="evo-curator-block">
+                    <h3 className="evo-curator-block-title">{t("evo.curatorOverlapTitle")}</h3>
+                    <ul className="evo-curator-overlap">
+                      {curatorReport.overlapClusters!.map((cluster, i) => (
+                        <li key={`overlap-${i}`}>
+                          {t("evo.curatorOverlapLine")
+                            .replace("{i}", String(i + 1))
+                            .replace("{ids}", cluster.join(" · "))}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(() => {
+                  const rows = [...(curatorReport.rows ?? [])]
+                    .filter((r) => r.stale || r.healthScore != null || r.healthReasons.length > 0)
+                    .sort((a, b) => {
+                      const sa = a.healthScore ?? 2;
+                      const sb = b.healthScore ?? 2;
+                      return sa - sb;
+                    })
+                    .slice(0, 12);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div className="evo-curator-block">
+                      <h3 className="evo-curator-block-title">{t("evo.curatorHealthTitle")}</h3>
+                      <div className="aux-task-list">
+                        {rows.map((row) => (
+                          <article
+                            className="aux-task-row evo-compact-row"
+                            key={`health-${row.skillId}`}
+                          >
+                            <div className="aux-task-main">
+                              <div className="aux-task-titleline">
+                                <h3>{row.skillId}</h3>
+                                {row.stale && (
+                                  <span className="aux-route-pill is-auto">
+                                    {t("evo.curatorStaleTag")}
+                                  </span>
+                                )}
+                                <span className="evo-score-pill">
+                                  {row.healthScore != null
+                                    ? t("evo.curatorHealthScore").replace(
+                                        "{score}",
+                                        row.healthScore.toFixed(2),
+                                      )
+                                    : t("evo.curatorHealthUnknown")}
+                                </span>
+                                {row.bytes != null && (
+                                  <span className="aux-muted">
+                                    {t("evo.curatorBytes").replace("{n}", String(row.bytes))}
+                                  </span>
+                                )}
+                              </div>
+                              {row.description && (
+                                <p className="aux-muted">{row.description}</p>
+                              )}
+                              {row.healthReasons.length > 0 && (
+                                <p className="aux-muted">{row.healthReasons.join(" · ")}</p>
+                              )}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {curatorReport.suggestions.some(
                   (s) => s.kind === "disable" || s.kind === "merge",
                 ) && (

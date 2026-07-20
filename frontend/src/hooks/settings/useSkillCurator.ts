@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { CurateReportDto, CuratorStatusDto } from "../../types";
 
 type CuratorRunReport = {
   report: CurateReportDto;
   enqueued: number;
+};
+
+type CuratorUpdatedPayload = {
+  suggestionCount?: number;
+  auto?: boolean;
 };
 
 type UseSkillCurator = {
@@ -13,6 +19,9 @@ type UseSkillCurator = {
   report: CurateReportDto | null;
   status: CuratorStatusDto | null;
   lastEnqueued: number;
+  /** 后台自动刷新提示（展示后可 clear） */
+  autoNotice: string | null;
+  clearAutoNotice(): void;
   run(enqueue?: boolean): Promise<void>;
   enqueue(): Promise<void>;
   reload(): Promise<void>;
@@ -28,6 +37,7 @@ export function useSkillCurator(active = true): UseSkillCurator {
   const [report, setReport] = useState<CurateReportDto | null>(null);
   const [status, setStatus] = useState<CuratorStatusDto | null>(null);
   const [lastEnqueued, setLastEnqueued] = useState(0);
+  const [autoNotice, setAutoNotice] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (!active) return;
@@ -46,6 +56,29 @@ export function useSkillCurator(active = true): UseSkillCurator {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // 后台到期策展完成后刷新报告 / 状态
+  useEffect(() => {
+    if (!active) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let unlisten: (() => void) | undefined;
+    void listen<CuratorUpdatedPayload>("curator-updated", (ev) => {
+      void reload();
+      if (ev.payload?.auto) {
+        const n = ev.payload.suggestionCount ?? 0;
+        setAutoNotice(String(n));
+      }
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      unlisten?.();
+    };
+  }, [active, reload]);
+
+  const clearAutoNotice = useCallback(() => setAutoNotice(null), []);
 
   const run = useCallback(
     async (enqueue = false) => {
@@ -79,5 +112,16 @@ export function useSkillCurator(active = true): UseSkillCurator {
     }
   }, []);
 
-  return { loading, error, report, status, lastEnqueued, run, enqueue, reload };
+  return {
+    loading,
+    error,
+    report,
+    status,
+    lastEnqueued,
+    autoNotice,
+    clearAutoNotice,
+    run,
+    enqueue,
+    reload,
+  };
 }

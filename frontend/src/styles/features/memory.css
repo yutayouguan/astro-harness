@@ -650,6 +650,36 @@ html[data-theme="dark"] .evo-seg-item.is-active {
   border-color: color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
 }
 
+.evo-curator-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.evo-curator-block {
+  margin: 8px 0 4px;
+}
+
+.evo-curator-block-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-mute);
+}
+
+.evo-curator-overlap {
+  margin: 0;
+  padding: 0 0 0 1.1em;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-mute);
+}
+
+.evo-curator-overlap li {
+  margin: 2px 0;
+}
+
 .evo-run-panel {
   padding: 12px 14px;
   border-radius: 14px;
