@@ -1336,6 +1336,7 @@ html[data-theme="dark"] .providers-badge--deprecated {
 
 .providers-model-detail .providers-model-caps {
   flex-wrap: wrap;
+  max-width: none;
 }
 
 .providers-model-radio {
@@ -1509,6 +1510,14 @@ html[data-theme="dark"] .providers-badge--deprecated {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  max-width: 42%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.providers-model-caps::-webkit-scrollbar {
+  display: none;
 }
 
 .providers-cap {

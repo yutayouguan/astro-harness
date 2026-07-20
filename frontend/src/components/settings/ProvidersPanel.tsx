@@ -61,7 +61,6 @@ import {
   formatModelCreated,
   formatModelPrice,
   isModelCreatedWithinDays,
-  listActiveModelCaps,
 } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
@@ -2137,8 +2136,61 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         Boolean(priceLabel) ||
                         Boolean(hfId) ||
                         moderated ||
-                        Boolean(latency) ||
-                        listActiveModelCaps(caps).length > 0;
+                        Boolean(latency);
+                      const capIcons = (
+                        <span className="providers-model-caps" aria-label="capabilities">
+                          {caps.vision && (
+                            <span className="providers-cap vision" title={t("providers.cap.vision")}>
+                              <Eye size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.file && (
+                            <span className="providers-cap file" title={t("providers.cap.file")}>
+                              <FileText size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.audio_in && (
+                            <span className="providers-cap audio-in" title={t("providers.cap.audioIn")}>
+                              <Mic size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.web && (
+                            <span className="providers-cap web" title={t("providers.cap.web")}>
+                              <Globe size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.reasoning && (
+                            <span className="providers-cap reasoning" title={t("providers.cap.reasoning")}>
+                              <Lightbulb size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.tools && (
+                            <span className="providers-cap tools" title={t("providers.cap.tools")}>
+                              <Wrench size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.image_gen && (
+                            <span className="providers-cap image-gen" title={t("providers.cap.imageGen")}>
+                              <Image size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.video_gen && (
+                            <span className="providers-cap video-gen" title={t("providers.cap.videoGen")}>
+                              <Video size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.audio_gen && (
+                            <span className="providers-cap audio-gen" title={t("providers.cap.audioGen")}>
+                              <Mic size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                          {caps.music_gen && (
+                            <span className="providers-cap music-gen" title={t("providers.cap.musicGen")}>
+                              <Music size={14} strokeWidth={2} aria-hidden />
+                            </span>
+                          )}
+                        </span>
+                      );
                       return (
                         <li
                           key={m.id}
@@ -2187,6 +2239,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                                 </span>
                               )}
                             </label>
+                            {capIcons}
                             <span className="providers-model-actions">
                               {hasDetail ? (
                                 <button
@@ -2314,91 +2367,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                                   </>
                                 ) : null}
                               </dl>
-                              <div
-                                className="providers-model-caps"
-                                aria-label="capabilities"
-                              >
-                                {caps.vision && (
-                                  <span
-                                    className="providers-cap vision"
-                                    title={t("providers.cap.vision")}
-                                  >
-                                    <Eye size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.file && (
-                                  <span
-                                    className="providers-cap file"
-                                    title={t("providers.cap.file")}
-                                  >
-                                    <FileText size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.audio_in && (
-                                  <span
-                                    className="providers-cap audio-in"
-                                    title={t("providers.cap.audioIn")}
-                                  >
-                                    <Mic size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.web && (
-                                  <span
-                                    className="providers-cap web"
-                                    title={t("providers.cap.web")}
-                                  >
-                                    <Globe size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.reasoning && (
-                                  <span
-                                    className="providers-cap reasoning"
-                                    title={t("providers.cap.reasoning")}
-                                  >
-                                    <Lightbulb size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.tools && (
-                                  <span
-                                    className="providers-cap tools"
-                                    title={t("providers.cap.tools")}
-                                  >
-                                    <Wrench size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.image_gen && (
-                                  <span
-                                    className="providers-cap image-gen"
-                                    title={t("providers.cap.imageGen")}
-                                  >
-                                    <Image size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.video_gen && (
-                                  <span
-                                    className="providers-cap video-gen"
-                                    title={t("providers.cap.videoGen")}
-                                  >
-                                    <Video size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.audio_gen && (
-                                  <span
-                                    className="providers-cap audio-gen"
-                                    title={t("providers.cap.audioGen")}
-                                  >
-                                    <Mic size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                                {caps.music_gen && (
-                                  <span
-                                    className="providers-cap music-gen"
-                                    title={t("providers.cap.musicGen")}
-                                  >
-                                    <Music size={14} strokeWidth={2} aria-hidden />
-                                  </span>
-                                )}
-                              </div>
                             </div>
                           ) : null}
                         </li>
