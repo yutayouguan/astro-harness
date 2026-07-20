@@ -8,7 +8,8 @@
 //! 用 [`REFLECTION_SYSTEM_PROMPT`] + [`build_reflection_user_prompt`] 得到文本，
 //! 再把模型输出交给 [`parse_candidates`]。
 //!
-//! 非目标：完整 GEPA/Pareto 遗传搜索、自动应用、git/PR 自动化。
+//! 非目标：完整外部 DSPy/GEPA 遗传引擎内置、自动应用、git/PR 全自动
+//! （本 crate 已含 GEPA-lite：变异 / 交叉 / Pareto；「批准到分支」仅为可选辅助）。
 
 pub mod auto;
 pub mod candidate;
