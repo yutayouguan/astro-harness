@@ -2294,20 +2294,22 @@ html[data-theme="dark"] .cron-job-detail-task {
   padding: 7px 14px;
 }
 
-/* History filters — glass toolbar（可嵌在 cron-toolbar 右侧） */
+/* History filters — 与 cron-tabs / view-toggle 同款玻璃壳 */
 .cron-history-filters {
+  --select-tone: var(--tone);
+  --select-tone-soft: var(--tone-soft);
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
-  padding: 6px 10px;
+  padding: 4px;
   border-radius: 14px;
   z-index: 40;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
-    color-mix(in srgb, var(--glass-fill) 65%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--glass-fill) 70%, transparent);
   box-shadow: var(--glass-rim), inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
@@ -2316,10 +2318,9 @@ html[data-theme="dark"] .cron-job-detail-task {
 
 .cron-toolbar-end.cron-history-filters {
   margin-bottom: 0;
-  /* 勿锁死 36px：内控已是 36px，固定高度会把上下 padding 挤没 */
   height: auto;
   min-height: 0;
-  padding: 6px 10px;
+  padding: 4px;
   flex: 0 1 auto;
   justify-content: flex-end;
   max-width: none;
@@ -2329,12 +2330,10 @@ html[data-theme="dark"] .cron-job-detail-task {
 
 html[data-theme="dark"] .cron-history-filters {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 28%, rgba(255, 255, 255, 0.05));
-  border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 8px 22px rgba(0, 0, 0, 0.18);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(8, 6, 18, 0.42);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .cron-history-filter {
@@ -2342,6 +2341,44 @@ html[data-theme="dark"] .cron-history-filters {
   width: 150px;
   flex: 0 0 auto;
   max-width: 180px;
+}
+
+/* 筛选内 Select：36px，玻璃对齐 tabs 内控件 */
+.cron-history-filters .select-menu-trigger {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.cron-history-filters .select-menu-trigger:hover:not(:disabled),
+.cron-history-filters .select-menu.is-open .select-menu-trigger {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 0 0 2px color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+html[data-theme="dark"] .cron-history-filters .select-menu {
+  --select-glass-fill:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(8, 6, 18, 0.35);
+  --select-glass-fill-hover:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    rgba(8, 6, 18, 0.42);
+  --select-glass-edge: rgba(255, 255, 255, 0.09);
+  --select-glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --select-glass-shadow: none;
+}
+
+html[data-theme="dark"] .cron-history-filters .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-trigger {
+  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.14));
+  color: color-mix(in srgb, #fff 14%, var(--tone));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 2px color-mix(in srgb, var(--tone) 16%, transparent);
 }
 
 .cron-history-dates {
@@ -2361,7 +2398,7 @@ html[data-theme="dark"] .cron-history-filters {
   user-select: none;
 }
 
-/* 历史筛选：复用 sched 玻璃壳，紧凑高度 */
+/* 历史日期触发器：与筛选条内 Select 同高、同玻璃 */
 .cron-history-date-btn.cron-sched-field-shell {
   flex: 0 0 auto;
   width: auto;
@@ -2371,10 +2408,16 @@ html[data-theme="dark"] .cron-history-filters {
   height: 36px;
   padding: 0 10px;
   gap: 6px;
+  border-radius: 10px;
   cursor: pointer;
   font: inherit;
   text-align: left;
   color: var(--ink);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    rgba(255, 255, 255, 0.38);
+  border-color: color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .cron-history-date-btn.cron-sched-field-shell > svg {
@@ -2383,13 +2426,30 @@ html[data-theme="dark"] .cron-history-filters {
   opacity: 0.9;
 }
 
+html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(8, 6, 18, 0.35);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
 .cron-history-date-btn.is-open,
 .cron-history-date-btn.cron-sched-field-shell:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
   outline: none;
+}
+
+html[data-theme="dark"] .cron-history-date-btn.is-open,
+html[data-theme="dark"] .cron-history-date-btn.cron-sched-field-shell:focus-visible {
+  border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.16));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent);
 }
 
 .cron-history-date-label {
@@ -2472,27 +2532,42 @@ html[data-theme="dark"] .cron-dt-clear {
 }
 
 .cron-timeline-card {
+  position: relative;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%, transparent);
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  overflow: hidden;
+}
+
+.cron-timeline-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--tone) 18%, transparent), transparent 55%);
+  opacity: 0.75;
 }
 
 html[data-theme="dark"] .cron-timeline-card {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%),
-    color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.1));
-  border-color: color-mix(in srgb, var(--tone) 24%, rgba(255, 255, 255, 0.16));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    rgba(8, 6, 18, 0.55);
+  border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(16px) saturate(1.25);
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+    0 12px 28px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.cron-timeline-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .cron-timeline-card-top {
@@ -2567,14 +2642,19 @@ html[data-theme="dark"] .cron-timeline-card {
 .cron-timeline-meta-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   max-width: 100%;
-  padding: 3px 8px 3px 6px;
+  min-width: 0;
+  padding: 4px 10px 4px 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink-mute);
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--ink-soft);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.5));
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2583,12 +2663,16 @@ html[data-theme="dark"] .cron-timeline-card {
 .cron-timeline-meta-chip svg {
   flex-shrink: 0;
   color: var(--tone);
-  opacity: 0.85;
+  opacity: 0.95;
 }
 
 html[data-theme="dark"] .cron-timeline-meta-chip {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--ink-soft);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .cron-timeline-log-btn {
