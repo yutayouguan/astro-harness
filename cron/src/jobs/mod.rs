@@ -248,4 +248,44 @@ mod tests {
         assert_eq!(next.hour(), 9);
         assert_eq!(next.minute(), 0);
     }
+
+    #[test]
+    fn normalize_cron_agent_id_maps_legacy_default() {
+        assert_eq!(normalize_cron_agent_id(""), "workspace");
+        assert_eq!(normalize_cron_agent_id("default"), "workspace");
+        assert_eq!(normalize_cron_agent_id("DEFAULT"), "workspace");
+        assert_eq!(normalize_cron_agent_id("workspace"), "workspace");
+        assert_eq!(normalize_cron_agent_id("Coder"), "coder");
+    }
+
+    #[test]
+    fn load_migrates_legacy_default_agent_id() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("jobs.json");
+        std::fs::write(
+            &path,
+            r#"{
+          "jobs": [{
+            "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "schedule": "every:5m",
+            "task": "提醒喝水",
+            "agent_id": "default",
+            "enabled": true,
+            "created_at": "2026-01-01T00:00:00Z"
+          }]
+        }"#,
+        )
+        .unwrap();
+        let store = CronStore::open(dir.path()).unwrap();
+        let jobs = store.list().unwrap();
+        assert_eq!(jobs[0].agent_id, "workspace");
+    }
+
+    #[test]
+    fn add_defaults_to_workspace_agent() {
+        let dir = TempDir::new().unwrap();
+        let store = CronStore::open(dir.path()).unwrap();
+        let job = store.add("every:1h", "hi").unwrap();
+        assert_eq!(job.agent_id, "workspace");
+    }
 }

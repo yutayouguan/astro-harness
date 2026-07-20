@@ -307,7 +307,7 @@ async fn run_agent_job(
     let sid = session_id
         .map(str::to_string)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    let agent_id = home::normalize_agent_id(&job.agent_id);
+    let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
 
     let mut config = AgentConfig::with_defaults(memory_dir.clone());
     // with_defaults 读的是活跃 agent 的 SOUL；覆盖为任务指定 agent。

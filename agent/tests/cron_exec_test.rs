@@ -29,4 +29,15 @@ async fn execute_job_fails_without_api_key() {
         .unwrap();
     assert_eq!(row.status, "failure");
     assert!(row.error.as_deref().unwrap_or("").contains("API"));
+    // 旧 jobs 的 "default" 必须记为真实默认工作区 id，避免落到 workspace-default/
+    assert_eq!(row.agent_id, "workspace");
+}
+
+#[test]
+fn normalize_cron_agent_id_maps_legacy_default() {
+    assert_eq!(cron::normalize_cron_agent_id(""), "workspace");
+    assert_eq!(cron::normalize_cron_agent_id("default"), "workspace");
+    assert_eq!(cron::normalize_cron_agent_id("DEFAULT"), "workspace");
+    assert_eq!(cron::normalize_cron_agent_id("workspace"), "workspace");
+    assert_eq!(cron::normalize_cron_agent_id("Coder"), "coder");
 }
