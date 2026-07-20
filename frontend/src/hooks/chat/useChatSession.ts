@@ -48,6 +48,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatRightTab } from "../../components/chat/ChatRightPanel";
 import { useChatStreamBuffers } from "./useChatStreamBuffers";
 import { useGeneratingPreview } from "./useGeneratingPreview";
+import { useParallelTasks } from "./useParallelTasks";
 import { useSend, type SendOpts } from "./useSend";
 import { useConfirm } from "../ui/DialogContext";
 
@@ -194,6 +195,22 @@ export function useChatSession({
     streamRafRef,
   } = useChatStreamBuffers(setMessages);
 
+  const {
+    parallelTasks,
+    parallelRunning,
+    startParallelTask,
+    cancelParallelTask,
+    clearAllParallel,
+  } = useParallelTasks({
+    activeProvider,
+    setMessages,
+    setEmptyMode,
+    setInput,
+    setAttachments,
+    showTransientToast,
+    t,
+  });
+
   // ── Send ──────────────────────────────────────────────────────────────────
   const { send: sendImmediate } = useSend({
     input,
@@ -258,11 +275,33 @@ export function useChatSession({
   const chatModeRef = useRef(chatMode);
   chatModeRef.current = chatMode;
 
-  /** 单线程模式：流式中入队；MultiTask 本步仍走原门闩（不入队） */
+  /** 单线程：流式中入队；MultiTask：立即开独立 session 并行 */
   const send = useCallback(
     async (opts?: SendOpts) => {
       const mode = chatModeRef.current;
-      if (streaming && mode !== "multitask") {
+      if (mode === "multitask") {
+        const text = (opts?.text ?? input).trim();
+        const pending = opts?.attachments ?? attachments;
+        if (!text && pending.length === 0) return;
+        if (sessionPendingInterrupts.length > 0) {
+          showTransientToast(t("chat.interrupt.pending"));
+          return;
+        }
+        if (sessionReadOnly || isCompacting) {
+          showTransientToast(
+            isCompacting
+              ? t("chat.compactInProgress")
+              : sessionEndReason === "compacted" || !sessionEndReason
+                ? t("chat.sessionCompactedReadOnly")
+                : t("chat.sessionEndedReadOnly"),
+            { tone: "warning" },
+          );
+          return;
+        }
+        await startParallelTask({ text, attachments: pending });
+        return;
+      }
+      if (streaming) {
         const text = (opts?.text ?? input).trim();
         const pending = opts?.attachments ?? attachments;
         if (!text && pending.length === 0) return;
@@ -318,6 +357,7 @@ export function useChatSession({
       isCompacting,
       sessionEndReason,
       sendImmediate,
+      startParallelTask,
       showTransientToast,
       t,
     ],
@@ -668,7 +708,8 @@ export function useChatSession({
       }
       return [];
     });
-  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
+    clearAllParallel();
+  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav, clearAllParallel]);
 
   /** 永久删除当前会话前：先取消流并丢弃本地监听，避免 ghost token。 */
   const prepareDeleteCurrentSession = useCallback(async () => {
@@ -822,7 +863,16 @@ export function useChatSession({
   }, [sessionId, streaming, streamPaused]);
 
   const stopStream = useCallback(async () => {
-    if (!sessionId || !streaming) return;
+    if (parallelRunning > 0) {
+      const running = parallelTasks.filter((t) => t.status === "running");
+      await Promise.all(running.map((t) => cancelParallelTask(t.id)));
+    }
+    if (!streaming) return;
+    if (!sessionId) {
+      setStreaming(false);
+      setStreamPaused(false);
+      return;
+    }
     streamGenRef.current += 1;
     unlistenRef.current?.();
     unlistenRef.current = null;
@@ -879,6 +929,9 @@ export function useChatSession({
   }, [
     sessionId,
     streaming,
+    parallelRunning,
+    parallelTasks,
+    cancelParallelTask,
     clearStreamBuffers,
     flushStreamTokens,
     flushToolDeltas,
@@ -1413,7 +1466,10 @@ export function useChatSession({
     input,
     attachments,
     queuedFollowUps,
-    streaming,
+    parallelTasks,
+    parallelRunning,
+    streaming: streaming || parallelRunning > 0,
+    primaryStreaming: streaming,
     streamPaused,
     tokenUsage,
     contextUsage,
@@ -1445,6 +1501,7 @@ export function useChatSession({
     removeQueuedFollowUp,
     updateQueuedFollowUpText,
     moveQueuedFollowUp,
+    cancelParallelTask,
     pauseStream,
     resumeStream,
     stopStream,

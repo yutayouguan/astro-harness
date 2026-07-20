@@ -1125,6 +1125,74 @@ html[data-theme="dark"] .composer-queue-edit {
   border-color: rgba(255, 255, 255, 0.14);
 }
 
+.composer-task-status {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--tone, #2563eb);
+  background: color-mix(in srgb, var(--tone-soft, #dbeafe) 70%, transparent);
+  vertical-align: 1px;
+}
+
+.composer-queue-item.is-task.is-done .composer-task-status {
+  color: color-mix(in srgb, #059669 80%, var(--ink));
+  background: color-mix(in srgb, #a7f3d0 45%, transparent);
+}
+
+.composer-queue-item.is-task.is-error .composer-task-status {
+  color: var(--danger, #dc2626);
+  background: color-mix(in srgb, var(--danger, #dc2626) 12%, transparent);
+}
+
+.composer-queue-item.is-task.is-cancelled .composer-task-status {
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink-mute) 12%, transparent);
+}
+
+.composer-queue-dot.is-running {
+  border-color: var(--tone, #2563eb);
+  background: color-mix(in srgb, var(--tone, #2563eb) 55%, #fff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #2563eb) 18%, transparent);
+  animation: composer-task-pulse 1.2s ease-in-out infinite;
+}
+
+.composer-queue-dot.is-done {
+  border-color: #059669;
+  background: #34d399;
+}
+
+.composer-queue-dot.is-error {
+  border-color: var(--danger, #dc2626);
+  background: color-mix(in srgb, var(--danger, #dc2626) 70%, #fff);
+}
+
+.composer-queue-dot.is-cancelled {
+  border-color: var(--ink-mute);
+  background: transparent;
+}
+
+@keyframes composer-task-pulse {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-queue-dot.is-running {
+    animation: none;
+  }
+}
+
 .composer-shell .composer {
   margin-top: 0;
 }

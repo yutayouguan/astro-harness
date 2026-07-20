@@ -811,6 +811,8 @@ export default function App() {
                       onRemoveQueuedFollowUp={chat.removeQueuedFollowUp}
                       onUpdateQueuedFollowUpText={chat.updateQueuedFollowUpText}
                       onMoveQueuedFollowUp={chat.moveQueuedFollowUp}
+                      parallelTasks={chat.parallelTasks}
+                      onCancelParallelTask={chat.cancelParallelTask}
                       pendingInterrupts={chat.sessionPendingInterrupts}
                       onUiAction={onUiAction}
                       onPauseStream={pauseStream}

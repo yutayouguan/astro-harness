@@ -1,8 +1,8 @@
 # 聊天交互模式与调度设计
 
 > 日期：2026-07-20  
-> 状态：设计定稿；Step 1（单线程队列）实施中  
-> 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、编排 / delegate / worktree
+> 状态：设计定稿；Step 1 / Step 2 已落地；Step 3（Plan gate + 模式切换授权）待做  
+> 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、编排 / delegate / worktree
 
 ## 1. 问题
 
@@ -70,14 +70,14 @@
 
 实现上复用已有 orchestration、delegate、async spawn、git worktree。
 
-**注意**：Step 1 **不**改变 MultiTask 行为（仍可能在 streaming 时暂不可发）；并行 spawn 为后续步骤。
+**注意**：Step 1 已落地 follow-up 队列。Step 2 起 MultiTask 走「每消息独立 `session_id` 并行流」，同会话禁止并发（后端 pause 重入会 cancel）。
 
 ## 5. 落地顺序
 
-1. **Step 1（本迭代）**：Agent / Plan / Ask 的 follow-up 队列 + Queued UI；流结束后自动 dequeue 发送；
-2. **Step 2**：MultiTask 每消息 spawn + 隔离执行上下文 + Task 面板；
+1. **Step 1（已完成）**：Agent / Plan / Ask 的 follow-up 队列 + Queued UI；流结束后自动 dequeue 发送；
+2. **Step 2（本迭代）**：MultiTask 每消息 spawn 独立 session + 并行监听 + Task 面板（MVP 暂不强制 worktree）；
 3. **Step 3**：Plan 工具 gate + `request_mode_switch` 授权条（倒计时 / 立即 / 取消）；
-4. **Step 4**：队列软边界巡检、task 汇总与体验打磨。
+4. **Step 4**：队列软边界巡检、task 汇总与 worktree 隔离增强。
 
 ## 6. Step 1 验收
 
@@ -86,9 +86,17 @@
 - 新开会话清空队列；
 - MultiTask：本步不引入队列（避免与「立即干」语义冲突）；仍按现有 streaming 门闩，直到 Step 2。
 
-## 7. 非目标（本阶段）
+## 6b. Step 2 验收
 
-- 不实现真正的 MultiTask 并行；
-- 不实现模式自动切换与倒计时授权；
-- 不改全局专家切换语义；
-- 不强制后端持久化队列（进程内 / 会话级即可；刷新丢失可接受）。
+- MultiTask 下连发 2～3 条：各自独立 `session_id`，同时出 token，互不 cancel；
+- 主时间线可见各 task 的用户句 + 助手气泡；输入框上方有 Task 面板（running / done / error）；
+- 并发上限（默认 5）；达上限时 toast，不静默丢消息；
+- Agent/Plan/Ask 队列行为不变；
+- MVP 不强制 git worktree（并行写同一工作区仍有冲突风险，后续 Step 增强）。
+
+## 7. 非目标（Step 2 仍不含）
+
+- 同 `session_id` 多 turn 并发；
+- 模式自动切换与倒计时授权；
+- MultiTask 强制 worktree / delegate_async 作为主路径；
+- 不改全局专家切换语义。

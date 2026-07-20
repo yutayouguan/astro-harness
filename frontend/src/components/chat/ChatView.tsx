@@ -59,6 +59,7 @@ import {
   type ChatInteractionMode,
 } from "../../lib/chat/chatMode";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
+import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
 import {
@@ -212,6 +213,9 @@ type Props = {
   onRemoveQueuedFollowUp?: (id: string) => void;
   onUpdateQueuedFollowUpText?: (id: string, text: string) => void;
   onMoveQueuedFollowUp?: (id: string, dir: -1 | 1) => void;
+  /** MultiTask 并行任务 */
+  parallelTasks?: ParallelChatTask[];
+  onCancelParallelTask?: (id: string) => void;
   /** 会话级未决 interrupt（有则禁用普通发送） */
   pendingInterrupts?: PendingInterrupt[];
   /** A2UI 卡片动作（approve / deny / choose） */
@@ -529,6 +533,8 @@ export default function ChatView({
   onRemoveQueuedFollowUp,
   onUpdateQueuedFollowUpText,
   onMoveQueuedFollowUp,
+  parallelTasks = [],
+  onCancelParallelTask,
   pendingInterrupts = [],
   onUiAction,
   onPauseStream,
@@ -570,6 +576,7 @@ export default function ChatView({
   const contextWrapRef = useRef<HTMLDivElement>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(true);
+  const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
@@ -1065,7 +1072,7 @@ export default function ChatView({
 
   const addPaths = useCallback(
     async (paths: string[]) => {
-      if (!paths.length || (streaming && chatMode === "multitask")) return;
+      if (!paths.length) return;
       const created = await pathsToAttachments(paths);
       addAttachments(created);
     },
@@ -1104,8 +1111,7 @@ export default function ChatView({
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>
         getCurrentWebview().onDragDropEvent((event) => {
-          if (streaming && chatMode === "multitask") return;
-          const kind = event.payload.type;
+                    const kind = event.payload.type;
           if (kind === "enter" || kind === "over") {
             setFileDragOver(true);
             return;
@@ -1151,8 +1157,7 @@ export default function ChatView({
   const onDragEnter = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (streaming && chatMode === "multitask") return;
-    dragDepthRef.current += 1;
+        dragDepthRef.current += 1;
     if (e.dataTransfer?.types?.includes("Files")) {
       setFileDragOver(true);
     }
@@ -1170,8 +1175,7 @@ export default function ChatView({
     e.stopPropagation();
     dragDepthRef.current = 0;
     setFileDragOver(false);
-    if (streaming && chatMode === "multitask") return;
-    // Tauri 原生 drop 已处理时跳过，避免重复添加
+        // Tauri 原生 drop 已处理时跳过，避免重复添加
     if (Date.now() - tauriDropAtRef.current < 500) return;
     if (e.dataTransfer.files?.length) {
       await addFiles(e.dataTransfer.files);
@@ -1185,8 +1189,7 @@ export default function ChatView({
     clipboardData: DataTransfer | null;
     preventDefault: () => void;
   }) => {
-    if (streaming && chatMode === "multitask") return;
-    const list = e.clipboardData?.files;
+        const list = e.clipboardData?.files;
     if (list && list.length > 0) {
       e.preventDefault();
       await addFiles(list);
@@ -1255,7 +1258,16 @@ export default function ChatView({
     !interruptBlocked &&
     !sendBlocked &&
     (input.trim().length > 0 || attachments.length > 0) &&
-    (!streaming || canQueueWhileStreaming);
+    (!streaming || canQueueWhileStreaming || chatMode === "multitask");
+  const parallelRunningIds = useMemo(
+    () =>
+      new Set(
+        parallelTasks
+          .filter((task) => task.status === "running")
+          .map((task) => task.assistantMessageId),
+      ),
+    [parallelTasks],
+  );
 
   const slotMirrorRef = useRef<HTMLDivElement>(null);
   const agentTemplateSegments = useMemo(
@@ -1329,9 +1341,11 @@ export default function ChatView({
   };
 
   const composerPlaceholder = streaming
-    ? queueEnabled
-      ? t("chat.placeholderStreaming")
-      : t("chat.placeholderStreamingBusy")
+    ? chatMode === "multitask"
+      ? t("chat.placeholderMultitask")
+      : queueEnabled
+        ? t("chat.placeholderStreaming")
+        : t("chat.placeholderStreamingBusy")
     : sendBlocked && sendBlockedReason
       ? sendBlockedReason
       : interruptBlocked
@@ -1366,10 +1380,12 @@ export default function ChatView({
           <div className="message-list" ref={messageListRef}>
             {messages.map((m, index) => {
               const isStreamingBubble =
-                streaming &&
                 m.role === "assistant" &&
                 !m.error &&
-                index === messages.length - 1;
+                (parallelRunningIds.has(m.id) ||
+                  (chatMode !== "multitask" &&
+                    streaming &&
+                    index === messages.length - 1));
               const reasoningActive = Boolean(
                 isStreamingBubble && m.reasoning && !m.content,
               );
@@ -1776,6 +1792,78 @@ export default function ChatView({
           </div>
         )}
 
+        {parallelTasks.length > 0 && (
+          <div
+            className="composer-queue composer-tasks"
+            aria-label={t("chat.task.title", {
+              running: String(parallelTasks.filter((x) => x.status === "running").length),
+              total: String(parallelTasks.length),
+            })}
+          >
+            <button
+              type="button"
+              className="composer-queue-toggle"
+              aria-expanded={tasksOpen}
+              onClick={() => setTasksOpen((o) => !o)}
+            >
+              <ChevronDown
+                size={14}
+                strokeWidth={2.2}
+                className={tasksOpen ? "is-open" : ""}
+                aria-hidden
+              />
+              <span>
+                {t("chat.task.title", {
+                  running: String(
+                    parallelTasks.filter((x) => x.status === "running").length,
+                  ),
+                  total: String(parallelTasks.length),
+                })}
+              </span>
+            </button>
+            {tasksOpen && (
+              <ul className="composer-queue-list">
+                {parallelTasks.map((task) => (
+                  <li
+                    key={task.id}
+                    className={`composer-queue-item is-task is-${task.status}`}
+                  >
+                    <span
+                      className={`composer-queue-dot is-${task.status}`}
+                      aria-hidden
+                    />
+                    <span className="composer-queue-text">
+                      <span className="composer-task-status">
+                        {task.status === "running"
+                          ? t("chat.task.status.running")
+                          : task.status === "done"
+                            ? t("chat.task.status.done")
+                            : task.status === "error"
+                              ? t("chat.task.status.error")
+                              : t("chat.task.status.cancelled")}
+                      </span>
+                      {task.prompt.trim() || t("chat.queue.emptyText")}
+                    </span>
+                    {task.status === "running" && (
+                      <span className="composer-queue-actions">
+                        <button
+                          type="button"
+                          className="composer-queue-btn"
+                          title={t("chat.task.cancel")}
+                          aria-label={t("chat.task.cancel")}
+                          onClick={() => onCancelParallelTask?.(task.id)}
+                        >
+                          <Square size={12} strokeWidth={2.4} />
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {attachments.length > 0 && (
           <div className="composer-previews">
             {attachments.map((att) => (
@@ -1833,7 +1921,7 @@ export default function ChatView({
             multiple
             accept="image/*,video/*,audio/*,.pdf,.txt,.md,.json,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rs,.ts,.tsx,.js,.py"
             onChange={(e) => void onFileChange(e)}
-            disabled={(streaming && chatMode === "multitask") || attachments.length >= MAX_ATTACHMENTS}
+            disabled={attachments.length >= MAX_ATTACHMENTS}
           />
           {fileDragOver ? (
             <div className="composer-drop-hint" aria-live="polite">
@@ -2138,7 +2226,7 @@ export default function ChatView({
                 type="button"
                 className="composer-icon-btn"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={(streaming && chatMode === "multitask") || attachments.length >= MAX_ATTACHMENTS}
+                disabled={attachments.length >= MAX_ATTACHMENTS}
                 title={t("chat.attach")}
                 aria-label={t("chat.attach")}
               >
