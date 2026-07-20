@@ -98,6 +98,8 @@ message ChatRequest {
   uint32 max_output_tokens = 30;
   // 交互模式：agent | plan | ask | multitask（空=agent）；用于 Plan/Ask 工具门禁
   string interaction_mode = 31;
+  // MultiTask / 委派隔离：非空则 AgentLoop 以该路径为 project_root（file_ops/terminal 沙箱根）
+  string project_root = 32;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

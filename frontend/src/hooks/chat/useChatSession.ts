@@ -22,6 +22,10 @@ import {
   newQueuedFollowUpId,
   type QueuedFollowUp,
 } from "../../lib/chat/followUpQueue";
+import {
+  buildParallelTasksSummaryMarkdown,
+  countRunningParallel,
+} from "../../lib/chat/parallelTasks";
 import { templateForLocale } from "../../lib/agent/agentCreateTemplate";
 import {
   clearChatSession,
@@ -130,6 +134,8 @@ export function useChatSession({
   const [modeSwitchPrompt, setModeSwitchPrompt] = useState<ModeSwitchRequest | null>(null);
   const modeSwitchArmedRef = useRef(false);
   const [streaming, setStreaming] = useState(false);
+  const [turnInFlight, setTurnInFlight] = useState(false);
+  const turnInFlightRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
@@ -208,6 +214,7 @@ export function useChatSession({
     startParallelTask,
     cancelParallelTask,
     clearAllParallel,
+    clearSettledParallel,
   } = useParallelTasks({
     activeProvider,
     setMessages,
@@ -284,6 +291,8 @@ export function useChatSession({
     setCurrentTurnId,
     setDissolvingIds,
     showTransientToast,
+    turnInFlightRef,
+    setTurnInFlight,
     onModeSwitchDetected,
     onModeSwitchPrompt,
   });
@@ -302,6 +311,37 @@ export function useChatSession({
     setModeSwitchPrompt(null);
     modeSwitchArmedRef.current = false;
   }, []);
+
+  const writeParallelSummary = useCallback(() => {
+    if (parallelTasks.length === 0) return;
+    if (countRunningParallel(parallelTasks) > 0) {
+      showTransientToast(t("chat.task.summaryStillRunning"), { tone: "warning" });
+      return;
+    }
+    const replyByAssistantId = new Map<string, string>();
+    for (const m of messages) {
+      if (m.role === "assistant") {
+        replyByAssistantId.set(m.id, m.content ?? "");
+      }
+    }
+    const content = buildParallelTasksSummaryMarkdown(
+      parallelTasks,
+      replyByAssistantId,
+    );
+    const id = `summary-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id,
+        role: "assistant",
+        content,
+        createdAt: Date.now(),
+      },
+    ]);
+    setEmptyMode(null);
+    setFocusMessageId(id);
+    showTransientToast(t("chat.task.summaryWritten"), { tone: "success" });
+  }, [parallelTasks, messages, showTransientToast, t]);
 
   const modeSwitchPromptRef = useRef(modeSwitchPrompt);
   modeSwitchPromptRef.current = modeSwitchPrompt;
@@ -349,14 +389,10 @@ export function useChatSession({
         await startParallelTask({ text, attachments: pending });
         return;
       }
-      if (streaming) {
+      if (streaming || turnInFlightRef.current || sessionPendingInterrupts.length > 0) {
         const text = (opts?.text ?? input).trim();
         const pending = opts?.attachments ?? attachments;
         if (!text && pending.length === 0) return;
-        if (sessionPendingInterrupts.length > 0) {
-          showTransientToast(t("chat.interrupt.pending"));
-          return;
-        }
         if (sessionReadOnly || isCompacting) {
           showTransientToast(
             isCompacting
@@ -398,9 +434,10 @@ export function useChatSession({
     },
     [
       streaming,
+      turnInFlight,
       input,
       attachments,
-      sessionPendingInterrupts,
+      sessionPendingInterrupts.length,
       sessionReadOnly,
       isCompacting,
       sessionEndReason,
@@ -412,7 +449,7 @@ export function useChatSession({
   );
 
   useEffect(() => {
-    if (streaming || isCompacting || sessionReadOnly) return;
+    if (streaming || turnInFlight || isCompacting || sessionReadOnly) return;
     if (sessionPendingInterrupts.length > 0) return;
     if (chatModeRef.current === "multitask") return;
     if (queueDrainLockRef.current) return;
@@ -448,6 +485,7 @@ export function useChatSession({
     })();
   }, [
     streaming,
+    turnInFlight,
     isCompacting,
     sessionReadOnly,
     sessionPendingInterrupts.length,
@@ -732,6 +770,8 @@ export function useChatSession({
     });
     setStreaming(false);
     setStreamPaused(false);
+    turnInFlightRef.current = false;
+    setTurnInFlight(false);
     setTokenUsage(null);
     setContextUsage(null);
     activeAssistantIdRef.current = null;
@@ -921,6 +961,8 @@ export function useChatSession({
     if (!sessionId) {
       setStreaming(false);
       setStreamPaused(false);
+      turnInFlightRef.current = false;
+      setTurnInFlight(false);
       return;
     }
     streamGenRef.current += 1;
@@ -974,6 +1016,8 @@ export function useChatSession({
     clearStreamBuffers();
     setStreaming(false);
     setStreamPaused(false);
+    turnInFlightRef.current = false;
+    setTurnInFlight(false);
     setStatus("ready");
     setStatusPhase("ready");
   }, [
@@ -1521,6 +1565,7 @@ export function useChatSession({
     modeSwitchPrompt,
     streaming: streaming || parallelRunning > 0,
     primaryStreaming: streaming,
+    turnInFlight,
     streamPaused,
     tokenUsage,
     contextUsage,
@@ -1555,6 +1600,8 @@ export function useChatSession({
     updateQueuedFollowUpText,
     moveQueuedFollowUp,
     cancelParallelTask,
+    clearSettledParallel,
+    writeParallelSummary,
     pauseStream,
     resumeStream,
     stopStream,

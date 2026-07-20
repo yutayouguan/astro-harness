@@ -290,6 +290,8 @@ pub fn run() {
             commands::start_chat,
             commands::chat_control,
             commands::interrupt_resume,
+            commands::prepare_multitask_worktree,
+            commands::cleanup_multitask_worktree,
             commands::generate_image,
             commands::query_memory,
             memory_commands::refresh_memory,

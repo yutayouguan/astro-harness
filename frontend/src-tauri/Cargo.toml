@@ -39,6 +39,7 @@ usage = { path = "../../usage" }
 orchestration = { path = "../../orchestration" }
 session = { path = "../../session" }
 agent = { path = "../../agent" }
+delegate = { path = "../../delegate" }
 backend = { path = "../../backend" }
 tools = { path = "../../tools" }
 mcp = { path = "../../mcp" }

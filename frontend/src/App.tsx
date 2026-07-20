@@ -790,6 +790,7 @@ export default function App() {
                       input={chat.input}
                       attachments={chat.attachments}
                       streaming={chat.streaming}
+                      turnInFlight={chat.turnInFlight}
                       streamPaused={chat.streamPaused}
                       sendBlocked={chat.isCompacting || chat.sessionReadOnly}
                       sendBlockedReason={
@@ -817,6 +818,8 @@ export default function App() {
                       onDismissModeSwitch={chat.dismissModeSwitch}
                       parallelTasks={chat.parallelTasks}
                       onCancelParallelTask={chat.cancelParallelTask}
+                      onWriteParallelSummary={chat.writeParallelSummary}
+                      onClearSettledParallel={chat.clearSettledParallel}
                       pendingInterrupts={chat.sessionPendingInterrupts}
                       onUiAction={onUiAction}
                       onPauseStream={pauseStream}

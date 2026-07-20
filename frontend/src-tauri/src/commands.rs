@@ -689,6 +689,7 @@ pub async fn start_chat(
     resume_json: Option<String>,
     keep_chat_bubbles: Option<i32>,
     interaction_mode: Option<String>,
+    project_root: Option<String>,
 ) -> Result<String, String> {
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
@@ -717,6 +718,10 @@ pub async fn start_chat(
         "plan" | "ask" | "multitask" => interaction_mode,
         _ => "agent".to_string(),
     };
+    let project_root = project_root
+        .unwrap_or_default()
+        .trim()
+        .to_string();
 
     // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
     {
@@ -811,6 +816,7 @@ pub async fn start_chat(
             context_window,
             max_output_tokens,
             &interaction_mode,
+            &project_root,
         )
         .await;
 
@@ -857,6 +863,54 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
         })
         .await
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultitaskWorktreeDto {
+    pub path: String,
+    pub repo_root: String,
+    pub branch: String,
+}
+
+/// MultiTask：若能解析到 git root 则创建隔离 worktree；否则返回 `None`（降级共工作区）。
+#[tauri::command]
+pub fn prepare_multitask_worktree(task_id: String) -> Result<Option<MultitaskWorktreeDto>, String> {
+    let Some(root) = delegate::resolve_project_root(None) else {
+        return Ok(None);
+    };
+    let Some(repo) = delegate::find_git_root(&root) else {
+        return Ok(None);
+    };
+    match delegate::create_task_worktree(&repo, &task_id) {
+        Ok(handle) => Ok(Some(MultitaskWorktreeDto {
+            path: handle.path().to_string_lossy().into_owned(),
+            repo_root: handle.repo_root.to_string_lossy().into_owned(),
+            branch: handle.branch.clone(),
+        })),
+        Err(e) => {
+            tracing::warn!(error = %e, "prepare_multitask_worktree failed; continuing without");
+            Ok(None)
+        }
+    }
+}
+
+/// 清理 MultiTask worktree；脏树按 clean_only 保留。
+#[tauri::command]
+pub fn cleanup_multitask_worktree(
+    path: String,
+    repo_root: String,
+    branch: String,
+) -> Result<(), String> {
+    let path = std::path::PathBuf::from(path.trim());
+    let repo = std::path::PathBuf::from(repo_root.trim());
+    let branch = branch.trim().to_string();
+    if path.as_os_str().is_empty() || repo.as_os_str().is_empty() || branch.is_empty() {
+        return Ok(());
+    }
+    // 泄漏 handle 字段到 cleanup API（不 drop 原 handle）
+    delegate::cleanup_task_worktree(&repo, &path, &branch, true);
     Ok(())
 }
 
@@ -934,6 +988,7 @@ async fn run_chat_stream(
     context_window: u32,
     max_output_tokens: u32,
     interaction_mode: &str,
+    project_root: &str,
 ) -> Result<(), String> {
     let endpoint = endpoint_url(grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
@@ -978,6 +1033,7 @@ async fn run_chat_stream(
             context_window,
             max_output_tokens,
             interaction_mode: interaction_mode.to_string(),
+            project_root: project_root.to_string(),
         })
         .await
         .map_err(|e| e.to_string())?

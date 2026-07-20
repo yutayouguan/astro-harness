@@ -130,6 +130,9 @@ export interface UseSendDeps {
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setDissolvingIds: Dispatch<SetStateAction<string[]>>;
   showTransientToast: ShowToastFn;
+  /** 主会话整轮未结束（含 HITL 停顿）；供队列软边界 */
+  turnInFlightRef: MutableRefObject<boolean>;
+  setTurnInFlight: Dispatch<SetStateAction<boolean>>;
   /** 本轮首次检测到模式切换请求时记录（流结束后再弹授权条） */
   onModeSwitchDetected?: (req: ModeSwitchRequest) => void;
   /** 流正常结束后，若本轮有模式切换请求则提示 UI */
@@ -208,9 +211,16 @@ export function useSend(deps: UseSendDeps) {
         setCurrentTurnId,
         setDissolvingIds,
         showTransientToast,
+        turnInFlightRef,
+        setTurnInFlight,
         onModeSwitchDetected,
         onModeSwitchPrompt,
       } = depsRef.current;
+
+      const markTurnEnded = () => {
+        turnInFlightRef.current = false;
+        setTurnInFlight(false);
+      };
 
       let pendingModeSwitch: ModeSwitchRequest | null = null;
       const text = (opts?.text ?? input).trim();
@@ -368,6 +378,8 @@ export function useSend(deps: UseSendDeps) {
         setAttachments([]);
       }
       setStreaming(true);
+      turnInFlightRef.current = true;
+      setTurnInFlight(true);
       setStreamPaused(false);
       setTokenUsage(null);
       setContextUsage(null);
@@ -765,6 +777,7 @@ export function useSend(deps: UseSendDeps) {
             generatingPreviewApi.onStreamEnd();
             setStreaming(false);
             setStreamPaused(false);
+            markTurnEnded();
             setStatus("ready");
             setStatusPhase("ready");
             setStatusDetail(null);
@@ -806,6 +819,7 @@ export function useSend(deps: UseSendDeps) {
             generatingPreviewApi.onStreamEnd();
             setStreaming(false);
             setStreamPaused(false);
+            markTurnEnded();
             setStatus("error");
             setStatusPhase("error");
             setStatusDetail(errMsg);
@@ -899,6 +913,7 @@ export function useSend(deps: UseSendDeps) {
         );
         setStreaming(false);
         setStreamPaused(false);
+        markTurnEnded();
         setStatus("error");
         setStatusPhase("error");
         setStatusDetail(null);

@@ -62,6 +62,7 @@ import {
 } from "../../lib/chat/chatMode";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
+import { countRunningParallel, countSettledByStatus } from "../../lib/chat/parallelTasks";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
 import {
@@ -192,6 +193,8 @@ type Props = {
   attachments: ChatAttachment[];
   /** 是否正在流式生成 */
   streaming: boolean;
+  /** 主会话整轮未结束（含 HITL）；用于软边界入队 */
+  turnInFlight?: boolean;
   /** 流是否已暂停 */
   streamPaused?: boolean;
   /** 禁止发送（压实中 / 只读会话等） */
@@ -222,6 +225,8 @@ type Props = {
   /** MultiTask 并行任务 */
   parallelTasks?: ParallelChatTask[];
   onCancelParallelTask?: (id: string) => void;
+  onWriteParallelSummary?: () => void;
+  onClearSettledParallel?: () => void;
   /** 会话级未决 interrupt（有则禁用普通发送） */
   pendingInterrupts?: PendingInterrupt[];
   /** A2UI 卡片动作（approve / deny / choose） */
@@ -525,6 +530,7 @@ export default function ChatView({
   input,
   attachments,
   streaming,
+  turnInFlight = false,
   streamPaused = false,
   sendBlocked = false,
   sendBlockedReason,
@@ -544,6 +550,8 @@ export default function ChatView({
   onDismissModeSwitch,
   parallelTasks = [],
   onCancelParallelTask,
+  onWriteParallelSummary,
+  onClearSettledParallel,
   pendingInterrupts = [],
   onUiAction,
   onPauseStream,
@@ -1285,12 +1293,13 @@ export default function ChatView({
 
   const interruptBlocked = pendingInterrupts.length > 0;
   const queueEnabled = chatMode !== "multitask";
-  const canQueueWhileStreaming = streaming && queueEnabled;
+  const canQueueWhileBusy =
+    queueEnabled && (streaming || turnInFlight || interruptBlocked);
   const canSend =
-    !interruptBlocked &&
     !sendBlocked &&
     (input.trim().length > 0 || attachments.length > 0) &&
-    (!streaming || canQueueWhileStreaming || chatMode === "multitask");
+    (!streaming || canQueueWhileBusy || chatMode === "multitask") &&
+    (queueEnabled || !interruptBlocked);
   const parallelRunningIds = useMemo(
     () =>
       new Set(
@@ -1372,21 +1381,22 @@ export default function ChatView({
     mirror.scrollLeft = ta.scrollLeft;
   };
 
-  const composerPlaceholder = streaming
-    ? chatMode === "multitask"
-      ? t("chat.placeholderMultitask")
-      : queueEnabled
-        ? t("chat.placeholderStreaming")
-        : t("chat.placeholderStreamingBusy")
-    : sendBlocked && sendBlockedReason
-      ? sendBlockedReason
-      : interruptBlocked
-        ? t("chat.interrupt.pending")
-        : emptyMode === "chat"
-          ? ""
-          : attachments.length
-            ? t("chat.placeholderWithAttach")
-            : t("chat.placeholder");
+  const composerPlaceholder =
+    streaming || (turnInFlight && queueEnabled)
+      ? chatMode === "multitask"
+        ? t("chat.placeholderMultitask")
+        : queueEnabled
+          ? t("chat.placeholderStreaming")
+          : t("chat.placeholderStreamingBusy")
+      : sendBlocked && sendBlockedReason
+        ? sendBlockedReason
+        : interruptBlocked && !queueEnabled
+          ? t("chat.interrupt.pending")
+          : emptyMode === "chat"
+            ? ""
+            : attachments.length
+              ? t("chat.placeholderWithAttach")
+              : t("chat.placeholder");
 
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
@@ -1917,6 +1927,11 @@ export default function ChatView({
                               : t("chat.task.status.cancelled")}
                       </span>
                       {task.prompt.trim() || t("chat.queue.emptyText")}
+                      {task.worktree?.path ? (
+                        <span className="composer-task-worktree" title={task.worktree.path}>
+                          {task.worktree.path.split(/[/\\]/).slice(-2).join("/")}
+                        </span>
+                      ) : null}
                     </span>
                     {task.status === "running" && (
                       <span className="composer-queue-actions">
@@ -1935,6 +1950,39 @@ export default function ChatView({
                 ))}
               </ul>
             )}
+            {countRunningParallel(parallelTasks) === 0 &&
+              parallelTasks.length > 0 && (
+                <div className="composer-task-summary">
+                  {(() => {
+                    const s = countSettledByStatus(parallelTasks);
+                    return (
+                      <span className="composer-task-summary-text">
+                        {t("chat.task.summaryCounts", {
+                          done: String(s.done),
+                          error: String(s.error),
+                          cancelled: String(s.cancelled),
+                        })}
+                      </span>
+                    );
+                  })()}
+                  <span className="composer-queue-actions">
+                    <button
+                      type="button"
+                      className="composer-queue-btn"
+                      onClick={() => onWriteParallelSummary?.()}
+                    >
+                      {t("chat.task.writeSummary")}
+                    </button>
+                    <button
+                      type="button"
+                      className="composer-queue-btn"
+                      onClick={() => onClearSettledParallel?.()}
+                    >
+                      {t("chat.task.clearSettled")}
+                    </button>
+                  </span>
+                </div>
+              )}
           </div>
         )}
 
@@ -2078,7 +2126,7 @@ export default function ChatView({
                     ? t("chat.welcomePlaceholder")
                     : composerPlaceholder || t("chat.placeholder")
               }
-              disabled={streaming || interruptBlocked}
+              disabled={streaming || (interruptBlocked && !queueEnabled)}
               autoFocus
             />
           </div>

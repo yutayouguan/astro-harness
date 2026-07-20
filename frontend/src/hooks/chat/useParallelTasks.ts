@@ -99,6 +99,18 @@ export function useParallelTasks(deps: Deps) {
   }, [flushToken]);
 
   const clearAllParallel = useCallback(() => {
+    setParallelTasks((prev) => {
+      for (const task of prev) {
+        if (task.worktree) {
+          void invoke("cleanup_multitask_worktree", {
+            path: task.worktree.path,
+            repoRoot: task.worktree.repoRoot,
+            branch: task.worktree.branch,
+          }).catch(() => {});
+        }
+      }
+      return [];
+    });
     for (const [taskId, entry] of unlistenMapRef.current) {
       entry.unlisten();
       void invoke("chat_control", {
@@ -111,7 +123,6 @@ export function useParallelTasks(deps: Deps) {
     for (const raf of rafMapRef.current.values()) cancelAnimationFrame(raf);
     rafMapRef.current.clear();
     streamBufRef.current.clear();
-    setParallelTasks([]);
   }, []);
 
   // 卸载时清理
@@ -141,6 +152,13 @@ export function useParallelTasks(deps: Deps) {
             : t,
         ),
       );
+      if (task.worktree) {
+        void invoke("cleanup_multitask_worktree", {
+          path: task.worktree.path,
+          repoRoot: task.worktree.repoRoot,
+          branch: task.worktree.branch,
+        }).catch(() => {});
+      }
       depsRef.current.setMessages((prev) =>
         prev.map((m) => {
           if (m.id !== task.assistantMessageId) return m;
@@ -199,6 +217,24 @@ export function useParallelTasks(deps: Deps) {
     const assistantId = `a-${taskId}`;
     const createdAt = Date.now();
 
+    let worktree: ParallelChatTask["worktree"];
+    try {
+      const prepared = await invoke<{
+        path: string;
+        repoRoot: string;
+        branch: string;
+      } | null>("prepare_multitask_worktree", { taskId });
+      if (prepared?.path) {
+        worktree = {
+          path: prepared.path,
+          repoRoot: prepared.repoRoot,
+          branch: prepared.branch,
+        };
+      }
+    } catch (e) {
+      console.warn("prepare_multitask_worktree failed", e);
+    }
+
     const task: ParallelChatTask = {
       id: taskId,
       sessionId,
@@ -207,6 +243,7 @@ export function useParallelTasks(deps: Deps) {
       assistantMessageId: assistantId,
       status: "running",
       createdAt,
+      worktree,
     };
 
     setParallelTasks((prev) => [task, ...prev]);
@@ -372,6 +409,7 @@ export function useParallelTasks(deps: Deps) {
         thinkingEnabled: modelApi.thinkingEnabled,
         reasoningEffort: modelApi.reasoningEffort,
         interactionMode: "multitask",
+        projectRoot: worktree?.path,
         attachments: pending.map((a) => ({
           name: a.name,
           mime: a.mime,
@@ -385,6 +423,13 @@ export function useParallelTasks(deps: Deps) {
     } catch (err) {
       const errMsg = String(err);
       finish("error", errMsg);
+      if (worktree) {
+        void invoke("cleanup_multitask_worktree", {
+          path: worktree.path,
+          repoRoot: worktree.repoRoot,
+          branch: worktree.branch,
+        }).catch(() => {});
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -397,6 +442,22 @@ export function useParallelTasks(deps: Deps) {
     }
   }, [cleanupTaskStream, enqueueToken, flushToken]);
 
+  const clearSettledParallel = useCallback(() => {
+    setParallelTasks((prev) => {
+      for (const task of prev) {
+        if (task.status === "running") continue;
+        if (task.worktree) {
+          void invoke("cleanup_multitask_worktree", {
+            path: task.worktree.path,
+            repoRoot: task.worktree.repoRoot,
+            branch: task.worktree.branch,
+          }).catch(() => {});
+        }
+      }
+      return prev.filter((t) => t.status === "running");
+    });
+  }, []);
+
   const parallelRunning = countRunningParallel(parallelTasks);
 
   return {
@@ -405,6 +466,7 @@ export function useParallelTasks(deps: Deps) {
     startParallelTask,
     cancelParallelTask,
     clearAllParallel,
+    clearSettledParallel,
     setParallelTasks,
   };
 }

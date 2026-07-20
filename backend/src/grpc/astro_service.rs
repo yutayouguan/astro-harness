@@ -770,6 +770,10 @@ impl AstroService for AstroServiceImpl {
                 agent.set_context_window(req.context_window);
             }
             agent.set_interaction_mode(tools::InteractionMode::parse(&req.interaction_mode));
+            let project_root = req.project_root.trim();
+            if !project_root.is_empty() {
+                agent.set_project_root(Some(std::path::PathBuf::from(project_root)));
+            }
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }

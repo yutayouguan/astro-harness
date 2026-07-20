@@ -1,8 +1,8 @@
 # 聊天交互模式与调度设计
 
 > 日期：2026-07-20  
-> 状态：设计定稿；Step 1 / Step 2 / Step 3 已落地；Step 4 待做  
-> 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、编排 / delegate / worktree
+> 状态：设计定稿；Step 1–4 已落地  
+> 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、[`parallelTasks.ts`](../../../frontend/src/lib/chat/parallelTasks.ts)、编排 / delegate / worktree
 
 ## 1. 问题
 
@@ -43,9 +43,9 @@
 - 当前 turn 流式中，用户再发送 → **入队**（不清空历史，不清空当前流）；
 - UI：`N Queued` 列表，支持编辑 / 上移 / 删除；
 - 出队时机（巡检点）：
-  1. **硬边界**：当前 turn 结束（`done` / 失败收束）；
-  2. **软边界**：HITL、工具审批等天然停顿（后续可扩展）；
-  3. **巡检点**（可选）：长任务周期性 checkpoint（后续）。
+  1. **硬边界**：当前 turn 结束（`done` / 失败收束）；`turnInFlight` 置 false 后自动 drain；
+  2. **软边界**：HITL / 审批停顿期间仍可入队（不新开 `start_chat`）；interrupt 解除后若回合未 Done 仍不出队；
+  3. **巡检点**（未做）：长任务周期性 checkpoint。
 
 ### 3.2 模式切换授权（Step 3）
 
@@ -77,7 +77,7 @@
 1. **Step 1（已完成）**：Agent / Plan / Ask 的 follow-up 队列 + Queued UI；流结束后自动 dequeue 发送；
 2. **Step 2（已完成）**：MultiTask 每消息 spawn 独立 session + 并行监听 + Task 面板（MVP 暂不强制 worktree）；
 3. **Step 3（已完成）**：Plan/Ask 工具 gate + `request_mode_switch` 授权条（倒计时 / 立即 / 取消）；
-4. **Step 4**：队列软边界巡检、task 汇总与 worktree 隔离增强。
+4. **Step 4（已完成）**：队列软边界（`turnInFlight`）+ MultiTask 本地汇总 + git worktree 隔离。
 
 ## 6. Step 1 验收
 
@@ -101,9 +101,16 @@
 - Plan→Agent 注入 summary；同轮只弹一次；
 - MultiTask 仍传 `interaction_mode=multitask`（不做只读门禁）。
 
-## 7. 非目标（Step 3 仍不含）
+## 6d. Step 4 验收
+
+- HITL 等待中可入队；解除后续跑未 Done 前不出队；Done 后自动出队；
+- MultiTask 全部结束后显示汇总计数；「写入对话」插入本地 Markdown 汇总；「清除已结束」保留 running；
+- MultiTask 在 git 仓内各 task 独立 `.worktrees/…` 作为 `project_root`；非 git 降级不报错；
+- 不做周期性 checkpoint；不改 Agent 模式会话级 worktree。
+
+## 7. 非目标（Step 4 仍不含）
 
 - 同 `session_id` 多 turn 并发；
-- MultiTask 强制 worktree / delegate_async 作为主路径；
-- 取消后自动把拒绝理由写回模型续跑（当前仅 UI 取消）；
+- 长任务周期性 checkpoint 出队；
+- 取消模式切换后把拒绝理由写回模型续跑；
 - 不改全局专家切换语义。

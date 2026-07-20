@@ -1214,6 +1214,32 @@ html[data-theme="dark"] .composer-queue-edit {
   background: transparent;
 }
 
+.composer-task-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+}
+
+.composer-task-summary-text {
+  font-size: 11px;
+  color: var(--ink-mute);
+  min-width: 0;
+}
+
+.composer-task-worktree {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--ink-mute);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes composer-task-pulse {
   0%,
   100% {
