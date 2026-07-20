@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   EMPTY_MODEL_CAPABILITIES,
+  formatKnowledgeCutoff,
+  formatModelPrice,
   inferModelCapabilities,
   listActiveModelCaps,
 } from "./modelCaps.ts";
@@ -17,14 +19,32 @@ test("listActiveModelCaps keeps fixed order", () => {
       tools: true,
       reasoning: true,
       vision: false,
+      file: true,
+      audio_in: false,
       web: true,
       image_gen: true,
       video_gen: false,
       audio_gen: true,
       music_gen: true,
     }),
-    ["tools", "reasoning", "web", "image_gen", "audio_gen", "music_gen"],
+    ["tools", "reasoning", "file", "web", "image_gen", "audio_gen", "music_gen"],
   );
+});
+
+test("formatModelPrice formats per-million USD", () => {
+  assert.equal(
+    formatModelPrice({
+      prompt_per_million: 0.14,
+      completion_per_million: 0.28,
+    }),
+    "$0.14/$0.28",
+  );
+  assert.equal(formatModelPrice(null), null);
+});
+
+test("formatKnowledgeCutoff prefers YYYY-MM", () => {
+  assert.equal(formatKnowledgeCutoff("2024-10-01"), "2024-10");
+  assert.equal(formatKnowledgeCutoff(null), null);
 });
 
 test("inferModelCapabilities marks deepseek-v4 as reasoning", () => {

@@ -101,6 +101,8 @@ function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {
             web: false,
             reasoning: false,
             tools: true,
+            file: false,
+            audio_in: false,
             image_gen: false,
             video_gen: false,
             audio_gen: false,

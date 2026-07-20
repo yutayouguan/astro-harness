@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 模型能力位（视觉 / 联网 / 推理 / 工具 / 生图 / 生视频 / 生音频 / 生音乐）。
+/// 模型能力位（视觉 / 联网 / 推理 / 工具 / 文件·音频输入 / 生图·视频·音频·音乐）。
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct ModelCapabilities {
     #[serde(default)]
@@ -15,6 +15,12 @@ pub struct ModelCapabilities {
     pub reasoning: bool,
     #[serde(default)]
     pub tools: bool,
+    /// 接受 file 输入（PDF 等）
+    #[serde(default)]
+    pub file: bool,
+    /// 接受 audio 输入
+    #[serde(default)]
+    pub audio_in: bool,
     #[serde(default)]
     pub image_gen: bool,
     #[serde(default)]
@@ -52,12 +58,50 @@ impl ModelReasoningMeta {
     }
 }
 
+/// OpenRouter 单价（USD / 百万 tokens），便于列表展示与估费。
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ModelPricingMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_per_million: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_per_million: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_per_million: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_per_million: Option<f64>,
+}
+
+/// OpenRouter `default_parameters`（采样默认值）。
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ModelDefaultParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frequency_penalty: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presence_penalty: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repetition_penalty: Option<f64>,
+}
+
 /// 前端展示用的模型元信息。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelInfo {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_slug: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knowledge_cutoff: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expiration_date: Option<String>,
     /// 输入上下文窗口（token）；未知为 null
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
@@ -68,6 +112,10 @@ pub struct ModelInfo {
     /// OpenRouter 推理档位 / 默认开关（无推理模型为 null）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<ModelReasoningMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pricing: Option<ModelPricingMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_parameters: Option<ModelDefaultParams>,
     /// 元数据来源：api / openrouter / known（可组合）
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub meta_source: String,
@@ -108,10 +156,16 @@ pub fn enrich_from_id(id: &str, kind: &str, hints: Option<ApiModelHints>) -> Mod
     let mut info = ModelInfo {
         id: id.to_string(),
         display_name: None,
+        description: None,
+        canonical_slug: None,
+        knowledge_cutoff: None,
+        expiration_date: None,
         context_window: None,
         max_output_tokens: None,
         capabilities: ModelCapabilities::default(),
         reasoning: None,
+        pricing: None,
+        default_parameters: None,
         meta_source: String::new(),
     };
     enrich_model_info(&mut info, kind, hints);
@@ -141,11 +195,19 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         None
     };
     let retained_display = info.display_name.clone();
+    let retained_description = info.description.clone();
+    let retained_canonical = info.canonical_slug.clone();
 
     info.context_window = retained_api_ctx;
     info.max_output_tokens = retained_api_out;
     info.capabilities = ModelCapabilities::default();
     info.reasoning = None;
+    info.pricing = None;
+    info.default_parameters = None;
+    info.knowledge_cutoff = None;
+    info.expiration_date = None;
+    info.description = retained_description;
+    info.canonical_slug = retained_canonical;
     info.display_name = retained_display;
     info.meta_source.clear();
 
@@ -192,6 +254,16 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         if info.display_name.is_none() {
             info.display_name = entry.display_name.clone();
         }
+        if info.description.is_none() {
+            info.description = entry.description.clone();
+        }
+        if info.canonical_slug.is_none() {
+            info.canonical_slug = entry.canonical_slug.clone();
+        }
+        info.knowledge_cutoff = entry.knowledge_cutoff.clone();
+        info.expiration_date = entry.expiration_date.clone();
+        info.pricing = entry.pricing.clone();
+        info.default_parameters = entry.default_parameters.clone();
         if let Some(n) = entry.max_input_tokens {
             if !context_locked_by_api {
                 info.context_window = Some(n);
@@ -216,6 +288,8 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             info.capabilities.web = false;
             info.capabilities.reasoning = false;
             info.capabilities.tools = false;
+            info.capabilities.file = entry.supports_file_input;
+            info.capabilities.audio_in = entry.supports_audio_input;
             info.capabilities.image_gen |= entry.supports_image_generation;
             info.capabilities.video_gen |= entry.supports_video_generation;
             info.capabilities.music_gen |= entry.supports_music_generation;
@@ -228,6 +302,8 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             info.capabilities.web |= entry.supports_web_search;
             info.capabilities.reasoning |= entry.supports_reasoning;
             info.capabilities.tools |= entry.supports_function_calling;
+            info.capabilities.file |= entry.supports_file_input;
+            info.capabilities.audio_in |= entry.supports_audio_input;
             info.capabilities.image_gen |= entry.supports_image_generation;
             info.capabilities.video_gen |= entry.supports_video_generation;
             info.capabilities.music_gen |= entry.supports_music_generation;
@@ -321,11 +397,20 @@ mod tests {
               "data": [{
                 "id": "deepseek/deepseek-chat",
                 "name": "DeepSeek Chat",
+                "description": "A chat model",
+                "canonical_slug": "deepseek/deepseek-chat",
+                "knowledge_cutoff": "2024-07-01",
                 "context_length": 131072,
                 "architecture": {
-                  "input_modalities": ["text"],
+                  "input_modalities": ["text", "file"],
                   "output_modalities": ["text"]
                 },
+                "pricing": {
+                  "prompt": "0.0000002",
+                  "completion": "0.0000008",
+                  "input_cache_read": "0.00000004"
+                },
+                "default_parameters": { "temperature": 1.0, "top_p": 1.0 },
                 "supported_parameters": ["tools", "tool_choice"],
                 "top_provider": { "max_completion_tokens": 8192 },
                 "reasoning": null
@@ -336,7 +421,14 @@ mod tests {
                 assert_eq!(info.context_window, Some(131072));
                 assert_eq!(info.max_output_tokens, Some(8192));
                 assert!(info.capabilities.tools);
+                assert!(info.capabilities.file);
                 assert!(!info.capabilities.reasoning);
+                assert_eq!(info.description.as_deref(), Some("A chat model"));
+                assert_eq!(info.canonical_slug.as_deref(), Some("deepseek/deepseek-chat"));
+                assert_eq!(info.knowledge_cutoff.as_deref(), Some("2024-07-01"));
+                let p = info.pricing.expect("pricing");
+                assert!((p.prompt_per_million.unwrap() - 0.2).abs() < 1e-9);
+                assert!((p.completion_per_million.unwrap() - 0.8).abs() < 1e-9);
                 assert_eq!(info.meta_source, "openrouter");
             },
         );
@@ -362,6 +454,10 @@ mod tests {
                 let mut stale = ModelInfo {
                     id: "deepseek-v4-flash".into(),
                     display_name: None,
+                    description: None,
+                    canonical_slug: None,
+                    knowledge_cutoff: None,
+                    expiration_date: None,
                     context_window: Some(128_000),
                     max_output_tokens: None,
                     capabilities: ModelCapabilities {
@@ -369,6 +465,8 @@ mod tests {
                         ..Default::default()
                     },
                     reasoning: None,
+                    pricing: None,
+                    default_parameters: None,
                     meta_source: "heuristic+table".into(),
                 };
                 enrich_model_info(&mut stale, "deepseek", None);

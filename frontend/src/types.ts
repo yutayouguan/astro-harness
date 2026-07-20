@@ -546,21 +546,49 @@ export type ModelCapabilities = {
   web: boolean;
   reasoning: boolean;
   tools: boolean;
+  /** 接受 file 输入 */
+  file: boolean;
+  /** 接受 audio 输入 */
+  audio_in: boolean;
   image_gen: boolean;
   video_gen: boolean;
   audio_gen: boolean;
   music_gen: boolean;
 };
 
+/** OpenRouter 单价（USD / 百万 tokens） */
+export type ModelPricingMeta = {
+  prompt_per_million?: number | null;
+  completion_per_million?: number | null;
+  cache_read_per_million?: number | null;
+  cache_write_per_million?: number | null;
+};
+
+/** OpenRouter default_parameters */
+export type ModelDefaultParams = {
+  temperature?: number | null;
+  top_p?: number | null;
+  top_k?: number | null;
+  frequency_penalty?: number | null;
+  presence_penalty?: number | null;
+  repetition_penalty?: number | null;
+};
+
 /** 模型元信息（列表 / 选择器） */
 export type ModelInfo = {
   id: string;
   display_name?: string | null;
+  description?: string | null;
+  canonical_slug?: string | null;
+  knowledge_cutoff?: string | null;
+  expiration_date?: string | null;
   context_window?: number | null;
   max_output_tokens?: number | null;
   capabilities: ModelCapabilities;
   /** OpenRouter 推理档位 / 默认开关 */
   reasoning?: ModelReasoningMeta | null;
+  pricing?: ModelPricingMeta | null;
+  default_parameters?: ModelDefaultParams | null;
   meta_source?: string;
 };
 

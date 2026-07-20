@@ -1,11 +1,13 @@
 /** 模型能力展示辅助。 */
-import type { ModelCapabilities } from "../../types";
+import type { ModelCapabilities, ModelPricingMeta } from "../../types";
 
 /** 能力位展示顺序（与 ModelPicker 图标一致）。 */
 export type ModelCapKey =
   | "tools"
   | "reasoning"
   | "vision"
+  | "file"
+  | "audio_in"
   | "web"
   | "image_gen"
   | "video_gen"
@@ -16,6 +18,8 @@ export const MODEL_CAP_ORDER: ModelCapKey[] = [
   "tools",
   "reasoning",
   "vision",
+  "file",
+  "audio_in",
   "web",
   "image_gen",
   "video_gen",
@@ -28,6 +32,8 @@ export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
   web: false,
   reasoning: false,
   tools: false,
+  file: false,
+  audio_in: false,
   image_gen: false,
   video_gen: false,
   audio_gen: false,
@@ -56,6 +62,39 @@ export function formatContextWindow(
     return `${Number.isInteger(k) ? k : k.toFixed(1)}K`;
   }
   return String(Math.round(tokens));
+}
+
+/** 格式化 OpenRouter 单价为 `$in/$out`（每百万 token）。 */
+export function formatModelPrice(
+  pricing?: ModelPricingMeta | null,
+): string | null {
+  const inp = pricing?.prompt_per_million;
+  const out = pricing?.completion_per_million;
+  if (
+    (inp == null || !Number.isFinite(inp)) &&
+    (out == null || !Number.isFinite(out))
+  ) {
+    return null;
+  }
+  const fmt = (n: number) => {
+    if (n >= 10) return n.toFixed(2);
+    if (n >= 1) return Number(n.toFixed(2)).toString();
+    if (n >= 0.01) return Number(n.toFixed(3)).toString();
+    return Number(n.toFixed(4)).toString();
+  };
+  const a = inp != null && Number.isFinite(inp) ? fmt(inp) : "—";
+  const b = out != null && Number.isFinite(out) ? fmt(out) : "—";
+  return `$${a}/$${b}`;
+}
+
+/** 知识截止日期短标签（取 YYYY-MM 或原串）。 */
+export function formatKnowledgeCutoff(
+  cutoff?: string | null,
+): string | null {
+  const s = cutoff?.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4}-\d{2})/);
+  return m?.[1] ?? s;
 }
 
 /** 根据模型 ID / 提供商启发式推断能力标签（API 通常不返回细粒度能力）。 */
@@ -96,6 +135,8 @@ export function inferModelCapabilities(
     web,
     reasoning,
     tools,
+    file: false,
+    audio_in: false,
     image_gen: false,
     video_gen: false,
     audio_gen: false,

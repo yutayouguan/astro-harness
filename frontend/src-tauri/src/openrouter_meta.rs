@@ -22,6 +22,8 @@ pub struct OpenRouterEntry {
     pub max_input_tokens: Option<u64>,
     pub max_output_tokens: Option<u64>,
     pub supports_vision: bool,
+    pub supports_file_input: bool,
+    pub supports_audio_input: bool,
     pub supports_function_calling: bool,
     pub supports_reasoning: bool,
     pub supports_web_search: bool,
@@ -30,6 +32,12 @@ pub struct OpenRouterEntry {
     pub supports_audio_output: bool,
     pub supports_music_generation: bool,
     pub display_name: Option<String>,
+    pub description: Option<String>,
+    pub canonical_slug: Option<String>,
+    pub knowledge_cutoff: Option<String>,
+    pub expiration_date: Option<String>,
+    pub pricing: Option<crate::model_meta::ModelPricingMeta>,
+    pub default_parameters: Option<crate::model_meta::ModelDefaultParams>,
     pub reasoning: crate::model_meta::ModelReasoningMeta,
     /// 命中的 OpenRouter 模型 id（调试 / 单测用）
     #[allow(dead_code)]
@@ -48,16 +56,74 @@ struct RawModel {
     #[serde(default)]
     name: Option<String>,
     #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    canonical_slug: Option<String>,
+    #[serde(default)]
+    knowledge_cutoff: Option<String>,
+    #[serde(default)]
+    expiration_date: Option<String>,
+    #[serde(default)]
     context_length: Option<u64>,
     #[serde(default)]
     architecture: Option<RawArchitecture>,
     #[serde(default)]
     top_provider: Option<RawTopProvider>,
     #[serde(default)]
+    pricing: Option<RawPricing>,
+    #[serde(default)]
+    default_parameters: Option<RawDefaultParams>,
+    #[serde(default)]
     supported_parameters: Vec<String>,
     /// 非空对象即表示支持推理（含 mandatory / effort 等）
     #[serde(default)]
     reasoning: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RawPricing {
+    #[serde(default)]
+    prompt: Option<serde_json::Value>,
+    #[serde(default)]
+    completion: Option<serde_json::Value>,
+    #[serde(default)]
+    input_cache_read: Option<serde_json::Value>,
+    #[serde(default)]
+    cache_read: Option<serde_json::Value>,
+    #[serde(default)]
+    input_cache_write: Option<serde_json::Value>,
+    #[serde(default)]
+    cache_write: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RawDefaultParams {
+    #[serde(default)]
+    temperature: Option<f64>,
+    #[serde(default)]
+    top_p: Option<f64>,
+    #[serde(default)]
+    top_k: Option<u64>,
+    #[serde(default)]
+    frequency_penalty: Option<f64>,
+    #[serde(default)]
+    presence_penalty: Option<f64>,
+    #[serde(default)]
+    repetition_penalty: Option<f64>,
+}
+
+fn parse_price_per_token(v: &Option<serde_json::Value>) -> Option<f64> {
+    let v = v.as_ref()?;
+    match v {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.parse().ok(),
+        _ => None,
+    }
+    .filter(|n| n.is_finite() && *n >= 0.0)
+}
+
+fn per_token_to_per_million(per_token: Option<f64>) -> Option<f64> {
+    per_token.map(|n| n * 1_000_000.0)
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -132,10 +198,65 @@ impl RawModel {
         let top = self.top_provider.unwrap_or_default();
         let max_input = self.context_length.or(top.context_length);
 
+        let pricing = self.pricing.as_ref().and_then(|p| {
+            let prompt = per_token_to_per_million(parse_price_per_token(&p.prompt));
+            let completion = per_token_to_per_million(parse_price_per_token(&p.completion));
+            let cache_read = per_token_to_per_million(
+                parse_price_per_token(&p.input_cache_read)
+                    .or_else(|| parse_price_per_token(&p.cache_read)),
+            );
+            let cache_write = per_token_to_per_million(
+                parse_price_per_token(&p.input_cache_write)
+                    .or_else(|| parse_price_per_token(&p.cache_write)),
+            );
+            if prompt.is_none()
+                && completion.is_none()
+                && cache_read.is_none()
+                && cache_write.is_none()
+            {
+                return None;
+            }
+            Some(crate::model_meta::ModelPricingMeta {
+                prompt_per_million: prompt,
+                completion_per_million: completion,
+                cache_read_per_million: cache_read,
+                cache_write_per_million: cache_write,
+            })
+        });
+
+        let default_parameters = self.default_parameters.as_ref().and_then(|d| {
+            let meta = crate::model_meta::ModelDefaultParams {
+                temperature: d.temperature,
+                top_p: d.top_p,
+                top_k: d.top_k,
+                frequency_penalty: d.frequency_penalty,
+                presence_penalty: d.presence_penalty,
+                repetition_penalty: d.repetition_penalty,
+            };
+            if meta.temperature.is_none()
+                && meta.top_p.is_none()
+                && meta.top_k.is_none()
+                && meta.frequency_penalty.is_none()
+                && meta.presence_penalty.is_none()
+                && meta.repetition_penalty.is_none()
+            {
+                None
+            } else {
+                Some(meta)
+            }
+        });
+
+        let nonempty = |s: Option<String>| {
+            s.map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        };
+
         OpenRouterEntry {
             max_input_tokens: max_input,
             max_output_tokens: top.max_completion_tokens,
             supports_vision: has_mod(&inns, "image") || has_mod(&inns, "video"),
+            supports_file_input: has_mod(&inns, "file"),
+            supports_audio_input: has_mod(&inns, "audio"),
             supports_function_calling: has_param("tools") || has_param("tool_choice"),
             supports_reasoning,
             supports_web_search: has_param("web_search_options"),
@@ -143,7 +264,13 @@ impl RawModel {
             supports_video_generation: video_out,
             supports_audio_output: audio_out && !supports_music,
             supports_music_generation: supports_music,
-            display_name: self.name,
+            display_name: nonempty(self.name),
+            description: nonempty(self.description),
+            canonical_slug: nonempty(self.canonical_slug),
+            knowledge_cutoff: nonempty(self.knowledge_cutoff),
+            expiration_date: nonempty(self.expiration_date),
+            pricing,
+            default_parameters,
             reasoning: reasoning_meta.unwrap_or_default(),
             matched_key: self.id,
         }
@@ -237,11 +364,12 @@ fn load_disk_into_memory() -> bool {
         mark_ready();
         return false;
     };
-    let map = parse_map(value);
+    let map = parse_map(value.clone());
     if map.is_empty() {
         mark_ready();
         return false;
     }
+    sync_usage_pricing_cache(&value);
     if let Ok(mut guard) = map_lock().write() {
         *guard = map;
         mark_ready();
@@ -319,6 +447,7 @@ async fn fetch_and_store() -> Result<usize, String> {
     std::fs::write(&tmp, serde_json::to_vec(&value).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+    sync_usage_pricing_cache(&value);
     let n = map.len();
     if let Ok(mut guard) = map_lock().write() {
         *guard = map;
@@ -326,6 +455,72 @@ async fn fetch_and_store() -> Result<usize, String> {
     mark_ready();
     tracing::info!(count = n, path = %path.display(), "OpenRouter 模型表已更新");
     Ok(n)
+}
+
+/// 同步写入 usage 估费用的 `openrouter-model-pricing.json`（per-token 单价）。
+fn sync_usage_pricing_cache(value: &serde_json::Value) {
+    let Some(data) = value.get("data").and_then(|v| v.as_array()) else {
+        return;
+    };
+    let mut models = serde_json::Map::new();
+    for item in data {
+        let Some(id) = item.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(pricing) = item.get("pricing") else {
+            continue;
+        };
+        let Some(prompt) = pricing.get("prompt").and_then(json_price) else {
+            continue;
+        };
+        let Some(completion) = pricing.get("completion").and_then(json_price) else {
+            continue;
+        };
+        let cache_read = pricing
+            .get("input_cache_read")
+            .and_then(json_price)
+            .or_else(|| pricing.get("cache_read").and_then(json_price));
+        let cache_write = pricing
+            .get("input_cache_write")
+            .and_then(json_price)
+            .or_else(|| pricing.get("cache_write").and_then(json_price));
+        let mut obj = serde_json::Map::new();
+        obj.insert("prompt".into(), serde_json::json!(prompt));
+        obj.insert("completion".into(), serde_json::json!(completion));
+        if let Some(v) = cache_read {
+            obj.insert("cache_read".into(), serde_json::json!(v));
+        }
+        if let Some(v) = cache_write {
+            obj.insert("cache_write".into(), serde_json::json!(v));
+        }
+        if let Some(v) = pricing.get("request").and_then(json_price) {
+            obj.insert("request".into(), serde_json::json!(v));
+        }
+        models.insert(id.to_string(), serde_json::Value::Object(obj));
+    }
+    if models.is_empty() {
+        return;
+    }
+    let fetched_at = chrono::Utc::now().to_rfc3339();
+    let cache = serde_json::json!({
+        "fetched_at": fetched_at,
+        "models": models,
+    });
+    let path = home::default_memory_dir().join("openrouter-model-pricing.json");
+    let tmp = path.with_extension("json.tmp");
+    if let Ok(bytes) = serde_json::to_vec_pretty(&cache) {
+        let _ = std::fs::write(&tmp, bytes);
+        let _ = std::fs::rename(&tmp, &path);
+    }
+}
+
+fn json_price(v: &serde_json::Value) -> Option<f64> {
+    match v {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.parse().ok(),
+        _ => None,
+    }
+    .filter(|n| n.is_finite() && *n >= 0.0)
 }
 
 /// 各供应商在 OpenRouter 上的常见 author 前缀。

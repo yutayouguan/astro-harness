@@ -14,6 +14,7 @@ import {
   Dna,
   Eye,
   EyeOff,
+  FileText,
   Globe,
   GripVertical,
   Image,
@@ -23,6 +24,8 @@ import {
   Link2,
   LoaderCircle,
   MessageCircle,
+  Mic,
+  Music,
   Plus,
   Power,
   RefreshCw,
@@ -32,6 +35,7 @@ import {
   Stethoscope,
   Tag,
   Trash2,
+  Video,
   Waypoints,
   Wrench,
   Zap,
@@ -47,7 +51,7 @@ import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
 import AuxiliaryModelsPanel from "./AuxiliaryModelsPanel";
 import EvolutionModelsPanel from "./EvolutionModelsPanel";
-import { formatContextWindow } from "../../lib/model/modelCaps";
+import { formatContextWindow, formatKnowledgeCutoff, formatModelPrice } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
   evaluateMediaModelsResult,
@@ -234,21 +238,6 @@ function maskApiKey(key: string): string {
   const tail = trimmed.slice(-4);
   const mid = "•".repeat(Math.min(16, Math.max(4, trimmed.length - 8)));
   return `${head}${mid}${tail}`;
-}
-
-/** 联网能力 */
-function IconGlobe(props: SVGProps<SVGSVGElement>) {
-  return <Globe size={14} strokeWidth={2} aria-hidden {...props} />;
-}
-
-/** 推理能力 */
-function IconBulb(props: SVGProps<SVGSVGElement>) {
-  return <Lightbulb size={14} strokeWidth={2} aria-hidden {...props} />;
-}
-
-/** 工具调用能力 */
-function IconWrench(props: SVGProps<SVGSVGElement>) {
-  return <Wrench size={14} strokeWidth={2} aria-hidden {...props} />;
 }
 
 /** 刷新模型列表 */
@@ -1118,6 +1107,8 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 web: false,
                 reasoning: false,
                 tools: true,
+                file: false,
+                audio_in: false,
                 image_gen: false,
                 video_gen: false,
                 audio_gen: false,
@@ -2048,10 +2039,30 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                       const latency = modelLatencies[m.id];
                       const caps = m.capabilities;
                       const ctxLabel = formatContextWindow(m.context_window);
+                      const priceLabel = formatModelPrice(m.pricing);
+                      const cutoffLabel = formatKnowledgeCutoff(m.knowledge_cutoff);
+                      const expired = Boolean(m.expiration_date?.trim());
+                      const rowTitle = [
+                        m.display_name || m.id,
+                        m.description?.trim() || null,
+                        m.canonical_slug ? `slug: ${m.canonical_slug}` : null,
+                        cutoffLabel
+                          ? `${t("providers.knowledgeCutoff")}: ${cutoffLabel}`
+                          : null,
+                        m.expiration_date
+                          ? `${t("providers.expiration")}: ${m.expiration_date}`
+                          : null,
+                        priceLabel
+                          ? `${t("providers.pricePerM")}: ${priceLabel}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join("\n");
                       return (
                         <li
                           key={m.id}
-                          className={`providers-model-row ${isCurrent ? "is-current" : ""}`}
+                          className={`providers-model-row ${isCurrent ? "is-current" : ""} ${expired ? "is-expiring" : ""}`}
+                          title={rowTitle}
                         >
                           <label className="providers-model-pick">
                             <input
@@ -2067,12 +2078,36 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                             <span className="providers-model-id" title={m.display_name ?? m.id}>
                               {m.id}
                             </span>
+                            {expired && (
+                              <span
+                                className="providers-model-badge is-expiring"
+                                title={`${t("providers.expiration")}: ${m.expiration_date}`}
+                              >
+                                {t("providers.expiring")}
+                              </span>
+                            )}
+                            {cutoffLabel && (
+                              <span
+                                className="providers-model-cutoff"
+                                title={`${t("providers.knowledgeCutoff")}: ${m.knowledge_cutoff}`}
+                              >
+                                {cutoffLabel}
+                              </span>
+                            )}
                             {ctxLabel && (
                               <span
                                 className="providers-model-ctx"
                                 title={t("providers.contextWindow")}
                               >
                                 {ctxLabel}
+                              </span>
+                            )}
+                            {priceLabel && (
+                              <span
+                                className="providers-model-price"
+                                title={t("providers.pricePerM")}
+                              >
+                                {priceLabel}
                               </span>
                             )}
                             {latency && (
@@ -2088,22 +2123,52 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                           <span className="providers-model-caps" aria-label="capabilities">
                             {caps.vision && (
                               <span className="providers-cap vision" title={t("providers.cap.vision")}>
-                                <IconEye />
+                                <Eye size={14} strokeWidth={2} aria-hidden />
+                              </span>
+                            )}
+                            {caps.file && (
+                              <span className="providers-cap file" title={t("providers.cap.file")}>
+                                <FileText size={14} strokeWidth={2} aria-hidden />
+                              </span>
+                            )}
+                            {caps.audio_in && (
+                              <span className="providers-cap audio-in" title={t("providers.cap.audioIn")}>
+                                <Mic size={14} strokeWidth={2} aria-hidden />
                               </span>
                             )}
                             {caps.web && (
                               <span className="providers-cap web" title={t("providers.cap.web")}>
-                                <IconGlobe />
+                                <Globe size={14} strokeWidth={2} aria-hidden />
                               </span>
                             )}
                             {caps.reasoning && (
                               <span className="providers-cap reasoning" title={t("providers.cap.reasoning")}>
-                                <IconBulb />
+                                <Lightbulb size={14} strokeWidth={2} aria-hidden />
                               </span>
                             )}
                             {caps.tools && (
                               <span className="providers-cap tools" title={t("providers.cap.tools")}>
-                                <IconWrench />
+                                <Wrench size={14} strokeWidth={2} aria-hidden />
+                              </span>
+                            )}
+                            {caps.image_gen && (
+                              <span className="providers-cap image-gen" title={t("providers.cap.imageGen")}>
+                                <Image size={14} strokeWidth={2} aria-hidden />
+                              </span>
+                            )}
+                            {caps.video_gen && (
+                              <span className="providers-cap video-gen" title={t("providers.cap.videoGen")}>
+                                <Video size={14} strokeWidth={2} aria-hidden />
+                              </span>
+                            )}
+                            {caps.audio_gen && (
+                              <span className="providers-cap audio-gen" title={t("providers.cap.audioGen")}>
+                                <Mic size={14} strokeWidth={2} aria-hidden />
+                              </span>
+                            )}
+                            {caps.music_gen && (
+                              <span className="providers-cap music-gen" title={t("providers.cap.musicGen")}>
+                                <Music size={14} strokeWidth={2} aria-hidden />
                               </span>
                             )}
                           </span>

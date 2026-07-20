@@ -1371,6 +1371,30 @@ html[data-theme="dark"] .providers-badge--deprecated {
   border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 }
 
+.providers-model-price,
+.providers-model-cutoff,
+.providers-model-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--ink-mute);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.providers-model-badge.is-expiring {
+  color: #b45309;
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  border-color: color-mix(in srgb, #f59e0b 28%, transparent);
+}
+
+.providers-model-row.is-expiring {
+  opacity: 0.92;
+}
+
 .providers-model-latency {
   flex-shrink: 0;
   font-size: 11px;
@@ -1424,6 +1448,32 @@ html[data-theme="dark"] .providers-badge--deprecated {
 .providers-cap.tools {
   color: #ea580c;
   background: color-mix(in srgb, #ea580c 16%, transparent);
+}
+
+.providers-cap.file {
+  color: #0f766e;
+  background: color-mix(in srgb, #0f766e 16%, transparent);
+}
+
+.providers-cap.audio-in,
+.providers-cap.audio-gen {
+  color: #db2777;
+  background: color-mix(in srgb, #db2777 16%, transparent);
+}
+
+.providers-cap.image-gen {
+  color: #0891b2;
+  background: color-mix(in srgb, #0891b2 16%, transparent);
+}
+
+.providers-cap.video-gen {
+  color: #4f46e5;
+  background: color-mix(in srgb, #4f46e5 16%, transparent);
+}
+
+.providers-cap.music-gen {
+  color: #c026d3;
+  background: color-mix(in srgb, #c026d3 16%, transparent);
 }
 
 .providers-model-actions {
@@ -1507,6 +1557,38 @@ html[data-theme="dark"] .providers-models-block {
     0 4px 16px rgba(0, 0, 0, 0.15);
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+html[data-theme="dark"] .providers-fallback-model,
+html[data-theme="dark"] .providers-fallback-add-select {
+  --select-glass-fill: color-mix(in srgb, var(--tone-soft) 12%, rgba(8, 6, 18, 0.45));
+  --select-glass-fill-hover: color-mix(in srgb, var(--tone-soft) 18%, rgba(8, 6, 18, 0.55));
+  --select-glass-edge: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.1));
+  --select-glass-rim: none;
+  --select-glass-shadow: none;
+}
+
+html[data-theme="dark"] .providers-fallback-model .select-menu-trigger,
+html[data-theme="dark"] .providers-fallback-add-select .select-menu-trigger {
+  color: var(--ink);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="dark"] .providers-fallback-model .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"] .providers-fallback-model.select-menu.is-open .select-menu-trigger,
+html[data-theme="dark"] .providers-fallback-add-select .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"] .providers-fallback-add-select.select-menu.is-open .select-menu-trigger {
+  border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.12));
+  color: var(--ink);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .providers-fallback-add-icon {
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.1));
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .providers-action-btn:not(.primary):not(.danger) {

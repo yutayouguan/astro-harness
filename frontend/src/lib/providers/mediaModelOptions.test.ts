@@ -20,6 +20,8 @@ const model = (
     web: false,
     reasoning: false,
     tools: false,
+    file: false,
+    audio_in: false,
     image_gen: false,
     video_gen: false,
     audio_gen: false,
