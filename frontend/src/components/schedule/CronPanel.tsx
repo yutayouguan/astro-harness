@@ -40,6 +40,7 @@ import {
   CreateCronDialog,
   type ProviderOpt,
 } from "./CreateCronDialog";
+import { GlassDatePicker } from "./GlassDatePicker";
 import { SelectMenu } from "../ui/SelectMenu";
 import { EmptyIllustration } from "../../illustrations";
 
@@ -1284,24 +1285,20 @@ export default function CronPanel({
                 className="cron-history-filter"
               />
               <div className="cron-history-dates" role="group" aria-label={t("cron.history.filterDate")}>
-                <input
-                  type="date"
-                  className="cron-history-date"
+                <GlassDatePicker
                   value={filterDateFrom}
-                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                  onChange={setFilterDateFrom}
                   aria-label={t("cron.history.filterDateFrom")}
-                  title={t("cron.history.filterDateFrom")}
+                  placeholder={t("cron.history.filterDateFrom")}
                 />
                 <span className="cron-history-date-sep" aria-hidden>
                   –
                 </span>
-                <input
-                  type="date"
-                  className="cron-history-date"
+                <GlassDatePicker
                   value={filterDateTo}
-                  onChange={(e) => setFilterDateTo(e.target.value)}
+                  onChange={setFilterDateTo}
                   aria-label={t("cron.history.filterDateTo")}
-                  title={t("cron.history.filterDateTo")}
+                  placeholder={t("cron.history.filterDateTo")}
                 />
               </div>
             </div>
@@ -1487,11 +1484,10 @@ export default function CronPanel({
                       {t("cron.history.traceTitle")}
                     </h3>
                     {(() => {
-                      const copyText =
-                        drawerMessages
-                          .filter((m) => m.role === "assistant" && (m.content || "").trim())
-                          .map((m) => (m.content || "").trim())
-                          .at(-1) || drawerRun.output;
+                      const texts = drawerMessages
+                        .filter((m) => m.role === "assistant" && (m.content || "").trim())
+                        .map((m) => (m.content || "").trim());
+                      const copyText = texts[texts.length - 1] || drawerRun.output;
                       return copyText ? <CopyLogButton text={copyText} /> : null;
                     })()}
                   </div>
