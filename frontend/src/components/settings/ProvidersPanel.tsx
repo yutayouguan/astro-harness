@@ -19,6 +19,7 @@ import {
   Globe,
   GripVertical,
   Image,
+  Info,
   KeyRound,
   Layers,
   Lightbulb,
@@ -60,6 +61,7 @@ import {
   formatModelCreated,
   formatModelPrice,
   isModelCreatedWithinDays,
+  listActiveModelCaps,
 } from "../../lib/model/modelCaps";
 import {
   buildMediaModelOptions,
@@ -238,6 +240,11 @@ function IconThisWeek(props: SVGProps<SVGSVGElement>) {
   return <Sparkles size={16} strokeWidth={2} aria-hidden {...props} />;
 }
 
+/** 模型详情展开 */
+function IconInfo(props: SVGProps<SVGSVGElement>) {
+  return <Info size={16} strokeWidth={2} aria-hidden {...props} />;
+}
+
 /** 显示密钥图标 */
 function IconEye(props: SVGProps<SVGSVGElement>) {
   return <Eye size={14} strokeWidth={2} aria-hidden {...props} />;
@@ -360,10 +367,12 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
   const [modelFilter, setModelFilter] = useState("");
   const [showFilter, setShowFilter] = useState(false);
-  /** 按 OpenRouter created 降序（新上架优先） */
-  const [sortByNewest, setSortByNewest] = useState(false);
+  /** 按 OpenRouter created 降序（新上架优先）；默认开启 */
+  const [sortByNewest, setSortByNewest] = useState(true);
   /** 仅显示近 7 天内上架的模型 */
   const [onlyThisWeek, setOnlyThisWeek] = useState(false);
+  /** 展开详情的模型 id */
+  const [expandedModelId, setExpandedModelId] = useState<string | null>(null);
   const [showAddModel, setShowAddModel] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
   const [drag, setDrag] = useState<{
@@ -520,8 +529,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     setTestResult(null);
     setModelFilter("");
     setShowFilter(false);
-    setSortByNewest(false);
+    setSortByNewest(true);
     setOnlyThisWeek(false);
+    setExpandedModelId(null);
     setShowAddModel(false);
     setCustomModelInput("");
     setError(null);
@@ -2116,199 +2126,281 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                       const isNewThisWeek = isModelCreatedWithinDays(m.created, 7);
                       const hfId = m.hugging_face_id?.trim() || null;
                       const moderated = m.is_moderated === true;
-                      const rowTitle = [
-                        m.display_name || m.id,
-                        m.description?.trim() || null,
-                        m.canonical_slug ? `slug: ${m.canonical_slug}` : null,
-                        cutoffLabel
-                          ? `${t("providers.knowledgeCutoff")}: ${cutoffLabel}`
-                          : null,
-                        m.expiration_date
-                          ? `${t("providers.expiration")}: ${m.expiration_date}`
-                          : null,
-                        createdLabel
-                          ? `${t("providers.created")}: ${createdLabel}`
-                          : null,
-                        hfId ? `${t("providers.huggingFace")}: ${hfId}` : null,
-                        moderated ? t("providers.moderated") : null,
-                        priceLabel
-                          ? `${t("providers.pricePerM")}: ${priceLabel}`
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join("\n");
+                      const expanded = expandedModelId === m.id;
+                      const displayName = m.display_name?.trim() || null;
+                      const hasDetail =
+                        Boolean(m.description?.trim()) ||
+                        Boolean(createdLabel) ||
+                        Boolean(cutoffLabel) ||
+                        Boolean(m.expiration_date?.trim()) ||
+                        Boolean(ctxLabel) ||
+                        Boolean(priceLabel) ||
+                        Boolean(hfId) ||
+                        moderated ||
+                        Boolean(latency) ||
+                        listActiveModelCaps(caps).length > 0;
                       return (
                         <li
                           key={m.id}
-                          className={`providers-model-row ${isCurrent ? "is-current" : ""} ${expired ? "is-expiring" : ""}`}
-                          title={rowTitle}
+                          className={`providers-model-row ${isCurrent ? "is-current" : ""} ${expired ? "is-expiring" : ""} ${expanded ? "is-expanded" : ""}`}
                         >
-                          <label className="providers-model-pick">
-                            <input
-                              type="radio"
-                              className="providers-model-radio"
-                              name="providers-model-select"
-                              checked={isCurrent}
-                              onChange={() => void useModel(m.id, m.expiration_date)}
-                              title={t("providers.useModel")}
-                              aria-label={`${t("providers.useModel")}: ${m.id}`}
-                            />
-                            <ModelBrandIcon modelId={m.id} className="providers-model-icon" />
-                            <span className="providers-model-id" title={m.display_name ?? m.id}>
-                              {m.id}
+                          <div className="providers-model-main">
+                            <label className="providers-model-pick">
+                              <input
+                                type="radio"
+                                className="providers-model-radio"
+                                name="providers-model-select"
+                                checked={isCurrent}
+                                onChange={() => void useModel(m.id, m.expiration_date)}
+                                title={t("providers.useModel")}
+                                aria-label={`${t("providers.useModel")}: ${m.id}`}
+                              />
+                              <ModelBrandIcon modelId={m.id} className="providers-model-icon" />
+                              <span className="providers-model-text">
+                                <span className="providers-model-id" title={displayName ?? m.id}>
+                                  {m.id}
+                                </span>
+                                {displayName && displayName !== m.id ? (
+                                  <span className="providers-model-display" title={displayName}>
+                                    {displayName}
+                                  </span>
+                                ) : null}
+                              </span>
+                              {expired && (
+                                <span
+                                  className="providers-model-badge is-expiring"
+                                  title={`${t("providers.expiration")}: ${m.expiration_date}`}
+                                >
+                                  {t("providers.expiring")}
+                                </span>
+                              )}
+                              {isNewThisWeek && (
+                                <span
+                                  className="providers-model-badge is-new"
+                                  title={
+                                    createdLabel
+                                      ? `${t("providers.created")}: ${createdLabel}`
+                                      : t("providers.newThisWeek")
+                                  }
+                                >
+                                  {t("providers.newThisWeek")}
+                                </span>
+                              )}
+                            </label>
+                            <span className="providers-model-actions">
+                              {hasDetail ? (
+                                <button
+                                  type="button"
+                                  className={`providers-icon-btn ${expanded ? "is-active" : ""}`}
+                                  title={
+                                    expanded
+                                      ? t("providers.hideModelDetails")
+                                      : t("providers.showModelDetails")
+                                  }
+                                  aria-label={
+                                    expanded
+                                      ? t("providers.hideModelDetails")
+                                      : t("providers.showModelDetails")
+                                  }
+                                  aria-expanded={expanded}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setExpandedModelId((id) =>
+                                      id === m.id ? null : m.id,
+                                    );
+                                  }}
+                                >
+                                  <IconInfo />
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className={`providers-icon-btn ${testing && isCurrent ? "is-busy" : ""}`}
+                                disabled={testing || testingAll}
+                                title={t("providers.test")}
+                                aria-label={`${t("providers.test")}: ${m.id}`}
+                                onClick={() => {
+                                  void (async () => {
+                                    const ok = await useModel(
+                                      m.id,
+                                      m.expiration_date,
+                                    );
+                                    if (!ok) return;
+                                    void testConnection(m.id);
+                                  })();
+                                }}
+                              >
+                                <IconStethoscope />
+                              </button>
                             </span>
-                            {expired && (
-                              <span
-                                className="providers-model-badge is-expiring"
-                                title={`${t("providers.expiration")}: ${m.expiration_date}`}
+                          </div>
+                          {expanded ? (
+                            <div className="providers-model-detail">
+                              {m.description?.trim() ? (
+                                <p className="providers-model-desc">
+                                  {m.description.trim()}
+                                </p>
+                              ) : null}
+                              <dl className="providers-model-meta">
+                                {createdLabel ? (
+                                  <>
+                                    <dt>{t("providers.created")}</dt>
+                                    <dd>{createdLabel}</dd>
+                                  </>
+                                ) : null}
+                                {cutoffLabel ? (
+                                  <>
+                                    <dt>{t("providers.knowledgeCutoff")}</dt>
+                                    <dd title={m.knowledge_cutoff ?? undefined}>
+                                      {cutoffLabel}
+                                    </dd>
+                                  </>
+                                ) : null}
+                                {m.expiration_date?.trim() ? (
+                                  <>
+                                    <dt>{t("providers.expiration")}</dt>
+                                    <dd>{m.expiration_date}</dd>
+                                  </>
+                                ) : null}
+                                {ctxLabel ? (
+                                  <>
+                                    <dt>{t("providers.contextWindow")}</dt>
+                                    <dd>{ctxLabel}</dd>
+                                  </>
+                                ) : null}
+                                {priceLabel ? (
+                                  <>
+                                    <dt>{t("providers.pricePerM")}</dt>
+                                    <dd>{priceLabel}</dd>
+                                  </>
+                                ) : null}
+                                {moderated ? (
+                                  <>
+                                    <dt>{t("providers.moderated")}</dt>
+                                    <dd>{t("providers.yes")}</dd>
+                                  </>
+                                ) : null}
+                                {hfId ? (
+                                  <>
+                                    <dt>{t("providers.huggingFace")}</dt>
+                                    <dd>
+                                      <a
+                                        className="providers-model-hf"
+                                        href={`https://huggingface.co/${hfId}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {hfId}
+                                      </a>
+                                    </dd>
+                                  </>
+                                ) : null}
+                                {latency ? (
+                                  <>
+                                    <dt>{t("providers.test")}</dt>
+                                    <dd
+                                      className={
+                                        latency.ok
+                                          ? "providers-model-latency ok"
+                                          : "providers-model-latency fail"
+                                      }
+                                    >
+                                      {latency.latency_ms < 0
+                                        ? "—"
+                                        : `${latency.latency_ms} ms`}
+                                    </dd>
+                                  </>
+                                ) : null}
+                              </dl>
+                              <div
+                                className="providers-model-caps"
+                                aria-label="capabilities"
                               >
-                                {t("providers.expiring")}
-                              </span>
-                            )}
-                            {isNewThisWeek && (
-                              <span
-                                className="providers-model-badge is-new"
-                                title={
-                                  createdLabel
-                                    ? `${t("providers.created")}: ${createdLabel}`
-                                    : t("providers.newThisWeek")
-                                }
-                              >
-                                {t("providers.newThisWeek")}
-                              </span>
-                            )}
-                            {moderated && (
-                              <span
-                                className="providers-model-badge is-moderated"
-                                title={t("providers.moderated")}
-                              >
-                                {t("providers.moderated")}
-                              </span>
-                            )}
-                            {hfId && (
-                              <a
-                                className="providers-model-hf"
-                                href={`https://huggingface.co/${hfId}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                title={`${t("providers.huggingFace")}: ${hfId}`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                HF
-                              </a>
-                            )}
-                            {createdLabel && (
-                              <span
-                                className="providers-model-created"
-                                title={`${t("providers.created")}: ${createdLabel}`}
-                              >
-                                {createdLabel}
-                              </span>
-                            )}
-                            {cutoffLabel && (
-                              <span
-                                className="providers-model-cutoff"
-                                title={`${t("providers.knowledgeCutoff")}: ${m.knowledge_cutoff}`}
-                              >
-                                {cutoffLabel}
-                              </span>
-                            )}
-                            {ctxLabel && (
-                              <span
-                                className="providers-model-ctx"
-                                title={t("providers.contextWindow")}
-                              >
-                                {ctxLabel}
-                              </span>
-                            )}
-                            {priceLabel && (
-                              <span
-                                className="providers-model-price"
-                                title={t("providers.pricePerM")}
-                              >
-                                {priceLabel}
-                              </span>
-                            )}
-                            {latency && (
-                              <span
-                                className={`providers-model-latency ${latency.ok ? "ok" : "fail"}`}
-                              >
-                                {latency.latency_ms < 0
-                                  ? "—"
-                                  : `${latency.latency_ms} ms`}
-                              </span>
-                            )}
-                          </label>
-                          <span className="providers-model-caps" aria-label="capabilities">
-                            {caps.vision && (
-                              <span className="providers-cap vision" title={t("providers.cap.vision")}>
-                                <Eye size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.file && (
-                              <span className="providers-cap file" title={t("providers.cap.file")}>
-                                <FileText size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.audio_in && (
-                              <span className="providers-cap audio-in" title={t("providers.cap.audioIn")}>
-                                <Mic size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.web && (
-                              <span className="providers-cap web" title={t("providers.cap.web")}>
-                                <Globe size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.reasoning && (
-                              <span className="providers-cap reasoning" title={t("providers.cap.reasoning")}>
-                                <Lightbulb size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.tools && (
-                              <span className="providers-cap tools" title={t("providers.cap.tools")}>
-                                <Wrench size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.image_gen && (
-                              <span className="providers-cap image-gen" title={t("providers.cap.imageGen")}>
-                                <Image size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.video_gen && (
-                              <span className="providers-cap video-gen" title={t("providers.cap.videoGen")}>
-                                <Video size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.audio_gen && (
-                              <span className="providers-cap audio-gen" title={t("providers.cap.audioGen")}>
-                                <Mic size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                            {caps.music_gen && (
-                              <span className="providers-cap music-gen" title={t("providers.cap.musicGen")}>
-                                <Music size={14} strokeWidth={2} aria-hidden />
-                              </span>
-                            )}
-                          </span>
-                          <span className="providers-model-actions">
-                            <button
-                              type="button"
-                              className={`providers-icon-btn ${testing && isCurrent ? "is-busy" : ""}`}
-                              disabled={testing || testingAll}
-                              title={t("providers.test")}
-                              aria-label={`${t("providers.test")}: ${m.id}`}
-                              onClick={() => {
-                                void (async () => {
-                                  const ok = await useModel(m.id, m.expiration_date);
-                                  if (!ok) return;
-                                  void testConnection(m.id);
-                                })();
-                              }}
-                            >
-                              <IconStethoscope />
-                            </button>
-                          </span>
+                                {caps.vision && (
+                                  <span
+                                    className="providers-cap vision"
+                                    title={t("providers.cap.vision")}
+                                  >
+                                    <Eye size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.file && (
+                                  <span
+                                    className="providers-cap file"
+                                    title={t("providers.cap.file")}
+                                  >
+                                    <FileText size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.audio_in && (
+                                  <span
+                                    className="providers-cap audio-in"
+                                    title={t("providers.cap.audioIn")}
+                                  >
+                                    <Mic size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.web && (
+                                  <span
+                                    className="providers-cap web"
+                                    title={t("providers.cap.web")}
+                                  >
+                                    <Globe size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.reasoning && (
+                                  <span
+                                    className="providers-cap reasoning"
+                                    title={t("providers.cap.reasoning")}
+                                  >
+                                    <Lightbulb size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.tools && (
+                                  <span
+                                    className="providers-cap tools"
+                                    title={t("providers.cap.tools")}
+                                  >
+                                    <Wrench size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.image_gen && (
+                                  <span
+                                    className="providers-cap image-gen"
+                                    title={t("providers.cap.imageGen")}
+                                  >
+                                    <Image size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.video_gen && (
+                                  <span
+                                    className="providers-cap video-gen"
+                                    title={t("providers.cap.videoGen")}
+                                  >
+                                    <Video size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.audio_gen && (
+                                  <span
+                                    className="providers-cap audio-gen"
+                                    title={t("providers.cap.audioGen")}
+                                  >
+                                    <Mic size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                                {caps.music_gen && (
+                                  <span
+                                    className="providers-cap music-gen"
+                                    title={t("providers.cap.musicGen")}
+                                  >
+                                    <Music size={14} strokeWidth={2} aria-hidden />
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
                         </li>
                       );
                     })}
