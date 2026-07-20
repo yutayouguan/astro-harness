@@ -157,17 +157,29 @@ pub(crate) async fn finish_usage_and_done(
 /// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
 /// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
 /// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
-#[allow(clippy::too_many_arguments)]
-pub async fn run_multi_turn_stream(
-    session: Arc<Mutex<AgentLoop>>,
-    targets: Vec<ChatTarget>,
-    registry: Arc<ProviderRegistry>,
-    base_config: ProviderConfig,
-    system_prompt: String,
-    pause: Arc<PauseControl>,
-    hitl_gate: Option<Arc<HitlGate>>,
-    tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-) {
+/// [`run_multi_turn_stream`] 入参打包。
+pub struct MultiTurnStreamArgs {
+    pub session: Arc<Mutex<AgentLoop>>,
+    pub targets: Vec<ChatTarget>,
+    pub registry: Arc<ProviderRegistry>,
+    pub base_config: ProviderConfig,
+    pub system_prompt: String,
+    pub pause: Arc<PauseControl>,
+    pub hitl_gate: Option<Arc<HitlGate>>,
+    pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+}
+
+pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
+    let MultiTurnStreamArgs {
+        session,
+        targets,
+        registry,
+        base_config,
+        system_prompt,
+        pause,
+        hitl_gate,
+        tx,
+    } = args;
     let session_id = {
         let agent = session.lock().await;
         agent.session_id().to_string()
@@ -190,8 +202,8 @@ pub async fn run_multi_turn_stream(
         )
         .await;
     }
-    run_multi_turn_stream_inner(
-        session.clone(),
+    run_multi_turn_stream_inner(MultiTurnStreamInnerArgs {
+        session: session.clone(),
         targets,
         registry,
         base_config,
@@ -199,9 +211,9 @@ pub async fn run_multi_turn_stream(
         pause,
         hitl_gate,
         tx,
-        session_id.clone(),
-        run_id.clone(),
-    )
+        thread_id: session_id.clone(),
+        run_id: run_id.clone(),
+    })
     .await;
     {
         let mut agent = session.lock().await;
@@ -222,21 +234,20 @@ pub async fn run_multi_turn_stream_from_provider(
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
 ) {
     let (targets, registry) = targets_and_registry_from_primary(provider, &config);
-    run_multi_turn_stream(
+    run_multi_turn_stream(MultiTurnStreamArgs {
         session,
         targets,
         registry,
-        config,
+        base_config: config,
         system_prompt,
         pause,
         hitl_gate,
         tx,
-    )
+    })
     .await;
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn run_multi_turn_stream_inner(
+struct MultiTurnStreamInnerArgs {
     session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
     registry: Arc<ProviderRegistry>,
@@ -247,7 +258,21 @@ async fn run_multi_turn_stream_inner(
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     thread_id: String,
     run_id: String,
-) {
+}
+
+async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
+    let MultiTurnStreamInnerArgs {
+        session,
+        targets,
+        registry,
+        base_config,
+        system_prompt,
+        pause,
+        hitl_gate,
+        tx,
+        thread_id,
+        run_id,
+    } = args;
     let streamer = ProviderStreamer::new(registry, targets, base_config);
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
@@ -1073,7 +1098,7 @@ pub fn stream_multi_turn_with_hitl(
 ) -> MultiTurnStream {
     let (tx, rx) = mpsc::channel(32);
     tokio::spawn(async move {
-        run_multi_turn_stream(
+        run_multi_turn_stream(MultiTurnStreamArgs {
             session,
             targets,
             registry,
@@ -1082,7 +1107,7 @@ pub fn stream_multi_turn_with_hitl(
             pause,
             hitl_gate,
             tx,
-        )
+        })
         .await;
     });
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {

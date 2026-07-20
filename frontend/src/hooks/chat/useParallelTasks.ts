@@ -603,24 +603,26 @@ export function useParallelTasks(deps: Deps) {
       unlistenMapRef.current.set(taskId, { unlisten, sessionId });
 
       await invoke<string>("start_chat", {
-        content: contentForModel,
-        provider: activeProvider.backend_id,
-        providerId: activeProvider.id,
-        model: activeProvider.model,
-        sessionId,
-        useMemory: true,
-        thinkingEnabled: modelApi.thinkingEnabled,
-        reasoningEffort: modelApi.reasoningEffort,
-        interactionMode: "multitask",
-        projectRoot: worktree?.path,
-        attachments: pending.map((a) => ({
-          name: a.name,
-          mime: a.mime,
-          kind: a.kind,
-          size: a.size,
-          dataBase64: a.dataBase64 ?? null,
-          localPath: a.localPath ?? null,
-        })),
+        request: {
+          content: contentForModel,
+          provider: activeProvider.backend_id,
+          providerId: activeProvider.id,
+          model: activeProvider.model,
+          sessionId,
+          useMemory: true,
+          thinkingEnabled: modelApi.thinkingEnabled,
+          reasoningEffort: modelApi.reasoningEffort,
+          interactionMode: "multitask",
+          projectRoot: worktree?.path,
+          attachments: pending.map((a) => ({
+            name: a.name,
+            mime: a.mime,
+            kind: a.kind,
+            size: a.size,
+            dataBase64: a.dataBase64 ?? null,
+            localPath: a.localPath ?? null,
+          })),
+        },
       });
       return true;
     } catch (err) {

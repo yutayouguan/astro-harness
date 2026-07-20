@@ -944,26 +944,28 @@ export function useSend(deps: UseSendDeps) {
         }
 
         await invoke<string>("start_chat", {
-          content: contentForModel,
-          provider: chatProvider.backend_id,
-          providerId: chatProvider.id,
-          model: chatModel,
-          sessionId: sid,
-          useMemory: true,
-          thinkingEnabled: modelApi.thinkingEnabled,
-          reasoningEffort: modelApi.reasoningEffort,
-          resumeJson: resumeJson || undefined,
-          keepChatBubbles: keepChatBubbles != null ? keepChatBubbles : undefined,
-          interactionMode: effectiveMode,
-          projectRoot,
-          attachments: pending.map((a) => ({
-            name: a.name,
-            mime: a.mime,
-            kind: a.kind,
-            size: a.size,
-            dataBase64: a.dataBase64 ?? null,
-            localPath: uploadedPaths.get(a.id) ?? a.localPath ?? null,
-          })),
+          request: {
+            content: contentForModel,
+            provider: chatProvider.backend_id,
+            providerId: chatProvider.id,
+            model: chatModel,
+            sessionId: sid,
+            useMemory: true,
+            thinkingEnabled: modelApi.thinkingEnabled,
+            reasoningEffort: modelApi.reasoningEffort,
+            resumeJson: resumeJson || undefined,
+            keepChatBubbles: keepChatBubbles != null ? keepChatBubbles : undefined,
+            interactionMode: effectiveMode,
+            projectRoot,
+            attachments: pending.map((a) => ({
+              name: a.name,
+              mime: a.mime,
+              kind: a.kind,
+              size: a.size,
+              dataBase64: a.dataBase64 ?? null,
+              localPath: uploadedPaths.get(a.id) ?? a.localPath ?? null,
+            })),
+          },
         });
         pendingKeepChatBubblesRef.current = null;
         setStatusPhase("generating");

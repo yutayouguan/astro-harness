@@ -37,6 +37,7 @@ mod types;
 pub(crate) use hitl_bridge::{parse_astro_hitl, try_park_parent_hitl};
 pub use multi_turn::{
     run_multi_turn_stream, run_multi_turn_stream_from_provider, stream_multi_turn,
+    MultiTurnStreamArgs,
     stream_multi_turn_from_provider, stream_multi_turn_with_hitl,
 };
 pub use provider::{

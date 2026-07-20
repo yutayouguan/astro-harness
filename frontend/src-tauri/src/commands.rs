@@ -670,28 +670,46 @@ pub async fn write_daily_memory(
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+/// `start_chat` 前端入参（camelCase，与 invoke 字段对齐）。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartChatRequest {
+    pub content: String,
+    pub provider: String,
+    pub model: String,
+    pub session_id: Option<String>,
+    pub use_memory: Option<bool>,
+    pub attachments: Option<Vec<ChatAttachmentDto>>,
+    pub provider_id: Option<String>,
+    pub thinking_enabled: Option<bool>,
+    pub reasoning_effort: Option<String>,
+    pub resume_json: Option<String>,
+    pub keep_chat_bubbles: Option<i32>,
+    pub interaction_mode: Option<String>,
+    pub project_root: Option<String>,
+}
+
 /// 启动流式聊天（内部走 Agent / Provider）。
 ///
 /// `keep_chat_bubbles`：若提供，则在开跑前将会话 DB 截断到该数量的 user/assistant 气泡
 ///（编辑重发 / 再生用；缺失则不截断）。
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub async fn start_chat(
-    app: AppHandle,
-    content: String,
-    provider: String,
-    model: String,
-    session_id: Option<String>,
-    use_memory: Option<bool>,
-    attachments: Option<Vec<ChatAttachmentDto>>,
-    provider_id: Option<String>,
-    thinking_enabled: Option<bool>,
-    reasoning_effort: Option<String>,
-    resume_json: Option<String>,
-    keep_chat_bubbles: Option<i32>,
-    interaction_mode: Option<String>,
-    project_root: Option<String>,
-) -> Result<String, String> {
+pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<String, String> {
+    let StartChatRequest {
+        content,
+        provider,
+        model,
+        session_id,
+        use_memory,
+        attachments,
+        provider_id,
+        thinking_enabled,
+        reasoning_effort,
+        resume_json,
+        keep_chat_bubbles,
+        interaction_mode,
+        project_root,
+    } = request;
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
     let attachments = attachments.unwrap_or_default();
