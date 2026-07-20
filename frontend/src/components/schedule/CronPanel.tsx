@@ -1283,22 +1283,27 @@ export default function CronPanel({
                 aria-label={t("cron.history.filterAgent")}
                 className="cron-history-filter"
               />
-              <input
-                type="date"
-                className="cron-history-date"
-                value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
-                aria-label={t("cron.history.filterDate")}
-                title={t("cron.history.filterDate")}
-              />
-              <input
-                type="date"
-                className="cron-history-date"
-                value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
-                aria-label={t("cron.history.filterDate")}
-                title={t("cron.history.filterDate")}
-              />
+              <div className="cron-history-dates" role="group" aria-label={t("cron.history.filterDate")}>
+                <input
+                  type="date"
+                  className="cron-history-date"
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                  aria-label={t("cron.history.filterDateFrom")}
+                  title={t("cron.history.filterDateFrom")}
+                />
+                <span className="cron-history-date-sep" aria-hidden>
+                  –
+                </span>
+                <input
+                  type="date"
+                  className="cron-history-date"
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                  aria-label={t("cron.history.filterDateTo")}
+                  title={t("cron.history.filterDateTo")}
+                />
+              </div>
             </div>
           )}
         </div>
