@@ -149,7 +149,7 @@ type Draft = {
   vision_model: string;
 };
 
-type DetailTab = "chat" | "media";
+type DetailTab = "chat" | "models" | "media";
 
 type PageTab = "providers" | "auxiliary" | "evolution";
 
@@ -548,6 +548,13 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
         setStoredApiKey(null);
       });
   }, [selected?.id, selected?.has_api_key, selected?.kind]);
+
+  // 切到不支持媒体的提供商时，避免停在空的媒体页
+  useEffect(() => {
+    if (detailTab === "media" && selected && !supportsMediaModels(selected.kind)) {
+      setDetailTab("chat");
+    }
+  }, [detailTab, selected]);
 
   // selected 字段外部更新时同步草稿（不重置模型列表）
   useEffect(() => {
@@ -1584,7 +1591,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
               title={t("providers.emptySelect")}
             />
           ) : (
-            <div className="providers-form">
+            <div
+              className={`providers-form ${detailTab === "models" ? "is-fill" : ""}`.trim()}
+            >
               <div className="providers-form-head">
                 <span className="providers-form-icon" aria-hidden>
                   <ProviderBrandIcon kind={selected.kind} />
@@ -1604,18 +1613,31 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 </div>
               </div>
 
-              {supportsMediaModels(selected.kind) ? (
-                <div className="providers-detail-tabs" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={detailTab === "chat"}
-                    className={`providers-detail-tab ${detailTab === "chat" ? "is-active" : ""}`}
-                    onClick={() => setDetailTab("chat")}
-                  >
-                    <MessageCircle size={14} strokeWidth={2} aria-hidden />
-                    {t("providers.tabChat")}
-                  </button>
+              <div className="providers-detail-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={detailTab === "chat"}
+                  className={`providers-detail-tab ${detailTab === "chat" ? "is-active" : ""}`}
+                  onClick={() => setDetailTab("chat")}
+                >
+                  <MessageCircle size={14} strokeWidth={2} aria-hidden />
+                  {t("providers.tabChat")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={detailTab === "models"}
+                  className={`providers-detail-tab ${detailTab === "models" ? "is-active" : ""}`}
+                  onClick={() => setDetailTab("models")}
+                >
+                  <Layers size={14} strokeWidth={2} aria-hidden />
+                  {t("providers.tabModels")}
+                  {models.length > 0 ? (
+                    <span className="providers-detail-tab-count">{models.length}</span>
+                  ) : null}
+                </button>
+                {supportsMediaModels(selected.kind) ? (
                   <button
                     type="button"
                     role="tab"
@@ -1626,10 +1648,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     <Image size={14} strokeWidth={2} aria-hidden />
                     {t("providers.tabMedia")}
                   </button>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
 
-              {(detailTab === "chat" || !supportsMediaModels(selected.kind)) && (
+              {detailTab === "chat" && (
               <>
               <div className="providers-form-grid">
                 <label className="providers-field">
@@ -1934,6 +1956,11 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 )}
               </div>
 
+              </>
+              )}
+
+              {detailTab === "models" && (
+              <div className="providers-models-panel">
               <div className="providers-models-block">
                 <div className="providers-models-head">
                   <div className="providers-models-title-row">
@@ -2375,7 +2402,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                   </ul>
                 )}
               </div>
-              </>
+              </div>
               )}
 
               {detailTab === "media" && supportsMediaModels(selected.kind) && (
