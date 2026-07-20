@@ -20,6 +20,8 @@
   padding: 16px;
   isolation: isolate;
   overflow: hidden;
+  container-type: inline-size;
+  container-name: cron-pane;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.22)),
@@ -2494,6 +2496,12 @@ html[data-theme="dark"] .cron-timeline-card {
   font-size: 14px;
   font-weight: 650;
   color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cron-timeline-card-top > .cron-status-pill {
+  flex-shrink: 0;
 }
 
 .cron-timeline-summary {
@@ -3043,31 +3051,71 @@ html[data-theme="dark"] .cron-run-drawer {
   }
 }
 
-@media (max-width: 960px) {
+/* 按面板内容区宽度适配（侧栏/半宽窗口也生效），日期始终横排 */
+@container cron-pane (max-width: 900px) {
   .cron-toolbar-end.cron-history-filters {
+    flex: 1 1 100%;
+    margin-left: 0;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
     flex-wrap: wrap;
     height: auto;
     min-height: 36px;
-    justify-content: flex-start;
-    width: 100%;
-    max-width: 100%;
   }
 
   .cron-history-filter {
-    flex: 1 1 140px;
-    max-width: none;
+    flex: 1 1 calc(50% - 4px);
     width: auto;
+    min-width: 0;
+    max-width: none;
   }
 
   .cron-history-dates {
-    flex: 1 1 auto;
+    flex: 1 1 100%;
+    width: 100%;
     min-width: 0;
   }
 
   .cron-history-date {
-    flex: 1 1 120px;
+    flex: 1 1 0;
     width: auto;
-    min-width: 120px;
+    min-width: 0;
+  }
+}
+
+@container cron-pane (max-width: 560px) {
+  .cron-history-filter {
+    flex: 1 1 100%;
+  }
+
+  .cron-history-filters {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .cron-timeline-card {
+    padding: 12px;
+  }
+
+  .cron-timeline-card-top {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cron-timeline-card-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .cron-timeline-card-foot .cron-history-item-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .cron-timeline-log-btn {
+    max-width: 100%;
   }
 }
 
@@ -3075,30 +3123,57 @@ html[data-theme="dark"] .cron-run-drawer {
   .cron-gallery {
     grid-template-columns: 1fr;
   }
+}
 
-  .cron-history-filters {
-    flex-direction: column;
-    align-items: stretch;
-    height: auto;
+/* 无 container query 时退回视口断点 */
+@supports not (container-type: inline-size) {
+  @media (max-width: 960px) {
+    .cron-toolbar-end.cron-history-filters {
+      flex: 1 1 100%;
+      margin-left: 0;
+      flex-wrap: wrap;
+      height: auto;
+      min-height: 36px;
+      justify-content: flex-start;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .cron-history-filter {
+      flex: 1 1 calc(50% - 4px);
+      max-width: none;
+      width: auto;
+      min-width: 0;
+    }
+
+    .cron-history-dates {
+      flex: 1 1 100%;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .cron-history-date {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+    }
   }
 
-  .cron-toolbar-end.cron-history-filters {
-    height: auto;
-  }
+  @media (max-width: 560px) {
+    .cron-history-filter {
+      flex: 1 1 100%;
+    }
 
-  .cron-history-filter {
-    max-width: none;
-    width: 100%;
-  }
+    .cron-timeline-card-foot {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
 
-  .cron-history-dates {
-    width: 100%;
-  }
-
-  .cron-history-date {
-    flex: 1 1 0;
-    width: auto;
-    min-width: 0;
+    .cron-timeline-card-foot .cron-history-item-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
   }
 }
 
