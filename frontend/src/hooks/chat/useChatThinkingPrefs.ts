@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   type ChatThinkingPrefs,
   type ThinkingLevel,
+  parseEffortLevel,
   thinkingPrefsEnabled,
 } from "../../lib/chat/thinkingPrefs";
 
@@ -18,14 +19,9 @@ function readStored(): ChatThinkingPrefs {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT };
     const parsed = JSON.parse(raw) as Partial<ChatThinkingPrefs>;
-    if (
-      parsed.level === "off" ||
-      parsed.level === "low" ||
-      parsed.level === "high" ||
-      parsed.level === "max"
-    ) {
-      return { level: parsed.level };
-    }
+    if (parsed.level === "off") return { level: "off" };
+    const effort = parseEffortLevel(parsed.level);
+    if (effort) return { level: effort };
     return { ...DEFAULT };
   } catch {
     return { ...DEFAULT };

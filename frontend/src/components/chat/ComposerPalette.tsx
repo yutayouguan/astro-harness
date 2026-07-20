@@ -1,6 +1,7 @@
 /** 输入框模式 / 附件调色板。 */
 import { useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
+import type { ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import type { SlashAction } from "../../lib/chat/composerCommands";
 
 /** 调色板种类：斜杠命令 / @提及 / 思考档位 */
@@ -20,7 +21,7 @@ export type PaletteItem = {
   /** @ 提及类别 */
   mentionKind?: "agent" | "skill" | "mcp";
   /** thinking 等级 */
-  level?: "off" | "low" | "high" | "max";
+  level?: ThinkingLevel;
 };
 
 /** Composer 浮动调色板入参 */

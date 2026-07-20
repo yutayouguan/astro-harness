@@ -5,8 +5,24 @@
 /** 聊天区空状态：欢迎卡片、创建 Agent 引导，或正常消息列表 */
 export type ChatEmptyMode = "chat" | "agent" | null;
 
-/** DeepSeek 等模型的推理力度 */
-export type ReasoningEffort = "high" | "max";
+/** DeepSeek / OpenRouter 等模型的推理力度 */
+export type ReasoningEffort =
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+
+/** OpenRouter `reasoning` 对象（档位 / 默认开关） */
+export type ModelReasoningMeta = {
+  supported_efforts?: string[];
+  default_effort?: string | null;
+  default_enabled?: boolean | null;
+  mandatory?: boolean | null;
+  supports_max_tokens?: boolean | null;
+};
 
 /** 聊天附件媒体类型 */
 export type ChatAttachmentKind = "image" | "video" | "audio" | "file";
@@ -543,6 +559,8 @@ export type ModelInfo = {
   context_window?: number | null;
   max_output_tokens?: number | null;
   capabilities: ModelCapabilities;
+  /** OpenRouter 推理档位 / 默认开关 */
+  reasoning?: ModelReasoningMeta | null;
   meta_source?: string;
 };
 

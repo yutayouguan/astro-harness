@@ -25,6 +25,33 @@ pub struct ModelCapabilities {
     pub music_gen: bool,
 }
 
+/// OpenRouter `reasoning` 对象：档位、默认开关等。
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct ModelReasoningMeta {
+    /// 如 `["xhigh","high"]` / `["high","medium","low"]`
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supported_efforts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mandatory: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supports_max_tokens: Option<bool>,
+}
+
+impl ModelReasoningMeta {
+    /// 是否携带任何有意义的推理元数据。
+    pub fn is_empty(&self) -> bool {
+        self.supported_efforts.is_empty()
+            && self.default_effort.is_none()
+            && self.default_enabled.is_none()
+            && self.mandatory.is_none()
+            && self.supports_max_tokens.is_none()
+    }
+}
+
 /// 前端展示用的模型元信息。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModelInfo {
@@ -38,6 +65,9 @@ pub struct ModelInfo {
     pub max_output_tokens: Option<u64>,
     #[serde(default)]
     pub capabilities: ModelCapabilities,
+    /// OpenRouter 推理档位 / 默认开关（无推理模型为 null）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<ModelReasoningMeta>,
     /// 元数据来源：api / openrouter / known（可组合）
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub meta_source: String,
@@ -81,6 +111,7 @@ pub fn enrich_from_id(id: &str, kind: &str, hints: Option<ApiModelHints>) -> Mod
         context_window: None,
         max_output_tokens: None,
         capabilities: ModelCapabilities::default(),
+        reasoning: None,
         meta_source: String::new(),
     };
     enrich_model_info(&mut info, kind, hints);
@@ -114,6 +145,7 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
     info.context_window = retained_api_ctx;
     info.max_output_tokens = retained_api_out;
     info.capabilities = ModelCapabilities::default();
+    info.reasoning = None;
     info.display_name = retained_display;
     info.meta_source.clear();
 
@@ -190,6 +222,7 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             if !entry.supports_music_generation {
                 info.capabilities.audio_gen |= entry.supports_audio_output;
             }
+            info.reasoning = None;
         } else {
             info.capabilities.vision |= entry.supports_vision;
             info.capabilities.web |= entry.supports_web_search;
@@ -200,6 +233,9 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
             info.capabilities.music_gen |= entry.supports_music_generation;
             if !entry.supports_music_generation {
                 info.capabilities.audio_gen |= entry.supports_audio_output;
+            }
+            if entry.supports_reasoning {
+                info.reasoning = Some(entry.reasoning.clone());
             }
         }
         sources.push("openrouter");
@@ -239,6 +275,15 @@ fn apply_known_capability_overrides(kind: &str, id_lower: &str, info: &mut Model
         || id_lower.contains("deepseek-r");
     if supports_thinking && !info.capabilities.reasoning {
         info.capabilities.reasoning = true;
+        if info.reasoning.is_none() {
+            info.reasoning = Some(ModelReasoningMeta {
+                supported_efforts: vec!["high".into(), "xhigh".into()],
+                default_effort: Some("high".into()),
+                default_enabled: Some(true),
+                mandatory: Some(false),
+                supports_max_tokens: None,
+            });
+        }
         return true;
     }
     false
@@ -310,7 +355,7 @@ mod tests {
                   "output_modalities": ["text"]
                 },
                 "supported_parameters": ["tools", "reasoning", "reasoning_effort"],
-                "reasoning": { "mandatory": false, "default_effort": "high" }
+                "reasoning": { "mandatory": false, "default_effort": "high", "supported_efforts": ["xhigh", "high"] }
               }]
             }"#,
             || {
@@ -323,6 +368,7 @@ mod tests {
                         vision: true,
                         ..Default::default()
                     },
+                    reasoning: None,
                     meta_source: "heuristic+table".into(),
                 };
                 enrich_model_info(&mut stale, "deepseek", None);
@@ -331,6 +377,9 @@ mod tests {
                 assert!(stale.capabilities.tools);
                 assert!(stale.capabilities.reasoning);
                 assert_eq!(stale.meta_source, "openrouter");
+                let r = stale.reasoning.expect("reasoning meta");
+                assert_eq!(r.default_effort.as_deref(), Some("high"));
+                assert!(r.supported_efforts.iter().any(|e| e == "xhigh"));
             },
         );
     }

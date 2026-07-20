@@ -530,8 +530,11 @@ pub async fn openai_compatible_chat_stream(
             "type": if config.thinking_enabled { "enabled" } else { "disabled" }
         });
         if config.thinking_enabled {
+            // DeepSeek V4：官方档位为 high / xhigh；max 映射到 xhigh
             let effort = match config.reasoning_effort.trim() {
-                "max" | "xhigh" => "max",
+                "max" | "xhigh" => "xhigh",
+                "high" => "high",
+                other if !other.is_empty() => other,
                 _ => "high",
             };
             body["reasoning_effort"] = json!(effort);

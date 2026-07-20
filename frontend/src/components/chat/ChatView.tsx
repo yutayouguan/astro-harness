@@ -74,6 +74,7 @@ import {
   pathsToAttachments,
 } from "../../lib/chat/chatPaste";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
+import { thinkingLevelsFromMeta } from "../../lib/chat/thinkingPrefs";
 import type {
   ChatActivity,
   ChatAttachment,
@@ -82,6 +83,7 @@ import type {
   ChatMessage,
   InstalledSkill,
   MessageTokenUsage,
+  ModelReasoningMeta,
   PendingInterrupt,
 } from "../../types";
 import { AgentCreateGuide } from "../agents/AgentCreateGuide";
@@ -246,6 +248,8 @@ type Props = {
   onPickWelcomePrompt: (prompt: string) => void;
   /** DeepSeek 等支持 thinking 时显示输入框控件 */
   showThinkingControls?: boolean;
+  /** OpenRouter 推理档位元数据；用于过滤思考级别 */
+  reasoningMeta?: ModelReasoningMeta | null;
   thinkingPrefs: ChatThinkingPrefs;
   onToggleThinking: () => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
@@ -561,6 +565,7 @@ export default function ChatView({
   onSkipAgentCreate,
   onPickWelcomePrompt,
   showThinkingControls = false,
+  reasoningMeta = null,
   thinkingPrefs,
   onToggleThinking: _onToggleThinking,
   onThinkingLevelChange,
@@ -748,35 +753,57 @@ export default function ChatView({
     return map;
   }, [t]);
 
-  const thinkingItems: PaletteItem[] = useMemo(
-    () => [
-      {
-        id: "off",
-        level: "off",
-        title: t("chat.thinkLevelOff"),
-        description: t("chat.thinkLevelOffDesc"),
-      },
-      {
-        id: "low",
-        level: "low",
-        title: t("chat.thinkLevelLow"),
-        description: t("chat.thinkLevelLowDesc"),
-      },
-      {
-        id: "high",
-        level: "high",
-        title: t("chat.thinkLevelHigh"),
-        description: t("chat.thinkLevelHighDesc"),
-      },
-      {
-        id: "max",
-        level: "max",
-        title: t("chat.thinkLevelMax"),
-        description: t("chat.thinkLevelMaxDesc"),
-      },
-    ],
-    [t],
-  );
+  const thinkingItems: PaletteItem[] = useMemo(() => {
+    const levels = thinkingLevelsFromMeta(reasoningMeta);
+    const label = (level: ThinkingLevel): { title: string; description: string } => {
+      switch (level) {
+        case "off":
+          return {
+            title: t("chat.thinkLevelOff"),
+            description: t("chat.thinkLevelOffDesc"),
+          };
+        case "none":
+          return {
+            title: t("chat.thinkLevelNone"),
+            description: t("chat.thinkLevelNoneDesc"),
+          };
+        case "minimal":
+          return {
+            title: t("chat.thinkLevelMinimal"),
+            description: t("chat.thinkLevelMinimalDesc"),
+          };
+        case "low":
+          return {
+            title: t("chat.thinkLevelLow"),
+            description: t("chat.thinkLevelLowDesc"),
+          };
+        case "medium":
+          return {
+            title: t("chat.thinkLevelMedium"),
+            description: t("chat.thinkLevelMediumDesc"),
+          };
+        case "high":
+          return {
+            title: t("chat.thinkLevelHigh"),
+            description: t("chat.thinkLevelHighDesc"),
+          };
+        case "xhigh":
+          return {
+            title: t("chat.thinkLevelXhigh"),
+            description: t("chat.thinkLevelXhighDesc"),
+          };
+        case "max":
+          return {
+            title: t("chat.thinkLevelMax"),
+            description: t("chat.thinkLevelMaxDesc"),
+          };
+      }
+    };
+    return levels.map((level) => {
+      const { title, description } = label(level);
+      return { id: level, level, title, description };
+    });
+  }, [t, reasoningMeta]);
 
   const slashItems: PaletteItem[] = useMemo(() => {
     return buildSlashPaletteEntries(skills).map((e) => ({
@@ -2262,11 +2289,19 @@ export default function ChatView({
                   <span>
                     {thinkingPrefs.level === "off"
                       ? t("chat.thinkLevelOff")
-                      : thinkingPrefs.level === "low"
-                        ? t("chat.thinkLevelLow")
-                        : thinkingPrefs.level === "max"
-                          ? t("chat.thinkLevelMax")
-                          : t("chat.thinkLevelHigh")}
+                      : thinkingPrefs.level === "none"
+                        ? t("chat.thinkLevelNone")
+                        : thinkingPrefs.level === "minimal"
+                          ? t("chat.thinkLevelMinimal")
+                          : thinkingPrefs.level === "low"
+                            ? t("chat.thinkLevelLow")
+                            : thinkingPrefs.level === "medium"
+                              ? t("chat.thinkLevelMedium")
+                              : thinkingPrefs.level === "xhigh"
+                                ? t("chat.thinkLevelXhigh")
+                                : thinkingPrefs.level === "max"
+                                  ? t("chat.thinkLevelMax")
+                                  : t("chat.thinkLevelHigh")}
                   </span>
                   <ChevronDown size={13} strokeWidth={2} />
                 </button>

@@ -30,6 +30,7 @@ pub struct OpenRouterEntry {
     pub supports_audio_output: bool,
     pub supports_music_generation: bool,
     pub display_name: Option<String>,
+    pub reasoning: crate::model_meta::ModelReasoningMeta,
     /// 命中的 OpenRouter 模型 id（调试 / 单测用）
     #[allow(dead_code)]
     pub matched_key: String,
@@ -70,7 +71,23 @@ struct RawArchitecture {
 #[derive(Debug, Deserialize, Default)]
 struct RawTopProvider {
     #[serde(default)]
+    context_length: Option<u64>,
+    #[serde(default)]
     max_completion_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RawReasoning {
+    #[serde(default)]
+    mandatory: Option<bool>,
+    #[serde(default)]
+    default_enabled: Option<bool>,
+    #[serde(default)]
+    default_effort: Option<String>,
+    #[serde(default)]
+    supported_efforts: Vec<String>,
+    #[serde(default)]
+    supports_max_tokens: Option<bool>,
 }
 
 impl RawModel {
@@ -106,22 +123,18 @@ impl RawModel {
             || name_lower.contains("music");
         let supports_music = audio_out && music_hint;
 
-        let reasoning_obj = match self.reasoning.as_ref() {
-            Some(v) if v.is_null() => false,
-            Some(v) if v.is_object() => v.as_object().is_some_and(|o| !o.is_empty()),
-            Some(_) => true,
-            None => false,
-        };
-        let supports_reasoning = reasoning_obj
+        let reasoning_meta = parse_reasoning_meta(self.reasoning.as_ref());
+        let supports_reasoning = reasoning_meta.is_some()
             || has_param("reasoning")
             || has_param("include_reasoning")
             || has_param("reasoning_effort");
 
+        let top = self.top_provider.unwrap_or_default();
+        let max_input = self.context_length.or(top.context_length);
+
         OpenRouterEntry {
-            max_input_tokens: self.context_length,
-            max_output_tokens: self
-                .top_provider
-                .and_then(|t| t.max_completion_tokens),
+            max_input_tokens: max_input,
+            max_output_tokens: top.max_completion_tokens,
             supports_vision: has_mod(&inns, "image") || has_mod(&inns, "video"),
             supports_function_calling: has_param("tools") || has_param("tool_choice"),
             supports_reasoning,
@@ -131,9 +144,45 @@ impl RawModel {
             supports_audio_output: audio_out && !supports_music,
             supports_music_generation: supports_music,
             display_name: self.name,
+            reasoning: reasoning_meta.unwrap_or_default(),
             matched_key: self.id,
         }
     }
+}
+
+/// 解析 OpenRouter 顶层 `reasoning` 对象。
+fn parse_reasoning_meta(raw: Option<&serde_json::Value>) -> Option<crate::model_meta::ModelReasoningMeta> {
+    let v = raw?;
+    if v.is_null() {
+        return None;
+    }
+    let parsed: RawReasoning = serde_json::from_value(v.clone()).ok()?;
+    let efforts: Vec<String> = parsed
+        .supported_efforts
+        .into_iter()
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let meta = crate::model_meta::ModelReasoningMeta {
+        supported_efforts: efforts,
+        default_effort: parsed
+            .default_effort
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty()),
+        default_enabled: parsed.default_enabled,
+        mandatory: parsed.mandatory,
+        supports_max_tokens: parsed.supports_max_tokens,
+    };
+    if meta.supported_efforts.is_empty()
+        && meta.default_effort.is_none()
+        && meta.default_enabled.is_none()
+        && meta.mandatory.is_none()
+        && meta.supports_max_tokens.is_none()
+    {
+        // 空对象 `{}` 仍视为「支持推理」占位
+        return Some(crate::model_meta::ModelReasoningMeta::default());
+    }
+    Some(meta)
 }
 
 /// OpenRouter 元数据缓存文件路径。
@@ -474,7 +523,7 @@ mod tests {
                   "output_modalities": ["text"]
                 },
                 "supported_parameters": ["tools", "reasoning", "reasoning_effort"],
-                "reasoning": { "mandatory": false, "default_effort": "high" },
+                "reasoning": { "mandatory": false, "default_effort": "high", "supported_efforts": ["xhigh", "high"] },
                 "top_provider": { "max_completion_tokens": 8192 }
               }]
             }"#,
@@ -485,6 +534,11 @@ mod tests {
                 assert!(!e.supports_vision);
                 assert_eq!(e.max_input_tokens, Some(1_048_576));
                 assert_eq!(e.max_output_tokens, Some(8192));
+                assert_eq!(e.reasoning.default_effort.as_deref(), Some("high"));
+                assert_eq!(
+                    e.reasoning.supported_efforts,
+                    vec!["xhigh".to_string(), "high".to_string()]
+                );
             },
         );
     }

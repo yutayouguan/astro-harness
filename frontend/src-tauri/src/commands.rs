@@ -702,14 +702,14 @@ pub async fn start_chat(
     let grpc_address = default_grpc_address();
     let event_name = format!("chat-stream-{sid}");
     let thinking_enabled = thinking_enabled.unwrap_or(false);
-    let reasoning_effort = reasoning_effort
+    let mut reasoning_effort = reasoning_effort
         .unwrap_or_else(|| "high".to_string())
         .trim()
-        .to_string();
-    let reasoning_effort = match reasoning_effort.as_str() {
-        "max" | "xhigh" => "max".to_string(),
-        _ => "high".to_string(),
-    };
+        .to_ascii_lowercase();
+    if reasoning_effort.is_empty() {
+        reasoning_effort = "high".to_string();
+    }
+    // 透传 OpenRouter / 厂商档位（none/minimal/low/medium/high/xhigh/max）
     let interaction_mode = interaction_mode
         .unwrap_or_else(|| "agent".to_string())
         .trim()

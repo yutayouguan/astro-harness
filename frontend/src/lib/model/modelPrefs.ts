@@ -1,10 +1,21 @@
 /** 模型选择器全局与会话偏好。 */
-import type { ReasoningEffort } from "../../types";
-import type { ThinkingLevel } from "../chat/thinkingPrefs";
+import type { ModelReasoningMeta, ReasoningEffort } from "../../types";
+import {
+  defaultThinkingLevelFromMeta,
+  parseEffortLevel,
+  type ThinkingLevel,
+} from "../chat/thinkingPrefs";
 
 export type ModelContextSize = "default" | "300k" | "1m";
-/** 与后端 ReasoningEffort / DeepSeek 请求一致 */
-export type ModelEffort = "low" | "medium" | "high" | "xhigh" | "max";
+/** 与后端 ReasoningEffort / OpenRouter supported_efforts 一致 */
+export type ModelEffort =
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
 
 export type ModelRuntimePrefs = {
   thinking: boolean;
@@ -71,6 +82,23 @@ export function loadModelPrefs(
   return all[modelPrefsKey(providerId, modelId)] ?? { ...DEFAULT_MODEL_PREFS };
 }
 
+/** 是否已有用户保存过的该模型偏好 */
+export function hasSavedModelPrefs(providerId: string, modelId: string): boolean {
+  const all = loadAllModelPrefs();
+  return Object.prototype.hasOwnProperty.call(all, modelPrefsKey(providerId, modelId));
+}
+
+/** 用 OpenRouter reasoning 元数据生成默认偏好（仅无已保存偏好时） */
+export function prefsFromReasoningMeta(
+  meta?: ModelReasoningMeta | null,
+): ModelRuntimePrefs {
+  const level = defaultThinkingLevelFromMeta(meta);
+  return {
+    ...DEFAULT_MODEL_PREFS,
+    ...thinkingLevelToModelPatch(level),
+  };
+}
+
 export function upsertModelPrefs(
   providerId: string,
   modelId: string,
@@ -114,9 +142,8 @@ export function syncMaxModeWithThinkingLevel(_level: ThinkingLevel): ModelPicker
 }
 
 function normalizeEffort(v: unknown): ModelEffort {
-  if (v === "low" || v === "medium" || v === "high" || v === "xhigh" || v === "max") {
-    return v;
-  }
+  const parsed = parseEffortLevel(typeof v === "string" ? v : undefined);
+  if (parsed && parsed !== "off") return parsed;
   return "high";
 }
 
@@ -133,7 +160,7 @@ function normalizePrefs(v: Partial<ModelRuntimePrefs> & { effort?: string }): Mo
   };
 }
 
-/** 映射到当前 DeepSeek / OpenAI 兼容请求参数 */
+/** 映射到请求参数（透传 OpenRouter / 厂商 effort 字符串） */
 export function modelPrefsToApi(
   prefs: ModelRuntimePrefs,
   globals: ModelPickerGlobals = DEFAULT_PICKER_GLOBALS,
@@ -146,7 +173,7 @@ export function modelPrefsToApi(
   }
   return {
     thinkingEnabled: true,
-    reasoningEffort: prefs.effort === "max" ? "max" : "high",
+    reasoningEffort: prefs.effort,
   };
 }
 
@@ -157,22 +184,15 @@ export function modelPrefsToThinkingLevel(
 ): ThinkingLevel {
   if (globals.maxMode) return "max";
   if (!prefs.thinking) return "off";
-  if (prefs.effort === "max") return "max";
-  return "high";
+  return prefs.effort;
 }
 
-/** 输入栏思考级别写回当前模型配置（low 与 high 同映射到 API high） */
+/** 输入栏思考级别写回当前模型配置 */
 export function thinkingLevelToModelPatch(
   level: ThinkingLevel,
 ): Partial<ModelRuntimePrefs> {
-  switch (level) {
-    case "off":
-      return { thinking: false };
-    case "max":
-      return { thinking: true, effort: "max" };
-    case "low":
-    case "high":
-    default:
-      return { thinking: true, effort: "high" };
+  if (level === "off") {
+    return { thinking: false };
   }
+  return { thinking: true, effort: level };
 }

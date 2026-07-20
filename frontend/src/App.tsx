@@ -50,9 +50,17 @@ import { useTransientToast } from "./hooks/ui/useTransientToast";
 import { useWindowChrome } from "./hooks/app/useWindowChrome";
 import { useI18n } from "./i18n/LocaleContext";
 import type { MessageKey } from "./i18n/messages";
-import { type ThinkingLevel } from "./lib/chat/thinkingPrefs";
+import {
+  defaultThinkingLevelFromMeta,
+  thinkingLevelsFromMeta,
+  type ThinkingLevel,
+} from "./lib/chat/thinkingPrefs";
 import {
   modelPrefsToThinkingLevel,
+  hasSavedModelPrefs,
+  loadPickerGlobals,
+  loadModelPrefs,
+  prefsFromReasoningMeta,
   syncMaxModeWithThinkingLevel,
   thinkingLevelToModelPatch,
   upsertModelPrefs,
@@ -93,7 +101,7 @@ import {
   clearShellGradientVars,
   flushGlassBackdrop,
 } from "./lib/ui/shellGradient";
-import type { ModelCapabilities, ProviderModelsResult } from "./types";
+import type { ModelCapabilities, ModelReasoningMeta, ProviderModelsResult } from "./types";
 
 const NAV_ROW_PITCH_PX = 44;
 export default function App() {
@@ -144,6 +152,8 @@ export default function App() {
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
   const [activeModelCapabilities, setActiveModelCapabilities] =
     useState<ModelCapabilities | null>(null);
+  const [activeModelReasoning, setActiveModelReasoning] =
+    useState<ModelReasoningMeta | null>(null);
   const [memoryHeaderAgent, setMemoryHeaderAgent] =
     useState<MemoryHeaderAgentPicker | null>(null);
 
@@ -208,6 +218,7 @@ export default function App() {
     if (!providerId || !modelId) {
       setModelContextWindow(null);
       setActiveModelCapabilities(null);
+      setActiveModelReasoning(null);
       return;
     }
     let cancelled = false;
@@ -222,15 +233,40 @@ export default function App() {
         const win = match?.context_window;
         setModelContextWindow(typeof win === "number" && win > 0 ? win : null);
         setActiveModelCapabilities(match?.capabilities ?? null);
+        const reasoning = match?.reasoning ?? null;
+        setActiveModelReasoning(reasoning);
+        // 无本地偏好时，按 OpenRouter default_enabled / default_effort 播种
+        if (reasoning && !hasSavedModelPrefs(providerId, modelId)) {
+          const seeded = prefsFromReasoningMeta(reasoning);
+          upsertModelPrefs(providerId, modelId, seeded);
+          syncComposerFromModelPrefs(seeded, loadPickerGlobals());
+        } else {
+          const prefs = loadModelPrefs(providerId, modelId);
+          const globals = loadPickerGlobals();
+          const level = modelPrefsToThinkingLevel(prefs, globals);
+          const allowed = thinkingLevelsFromMeta(reasoning);
+          if (!allowed.includes(level)) {
+            const snapped = defaultThinkingLevelFromMeta(reasoning);
+            const next = {
+              ...prefs,
+              ...thinkingLevelToModelPatch(snapped),
+            };
+            upsertModelPrefs(providerId, modelId, next);
+            syncComposerFromModelPrefs(next, globals);
+          } else {
+            syncComposerFromModelPrefs(prefs, globals);
+          }
+        }
       } catch {
         if (!cancelled) {
           setModelContextWindow(null);
           setActiveModelCapabilities(null);
+          setActiveModelReasoning(null);
         }
       }
     })();
     return () => { cancelled = true; };
-  }, [activeProvider?.id, activeProvider?.model]);
+  }, [activeProvider?.id, activeProvider?.model, syncComposerFromModelPrefs]);
 
   // ── ⌘/Ctrl+N：聊天页新建会话 ─────────────────────────────────────────────
   useEffect(() => {
@@ -395,10 +431,10 @@ export default function App() {
           break;
         }
         case "reasoning": {
-          const order = ["off", "low", "high", "max"] as const;
-          const i = order.indexOf(thinkingPrefs.level);
-          const next = order[(i + 1) % order.length];
-          setThinkingLevel(next);
+          const order = thinkingLevelsFromMeta(activeModelReasoning);
+          const i = Math.max(0, order.indexOf(thinkingPrefs.level));
+          const next = order[(i + 1) % order.length] ?? "high";
+          onThinkingLevelChange(next);
           showTransientToast(t("chat.slashReasoningMsg", { level: next }));
           break;
         }
@@ -533,11 +569,13 @@ export default function App() {
       activeProvider,
       chatMode,
       thinkingPrefs.level,
+      activeModelReasoning,
       chatDisplayPrefs.verbosity,
       showTransientToast,
       t,
       setVerbosity,
       setThinkingLevel,
+      onThinkingLevelChange,
       onChatModeChange,
       setMemoryPendingCount,
       setChatRightTab,
@@ -836,6 +874,7 @@ export default function App() {
                       onSkipAgentCreate={skipAgentCreate}
                       onPickWelcomePrompt={(prompt) => setInput(prompt)}
                       showThinkingControls={showThinking}
+                      reasoningMeta={activeModelReasoning}
                       thinkingPrefs={thinkingPrefs}
                       onToggleThinking={onToggleThinking}
                       onThinkingLevelChange={onThinkingLevelChange}
