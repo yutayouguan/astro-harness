@@ -22,6 +22,7 @@ import {
   Save,
   Play,
   Plus,
+  History,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
@@ -31,6 +32,8 @@ type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
 import type { LoopDto, NodeType, NodeMeta } from "./loopTypes";
 import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory } from "./loopTypes";
 import LoopConfigPanel from "./LoopConfigPanel";
+import LoopRunHistory from "./LoopRunHistory";
+import LoopRunDetail from "./LoopRunDetail";
 
 interface Props {
   workflowId: string | null;
@@ -72,6 +75,10 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // run history state
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   // sidebar collapsed categories
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -214,6 +221,16 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
         />
         <div className="loop-editor-toolbar-right">
           <button
+            className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
+            title="运行日志"
+            onClick={() => {
+              setShowHistory((v) => !v);
+              setSelectedRunId(null);
+            }}
+          >
+            <History size={16} />
+          </button>
+          <button
             className="loop-btn loop-btn--secondary"
             onClick={() => void handleSave()}
             disabled={saving}
@@ -229,6 +246,7 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
               try {
                 const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: workflow.id });
                 console.log("run_loop result:", result);
+                setShowHistory(true);
               } catch (e) {
                 console.error("run_loop failed", e);
               }
