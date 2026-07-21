@@ -188,7 +188,7 @@ mod tests {
                 content: Some("hello protocol".into()),
                 old_text: None,
                 source: "test".into(),
-                agent_id: "workspace".into(),
+                agent_id: "default".into(),
             })
             .unwrap();
         match r {
@@ -210,7 +210,7 @@ mod tests {
                 content: Some("pending entry".into()),
                 old_text: None,
                 source: "test".into(),
-                agent_id: "workspace".into(),
+                agent_id: "default".into(),
             })
             .unwrap();
         match r {

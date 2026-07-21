@@ -202,7 +202,7 @@ fn insert_and_count_events() {
         ts: "2026-07-13T02:00:00Z",
         kind: "tool",
         name: "terminal",
-        agent_id: "workspace",
+        agent_id: "default",
         session_id: None,
         input_tokens: 0,
         output_tokens: 0,
@@ -215,7 +215,7 @@ fn insert_and_count_events() {
         ts: "2026-07-13T03:00:00Z",
         kind: "llm",
         name: "gpt-4o-mini",
-        agent_id: "workspace",
+        agent_id: "default",
         session_id: Some("s1".into()),
         input_tokens: 100,
         output_tokens: 50,
@@ -242,9 +242,9 @@ fn filters_by_agent_and_excludes_out_of_range() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
     for (ts, agent, kind, name) in [
-        ("2026-07-01T10:00:00Z", "workspace", "tool", "terminal"),
+        ("2026-07-01T10:00:00Z", "default", "tool", "terminal"),
         ("2026-07-02T10:00:00Z", "research", "tool", "web_search"),
-        ("2026-06-01T10:00:00Z", "workspace", "tool", "terminal"), // 上月
+        ("2026-06-01T10:00:00Z", "default", "tool", "terminal"), // 上月
     ] {
         db.insert(zero_billing_event(ZeroBillingEvent {
             ts,
@@ -274,7 +274,7 @@ fn filters_by_agent_and_excludes_out_of_range() {
         .query_insights(UsageInsightsQuery {
             period: UsagePeriod::Month,
             as_of: Some("2026-07-15T00:00:00Z".into()),
-            agent_id: Some("workspace".into()),
+            agent_id: Some("default".into()),
         })
         .unwrap();
     assert_eq!(one.kpis.calls, 1);
@@ -289,7 +289,7 @@ fn skill_events_do_not_inflate_kpi_calls() {
         ts: "2026-07-13T01:00:00Z",
         kind: "tool",
         name: "skills",
-        agent_id: "workspace",
+        agent_id: "default",
         session_id: None,
         input_tokens: 0,
         output_tokens: 0,
@@ -302,7 +302,7 @@ fn skill_events_do_not_inflate_kpi_calls() {
         ts: "2026-07-13T01:00:01Z",
         kind: "skill",
         name: "demo",
-        agent_id: "workspace",
+        agent_id: "default",
         session_id: None,
         input_tokens: 0,
         output_tokens: 0,
@@ -335,7 +335,7 @@ fn offset_timestamp_normalized_and_counted_in_month() {
         ts: "2026-07-01T00:00:00+00:00",
         kind: "tool",
         name: "terminal",
-        agent_id: "workspace",
+        agent_id: "default",
         session_id: None,
         input_tokens: 0,
         output_tokens: 0,

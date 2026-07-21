@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     source TEXT NOT NULL,
     session_id TEXT,
     message_id TEXT,
-    agent_id TEXT NOT NULL DEFAULT 'workspace',
+    agent_id TEXT NOT NULL DEFAULT 'default',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     missing INTEGER NOT NULL DEFAULT 0
@@ -625,7 +625,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        assert_eq!(row.agent_id, "workspace");
+        assert_eq!(row.agent_id, "default");
     }
 
     #[test]

@@ -54,7 +54,7 @@ function applyConfig(
 
 export function ActiveAgentProvider({ children }: { children: ReactNode }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [activeAgentId, setActiveAgentId] = useState("workspace");
+  const [activeAgentId, setActiveAgentId] = useState("default");
   const [workspaceDir, setWorkspaceDir] = useState("");
   const [ready, setReady] = useState(false);
   const switchingRef = useRef(false);

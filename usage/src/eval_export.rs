@@ -158,7 +158,7 @@ mod tests {
             ts: "2026-07-17T00:00:00Z".into(),
             kind: "llm".into(),
             name: "gpt-test".into(),
-            agent_id: "workspace".into(),
+            agent_id: "default".into(),
             session_id: Some("sess-eval-1".into()),
             turn_id: Some("t1".into()),
             input_tokens: 10,

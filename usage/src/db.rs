@@ -929,7 +929,7 @@ mod tests {
             ts: "2026-07-13T02:00:02Z".into(),
             kind: "llm".into(),
             name: "gpt-5.6".into(),
-            agent_id: "workspace".into(),
+            agent_id: "default".into(),
             session_id: None,
             turn_id: None,
             input_tokens: 10,
@@ -956,7 +956,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(insights.rankings.by_agent.len(), 1);
-        assert_eq!(insights.rankings.by_agent[0].name, "workspace");
+        assert_eq!(insights.rankings.by_agent[0].name, "default");
         assert_eq!(insights.rankings.by_agent[0].calls, 1);
         assert_eq!(insights.rankings.by_agent[0].tokens, 15);
     }

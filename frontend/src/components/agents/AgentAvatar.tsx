@@ -32,7 +32,7 @@ export default function AgentAvatar({ agent, size = 22, className = "" }: Props)
 
   const isDefault =
     agent.is_default === true ||
-    agent.id === "workspace" ||
+    agent.id === "default" ||
     agent.id === "default";
 
   if (isDefault) {

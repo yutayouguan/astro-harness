@@ -264,7 +264,7 @@ pub fn create_agent_with_profile(
     };
 
     if id == DEFAULT_AGENT_ID {
-        anyhow::bail!("不能覆盖默认 Agent `workspace`，请换一个名称");
+        anyhow::bail!("不能覆盖默认 Agent `default`，请换一个名称");
     }
     const RESERVED: &[&str] = &[
         "sessions",
@@ -275,6 +275,7 @@ pub fn create_agent_with_profile(
         "cache",
         "agents",
         "workspace",
+        "default",
     ];
     if RESERVED.contains(&id.as_str()) || id.starts_with("workspace-") {
         anyhow::bail!("id `{id}` 为系统保留，请换一个");

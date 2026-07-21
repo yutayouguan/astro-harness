@@ -18,6 +18,6 @@ export type AgentInfo = {
  * 将 `default` / 空 id 规范为 `workspace`（默认 Agent 工作区约定）。
  */
 export function normalizeAgentId(id: string | null | undefined): string {
-  if (!id || id === "default") return "workspace";
+  if (!id || id === "workspace") return "default";
   return id;
 }

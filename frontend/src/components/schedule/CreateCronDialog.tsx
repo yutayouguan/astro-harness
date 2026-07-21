@@ -80,7 +80,7 @@ export function CreateCronDialog({
   activeProviderId,
   models: modelsProp,
   agents = [],
-  defaultAgentId = "workspace",
+  defaultAgentId = "default",
   editingJob = null,
 }: Props) {
   const { t } = useI18n();
@@ -250,7 +250,7 @@ export function CreateCronDialog({
       ? agents
       : [
           {
-            id: "workspace",
+            id: "default",
             name: t("cron.agent.default"),
             path: "",
             is_default: true,

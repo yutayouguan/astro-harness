@@ -28,7 +28,7 @@ import {
 
 export type EmptyScene =
   | "chat"
-  | "workspace"
+  | "default"
   | "memory"
   | "cron"
   | "files"

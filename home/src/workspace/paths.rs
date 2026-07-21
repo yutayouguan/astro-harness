@@ -3,8 +3,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// 默认 Agent 的 id / 目录名：`~/.astro/workspace`
-pub const DEFAULT_AGENT_ID: &str = "workspace";
+/// 默认 Agent 的 id（存储在 DB 和协议层）。
+pub const DEFAULT_AGENT_ID: &str = "default";
+
+/// 默认 Agent 的**工作区内容目录名**（`~/.astro/workspace/`），
+/// 与 Agent id `"default"` 无关，仅用于文件系统路径拼接。
+pub const DEFAULT_AGENT_WORKSPACE_DIR: &str = "workspace";
 
 /// 新建 Agent id 的可读 slug 与随机后缀分隔符：`{slug}--{hex}`
 pub const AGENT_ID_SUFFIX_SEP: &str = "--";
@@ -103,12 +107,12 @@ pub fn default_memory_dir() -> PathBuf {
 
 /// 解析 Agent 工作区路径。
 ///
-/// - `workspace`（默认）→ `{base}/workspace`
+/// - `default`（默认）→ `{base}/workspace`（目录名保持 `workspace` 不变）
 /// - 其他 id → `{base}/workspace-{id}`
 pub fn agent_workspace_dir(base: &Path, agent_id: &str) -> PathBuf {
     let id = normalize_agent_id(agent_id);
     if id == DEFAULT_AGENT_ID {
-        base.join(DEFAULT_AGENT_ID)
+        base.join(DEFAULT_AGENT_WORKSPACE_DIR)
     } else {
         base.join(format!("workspace-{id}"))
     }
@@ -130,9 +134,9 @@ pub fn agent_config_dir(base: &Path, agent_id: &str) -> PathBuf {
     }
 }
 
-/// 从工作区目录名解析 agent id（`workspace` / `workspace-xxx`）
+/// 从工作区目录名解析 agent id（`workspace` → `"default"`；`workspace-xxx` → `"xxx"`）
 pub fn agent_id_from_workspace_dir_name(name: &str) -> Option<String> {
-    if name == DEFAULT_AGENT_ID {
+    if name == DEFAULT_AGENT_WORKSPACE_DIR {
         return Some(DEFAULT_AGENT_ID.to_string());
     }
     name.strip_prefix("workspace-")

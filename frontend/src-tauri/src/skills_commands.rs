@@ -34,7 +34,7 @@ fn normalize_agent_id(agent_id: Option<String>) -> Option<String> {
         .filter(|s| !s.is_empty())
         .map(|s| {
             if s == "default" {
-                "workspace".to_string()
+                "default".to_string()
             } else {
                 s
             }
@@ -48,7 +48,7 @@ fn origin_agent_id(record: &SkillOriginRecord) -> String {
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        Some("default") | None => "workspace".to_string(),
+        Some("default") | None => "default".to_string(),
         Some(id) => id.to_string(),
     }
 }

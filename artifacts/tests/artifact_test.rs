@@ -173,7 +173,7 @@ fn list_filters_by_agent_id() {
         artifacts::db::ArtifactSource::AgentWrite,
         Some("s1"),
         None,
-        Some("workspace"),
+        Some("default"),
     )
     .unwrap();
     db.register(

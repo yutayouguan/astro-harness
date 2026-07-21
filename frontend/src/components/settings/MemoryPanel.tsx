@@ -1157,7 +1157,7 @@ export default function MemoryPanel({
                             agents.find((x) => x.id === a.agent_id) ?? {
                               id: a.agent_id,
                               name: a.agent_name,
-                              is_default: a.agent_id === "workspace",
+                              is_default: a.agent_id === "default",
                             }
                           }
                           size={36}

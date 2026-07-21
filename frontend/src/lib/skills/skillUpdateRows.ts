@@ -20,7 +20,7 @@ function norm(value: string | undefined | null): string | undefined {
 
 /** Agent id 规范化（空 / default → workspace，与 memory crate 一致） */
 function normalizeAgentId(id: string | null | undefined): string {
-  if (!id || id === "default") return "workspace";
+  if (!id || id === "workspace") return "default";
   return id;
 }
 
