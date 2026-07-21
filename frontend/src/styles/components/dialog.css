@@ -50,8 +50,9 @@ html[data-theme="light"] .app-dialog-backdrop {
   animation: app-dialog-rise-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* 危险态：外壳仍跟 Tab tone；危险色只落在图标 / 强调区 / 确认按钮 */
 .app-dialog.is-danger {
-  --dialog-accent: #ef4444;
+  --dialog-danger: var(--danger, #ef4444);
 }
 
 .app-dialog.is-prompt {
@@ -87,15 +88,9 @@ html[data-theme="dark"] .app-dialog {
 }
 
 .app-dialog.is-danger .app-dialog-icon {
-  color: #dc2626;
-  background: color-mix(in srgb, #ef4444 14%, transparent);
-  border-color: color-mix(in srgb, #ef4444 30%, transparent);
-}
-
-html[data-theme="dark"] .app-dialog.is-danger .app-dialog-icon {
-  color: #fda4a4;
-  background: color-mix(in srgb, #f87171 16%, transparent);
-  border-color: color-mix(in srgb, #f87171 34%, transparent);
+  color: var(--dialog-danger);
+  background: color-mix(in srgb, var(--dialog-danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--dialog-danger) 30%, transparent);
 }
 
 .app-dialog-copy {
@@ -126,8 +121,13 @@ html[data-theme="dark"] .app-dialog.is-danger .app-dialog-icon {
   margin: 2px 0 4px;
   padding: 11px 12px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--danger, #c44) 28%, var(--glass-edge));
-  background: color-mix(in srgb, var(--danger, #c44) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--dialog-accent) 22%, var(--glass-edge));
+  background: color-mix(in srgb, var(--dialog-accent) 8%, var(--surface, var(--glass-panel)));
+}
+
+.app-dialog.is-danger .app-dialog-emphasis {
+  border-color: color-mix(in srgb, var(--dialog-danger) 28%, var(--glass-edge));
+  background: color-mix(in srgb, var(--dialog-danger) 8%, var(--surface, var(--glass-panel)));
 }
 
 .app-dialog-emphasis-label {
@@ -147,7 +147,7 @@ html[data-theme="dark"] .app-dialog.is-danger .app-dialog-icon {
 }
 
 .app-dialog.is-danger .app-dialog-emphasis-value {
-  color: color-mix(in srgb, var(--danger, #b33) 35%, var(--ink));
+  color: color-mix(in srgb, var(--dialog-danger) 35%, var(--ink));
 }
 
 .app-dialog-body {
@@ -228,25 +228,17 @@ html[data-theme="dark"] .app-dialog-input {
 }
 
 .app-dialog-btn.is-confirm.is-danger {
-  color: #b91c1c;
-  border-color: color-mix(in srgb, #ef4444 36%, transparent);
+  color: color-mix(in srgb, var(--dialog-danger, var(--danger)) 72%, var(--ink));
+  border-color: color-mix(in srgb, var(--dialog-danger, var(--danger)) 36%, transparent);
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.22), transparent),
-    color-mix(in srgb, #ef4444 16%, transparent);
+    color-mix(in srgb, var(--dialog-danger, var(--danger)) 16%, transparent);
 }
 
 .app-dialog-btn.is-confirm.is-danger:hover:not(:disabled) {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.28), transparent),
-    color-mix(in srgb, #ef4444 24%, transparent);
-}
-
-html[data-theme="dark"] .app-dialog-btn.is-confirm.is-danger {
-  color: #fecaca;
-  border-color: color-mix(in srgb, #f87171 40%, transparent);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), transparent),
-    color-mix(in srgb, #f87171 18%, transparent);
+    color-mix(in srgb, var(--dialog-danger, var(--danger)) 24%, transparent);
 }
 
 .app-dialog-btn.is-confirm:disabled {
