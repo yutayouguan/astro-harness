@@ -381,7 +381,10 @@ mod tests {
             "questions": [{ "question": "x" }],
             "body": "y"
         }));
-        assert!(resolve_ask_user_mode(&a).unwrap_err().to_string().contains("mix"));
+        assert!(resolve_ask_user_mode(&a)
+            .unwrap_err()
+            .to_string()
+            .contains("mix"));
     }
 
     #[test]
