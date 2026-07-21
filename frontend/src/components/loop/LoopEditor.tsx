@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -64,9 +66,18 @@ const nodeTypes: NodeTypes = {
   loopNode: LoopNode as unknown as NodeTypes[string],
 };
 
-// ── Editor ───────────────────────────────────────────────────────────
+// ── Editor (wrapped with ReactFlowProvider) ─────────────────────────
 
-export default function LoopEditor({ workflowId, providers: _providers, onBack }: Props) {
+export default function LoopEditor(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <LoopEditorInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
+  const reactFlowInstance = useReactFlow();
   const [workflow, setWorkflow] = useState<LoopDto | null>(null);
   const [name, setName] = useState("未命名创建loop");
   const [, setDirty] = useState(false);
@@ -179,20 +190,23 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
       const meta = NODE_REGISTRY.find((m) => m.type === nodeType);
       if (!meta) return;
 
-      const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-      if (!bounds) return;
+      // 用 React Flow 实例将屏幕坐标转换为画布坐标（支持缩放和平移）
+      const flowPosition = reactFlowInstance.screenToFlowPosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
 
       const newId = crypto.randomUUID();
       const newNode: RFNode = {
         id: newId,
         type: "loopNode",
-        position: { x: e.clientX - bounds.left - 80, y: e.clientY - bounds.top - 20 },
+        position: flowPosition,
         data: { label: meta.label, meta, config: {}, nodeType },
       };
       setNodes((nds) => [...nds, newNode]);
       setDirty(true);
     },
-    [setNodes],
+    [setNodes, reactFlowInstance],
   );
 
   const toggleCategory = (cat: string) => {
@@ -302,7 +316,12 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
         </div>
 
         {/* ── Center: Canvas ── */}
-        <div className="loop-canvas-container" ref={reactFlowWrapper}>
+        <div
+          className="loop-canvas-container"
+          ref={reactFlowWrapper}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
