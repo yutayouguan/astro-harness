@@ -82,7 +82,7 @@ impl PromptBuilder {
         self
     }
 
-    /// 追加当日记忆层（mermaid/日文件来源）。
+    /// 追加当日记忆层（`memory/YYYY-MM-DD.md`）。
     pub fn with_daily_memory(mut self, daily_content: &str) -> Self {
         if !daily_content.is_empty() {
             self.layers

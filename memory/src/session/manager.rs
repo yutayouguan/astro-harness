@@ -30,7 +30,7 @@ pub struct MemoryManager {
     pub base_dir: PathBuf,
     /// 当前绑定的 Agent 标识（已规范化）。
     pub agent_id: String,
-    /// Agent 工作区目录，含 `MEMORY.md`、`USER.md`、`mermaid/` 等。
+    /// Agent 工作区目录，含 `MEMORY.md`、`USER.md`、`memory/` 等。
     pub workspace_dir: PathBuf,
     /// 长期记忆存储（live + snapshot）。
     pub memory: MemoryStore,
@@ -106,7 +106,7 @@ impl MemoryManager {
         }
         content.push('\n');
         std::fs::write(&path, &content)?;
-        Ok(format!("已写入每日记忆 mermaid/{date}.md"))
+        Ok(format!("已写入每日记忆 memory/{date}.md"))
     }
 
     /// 返回 `(长期记忆, 用户档案)` 的 **snapshot** 渲染文本，供 Prompt 注入。
@@ -347,7 +347,7 @@ fn truncate_chars(s: &str, max: usize) -> String {
 ///
 /// - `"user"` → [`MemoryTarget::User`]
 /// - `"memory"` / 缺省 → [`MemoryTarget::Memory`]
-/// - `"daily"` / `"mermaid"` → 错误（日记仅系统入口）
+/// - `"daily"` / `"mermaid"`（遗留目录名）→ 错误（日记仅系统入口）
 fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
     match value {
         None => Ok(MemoryTarget::Memory),

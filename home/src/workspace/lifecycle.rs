@@ -9,8 +9,8 @@ use crate::GENERATED_SUBDIRS;
 use super::agent_config::AgentRuntimeConfig;
 use super::paths::{
     active_agent_id, agent_config_dir, agent_id_from_workspace_dir_name, agent_workspace_dir,
-    daily_memory_path, default_memory_dir, generate_agent_id, normalize_agent_id, set_active_agent,
-    DEFAULT_AGENT_ID,
+    daily_memory_path, default_memory_dir, generate_agent_id, migrate_daily_memory_dir,
+    normalize_agent_id, set_active_agent, DEFAULT_AGENT_ID,
 };
 use super::templates::{
     render_template, AGENT_SUBDIRS, CORE_FILES, ENSURED_DIRS, STATE_JSON_FILES,
@@ -347,7 +347,7 @@ fn apply_agent_profile(ws: &Path, id: &str, name: &str, p: &AgentProfile) -> any
 ## 记忆空间
 
 - **长期精炼：** `MEMORY.md`
-- **每日记忆：** `mermaid/YYYY-MM-DD.md`
+- **每日记忆：** `memory/YYYY-MM-DD.md`
 - **专属技能：** `skills/`
 - **公共技能：** `~/.astro/skills`
 - **运行配置：** `~/.astro/agents/{id}/config.json`
@@ -470,7 +470,7 @@ _(随协作持续更新)_
     let memory = format!(
         r#"# MEMORY.md — 长期精炼记忆
 
-跨会话保留的结构化事实。日常流水请写入 `mermaid/YYYY-MM-DD.md`。
+跨会话保留的结构化事实。日常流水请写入 `memory/YYYY-MM-DD.md`。
 
 - Agent「{name}」已创建（id: {id}）
 "#,
@@ -484,8 +484,9 @@ _(随协作持续更新)_
 
 /// 确保日记忆文件存在（不存在则写模板）
 pub fn ensure_daily_memory(workspace: &Path, date: &str) -> anyhow::Result<PathBuf> {
-    let mermaid = workspace.join("mermaid");
-    fs::create_dir_all(&mermaid)?;
+    migrate_daily_memory_dir(workspace)?;
+    let dir = workspace.join(super::paths::DAILY_MEMORY_DIR);
+    fs::create_dir_all(&dir)?;
     let path = daily_memory_path(workspace, date);
     if !path.exists() {
         let content = format!(
@@ -506,6 +507,8 @@ pub fn ensure_agent_space(
     let workspace = agent_workspace_dir(base, &id);
     fs::create_dir_all(&workspace)?;
     fs::create_dir_all(agent_config_dir(base, &id))?;
+
+    migrate_daily_memory_dir(&workspace)?;
 
     for sub in AGENT_SUBDIRS {
         fs::create_dir_all(workspace.join(sub))?;
@@ -649,7 +652,7 @@ mod tests {
 
         let ws = dir.path().join("workspace");
         assert!(ws.is_dir());
-        assert!(ws.join("mermaid").is_dir());
+        assert!(ws.join("memory").is_dir());
         assert!(ws.join("skills").is_dir());
         for rel in GENERATED_SUBDIRS {
             assert!(ws.join(rel).is_dir(), "missing workspace/{rel}");
@@ -733,7 +736,7 @@ mod tests {
         let ws = PathBuf::from(&info.path);
         assert!(ws.join("AGENT.md").is_file());
         assert!(ws.join("MEMORY.md").is_file());
-        assert!(ws.join("mermaid").is_dir());
+        assert!(ws.join("memory").is_dir());
         assert!(ws.join("skills").is_dir());
         assert!(dir
             .path()
@@ -845,6 +848,28 @@ mod tests {
         let ws = dir.path().join("workspace");
         let path = ensure_daily_memory(&ws, "2026-07-11").unwrap();
         assert!(path.is_file());
+        assert!(path.starts_with(ws.join("memory")));
         assert_eq!(list_daily_memory_dates(&ws), vec!["2026-07-11".to_string()]);
+    }
+
+    #[test]
+    fn migrates_legacy_mermaid_daily_dir() {
+        let dir = TempDir::new().unwrap();
+        ensure_workspace(dir.path()).unwrap();
+        let ws = dir.path().join("workspace");
+        let legacy = ws.join("mermaid");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(legacy.join("2026-07-10.md"), "# old\n").unwrap();
+        // Drop newly created memory/ so migration rename path is exercised.
+        let _ = fs::remove_dir_all(ws.join("memory"));
+        let path = ensure_daily_memory(&ws, "2026-07-11").unwrap();
+        assert!(path.is_file());
+        assert!(!ws.join("mermaid").exists());
+        assert!(ws.join("memory/2026-07-10.md").is_file());
+        assert!(ws.join("memory/2026-07-11.md").is_file());
+        assert_eq!(
+            list_daily_memory_dates(&ws),
+            vec!["2026-07-11".to_string(), "2026-07-10".to_string()]
+        );
     }
 }

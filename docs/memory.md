@@ -157,7 +157,7 @@ auxiliary:
 |------|------|
 | `{workspace}/MEMORY.md` | 长期精炼记忆 |
 | `{workspace}/USER.md` | 用户档案 |
-| `{workspace}/mermaid/YYYY-MM-DD.md` | 今日日记（流水，**不可**通过 `memory` 工具写入） |
+| `{workspace}/memory/YYYY-MM-DD.md` | 今日日记（流水，**不可**通过 `memory` 工具写入） |
 
 - **读**：兼容旧版 `-` / `*` 列表；若无 `§` 则按列表解析。
 - **写**：成功保存后盘上统一为 `§` 分隔的多行条目格式。
@@ -249,7 +249,7 @@ auxiliary:
 
 ## 入梦（Dreaming）
 
-入梦管线读取 `mermaid/` 日记，经抽取模型产出 MEMORY 条目，写回时：
+入梦管线读取 `memory/` 日记，经抽取模型产出 MEMORY 条目，写回时：
 
 1. 解析输出为条目（`§` 或列表）
 2. 经 `MemoryStore::replace_all_entries` 整体替换 live

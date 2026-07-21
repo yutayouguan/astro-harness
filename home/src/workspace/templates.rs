@@ -12,7 +12,7 @@ pub(crate) const CORE_FILES: &[(&str, &str)] = &[
 ];
 
 /// Agent 工作区内需要确保存在的子目录
-pub(crate) const AGENT_SUBDIRS: &[&str] = &["mermaid", "skills"];
+pub(crate) const AGENT_SUBDIRS: &[&str] = &["memory", "skills"];
 
 pub(crate) const TEMPLATE_AGENT: &str = r#"# AGENT.md — 本记忆空间的 Agent
 
@@ -26,7 +26,7 @@ _描述这个 Agent 的定位、擅长领域与边界。新建 Agent 时请改�
 ## 记忆空间
 
 - **长期精炼：** `MEMORY.md` — 跨会话稳定事实与决策
-- **每日记忆：** `mermaid/YYYY-MM-DD.md` — 当日流水，可再提炼进 MEMORY.md
+- **每日记忆：** `memory/YYYY-MM-DD.md` — 当日流水，可再提炼进 MEMORY.md
 - **专属技能：** `skills/` — 仅本 Agent 可用
 - **公共技能：** `~/.astro/skills` — 所有 Agent 共享
 
@@ -113,7 +113,7 @@ pub(crate) const TEMPLATE_AGENTS: &str = r#"# AGENTS.md — 本记忆空间的�
 
 - `AGENT.md` / `IDENTITY.md` / `SOUL.md` / `USER.md`
 - `MEMORY.md`（长期精炼记忆）
-- 当日 `mermaid/YYYY-MM-DD.md`（每日记忆）
+- 当日 `memory/YYYY-MM-DD.md`（每日记忆）
 
 不要重复通读启动文件，除非：
 
@@ -124,7 +124,7 @@ pub(crate) const TEMPLATE_AGENTS: &str = r#"# AGENTS.md — 本记忆空间的�
 ## 记忆空间
 
 - **长期精炼：** `MEMORY.md` — 跨会话稳定事实与决策（提炼后的结论）
-- **每日记忆：** `mermaid/YYYY-MM-DD.md` — 当日流水与事件
+- **每日记忆：** `memory/YYYY-MM-DD.md` — 当日流水与事件
 - **用户档案：** `USER.md` — 称呼、背景、协作偏好
 - **会话检索：** `~/.astro/sessions/`（全局会话库）
 
@@ -204,7 +204,7 @@ Skills 可共享；你的环境是你的。分开后更新 Skill 不会冲掉本
 
 pub(crate) const TEMPLATE_MEMORY: &str = r#"# MEMORY.md — 长期精炼记忆
 
-跨会话保留的结构化事实。只写提炼后的结论，日常流水请写入 `mermaid/YYYY-MM-DD.md`。
+跨会话保留的结构化事实。只写提炼后的结论，日常流水请写入 `memory/YYYY-MM-DD.md`。
 
 - Astro 记忆空间已初始化
 "#;

@@ -1064,7 +1064,7 @@ export default function MemoryPanel({
                 }}
                 placeholder={t("memory.dailyEmptyHint")}
                 spellCheck={false}
-                aria-label={`mermaid/${dailyDate}.md`}
+                aria-label={`memory/${dailyDate}.md`}
               />
             )}
           </section>

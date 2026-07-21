@@ -31,7 +31,7 @@
 | 工具 | 单一 `memory`；废除 `memory_add` / `memory_replace` / `memory_remove` |
 | 字符上限 | 默认 `2200` / `1375`，`config.yaml` 可配 |
 | Snapshot | 同会话冻结；新 `session_id` 或显式 `refresh_memory` 重载 |
-| 日记 | **不进** `memory` 工具；系统/入梦管线写 `mermaid/` |
+| 日记 | **不进** `memory` 工具；系统/入梦管线写 `memory/` |
 | 文件格式 | 读兼容 `- ` / `*` / `§`；**新写入统一 `§`** |
 | 审批 + review | P2：`write_approval` + 回合后 cheap-model review |
 | 外部 provider | **不做** |
@@ -74,7 +74,7 @@ config.yaml (memory.* / auxiliary.*)
         ▲
         │
  MemoryManager ── SessionStore (FTS) ── session_search
-        │         └── mermaid/ 日记（系统/入梦写）
+        │         └── memory/ 日记（系统/入梦写）
         ▼
  AgentLoop ── StaticContext ← snapshot only
            └── turn end ──(P2)── background review ──► MemoryStore
@@ -139,7 +139,7 @@ config.yaml (memory.* / auxiliary.*)
 
 ### 今日日记
 
-- 路径：`mermaid/YYYY-MM-DD.md`  
+- 路径：`memory/YYYY-MM-DD.md`  
 - **不**进 `memory` 工具  
 - 可被系统侧 `append_daily`、background review「写日记」意图、入梦读取  
 - 注入 prompt：每轮可读盘，但截断至 `memory.daily_prompt_max_chars`（默认 **1024**），并标明非长期记忆  
