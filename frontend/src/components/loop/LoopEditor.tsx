@@ -355,9 +355,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         {/* ── Right: Config panel ── */}
         {selectedNode && (
           <LoopConfigPanel
+            nodeId={selectedNode.id}
             nodeType={(selectedNode.data as Record<string, unknown>).nodeType as NodeType}
             label={(selectedNode.data as Record<string, unknown>).label as string}
             config={((selectedNode.data as Record<string, unknown>).config as Record<string, unknown>) ?? {}}
+            disabled={!!((selectedNode.data as Record<string, unknown>).disabled)}
             onLabelChange={(label) => {
               setNodes((nds) =>
                 nds.map((n) =>
@@ -376,6 +378,24 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                     : n,
                 ),
               );
+              setDirty(true);
+            }}
+            onDisabledChange={(disabled) => {
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === selectedNode.id
+                    ? { ...n, data: { ...n.data, disabled } }
+                    : n,
+                ),
+              );
+              setDirty(true);
+            }}
+            onDelete={() => {
+              setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
+              setEdges((eds) =>
+                eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id),
+              );
+              setSelectedNodeId(null);
               setDirty(true);
             }}
             onClose={() => setSelectedNodeId(null)}

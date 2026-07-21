@@ -415,22 +415,63 @@
 /* ── Config panel (右侧) ──────────────────────────────────────── */
 
 .loop-config-panel {
-  width: 300px;
+  width: 340px;
   border-left: 1px solid var(--border);
   background: var(--glass-panel);
-  overflow-y: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.loop-config-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.loop-config-panel-header {
+.loop-config-tab {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.loop-config-tab:hover {
+  color: var(--ink);
+}
+.loop-config-tab.is-active {
+  color: var(--tone, #ec4899);
+  border-bottom-color: var(--tone, #ec4899);
+}
+
+.loop-config-panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.loop-config-node-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 16px;
+  justify-content: space-between;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 14px;
+}
+
+.loop-config-node-type {
+  font-size: 15px;
   font-weight: 600;
   color: var(--ink);
+}
+
+.loop-config-node-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .loop-config-panel-body {
@@ -559,6 +600,86 @@
 }
 .loop-config-checkbox:checked::after {
   transform: translateX(14px);
+}
+
+/* ── Upstream fields collapsible ──────────────────────────────── */
+
+.loop-config-upstream {
+  margin-bottom: 14px;
+}
+
+.loop-config-upstream-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.loop-config-upstream-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone, #ec4899) 12%, transparent);
+  color: var(--tone, #ec4899);
+}
+
+.loop-config-upstream-add {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--tone, #ec4899);
+}
+
+.loop-config-upstream-body {
+  padding: 8px 0 4px 20px;
+}
+
+/* ── Config row (side-by-side fields) ─────────────────────────── */
+
+.loop-config-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ── Preset save row ──────────────────────────────────────────── */
+
+.loop-config-preset {
+  margin-bottom: 8px;
+}
+
+.loop-config-preset-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+.loop-config-preset-row .loop-config-input {
+  flex: 1;
+}
+
+.loop-btn--sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* ── Native checkbox (not toggle) ─────────────────────────────── */
+
+.loop-config-checkbox-native {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--tone, #ec4899);
+  cursor: pointer;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
