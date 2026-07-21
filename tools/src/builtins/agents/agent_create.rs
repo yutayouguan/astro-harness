@@ -29,9 +29,9 @@ pub struct AgentProfileArgs {
     pub preferences: Option<String>,
 }
 
-/// Arguments for the `create_agent` tool.
+/// Arguments for the `agent_create` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct CreateAgentArgs {
+pub struct AgentCreateArgs {
     /// Display name (any language; may collide; decoupled from immutable id).
     pub name: String,
     /// Optional explicit id (advanced / tests). Default `{slug}--{hex12}` from name.
@@ -47,13 +47,13 @@ pub struct CreateAgentArgs {
     pub profile: Option<AgentProfileArgs>,
 }
 
-/// 向注册表登记 `create_agent`（归入 `multi_agent` 工具集）。
+/// 向注册表登记 `agent_create`（归入 `orchestrate` 工具集）。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "create_agent".to_string(),
-        toolset: "multi_agent".to_string(),
+        name: "agent_create".to_string(),
+        toolset: "orchestrate".to_string(),
         description: "Create a durable Agent persona with persistent workspace. NOT for in-turn task splitting—use delegate for ephemeral sub-agents. Prefer after loading the create-agent skill.".to_string(),
-        schema: schema_for_args::<CreateAgentArgs>(),
+        schema: schema_for_args::<AgentCreateArgs>(),
         check_fn: None,
         icon: "bot",
         ..ToolEntry::lifecycle_defaults().exclusive()
@@ -62,7 +62,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["create_agent"],
+    names: ["agent_create"],
     sync_ctx: dispatch,
 }
 
@@ -76,8 +76,8 @@ fn opt_str(v: &Option<String>) -> String {
 /// # 错误
 /// 缺少 `name`、参数无效，或底层 `create_agent_with_profile` 失败。
 pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: CreateAgentArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("create_agent 参数无效: {e}"))?;
+    let parsed: AgentCreateArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("agent_create 参数无效: {e}"))?;
     let name = parsed.name.trim();
     if name.is_empty() {
         anyhow::bail!("缺少 name 参数");

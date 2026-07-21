@@ -129,8 +129,8 @@ export const zh = {
   "insights.trace.detail.input": "输入",
   "insights.trace.detail.output": "输出",
   "insights.trace.detail.noData": "暂无记录",
-  "insights.collab.empty": "暂无编排记录。可在对话中调用 orchestration_run。",
-  "insights.collab.emptyHint": "用 multi_agent / orchestration_run 发起多角色协作后，列表与关系图会出现在这里。",
+  "insights.collab.empty": "暂无编排记录。可在对话中调用 orchestrate。",
+  "insights.collab.emptyHint": "用 orchestrate 发起多角色协作后，列表与关系图会出现在这里。",
   "insights.collab.listEmpty": "此筛选下暂无编排",
   "insights.collab.listTitle": "近期编排",
   "insights.collab.graphTitle": "协作图",
@@ -481,8 +481,8 @@ export const zh = {
   "agentTools.delegate.desc": "为并行任务派生子代理",
   "agentTools.cron.title": "计划任务",
   "agentTools.cron.desc": "创建和管理定时任务（cron：add/list/remove/enable/disable）",
-  "agentTools.multiAgent.title": "多代理协作",
-  "agentTools.multiAgent.desc": "协调多个 AI 模型协同工作",
+  "agentTools.orchestrate.title": "编排",
+  "agentTools.orchestrate.desc": "串行多角色编排（action=run|status；可用 agents 快捷展开）",
   "agentTools.todo.title": "待办列表",
   "agentTools.todo.desc": "为复杂任务创建 checklist 待办",
 
@@ -766,7 +766,7 @@ export const zh = {
   "chat.agentGuideComposerAria": "创建 Agent 模板，点击高亮处填空，Tab 切换",
   "chat.agentCreateNeedRequired": "请先填写「名称」和「做什么」；其余选填，未填不会发给模型。",
   "chat.agentCreateHint":
-    "请先用 skills 工具加载 create-agent 技能，再按技能步骤调用 create_agent 工具创建助手，并填充各 md 文件。",
+    "请先用 skills 工具加载 create-agent 技能，再按技能步骤调用 agent_create 工具创建助手，并填充各 md 文件。",
   "chat.agentIconsTitle": "外观（可选）",
   "chat.agentIconsSub": "头像用于对话主视觉；Emoji 是小号 Lucide。点右侧入口在抽屉中选择。",
   "chat.agentCoversTitle": "头像",
@@ -1828,8 +1828,8 @@ export const en: Record<MessageKey, string> = {
   "insights.trace.detail.input": "Input",
   "insights.trace.detail.output": "Output",
   "insights.trace.detail.noData": "No data recorded",
-  "insights.collab.empty": "No orchestrations yet. Call orchestration_run in chat.",
-  "insights.collab.emptyHint": "Start multi-agent work via multi_agent / orchestration_run to populate the list and graph.",
+  "insights.collab.empty": "No orchestrations yet. Call orchestrate in chat.",
+  "insights.collab.emptyHint": "Start multi-agent work via orchestrate to populate the list and graph.",
   "insights.collab.listEmpty": "No orchestrations for this filter",
   "insights.collab.listTitle": "Recent orchestrations",
   "insights.collab.graphTitle": "Collaboration graph",
@@ -2185,8 +2185,9 @@ export const en: Record<MessageKey, string> = {
   "agentTools.delegate.desc": "Spawn sub-agents for parallel tasks",
   "agentTools.cron.title": "Scheduled Tasks",
   "agentTools.cron.desc": "Create and manage cron jobs (action: add/list/remove/enable/disable)",
-  "agentTools.multiAgent.title": "Multi-Agent",
-  "agentTools.multiAgent.desc": "Coordinate multiple AI models together",
+  "agentTools.orchestrate.title": "Orchestrate",
+  "agentTools.orchestrate.desc":
+    "Serial multi-agent orchestration (action=run|status; agents[] shortcut supported)",
   "agentTools.todo.title": "Todo",
   "agentTools.todo.desc": "Create a checklist todo list for complex tasks",
 
@@ -2472,7 +2473,7 @@ export const en: Record<MessageKey, string> = {
   "chat.agentCreateNeedRequired":
     "Fill in 「name」 and 「help with」 first; other slots are optional and omitted if empty.",
   "chat.agentCreateHint":
-    "First load the create-agent skill with the skills tool, then call create_agent and fill the markdown files as the skill describes.",
+    "First load the create-agent skill with the skills tool, then call agent_create and fill the markdown files as the skill describes.",
   "chat.agentIconsTitle": "Look (optional)",
   "chat.agentIconsSub":
     "Avatar for chat face; Emoji is a small Lucide mark. Open the side drawer to pick.",

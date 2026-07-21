@@ -27,18 +27,7 @@ pub struct TeamMemberArgs {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct TeamCreateArgs {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub mode: Option<String>,
-    #[serde(default)]
-    pub leader_agent_id: Option<String>,
-    pub members: Vec<TeamMemberArgs>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct TeamRunArgs {
+struct TeamRunArgs {
     pub team_id: String,
     pub goal: String,
     #[serde(default)]
@@ -47,54 +36,54 @@ pub struct TeamRunArgs {
     pub member_id: Option<String>,
     #[serde(default)]
     pub context: Option<String>,
-    /// `tasks` mode: explicit task list; default assigns one goal step per member in order.
     #[serde(default)]
     pub tasks: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct TeamIdArgs {
-    #[serde(default)]
-    pub team_id: Option<String>,
-}
-
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "team_list".to_string(),
-        toolset: "multi_agent".to_string(),
-        description:
-            "List persisted Team definitions from ~/.astro/teams, or inspect one team by team_id."
-                .to_string(),
-        schema: schema_for_args::<TeamIdArgs>(),
+        name: "team".to_string(),
+        toolset: "orchestrate".to_string(),
+        description: "Manage persisted Teams. action=list|create|run. \
+list: optional team_id; create: id+name+members; run: team_id+goal (mode=coordinate|route|broadcast|tasks)."
+            .to_string(),
+        schema: schema_for_args::<TeamArgs>(),
         check_fn: None,
         icon: "users",
         ..ToolEntry::lifecycle_defaults()
     });
-    registry.register(ToolEntry {
-        name: "team_create".to_string(),
-        toolset: "multi_agent".to_string(),
-        description: "Create or replace a persisted Team definition. Modes: coordinate, route, broadcast, tasks."
-            .to_string(),
-        schema: schema_for_args::<TeamCreateArgs>(),
-        check_fn: None,
-        icon: "users-plus",
-            ..ToolEntry::lifecycle_defaults()
-    });
-    registry.register(ToolEntry {
-        name: "team_run".to_string(),
-        toolset: "multi_agent".to_string(),
-        description: "Run a persisted Team using coordinate, route, broadcast, or tasks. Uses the existing delegate runtime; route requires member_id when the team has multiple members; tasks runs members serially with a shared task board."
-            .to_string(),
-        schema: schema_for_args::<TeamRunArgs>(),
-        check_fn: None,
-        icon: "network",
-            ..ToolEntry::lifecycle_defaults()
-    });
+}
+
+/// Unified args for `team` (fields used depend on action).
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct TeamArgs {
+    /// `list` | `create` | `run`.
+    pub action: String,
+    #[serde(default)]
+    pub team_id: Option<String>,
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub leader_agent_id: Option<String>,
+    #[serde(default)]
+    pub members: Option<Vec<TeamMemberArgs>>,
+    #[serde(default)]
+    pub goal: Option<String>,
+    #[serde(default)]
+    pub member_id: Option<String>,
+    #[serde(default)]
+    pub context: Option<String>,
+    #[serde(default)]
+    pub tasks: Option<Vec<String>>,
 }
 
 pub fn dispatch_list(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: TeamIdArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("team_list 参数无效: {e}"))?;
+    let parsed: TeamArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("team list 参数无效: {e}"))?;
     if let Some(id) = parsed
         .team_id
         .as_deref()
@@ -109,8 +98,27 @@ pub fn dispatch_list(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow:
 }
 
 pub fn dispatch_create(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: TeamCreateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("team_create 参数无效: {e}"))?;
+    let parsed: TeamArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("team create 参数无效: {e}"))?;
+    let id = parsed
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("team create 需要 id"))?
+        .to_string();
+    let name = parsed
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("team create 需要 name"))?
+        .to_string();
+    let members = parsed
+        .members
+        .clone()
+        .filter(|m| !m.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("team create 需要 members"))?;
     let mode = parsed
         .mode
         .as_deref()
@@ -118,15 +126,14 @@ pub fn dispatch_create(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyho
         .transpose()?
         .unwrap_or_default();
     let team = orchestration::TeamDefinition {
-        id: parsed.id.trim().to_string(),
-        name: parsed.name.trim().to_string(),
+        id,
+        name,
         mode,
         leader_agent_id: parsed
             .leader_agent_id
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
-        members: parsed
-            .members
+        members: members
             .into_iter()
             .map(|m| orchestration::TeamMember {
                 id: m.id.trim().to_string(),
@@ -167,15 +174,27 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         );
     }
 
-    let parsed: TeamRunArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("team_run 参数无效: {e}"))?;
+    let unified: TeamArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("team run 参数无效: {e}"))?;
+    let parsed = TeamRunArgs {
+        team_id: unified
+            .team_id
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+        goal: unified.goal.unwrap_or_default().trim().to_string(),
+        mode: unified.mode,
+        member_id: unified.member_id,
+        context: unified.context,
+        tasks: unified.tasks,
+    };
     let team_id = parsed.team_id.trim();
     if team_id.is_empty() {
-        anyhow::bail!("team_run 需要 team_id");
+        anyhow::bail!("team run 需要 team_id");
     }
     let goal = parsed.goal.trim();
     if goal.is_empty() {
-        anyhow::bail!("team_run 需要 goal");
+        anyhow::bail!("team run 需要 goal");
     }
 
     let team = orchestration::load_team(&ctx.memory_dir, team_id)?;
@@ -453,23 +472,30 @@ fn member_context(
     ctx
 }
 
-/// 本模块统一入口：`team_list` / `team_create` / `team_run`。
+/// 本模块统一入口：按 `action` 分发。
 fn handle(
     ctx: &mut ToolContext<'_>,
-    name: &str,
+    _name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
-    match name {
-        "team_list" => dispatch_list(ctx, args),
-        "team_create" => dispatch_create(ctx, args),
-        "team_run" => dispatch_run(ctx, args),
-        other => anyhow::bail!("未知团队工具: {other}"),
+    let action = args
+        .get("action")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("team 需要 action=list|create|run"))?
+        .to_ascii_lowercase();
+    match action.as_str() {
+        "list" => dispatch_list(ctx, args),
+        "create" => dispatch_create(ctx, args),
+        "run" => dispatch_run(ctx, args),
+        other => anyhow::bail!("未知 team action: {other}（应为 list|create|run）"),
     }
 }
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["team_list", "team_create", "team_run"],
+    names: ["team"],
     sync_named: handle,
 }
 

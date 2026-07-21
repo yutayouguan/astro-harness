@@ -1,7 +1,8 @@
-//! 多 Agent 编排工具：异步串行调度子 Agent，并可查询进度。
+//! 多 Agent 串行编排：单一 `orchestrate`（action=run|status）。
 //!
-//! `orchestration_run` 落库后经 spawn hook 后台执行；立即返回 `orchestration_id`。
+//! `run` 落库后经 spawn hook 后台执行；立即返回 `orchestration_id`。
 //! 真正执行在 `agent::exec::orchestration`，本模块不依赖 `agent` crate。
+//! 便捷形状：`agents: [role…]`（原 multi_agent）展开为临时角色 steps。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -23,44 +24,65 @@ pub struct OrchestrationStepArgs {
     pub agent_id: Option<String>,
 }
 
-/// Arguments for `orchestration_run`.
+/// Arguments for the unified `orchestrate` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct OrchestrationRunArgs {
-    pub goal: String,
-    /// Serial steps (1–8).
-    pub steps: Vec<OrchestrationStepArgs>,
+pub struct OrchestrateArgs {
+    /// `run` (default) | `status`.
+    #[serde(default)]
+    pub action: Option<String>,
+    /// Overall goal (run).
+    #[serde(default)]
+    pub goal: Option<String>,
+    /// Serial steps (1–8); preferred for run.
+    #[serde(default)]
+    pub steps: Option<Vec<OrchestrationStepArgs>>,
+    /// Convenience: role name list → temporary steps (run); mutually exclusive with steps when both set prefer steps.
+    #[serde(default)]
+    pub agents: Option<Vec<String>>,
+    /// Orchestration id (status).
+    #[serde(default)]
+    pub orchestration_id: Option<String>,
 }
 
-/// Arguments for `orchestration_status`.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct OrchestrationStatusArgs {
-    /// Orchestration id returned by `orchestration_run`.
-    pub orchestration_id: String,
-}
-
-/// 向注册表登记编排工具（toolset=`multi_agent`）。
+/// 向注册表登记 `orchestrate`。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "orchestration_run".to_string(),
-        toolset: "multi_agent".to_string(),
-        description: "Async serial multi-agent orchestration. Returns orchestration_id; poll with orchestration_status. Use delegate for parallel one-shot subtasks."
+        name: "orchestrate".to_string(),
+        toolset: "orchestrate".to_string(),
+        description: "Async serial multi-agent orchestration. \
+action=run (default): goal + steps[{role,prompt,agent_id?}] or convenience agents=[role…]. \
+Returns orchestration_id; action=status to poll. Use delegate for parallel one-shot subtasks."
             .to_string(),
-        schema: schema_for_args::<OrchestrationRunArgs>(),
+        schema: schema_for_args::<OrchestrateArgs>(),
         check_fn: None,
         icon: "git-branch",
-            ..ToolEntry::lifecycle_defaults()
-    });
-    registry.register(ToolEntry {
-        name: "orchestration_status".to_string(),
-        toolset: "multi_agent".to_string(),
-        description:
-            "Query status and step outputs of an orchestration started by orchestration_run."
-                .to_string(),
-        schema: schema_for_args::<OrchestrationStatusArgs>(),
-        check_fn: None,
-        icon: "list-checks",
         ..ToolEntry::lifecycle_defaults()
     });
+}
+
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["orchestrate"],
+    sync_named: handle,
+}
+
+fn handle(
+    ctx: &mut ToolContext<'_>,
+    _name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    let action = args
+        .get("action")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("run")
+        .to_ascii_lowercase();
+    match action.as_str() {
+        "run" => dispatch_run(ctx, args),
+        "status" => dispatch_status(args),
+        other => anyhow::bail!("未知 orchestrate action: {other}（应为 run|status）"),
+    }
 }
 
 /// 创建编排并触发后台执行；立即返回 queued JSON。
@@ -72,29 +94,20 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
             home::effective_max_spawn_depth()
         );
     }
-    let parsed: OrchestrationRunArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("orchestration_run 参数无效: {e}"))?;
-    validate_run_args(&parsed)?;
+    let parsed: OrchestrateArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("orchestrate run 参数无效: {e}"))?;
+    let goal = parsed.goal.as_deref().unwrap_or("").trim();
+    if goal.is_empty() {
+        anyhow::bail!("orchestrate run 需要非空 goal");
+    }
 
-    let steps: Vec<_> = parsed
-        .steps
-        .into_iter()
-        .map(|s| orchestration::NewOrchestrationStep {
-            role: s.role.trim().to_string(),
-            agent_id: s
-                .agent_id
-                .as_ref()
-                .map(|a| a.trim().to_string())
-                .filter(|a| !a.is_empty()),
-            prompt: s.prompt.trim().to_string(),
-        })
-        .collect();
+    let steps = resolve_steps(&parsed, goal)?;
 
     let db = orchestration::OrchestrationDb::open_default()?;
     let orchestration_id = db.create(orchestration::NewOrchestration {
         parent_agent_id: ctx.memory.agent_id.clone(),
         session_id: Some(ctx.session_id.clone()),
-        goal: parsed.goal.trim().to_string(),
+        goal: goal.to_string(),
         steps,
         provider: ctx.chat_provider.clone(),
         model: ctx.chat_model.clone(),
@@ -125,29 +138,60 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     .to_string())
 }
 
-fn validate_run_args(parsed: &OrchestrationRunArgs) -> anyhow::Result<()> {
-    let goal = parsed.goal.trim();
-    if goal.is_empty() {
-        anyhow::bail!("orchestration_run 需要非空 goal");
-    }
-    if parsed.steps.is_empty() || parsed.steps.len() > MAX_STEPS {
-        anyhow::bail!("orchestration_run steps 长度须为 1..={MAX_STEPS}");
-    }
-    for (i, step) in parsed.steps.iter().enumerate() {
-        if step.role.trim().is_empty() || step.prompt.trim().is_empty() {
-            anyhow::bail!("orchestration_run steps[{i}] 需要非空 role 与 prompt");
+fn resolve_steps(
+    parsed: &OrchestrateArgs,
+    goal: &str,
+) -> anyhow::Result<Vec<orchestration::NewOrchestrationStep>> {
+    if let Some(steps) = &parsed.steps {
+        if steps.is_empty() || steps.len() > MAX_STEPS {
+            anyhow::bail!("orchestrate steps 长度须为 1..={MAX_STEPS}");
         }
+        let mut out = Vec::with_capacity(steps.len());
+        for (i, step) in steps.iter().enumerate() {
+            if step.role.trim().is_empty() || step.prompt.trim().is_empty() {
+                anyhow::bail!("orchestrate steps[{i}] 需要非空 role 与 prompt");
+            }
+            out.push(orchestration::NewOrchestrationStep {
+                role: step.role.trim().to_string(),
+                agent_id: step
+                    .agent_id
+                    .as_ref()
+                    .map(|a| a.trim().to_string())
+                    .filter(|a| !a.is_empty()),
+                prompt: step.prompt.trim().to_string(),
+            });
+        }
+        return Ok(out);
     }
-    Ok(())
+
+    let agents = parsed.agents.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("orchestrate run 需要 steps 或 agents")
+    })?;
+    if agents.is_empty() || agents.len() > MAX_STEPS {
+        anyhow::bail!("orchestrate agents 长度须为 1..={MAX_STEPS}");
+    }
+    let mut out = Vec::with_capacity(agents.len());
+    for (i, role) in agents.iter().enumerate() {
+        let role = role.trim();
+        if role.is_empty() {
+            anyhow::bail!("orchestrate agents[{i}] 不能为空");
+        }
+        out.push(orchestration::NewOrchestrationStep {
+            role: role.to_string(),
+            agent_id: None,
+            prompt: format!("As {role}, help achieve the overall goal.\n\n## Goal\n{goal}"),
+        });
+    }
+    Ok(out)
 }
 
 /// 查询编排与步骤状态。
 pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: OrchestrationStatusArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("orchestration_status 参数无效: {e}"))?;
-    let id = parsed.orchestration_id.trim();
+    let parsed: OrchestrateArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("orchestrate status 参数无效: {e}"))?;
+    let id = parsed.orchestration_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("orchestration_status 需要 orchestration_id");
+        anyhow::bail!("orchestrate status 需要 orchestration_id");
     }
 
     let db = orchestration::OrchestrationDb::open_default()?;
@@ -192,66 +236,34 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
     .to_string())
 }
 
-/// 本模块统一入口：`orchestration_run` / `orchestration_status`。
-fn handle(
-    ctx: &mut ToolContext<'_>,
-    name: &str,
-    args: &serde_json::Value,
-) -> anyhow::Result<String> {
-    match name {
-        "orchestration_run" => dispatch_run(ctx, args),
-        "orchestration_status" => dispatch_status(args),
-        other => anyhow::bail!("未知编排工具: {other}"),
-    }
-}
-
-crate::submit_builtin_tool! {
-    register: register,
-    names: ["orchestration_run", "orchestration_status"],
-    sync_named: handle,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn reject_empty_steps() {
-        let parsed = OrchestrationRunArgs {
-            goal: "g".into(),
-            steps: vec![],
+    fn agents_expand_to_steps() {
+        let parsed = OrchestrateArgs {
+            action: None,
+            goal: Some("写周报".into()),
+            steps: None,
+            agents: Some(vec!["writer".into(), "editor".into()]),
+            orchestration_id: None,
         };
-        let err = validate_run_args(&parsed).unwrap_err().to_string();
-        assert!(err.contains("1..="));
+        let steps = resolve_steps(&parsed, "写周报").unwrap();
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].role, "writer");
     }
 
     #[test]
-    fn reject_too_many_steps() {
-        let steps = (0..9)
-            .map(|i| OrchestrationStepArgs {
-                role: format!("r{i}"),
-                prompt: "p".into(),
-                agent_id: None,
-            })
-            .collect();
-        let parsed = OrchestrationRunArgs {
-            goal: "g".into(),
-            steps,
+    fn reject_empty_agents() {
+        let parsed = OrchestrateArgs {
+            action: None,
+            goal: Some("g".into()),
+            steps: None,
+            agents: Some(vec![]),
+            orchestration_id: None,
         };
-        assert!(validate_run_args(&parsed).is_err());
-    }
-
-    #[test]
-    fn accept_valid_steps() {
-        let parsed = OrchestrationRunArgs {
-            goal: "写周报".into(),
-            steps: vec![OrchestrationStepArgs {
-                role: "writer".into(),
-                prompt: "起草".into(),
-                agent_id: None,
-            }],
-        };
-        assert!(validate_run_args(&parsed).is_ok());
+        assert!(resolve_steps(&parsed, "g").is_err());
     }
 
     #[test]

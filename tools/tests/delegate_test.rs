@@ -79,7 +79,7 @@ async fn delegate_goal_hits_runner_or_key() {
 
 #[tokio::test]
 async fn delegate_async_status_collect_cancel_flow() {
-    let _guard = ASYNC_TEST_LOCK.blocking_lock();
+    let _guard = ASYNC_TEST_LOCK.lock().await;
     let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
@@ -103,8 +103,8 @@ async fn delegate_async_status_collect_cancel_flow() {
     let started = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate_async",
-        &serde_json::json!({"goal": "async job"}),
+        "delegate",
+        &serde_json::json!({"action": "async", "goal": "async job"}),
     )
     .await
     .unwrap();
@@ -115,8 +115,8 @@ async fn delegate_async_status_collect_cancel_flow() {
     let status = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate_status",
-        &serde_json::json!({"task_id": task_id}),
+        "delegate",
+        &serde_json::json!({"action": "status", "task_id": task_id}),
     )
     .await
     .unwrap();
@@ -129,8 +129,8 @@ async fn delegate_async_status_collect_cancel_flow() {
     let collected = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate_collect",
-        &serde_json::json!({"task_id": task_id, "timeout_secs": 5}),
+        "delegate",
+        &serde_json::json!({"action": "collect", "task_id": task_id, "timeout_secs": 5}),
     )
     .await
     .unwrap();
@@ -141,7 +141,7 @@ async fn delegate_async_status_collect_cancel_flow() {
 
 #[tokio::test]
 async fn delegate_async_cancel_marks_cancelled() {
-    let _guard = ASYNC_TEST_LOCK.blocking_lock();
+    let _guard = ASYNC_TEST_LOCK.lock().await;
     let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
         let tid = task_id.clone();
         tokio::spawn(async move {
@@ -162,8 +162,8 @@ async fn delegate_async_cancel_marks_cancelled() {
     let started = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate_async",
-        &serde_json::json!({"goal": "cancel me"}),
+        "delegate",
+        &serde_json::json!({"action": "async", "goal": "cancel me"}),
     )
     .await
     .unwrap();
@@ -175,8 +175,8 @@ async fn delegate_async_cancel_marks_cancelled() {
     let cancelled = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate_cancel",
-        &serde_json::json!({"task_id": task_id}),
+        "delegate",
+        &serde_json::json!({"action": "cancel", "task_id": task_id}),
     )
     .await
     .unwrap();
@@ -186,7 +186,7 @@ async fn delegate_async_cancel_marks_cancelled() {
 
 #[tokio::test]
 async fn delegate_blocked_at_max_spawn_depth() {
-    let _guard = ASYNC_TEST_LOCK.blocking_lock();
+    let _guard = ASYNC_TEST_LOCK.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let providers = providers::registry::ProviderRegistry::new();

@@ -1,7 +1,7 @@
-//! 委派工具：同步 / 异步真 spawn 子 Agent。
+//! 委派工具：同步 / 异步真 spawn 子 Agent（单一 `delegate` + `action`）。
 //!
 //! 经 `memory` OnceLock 回调执行；未注册 runner/spawner 时返回错误。
-//! 用于回合内短暂子任务（不建持久 Agent）；新建长期助手请用 `create_agent`。
+//! 用于回合内短暂子任务（不建持久 Agent）；新建长期助手请用 `agent_create`。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -31,10 +31,13 @@ pub struct DelegateTaskArgs {
     pub model: Option<String>,
 }
 
-/// Arguments for `delegate` / `delegate_async`.
+/// Arguments for the unified `delegate` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct DelegateArgs {
-    /// Single-task goal (mutually exclusive with `tasks`).
+    /// `run` (default) | `async` | `status` | `collect` | `cancel`.
+    #[serde(default)]
+    pub action: Option<String>,
+    /// Single-task goal (mutually exclusive with `tasks`); for run/async.
     #[serde(default)]
     pub goal: Option<String>,
     #[serde(default)]
@@ -56,74 +59,58 @@ pub struct DelegateArgs {
     /// Concurrency cap; default from config (often 3).
     #[serde(default)]
     pub max_concurrent: Option<usize>,
-}
-
-/// Arguments for `delegate_status` / `delegate_cancel`.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct DelegateTaskIdArgs {
-    /// Task id returned by `delegate_async`.
-    pub task_id: String,
-}
-
-/// Arguments for `delegate_collect`.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct DelegateCollectArgs {
-    /// Task id returned by `delegate_async`.
-    pub task_id: String,
-    /// Max wait seconds; default 600.
+    /// Task id for status/collect/cancel.
+    #[serde(default)]
+    pub task_id: Option<String>,
+    /// Max wait seconds for collect; default 600.
     #[serde(default)]
     pub timeout_secs: Option<u64>,
 }
 
-/// 向注册表登记委派相关工具。
+/// 向注册表登记 `delegate`。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "delegate".to_string(),
         toolset: "delegate".to_string(),
-        description: "Spawn ephemeral sub-agent(s) in-turn (parallel, isolated). No durable persona—use create_agent for that. Pass full context; children have no parent history. Prefer orchestration_run for serial pipelines; delegate_async to not block.".to_string(),
+        description: "Spawn ephemeral sub-agent(s) in-turn (parallel, isolated). \
+action=run (default, sync) | async (returns task_id) | status | collect | cancel. \
+No durable persona—use agent_create. Prefer orchestrate for serial pipelines. \
+Pass full context; children have no parent history."
+            .to_string(),
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",
         ..ToolEntry::lifecycle_defaults().exclusive()
     });
-    registry.register(ToolEntry {
-        name: "delegate_async".to_string(),
-        toolset: "delegate".to_string(),
-        description: "Like delegate but async—returns task_id immediately; poll with delegate_status or delegate_collect.".to_string(),
-        schema: schema_for_args::<DelegateArgs>(),
-        check_fn: None,
-        icon: "send",
-            ..ToolEntry::lifecycle_defaults()
-    });
-    registry.register(ToolEntry {
-        name: "delegate_status".to_string(),
-        toolset: "delegate".to_string(),
-        description: "Query status of a background delegate started by delegate_async.".to_string(),
-        schema: schema_for_args::<DelegateTaskIdArgs>(),
-        check_fn: None,
-        icon: "list-checks",
-        ..ToolEntry::lifecycle_defaults()
-    });
-    registry.register(ToolEntry {
-        name: "delegate_collect".to_string(),
-        toolset: "delegate".to_string(),
-        description:
-            "Wait until a background delegate finishes (or timeout) and return its result."
-                .to_string(),
-        schema: schema_for_args::<DelegateCollectArgs>(),
-        check_fn: None,
-        icon: "hourglass",
-        ..ToolEntry::lifecycle_defaults()
-    });
-    registry.register(ToolEntry {
-        name: "delegate_cancel".to_string(),
-        toolset: "delegate".to_string(),
-        description: "Cancel a background delegate if still running. Best-effort; in-flight children may finish but result is discarded.".to_string(),
-        schema: schema_for_args::<DelegateTaskIdArgs>(),
-        check_fn: None,
-        icon: "x",
-            ..ToolEntry::lifecycle_defaults()
-    });
+}
+
+crate::submit_builtin_tool! {
+    register: register,
+    names: ["delegate"],
+    async_named: handle,
+}
+
+/// 本模块统一入口：按 `action` 分发。
+async fn handle(
+    ctx: &mut ToolContext<'_>,
+    _name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    let action = args
+        .get("action")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("run")
+        .to_ascii_lowercase();
+    match action.as_str() {
+        "run" => dispatch(ctx, args),
+        "async" => dispatch_async(ctx, args),
+        "status" => dispatch_status(args),
+        "collect" => dispatch_collect(args).await,
+        "cancel" => dispatch_cancel(args),
+        other => anyhow::bail!("未知 delegate action: {other}（应为 run|async|status|collect|cancel）"),
+    }
 }
 
 /// 同步执行真委派并返回摘要 JSON。
@@ -153,11 +140,11 @@ pub fn dispatch_async(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 
 /// 查询异步委派状态。
 pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: DelegateTaskIdArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("delegate_status 参数无效: {e}"))?;
-    let id = parsed.task_id.trim();
+    let parsed: DelegateArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("delegate status 参数无效: {e}"))?;
+    let id = parsed.task_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("delegate_status 需要非空 task_id");
+        anyhow::bail!("delegate status 需要非空 task_id");
     }
     let rec = delegate::async_delegate_status(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(record_to_json(&rec, true))
@@ -165,11 +152,11 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
 
 /// 等待异步委派完成。
 pub async fn dispatch_collect(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: DelegateCollectArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("delegate_collect 参数无效: {e}"))?;
-    let id = parsed.task_id.trim();
+    let parsed: DelegateArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("delegate collect 参数无效: {e}"))?;
+    let id = parsed.task_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("delegate_collect 需要非空 task_id");
+        anyhow::bail!("delegate collect 需要非空 task_id");
     }
     let timeout = parsed.timeout_secs.unwrap_or(600).clamp(1, 3600);
     let rec = delegate::async_delegate_collect(id, timeout)
@@ -180,43 +167,16 @@ pub async fn dispatch_collect(args: &serde_json::Value) -> anyhow::Result<String
 
 /// 取消异步委派。
 pub fn dispatch_cancel(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: DelegateTaskIdArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("delegate_cancel 参数无效: {e}"))?;
-    let id = parsed.task_id.trim();
+    let parsed: DelegateArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("delegate cancel 参数无效: {e}"))?;
+    let id = parsed.task_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("delegate_cancel 需要非空 task_id");
+        anyhow::bail!("delegate cancel 需要非空 task_id");
     }
     let rec = delegate::async_delegate_cancel(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(record_to_json(&rec, true))
 }
 
-/// 本模块统一入口：同步 / 异步委派及状态查询。
-async fn handle(
-    ctx: &mut ToolContext<'_>,
-    name: &str,
-    args: &serde_json::Value,
-) -> anyhow::Result<String> {
-    match name {
-        "delegate" => dispatch(ctx, args),
-        "delegate_async" => dispatch_async(ctx, args),
-        "delegate_status" => dispatch_status(args),
-        "delegate_collect" => dispatch_collect(args).await,
-        "delegate_cancel" => dispatch_cancel(args),
-        other => anyhow::bail!("未知委派工具: {other}"),
-    }
-}
-
-crate::submit_builtin_tool! {
-    register: register,
-    names: [
-        "delegate",
-        "delegate_async",
-        "delegate_status",
-        "delegate_collect",
-        "delegate_cancel"
-    ],
-    async_named: handle,
-}
 fn build_run_request(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
@@ -339,6 +299,7 @@ mod resolve_tests {
     #[test]
     fn parses_role_toolsets_max_iterations() {
         let parsed = DelegateArgs {
+            action: None,
             goal: Some("do it".into()),
             context: Some("ctx".into()),
             role: Some("orchestrator".into()),
@@ -347,6 +308,8 @@ mod resolve_tests {
             model: Some("claude:opus".into()),
             tasks: None,
             max_concurrent: None,
+            task_id: None,
+            timeout_secs: None,
         };
         let specs = resolve_tasks(&parsed).unwrap();
         assert_eq!(specs.len(), 1);

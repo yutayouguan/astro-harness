@@ -37,7 +37,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "present",
     "delegate",
     "cron",
-    "multi_agent",
+    "orchestrate",
     "todo",
 ];
 
@@ -207,15 +207,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "ask_user" => "ask_user",
         "switch_mode" => "switch_mode",
         "present" => "present",
-        "delegate" | "delegate_async" | "delegate_status" | "delegate_collect"
-        | "delegate_cancel" => "delegate",
-        "multi_agent"
-        | "create_agent"
-        | "orchestration_run"
-        | "orchestration_status"
-        | "team_list"
-        | "team_create"
-        | "team_run" => "multi_agent",
+        "delegate" => "delegate",
+        "orchestrate" | "agent_create" | "team" => "orchestrate",
         "todo" => "todo",
         other => other,
     }

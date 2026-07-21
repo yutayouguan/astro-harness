@@ -33,11 +33,9 @@ async fn register_all_includes_panel_tools() {
         "skills",
         "ask_user",
         "delegate",
-        "delegate_async",
-        "delegate_status",
-        "delegate_collect",
-        "delegate_cancel",
-        "multi_agent",
+        "orchestrate",
+        "agent_create",
+        "team",
         "todo",
     ] {
         assert!(names.contains(&expected), "missing {expected}");

@@ -418,7 +418,7 @@ mod tests {
         crate::register_all(&mut reg);
         assert!(reg.any_exclusive_access(&["memory", "delegate", "pin_context"]));
         assert!(!reg.any_exclusive_access(&["web_search"]));
-        assert!(reg.get("create_agent").unwrap().exclusive_access);
+        assert!(reg.get("agent_create").unwrap().exclusive_access);
         assert!(reg.get("search").is_some());
         assert!(reg.get("pin_context").unwrap().exclusive_access);
     }

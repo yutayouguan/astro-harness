@@ -375,25 +375,16 @@ fn apply_nested_agent_tool_strips_with_role(
     for name in [
         "memory",
         "search",
-        "create_agent",
-        "multi_agent",
+        "agent_create",
+        "orchestrate",
+        "team",
         "ask_user",
     ] {
         registry.unregister(name);
     }
     let strip_delegate = role == DelegateRole::Leaf || depth_ctx.is_leaf();
     if strip_delegate {
-        for name in [
-            "delegate",
-            "delegate_async",
-            "delegate_status",
-            "delegate_collect",
-            "delegate_cancel",
-            "orchestration_run",
-            "orchestration_status",
-        ] {
-            registry.unregister(name);
-        }
+        registry.unregister("delegate");
     }
 }
 
@@ -662,9 +653,9 @@ mod strip_tests {
             .map(|t| t.name.as_str())
             .collect();
         assert!(!names.contains(&"delegate"));
-        assert!(!names.contains(&"orchestration_run"));
+        assert!(!names.contains(&"orchestrate"));
         assert!(!names.contains(&"ask_user"));
-        assert!(!names.contains(&"create_agent"));
+        assert!(!names.contains(&"agent_create"));
         assert!(!names.contains(&"memory"));
     }
 
@@ -686,7 +677,7 @@ mod strip_tests {
             .map(|t| t.name.as_str())
             .collect();
         assert!(names.contains(&"delegate"));
-        assert!(names.contains(&"orchestration_run"));
+        assert!(names.contains(&"orchestrate"));
         assert!(!names.contains(&"memory"));
         assert!(!names.contains(&"ask_user"));
     }

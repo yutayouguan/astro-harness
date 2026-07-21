@@ -7,9 +7,8 @@ pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
 
 const SUBAGENT_TOOLS: &[&str] = &[
     "delegate",
-    "delegate_async",
-    "async_delegate_collect",
-    "orchestration_run",
+    "delegate",
+    "orchestrate",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

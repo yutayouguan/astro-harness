@@ -1426,7 +1426,7 @@ impl AgentLoop {
                 ..Default::default()
             },
         );
-        if name == "delegate" || name == "multi_agent" {
+        if name == "delegate" || name == "orchestrate" {
             self.fire_subagent_stop_from_delegate_result(&raw_result)
                 .await;
         }

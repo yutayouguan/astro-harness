@@ -1,9 +1,9 @@
-//! multi_agent 转调 orchestration 冒烟测试。
+//! orchestrate 转调 orchestration 冒烟测试。
 
 use tools::ToolContext;
 
 #[tokio::test]
-async fn multi_agent_queues_orchestration() {
+async fn orchestrate_queues_orchestration() {
     let dir = tempfile::tempdir().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -36,7 +36,7 @@ async fn multi_agent_queues_orchestration() {
     let out = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "multi_agent",
+        "orchestrate",
         &serde_json::json!({
             "goal": "ship feature",
             "agents": ["researcher", "writer"]
@@ -46,7 +46,8 @@ async fn multi_agent_queues_orchestration() {
     .unwrap();
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["status"], "queued");
-    assert_eq!(v["via"], "multi_agent");
+    assert_eq!(v["status"], "queued");
+    assert!(v["orchestration_id"].as_str().unwrap().len() > 4);
     let id = v["orchestration_id"].as_str().unwrap();
     assert!(!id.is_empty());
 
@@ -61,7 +62,7 @@ async fn multi_agent_queues_orchestration() {
 }
 
 #[tokio::test]
-async fn multi_agent_rejects_empty_agents() {
+async fn orchestrate_rejects_empty_agents() {
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
@@ -91,7 +92,7 @@ async fn multi_agent_rejects_empty_agents() {
     let err = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "multi_agent",
+        "orchestrate",
         &serde_json::json!({"goal": "x", "agents": []}),
     )
     .await

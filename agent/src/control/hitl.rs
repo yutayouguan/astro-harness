@@ -283,7 +283,7 @@ pub fn is_interactive_tool(name: &str) -> bool {
 pub fn is_exclusive_tool(name: &str) -> bool {
     matches!(
         name,
-        "memory" | "pin_context" | "create_agent" | "delegate"
+        "memory" | "pin_context" | "agent_create" | "delegate"
     )
 }
 

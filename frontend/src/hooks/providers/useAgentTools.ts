@@ -53,7 +53,7 @@ export type AgentToolId =
   | "present"
   | "delegate"
   | "cron"
-  | "multi_agent"
+  | "orchestrate"
   | "todo";
 
 type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
@@ -375,10 +375,13 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     Icon: IconDelegate,
     tone: "sky",
     params: [
+      { name: "action", type: "string", optional: true },
       { name: "goal", type: "string", optional: true },
       { name: "context", type: "string", optional: true },
       { name: "tasks", type: "object", optional: true },
       { name: "max_concurrent", type: "number", optional: true },
+      { name: "task_id", type: "string", optional: true },
+      { name: "timeout_secs", type: "number", optional: true },
     ],
   },
   {
@@ -396,14 +399,17 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "multi_agent",
-    titleKey: "agentTools.multiAgent.title",
-    descKey: "agentTools.multiAgent.desc",
+    id: "orchestrate",
+    titleKey: "agentTools.orchestrate.title",
+    descKey: "agentTools.orchestrate.desc",
     Icon: IconMultiAgent,
     tone: "fuchsia",
     params: [
-      { name: "goal", type: "string" },
-      { name: "agents", type: "array" },
+      { name: "action", type: "string", optional: true },
+      { name: "goal", type: "string", optional: true },
+      { name: "steps", type: "array", optional: true },
+      { name: "agents", type: "array", optional: true },
+      { name: "orchestration_id", type: "string", optional: true },
     ],
   },
   {
