@@ -13,7 +13,6 @@ use crate::schema::schema_for_args;
 /// One item in a batch delegate.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct DelegateTaskArgs {
-    /// Sub-task goal.
     pub goal: String,
     /// Context the child needs (parent must pass explicitly).
     #[serde(default)]
@@ -38,7 +37,6 @@ pub struct DelegateArgs {
     /// Single-task goal (mutually exclusive with `tasks`).
     #[serde(default)]
     pub goal: Option<String>,
-    /// Single-task context.
     #[serde(default)]
     pub context: Option<String>,
     /// Single-task role: `leaf` | `orchestrator`.
@@ -47,7 +45,6 @@ pub struct DelegateArgs {
     /// Single-task toolset whitelist.
     #[serde(default)]
     pub toolsets: Option<Vec<String>>,
-    /// Single-task max iterations.
     #[serde(default)]
     pub max_iterations: Option<usize>,
     /// Single-task optional model: `provider:model_id`.

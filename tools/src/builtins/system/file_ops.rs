@@ -52,13 +52,10 @@ pub struct FileOpsArgs {
     /// Patch: text to replace (must be unique unless `replace_all=true`).
     #[serde(default)]
     pub old_string: Option<String>,
-    /// Patch: replacement text.
     #[serde(default)]
     pub new_string: Option<String>,
-    /// Patch: replace all matches when true.
     #[serde(default)]
     pub replace_all: Option<bool>,
-    /// Destination path for `move` / `copy`.
     #[serde(default)]
     pub dest: Option<String>,
     /// Read: byte offset (default 0).

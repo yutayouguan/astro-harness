@@ -17,7 +17,6 @@ const MAX_STEPS: usize = 8;
 pub struct OrchestrationStepArgs {
     /// Role name (display and temporary role injection).
     pub role: String,
-    /// Instruction for this step.
     pub prompt: String,
     /// Existing agent id; omit for a temporary role (uses parent credentials).
     #[serde(default)]
@@ -27,7 +26,6 @@ pub struct OrchestrationStepArgs {
 /// Arguments for `orchestration_run`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct OrchestrationRunArgs {
-    /// Overall goal.
     pub goal: String,
     /// Serial steps (1–8).
     pub steps: Vec<OrchestrationStepArgs>,

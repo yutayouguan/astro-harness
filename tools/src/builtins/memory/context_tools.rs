@@ -36,7 +36,6 @@ pub enum SearchScope {
 /// Arguments for `search_context`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SearchContextArgs {
-    /// Search query.
     pub query: String,
     /// Scope; default `all`.
     #[serde(default)]

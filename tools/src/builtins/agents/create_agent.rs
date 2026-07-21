@@ -13,22 +13,18 @@ use crate::schema::schema_for_args;
 /// Persona / preference profile fields for AGENT / IDENTITY / SOUL / USER templates.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 pub struct AgentProfileArgs {
-    /// Background / life experience.
     #[serde(default)]
     pub background: Option<String>,
-    /// Speaking style.
     #[serde(default)]
     pub style: Option<String>,
     /// Primary ways to help the user.
     #[serde(default)]
     pub focus: Option<String>,
-    /// Things to explicitly avoid.
     #[serde(default)]
     pub avoid: Option<String>,
     /// How to address the user.
     #[serde(default)]
     pub call_me: Option<String>,
-    /// Other preferences.
     #[serde(default)]
     pub preferences: Option<String>,
 }
@@ -47,7 +43,6 @@ pub struct CreateAgentArgs {
     /// Copy global tools/MCP into `agents/{id}/config.json` as a starting point; default `true`.
     #[serde(default)]
     pub inherit_config: Option<bool>,
-    /// Optional persona profile.
     #[serde(default)]
     pub profile: Option<AgentProfileArgs>,
 }

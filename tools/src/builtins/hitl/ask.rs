@@ -26,7 +26,6 @@ pub struct AskQuestion {
     /// Answer key; defaults to `q0` / `q1` …
     #[serde(default)]
     pub id: Option<String>,
-    /// Question shown to the user.
     pub question: String,
     /// Preset options; empty means free-text input only.
     #[serde(default)]

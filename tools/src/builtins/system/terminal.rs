@@ -17,7 +17,6 @@ use crate::schema::schema_for_args;
 /// Arguments for the `terminal` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TerminalArgs {
-    /// Shell command string to run.
     pub command: String,
     /// Optional workspace-relative working subdirectory.
     #[serde(default)]

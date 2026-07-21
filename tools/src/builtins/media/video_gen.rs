@@ -40,7 +40,6 @@ pub struct VideoGenArgs {
     /// Extend from workspace video path (preferred for next shots).
     #[serde(default)]
     pub extend_video: Option<String>,
-    /// Extend from remote video URI.
     #[serde(default)]
     pub extend_video_uri: Option<String>,
     /// Extend from prior operation id.
@@ -61,7 +60,6 @@ pub struct VideoGenArgs {
     /// Person generation: `allow_adult` / `allow_all` / `dont_allow`.
     #[serde(default)]
     pub person_generation: Option<String>,
-    /// Random seed (integer).
     #[serde(default)]
     pub seed: Option<i64>,
 }

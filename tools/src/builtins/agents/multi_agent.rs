@@ -15,7 +15,6 @@ const MAX_AGENTS: usize = 8;
 /// Arguments for the `multi_agent` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MultiAgentArgs {
-    /// Overall goal (required).
     pub goal: String,
     /// Role descriptions for sub-agents (1–8), run serially in order.
     pub agents: Vec<String>,

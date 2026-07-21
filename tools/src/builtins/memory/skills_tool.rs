@@ -34,7 +34,6 @@ pub struct SkillsArgs {
     /// `manage` patch: text to replace (must appear uniquely in SKILL.md).
     #[serde(default)]
     pub old_string: Option<String>,
-    /// `manage` patch: replacement text.
     #[serde(default)]
     pub new_string: Option<String>,
     /// Optional structured input appended under a "Call input" section for `load`/`view`.

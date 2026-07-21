@@ -12,7 +12,6 @@ use crate::schema::schema_for_args;
 /// Checklist item as an object.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PlanItemObject {
-    /// Item text.
     pub text: String,
     /// Whether completed; omitted means incomplete.
     #[serde(default)]
@@ -35,7 +34,6 @@ pub struct TaskPlanArgs {
     /// Plan title; default `Task Plan`.
     #[serde(default)]
     pub title: Option<String>,
-    /// Checklist items.
     pub items: Vec<PlanItem>,
 }
 

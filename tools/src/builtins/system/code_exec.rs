@@ -33,7 +33,6 @@ const SAFE_ENV_KEYS: &[&str] = &[
 /// Arguments for the `code_exec` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CodeExecArgs {
-    /// Source code to execute.
     pub code: String,
     /// Language: `python` (default) / `javascript`|`js` / `shell`|`bash`. Unknown languages error.
     #[serde(default)]

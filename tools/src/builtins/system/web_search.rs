@@ -19,7 +19,6 @@ const USER_AGENT: &str = concat!(
 /// Arguments for the `web_search` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WebSearchArgs {
-    /// Search query.
     pub query: String,
     /// Max results (1–10, default 5).
     #[serde(default)]
