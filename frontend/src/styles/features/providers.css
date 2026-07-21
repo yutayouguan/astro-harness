@@ -375,6 +375,7 @@ html[data-theme="dark"] .providers-badge--deprecated {
   gap: 6px;
   position: relative;
   z-index: 2;
+  flex-shrink: 0;
   padding: 4px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--glass-border) 80%, transparent);
