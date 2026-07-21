@@ -22,7 +22,6 @@ import {
   Save,
   Play,
   Plus,
-  Settings2,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
@@ -31,6 +30,7 @@ import * as LucideIcons from "lucide-react";
 type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
 import type { LoopDto, NodeType, NodeMeta } from "./loopTypes";
 import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory } from "./loopTypes";
+import LoopConfigPanel from "./LoopConfigPanel";
 
 interface Props {
   workflowId: string | null;
@@ -305,34 +305,32 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
 
         {/* ── Right: Config panel ── */}
         {selectedNode && (
-          <div className="loop-config-panel">
-            <div className="loop-config-panel-header">
-              <Settings2 size={16} />
-              <span>{(selectedNode.data as Record<string, unknown>).label as string}</span>
-            </div>
-            <div className="loop-config-panel-body">
-              <label className="loop-config-field">
-                <span className="loop-config-label">标签</span>
-                <input
-                  className="loop-config-input"
-                  value={(selectedNode.data as Record<string, unknown>).label as string}
-                  onChange={(e) => {
-                    setNodes((nds) =>
-                      nds.map((n) =>
-                        n.id === selectedNode.id
-                          ? { ...n, data: { ...n.data, label: e.target.value } }
-                          : n,
-                      ),
-                    );
-                    setDirty(true);
-                  }}
-                />
-              </label>
-              <div className="loop-config-placeholder">
-                节点配置面板（阶段 2 实现）
-              </div>
-            </div>
-          </div>
+          <LoopConfigPanel
+            nodeType={(selectedNode.data as Record<string, unknown>).nodeType as NodeType}
+            label={(selectedNode.data as Record<string, unknown>).label as string}
+            config={((selectedNode.data as Record<string, unknown>).config as Record<string, unknown>) ?? {}}
+            onLabelChange={(label) => {
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === selectedNode.id
+                    ? { ...n, data: { ...n.data, label } }
+                    : n,
+                ),
+              );
+              setDirty(true);
+            }}
+            onConfigChange={(config) => {
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === selectedNode.id
+                    ? { ...n, data: { ...n.data, config } }
+                    : n,
+                ),
+              );
+              setDirty(true);
+            }}
+            onClose={() => setSelectedNodeId(null)}
+          />
         )}
       </div>
     </div>
