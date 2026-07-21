@@ -15,6 +15,7 @@ import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ChatView from "./components/chat/ChatView";
 import CronPanel from "./components/schedule/CronPanel";
+import LoopPanel from "./components/loop/LoopPanel";
 import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
 import MemoryPanel, {
@@ -994,6 +995,17 @@ export default function App() {
               )}
               {nav === "insights" && (
                 <InsightsPanel active={nav === "insights"} />
+              )}
+              {nav === "loop" && (
+                <LoopPanel
+                  active={nav === "loop"}
+                  providers={providers.map((p) => ({
+                    id: p.id,
+                    name: p.display_name,
+                    model: p.model,
+                    kind: p.kind,
+                  }))}
+                />
               )}
               {nav === "cron" && (
                 <CronPanel

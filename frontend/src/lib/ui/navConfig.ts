@@ -3,6 +3,7 @@ import {
   IconChat,
   IconCron,
   IconInsights,
+  IconLoop,
   IconMemory,
   IconProviders,
   IconSettings,
@@ -24,6 +25,7 @@ export type NavId =
   | "files"
   | "skills"
   | "tools"
+  | "loop"
   | "insights"
   | "cron"
   | "providers"
@@ -60,6 +62,7 @@ export const NAV: {
   },
   { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
   { id: "tools", labelKey: "nav.tools", Icon: IconTools, tone: "orange" },
+  { id: "loop", labelKey: "nav.loop", Icon: IconLoop, tone: "pink" },
   { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "teal" },
   {
     id: "providers",
@@ -94,6 +97,7 @@ export const PAGE_META: Record<
   skills: { titleKey: "page.skills.title", subKey: "page.skills.sub" },
   tools: { titleKey: "page.tools.title", subKey: "page.tools.sub" },
   insights: { titleKey: "page.insights.title", subKey: "page.insights.sub" },
+  loop: { titleKey: "page.loop.title", subKey: "page.loop.sub" },
   cron: { titleKey: "page.cron.title", subKey: "page.cron.sub" },
   providers: {
     titleKey: "page.providers.title",

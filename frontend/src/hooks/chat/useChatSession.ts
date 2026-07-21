@@ -64,7 +64,7 @@ import { useConfirm } from "../ui/DialogContext";
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
 type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
 type StatusPhase = "ready" | "connecting" | "generating" | "error";
-type NavId = "chat" | "memory" | "files" | "skills" | "tools" | "insights" | "cron" | "providers" | "settings";
+type NavId = "chat" | "memory" | "files" | "skills" | "tools" | "loop" | "insights" | "cron" | "providers" | "settings";
 
 const MAX_ATTACHMENTS = 8;
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;

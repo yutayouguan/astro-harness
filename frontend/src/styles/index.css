@@ -42,6 +42,7 @@
 @import "./features/providers.css";
 @import "./components/select-menu.css";
 @import "./features/cron.css";
+@import "./features/loop.css";
 @import "./features/insights.css";
 @import "./foundation/transitions.css";
 @import "./components/illustrations.css";

@@ -19,6 +19,7 @@ mod fs_ops;
 mod grpc;
 mod icon_commands;
 mod ip_location;
+mod loop_commands;
 mod keystore;
 mod memory_commands;
 mod menu_locale;
@@ -360,6 +361,19 @@ pub fn run() {
             commands::delete_cron_run,
             commands::list_cron_runs,
             commands::list_cron_job_runs,
+            loop_commands::list_loops,
+            loop_commands::get_loop,
+            loop_commands::create_loop,
+            loop_commands::save_loop,
+            loop_commands::delete_loop,
+            loop_commands::set_loop_enabled,
+            loop_commands::set_loop_ai_callable,
+            loop_commands::list_loop_runs,
+            loop_commands::get_loop_run,
+            loop_commands::delete_loop_run,
+            loop_commands::list_loop_step_logs,
+            loop_commands::export_loop,
+            loop_commands::import_loop,
             config_commands::get_tools_enabled,
             config_commands::set_tools_enabled,
             config_commands::get_tool_catalog,

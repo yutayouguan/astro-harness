@@ -199,6 +199,18 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
+/** Loop 工作流 — 节点连线图标；默认空心线稿，选中填实 */
+export function IconLoop(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="12" cy="18" r="3" />
+      <path className="nav-icon-stroke" d="M9 6h6M7.5 8.5 10.5 16M16.5 8.5 13.5 16" />
+    </NavIconBase>
+  );
+}
+
 /** 定时任务 — 默认空心+勾线稿；选中表盘填实，勾变透镜镂空 */
 export function IconCron(props: IconProps) {
   return (

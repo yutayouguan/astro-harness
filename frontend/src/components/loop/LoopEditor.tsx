@@ -1,0 +1,340 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  addEdge,
+  useNodesState,
+  useEdgesState,
+  type Connection,
+  type Node as RFNode,
+  type Edge as RFEdge,
+  type NodeTypes,
+  type OnConnect,
+  Handle,
+  Position,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import {
+  ArrowLeft,
+  Save,
+  Play,
+  Plus,
+  Settings2,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import * as LucideIcons from "lucide-react";
+
+type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
+import type { LoopDto, NodeType, NodeMeta } from "./loopTypes";
+import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory } from "./loopTypes";
+
+interface Props {
+  workflowId: string | null;
+  providers: { id: string; name: string; model: string; kind: string }[];
+  onBack: () => void;
+}
+
+// ── Custom node component ────────────────────────────────────────────
+
+function LoopNode({ data, selected }: { data: { label: string; meta: NodeMeta }; selected?: boolean }) {
+  const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
+  return (
+    <div
+      className={`loop-rf-node loop-rf-node--${data.meta.category}${selected ? " is-selected" : ""}`}
+      style={{ "--node-color": data.meta.color } as React.CSSProperties}
+    >
+      <Handle type="target" position={Position.Left} className="loop-rf-handle" />
+      <div className="loop-rf-node-header">
+        {IconComp && <IconComp size={14} />}
+        <span>{data.label}</span>
+      </div>
+      <Handle type="source" position={Position.Right} className="loop-rf-handle" />
+    </div>
+  );
+}
+
+const nodeTypes: NodeTypes = {
+  loopNode: LoopNode as unknown as NodeTypes[string],
+};
+
+// ── Editor ───────────────────────────────────────────────────────────
+
+export default function LoopEditor({ workflowId, providers: _providers, onBack }: Props) {
+  const [workflow, setWorkflow] = useState<LoopDto | null>(null);
+  const [name, setName] = useState("未命名创建loop");
+  const [, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // sidebar collapsed categories
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
+  // load workflow
+  useEffect(() => {
+    if (!workflowId) return;
+    (async () => {
+      try {
+        const wf = await invoke<LoopDto | null>("get_loop", { id: workflowId });
+        if (!wf) return;
+        setWorkflow(wf);
+        setName(wf.name);
+        setNodes(
+          wf.nodes.map((n) => ({
+            id: n.id,
+            type: "loopNode",
+            position: { x: n.position.x, y: n.position.y },
+            data: {
+              label: n.label,
+              meta: NODE_REGISTRY.find((m) => m.type === n.node_type) ?? NODE_REGISTRY[0],
+              config: n.config,
+              nodeType: n.node_type,
+            },
+          })),
+        );
+        setEdges(
+          wf.edges.map((e) => ({
+            id: e.id,
+            source: e.source,
+            sourceHandle: e.source_handle ?? undefined,
+            target: e.target,
+            targetHandle: e.target_handle ?? undefined,
+            animated: true,
+          })),
+        );
+      } catch (e) {
+        console.error("get_loop failed", e);
+      }
+    })();
+  }, [workflowId, setNodes, setEdges]);
+
+  const onConnect: OnConnect = useCallback(
+    (conn: Connection) => {
+      setEdges((eds) => addEdge({ ...conn, animated: true }, eds));
+      setDirty(true);
+    },
+    [setEdges],
+  );
+
+  const handleSave = async () => {
+    if (!workflow) return;
+    setSaving(true);
+    try {
+      const dto: LoopDto = {
+        ...workflow,
+        name,
+        nodes: nodes.map((n) => ({
+          id: n.id,
+          node_type: (n.data as Record<string, unknown>).nodeType as NodeType,
+          label: (n.data as Record<string, unknown>).label as string,
+          position: { x: n.position.x, y: n.position.y },
+          config: ((n.data as Record<string, unknown>).config as Record<string, unknown>) ?? {},
+          disabled: false,
+        })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          source_handle: e.sourceHandle ?? null,
+          target: e.target,
+          target_handle: e.targetHandle ?? null,
+        })),
+      };
+      const saved = await invoke<LoopDto>("save_loop", { data: dto });
+      setWorkflow(saved);
+      setDirty(false);
+    } catch (e) {
+      console.error("save_loop failed", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // drag & drop from palette
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const nodeType = e.dataTransfer.getData("application/loop-node-type") as NodeType;
+      if (!nodeType) return;
+
+      const meta = NODE_REGISTRY.find((m) => m.type === nodeType);
+      if (!meta) return;
+
+      const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (!bounds) return;
+
+      const newId = crypto.randomUUID();
+      const newNode: RFNode = {
+        id: newId,
+        type: "loopNode",
+        position: { x: e.clientX - bounds.left - 80, y: e.clientY - bounds.top - 20 },
+        data: { label: meta.label, meta, config: {}, nodeType },
+      };
+      setNodes((nds) => [...nds, newNode]);
+      setDirty(true);
+    },
+    [setNodes],
+  );
+
+  const toggleCategory = (cat: string) => {
+    setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId),
+    [nodes, selectedNodeId],
+  );
+
+  return (
+    <div className="loop-editor">
+      {/* ── Toolbar ── */}
+      <div className="loop-editor-toolbar">
+        <button className="loop-icon-btn" onClick={onBack} title="返回">
+          <ArrowLeft size={16} />
+        </button>
+        <input
+          className="loop-editor-name"
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setDirty(true);
+          }}
+        />
+        <div className="loop-editor-toolbar-right">
+          <button
+            className="loop-btn loop-btn--secondary"
+            onClick={() => void handleSave()}
+            disabled={saving}
+          >
+            <Save size={14} />
+            <span>{saving ? "保存中…" : "保存"}</span>
+          </button>
+          <button className="loop-btn loop-btn--primary">
+            <Play size={14} />
+            <span>运行一次</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="loop-editor-body">
+        {/* ── Left: Node palette ── */}
+        <div className="loop-node-palette">
+          <div className="loop-palette-title">节点</div>
+          {NODE_CATEGORIES.map((cat) => {
+            const items = getNodesByCategory(cat.key);
+            const isCollapsed = !!collapsed[cat.key];
+            return (
+              <div key={cat.key} className="loop-palette-group">
+                <button
+                  className="loop-palette-group-header"
+                  onClick={() => toggleCategory(cat.key)}
+                >
+                  {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  <span>{cat.label}</span>
+                </button>
+                {!isCollapsed && (
+                  <div className="loop-palette-items">
+                    {items.map((meta) => {
+                      const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
+                      return (
+                        <div
+                          key={meta.type}
+                          className="loop-palette-item"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("application/loop-node-type", meta.type);
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                        >
+                          {IconComp && <IconComp size={14} />}
+                          <span>{meta.label}</span>
+                          <Plus size={12} className="loop-palette-item-plus" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Center: Canvas ── */}
+        <div className="loop-canvas-container" ref={reactFlowWrapper}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={(changes) => {
+              onNodesChange(changes);
+              setDirty(true);
+            }}
+            onEdgesChange={(changes) => {
+              onEdgesChange(changes);
+              setDirty(true);
+            }}
+            onConnect={onConnect}
+            onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+            onPaneClick={() => setSelectedNodeId(null)}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            nodeTypes={nodeTypes}
+            fitView
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background />
+            <Controls />
+            <MiniMap
+              nodeColor={(n) =>
+                ((n.data as Record<string, unknown>)?.meta as NodeMeta)?.color ?? "#888"
+              }
+            />
+          </ReactFlow>
+        </div>
+
+        {/* ── Right: Config panel ── */}
+        {selectedNode && (
+          <div className="loop-config-panel">
+            <div className="loop-config-panel-header">
+              <Settings2 size={16} />
+              <span>{(selectedNode.data as Record<string, unknown>).label as string}</span>
+            </div>
+            <div className="loop-config-panel-body">
+              <label className="loop-config-field">
+                <span className="loop-config-label">标签</span>
+                <input
+                  className="loop-config-input"
+                  value={(selectedNode.data as Record<string, unknown>).label as string}
+                  onChange={(e) => {
+                    setNodes((nds) =>
+                      nds.map((n) =>
+                        n.id === selectedNode.id
+                          ? { ...n, data: { ...n.data, label: e.target.value } }
+                          : n,
+                      ),
+                    );
+                    setDirty(true);
+                  }}
+                />
+              </label>
+              <div className="loop-config-placeholder">
+                节点配置面板（阶段 2 实现）
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

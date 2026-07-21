@@ -1,0 +1,467 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Loop — 可视化工作流引擎样式
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Panel (列表页) ─────────────────────────────────────────────── */
+
+.loop-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 32px 40px;
+  overflow-y: auto;
+}
+
+.loop-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+  gap: 24px;
+}
+
+.loop-panel-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+
+.loop-panel-desc {
+  font-size: 13px;
+  color: var(--ink-secondary);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 640px;
+}
+
+.loop-panel-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+
+.loop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.loop-btn--primary {
+  background: var(--tone, #ec4899);
+  color: #fff;
+}
+.loop-btn--primary:hover {
+  filter: brightness(1.1);
+}
+
+.loop-btn--secondary {
+  background: var(--glass-panel);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+.loop-btn--secondary:hover {
+  background: var(--glass-hover);
+}
+
+.loop-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.loop-icon-btn:hover {
+  background: var(--glass-hover);
+  color: var(--ink);
+}
+.loop-icon-btn--danger:hover {
+  color: #ef4444;
+}
+
+/* ── Card list ─────────────────────────────────────────────────── */
+
+.loop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.loop-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-secondary);
+  font-size: 14px;
+}
+.loop-empty-hint {
+  font-size: 12px;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+.loop-card {
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: var(--glass-panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  transition: border-color 0.15s;
+}
+.loop-card:hover {
+  border-color: var(--tone, #ec4899);
+}
+
+.loop-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.loop-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone, #ec4899) 15%, transparent);
+  color: var(--tone, #ec4899);
+}
+
+.loop-card-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loop-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.loop-card-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tone, #ec4899) 12%, transparent);
+  color: var(--tone, #ec4899);
+}
+
+.loop-card-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.loop-card-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-tertiary);
+}
+
+.loop-card-toggles {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.loop-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+.loop-toggle input[type="checkbox"] {
+  width: 32px;
+  height: 18px;
+  appearance: none;
+  background: var(--glass-dim);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.loop-toggle input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.loop-toggle input[type="checkbox"]:checked {
+  background: var(--tone, #ec4899);
+}
+.loop-toggle input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Editor (画布页)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.loop-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.loop-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--glass-panel);
+  flex-shrink: 0;
+}
+
+.loop-editor-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  outline: none;
+}
+.loop-editor-name:focus {
+  border-color: var(--tone, #ec4899);
+  background: var(--glass-panel);
+}
+
+.loop-editor-toolbar-right {
+  display: flex;
+  gap: 8px;
+}
+
+.loop-editor-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Node palette (左侧) ──────────────────────────────────────── */
+
+.loop-node-palette {
+  width: 220px;
+  border-right: 1px solid var(--border);
+  background: var(--glass-panel);
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 12px 0;
+}
+
+.loop-palette-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  padding: 0 14px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.loop-palette-group {
+  margin-bottom: 4px;
+}
+
+.loop-palette-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.loop-palette-group-header:hover {
+  background: var(--glass-hover);
+}
+
+.loop-palette-items {
+  padding: 2px 8px;
+}
+
+.loop-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+  cursor: grab;
+  user-select: none;
+  transition: all 0.12s;
+}
+.loop-palette-item:hover {
+  background: var(--glass-hover);
+  color: var(--ink);
+}
+.loop-palette-item:active {
+  cursor: grabbing;
+}
+.loop-palette-item-plus {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.loop-palette-item:hover .loop-palette-item-plus {
+  opacity: 0.5;
+}
+
+/* ── Canvas ────────────────────────────────────────────────────── */
+
+.loop-canvas-container {
+  flex: 1;
+  position: relative;
+}
+
+/* React Flow 样式覆盖 */
+.loop-canvas-container .react-flow__background {
+  background: var(--bg0);
+}
+.loop-canvas-container .react-flow__controls {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.loop-canvas-container .react-flow__controls-button {
+  background: var(--glass-panel);
+  color: var(--ink);
+  border-bottom: 1px solid var(--border);
+}
+.loop-canvas-container .react-flow__controls-button:hover {
+  background: var(--glass-hover);
+}
+.loop-canvas-container .react-flow__minimap {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* ── React Flow Node ──────────────────────────────────────────── */
+
+.loop-rf-node {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 40%, var(--border));
+  background: var(--glass-panel);
+  backdrop-filter: blur(12px);
+  min-width: 140px;
+  font-size: 12px;
+  color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.loop-rf-node.is-selected {
+  border-color: var(--node-color, #888);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color, #888) 25%, transparent);
+}
+
+.loop-rf-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+.loop-rf-node-header svg {
+  color: var(--node-color, #888);
+  flex-shrink: 0;
+}
+
+.loop-rf-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: var(--node-color, #888) !important;
+  border: 2px solid var(--glass-panel) !important;
+}
+
+/* ── Config panel (右侧) ──────────────────────────────────────── */
+
+.loop-config-panel {
+  width: 300px;
+  border-left: 1px solid var(--border);
+  background: var(--glass-panel);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.loop-config-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.loop-config-panel-body {
+  padding: 16px;
+}
+
+.loop-config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.loop-config-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-secondary);
+}
+
+.loop-config-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg0);
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+}
+.loop-config-input:focus {
+  border-color: var(--tone, #ec4899);
+}
+
+.loop-config-placeholder {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  text-align: center;
+  padding: 20px 0;
+}

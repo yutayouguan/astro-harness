@@ -5,6 +5,7 @@ export const HEADER_AGENT_PICKER_NAV_IDS = [
   "files",
   "skills",
   "tools",
+  "loop",
   "cron",
   "insights",
   "memory",
