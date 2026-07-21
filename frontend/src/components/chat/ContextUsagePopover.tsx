@@ -1,7 +1,7 @@
-/** Composer 上下文占用浮层：分段条、图例与「查看详情」（portal + 启发式定位）。 */
+/** Composer 上下文占用浮层：分段条、图例、本轮估费与「查看详情」（portal + 启发式定位）。 */
 import { useEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Coins, X } from "lucide-react";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
@@ -26,10 +26,18 @@ const SEG_LABEL: Record<string, MessageKey> = {
   conversation: "chat.contextSeg.conversation",
 };
 
+export type EstimateCostLabel = {
+  cost: string;
+  short: string;
+  full: string;
+};
+
 type Props = {
   open: boolean;
   snapshot: ContextUsageSnapshot | null;
   windowTokens: number;
+  /** 发送前粗估；有定价时显示在浮层底部 */
+  estimateCost?: EstimateCostLabel | null;
   onClose: () => void;
   onViewDetails: () => void;
   /** 含触发按钮的外层；用于 click-outside 与锚点定位 */
@@ -40,6 +48,7 @@ export default function ContextUsagePopover({
   open,
   snapshot,
   windowTokens,
+  estimateCost = null,
   onClose,
   onViewDetails,
   containRef,
@@ -59,7 +68,7 @@ export default function ContextUsagePopover({
     gap: 8,
     maxHeightCap: 480,
     minMaxHeight: 120,
-    sizeKey: snapshot?.totalTokens ?? "empty",
+    sizeKey: `${snapshot?.totalTokens ?? "empty"}:${estimateCost?.cost ?? ""}`,
   });
 
   useEffect(() => {
@@ -157,6 +166,20 @@ export default function ContextUsagePopover({
       ) : (
         <p className="ctx-usage-popover-empty">{t("chat.contextUsageEmpty")}</p>
       )}
+
+      {estimateCost ? (
+        <div
+          className="ctx-usage-popover-cost"
+          title={estimateCost.full}
+          aria-label={estimateCost.short}
+        >
+          <Coins size={13} strokeWidth={2} aria-hidden />
+          <span className="ctx-usage-popover-cost-label">
+            {t("chat.estimateCostTurn")}
+          </span>
+          <span className="ctx-usage-popover-cost-value">{estimateCost.cost}</span>
+        </div>
+      ) : null}
     </div>,
     document.body,
   );

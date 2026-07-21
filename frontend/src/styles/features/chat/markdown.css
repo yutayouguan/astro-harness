@@ -629,33 +629,6 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   flex-shrink: 0;
 }
 
-.composer-cost-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  max-width: 9.5rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  padding: 3px 8px 3px 6px;
-  border-radius: 999px;
-  color: var(--ink-mute);
-  background: color-mix(in srgb, currentColor 7%, transparent);
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  cursor: default;
-  user-select: none;
-}
-
-.composer-cost-chip svg {
-  flex-shrink: 0;
-  opacity: 0.88;
-}
-
 .composer-mode {
   position: relative;
 }
@@ -914,6 +887,42 @@ html[data-theme="light"] .composer-mode-menu {
   font-size: 0.82rem;
   line-height: 1.45;
   color: var(--ink-mute);
+}
+
+.ctx-usage-popover-cost {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 10px 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 8%, transparent);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  user-select: none;
+}
+
+.ctx-usage-popover-cost svg {
+  flex-shrink: 0;
+  color: var(--tone, var(--accent));
+  opacity: 0.9;
+}
+
+.ctx-usage-popover-cost-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-mute);
+  font-weight: 550;
+}
+
+.ctx-usage-popover-cost-value {
+  flex-shrink: 0;
+  color: var(--ink);
+  letter-spacing: 0.01em;
 }
 
 .ctx-usage-bar {

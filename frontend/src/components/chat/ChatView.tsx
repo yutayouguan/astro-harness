@@ -20,7 +20,6 @@ import {
   ChartPie,
   Check,
   ChevronDown,
-  Coins,
   Copy,
   File,
   FileVideo,
@@ -2487,16 +2486,6 @@ export default function ChatView({
             </div>
 
             <div className="composer-bar-right">
-              {estimateCostLabel ? (
-                <span
-                  className="composer-cost-chip"
-                  title={estimateCostLabel.full}
-                  aria-label={estimateCostLabel.short}
-                >
-                  <Coins size={13} strokeWidth={2} aria-hidden />
-                  <span>{estimateCostLabel.cost}</span>
-                </span>
-              ) : null}
               <div className="composer-context-wrap" ref={contextWrapRef}>
                 <button
                   type="button"
@@ -2529,6 +2518,7 @@ export default function ChatView({
                   open={contextPopoverOpen}
                   snapshot={contextUsage}
                   windowTokens={contextWindow}
+                  estimateCost={estimateCostLabel}
                   containRef={contextWrapRef}
                   onClose={() => setContextPopoverOpen(false)}
                   onViewDetails={() => {
