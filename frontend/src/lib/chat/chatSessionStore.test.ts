@@ -7,6 +7,7 @@ import type { ChatMessage } from "../../types.ts";
 import {
   isChatCleared,
   loadChatSession,
+  loadContextUsageForSession,
   persistAfterEditTruncate,
   saveChatSession,
 } from "./chatSessionStore.ts";
@@ -89,4 +90,19 @@ test("saveChatSession records contextUsage and preserves it when omitted", () =>
   saveChatSession("s3", [msg("u1", "user", "hi"), msg("a1", "assistant", "yo2")], [], null);
   stored = loadChatSession();
   assert.equal(stored!.contextUsage, undefined);
+});
+
+test("loadContextUsageForSession restores per-session cache", () => {
+  const usage = {
+    contextWindow: 128_000,
+    totalTokens: 99,
+    segments: [{ id: "tools", tokens: 99, items: [{ id: "file_ops", label: "file_ops", tokens: 99 }] }],
+    updatedAt: 7,
+  };
+  saveChatSession("sess-a", [msg("u1", "user", "a"), msg("a1", "assistant", "b")], [], usage);
+  assert.equal(loadContextUsageForSession("sess-a")?.totalTokens, 99);
+  assert.equal(loadContextUsageForSession("sess-b"), null);
+
+  saveChatSession("sess-a", [msg("u1", "user", "a"), msg("a1", "assistant", "b")], [], null);
+  assert.equal(loadContextUsageForSession("sess-a"), null);
 });

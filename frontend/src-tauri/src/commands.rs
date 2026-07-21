@@ -21,10 +21,19 @@ fn open_sessions() -> Result<session::SessionStore, String> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ContextUsageItemDto {
+    pub id: String,
+    pub label: String,
+    pub tokens: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ContextUsageSegmentDto {
     pub id: String,
     pub tokens: u32,
     pub count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ContextUsageItemDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1192,6 +1201,15 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                                 id: s.id,
                                 tokens: s.tokens,
                                 count: s.count,
+                                items: s
+                                    .items
+                                    .into_iter()
+                                    .map(|it| ContextUsageItemDto {
+                                        id: it.id,
+                                        label: it.label,
+                                        tokens: it.tokens,
+                                    })
+                                    .collect(),
                             })
                             .collect(),
                         updated_at: cu.updated_at,

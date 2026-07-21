@@ -141,10 +141,17 @@ message UsageEvent {
 }
 
 // 上下文占用分层片段（count=0 表示未设置）。
+message ContextUsageItem {
+  string id = 1;
+  string label = 2;
+  uint32 tokens = 3;
+}
+
 message ContextUsageSegment {
   string id = 1;
   uint32 tokens = 2;
   uint32 count = 3;
+  repeated ContextUsageItem items = 4;
 }
 
 // 本轮 API 请求前的上下文占用估算。

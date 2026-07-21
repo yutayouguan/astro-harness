@@ -273,9 +273,25 @@ export default function ContextExplorer({
                     ~{formatTokenCount(s.tokens)}
                   </span>
                 </button>
-                {open && hint ? (
-                  <p className="ctx-explorer-row-hint">{hint}</p>
-                ) : null}
+                {open && (
+                  <div className="ctx-explorer-row-detail">
+                    {hint ? <p className="ctx-explorer-row-hint">{hint}</p> : null}
+                    {s.items && s.items.length > 0 ? (
+                      <ul className="ctx-explorer-items">
+                        {s.items.map((it) => (
+                          <li key={it.id} className="ctx-explorer-item">
+                            <span className="ctx-explorer-item-label" title={it.label}>
+                              {it.label}
+                            </span>
+                            <span className="ctx-explorer-item-tokens">
+                              ~{formatTokenCount(it.tokens)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                )}
               </li>
             );
           })}

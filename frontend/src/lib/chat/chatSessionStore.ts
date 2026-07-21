@@ -7,6 +7,53 @@ import type { ContextUsageSnapshot } from "./contextUsage";
 
 const STORAGE_KEY = "astro.chat.session";
 const CLEARED_KEY = "astro.chat.cleared";
+const USAGE_BY_SESSION_KEY = "astro.chat.contextUsageBySession";
+
+/** 按会话缓存最近一次 context_usage（切换会话时可即时恢复） */
+export function loadContextUsageForSession(
+  sessionId: string | null | undefined,
+): ContextUsageSnapshot | null {
+  if (!sessionId) return null;
+  try {
+    const raw = localStorage.getItem(USAGE_BY_SESSION_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, ContextUsageSnapshot>;
+    const snap = map?.[sessionId];
+    if (!snap || typeof snap.totalTokens !== "number") return null;
+    return snap;
+  } catch {
+    return null;
+  }
+}
+
+export function saveContextUsageForSession(
+  sessionId: string | null | undefined,
+  usage: ContextUsageSnapshot | null,
+): void {
+  if (!sessionId) return;
+  try {
+    const raw = localStorage.getItem(USAGE_BY_SESSION_KEY);
+    const map = (raw ? JSON.parse(raw) : {}) as Record<
+      string,
+      ContextUsageSnapshot
+    >;
+    if (!usage) {
+      delete map[sessionId];
+    } else {
+      map[sessionId] = usage;
+    }
+    // 简单上限，避免无限增长
+    const keys = Object.keys(map);
+    if (keys.length > 80) {
+      for (const k of keys.slice(0, keys.length - 80)) {
+        delete map[k];
+      }
+    }
+    localStorage.setItem(USAGE_BY_SESSION_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
 
 /** 持久化的会话快照 */
 export type StoredChatSession = {
@@ -126,6 +173,9 @@ export function saveChatSession(
       updatedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    if (sessionId && contextUsage !== undefined) {
+      saveContextUsageForSession(sessionId, contextUsage);
+    }
   } catch {
     // quota / private mode
   }

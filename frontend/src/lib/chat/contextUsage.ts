@@ -8,10 +8,18 @@ export type ContextUsageSegmentId =
   | "subagent"
   | "conversation";
 
+export type ContextUsageItem = {
+  id: string;
+  label: string;
+  tokens: number;
+};
+
 export type ContextUsageSegment = {
   id: ContextUsageSegmentId | string;
   tokens: number;
   count?: number;
+  /** 分类下的明细（工具 / skill / 记忆文件等） */
+  items?: ContextUsageItem[];
 };
 
 export type ContextUsageSnapshot = {
@@ -66,7 +74,7 @@ export function usagePercent(used: number, window: number): number {
 
 export function visibleSegments(snap: ContextUsageSnapshot): ContextUsageSegment[] {
   return snap.segments
-    .filter((s) => s.tokens > 0)
+    .filter((s) => s.tokens > 0 || (s.items?.length ?? 0) > 0)
     .slice()
     .sort((a, b) => b.tokens - a.tokens);
 }
@@ -92,10 +100,17 @@ export function displayContextWindow(
   return resolveContextWindow(windowTokens, snapshot?.contextWindow);
 }
 
+type RawSegment = {
+  id: string;
+  tokens: number;
+  count?: number | null;
+  items?: Array<{ id?: string; label?: string; tokens?: number } | null> | null;
+};
+
 export function normalizeContextUsageEvent(payload: {
   context_window?: number;
   total_tokens?: number;
-  segments?: Array<{ id: string; tokens: number; count?: number | null }>;
+  segments?: RawSegment[];
   updated_at?: number;
   recommend_compact?: boolean;
   recommendCompact?: boolean;
@@ -114,6 +129,16 @@ export function normalizeContextUsageEvent(payload: {
       };
       if (segment.count != null) {
         normalized.count = segment.count;
+      }
+      const items = (segment.items ?? [])
+        .filter((it): it is NonNullable<typeof it> => !!it && (it.tokens ?? 0) > 0)
+        .map((it) => ({
+          id: it.id ?? it.label ?? "item",
+          label: it.label || it.id || "item",
+          tokens: it.tokens ?? 0,
+        }));
+      if (items.length > 0) {
+        normalized.items = items;
       }
       return normalized;
     }),

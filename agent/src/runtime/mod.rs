@@ -1118,6 +1118,19 @@ impl AgentLoop {
     /// 与 `build_system_prompt` 同源的分层字符数，供上下文占用估算。
     /// 返回 (system, memory, skills, recall)。
     pub fn system_prompt_layer_chars(&self) -> (usize, usize, usize, usize) {
+        let layers = self.system_prompt_layer_breakdown();
+        (
+            layers.system_chars,
+            layers.memory_chars,
+            layers.skills_chars,
+            layers.recall_chars,
+        )
+    }
+
+    /// 分层占用明细（含 memory / skills 子项），供 `context_usage` 快照。
+    pub fn system_prompt_layer_breakdown(&self) -> crate::prompt::context_usage::LayerBreakdown {
+        use crate::prompt::context_usage::{estimate_tokens, LayerBreakdown, NamedChars};
+
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
         let skill_index: Vec<(&str, &str)> = skill_pairs
             .iter()
@@ -1129,15 +1142,42 @@ impl AgentLoop {
         for part in [&static_ctx.soul, &static_ctx.identity, &static_ctx.agent_md] {
             system_chars += part.trim().len();
         }
-        let memory_chars = static_ctx.memory.trim().len()
-            + static_ctx.user_profile.trim().len()
-            + static_ctx.daily.trim().len();
+
+        let mut memory_items: Vec<NamedChars> = Vec::new();
+        let mut push_mem = |id: &str, label: &str, content: &str| {
+            let n = content.trim().len();
+            if n > 0 {
+                memory_items.push((id.to_string(), label.to_string(), n));
+            }
+        };
+        push_mem("memory", "MEMORY.md", &static_ctx.memory);
+        push_mem("user", "USER.md", &static_ctx.user_profile);
+        push_mem("daily", "今日记忆", &static_ctx.daily);
+        let memory_chars: usize = memory_items.iter().map(|(_, _, n)| *n).sum();
+
         let skills_chars = PromptBuilder::new()
             .with_skills_index(&skill_index)
             .build()
             .len();
+        let skill_items: Vec<NamedChars> = skill_pairs
+            .iter()
+            .map(|(name, desc)| {
+                let line = format!("- **{}**: {}", name, desc);
+                (name.clone(), name.clone(), line.len())
+            })
+            .filter(|(_, _, n)| estimate_tokens(*n) > 0)
+            .collect();
+
         let recall_chars = dynamic_ctx.render().len();
-        (system_chars, memory_chars, skills_chars, recall_chars)
+
+        LayerBreakdown {
+            system_chars,
+            memory_chars,
+            skills_chars,
+            recall_chars,
+            memory_items,
+            skill_items,
+        }
     }
 
     /// guidance（mode 在前，便于预算截断时保留）+ timestamp，与 `assemble_system_layers` 顺序一致。

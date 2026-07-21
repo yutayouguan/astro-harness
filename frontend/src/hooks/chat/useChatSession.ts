@@ -32,8 +32,10 @@ import {
   isChatCleared,
   isWelcomeOnly,
   loadChatSession,
+  loadContextUsageForSession,
   persistAfterEditTruncate,
   saveChatSession,
+  saveContextUsageForSession,
 } from "../../lib/chat/chatSessionStore";
 import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
 import { MSG_DISSOLVE_MS } from "../../components/chat/MsgDissolveOverlay";
@@ -623,6 +625,9 @@ export function useChatSession({
   useEffect(() => {
     if (restoringRef.current || streaming) return;
     saveChatSession(sessionId, messages, sessionPendingInterrupts, contextUsage);
+    if (sessionId && contextUsage) {
+      saveContextUsageForSession(sessionId, contextUsage);
+    }
   }, [messages, sessionId, streaming, sessionPendingInterrupts, contextUsage]);
 
   useEffect(() => {
@@ -786,7 +791,10 @@ export function useChatSession({
       setSessionReadOnly(!!endReason);
       setSessionEndReason(endReason ?? null);
       setEmptyMode(null);
-      saveChatSession(sid, restored, pendingInterrupts);
+      // 按会话恢复占用快照，避免显示上一会话数字
+      const usage = loadContextUsageForSession(sid);
+      setContextUsage(usage);
+      saveChatSession(sid, restored, pendingInterrupts, usage);
       queueMicrotask(() => {
         restoringRef.current = false;
       });
@@ -1638,6 +1646,8 @@ export function useChatSession({
           setSessionId(hist.sessionId ?? targetSessionId);
           setSessionReadOnly(!!endReason);
           setSessionEndReason(endReason);
+          const usage = loadContextUsageForSession(hist.sessionId ?? targetSessionId);
+          setContextUsage(usage);
         }
         const canFocus = !!messageId && restored.some((m) => m.id === messageId);
         setFocusMessageId(canFocus ? messageId! : null);

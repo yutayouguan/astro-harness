@@ -410,15 +410,16 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
 
         {
             let agent = session.lock().await;
-            let (system_chars, memory_chars, skills_chars, recall_chars) =
-                agent.system_prompt_layer_chars();
+            let layers = agent.system_prompt_layer_breakdown();
             let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
             let snap = crate::prompt::context_usage::build_snapshot(
                 crate::prompt::context_usage::ContextUsageInput {
-                    system_chars,
-                    memory_chars,
-                    skills_chars,
-                    recall_chars,
+                    system_chars: layers.system_chars,
+                    memory_chars: layers.memory_chars,
+                    skills_chars: layers.skills_chars,
+                    recall_chars: layers.recall_chars,
+                    memory_items: &layers.memory_items,
+                    skill_items: &layers.skill_items,
                     tools: &tools,
                     messages: &history,
                     context_window: agent.context_window(),

@@ -9,6 +9,7 @@ import {
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
+import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
 import {
   parseModeSwitchResult,
   type ChatInteractionMode,
@@ -479,6 +480,7 @@ export function useSend(deps: UseSendDeps) {
           } else if (payload.type === "context_usage") {
             const snap = normalizeContextUsageEvent(payload);
             setContextUsage(snap);
+            if (sid) saveContextUsageForSession(sid, snap);
             if (snap.recommendCompact) {
               const now = Date.now();
               // 流式中只提示，不自动拆 session；60s 冷却避免刷屏

@@ -69,7 +69,14 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
       segments: [
         { id: "system", tokens: 10, count: 1 },
         { id: "tools", tokens: 0, count: null },
-        { id: "conversation", tokens: 32 },
+        {
+          id: "skills",
+          tokens: 32,
+          items: [
+            { id: "demo", label: "demo", tokens: 20 },
+            { id: "skip", label: "skip", tokens: 0 },
+          ],
+        },
       ],
     }),
     {
@@ -80,7 +87,11 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
       segments: [
         { id: "system", tokens: 10, count: 1 },
         { id: "tools", tokens: 0 },
-        { id: "conversation", tokens: 32 },
+        {
+          id: "skills",
+          tokens: 32,
+          items: [{ id: "demo", label: "demo", tokens: 20 }],
+        },
       ],
     },
   );

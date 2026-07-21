@@ -478,6 +478,15 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                             id: s.id,
                             tokens: s.tokens,
                             count: s.meta.and_then(|m| m.count).unwrap_or(0),
+                            items: s
+                                .items
+                                .into_iter()
+                                .map(|it| proto::ContextUsageItem {
+                                    id: it.id,
+                                    label: it.label,
+                                    tokens: it.tokens,
+                                })
+                                .collect(),
                         })
                         .collect(),
                     updated_at: snap.updated_at,
