@@ -372,12 +372,7 @@ fn apply_nested_agent_tool_strips_with_role(
     depth_ctx: home::SpawnDepthCtx,
     role: DelegateRole,
 ) {
-    for name in [
-        "memory",
-        "search",
-        "persona_create",
-        "ask_user",
-    ] {
+    for name in ["memory", "search", "persona_create", "ask_user"] {
         registry.unregister(name);
     }
     let strip_delegate = role == DelegateRole::Leaf || depth_ctx.is_leaf();
