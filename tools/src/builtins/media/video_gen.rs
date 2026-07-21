@@ -17,51 +17,51 @@ use crate::schema::schema_for_args;
 /// `video_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VideoGenArgs {
-    /// 详细视频提示词（不可为空）。须写充实描述，勿只用短句：主体与动作、镜头运动、场景、光影/色彩、风格与氛围、时间节奏。关键视觉或镜头方向不明确且无法从上下文合理推断时，先用 `clarify` 询问用户；用户明确要求自由发挥时无需追问。若思考过程已写好详细描述，必须原样传入。
+    /// Detailed shot prompt (required): subject/action, camera, setting, lighting, style, mood—not a short summary. Pass thinking drafts verbatim.
     pub prompt: String,
-    /// 短标题（建议中文，如「山间采菌」），用于落盘文件名：`{title}-{时间戳}-{短id}.mp4`。缺省则用「视频」。
+    /// Short Chinese title for the filename; default 视频.
     #[serde(default)]
     pub title: Option<String>,
-    /// 宽高比，如 `16:9` / `9:16`（可选）。
+    /// Aspect ratio, e.g. `16:9` / `9:16`.
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// 时长秒数（可选；参考图/首尾帧/续拍/1080p/4K 时强制为 8）。
+    /// Duration in seconds (forced to 8 for extend/refs/last_frame/1080p/4K).
     #[serde(default)]
     pub duration_seconds: Option<u32>,
-    /// 输出分辨率（可选）：`720p` / `1080p` / `4K`。
+    /// Output resolution: `720p` / `1080p` / `4K`.
     #[serde(default)]
     pub resolution: Option<String>,
-    /// 负面提示：希望排除的内容（可选；原生 Veo 忽略）。
+    /// Negative prompt (optional; ignored by native Veo).
     #[serde(default)]
     pub negative_prompt: Option<String>,
-    /// 视觉风格（可选）：`cinematic` / `creative`（原生 Veo 忽略）。
+    /// Visual style: `cinematic` / `creative` (ignored by native Veo).
     #[serde(default)]
     pub style: Option<String>,
-    /// 续拍：工作区内已有视频路径（优先于 extend_video_uri / extend_video_id）。
+    /// Extend from workspace video path (preferred for next shots).
     #[serde(default)]
     pub extend_video: Option<String>,
-    /// 续拍：远端视频 URI（可选）。
+    /// Extend from remote video URI.
     #[serde(default)]
     pub extend_video_uri: Option<String>,
-    /// 续拍：已有视频的 operation id（可选）。
+    /// Extend from prior operation id.
     #[serde(default)]
     pub extend_video_id: Option<String>,
-    /// 角色/风格参考图路径列表（最多 3 张；不可与 image/last_frame 同用）。
+    /// Reference image paths (max 3; incompatible with image/last_frame).
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// 单张参考图路径（会合并进 reference_images）。
+    /// Single reference image path (merged into reference_images).
     #[serde(default)]
     pub reference_image: Option<String>,
-    /// 首帧图路径（建议先 image_gen；图生视频 / 插值）。
+    /// First-frame image path (image-to-video / interpolation).
     #[serde(default)]
     pub image: Option<String>,
-    /// 尾帧图路径（插值；必须同时提供 `image`）。
+    /// Last-frame image path (requires `image`).
     #[serde(default)]
     pub last_frame: Option<String>,
-    /// 人物生成策略（可选）：`allow_adult` / `allow_all` / `dont_allow`。
+    /// Person generation: `allow_adult` / `allow_all` / `dont_allow`.
     #[serde(default)]
     pub person_generation: Option<String>,
-    /// 随机种子（可选，整数）。
+    /// Random seed (integer).
     #[serde(default)]
     pub seed: Option<i64>,
 }
@@ -71,7 +71,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video via Google native Veo (predictLongRunning). BEFORE calling: if key visual or shot direction (especially subject/action, camera movement, style, or mood) is unclear and cannot be reasonably inferred from context, use `clarify` to ask the user, preferably with concise options. Do not ask when the user explicitly delegates creative choices. prompt MUST be a rich, detailed shot description (subject/action, camera move, setting, lighting, style, mood)—NOT a short summary; pass thinking drafts verbatim. Optional title: short Chinese name for the saved file (e.g. 山间采菌 → 山间采菌-YYYYMMDD-….mp4; default 视频). Prefer extend_video for next shots. reference_images accepts up to 3 workspace paths. Advanced modes (extend, refs, last_frame, 1080p/4K) force duration_seconds=8. Writes to generated/videos/."
+        description: "Generate a short video via Google Veo. If shot direction is unclear and not delegated, ask via `clarify` first. Prefer extend_video for next shots; refs ≤3; extend/refs/last_frame/1080p/4K force duration_seconds=8. Saves under generated/videos/."
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,

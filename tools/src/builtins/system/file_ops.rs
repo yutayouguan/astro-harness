@@ -39,49 +39,47 @@ const MAX_SEARCH_FILES_SCANNED: usize = 2000;
 /// `file_ops` 工具的参数结构。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct FileOpsArgs {
-    /// 相对于工作区的路径。
+    /// Workspace-relative path.
     pub path: String,
-    /// 操作类型：`read` | `write` | `append` | `list` | `delete` | `mkdir` | `search` | `patch` | `move` | `copy`。
+    /// Operation: `read` | `write` | `append` | `list` | `delete` | `mkdir` | `search` | `patch` | `move` | `copy`.
     pub operation: String,
-    /// `write` / `append` 时写入的内容；`write` 必填，`append` 可省略则报错。
+    /// Content for `write` / `append` (`write` required).
     #[serde(default)]
     pub content: Option<String>,
-    /// `search` 时的查询串（文件名或文件内容子串，大小写不敏感）。也可用 `content` 代替。
+    /// Search query (filename or content; case-insensitive). `content` also accepted.
     #[serde(default)]
     pub query: Option<String>,
-    /// `patch`：要替换的原文（默认须在文件中唯一出现，除非 `replace_all=true`）。
+    /// Patch: text to replace (must be unique unless `replace_all=true`).
     #[serde(default)]
     pub old_string: Option<String>,
-    /// `patch`：替换后的新文本。
+    /// Patch: replacement text.
     #[serde(default)]
     pub new_string: Option<String>,
-    /// `patch`：为 `true` 时替换全部匹配（至少 1 处）；默认仅当唯一匹配时替换。
+    /// Patch: replace all matches when true.
     #[serde(default)]
     pub replace_all: Option<bool>,
-    /// `move` / `copy` 的目标路径（相对于工作区）。
+    /// Destination path for `move` / `copy`.
     #[serde(default)]
     pub dest: Option<String>,
-    /// `read` 时从该字节偏移开始读（默认 0）；用于大文件分段续读。
+    /// Read: byte offset (default 0).
     #[serde(default)]
     pub offset: Option<u64>,
-    /// `read` 时本次最多读取的字节数；超过 [`MAX_READ_BYTES`] 会被钳制。
-    /// `search` 时表示最多返回命中数（默认/上限 [`MAX_SEARCH_HITS`]）。
+    /// Read: max bytes (capped at 64KiB). Search: max hits (default/cap 50).
     #[serde(default)]
     pub limit: Option<usize>,
-    /// `read`：起始行（1 起，含）；配合 `end_line` 按行读取而非按字节。
+    /// Read: start line (1-based, inclusive).
     #[serde(default)]
     pub start_line: Option<usize>,
-    /// `read`：结束行（1 起，含）；缺省时读到文件末尾（仍受字节上限约束）。
+    /// Read: end line (1-based, inclusive); omitted reads to EOF (still byte-capped).
     #[serde(default)]
     pub end_line: Option<usize>,
-    /// `search`：为 `true` 时把 `query` 当正则（大小写不敏感）而非子串。
+    /// Search: treat `query` as case-insensitive regex.
     #[serde(default)]
     pub regex: Option<bool>,
-    /// `search` / `list`：仅匹配这些扩展名（逗号分隔，如 `"rs,toml"`，不含点）。
+    /// Search/list: extension filter, e.g. `rs,toml` (no dots).
     #[serde(default)]
     pub ext: Option<String>,
-    /// `delete` 目录时：为 `true` 才整树删除；默认仅删空目录。
-    /// `list` 时：为 `true` 则递归列出目录树。
+    /// Delete dirs: true to remove trees. List: true for recursive listing.
     #[serde(default)]
     pub recursive: Option<bool>,
 }
@@ -91,13 +89,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "file_ops".to_string(),
         toolset: "file_ops".to_string(),
-        description: "Read, write, append, list, mkdir, delete, search, patch, move, or copy files under project_root when set (delegated worktree), else the agent memory workspace. \
-             read returns at most 64KiB UTF-8 (use offset/limit to continue, or start_line/end_line for line ranges). \
-             list caps at 500 entries / 64KiB, marks dirs with '/', recursive=true walks the tree; ext filters by extension (e.g. 'rs,toml'). \
-             search finds filenames or text content under path (query required; case-insensitive; regex=true for regex; ext to filter; caps hits/bytes). \
-             patch replaces old_string→new_string (unique match by default; replace_all=true replaces every match). \
-             move/copy need dest; move renames files or dirs, copy duplicates files or dir trees. \
-             delete refuses workspace root; directories need recursive=true to remove trees."
+        description: "File ops under project_root (delegated worktree) or agent workspace: read, write, append, list, mkdir, delete, search, patch, move, copy. Paths are workspace-relative; read/list/search outputs are size-capped."
             .to_string(),
         schema: schema_for_args::<FileOpsArgs>(),
         check_fn: None,
