@@ -1102,13 +1102,7 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let guidance = format!(
-            "{}\n\n{}",
-            crate::prompt::prompt_builder::TOOL_GUIDANCE,
-            self.interaction_mode.system_guidance()
-        );
-        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
-        let timestamp = format!("# 当前时间\n{now}");
+        let (guidance, timestamp) = self.system_prompt_guidance_timestamp();
         let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
         crate::prompt::assemble_system_layers(
             &mut budget,
@@ -1130,13 +1124,8 @@ impl AgentLoop {
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let mut guidance_ts = PromptBuilder::new()
-            .with_tool_guidance()
-            .with_timestamp()
-            .build();
-        guidance_ts.push_str("\n\n");
-        guidance_ts.push_str(self.interaction_mode.system_guidance());
-        let mut system_chars = guidance_ts.len();
+        let (guidance, timestamp) = self.system_prompt_guidance_timestamp();
+        let mut system_chars = guidance.len() + timestamp.len();
         for part in [&static_ctx.soul, &static_ctx.identity, &static_ctx.agent_md] {
             system_chars += part.trim().len();
         }
@@ -1149,6 +1138,19 @@ impl AgentLoop {
             .len();
         let recall_chars = dynamic_ctx.render().len();
         (system_chars, memory_chars, skills_chars, recall_chars)
+    }
+
+    /// guidance（mode 在前，便于预算截断时保留）+ timestamp，与 `assemble_system_layers` 顺序一致。
+    fn system_prompt_guidance_timestamp(&self) -> (String, String) {
+        // mode 置于 TOOL_GUIDANCE 之前：guidance 层被 take_chars 截断时优先保留模式说明。
+        let guidance = format!(
+            "{}\n\n{}",
+            self.interaction_mode.system_guidance(),
+            crate::prompt::prompt_builder::TOOL_GUIDANCE,
+        );
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
+        let timestamp = format!("# 当前时间\n{now}");
+        (guidance, timestamp)
     }
 
     /// 解析当前 Agent 工作区目录，供工具上下文注入。

@@ -40,23 +40,28 @@ impl InteractionMode {
     /// 写入 system prompt 的模式行为说明（非用户消息）。
     ///
     /// 工具可见性/硬拦仍由 `filter_schemas` / `check_tool_call` 强制；此处只告诉模型当前档位意图。
+    /// 中英并列，避免仅依赖 UI locale 时英文界面丢失指引。
     pub fn system_guidance(self) -> &'static str {
         match self {
             Self::Agent => {
-                "# 交互模式：Agent\n\
+                "# Interaction mode: Agent / 交互模式：Agent\n\
+Tools enabled. For complex multi-step work, call request_mode_switch(to=\"plan\", reason=…) first, then return to Agent after authorization.\n\
 可执行工具完成任务。复杂多步工作可先调用 request_mode_switch(to=\"plan\", reason=…) 进入规划，再在授权后回到 Agent 执行。"
             }
             Self::Plan => {
-                "# 交互模式：Plan（只读规划）\n\
+                "# Interaction mode: Plan (read-only planning) / 交互模式：Plan（只读规划）\n\
+Read-only: file_ops(read/list/search), web_search, task_plan. No writes, terminal, code_exec, delegate, or memory. When ready, call request_mode_switch(to=\"agent\", reason=…, summary=plan summary).\n\
 可用 file_ops(read/list/search)、web_search、task_plan 等只读工具。禁止写文件、terminal、code_exec、delegate、memory。\n\
 计划就绪后调用 request_mode_switch(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
             }
             Self::Ask => {
-                "# 交互模式：Ask（只读问答）\n\
+                "# Interaction mode: Ask (read-only Q&A) / 交互模式：Ask（只读问答）\n\
+Explain and retrieve; do not modify files or run side effects. To implement, call request_mode_switch(to=\"agent\", …).\n\
 以解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 request_mode_switch(to=\"agent\", …)。"
             }
             Self::Multitask => {
-                "# 交互模式：MultiTask\n\
+                "# Interaction mode: MultiTask / 交互模式：MultiTask\n\
+Split the goal into parallel subtasks, coordinate, and summarize.\n\
 将目标拆成可并行子任务，协调完成并汇总结果。"
             }
         }
@@ -279,6 +284,20 @@ mod tests {
         assert!(InteractionMode::Multitask
             .system_guidance()
             .contains("MultiTask"));
+        // 中英并列，避免英文 UI 丢失指引
+        for mode in [
+            InteractionMode::Agent,
+            InteractionMode::Plan,
+            InteractionMode::Ask,
+            InteractionMode::Multitask,
+        ] {
+            let g = mode.system_guidance();
+            assert!(
+                g.contains("Interaction mode:") && g.contains("交互模式："),
+                "expected bilingual guidance for {:?}: {g}",
+                mode
+            );
+        }
     }
 
     #[test]

@@ -214,3 +214,34 @@ async fn run_turn_clears_prior_cancel_signal() {
     assert!(matches!(result, TurnResult::Continue { .. }));
     assert!(!agent.cancel_signal().is_cancelled());
 }
+
+#[tokio::test]
+async fn system_prompt_includes_interaction_mode_guidance() {
+    let dir = TempDir::new().unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+
+    agent.set_interaction_mode(tools::InteractionMode::Plan);
+    let plan_prompt = agent.build_system_prompt();
+    assert!(
+        plan_prompt.contains("Interaction mode: Plan") && plan_prompt.contains("交互模式：Plan"),
+        "Plan guidance missing from system prompt:\n{plan_prompt}"
+    );
+    // mode 应出现在 TOOL_GUIDANCE 之前（预算截断时优先保留）
+    let mode_pos = plan_prompt.find("Interaction mode: Plan").expect("mode");
+    let tool_pos = plan_prompt.find("# 工具使用").expect("tool guidance");
+    assert!(
+        mode_pos < tool_pos,
+        "mode guidance should precede TOOL_GUIDANCE"
+    );
+
+    agent.set_interaction_mode(tools::InteractionMode::Ask);
+    let ask_prompt = agent.build_system_prompt();
+    assert!(
+        ask_prompt.contains("Interaction mode: Ask") && ask_prompt.contains("交互模式：Ask"),
+        "Ask guidance missing from system prompt:\n{ask_prompt}"
+    );
+
+    // 估算层与真实组装共用同源 guidance+timestamp
+    let (system_chars, _, _, _) = agent.system_prompt_layer_chars();
+    assert!(system_chars > 0);
+}
