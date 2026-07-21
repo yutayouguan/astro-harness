@@ -1447,8 +1447,7 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
                 session_id: "s1",
                 role: "user",
                 content: Some(
-                    "帮我写个脚本\n\n---\n[Mode: Agent] 可执行工具。复杂多步任务可先 switch_mode。"
-                        .into(),
+                    "帮我写个脚本\n\n---\n[Mode: Agent] 可执行工具。复杂多步任务可先 switch_mode。",
                 ),
                 ..NewMessage::empty("s1", "user")
             })
@@ -1457,7 +1456,7 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
             .append_message(NewMessage {
                 session_id: "s1",
                 role: "user",
-                content: Some("干净消息，无 Mode 后缀".into()),
+                content: Some("干净消息，无 Mode 后缀"),
                 ..NewMessage::empty("s1", "user")
             })
             .unwrap();
@@ -1465,7 +1464,7 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
             .append_message(NewMessage {
                 session_id: "s1",
                 role: "assistant",
-                content: Some("ok\n\n---\n[Mode: Agent] should stay on assistant".into()),
+                content: Some("ok\n\n---\n[Mode: Agent] should stay on assistant"),
                 ..NewMessage::empty("s1", "assistant")
             })
             .unwrap();

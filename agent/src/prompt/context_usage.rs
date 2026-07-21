@@ -262,7 +262,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
                 })
             })
             .collect();
-        items.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+        items.sort_by_key(|b| std::cmp::Reverse(b.tokens));
         items
     };
 
@@ -288,7 +288,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
                 })
             })
             .collect();
-        items.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+        items.sort_by_key(|b| std::cmp::Reverse(b.tokens));
         items
     };
 
