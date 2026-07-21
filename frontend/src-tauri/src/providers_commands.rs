@@ -491,7 +491,9 @@ fn providers_path() -> PathBuf {
 
 /// 模型缓存文件路径。
 fn models_path() -> PathBuf {
-    home::default_memory_dir().join("models.json")
+    let dir = home::default_memory_dir().join("cache");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("models.json")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
