@@ -1,4 +1,4 @@
-//! 浏览器工具：通过 HTTP GET 抓取公开 URL 的文本内容。
+//! HTTP 抓取工具：通过 HTTP GET 抓取公开 URL 的文本内容。
 //!
 //! 提供轻量级网页抓取；完整浏览器自动化（点击、填表等）应使用 MCP browser 工具。
 //! 不跟随重定向；拒绝明显内网/本机地址以降低 SSRF 风险。正文按 UTF-8 安全截断。
@@ -14,21 +14,21 @@ use crate::schema::schema_for_args;
 
 const MAX_BODY_BYTES: usize = 12_000;
 
-/// Arguments for the `browser` tool.
+/// Arguments for the `http_fetch` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct BrowserArgs {
+pub struct HttpFetchArgs {
     /// Target URL; must start with `http://` or `https://`; public host only (no localhost/private).
     pub url: String,
 }
 
-/// 向注册表注册 `browser` 工具。
+/// 向注册表注册 `http_fetch` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "browser".to_string(),
-        toolset: "browser".to_string(),
+        name: "http_fetch".to_string(),
+        toolset: "http_fetch".to_string(),
         description: "HTTP GET a public http(s) URL and return text (no redirects, no click/fill). Body capped at ~12KB. For full browser automation use MCP browser tools."
             .to_string(),
-        schema: schema_for_args::<BrowserArgs>(),
+        schema: schema_for_args::<HttpFetchArgs>(),
         check_fn: None,
         icon: "globe-2",
             ..ToolEntry::lifecycle_defaults()
@@ -37,7 +37,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["browser"],
+    names: ["http_fetch"],
     async_ctx: dispatch,
 }
 
@@ -45,11 +45,11 @@ crate::submit_builtin_tool! {
 ///
 /// 正文超过 [`MAX_BODY_BYTES`] 时按 UTF-8 字符边界截断；请求超时 30 秒；不跟随重定向。
 pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: BrowserArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("browser 参数无效: {e}"))?;
+    let parsed: HttpFetchArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("http_fetch 参数无效: {e}"))?;
     let url = parsed.url.trim();
     if url.is_empty() {
-        anyhow::bail!("browser 需要 url");
+        anyhow::bail!("http_fetch 需要 url");
     }
     assert_public_http_url(url)?;
 

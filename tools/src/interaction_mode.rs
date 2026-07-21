@@ -45,19 +45,19 @@ impl InteractionMode {
         match self {
             Self::Agent => {
                 "# Interaction mode: Agent / 交互模式：Agent\n\
-Tools enabled. For complex multi-step work, call request_mode_switch(to=\"plan\", reason=…) first, then return to Agent after authorization.\n\
-可执行工具完成任务。复杂多步工作可先调用 request_mode_switch(to=\"plan\", reason=…) 进入规划，再在授权后回到 Agent 执行。"
+Tools enabled. For complex multi-step work, call switch_mode(to=\"plan\", reason=…) first, then return to Agent after authorization.\n\
+可执行工具完成任务。复杂多步工作可先调用 switch_mode(to=\"plan\", reason=…) 进入规划，再在授权后回到 Agent 执行。"
             }
             Self::Plan => {
                 "# Interaction mode: Plan (read-only planning) / 交互模式：Plan（只读规划）\n\
-Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, delegate, or memory. When ready, call request_mode_switch(to=\"agent\", reason=…, summary=plan summary).\n\
+Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, delegate, or memory. When ready, call switch_mode(to=\"agent\", reason=…, summary=plan summary).\n\
 可用 file_ops(read/list/search)、web_search、todo 等只读工具。禁止写文件、terminal、code_exec、delegate、memory。\n\
-计划就绪后调用 request_mode_switch(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
+计划就绪后调用 switch_mode(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
             }
             Self::Ask => {
                 "# Interaction mode: Ask (read-only Q&A) / 交互模式：Ask（只读问答）\n\
-Explain and retrieve; do not modify files or run side effects. To implement, call request_mode_switch(to=\"agent\", reason=…, summary=plan).\n\
-以解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 request_mode_switch(to=\"agent\", reason=…, summary=计划摘要)。"
+Explain and retrieve; do not modify files or run side effects. To implement, call switch_mode(to=\"agent\", reason=…, summary=plan).\n\
+以解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 switch_mode(to=\"agent\", reason=…, summary=计划摘要)。"
             }
             Self::Multitask => {
                 "# Interaction mode: MultiTask / 交互模式：MultiTask\n\
@@ -79,14 +79,13 @@ const READONLY_ALLOW: &[&str] = &[
     "file_ops", // action 级再拦写
     "web_search",
     "web_extract",
-    "browser",
-    "session_search",
-    "search_context",
+    "http_fetch",
+    "search",
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
     "todo", // Ask 模式下硬拦
-    "request_mode_switch",
-    "present_metrics",
+    "switch_mode",
+    "present",
 ];
 
 /// `file_ops` 只读 operation。
@@ -123,14 +122,14 @@ pub fn check_tool_call(
     }
     if name.starts_with("mcp__") {
         return Err(format!(
-            "[blocked by {} mode] MCP tools are disabled in {} mode. Use request_mode_switch to Agent if you need them.",
+            "[blocked by {} mode] MCP tools are disabled in {} mode. Use switch_mode to Agent if you need them.",
             mode.as_str(),
             mode.as_str()
         ));
     }
     if name == "memory" || name == "pin_context" {
         return Err(format!(
-            "[blocked by {} mode] `{name}` writes persistent memory/context. Call request_mode_switch(to=\"agent\") if needed.",
+            "[blocked by {} mode] `{name}` writes persistent memory/context. Call switch_mode(to=\"agent\") if needed.",
             mode.as_str()
         ));
     }
@@ -142,7 +141,7 @@ pub fn check_tool_call(
     }
     if !READONLY_ALLOW.contains(&name) {
         return Err(format!(
-            "[blocked by {} mode] Tool `{name}` is not available. Stay read-only, or call request_mode_switch(to=\"agent\", …) after the plan is ready.",
+            "[blocked by {} mode] Tool `{name}` is not available. Stay read-only, or call switch_mode(to=\"agent\", …) after the plan is ready.",
             mode.as_str()
         ));
     }
@@ -156,7 +155,7 @@ pub fn check_tool_call(
             .to_ascii_lowercase();
         if !FILE_OPS_READ.iter().any(|o| *o == op) {
             return Err(format!(
-                "[blocked by {} mode] file_ops operation `{op}` writes or mutates the workspace. Only read/list/search are allowed. Call request_mode_switch(to=\"agent\") to execute.",
+                "[blocked by {} mode] file_ops operation `{op}` writes or mutates the workspace. Only read/list/search are allowed. Call switch_mode(to=\"agent\") to execute.",
                 mode.as_str()
             ));
         }
@@ -193,7 +192,7 @@ pub fn check_tool_call(
     }
     if name == "terminal" {
         return Err(format!(
-            "[blocked by {} mode] terminal is disabled (side effects). Call request_mode_switch(to=\"agent\") when ready to execute.",
+            "[blocked by {} mode] terminal is disabled (side effects). Call switch_mode(to=\"agent\") when ready to execute.",
             mode.as_str()
         ));
     }
@@ -315,7 +314,7 @@ mod tests {
         assert!(tool_visible_in_mode(InteractionMode::Plan, "web_search"));
         assert!(tool_visible_in_mode(
             InteractionMode::Plan,
-            "request_mode_switch"
+            "switch_mode"
         ));
         assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));
     }

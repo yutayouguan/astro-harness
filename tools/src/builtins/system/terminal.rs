@@ -1,11 +1,10 @@
-//! 终端工具：在 Agent 工作区内执行 Shell 命令。
+//! 终端工具：在 Agent 工作区内执行 Shell 命令，并管理后台任务。
 //!
-//! 通过 `sh -c` 运行命令，默认工作目录为 workspace；可选 `cwd` 指定
-//! workspace 内的相对子目录。默认超时 60 秒，可用 `timeout_secs` 调整（上限 900s），
-//! 便于构建 / 测试 / 装依赖等长任务。
+//! - `action=run`（默认）：通过 `sh -c` 运行命令
+//! - `action=list|status|wait|kill`：管理 `background=true` 启动的后台任务
 //!
-//! **注意**：仅默认 cwd 落在 workspace，命令本身可访问整机路径；stdout/stderr
-//! 有 64KiB 截断以防撑爆上下文。
+//! 默认工作目录为 workspace；可选 `cwd` 指定相对子目录。
+//! 默认超时 60 秒（`timeout_secs`，上限 900s）。stdout/stderr 有 64KiB 截断。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,20 +13,30 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `terminal` tool.
+/// Arguments for the unified `terminal` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TerminalArgs {
-    pub command: String,
-    /// Optional workspace-relative working subdirectory.
+    /// `run` (default) | `list` | `status` | `wait` | `kill`.
+    #[serde(default)]
+    pub action: Option<String>,
+    /// Shell command (required for `run`).
+    #[serde(default)]
+    pub command: Option<String>,
+    /// Optional workspace-relative working subdirectory (`run`).
     #[serde(default)]
     pub cwd: Option<String>,
-    /// Optional timeout in seconds (default 60, clamped to 1..=900); for long builds/tests.
+    /// Timeout seconds: `run` default 60 max 900; `wait` default 30 max 600.
     #[serde(default)]
     pub timeout_secs: Option<u64>,
-    /// If true, run in the background and return a job id immediately (no timeout);
-    /// poll or stop with `terminal_job` (action=status/wait/kill).
+    /// If true with `run`, start background job and return id immediately.
     #[serde(default)]
     pub background: Option<bool>,
+    /// Job id for `status` / `wait` / `kill`.
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Byte offset for `status` / `wait` output paging.
+    #[serde(default)]
+    pub offset: Option<usize>,
 }
 
 /// `timeout_secs` 上限，防止命令永久挂起占用执行器。
@@ -41,12 +50,17 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "terminal".to_string(),
         toolset: "terminal".to_string(),
-        description: "Run a shell command. cwd=project_root (delegated worktree) or agent workspace. timeout_secs max 900s; background=true for async (returns job id, poll via terminal_job). stdout/stderr capped at 64KiB."
+        description: "Run a shell command or manage background jobs. \
+action=run (default): command required; cwd=project_root or workspace; timeout_secs max 900; \
+background=true returns job id. \
+action=list|status|wait|kill: manage background jobs (id required except list; \
+status/wait support offset; wait timeout_secs default 30 max 600). \
+stdout/stderr capped at 64KiB (run) / 60KiB per poll (jobs)."
             .to_string(),
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,
         icon: "terminal",
-            ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults()
     });
 }
 
@@ -56,19 +70,52 @@ crate::submit_builtin_tool! {
     async_ctx: dispatch,
 }
 
-/// 在 workspace（或指定子目录）下执行 Shell 命令并返回退出码、stdout、stderr。
-///
-/// `cwd` 经 `resolve_safe` 校验；命令为空时立即报错。输出经统一截断。
+/// 分发 `run` 或后台任务管理。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+    let parsed: TerminalArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("terminal 参数无效: {e}"))?;
+    let action = parsed
+        .action
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("run")
+        .to_ascii_lowercase();
+
+    if matches!(
+        action.as_str(),
+        "list" | "status" | "poll" | "wait" | "kill"
+    ) {
+        return super::jobs::dispatch_job_action(
+            ctx,
+            &action,
+            parsed.id.as_deref(),
+            parsed.offset,
+            parsed.timeout_secs,
+        )
+        .await;
+    }
+    if action != "run" {
+        anyhow::bail!("未知 action: {action}（应为 run|list|status|wait|kill）");
+    }
+
+    dispatch_run(ctx, args, &parsed).await
+}
+
+async fn dispatch_run(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+    parsed: &TerminalArgs,
+) -> anyhow::Result<String> {
     use std::process::Stdio;
     use std::time::Duration;
 
-    let parsed: TerminalArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("terminal 参数无效: {e}"))?;
-    let command = parsed.command.trim();
-    if command.is_empty() {
-        anyhow::bail!("terminal 需要 command");
-    }
+    let command = parsed
+        .command
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("terminal run 需要 command"))?;
 
     let root = ctx.ensure_project_or_workspace()?;
     let cwd = if let Some(rel) = parsed
@@ -92,7 +139,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
             .unwrap_or(".");
         let id = super::jobs::spawn_background(&ctx.session_id, command, &cwd, cwd_display)?;
         return Ok(format!(
-            "已在后台启动任务 {id}。\n用 terminal_job action=status id={id} 轮询输出，action=wait 等待完成，action=kill 终止。"
+            "已在后台启动任务 {id}。\n用 terminal action=status id={id} 轮询输出，action=wait 等待完成，action=kill 终止。"
         ));
     }
 

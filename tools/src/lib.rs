@@ -208,7 +208,7 @@ mod inventory_register_tests {
             "tts",
             "ask_user",
             "delegate",
-            "present_ui",
+            "present",
             "file_ops",
             "web_search",
         ] {

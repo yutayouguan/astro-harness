@@ -15,8 +15,7 @@ async fn register_all_includes_panel_tools() {
         .collect();
     for expected in [
         "memory",
-        "session_search",
-        "search_context",
+        "search",
         "pin_context",
         "cron",
         "image_gen",
@@ -26,9 +25,9 @@ async fn register_all_includes_panel_tools() {
         "terminal",
         "web_search",
         "web_extract",
-        "browser",
+        "http_fetch",
         "code_exec",
-        "vision",
+        "image_understand",
         "robotics",
         "tts",
         "skills",

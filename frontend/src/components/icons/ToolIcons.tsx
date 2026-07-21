@@ -32,7 +32,7 @@ export function IconWebSearch(props: IconProps) {
   );
 }
 
-export function IconBrowser(props: IconProps) {
+export function IconHttpFetch(props: IconProps) {
   return (
     <IconBase {...props}>
       <rect x="3" y="4" width="18" height="16" rx="2" />

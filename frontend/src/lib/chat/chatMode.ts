@@ -42,7 +42,7 @@ export function saveChatMode(mode: ChatInteractionMode) {
   }
 }
 
-/** `request_mode_switch` 工具返回的结构化请求 */
+/** `switch_mode` 工具返回的结构化请求 */
 export type ModeSwitchRequest = {
   to: "plan" | "agent";
   reason: string;

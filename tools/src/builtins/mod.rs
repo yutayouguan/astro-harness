@@ -11,10 +11,10 @@ pub mod present;
 pub mod system;
 
 pub use agents::{create_agent, delegate, multi_agent, orchestration, team};
-pub use hitl::{ask_user, request_mode_switch};
+pub use hitl::{ask_user, switch_mode};
 pub use media::{
-    audio_understand, image_gen, music_gen, robotics, tts, video_gen, video_understand, vision,
+    audio_understand, image_gen, music_gen, robotics, tts, video_gen, video_understand, image_understand,
 };
 pub use memory::{context_tools, memory_tools, scheduled, skills_tool, todo};
-pub use present::{present_callout, present_metrics, present_result, present_shared, present_ui};
-pub use system::{browser, code_exec, file_ops, terminal, web_extract, web_search};
+pub use present::present_shared;
+pub use system::{code_exec, file_ops, http_fetch, terminal, web_extract, web_search};

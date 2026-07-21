@@ -1,5 +1,5 @@
-//! 后台任务：让 `terminal` 的长命令脱离 60s 超时在后台运行，
-//! 再由 `terminal_job` 工具轮询输出、等待完成或终止。
+//! 后台任务：让 `terminal` 的长命令脱离超时在后台运行，
+//! 再由同一 `terminal` 工具的 `action=list|status|wait|kill` 轮询输出、等待完成或终止。
 //!
 //! 由于工具在每次调用时都跑在临时 tokio 运行时上（见 `agent` 层快照执行），
 //! 后台进程不能挂在 [`crate::context::ToolContext`] 上——它会随运行时一起被回收。
@@ -13,12 +13,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-
 use crate::context::ToolContext;
-use crate::registry::{ToolEntry, ToolRegistry};
-use crate::schema::schema_for_args;
 
 /// 单个后台任务缓冲的输出上限（字节）；超出后停止追加并标记截断。
 const MAX_JOB_OUTPUT: usize = 1024 * 1024;
@@ -218,78 +213,42 @@ pub fn spawn_background(
     Ok(id)
 }
 
-/// Arguments for the `terminal_job` tool.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct JobArgs {
-    /// Action: `list` | `status` | `wait` | `kill`.
-    pub action: String,
-    /// Job id (required for `status` / `wait` / `kill`).
-    #[serde(default)]
-    pub id: Option<String>,
-    /// For `status`/`wait`: return new output starting at this byte offset (default 0).
-    #[serde(default)]
-    pub offset: Option<usize>,
-    /// For `wait`: max seconds to wait (default 30, clamped to 1..=600).
-    #[serde(default)]
-    pub timeout_secs: Option<u64>,
-}
-
-/// 向注册表登记 `terminal_job` 工具（与 `terminal` 同 toolset，一起启停）。
-pub fn register(registry: &mut ToolRegistry) {
-    registry.register(ToolEntry {
-        name: "terminal_job".to_string(),
-        toolset: "terminal".to_string(),
-        description: "Manage background shell jobs started by terminal(background=true). \
-             action=list shows this session's jobs; status returns new output from offset (poll again with the returned offset); \
-             wait blocks up to timeout_secs (default 30, max 600) until the job ends; kill terminates it. \
-             Output is combined stdout/stderr, capped at 1MiB total and 60KiB per status/wait call."
-            .to_string(),
-        schema: schema_for_args::<JobArgs>(),
-        check_fn: None,
-        icon: "list-checks",
-        ..ToolEntry::lifecycle_defaults()
-    });
-}
-
-crate::submit_builtin_tool! {
-    register: register,
-    names: ["terminal_job"],
-    async_ctx: dispatch,
-}
-
-/// 按 `action` 管理后台任务。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: JobArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("terminal_job 参数无效: {e}"))?;
-    let action = parsed.action.trim().to_lowercase();
+/// 按 `action` 管理后台任务（由 `terminal` 分发）。
+pub async fn dispatch_job_action(
+    ctx: &ToolContext<'_>,
+    action: &str,
+    id: Option<&str>,
+    offset: Option<usize>,
+    timeout_secs: Option<u64>,
+) -> anyhow::Result<String> {
+    let action = action.trim().to_lowercase();
 
     match action.as_str() {
         "list" => Ok(list_jobs(&ctx.session_id)),
         "status" | "poll" => {
-            let job = require_job(&parsed.id, &ctx.session_id)?;
-            Ok(render_status(&job, parsed.offset.unwrap_or(0)))
+            let job = require_job(id, &ctx.session_id)?;
+            Ok(render_status(&job, offset.unwrap_or(0)))
         }
         "wait" => {
-            let job = require_job(&parsed.id, &ctx.session_id)?;
-            let timeout = parsed.timeout_secs.unwrap_or(30).clamp(1, 600);
+            let job = require_job(id, &ctx.session_id)?;
+            let timeout = timeout_secs.unwrap_or(30).clamp(1, 600);
             let deadline = Instant::now() + Duration::from_secs(timeout);
             while !job.status().is_terminal() && Instant::now() < deadline {
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
-            Ok(render_status(&job, parsed.offset.unwrap_or(0)))
+            Ok(render_status(&job, offset.unwrap_or(0)))
         }
         "kill" => {
-            let job = require_job(&parsed.id, &ctx.session_id)?;
+            let job = require_job(id, &ctx.session_id)?;
             kill_job(&job);
             Ok(format!("已请求终止任务 {}（{}）", job.id, job.command))
         }
-        other => anyhow::bail!("未知 action: {other}（应为 list|status|wait|kill）"),
+        other => anyhow::bail!("未知 action: {other}（应为 list|status|wait|kill|run）"),
     }
 }
 
-fn require_job(id: &Option<String>, session_id: &str) -> anyhow::Result<Arc<Job>> {
+fn require_job(id: Option<&str>, session_id: &str) -> anyhow::Result<Arc<Job>> {
     let id = id
-        .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("该 action 需要 id 参数"))?;
@@ -511,9 +470,9 @@ mod tests {
         let id = spawn_background("owner", "printf ok", dir.path(), ".").unwrap();
         wait_terminal(&id, 5);
         // 同会话可取
-        assert!(require_job(&Some(id.clone()), "owner").is_ok());
+        assert!(require_job(Some(id.as_str()), "owner").is_ok());
         // 他会话视为不存在
-        let res = require_job(&Some(id.clone()), "intruder");
+        let res = require_job(Some(id.as_str()), "intruder");
         assert!(res.is_err());
         let err = res.err().unwrap();
         assert!(err.to_string().contains("未找到"), "{err}");

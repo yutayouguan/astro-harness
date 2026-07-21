@@ -309,7 +309,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
 }
 
 #[tokio::test]
-async fn present_ui_emits_valid_astro_ui() {
+async fn present_emits_valid_astro_ui() {
     let dir = TempDir::new().unwrap();
     let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
@@ -336,7 +336,7 @@ async fn present_ui_emits_valid_astro_ui() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "present_ui",
+        "present",
         &serde_json::json!({
             "title": "Weather",
             "body": "Sunny, 26°C",
@@ -410,5 +410,5 @@ async fn register_all_includes_ask_user() {
     assert!(!names.contains(&"confirm"));
     assert!(!names.contains(&"clarify"));
     assert!(!names.contains(&"request_user_location"));
-    assert!(names.contains(&"present_ui"));
+    assert!(names.contains(&"present"));
 }

@@ -7,7 +7,7 @@
 //! - `mode=confirm`：`title`+`body` → 批准卡；reason `confirmation`
 //! - `mode=location`：可选 `message` → 定位卡；reason `location_required`
 //!
-//! Agent↔Plan 切换仍用独立工具 `request_mode_switch`（不同管线）。
+//! Agent↔Plan 切换仍用独立工具 `switch_mode`（不同管线）。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -77,7 +77,7 @@ confirm — mode=\"confirm\" with `title`+`body` for sensitive/irreversible acti
 location — mode=\"location\" (optional `message`) before local weather/nearby; never assume a city. \
 Omit mode only when unambiguous: questions only → question; title+body only → confirm. \
 Location always requires mode=\"location\". Do not mix questions with body. \
-Not for Agent↔Plan switching (use request_mode_switch). Prefer asking over guessing."
+Not for Agent↔Plan switching (use switch_mode). Prefer asking over guessing."
             .to_string(),
         schema: schema_for_args::<AskUserArgs>(),
         check_fn: None,

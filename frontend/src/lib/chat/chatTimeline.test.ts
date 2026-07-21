@@ -20,7 +20,7 @@ test("reasoning then tool then reasoning creates three segments", () => {
   m = applyActivityUpsert(m, {
     id: "c1",
     kind: "tool",
-    title: "present_ui",
+    title: "present",
     status: "running",
     at: 200,
   });
@@ -61,7 +61,7 @@ test("surface after activity appends surface segment", () => {
   m = applyActivityUpsert(m, {
     id: "c1",
     kind: "tool",
-    title: "present_ui",
+    title: "present",
     at: 1,
   });
   m = applySurfaceUpsert(

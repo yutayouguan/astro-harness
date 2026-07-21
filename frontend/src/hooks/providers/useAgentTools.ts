@@ -4,7 +4,7 @@ import type { ComponentType, SVGProps } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   IconAudioUnderstand,
-  IconBrowser,
+  IconHttpFetch,
   IconClarify,
   IconCodeExec,
   IconDelegate,
@@ -33,11 +33,11 @@ const IS_TAURI =
 
 export type AgentToolId =
   | "web_search"
-  | "browser"
+  | "http_fetch"
   | "terminal"
   | "file_ops"
   | "code_exec"
-  | "vision"
+  | "image_understand"
   | "robotics"
   | "audio_understand"
   | "image_gen"
@@ -47,10 +47,10 @@ export type AgentToolId =
   | "music_gen"
   | "skills"
   | "memory"
-  | "session_search"
+  | "search"
   | "ask_user"
-  | "request_mode_switch"
-  | "present_ui"
+  | "switch_mode"
+  | "present"
   | "delegate"
   | "cron"
   | "multi_agent"
@@ -124,10 +124,10 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "browser",
-    titleKey: "agentTools.browser.title",
-    descKey: "agentTools.browser.desc",
-    Icon: IconBrowser,
+    id: "http_fetch",
+    titleKey: "agentTools.httpFetch.title",
+    descKey: "agentTools.httpFetch.desc",
+    Icon: IconHttpFetch,
     tone: "cyan",
     params: [
       { name: "url", type: "string" },
@@ -140,8 +140,13 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     Icon: IconTerminal,
     tone: "purple",
     params: [
-      { name: "command", type: "string" },
+      { name: "action", type: "string", optional: true },
+      { name: "command", type: "string", optional: true },
       { name: "cwd", type: "string", optional: true },
+      { name: "timeout_secs", type: "number", optional: true },
+      { name: "background", type: "boolean", optional: true },
+      { name: "id", type: "string", optional: true },
+      { name: "offset", type: "number", optional: true },
     ],
   },
   {
@@ -174,9 +179,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "vision",
-    titleKey: "agentTools.vision.title",
-    descKey: "agentTools.vision.desc",
+    id: "image_understand",
+    titleKey: "agentTools.imageUnderstand.title",
+    descKey: "agentTools.imageUnderstand.desc",
     Icon: IconEye,
     tone: "pink",
     params: [
@@ -309,13 +314,14 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "session_search",
-    titleKey: "agentTools.sessionSearch.title",
-    descKey: "agentTools.sessionSearch.desc",
+    id: "search",
+    titleKey: "agentTools.search.title",
+    descKey: "agentTools.search.desc",
     Icon: IconSessionSearch,
     tone: "lime",
     params: [
       { name: "query", type: "string" },
+      { name: "scope", type: "string", optional: true },
       { name: "limit", type: "number", optional: true },
     ],
   },
@@ -334,9 +340,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "request_mode_switch",
-    titleKey: "agentTools.requestModeSwitch.title",
-    descKey: "agentTools.requestModeSwitch.desc",
+    id: "switch_mode",
+    titleKey: "agentTools.switchMode.title",
+    descKey: "agentTools.switchMode.desc",
     Icon: IconClarify,
     tone: "indigo",
     params: [
@@ -346,16 +352,20 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "present_ui",
-    titleKey: "agentTools.presentUi.title",
-    descKey: "agentTools.presentUi.desc",
+    id: "present",
+    titleKey: "agentTools.present.title",
+    descKey: "agentTools.present.desc",
     Icon: IconPresentUi,
     tone: "cyan",
     params: [
+      { name: "kind", type: "string", optional: true },
       { name: "title", type: "string", optional: true },
       { name: "body", type: "string", optional: true },
       { name: "image_url", type: "string", optional: true },
       { name: "operations", type: "object", optional: true },
+      { name: "variant", type: "string", optional: true },
+      { name: "status", type: "string", optional: true },
+      { name: "metrics", type: "array", optional: true },
     ],
   },
   {

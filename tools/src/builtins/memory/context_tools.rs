@@ -1,6 +1,6 @@
-//! Agentic 上下文工具：`search_context` / `pin_context`。
+//! Agentic 上下文工具：`search` / `pin_context`。
 //!
-//! - `search_context`：按需检索 session FTS、MEMORY/USER、Knowledge，避免每轮塞满 Dynamic
+//! - `search`：按需检索 session FTS、MEMORY/USER、Knowledge，避免每轮塞满 Dynamic
 //! - `pin_context`：将会话内固定片段写入 `{workspace}/pinned-context.json`，供后续 system prompt 注入
 
 use schemars::JsonSchema;
@@ -17,7 +17,7 @@ const PINNED_FILE: &str = "pinned-context.json";
 const MAX_PIN_CHARS: usize = 8 * 1024;
 const MAX_PINS: usize = 20;
 
-/// `search_context` search scope.
+/// `search` search scope.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
@@ -33,9 +33,9 @@ pub enum SearchScope {
     All,
 }
 
-/// Arguments for `search_context`.
+/// Arguments for `search`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct SearchContextArgs {
+pub struct SearchArgs {
     pub query: String,
     /// Scope; default `all`.
     #[serde(default)]
@@ -90,11 +90,11 @@ struct PinnedStore {
 /// 向注册表登记 agentic 上下文工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "search_context".to_string(),
-        toolset: "search_context".to_string(),
+        name: "search".to_string(),
+        toolset: "search".to_string(),
         description: "On-demand context search across session history (FTS), MEMORY/USER, and knowledge DB. Prefer this over stuffing every recall into the system prompt. scope=session|memory|knowledge|all."
             .to_string(),
-        schema: schema_for_args::<SearchContextArgs>(),
+        schema: schema_for_args::<SearchArgs>(),
         check_fn: None,
         icon: "search",
         ..ToolEntry::lifecycle_defaults()
@@ -102,7 +102,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "pin_context".to_string(),
         toolset: "pin_context".to_string(),
-        description: "Pin/unpin session-scoped context snippets that stay in the system prompt until cleared. action=pin|list|unpin|clear. Use after search_context to keep key facts loaded."
+        description: "Pin/unpin session-scoped context snippets that stay in the system prompt until cleared. action=pin|list|unpin|clear. Use after search to keep key facts loaded."
             .to_string(),
         schema: schema_for_args::<PinContextArgs>(),
         check_fn: None,
@@ -111,14 +111,14 @@ pub fn register(registry: &mut ToolRegistry) {
     });
 }
 
-/// 分发 `search_context` / `pin_context`。
+/// 分发 `search` / `pin_context`。
 pub fn dispatch(
     ctx: &ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
     match name {
-        "search_context" => dispatch_search(ctx, args),
+        "search" => dispatch_search(ctx, args),
         "pin_context" => dispatch_pin(ctx, args),
         other => anyhow::bail!("未知上下文工具: {other}"),
     }
@@ -126,16 +126,16 @@ pub fn dispatch(
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["search_context", "pin_context"],
+    names: ["search", "pin_context"],
     sync_named: dispatch,
 }
 
 fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: SearchContextArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("search_context 参数无效: {e}"))?;
+    let parsed: SearchArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("search 参数无效: {e}"))?;
     let query = parsed.query.trim();
     if query.is_empty() {
-        anyhow::bail!("search_context 需要非空 query");
+        anyhow::bail!("search 需要非空 query");
     }
     let limit = parsed.limit.unwrap_or(5).clamp(1, 10) as usize;
     let mut sections = Vec::new();
@@ -205,7 +205,7 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
     }
 
     Ok(common::truncate_tool_result(
-        &format!("# search_context: {query}\n\n{}", sections.join("\n\n")),
+        &format!("# search: {query}\n\n{}", sections.join("\n\n")),
         common::MAX_TOOL_RESULT_BYTES,
     ))
 }

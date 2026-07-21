@@ -230,7 +230,7 @@ type Props = {
   onRemoveQueuedFollowUp?: (id: string) => void;
   onUpdateQueuedFollowUpText?: (id: string, text: string) => void;
   onMoveQueuedFollowUp?: (id: string, dir: -1 | 1) => void;
-  /** `request_mode_switch` 流结束后的授权请求 */
+  /** `switch_mode` 流结束后的授权请求 */
   modeSwitchPrompt?: ModeSwitchRequest | null;
   onApproveModeSwitch?: () => void;
   onDismissModeSwitch?: () => void;

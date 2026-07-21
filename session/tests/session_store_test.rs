@@ -254,7 +254,7 @@ fn build_chat_history_restores_timeline() {
             content: Some("card shown"),
             reasoning: Some("think"),
             tool_calls: Some(serde_json::json!([{
-                "id": "c1", "name": "present_ui", "arguments": {}
+                "id": "c1", "name": "present", "arguments": {}
             }])),
             reasoning_details: Some(details),
             ..NewMessage::empty("s1", "assistant")
@@ -266,7 +266,7 @@ fn build_chat_history_restores_timeline() {
             role: "tool",
             content: Some("Presented info card"),
             tool_call_id: Some("c1"),
-            tool_name: Some("present_ui"),
+            tool_name: Some("present"),
             ..NewMessage::empty("s1", "tool")
         })
         .unwrap();
@@ -337,7 +337,7 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             role: "assistant",
             content: Some("生成成功"),
             tool_calls: Some(serde_json::json!([{
-                "id": "c2", "name": "present_result", "arguments": {}
+                "id": "c2", "name": "present", "arguments": {}
             }])),
             reasoning_details: Some(serde_json::json!({
                 "astro_timeline_v1": [
@@ -362,7 +362,7 @@ fn build_chat_history_coalesces_consecutive_assistants() {
             role: "tool",
             content: Some("Presented info card"),
             tool_call_id: Some("c2"),
-            tool_name: Some("present_result"),
+            tool_name: Some("present"),
             ..NewMessage::empty("s1", "tool")
         })
         .unwrap();
@@ -1447,7 +1447,7 @@ fn v16_to_v17_strips_legacy_chat_mode_hint() {
                 session_id: "s1",
                 role: "user",
                 content: Some(
-                    "帮我写个脚本\n\n---\n[Mode: Agent] 可执行工具。复杂多步任务可先 request_mode_switch。"
+                    "帮我写个脚本\n\n---\n[Mode: Agent] 可执行工具。复杂多步任务可先 switch_mode。"
                         .into(),
                 ),
                 ..NewMessage::empty("s1", "user")

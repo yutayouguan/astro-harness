@@ -376,7 +376,7 @@ export function useChatSession({
       `The user declined switching to "${req.to}". ` +
       `Requested reason was: ${req.reason}\n` +
       `Stay in the current interaction mode and continue. ` +
-      `Do not call request_mode_switch again for the same reason unless the user explicitly asks.`;
+      `Do not call switch_mode again for the same reason unless the user explicitly asks.`;
     showTransientToast(t("chat.modeSwitch.declined"), { tone: "warning" });
     void (async () => {
       await sendImmediateRef.current({ text: inject });

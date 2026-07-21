@@ -8,4 +8,4 @@ pub mod robotics;
 pub mod tts;
 pub mod video_gen;
 pub mod video_understand;
-pub mod vision;
+pub mod image_understand;

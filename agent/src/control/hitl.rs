@@ -283,7 +283,7 @@ pub fn is_interactive_tool(name: &str) -> bool {
 pub fn is_exclusive_tool(name: &str) -> bool {
     matches!(
         name,
-        "memory" | "session_search" | "pin_context" | "create_agent" | "delegate"
+        "memory" | "pin_context" | "create_agent" | "delegate"
     )
 }
 
@@ -456,7 +456,7 @@ mod tests {
         assert!(is_exclusive_tool("delegate"));
         assert!(!is_exclusive_tool("web_search"));
         assert!(is_interactive_tool("ask_user"));
-        assert!(!is_interactive_tool("request_mode_switch"));
+        assert!(!is_interactive_tool("switch_mode"));
         assert!(!is_interactive_tool("terminal"));
     }
 }

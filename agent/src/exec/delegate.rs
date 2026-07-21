@@ -374,7 +374,7 @@ fn apply_nested_agent_tool_strips_with_role(
 ) {
     for name in [
         "memory",
-        "session_search",
+        "search",
         "create_agent",
         "multi_agent",
         "ask_user",

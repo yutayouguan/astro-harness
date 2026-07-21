@@ -49,7 +49,7 @@ pub fn make_llm_compress_view(
         "{TOOL_LLM_COMPRESS_MARK}\n\
          Tool: {name}\n\
          Original chars: {original_chars}. Full output remains in session DB.\n\
-         Recovery: `session_search` or `file_ops` read on spill path if present.\n\n\
+         Recovery: `search` (scope=session) or `file_ops` read on spill path if present.\n\n\
          {body}"
     )
 }

@@ -73,7 +73,7 @@ test("coalesceConsecutiveAssistants merges same-turn assistant bubbles", () => {
       id: "a2",
       role: "assistant",
       content: "生成成功",
-      activities: [{ id: "c2", kind: "tool", title: "present_result", status: "done" }],
+      activities: [{ id: "c2", kind: "tool", title: "present", status: "done" }],
       segments: [
         { type: "reasoning", id: "r1", text: "t1", at: 1000 },
         { type: "activity", id: "c1", at: 2000 },

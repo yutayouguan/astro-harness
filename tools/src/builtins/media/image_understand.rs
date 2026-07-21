@@ -1,4 +1,4 @@
-//! 视觉工具：Google Interactions API 优先，OpenAI `chat/completions` 备用。
+//! 图像理解工具：Google Interactions API 优先，OpenAI `chat/completions` 备用。
 //!
 //! 支持 describe / detect / segment 模式与多图输入。
 
@@ -17,9 +17,9 @@ use crate::context::{ImageGenCreds, ToolContext};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `vision` tool.
+/// Arguments for the `image_understand` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct VisionArgs {
+pub struct ImageUnderstandArgs {
     /// Workspace-relative paths or http(s) URLs (primary field).
     #[serde(default)]
     pub image_urls: Option<Vec<String>>,
@@ -33,14 +33,14 @@ pub struct VisionArgs {
     pub mode: Option<String>,
 }
 
-/// 向注册表登记 `vision` 工具。
+/// 向注册表登记 `image_understand` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "vision".to_string(),
-        toolset: "vision".to_string(),
+        name: "image_understand".to_string(),
+        toolset: "image_understand".to_string(),
         description: "Analyze image(s). Modes: describe, detect, segment. Pass image_urls or legacy image_url. Google Interactions API; OpenAI fallback."
             .to_string(),
-        schema: schema_for_args::<VisionArgs>(),
+        schema: schema_for_args::<ImageUnderstandArgs>(),
         check_fn: None,
         icon: "eye",
             ..ToolEntry::lifecycle_defaults()
@@ -49,14 +49,14 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["vision"],
+    names: ["image_understand"],
     async_ctx: dispatch,
 }
 
 /// 读取图片并调用视觉模型，返回描述/问答文本。
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: VisionArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("vision 参数无效: {e}"))?;
+    let parsed: ImageUnderstandArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("image_understand 参数无效: {e}"))?;
     let mode = VisionMode::parse(parsed.mode.as_deref().unwrap_or(""))?;
     let mut urls = parsed.image_urls.unwrap_or_default();
     if let Some(one) = parsed.image_url {
@@ -67,7 +67,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     }
     urls.retain(|u| !u.trim().is_empty());
     if urls.is_empty() {
-        anyhow::bail!("vision 需要 image_urls 或 image_url");
+        anyhow::bail!("image_understand 需要 image_urls 或 image_url");
     }
     let prompt = parsed
         .prompt
@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn merges_image_url_into_list() {
         let args = serde_json::json!({"image_url": "a.png", "mode": "detect"});
-        let parsed: VisionArgs = serde_json::from_value(args).unwrap();
+        let parsed: ImageUnderstandArgs = serde_json::from_value(args).unwrap();
         assert!(parsed.image_url.as_deref() == Some("a.png"));
         assert_eq!(VisionMode::parse("detect").unwrap(), VisionMode::Detect);
     }

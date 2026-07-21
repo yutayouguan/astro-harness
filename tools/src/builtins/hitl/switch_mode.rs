@@ -1,4 +1,4 @@
-//! `request_mode_switch`：请求切换 Agent ↔ Plan（流结束后由前端授权条确认）。
+//! `switch_mode`：请求切换 Agent ↔ Plan（流结束后由前端授权条确认）。
 //!
 //! 与 `ask_user`（同回合 HITL park）不同：本工具产出 `astro_mode_switch`，不走 HitlGate。
 
@@ -39,8 +39,8 @@ struct ModeSwitchArgs {
 
 pub fn register(registry: &mut crate::registry::ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
-        name: "request_mode_switch".to_string(),
-        toolset: "request_mode_switch".to_string(),
+        name: "switch_mode".to_string(),
+        toolset: "switch_mode".to_string(),
         description: "Request switching chat interaction mode between Agent and Plan only \
 (not ask/multitask). Use for Agent→Plan when a complex task needs a written plan first, \
 or Plan→Agent when the plan is ready to execute. \
@@ -58,16 +58,16 @@ Do not use ask_user(confirm) for mode changes; do not use this tool for clarifyi
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["request_mode_switch"],
+    names: ["switch_mode"],
     sync_ctx: dispatch,
 }
 
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: ModeSwitchArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("request_mode_switch 参数无效: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("switch_mode 参数无效: {e}"))?;
     let reason = parsed.reason.trim();
     if reason.is_empty() {
-        anyhow::bail!("request_mode_switch.reason is required");
+        anyhow::bail!("switch_mode.reason is required");
     }
     let summary = parsed
         .summary
@@ -76,7 +76,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
         .filter(|s| !s.is_empty())
         .map(str::to_string);
     if parsed.to == ModeSwitchTarget::Agent && summary.is_none() {
-        anyhow::bail!("request_mode_switch to=\"agent\" requires non-empty summary (the plan)");
+        anyhow::bail!("switch_mode to=\"agent\" requires non-empty summary (the plan)");
     }
 
     let payload = json!({
