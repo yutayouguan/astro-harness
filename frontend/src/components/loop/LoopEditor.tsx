@@ -221,7 +221,19 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
             <Save size={14} />
             <span>{saving ? "保存中…" : "保存"}</span>
           </button>
-          <button className="loop-btn loop-btn--primary">
+          <button
+            className="loop-btn loop-btn--primary"
+            onClick={async () => {
+              if (!workflow) return;
+              await handleSave();
+              try {
+                const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: workflow.id });
+                console.log("run_loop result:", result);
+              } catch (e) {
+                console.error("run_loop failed", e);
+              }
+            }}
+          >
             <Play size={14} />
             <span>运行一次</span>
           </button>

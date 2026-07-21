@@ -182,6 +182,37 @@ impl WorkflowRunDb {
         Ok(n > 0)
     }
 
+    pub fn insert_step_log(
+        &self,
+        id: &str,
+        run_id: &str,
+        node_id: &str,
+        node_type: &str,
+        node_label: &str,
+        started_at: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO workflow_step_logs (id, run_id, node_id, node_type, node_label, started_at, status) VALUES (?1,?2,?3,?4,?5,?6,'running')",
+            rusqlite::params![id, run_id, node_id, node_type, node_label, started_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn finish_step_log(
+        &self,
+        id: &str,
+        status: &str,
+        finished_at: &str,
+        output: Option<&str>,
+        error: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE workflow_step_logs SET status=?2, finished_at=?3, output=?4, error=?5 WHERE id=?1",
+            rusqlite::params![id, status, finished_at, output, error],
+        )?;
+        Ok(())
+    }
+
     pub fn list_step_logs(&self, run_id: &str) -> Result<Vec<WorkflowStepLogRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, run_id, node_id, node_type, node_label, started_at, finished_at, status, input, output, error FROM workflow_step_logs WHERE run_id=?1 ORDER BY started_at",

@@ -6761,6 +6761,7 @@ dependencies = [
  "chrono",
  "common",
  "home",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",

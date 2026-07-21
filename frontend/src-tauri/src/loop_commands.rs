@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use workflow::engine::WorkflowRunResult;
 use workflow::model::{NewWorkflow, NodeType, Position, Workflow, WorkflowEdge, WorkflowNode};
 use workflow::run_db::{WorkflowRunDb, WorkflowRunRow, WorkflowStepLogRow};
 use workflow::store::WorkflowStore;
@@ -163,6 +164,31 @@ pub async fn set_loop_ai_callable(id: String, callable: bool) -> Result<bool, St
     store
         .set_ai_callable(&id, callable)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn run_loop(id: String) -> Result<WorkflowRunResult, String> {
+    let store = WorkflowStore::open_default().map_err(|e| e.to_string())?;
+    let wf = store
+        .get(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("workflow {} 不存在", id))?;
+
+    // WorkflowRunDb 含 rusqlite Connection（非 Send），需在 spawn_blocking + current_thread runtime 中执行
+    tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| e.to_string())?;
+        rt.block_on(async {
+            let run_db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
+            workflow::engine::execute_workflow(&wf, serde_json::json!({}), "manual", &run_db)
+                .await
+                .map_err(|e| e.to_string())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

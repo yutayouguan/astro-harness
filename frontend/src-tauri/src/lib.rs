@@ -368,6 +368,7 @@ pub fn run() {
             loop_commands::delete_loop,
             loop_commands::set_loop_enabled,
             loop_commands::set_loop_ai_callable,
+            loop_commands::run_loop,
             loop_commands::list_loop_runs,
             loop_commands::get_loop_run,
             loop_commands::delete_loop_run,

@@ -174,8 +174,13 @@ export default function LoopPanel({ active, providers }: Props) {
                 <button
                   className="loop-icon-btn"
                   title="运行一次"
-                  onClick={() => {
-                    /* TODO: run_loop */
+                  onClick={async () => {
+                    try {
+                      const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: lp.id });
+                      console.log("run_loop result:", result);
+                    } catch (e) {
+                      console.error("run_loop failed", e);
+                    }
                   }}
                 >
                   <Play size={14} />
