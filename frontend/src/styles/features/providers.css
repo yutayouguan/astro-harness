@@ -539,37 +539,53 @@ html[data-theme="dark"] .providers-badge--deprecated {
 .providers-media-model-select {
   width: 100%;
   min-width: 0;
-  --select-glass-shadow:
-    0 2px 8px color-mix(in srgb, var(--select-tone) 6%, rgba(15, 23, 42, 0.04)),
-    0 1px 2px rgba(15, 23, 42, 0.03);
+  --select-glass-fill: color-mix(in srgb, var(--glass-fill, #fff) 92%, transparent);
+  --select-glass-fill-hover: color-mix(in srgb, var(--glass-fill, #fff) 98%, transparent);
+  --select-glass-edge: color-mix(in srgb, var(--tone) 16%, var(--glass-edge));
+  --select-glass-rim: none;
+  --select-glass-shadow: none;
+  --select-glass-blur: none;
 }
 
 .providers-media-model-select .select-menu-trigger {
   width: 100%;
   min-height: 42px;
   justify-content: space-between;
+  background: var(--select-glass-fill);
+  border: 1px solid var(--select-glass-edge);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .providers-media-model-select .select-menu-trigger:hover:not(:disabled),
 .providers-media-model-select.select-menu.is-open .select-menu-trigger {
-  box-shadow:
-    0 3px 10px color-mix(in srgb, var(--select-tone) 10%, rgba(15, 23, 42, 0.05)),
-    0 1px 3px rgba(15, 23, 42, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+  background: var(--select-glass-fill-hover);
+  border-color: color-mix(in srgb, var(--tone) 30%, var(--glass-edge));
+  box-shadow: none;
+}
+
+.providers-media-model-select .select-menu-trigger:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 18%, transparent);
 }
 
 html[data-theme="dark"] .providers-media-model-select {
-  --select-glass-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.2),
-    0 1px 2px rgba(0, 0, 0, 0.14);
+  --select-glass-fill: color-mix(in srgb, var(--tone-soft) 12%, rgba(8, 6, 18, 0.45));
+  --select-glass-fill-hover: color-mix(in srgb, var(--tone-soft) 18%, rgba(8, 6, 18, 0.55));
+  --select-glass-edge: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.1));
+  --select-glass-rim: none;
+  --select-glass-shadow: none;
+}
+
+html[data-theme="dark"] .providers-media-model-select .select-menu-trigger {
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 html[data-theme="dark"] .providers-media-model-select .select-menu-trigger:hover:not(:disabled),
 html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .select-menu-trigger {
-  box-shadow:
-    0 3px 10px color-mix(in srgb, var(--select-tone) 12%, rgba(0, 0, 0, 0.24)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: none;
 }
 
 .providers-form-grid {
