@@ -39,7 +39,7 @@ async fn register_all_includes_panel_tools() {
         "delegate_collect",
         "delegate_cancel",
         "multi_agent",
-        "task_plan",
+        "todo",
     ] {
         assert!(names.contains(&expected), "missing {expected}");
     }

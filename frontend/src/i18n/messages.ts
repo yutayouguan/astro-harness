@@ -483,8 +483,8 @@ export const zh = {
   "agentTools.cron.desc": "创建和管理定时任务（cron：add/list/remove/enable/disable）",
   "agentTools.multiAgent.title": "多代理协作",
   "agentTools.multiAgent.desc": "协调多个 AI 模型协同工作",
-  "agentTools.taskPlan.title": "任务规划",
-  "agentTools.taskPlan.desc": "为复杂任务创建和管理待办列表",
+  "agentTools.todo.title": "待办列表",
+  "agentTools.todo.desc": "为复杂任务创建 checklist 待办",
 
   "status.ready": "就绪",
   "status.connecting": "连接中",
@@ -2184,8 +2184,8 @@ export const en: Record<MessageKey, string> = {
   "agentTools.cron.desc": "Create and manage cron jobs (action: add/list/remove/enable/disable)",
   "agentTools.multiAgent.title": "Multi-Agent",
   "agentTools.multiAgent.desc": "Coordinate multiple AI models together",
-  "agentTools.taskPlan.title": "Task Planning",
-  "agentTools.taskPlan.desc": "Create and manage to-do lists for complex tasks",
+  "agentTools.todo.title": "Todo",
+  "agentTools.todo.desc": "Create a checklist todo list for complex tasks",
 
   "status.ready": "Ready",
   "status.connecting": "Connecting",

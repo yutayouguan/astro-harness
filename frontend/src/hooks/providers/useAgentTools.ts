@@ -20,7 +20,7 @@ import {
   IconScheduled,
   IconSessionSearch,
   IconSkillsTool,
-  IconTaskPlan,
+  IconTodo,
   IconTerminal,
   IconTts,
   IconWebSearch,
@@ -54,7 +54,7 @@ export type AgentToolId =
   | "delegate"
   | "cron"
   | "multi_agent"
-  | "task_plan";
+  | "todo";
 
 type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -397,10 +397,10 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "task_plan",
-    titleKey: "agentTools.taskPlan.title",
-    descKey: "agentTools.taskPlan.desc",
-    Icon: IconTaskPlan,
+    id: "todo",
+    titleKey: "agentTools.todo.title",
+    descKey: "agentTools.todo.desc",
+    Icon: IconTodo,
     tone: "violet",
     params: [
       { name: "title", type: "string", optional: true },

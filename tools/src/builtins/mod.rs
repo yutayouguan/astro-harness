@@ -15,6 +15,6 @@ pub use hitl::{ask_user, request_mode_switch};
 pub use media::{
     audio_understand, image_gen, music_gen, robotics, tts, video_gen, video_understand, vision,
 };
-pub use memory::{context_tools, memory_tools, scheduled, skills_tool, task_plan};
+pub use memory::{context_tools, memory_tools, scheduled, skills_tool, todo};
 pub use present::{present_callout, present_metrics, present_result, present_shared, present_ui};
 pub use system::{browser, code_exec, file_ops, terminal, web_extract, web_search};

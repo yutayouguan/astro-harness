@@ -235,7 +235,7 @@ export function IconMultiAgent(props: IconProps) {
   );
 }
 
-export function IconTaskPlan(props: IconProps) {
+export function IconTodo(props: IconProps) {
   return (
     <IconBase {...props}>
       <rect x="3" y="5" width="18" height="16" rx="2" />

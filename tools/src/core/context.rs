@@ -147,7 +147,7 @@ pub struct ToolContext<'a> {
     pub image_gen_targets: &'a ImageGenTargets,
     /// 已注册的 LLM Provider 列表，供 `image_gen` 查找实现。
     pub providers: &'a ProviderRegistry,
-    /// 当前会话 id；`delegate`、`task_plan`、编排落盘时写入关联字段。
+    /// 当前会话 id；`delegate`、`todo`、编排落盘时写入关联字段。
     pub session_id: String,
     /// 当前流式 run 的 turn_id（与 agent `run_id` 相同）；未在 run 内为 `None`。
     pub turn_id: Option<String>,

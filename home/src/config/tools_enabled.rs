@@ -39,7 +39,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "delegate",
     "cron",
     "multi_agent",
-    "task_plan",
+    "todo",
 ];
 
 /// 全局工具开关配置文件路径（`~/.astro/tools-enabled.json`）。
@@ -218,7 +218,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         | "team_list"
         | "team_create"
         | "team_run" => "multi_agent",
-        "task_plan" => "task_plan",
+        "todo" => "todo",
         other => other,
     }
 }

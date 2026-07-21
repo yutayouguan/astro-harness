@@ -1,7 +1,7 @@
 //! 聊天交互模式（Agent / Plan / Ask / MultiTask）的工具能力档。
 //!
 //! Plan / Ask：只读向；写文件、有副作用终端、委派等硬拦。
-//! Ask 比 Plan 更严（禁 task_plan）。
+//! Ask 比 Plan 更严（禁 todo）。
 //! Agent / MultiTask：不额外限制（仍受 tools_enabled 约束）。
 
 use serde::{Deserialize, Serialize};
@@ -50,8 +50,8 @@ Tools enabled. For complex multi-step work, call request_mode_switch(to=\"plan\"
             }
             Self::Plan => {
                 "# Interaction mode: Plan (read-only planning) / 交互模式：Plan（只读规划）\n\
-Read-only: file_ops(read/list/search), web_search, task_plan. No writes, terminal, code_exec, delegate, or memory. When ready, call request_mode_switch(to=\"agent\", reason=…, summary=plan summary).\n\
-可用 file_ops(read/list/search)、web_search、task_plan 等只读工具。禁止写文件、terminal、code_exec、delegate、memory。\n\
+Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, delegate, or memory. When ready, call request_mode_switch(to=\"agent\", reason=…, summary=plan summary).\n\
+可用 file_ops(read/list/search)、web_search、todo 等只读工具。禁止写文件、terminal、code_exec、delegate、memory。\n\
 计划就绪后调用 request_mode_switch(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
             }
             Self::Ask => {
@@ -74,7 +74,7 @@ Split the goal into parallel subtasks, coordinate, and summarize.\n\
 }
 
 /// Plan / Ask 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
-/// `memory` 全写，不在此列；`skills` / `file_ops` / `task_plan` 另有 action 级限制。
+/// `memory` 全写，不在此列；`skills` / `file_ops` / `todo` 另有 action 级限制。
 const READONLY_ALLOW: &[&str] = &[
     "file_ops", // action 级再拦写
     "web_search",
@@ -84,7 +84,7 @@ const READONLY_ALLOW: &[&str] = &[
     "search_context",
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
-    "task_plan", // Ask 模式下硬拦
+    "todo", // Ask 模式下硬拦
     "request_mode_switch",
     "present_metrics",
 ];
@@ -103,7 +103,7 @@ pub fn tool_visible_in_mode(mode: InteractionMode, name: &str) -> bool {
     if name.starts_with("mcp__") {
         return false;
     }
-    if mode == InteractionMode::Ask && name == "task_plan" {
+    if mode == InteractionMode::Ask && name == "todo" {
         return false;
     }
     if name == "memory" || name == "pin_context" {
@@ -134,9 +134,9 @@ pub fn check_tool_call(
             mode.as_str()
         ));
     }
-    if mode == InteractionMode::Ask && name == "task_plan" {
+    if mode == InteractionMode::Ask && name == "todo" {
         return Err(
-            "[blocked by ask mode] task_plan writes plan files. Stay read-only, or switch to Plan/Agent."
+            "[blocked by ask mode] todo writes checklist files. Stay read-only, or switch to Plan/Agent."
                 .into(),
         );
     }
@@ -267,12 +267,12 @@ mod tests {
     }
 
     #[test]
-    fn ask_blocks_task_plan() {
+    fn ask_blocks_todo() {
         assert!(
-            check_tool_call(InteractionMode::Ask, "task_plan", &json!({ "title": "t" }),).is_err()
+            check_tool_call(InteractionMode::Ask, "todo", &json!({ "title": "t" }),).is_err()
         );
-        assert!(!tool_visible_in_mode(InteractionMode::Ask, "task_plan"));
-        assert!(tool_visible_in_mode(InteractionMode::Plan, "task_plan"));
+        assert!(!tool_visible_in_mode(InteractionMode::Ask, "todo"));
+        assert!(tool_visible_in_mode(InteractionMode::Plan, "todo"));
     }
 
     #[test]
