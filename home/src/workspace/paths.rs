@@ -114,10 +114,20 @@ pub fn agent_workspace_dir(base: &Path, agent_id: &str) -> PathBuf {
     }
 }
 
-/// Agent 配置目录：`{base}/agents/{id}/`（模型、工具、MCP 等，不含工作区文件）
+/// 默认 Agent 的配置目录名（`agents/default/`），与工作区目录名 `workspace/` 区分。
+pub const DEFAULT_AGENT_CONFIG_DIR: &str = "default";
+
+/// Agent 配置目录：`{base}/agents/{id}/`（模型、工具、MCP 等，不含工作区文件）。
+///
+/// 默认 Agent（id = `workspace`）的配置目录固定为 `agents/default/`，
+/// 避免与工作区内容目录 `workspace/` 产生歧义。
 pub fn agent_config_dir(base: &Path, agent_id: &str) -> PathBuf {
     let id = normalize_agent_id(agent_id);
-    base.join("agents").join(id)
+    if id == DEFAULT_AGENT_ID {
+        base.join("agents").join(DEFAULT_AGENT_CONFIG_DIR)
+    } else {
+        base.join("agents").join(id)
+    }
 }
 
 /// 从工作区目录名解析 agent id（`workspace` / `workspace-xxx`）
@@ -286,6 +296,13 @@ pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
 pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(base)?;
     fs::create_dir_all(base.join("agents"))?;
+    // 迁移：旧版本默认 Agent 配置目录为 agents/workspace，
+    // 新版本改为 agents/default 以避免与工作区内容目录 workspace/ 歧义。
+    let old_config = base.join("agents").join(DEFAULT_AGENT_ID);
+    let new_config = base.join("agents").join(DEFAULT_AGENT_CONFIG_DIR);
+    if old_config.is_dir() && !new_config.exists() {
+        let _ = fs::rename(&old_config, &new_config);
+    }
     Ok(())
 }
 
