@@ -467,7 +467,9 @@ fn estimate_usage_cost_reads_openrouter_cache_file() {
     use usage::{estimate_usage_cost, CostStatus, UsageTokens};
     let dir = tempfile::tempdir().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-    let cache = dir.path().join("openrouter-model-pricing.json");
+    let cache_dir = dir.path().join("cache");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    let cache = cache_dir.join("openrouter-model-pricing.json");
     std::fs::write(
         &cache,
         r#"{"fetched_at":"2099-01-01T00:00:00Z","models":{"test/or-model":{"prompt":0.000001,"completion":0.000002}}}"#,

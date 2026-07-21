@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn export_jsonl_roundtrip() {
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         let db_path = dir.path().join("usage.db");
         let db = UsageDb::new(db_path).unwrap();
         db.insert(NewUsageEvent {
