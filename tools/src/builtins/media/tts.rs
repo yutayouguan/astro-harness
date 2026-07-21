@@ -19,34 +19,34 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// 多说话人条目（与转写中角色名一致）。
+/// Multi-speaker entry (names should match roles in the transcript).
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TtsSpeaker {
-    /// 说话人名称（出现在 text/转写中）。
+    /// Speaker name (appears in text / transcript).
     pub speaker: String,
-    /// Google 预置音色，如 `Kore` / `Puck`。
+    /// Google preset voice, e.g. `Kore` / `Puck`.
     pub voice: String,
 }
 
-/// `tts` 工具参数。
+/// Arguments for the `tts` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TtsArgs {
-    /// 待合成的文本（不可为空；可含 `[whispers]` 等音频标记）。
+    /// Text to synthesize (required; may include markers like `[whispers]`).
     pub text: String,
-    /// 短标题（建议中文，如「旁白草稿」），用于落盘文件名：`{title}-{时间戳}-{短id}.wav`。缺省则用「语音」。
+    /// Short title for the filename; default "Speech".
     #[serde(default)]
     pub title: Option<String>,
-    /// 单说话人音色：Google 预置如 `Kore`；OpenAI 路径可用 `alloy` 等。
-    /// 若同时提供 `speakers`，以 `speakers` 为准。
+    /// Single-speaker voice: Google presets like `Kore`; OpenAI path may use `alloy`, etc.
+    /// If `speakers` is also set, `speakers` wins.
     #[serde(default)]
     pub voice: Option<String>,
-    /// 多说话人（最多 2）；Google Interactions 专用。
+    /// Multi-speaker (max 2); Google Interactions only.
     #[serde(default)]
     pub speakers: Option<Vec<TtsSpeaker>>,
-    /// 导演/风格说明（口音、语气、节奏等）；仅 Google Interactions 生效。
+    /// Director / style notes (accent, tone, pacing); Google Interactions only.
     #[serde(default)]
     pub style: Option<String>,
-    /// 是否流式生成并聚合落盘；仅 Google Interactions（默认 false）。
+    /// Stream generation and aggregate to disk; Google Interactions only (default false).
     #[serde(default)]
     pub stream: Option<bool>,
 }
@@ -56,7 +56,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "tts".to_string(),
         toolset: "tts".to_string(),
-        description: "Convert text to speech. Google: Gemini Interactions TTS (voices, optional speakers[max 2], style director notes, stream). Optional title: short Chinese name for the saved file (e.g. 旁白草稿 → 旁白草稿-YYYYMMDD-….wav; default 语音). OpenAI: /audio/speech fallback when Google is not configured. Advanced speakers/style/stream are Google-only."
+        description: "Convert text to speech. Google: Gemini Interactions TTS (voices, optional speakers[max 2], style director notes, stream). Optional title: short name for the saved file (default Speech). OpenAI: /audio/speech fallback when Google is not configured. Advanced speakers/style/stream are Google-only."
             .to_string(),
         schema: schema_for_args::<TtsArgs>(),
         check_fn: None,

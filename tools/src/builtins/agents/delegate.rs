@@ -10,70 +10,70 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// 批量委派中的单项。
+/// One item in a batch delegate.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct DelegateTaskArgs {
-    /// 子任务目标。
+    /// Sub-task goal.
     pub goal: String,
-    /// 子 Agent 所需上下文（父须显式传入）。
+    /// Context the child needs (parent must pass explicitly).
     #[serde(default)]
     pub context: Option<String>,
-    /// `leaf`（默认）不可再委派；`orchestrator` 在 max_spawn_depth 允许时可再派一层。
+    /// `leaf` (default) cannot re-delegate; `orchestrator` may spawn one more level if allowed.
     #[serde(default)]
     pub role: Option<String>,
-    /// 工具集白名单，如 `["terminal","file","web"]`；缺省=父集减去剥离项。
+    /// Toolset whitelist, e.g. `["terminal","file","web"]`; default = parent minus stripped sets.
     #[serde(default)]
     pub toolsets: Option<Vec<String>>,
-    /// 子 Agent 最大迭代轮次；缺省用配置 child_max_iterations（通常 50）。
+    /// Max child iterations; default from config child_max_iterations (often 50).
     #[serde(default)]
     pub max_iterations: Option<usize>,
-    /// 可选模型：`provider:model_id`。
+    /// Optional model: `provider:model_id`.
     #[serde(default)]
     pub model: Option<String>,
 }
 
-/// `delegate` / `delegate_async` 工具参数。
+/// Arguments for `delegate` / `delegate_async`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct DelegateArgs {
-    /// 单任务目标（与 `tasks` 二选一）。
+    /// Single-task goal (mutually exclusive with `tasks`).
     #[serde(default)]
     pub goal: Option<String>,
-    /// 单任务上下文。
+    /// Single-task context.
     #[serde(default)]
     pub context: Option<String>,
-    /// 单任务角色：`leaf` | `orchestrator`。
+    /// Single-task role: `leaf` | `orchestrator`.
     #[serde(default)]
     pub role: Option<String>,
-    /// 单任务工具集白名单。
+    /// Single-task toolset whitelist.
     #[serde(default)]
     pub toolsets: Option<Vec<String>>,
-    /// 单任务最大迭代轮次。
+    /// Single-task max iterations.
     #[serde(default)]
     pub max_iterations: Option<usize>,
-    /// 单任务可选模型：`provider:model_id`。
+    /// Single-task optional model: `provider:model_id`.
     #[serde(default)]
     pub model: Option<String>,
-    /// 并行子任务（1～3 建议；上限 8）。
+    /// Parallel sub-tasks (1–3 recommended; max 8).
     #[serde(default)]
     pub tasks: Option<Vec<DelegateTaskArgs>>,
-    /// 并行上限，默认读配置（通常 3）。
+    /// Concurrency cap; default from config (often 3).
     #[serde(default)]
     pub max_concurrent: Option<usize>,
 }
 
-/// `delegate_status` / `delegate_cancel` 参数。
+/// Arguments for `delegate_status` / `delegate_cancel`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct DelegateTaskIdArgs {
-    /// 由 `delegate_async` 返回的任务 id。
+    /// Task id returned by `delegate_async`.
     pub task_id: String,
 }
 
-/// `delegate_collect` 参数。
+/// Arguments for `delegate_collect`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct DelegateCollectArgs {
-    /// 由 `delegate_async` 返回的任务 id。
+    /// Task id returned by `delegate_async`.
     pub task_id: String,
-    /// 最长等待秒数，默认 600。
+    /// Max wait seconds; default 600.
     #[serde(default)]
     pub timeout_secs: Option<u64>,
 }

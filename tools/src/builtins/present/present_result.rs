@@ -12,7 +12,7 @@ use crate::schema::schema_for_args;
 pub struct PresentResultArgs {
     pub title: String,
     pub body: String,
-    /// 状态语义：`"success"` / `"warn"` / `"danger"` / `"info"`（默认 `"success"`）。
+    /// Status: `"success"` / `"warn"` / `"danger"` / `"info"` (default `"success"`).
     #[serde(default)]
     pub status: Option<String>,
 }

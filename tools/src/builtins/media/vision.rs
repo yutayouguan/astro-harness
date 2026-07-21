@@ -17,18 +17,18 @@ use crate::context::{ImageGenCreds, ToolContext};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// `vision` 工具参数。
+/// Arguments for the `vision` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VisionArgs {
-    /// 工作区相对路径或 http(s) URL 列表（主字段）。
+    /// Workspace-relative paths or http(s) URLs (primary field).
     #[serde(default)]
     pub image_urls: Option<Vec<String>>,
-    /// 兼容单图旧参数；有则并入 image_urls。
+    /// Legacy single-image field; merged into image_urls when set.
     #[serde(default)]
     pub image_url: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
-    /// describe | detect | segment；缺省 describe。
+    /// describe | detect | segment; default describe.
     #[serde(default)]
     pub mode: Option<String>,
 }

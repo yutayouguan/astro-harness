@@ -10,44 +10,44 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// 人格 / 偏好档案字段，用于填充 AGENT / IDENTITY / SOUL / USER 等模板。
+/// Persona / preference profile fields for AGENT / IDENTITY / SOUL / USER templates.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 pub struct AgentProfileArgs {
-    /// 背景经历。
+    /// Background / life experience.
     #[serde(default)]
     pub background: Option<String>,
-    /// 说话风格。
+    /// Speaking style.
     #[serde(default)]
     pub style: Option<String>,
-    /// 主要帮用户做的事。
+    /// Primary ways to help the user.
     #[serde(default)]
     pub focus: Option<String>,
-    /// 明确不要做的事。
+    /// Things to explicitly avoid.
     #[serde(default)]
     pub avoid: Option<String>,
-    /// 请如何称呼用户。
+    /// How to address the user.
     #[serde(default)]
     pub call_me: Option<String>,
-    /// 其他偏好。
+    /// Other preferences.
     #[serde(default)]
     pub preferences: Option<String>,
 }
 
-/// `create_agent` 工具参数。
+/// Arguments for the `create_agent` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CreateAgentArgs {
-    /// 助手显示名（可中文、可重名；与不可变 id 解耦）。
+    /// Display name (any language; may collide; decoupled from immutable id).
     pub name: String,
-    /// 可选显式 id（高级覆盖 / 测试）。缺省自动生成 `{slug}--{hex12}`（slug 取自 name，可读；hex 保唯一）。
+    /// Optional explicit id (advanced / tests). Default `{slug}--{hex12}` from name.
     #[serde(default)]
     pub id: Option<String>,
-    /// 创建后是否切换为当前 Agent（会改 ASTRO_WORKSPACE / MEMORY）；缺省 `false`，需显式 true。
+    /// Switch to this agent after create (updates ASTRO_WORKSPACE / MEMORY); default `false`.
     #[serde(default)]
     pub activate: Option<bool>,
-    /// 是否把全局 tools/MCP 拷入 `agents/{id}/config.json` 作起点；缺省 `true`。
+    /// Copy global tools/MCP into `agents/{id}/config.json` as a starting point; default `true`.
     #[serde(default)]
     pub inherit_config: Option<bool>,
-    /// 可选人格档案。
+    /// Optional persona profile.
     #[serde(default)]
     pub profile: Option<AgentProfileArgs>,
 }

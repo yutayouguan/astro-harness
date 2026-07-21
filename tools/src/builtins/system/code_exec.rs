@@ -30,12 +30,12 @@ const SAFE_ENV_KEYS: &[&str] = &[
     "TEMP", "SHELL", "PWD",
 ];
 
-/// `code_exec` 工具参数。
+/// Arguments for the `code_exec` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CodeExecArgs {
-    /// 要执行的源代码。
+    /// Source code to execute.
     pub code: String,
-    /// 语言：必须是 `python`（默认）/ `javascript`|`js` / `shell`|`bash`。未知语言会报错。
+    /// Language: `python` (default) / `javascript`|`js` / `shell`|`bash`. Unknown languages error.
     #[serde(default)]
     pub language: Option<String>,
 }

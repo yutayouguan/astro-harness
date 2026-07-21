@@ -9,19 +9,19 @@ use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
 
-/// `present_ui` 工具参数：快捷字段或完整 operations。
+/// `present_ui` args: shortcuts or full operations.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PresentUiArgs {
-    /// 卡片标题（快捷模式）。
+    /// Card title (shortcut mode).
     #[serde(default)]
     pub title: Option<String>,
-    /// 卡片正文（快捷模式）。
+    /// Card body (shortcut mode).
     #[serde(default)]
     pub body: Option<String>,
-    /// 可选图片 URL（快捷模式）。
+    /// Optional image URL (shortcut mode).
     #[serde(default)]
     pub image_url: Option<String>,
-    /// 完整 A2UI operations 数组（优先于快捷字段）。
+    /// Full A2UI operations array (preferred over shortcuts).
     #[serde(default)]
     pub operations: Option<Value>,
 }
@@ -31,7 +31,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "present_ui".to_string(),
         toolset: "present_ui".to_string(),
-        description: "在聊天中展示只读信息卡（不打断对话）。优先用 title/body/image_url 快捷字段，或传 A2UI v0.9 operations[]（catalogId=astro://a2ui/catalog/v2）。根节点须为 Card；用 variant 表达语义，JSON 中不要写十六进制颜色。"
+        description: "Present a read-only UI card in chat (no interrupt). Prefer title/body/image_url shortcuts, or A2UI v0.9 operations[] with catalogId astro://a2ui/catalog/v2. Root must be Card; use variant for semantics—never hex colors in JSON."
             .to_string(),
         schema: schema_for_args::<PresentUiArgs>(),
         check_fn: None,

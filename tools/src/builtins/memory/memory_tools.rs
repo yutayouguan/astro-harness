@@ -11,52 +11,52 @@ use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
 
-/// `memory` 工具动作。
+/// `memory` tool actions.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum MemoryAction {
-    /// 追加一条精炼记忆。
+    /// Append a refined memory entry.
     Add,
-    /// 按子串唯一匹配替换条目。
+    /// Replace an entry by unique substring match.
     Replace,
-    /// 按子串唯一匹配删除条目。
+    /// Remove an entry by unique substring match.
     Remove,
 }
 
-/// 记忆写入目标：`memory` → MEMORY.md；`user` → USER.md。
+/// Memory write target: `memory` → MEMORY.md; `user` → USER.md.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
 pub enum MemoryTarget {
-    /// 长期精炼记忆（`MEMORY.md`）。
+    /// Long-term refined memory (`MEMORY.md`).
     #[default]
     Memory,
-    /// 用户档案（`USER.md`）。
+    /// User profile (`USER.md`).
     User,
 }
 
-/// 单一 `memory` 工具参数。
+/// Arguments for the `memory` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MemoryArgs {
-    /// 操作类型：`add` / `replace` / `remove`。
+    /// Action: `add` / `replace` / `remove`.
     pub action: MemoryAction,
-    /// 写入目标，默认 `memory`。
+    /// Write target; default `memory`.
     #[serde(default)]
     pub target: MemoryTarget,
-    /// add / replace 的新内容。
+    /// New content for add / replace.
     #[serde(default)]
     pub content: Option<String>,
-    /// replace / remove 用于定位条目的子串。
+    /// Substring used to locate the entry for replace / remove.
     #[serde(default)]
     pub old_text: Option<String>,
 }
 
-/// `session_search` 工具的参数结构。
+/// Arguments for the `session_search` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SessionSearchArgs {
-    /// FTS5 全文检索关键词（匹配历史消息正文 / 工具名等）。
+    /// FTS5 full-text query (matches message body / tool names, etc.).
     pub query: String,
-    /// 返回条数上限，默认 5，最大 10（与数据库 LIMIT 一致）。
+    /// Max results; default 5, max 10 (matches DB LIMIT).
     #[serde(default)]
     pub limit: Option<u32>,
 }

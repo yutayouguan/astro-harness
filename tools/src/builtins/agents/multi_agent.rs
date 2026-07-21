@@ -12,12 +12,12 @@ use crate::schema::schema_for_args;
 
 const MAX_AGENTS: usize = 8;
 
-/// `multi_agent` 工具参数。
+/// Arguments for the `multi_agent` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MultiAgentArgs {
-    /// 总体目标（不可为空）。
+    /// Overall goal (required).
     pub goal: String,
-    /// 各子代理的角色描述列表（1～8），按顺序串行执行。
+    /// Role descriptions for sub-agents (1–8), run serially in order.
     pub agents: Vec<String>,
 }
 

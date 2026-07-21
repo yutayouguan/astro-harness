@@ -21,7 +21,7 @@ pub struct TeamMemberArgs {
     pub agent_id: Option<String>,
     #[serde(default)]
     pub toolsets: Option<Vec<String>>,
-    /// 可选：`provider:model_id`（如 `claude:claude-sonnet-4-5`）。
+    /// Optional model: `provider:model_id` (e.g. `claude:claude-sonnet-4-5`).
     #[serde(default)]
     pub model: Option<String>,
 }
@@ -47,7 +47,7 @@ pub struct TeamRunArgs {
     pub member_id: Option<String>,
     #[serde(default)]
     pub context: Option<String>,
-    /// `tasks` 模式：显式任务列表；缺省则按成员顺序各承担一步 goal。
+    /// `tasks` mode: explicit task list; default assigns one goal step per member in order.
     #[serde(default)]
     pub tasks: Option<Vec<String>>,
 }

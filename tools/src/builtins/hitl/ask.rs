@@ -20,33 +20,33 @@ use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
 
-/// question 模式下的一步提问。
+/// One question step in `question` mode.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AskQuestion {
-    /// 答案键；缺省时用 `q0` / `q1` …
+    /// Answer key; defaults to `q0` / `q1` …
     #[serde(default)]
     pub id: Option<String>,
-    /// 向用户提出的问题。
+    /// Question shown to the user.
     pub question: String,
-    /// 预设选项；留空则前端仅展示自由输入框。
+    /// Preset options; empty means free-text input only.
     #[serde(default)]
     pub options: Vec<String>,
 }
 
-/// `ask` 工具参数。
+/// Arguments for the `ask` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AskArgs {
-    /// 交互模式：`question`（向用户提问，默认）| `confirm`（敏感操作前请求批准）。
-    /// 省略时按参数推断：给了 `questions` → question；只给了 `body` → confirm。
+    /// Mode: `question` (ask the user, default) | `confirm` (approve a sensitive action).
+    /// If omitted: `questions` → question; only `body` → confirm.
     #[serde(default)]
     pub mode: Option<String>,
-    /// question 模式：提问步骤（1+）。每步可带 `options`；`options` 为空则只显示自由输入框。
+    /// Question mode: one or more steps. Each may include `options`; empty options = free text.
     #[serde(default)]
     pub questions: Vec<AskQuestion>,
-    /// 标题：question 向导标题 / confirm 确认卡标题。
+    /// Title: wizard title (question) or confirmation card title (confirm).
     #[serde(default)]
     pub title: Option<String>,
-    /// confirm 模式：确认卡正文说明。
+    /// Confirm mode: body text for the confirmation card.
     #[serde(default)]
     pub body: Option<String>,
 }

@@ -13,31 +13,31 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// `skills` 工具参数。
+/// Arguments for the `skills` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SkillsArgs {
-    /// 动作：`load` / `view`（默认）、`list`、`curate`、`manage`。
+    /// Action: `load` / `view` (default), `list`, `curate`, `manage`.
     #[serde(default)]
     pub action: Option<String>,
-    /// Skill 名称 / id。`load`/`view`/`manage` 必填；`list`/`curate` 可省略。
+    /// Skill name / id. Required for `load`/`view`/`manage`; optional for `list`/`curate`.
     #[serde(default)]
     pub skill_id: Option<String>,
-    /// `manage` 子操作：`create` | `update` | `patch` | `delete`。
+    /// `manage` sub-action: `create` | `update` | `patch` | `delete`.
     #[serde(default)]
     pub manage_action: Option<String>,
-    /// `manage` create/update：SKILL.md 正文（可含 YAML frontmatter）。
+    /// `manage` create/update: SKILL.md body (may include YAML frontmatter).
     #[serde(default)]
     pub content: Option<String>,
-    /// `manage` create：描述（写入 frontmatter；若 content 已含 frontmatter 可省略）。
+    /// `manage` create: description for frontmatter (optional if content already has frontmatter).
     #[serde(default)]
     pub description: Option<String>,
-    /// `manage` patch：要替换的原文（须在 SKILL.md 中唯一出现）。
+    /// `manage` patch: text to replace (must appear uniquely in SKILL.md).
     #[serde(default)]
     pub old_string: Option<String>,
-    /// `manage` patch：替换后的新文本。
+    /// `manage` patch: replacement text.
     #[serde(default)]
     pub new_string: Option<String>,
-    /// 可选结构化输入，附在 `load`/`view` 返回文本的「调用输入」小节。
+    /// Optional structured input appended under a "Call input" section for `load`/`view`.
     #[serde(default)]
     pub input: Option<serde_json::Value>,
 }

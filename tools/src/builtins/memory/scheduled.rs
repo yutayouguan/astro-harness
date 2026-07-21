@@ -8,27 +8,27 @@ use serde::{Deserialize, Serialize};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// 创建定时任务的参数（`cron_add` / `scheduled` 共用）。
+/// Args to create a scheduled job (`cron_add` / `scheduled`).
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CronAddArgs {
-    /// 调度表达式，如 `every:30m` 或五段 cron。
+    /// Schedule expression, e.g. `every:30m` or five-field cron.
     #[serde(default)]
     pub cron: Option<String>,
-    /// `cron` 字段的别名。
+    /// Alias of the `cron` field.
     #[serde(default)]
     pub schedule: Option<String>,
-    /// 任务触发时 Agent 应执行的内容。
+    /// What the agent should do when the job fires.
     pub task: String,
 }
 
-/// 无参数工具（如 `cron_list`）的空 schema。
+/// Empty schema for tools with no parameters (e.g. `cron_list`).
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct EmptyArgs {}
 
-/// 按 id 操作任务的参数（启用 / 禁用 / 删除）。
+/// Args for id-based job ops (enable / disable / remove).
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CronIdArgs {
-    /// 完整 id 或其 8 字符前缀。
+    /// Full id or its 8-character prefix.
     pub id: String,
 }
 

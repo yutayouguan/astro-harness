@@ -21,21 +21,21 @@ use crate::schema::schema_for_args;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MusicGenArgs {
-    /// 音乐描述（流派/乐器/BPM/情绪/结构等）。不含歌词正文时写主题即可。
+    /// Music description (genre/instruments/BPM/mood/structure). Theme only if no lyrics body.
     pub prompt: String,
-    /// 短标题（建议中文，如「采菌子歌」），用于落盘文件名：`{title}-{时间戳}-{短id}.mp3`。缺省则用「音乐」。
+    /// Short title for the filename; default "Music".
     #[serde(default)]
     pub title: Option<String>,
-    /// 可选歌词。有则按此演唱（勿省略已写好的歌词）；无则由 Lyria 自写。建议带 `[Verse]`/`[Chorus]` 等分段标签。
+    /// Optional lyrics. If already written, pass them here (else Lyria invents). Prefer `[Verse]`/`[Chorus]` tags.
     #[serde(default)]
     pub lyrics: Option<String>,
-    /// `clip`（默认，约 30s）或 `pro`（完整歌曲）。
+    /// `clip` (default, ~30s) or `pro` (full song).
     #[serde(default)]
     pub model: Option<String>,
-    /// 参考图工作区路径，最多 10。
+    /// Reference image workspace paths (max 10).
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// `mp3`（默认）或 `wav`（仅 pro）。
+    /// `mp3` (default) or `wav` (pro only).
     #[serde(default)]
     pub format: Option<String>,
 }
@@ -107,7 +107,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "music_gen".to_string(),
         toolset: "music_gen".to_string(),
-        description: "Generate music with Google Lyria 3 (Interactions). prompt=style/mood/instrumentation; optional title (short Chinese name for the file, e.g. 采菌子歌 → 采菌子歌-YYYYMMDD-….mp3; default 音乐); optional lyrics (if you already wrote lyrics, MUST pass them here — otherwise Lyria invents its own); model=clip|pro; optional reference_images (≤10); format=mp3|wav (wav requires pro). Google only — not local playback. Writes generated/audio/.".to_string(),
+        description: "Generate music with Google Lyria 3 (Interactions). prompt=style/mood/instrumentation; optional title (short name for the file; default Music); optional lyrics (if you already wrote lyrics, MUST pass them here — otherwise Lyria invents its own); model=clip|pro; optional reference_images (≤10); format=mp3|wav (wav requires pro). Google only — not local playback. Writes generated/audio/.".to_string(),
         schema: schema_for_args::<MusicGenArgs>(),
         check_fn: None,
         icon: "music",

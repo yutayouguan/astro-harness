@@ -9,11 +9,11 @@ use crate::schema::schema_for_args;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ModeSwitchArgs {
-    /// 目标模式：`plan` 或 `agent`（本工具不处理 ask/multitask）。
+    /// Target mode: `plan` or `agent` (this tool does not handle ask/multitask).
     to: String,
-    /// 为何需要切换（给用户看）。
+    /// Why the switch is needed (shown to the user).
     reason: String,
-    /// Plan→Agent 时附带的计划摘要，切换批准后注入下一轮。
+    /// Plan summary when switching Plan→Agent; injected into the next turn after approval.
     #[serde(default)]
     summary: Option<String>,
 }

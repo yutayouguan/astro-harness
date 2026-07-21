@@ -9,33 +9,33 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// 对象形式的清单项。
+/// Checklist item as an object.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PlanItemObject {
-    /// 条目文本。
+    /// Item text.
     pub text: String,
-    /// 是否已完成；缺省视为未完成。
+    /// Whether completed; omitted means incomplete.
     #[serde(default)]
     pub done: Option<bool>,
 }
 
-/// 清单项：纯字符串，或 `{ text, done }` 对象。
+/// Checklist item: plain string, or `{ text, done }` object.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
 pub enum PlanItem {
-    /// 仅文本，默认未完成。
+    /// Text only; defaults to incomplete.
     Text(String),
-    /// 带完成状态的对象。
+    /// Object with completion state.
     Object(PlanItemObject),
 }
 
-/// `task_plan` 工具参数。
+/// Arguments for the `task_plan` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TaskPlanArgs {
-    /// 计划标题；缺省为 `Task Plan`。
+    /// Plan title; default `Task Plan`.
     #[serde(default)]
     pub title: Option<String>,
-    /// 清单条目列表。
+    /// Checklist items.
     pub items: Vec<PlanItem>,
 }
 

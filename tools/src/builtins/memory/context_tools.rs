@@ -17,60 +17,60 @@ const PINNED_FILE: &str = "pinned-context.json";
 const MAX_PIN_CHARS: usize = 8 * 1024;
 const MAX_PINS: usize = 20;
 
-/// `search_context` 检索范围。
+/// `search_context` search scope.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
 pub enum SearchScope {
-    /// 会话历史 FTS。
+    /// Session history FTS.
     Session,
-    /// MEMORY.md + USER.md 子串。
+    /// MEMORY.md + USER.md substring search.
     Memory,
-    /// Knowledge Content DB。
+    /// Knowledge Content DB.
     Knowledge,
-    /// 以上全部（默认）。
+    /// All of the above (default).
     #[default]
     All,
 }
 
-/// `search_context` 参数。
+/// Arguments for `search_context`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SearchContextArgs {
-    /// 检索关键词。
+    /// Search query.
     pub query: String,
-    /// 范围，默认 `all`。
+    /// Scope; default `all`.
     #[serde(default)]
     pub scope: SearchScope,
-    /// 每源返回上限，默认 5，最大 10。
+    /// Max results per source; default 5, max 10.
     #[serde(default)]
     pub limit: Option<u32>,
 }
 
-/// `pin_context` 动作。
+/// `pin_context` actions.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PinAction {
-    /// 追加一条固定片段。
+    /// Append a pinned snippet.
     Pin,
-    /// 列出当前固定片段。
+    /// List current pinned snippets.
     List,
-    /// 按 id 移除。
+    /// Remove by id.
     Unpin,
-    /// 清空全部。
+    /// Clear all.
     Clear,
 }
 
-/// `pin_context` 参数。
+/// Arguments for `pin_context`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PinContextArgs {
     pub action: PinAction,
-    /// `pin` 时的正文。
+    /// Body text for `pin`.
     #[serde(default)]
     pub content: Option<String>,
-    /// `unpin` 时的片段 id。
+    /// Snippet id for `unpin`.
     #[serde(default)]
     pub id: Option<String>,
-    /// 可选短标题（写入列表展示）。
+    /// Optional short title (shown in lists).
     #[serde(default)]
     pub title: Option<String>,
 }

@@ -12,7 +12,7 @@ use crate::schema::schema_for_args;
 pub struct PresentCalloutArgs {
     pub title: String,
     pub body: String,
-    /// Callout 语义：`"warn"` 或 `"info"`（默认 `"info"`）。
+    /// Callout variant: `"warn"` or `"info"` (default `"info"`).
     #[serde(default)]
     pub variant: Option<String>,
 }

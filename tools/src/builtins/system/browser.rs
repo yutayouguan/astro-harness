@@ -14,10 +14,10 @@ use crate::schema::schema_for_args;
 
 const MAX_BODY_BYTES: usize = 12_000;
 
-/// `browser` 工具的参数结构。
+/// Arguments for the `browser` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct BrowserArgs {
-    /// 目标 URL，须以 `http://` 或 `https://` 开头；须为公网主机（禁 localhost/私网）。
+    /// Target URL; must start with `http://` or `https://`; public host only (no localhost/private).
     pub url: String,
 }
 

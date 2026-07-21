@@ -12,31 +12,31 @@ use crate::schema::schema_for_args;
 
 const MAX_STEPS: usize = 8;
 
-/// 编排中的单步参数。
+/// One step in an orchestration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct OrchestrationStepArgs {
-    /// 角色名（展示与临时角色注入）。
+    /// Role name (display and temporary role injection).
     pub role: String,
-    /// 该步指令。
+    /// Instruction for this step.
     pub prompt: String,
-    /// 已有 Agent id；缺省表示临时角色（用父 Agent 凭据）。
+    /// Existing agent id; omit for a temporary role (uses parent credentials).
     #[serde(default)]
     pub agent_id: Option<String>,
 }
 
-/// `orchestration_run` 参数。
+/// Arguments for `orchestration_run`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct OrchestrationRunArgs {
-    /// 总目标。
+    /// Overall goal.
     pub goal: String,
-    /// 串行步骤（1～8）。
+    /// Serial steps (1–8).
     pub steps: Vec<OrchestrationStepArgs>,
 }
 
-/// `orchestration_status` 参数。
+/// Arguments for `orchestration_status`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct OrchestrationStatusArgs {
-    /// 编排 id（由 `orchestration_run` 返回）。
+    /// Orchestration id returned by `orchestration_run`.
     pub orchestration_id: String,
 }
 

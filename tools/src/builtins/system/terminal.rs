@@ -14,19 +14,19 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// `terminal` 工具的参数结构。
+/// Arguments for the `terminal` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TerminalArgs {
-    /// 要执行的 Shell 命令字符串。
+    /// Shell command string to run.
     pub command: String,
-    /// 可选：相对于 workspace 的工作子目录。
+    /// Optional workspace-relative working subdirectory.
     #[serde(default)]
     pub cwd: Option<String>,
-    /// 可选：超时秒数（默认 60，钳制到 1..=900）；用于构建 / 测试等长任务。
+    /// Optional timeout in seconds (default 60, clamped to 1..=900); for long builds/tests.
     #[serde(default)]
     pub timeout_secs: Option<u64>,
-    /// 可选：为 `true` 时把命令放后台运行并立即返回 job id，不受超时约束；
-    /// 之后用 `terminal_job`（action=status/wait/kill）轮询或终止。
+    /// If true, run in the background and return a job id immediately (no timeout);
+    /// poll or stop with `terminal_job` (action=status/wait/kill).
     #[serde(default)]
     pub background: Option<bool>,
 }

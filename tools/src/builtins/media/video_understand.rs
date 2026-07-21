@@ -46,11 +46,11 @@ fn build_interactions_client() -> anyhow::Result<reqwest::Client> {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VideoUnderstandArgs {
-    /// 工作区相对路径、http(s) 直链，或公开 YouTube URL。
+    /// Workspace-relative path, http(s) direct link, or public YouTube URL.
     pub video_url: String,
     #[serde(default)]
     pub prompt: Option<String>,
-    /// `qa` | `summarize` | `timeline`；默认 `qa`。
+    /// `qa` | `summarize` | `timeline`; default `qa`.
     #[serde(default)]
     pub mode: Option<String>,
 }

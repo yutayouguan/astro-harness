@@ -15,10 +15,10 @@ use crate::schema::schema_for_args;
 const DEFAULT_MESSAGE: &str =
     "查询本地天气或附近信息需要你的位置。请授权共享当前位置，或手动填写城市。";
 
-/// `request_user_location` 工具参数。
+/// Arguments for `request_user_location`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct RequestUserLocationArgs {
-    /// 向用户说明为何需要定位（可空，使用默认文案）。
+    /// Why location is needed (optional; uses a default message when empty).
     #[serde(default)]
     pub message: String,
 }

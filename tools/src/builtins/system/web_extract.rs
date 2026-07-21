@@ -24,16 +24,16 @@ const DEFAULT_MAX_CHARS: usize = 12_000;
 /// 硬上限，防止把整页塞进上下文。
 const HARD_MAX_CHARS: usize = 48_000;
 
-/// `web_extract` 工具参数。
+/// Arguments for the `web_extract` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WebExtractArgs {
-    /// 单个 URL（与 `urls` 二选一；都给时优先 `urls`）。
+    /// Single URL (mutually exclusive with `urls`; `urls` wins if both set).
     #[serde(default)]
     pub url: Option<String>,
-    /// 多个 URL（最多 5 个）。
+    /// Multiple URLs (max 5).
     #[serde(default)]
     pub urls: Option<Vec<String>>,
-    /// 每个 URL 返回正文的最大字符数（默认 12000，硬上限 48000）。
+    /// Max characters of body text per URL (default 12000, hard cap 48000).
     #[serde(default)]
     pub max_chars: Option<usize>,
 }

@@ -20,39 +20,39 @@ use crate::schema::schema_for_args;
 
 const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 
-/// `image_gen` 工具参数。
+/// `image_gen` tool args.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageGenArgs {
-    /// 详细画面提示词（必填）：主体、场景、构图、光影、材质、风格、氛围；勿用短句摘要。思考稿须原样传入。
+    /// Detailed image prompt (required): subject, setting, composition, lighting, materials, style, mood—not a short summary. Pass thinking drafts verbatim.
     pub prompt: String,
-    /// 短中文标题，用于文件名；缺省「图片」。
+    /// Short title for the filename; default "Image".
     #[serde(default)]
     pub title: Option<String>,
-    /// 用户要求宽高比时填写（如 16:9）。常用：`1:1` / `16:9` / `9:16` / `4:3` / `3:4`。
+    /// Aspect ratio when the user asks (e.g. 16:9). Common: `1:1` / `16:9` / `9:16` / `4:3` / `3:4`.
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// 用户要求分辨率时填写：`0.5K` / `1K` / `2K` / `4K`（K 大写）。
+    /// Resolution tier when the user asks: `0.5K` / `1K` / `2K` / `4K` (uppercase K).
     #[serde(default)]
     pub image_size: Option<String>,
-    /// 参考图工作区路径（最多 14 张）。
+    /// Reference image workspace paths (max 14).
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// 上一轮 Interactions 会话 ID（多轮编辑）。
+    /// Previous Interactions session id (multi-turn edit).
     #[serde(default)]
     pub previous_interaction_id: Option<String>,
-    /// 启用 Google Search grounding。
+    /// Enable Google Search grounding.
     #[serde(default)]
     pub google_search: bool,
-    /// 启用图片搜索（须同时 `google_search=true`）。
+    /// Enable image search (requires `google_search=true`).
     #[serde(default)]
     pub image_search: bool,
-    /// 思考深度：`minimal` / `high`。
+    /// Thinking depth: `minimal` / `high`.
     #[serde(default)]
     pub thinking_level: Option<String>,
-    /// 外部视频 URL（与 `video` 二选一）。
+    /// External video URL (mutually exclusive with `video`).
     #[serde(default)]
     pub video_uri: Option<String>,
-    /// 工作区内已生成视频路径（与 `video_uri` 二选一）。
+    /// Workspace-relative generated video path (mutually exclusive with `video_uri`).
     #[serde(default)]
     pub video: Option<String>,
 }
@@ -164,7 +164,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "生成或编辑图片（Gemini Interactions；OpenAI 回退仅支持纯 prompt）。主体/风格/构图/氛围不明确且用户未授权自由发挥时，先用 `clarify` 询问。宽高比与分辨率写入 aspect_ratio/image_size，勿只写进 prompt。支持 reference_images（≤14）、previous_interaction_id、search、thinking_level、视频输入。结果写入 generated/images/。"
+        description: "Generate or edit images (Gemini Interactions; OpenAI fallback is prompt-only). If subject/style/composition/mood is unclear and not delegated, ask via `clarify` first. Put aspect ratio and resolution in aspect_ratio/image_size—not only in prompt. Supports reference_images (≤14), previous_interaction_id, search, thinking_level, video inputs. Saves under generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,

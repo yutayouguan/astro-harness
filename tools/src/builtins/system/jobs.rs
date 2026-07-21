@@ -218,18 +218,18 @@ pub fn spawn_background(
     Ok(id)
 }
 
-/// `terminal_job` 工具参数。
+/// Arguments for the `terminal_job` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct JobArgs {
-    /// 动作：`list` | `status` | `wait` | `kill`。
+    /// Action: `list` | `status` | `wait` | `kill`.
     pub action: String,
-    /// 任务 id（`status`/`wait`/`kill` 必填）。
+    /// Job id (required for `status` / `wait` / `kill`).
     #[serde(default)]
     pub id: Option<String>,
-    /// `status`/`wait`：从该字节偏移起返回新输出（默认 0）。
+    /// For `status`/`wait`: return new output starting at this byte offset (default 0).
     #[serde(default)]
     pub offset: Option<usize>,
-    /// `wait`：最多等待秒数（默认 30，钳制 1..=600）。
+    /// For `wait`: max seconds to wait (default 30, clamped to 1..=600).
     #[serde(default)]
     pub timeout_secs: Option<u64>,
 }
