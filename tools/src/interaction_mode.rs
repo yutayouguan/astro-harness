@@ -267,9 +267,7 @@ mod tests {
 
     #[test]
     fn ask_blocks_todo() {
-        assert!(
-            check_tool_call(InteractionMode::Ask, "todo", &json!({ "title": "t" }),).is_err()
-        );
+        assert!(check_tool_call(InteractionMode::Ask, "todo", &json!({ "title": "t" }),).is_err());
         assert!(!tool_visible_in_mode(InteractionMode::Ask, "todo"));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "todo"));
     }
@@ -312,10 +310,7 @@ mod tests {
     fn plan_hides_terminal_in_schema() {
         assert!(!tool_visible_in_mode(InteractionMode::Plan, "terminal"));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "web_search"));
-        assert!(tool_visible_in_mode(
-            InteractionMode::Plan,
-            "switch_mode"
-        ));
+        assert!(tool_visible_in_mode(InteractionMode::Plan, "switch_mode"));
         assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));
     }
 }
