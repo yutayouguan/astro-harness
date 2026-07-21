@@ -1433,6 +1433,64 @@ fn v15_schema_migrates_to_v16_without_data_loss() {
 }
 
 #[test]
+fn v16_to_v17_strips_legacy_chat_mode_hint() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+
+    {
+        let store = SessionStore::open(&path).unwrap();
+        store
+            .create_session("s1", "tauri", None, None, None)
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "s1",
+                role: "user",
+                content: Some(
+                    "帮我写个脚本\n\n---\n[Mode: Agent] 可执行工具。复杂多步任务可先 request_mode_switch。"
+                        .into(),
+                ),
+                ..NewMessage::empty("s1", "user")
+            })
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "s1",
+                role: "user",
+                content: Some("干净消息，无 Mode 后缀".into()),
+                ..NewMessage::empty("s1", "user")
+            })
+            .unwrap();
+        store
+            .append_message(NewMessage {
+                session_id: "s1",
+                role: "assistant",
+                content: Some("ok\n\n---\n[Mode: Agent] should stay on assistant".into()),
+                ..NewMessage::empty("s1", "assistant")
+            })
+            .unwrap();
+    }
+
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute("UPDATE schema_version SET version = 16", [])
+            .unwrap();
+    }
+
+    let reopened = SessionStore::open(&path).unwrap();
+    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
+
+    let msgs = reopened.get_messages("s1").unwrap();
+    assert_eq!(msgs.len(), 3);
+    assert_eq!(msgs[0].content.as_deref(), Some("帮我写个脚本"));
+    assert_eq!(msgs[1].content.as_deref(), Some("干净消息，无 Mode 后缀"));
+    assert_eq!(
+        msgs[2].content.as_deref(),
+        Some("ok\n\n---\n[Mode: Agent] should stay on assistant")
+    );
+}
+
+#[test]
 fn pin_session_sorts_before_unpinned() {
     let (_dir, store) = test_store();
     store

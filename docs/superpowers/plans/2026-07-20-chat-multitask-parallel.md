@@ -4,7 +4,7 @@
 
 ## 目标
 
-MultiTask 下用户每发一句 → 立即用**新 `session_id`** 开一路 `start_chat`，多路并行；主时间线展示各 task 气泡 + Task 面板。
+MultiTask 下用户每发一句 → 立即用**新 `session_id`** 开一路 `invoke("start_chat", { request: { …, interactionMode: "multitask" } })`，多路并行；主时间线展示各 task 气泡 + Task 面板。模式说明由后端写入 system prompt，不拼进用户消息。
 
 ## 约束
 

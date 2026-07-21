@@ -1,4 +1,4 @@
-//! 单库会话存储（schema v15）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
+//! 单库会话存储（schema v17）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
 mod messages;
 mod schema;
@@ -226,13 +226,8 @@ impl SessionStore {
     pub fn open(path: &Path) -> Result<Self> {
         if path.exists() {
             let version = peek_schema_version(path).unwrap_or(0);
-            // v13→v14 / v14→v15 / v15→v16 为 additive ALTER，可就地升级，不必丢历史。
-            let additive_only = (version == 13 && SCHEMA_VERSION >= 14)
-                || (version == 14 && SCHEMA_VERSION >= 15)
-                || (version == 15 && SCHEMA_VERSION >= 16)
-                || (version == 13 && SCHEMA_VERSION >= 15)
-                || (version == 13 && SCHEMA_VERSION >= 16)
-                || (version == 14 && SCHEMA_VERSION >= 16);
+            // v13→v17 为 additive（ALTER / 数据清洗），可就地升级，不必丢历史。
+            let additive_only = (13..SCHEMA_VERSION).contains(&version);
             if version < SCHEMA_VERSION && !additive_only {
                 tracing::warn!(
                     version,

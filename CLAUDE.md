@@ -58,7 +58,7 @@ npm run tauri:build:universal    # universal-apple-darwin
 | `common` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、SQLite helpers、tool-spill。无业务逻辑。 |
 | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。 |
 | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates、spawn-depth 限制。无 SQLite。 |
-| `session` | `SessionStore`（`state.db` WAL SQLite，schema v16，FTS5）— 消息、会话、billing、FTS 召回。 |
+| `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回。 |
 | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap。 |
 | `agent` | Agent 运行时核心：`AgentLoop` 状态机、流式多轮循环、工具分发、压缩、HITL、hooks、prompt 组装。 |
 | `providers` | 多厂商 LLM/图像 Provider 层：`ProviderRegistry`、流式 `ChatStream`、fallback 链。支持 Google、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure 等十余家。 |
@@ -82,7 +82,7 @@ npm run tauri:build:universal    # universal-apple-darwin
       ├─ reload_tools_and_mcp() // 热加载 tool gates + MCP（每轮）
       ├─ SessionStore::append_message()
       ├─ build_conversation_context() // FTS 召回（turn >= recent_turns=10 时触发）
-      ├─ build_system_prompt()  // soul + MEMORY.md + USER.md + daily + recalled + skills index
+      ├─ build_system_prompt()  // soul + MEMORY + USER + daily + recalled + skills + interactionMode guidance + TOOL_GUIDANCE
       └─ → TurnResult::Continue { system_prompt }
 
   → run_multi_turn_stream() (streaming 路径)
@@ -120,7 +120,7 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
     USER.md           # 用户画像（快照）
     config.json       # AgentRuntimeConfig
     tools_enabled.json # tool gate 热加载
-  sessions/state.db   # 消息、会话、FTS5（schema v16）
+  sessions/state.db   # 消息、会话、FTS5（schema v17）
   cron/               # cron.db + jobs.json
   usage/usage.db
   artifacts/artifacts.db
@@ -139,6 +139,8 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 5. **Skill soft-alias**：模型把 skill 名当工具调用时，若工具注册表中不存在但 skill 已安装且 enabled，自动改写为 `skills(action=load, skill_id=…)`。
 
 6. **MCP 工具名**：`mcp__{server_id}__{tool_name}` 前缀，`is_mcp_tool_name()` 检测。
+
+7. **交互模式**：`interaction_mode` 经 ChatRequest 下传；行为说明只进 system（`system_guidance`），用户消息不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。schema v17 起剥离历史 Mode 后缀。
 
 ## Data Flow: cron.rs → headless.rs
 

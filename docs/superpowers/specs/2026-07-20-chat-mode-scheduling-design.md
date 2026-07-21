@@ -1,16 +1,27 @@
 # 聊天交互模式与调度设计
 
 > 日期：2026-07-20  
-> 状态：设计定稿；Step 1–4 + 增强 + High/Medium 修复已落地  
+> 状态：设计定稿；Step 1–4 + 增强 + High/Medium 修复已落地；**模式说明已迁入 system prompt（不再拼进用户消息）**  
 > 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、[`parallelTasks.ts`](../../../frontend/src/lib/chat/parallelTasks.ts)、编排 / delegate / worktree
 
-## 1. 问题
+## 1. 问题（历史背景）
 
-当前四种模式（Agent / Plan / Ask / MultiTask）几乎只靠发送前拼接的 `chatModeHint`，差异很弱：
+早期四种模式（Agent / Plan / Ask / MultiTask）几乎只靠发送前拼接的 `chatModeHint` 进**用户消息**，差异很弱：
 
 - 流式进行中再发消息会被直接挡住，**没有** Cursor / Claude Code 式的 follow-up 队列；
-- MultiTask **没有**真正并行 spawn，也谈不上「互不影响」；
-- Plan 无法硬限制写操作，模式切换也不会自动发生。
+- MultiTask **没有**真正并行 spawn；
+- Plan 无法硬限制写操作。
+
+上述调度与工具 gate 已落地。另：`chatModeHint` 会污染会话历史 / UI / FTS，已废弃。
+
+## 1b. 现行约定（2026-07 起）
+
+| 项 | 约定 |
+|---|---|
+| 模式行为说明 | `InteractionMode::system_guidance()`（中英并列）写入 **system prompt**，不进用户 `content` |
+| 前端 | 只传 `interactionMode`；**禁止**再拼 `[Mode: …]` |
+| Tauri `start_chat` | **仅** `invoke("start_chat", { request: StartChatRequest })`；不保留扁平字段兼容 |
+| 历史数据 | schema **v17** 打开库时剥离用户消息末尾 `\n\n---\n[Mode: …]`；不双写、不读时兼容 |
 
 用户期望：
 
@@ -23,9 +34,9 @@
 
 ## 2. 核心思想
 
-把「模式」拆成两层，而不是再堆更长 prompt：
+把「模式」拆成两层，而不是再堆更长用户消息：
 
-1. **能力档位**：工具 gate（尤其 Plan 禁写）；
+1. **能力档位**：工具 gate（尤其 Plan 禁写）+ system 层 `system_guidance`；
 2. **调度策略**：单线程队列 vs 多 task 并行。
 
 另外：
@@ -82,6 +93,7 @@ Agent 模式下按 `session_id` 创建/复用 git worktree，经 `project_root` 
 2. **Step 2（已完成）**：MultiTask 每消息 spawn 独立 session + 并行监听 + Task 面板（MVP 暂不强制 worktree）；
 3. **Step 3（已完成）**：Plan/Ask 工具 gate + `request_mode_switch` 授权条（倒计时 / 立即 / 取消）；
 4. **Step 4（已完成）**：队列软边界（`turnInFlight`）+ MultiTask 本地汇总 + git worktree 隔离。
+5. **模式说明迁入 system（已完成）**：删除前端 `chatModeHint`；`system_guidance` 中英并列；schema v17 剥离历史后缀；`start_chat` 仅 `StartChatRequest` 包装。
 
 ## 6. Step 1 验收
 
@@ -127,11 +139,12 @@ Agent 模式下按 `session_id` 创建/复用 git worktree，经 `project_root` 
 - HITL / `turnInFlight` 时保留 Stop，并清空 pending interrupts；
 - 空 `project_root` → 后端清除；非 Agent 发送显式传空；
 - mode pill：streaming / turnInFlight / HITL / 并行 running 时锁定；Plan/Ask 只读徽章 + 菜单说明；
-- `chatModeHint` 中英 i18n；Plan/Ask 专用 placeholder；
+- ~~`chatModeHint` 中英 i18n~~ → 已改为 `system_guidance` 中英并列（不进用户消息）；Plan/Ask 专用 placeholder；
 - MultiTask 并行 HITL：`activity` → A2UI surface；`waiting` 状态；气泡内审批/澄清；`interrupt_resume` 走 task.sessionId；不写入主会话 pending（不误锁新并行发送）。
 
 ## 7. 非目标
 
 - 同 `session_id` 多 turn 真正并发（仍靠 pause 互斥）；
 - 不改全局专家切换语义；
-- MultiTask 并行 HITL 跨刷新恢复（内存态；主会话有 store）。
+- MultiTask 并行 HITL 跨刷新恢复（内存态；主会话有 store）；
+- **不**为旧扁平 `start_chat` 参数或历史 `[Mode: …]` 用户后缀保留运行时兼容层（迁移时一次性删净）。

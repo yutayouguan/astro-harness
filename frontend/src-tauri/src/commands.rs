@@ -671,6 +671,8 @@ pub async fn write_daily_memory(
 }
 
 /// `start_chat` 前端入参（camelCase，与 invoke 字段对齐）。
+///
+/// 调用形态固定为 `invoke("start_chat", { request: { … } })`，**不**接受扁平顶层字段。
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartChatRequest {

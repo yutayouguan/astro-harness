@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 16;
+pub const SCHEMA_VERSION: i32 = 17;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -125,6 +125,12 @@ impl SessionStore {
                 self.conn.execute_batch(SCHEMA_V11_DDL)?;
                 self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
             }
+            // v16→v17：删除历史用户消息末尾的 `chatModeHint`（`---\n[Mode: …]`），
+            // 模式说明已迁入 system prompt，旧后缀会造成混杂信号。
+            if (1..17).contains(&current) && self.table_exists("messages")? {
+                self.strip_legacy_chat_mode_hints()
+                    .context("strip legacy chatModeHint from user messages")?;
+            }
             self.stamp_schema_version()?;
         }
         // 版本已到也要自愈缺列，避免「stamp=14 但列缺失」的半迁移库。
@@ -139,6 +145,57 @@ impl SessionStore {
         if self.table_exists("sessions")? && !self.column_exists("sessions", "pinned_at")? {
             self.conn
                 .execute("ALTER TABLE sessions ADD COLUMN pinned_at REAL", [])?;
+        }
+        Ok(())
+    }
+
+    /// 剥离用户消息末尾遗留的 `\n\n---\n[Mode: …]`（旧 `chatModeHint`）。
+    ///
+    /// UPDATE 会触发 FTS 同步；仅改写带该后缀的 user 行。
+    pub(crate) fn strip_legacy_chat_mode_hints(&self) -> Result<()> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, content, compressed_content FROM messages
+             WHERE role = 'user'
+               AND (
+                 content LIKE '%' || char(10) || char(10) || '---' || char(10) || '[Mode: %'
+                 OR compressed_content LIKE '%' || char(10) || char(10) || '---' || char(10) || '[Mode: %'
+               )",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
+
+        let mut updated = 0usize;
+        for (id, content, compressed) in rows {
+            let new_content = content
+                .as_deref()
+                .and_then(strip_legacy_chat_mode_hint)
+                .or_else(|| content.clone());
+            let new_compressed = compressed
+                .as_deref()
+                .and_then(strip_legacy_chat_mode_hint)
+                .or_else(|| compressed.clone());
+            if new_content == content && new_compressed == compressed {
+                continue;
+            }
+            self.conn.execute(
+                "UPDATE messages SET content = ?1, compressed_content = ?2 WHERE id = ?3",
+                params![new_content, new_compressed, id],
+            )?;
+            updated += 1;
+        }
+        if updated > 0 {
+            tracing::info!(
+                updated,
+                "stripped legacy chatModeHint suffixes from user messages"
+            );
         }
         Ok(())
     }
@@ -298,5 +355,50 @@ impl SessionStore {
             })
             .optional()?;
         Ok(version.unwrap_or(0))
+    }
+}
+
+/// 去掉用户消息末尾旧版 `chatModeHint`（`\n\n---\n[Mode: Agent|Plan|Ask|MultiTask]…`）。
+///
+/// 无匹配时返回 `None`（调用方保留原文）。不触碰同形态的 Agent 创建提示等其它 `---` 段。
+pub(crate) fn strip_legacy_chat_mode_hint(content: &str) -> Option<String> {
+    const MARKER: &str = "\n\n---\n[Mode: ";
+    let idx = content.rfind(MARKER)?;
+    let rest = &content[idx + MARKER.len()..];
+    let mode_ok = rest.starts_with("Agent]")
+        || rest.starts_with("Plan]")
+        || rest.starts_with("Ask]")
+        || rest.starts_with("MultiTask]");
+    if !mode_ok {
+        return None;
+    }
+    Some(content[..idx].to_string())
+}
+
+#[cfg(test)]
+mod strip_hint_tests {
+    use super::strip_legacy_chat_mode_hint;
+
+    #[test]
+    fn strips_agent_plan_ask_multitask_suffix() {
+        for mode in ["Agent", "Plan", "Ask", "MultiTask"] {
+            let raw = format!("hello world\n\n---\n[Mode: {mode}] tools enabled blah");
+            assert_eq!(
+                strip_legacy_chat_mode_hint(&raw).as_deref(),
+                Some("hello world"),
+                "mode={mode}"
+            );
+        }
+    }
+
+    #[test]
+    fn leaves_unrelated_separator_alone() {
+        let raw = "body\n\n---\n创建 Agent 提示（非 Mode）";
+        assert_eq!(strip_legacy_chat_mode_hint(raw), None);
+    }
+
+    #[test]
+    fn leaves_clean_user_text_alone() {
+        assert_eq!(strip_legacy_chat_mode_hint("just a question"), None);
     }
 }

@@ -560,7 +560,10 @@ RunFinished {
 
 映射 gRPC → emit。
 
-- [ ] **Step 2: `chat` invoke 增加 `resumeJson?: string` 传入 `ChatRequest.resume_json`**
+- [ ] **Step 2: `start_chat` 经 `StartChatRequest` 传 `resumeJson?: string` → `ChatRequest.resume_json`**
+
+> 现行调用：`invoke("start_chat", { request: { content, provider, model, resumeJson, … } })`。  
+> **不**再支持扁平顶层字段；无双路径兼容。
 
 - [ ] **Step 3: `chat_control`：`resume` 与 `stream_resume` 均映射到流恢复；文档注释标明勿用于 interrupt**
 
@@ -663,7 +666,8 @@ Props：`operations`, `disabled`, `onAction(name, context)`。
 
 Confirm：`approve`→`interrupt_resume` payload `{"approved":true}`；`deny`→`{"approved":false}`。  
 Clarify：选项按钮 → `{"value":"..."}`。  
-然后 `invoke("start_chat" | 现有 chat, { resumeJson })`。
+然后 `invoke("interrupt_resume", { sessionId, resumeJson })`（HITL 续跑；**不要**再调扁平 `start_chat`）。  
+新开聊：`invoke("start_chat", { request: { …, resumeJson? } })`。
 
 - [ ] **Step 6: Commit**
 
