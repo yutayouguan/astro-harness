@@ -717,19 +717,16 @@
   border: 0;
 }
 
-html[data-theme="dark"] .insights-seg,
-html.dark .insights-seg {
+html[data-theme="dark"] .insights-seg{
   background: color-mix(in srgb, var(--glass-panel, rgba(20, 20, 24, 0.7)) 88%, transparent);
 }
 
-html[data-theme="dark"] .insights-seg-item.active,
-html.dark .insights-seg-item.active {
+html[data-theme="dark"] .insights-seg-item.active{
   background: color-mix(in srgb, var(--tone-soft) 70%, rgba(255, 255, 255, 0.08));
   color: color-mix(in srgb, var(--tone) 40%, #fff);
 }
 
-html[data-theme="dark"] .insights-kpi--primary,
-html.dark .insights-kpi--primary {
+html[data-theme="dark"] .insights-kpi--primary{
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.06), transparent),
     color-mix(in srgb, var(--tone-soft) 45%, rgba(20, 20, 24, 0.55));
@@ -738,34 +735,25 @@ html.dark .insights-kpi--primary {
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-html[data-theme="dark"] .insights-kpi,
-html.dark .insights-kpi {
+html[data-theme="dark"] .insights-kpi{
   box-shadow:
     0 2px 10px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 html[data-theme="dark"] .insights-chart,
-html.dark .insights-chart,
 html[data-theme="dark"] .insights-rank,
-html.dark .insights-rank,
 html[data-theme="dark"] .insights-collab-list-panel,
-html.dark .insights-collab-list-panel,
 html[data-theme="dark"] .insights-collab-steps-panel,
-html.dark .insights-collab-steps-panel,
 html[data-theme="dark"] .insights-collab-graph-panel,
-html.dark .insights-collab-graph-panel,
 html[data-theme="dark"] .insights-trace-list-panel,
-html.dark .insights-trace-list-panel,
-html[data-theme="dark"] .insights-trace-chain-panel,
-html.dark .insights-trace-chain-panel {
+html[data-theme="dark"] .insights-trace-chain-panel{
   box-shadow:
     0 2px 10px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-html[data-theme="dark"] .insights-unpriced,
-html.dark .insights-unpriced {
+html[data-theme="dark"] .insights-unpriced{
   --insights-warn: color-mix(in srgb, var(--tone) 55%, #fbbf24);
   --insights-warn-soft: color-mix(in srgb, var(--tone) 16%, transparent);
 }
@@ -1063,18 +1051,15 @@ html.dark .insights-unpriced {
   pointer-events: none;
 }
 
-html[data-theme="dark"] .insights-collab-node.kind-agent,
-html.dark .insights-collab-node.kind-agent {
+html[data-theme="dark"] .insights-collab-node.kind-agent{
   fill: color-mix(in srgb, var(--tone) 35%, rgba(20, 20, 24, 0.9));
 }
 
-html[data-theme="dark"] .insights-collab-node.kind-role,
-html.dark .insights-collab-node.kind-role {
+html[data-theme="dark"] .insights-collab-node.kind-role{
   fill: color-mix(in srgb, var(--ink-mute) 25%, rgba(20, 20, 24, 0.9));
 }
 
-html[data-theme="dark"] .insights-collab-label,
-html.dark .insights-collab-label {
+html[data-theme="dark"] .insights-collab-label{
   fill: var(--ink);
 }
 

@@ -27,6 +27,14 @@ html[data-theme="dark"] {
       --ink-1: var(--ink);
       --ink-2: var(--ink-soft);
   --text-muted: var(--ink-mute);
+  /* 语义别名：兼容旧选择器，避免 var(--surface) 等静默失效 */
+  --bg: var(--bg1);
+  --bg-base: var(--bg0);
+  --surface: var(--glass-panel);
+  --panel: var(--glass-panel);
+  --border: var(--glass-edge);
+  --text: var(--ink);
+  --muted: var(--ink-mute);
   --accent: #c084fc;
   --accent-2: #60a5fa;
   --pink: #f472b6;
@@ -159,6 +167,14 @@ html[data-theme="light"] {
   --ink-1: var(--ink);
     --ink-2: var(--ink-soft);
     --text-muted: var(--ink-mute);
+  /* 语义别名：与暗色同一套名字，组件无需再写 theme 分支 */
+  --bg: var(--bg1);
+  --bg-base: var(--bg0);
+  --surface: var(--glass-panel);
+  --panel: var(--glass-panel);
+  --border: var(--glass-edge);
+  --text: var(--ink);
+  --muted: var(--ink-mute);
   --accent: #6366f1;
   --accent-2: #3b82f6;
   --pink: #ec4899;

@@ -170,13 +170,13 @@ html[data-theme="dark"] .msg-timeline-line {
 
 .a2ui-surface {
   margin: 0 0 10px;
-  --a2ui-glass-bg: color-mix(in srgb, var(--panel, var(--bg)) 72%, transparent);
+  --a2ui-glass-bg: color-mix(in srgb, var(--panel) 72%, transparent);
   --a2ui-glass-border: color-mix(in srgb, var(--ink) 14%, transparent);
   --a2ui-glass-blur: 14px;
   --a2ui-glass-shadow: 0 8px 28px color-mix(in srgb, var(--ink) 12%, transparent);
   --a2ui-glass-fill: color-mix(in srgb, var(--ink) 5%, transparent);
-  --a2ui-accent-fill: color-mix(in srgb, var(--accent, #3b82f6) 22%, transparent);
-  --a2ui-accent-border: color-mix(in srgb, var(--accent, #3b82f6) 42%, transparent);
+  --a2ui-accent-fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  --a2ui-accent-border: color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
 html[data-theme="dark"] .a2ui-surface {

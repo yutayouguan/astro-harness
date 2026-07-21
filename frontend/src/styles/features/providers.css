@@ -1541,58 +1541,58 @@ a.providers-meta-chip.is-link:hover {
 }
 
 .providers-cap-pill.vision {
-  color: #16a34a;
-  background: color-mix(in srgb, #16a34a 14%, transparent);
-  border-color: color-mix(in srgb, #16a34a 22%, transparent);
+  color: var(--tone-green);
+  background: color-mix(in srgb, var(--tone-green) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-green) 22%, transparent);
 }
 
 .providers-cap-pill.web {
-  color: #2563eb;
-  background: color-mix(in srgb, #2563eb 14%, transparent);
-  border-color: color-mix(in srgb, #2563eb 22%, transparent);
+  color: var(--tone-blue);
+  background: color-mix(in srgb, var(--tone-blue) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-blue) 22%, transparent);
 }
 
 .providers-cap-pill.reasoning {
-  color: #7c3aed;
-  background: color-mix(in srgb, #7c3aed 14%, transparent);
-  border-color: color-mix(in srgb, #7c3aed 22%, transparent);
+  color: var(--tone-purple);
+  background: color-mix(in srgb, var(--tone-purple) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-purple) 22%, transparent);
 }
 
 .providers-cap-pill.tools {
-  color: #ea580c;
-  background: color-mix(in srgb, #ea580c 14%, transparent);
-  border-color: color-mix(in srgb, #ea580c 22%, transparent);
+  color: var(--tone-orange);
+  background: color-mix(in srgb, var(--tone-orange) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-orange) 22%, transparent);
 }
 
 .providers-cap-pill.file {
-  color: #0d9488;
-  background: color-mix(in srgb, #0d9488 14%, transparent);
-  border-color: color-mix(in srgb, #0d9488 22%, transparent);
+  color: var(--tone-teal);
+  background: color-mix(in srgb, var(--tone-teal) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-teal) 22%, transparent);
 }
 
 .providers-cap-pill.audio-in,
 .providers-cap-pill.audio-gen {
-  color: #db2777;
-  background: color-mix(in srgb, #db2777 14%, transparent);
-  border-color: color-mix(in srgb, #db2777 22%, transparent);
+  color: var(--tone-pink);
+  background: color-mix(in srgb, var(--tone-pink) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-pink) 22%, transparent);
 }
 
 .providers-cap-pill.image-gen {
-  color: #0891b2;
-  background: color-mix(in srgb, #0891b2 14%, transparent);
-  border-color: color-mix(in srgb, #0891b2 22%, transparent);
+  color: var(--tone-cyan);
+  background: color-mix(in srgb, var(--tone-cyan) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-cyan) 22%, transparent);
 }
 
 .providers-cap-pill.video-gen {
-  color: #4f46e5;
-  background: color-mix(in srgb, #4f46e5 14%, transparent);
-  border-color: color-mix(in srgb, #4f46e5 22%, transparent);
+  color: var(--tone-indigo);
+  background: color-mix(in srgb, var(--tone-indigo) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-indigo) 22%, transparent);
 }
 
 .providers-cap-pill.music-gen {
-  color: #c026d3;
-  background: color-mix(in srgb, #c026d3 14%, transparent);
-  border-color: color-mix(in srgb, #c026d3 22%, transparent);
+  color: var(--tone-twilight);
+  background: color-mix(in srgb, var(--tone-twilight) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone-twilight) 22%, transparent);
 }
 
 .providers-model-detail .providers-model-caps {
@@ -1791,49 +1791,49 @@ a.providers-meta-chip.is-link:hover {
 }
 
 .providers-cap.vision {
-  color: #16a34a;
-  background: color-mix(in srgb, #16a34a 16%, transparent);
+  color: var(--tone-green);
+  background: color-mix(in srgb, var(--tone-green) 16%, transparent);
 }
 
 .providers-cap.web {
-  color: #2563eb;
-  background: color-mix(in srgb, #2563eb 16%, transparent);
+  color: var(--tone-blue);
+  background: color-mix(in srgb, var(--tone-blue) 16%, transparent);
 }
 
 .providers-cap.reasoning {
-  color: #7c3aed;
-  background: color-mix(in srgb, #7c3aed 16%, transparent);
+  color: var(--tone-purple);
+  background: color-mix(in srgb, var(--tone-purple) 16%, transparent);
 }
 
 .providers-cap.tools {
-  color: #ea580c;
-  background: color-mix(in srgb, #ea580c 16%, transparent);
+  color: var(--tone-orange);
+  background: color-mix(in srgb, var(--tone-orange) 16%, transparent);
 }
 
 .providers-cap.file {
-  color: #0f766e;
-  background: color-mix(in srgb, #0f766e 16%, transparent);
+  color: var(--tone-teal);
+  background: color-mix(in srgb, var(--tone-teal) 16%, transparent);
 }
 
 .providers-cap.audio-in,
 .providers-cap.audio-gen {
-  color: #db2777;
-  background: color-mix(in srgb, #db2777 16%, transparent);
+  color: var(--tone-pink);
+  background: color-mix(in srgb, var(--tone-pink) 16%, transparent);
 }
 
 .providers-cap.image-gen {
-  color: #0891b2;
-  background: color-mix(in srgb, #0891b2 16%, transparent);
+  color: var(--tone-cyan);
+  background: color-mix(in srgb, var(--tone-cyan) 16%, transparent);
 }
 
 .providers-cap.video-gen {
-  color: #4f46e5;
-  background: color-mix(in srgb, #4f46e5 16%, transparent);
+  color: var(--tone-indigo);
+  background: color-mix(in srgb, var(--tone-indigo) 16%, transparent);
 }
 
 .providers-cap.music-gen {
-  color: #c026d3;
-  background: color-mix(in srgb, #c026d3 16%, transparent);
+  color: var(--tone-twilight);
+  background: color-mix(in srgb, var(--tone-twilight) 16%, transparent);
 }
 
 .providers-model-actions {
@@ -1847,38 +1847,6 @@ a.providers-meta-chip.is-link:hover {
   width: 32px;
   height: 32px;
   border-radius: 10px;
-}
-
-html[data-theme="dark"] .providers-cap.vision {
-  color: #4ade80;
-}
-
-html[data-theme="dark"] .providers-cap.web {
-  color: #60a5fa;
-}
-
-html[data-theme="dark"] .providers-cap.reasoning {
-  color: #a78bfa;
-}
-
-html[data-theme="dark"] .providers-cap.tools {
-  color: #fb923c;
-}
-
-html[data-theme="dark"] .providers-cap.vision {
-  color: #4ade80;
-}
-
-html[data-theme="dark"] .providers-cap.web {
-  color: #60a5fa;
-}
-
-html[data-theme="dark"] .providers-cap.reasoning {
-  color: #a78bfa;
-}
-
-html[data-theme="dark"] .providers-cap.tools {
-  color: #fb923c;
 }
 
 html[data-theme="dark"] .providers-list-item {

@@ -2026,18 +2026,13 @@ html[data-theme="dark"] .mem-empty-chat {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  color: #0f172a;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-}
-
-html[data-theme="dark"] .mem-cta {
-  color: #0b1020;
-  background: #f8fafc;
+  color: #fff;
+  background: var(--tone-green);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--tone-green) 28%, transparent);
 }
 
 .mem-cta:hover {
-  filter: brightness(0.97);
+  filter: brightness(1.06);
 }
 
 .mem-editor-fill {
