@@ -354,6 +354,48 @@ async fn present_ui_emits_valid_astro_ui() {
 }
 
 #[tokio::test]
+async fn ask_rejects_mixed_questions_and_body() {
+    let dir = TempDir::new().unwrap();
+    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let mut ctx = ToolContext {
+        memory: &mut memory,
+        sessions: &sessions,
+        memory_dir: dir.path().to_path_buf(),
+        workspace_dir: workspace,
+        project_root: None,
+        image_gen_targets: &targets,
+        providers: &providers,
+        session_id: "test".into(),
+        turn_id: None,
+        chat_api_key: String::new(),
+        chat_base_url: String::new(),
+        chat_provider: String::new(),
+        chat_model: String::new(),
+        chat_targets: vec![],
+        delegate_runner: None,
+        async_spawner: None,
+        orchestration_spawner: None,
+        hook_bus: None,
+    };
+
+    let err = tools::dispatch_tool(
+        |_| true,
+        &mut ctx,
+        "ask",
+        &serde_json::json!({
+            "questions": [{ "question": "Which?" }],
+            "body": "approve?"
+        }),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("mix") || err.to_string().contains("mode="),
+        "{err}"
+    );
+}
+
+#[tokio::test]
 async fn register_all_includes_ask() {
     let mut registry = ToolRegistry::new();
     register_all(&mut registry);

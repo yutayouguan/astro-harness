@@ -3,13 +3,13 @@
 //! 合并原 `clarify` + `confirm`。返回带 `astro_hitl` 标记的 A2UI JSON，由 streaming
 //! 层经 `HitlGate` 同回合 park；用户提交后写入标准 tool result 并续跑（不结束 run）。
 //!
-//! - `mode=question`（默认）：`questions` 数组 → 叠层 Tab 向导 `ClarifyWizard`；
+//! - `mode=question`（默认推断）：`questions` 数组 → 叠层 Tab 向导；
 //!   reason `input_required`，response schema `{answers, value}`。
 //! - `mode=confirm`：`title`+`body` → 批准/拒绝卡；reason `confirmation`，
 //!   response schema `{approved}`。
 //!
-//! 保留两套 reason / response schema 以对齐 streaming park、interrupt 校验与
-//! 危险命令网关；`ask` 仅作为统一入口按 mode 分派。
+//! 模式解析：显式 `mode` 优先；省略时仅允许「纯 questions」或「纯 title+body」，
+//! 混传或两者皆空则报错（不再静默猜测）。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,16 @@ use uuid::Uuid;
 use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
+
+/// `ask` 模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum AskMode {
+    /// 澄清 / 收集输入（ClarifyWizard）。
+    Question,
+    /// 敏感操作批准 / 拒绝。
+    Confirm,
+}
 
 /// One question step in `question` mode.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -35,17 +45,16 @@ pub struct AskQuestion {
 /// Arguments for the `ask` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AskArgs {
-    /// Mode: `question` (ask the user, default) | `confirm` (approve a sensitive action).
-    /// If omitted: `questions` → question; only `body` → confirm.
+    /// `question` | `confirm`. Omit only when args are unambiguous (see tool description).
     #[serde(default)]
-    pub mode: Option<String>,
+    pub mode: Option<AskMode>,
     /// Question mode: one or more steps. Each may include `options`; empty options = free text.
     #[serde(default)]
     pub questions: Vec<AskQuestion>,
-    /// Title: wizard title (question) or confirmation card title (confirm).
+    /// Wizard title (question) or confirmation card title (confirm).
     #[serde(default)]
     pub title: Option<String>,
-    /// Confirm mode: body text for the confirmation card.
+    /// Confirm mode only: body text for the confirmation card.
     #[serde(default)]
     pub body: Option<String>,
 }
@@ -55,10 +64,13 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "ask".to_string(),
         toolset: "ask".to_string(),
-        description: "Ask the user before proceeding. Two modes: \
-(1) question — set `questions` (1+ steps; each may include `options`, empty options show a free-text field) to clarify unclear requirements; \
-(2) confirm — set mode=\"confirm\" with `title`+`body` to request approval of a sensitive or irreversible action. \
-Prefer asking over guessing when requirements are ambiguous or key info is missing."
+        description: "Ask the user before proceeding (same-turn HITL park). \
+Modes: question — `questions` (1+ steps; optional `options`, empty = free text) to clarify requirements; \
+confirm — mode=\"confirm\" with `title`+`body` to approve a sensitive/irreversible action. \
+Omit mode only when unambiguous: questions only → question; title+body only → confirm. \
+Do not mix questions with body. \
+Not for Agent↔Plan switching (use request_mode_switch) or GPS/city for local weather/nearby (use request_user_location). \
+Prefer asking over guessing when requirements are ambiguous."
             .to_string(),
         schema: schema_for_args::<AskArgs>(),
         check_fn: None,
@@ -81,22 +93,67 @@ fn normalize_options(raw: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-/// 按 `mode`（或参数推断）分派到 question / confirm 载荷构建。
+fn has_usable_questions(questions: &[AskQuestion]) -> bool {
+    questions.iter().any(|q| !q.question.trim().is_empty())
+}
+
+fn has_body(parsed: &AskArgs) -> bool {
+    parsed
+        .body
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|s| !s.is_empty())
+}
+
+/// Resolve question vs confirm; explicit `mode` wins; omitted mode must be unambiguous.
+pub(crate) fn resolve_ask_mode(parsed: &AskArgs) -> anyhow::Result<AskMode> {
+    let has_q = has_usable_questions(&parsed.questions);
+    let has_b = has_body(parsed);
+
+    match parsed.mode {
+        Some(AskMode::Confirm) => {
+            if has_q {
+                anyhow::bail!(
+                    "ask confirm mode must not include questions; use mode=\"question\" or drop questions"
+                );
+            }
+            Ok(AskMode::Confirm)
+        }
+        Some(AskMode::Question) => {
+            if has_b {
+                anyhow::bail!(
+                    "ask question mode must not include body; use mode=\"confirm\" for approvals"
+                );
+            }
+            Ok(AskMode::Question)
+        }
+        None => {
+            if has_q && has_b {
+                anyhow::bail!(
+                    "ask: do not mix questions and body; set mode=\"question\" or mode=\"confirm\""
+                );
+            }
+            if has_q {
+                return Ok(AskMode::Question);
+            }
+            if has_b {
+                return Ok(AskMode::Confirm);
+            }
+            anyhow::bail!(
+                "ask: set mode=\"question\" with questions, or mode=\"confirm\" with title+body"
+            );
+        }
+    }
+}
+
+/// 按 `mode`（或严格推断）分派到 question / confirm 载荷构建。
 pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: AskArgs =
         serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("ask 参数无效: {e}"))?;
 
-    let mode = parsed.mode.as_deref().map(|s| s.trim().to_lowercase());
-    let is_confirm = match mode.as_deref() {
-        Some("confirm") => true,
-        Some("question") => false,
-        _ => parsed.questions.is_empty() && parsed.body.is_some(),
-    };
-
-    if is_confirm {
-        build_confirm(&parsed)
-    } else {
-        build_question(&parsed)
+    match resolve_ask_mode(&parsed)? {
+        AskMode::Confirm => build_confirm(&parsed),
+        AskMode::Question => build_question(&parsed),
     }
 }
 
@@ -189,11 +246,87 @@ fn build_question(parsed: &AskArgs) -> anyhow::Result<String> {
         "response_schema": {
             "type": "object",
             "properties": {
-                "answers": { "type": "object" },
-                "value": { "type": "string" }
+                "answers": {
+                    "type": "object",
+                    "description": "Map of step id → user answer"
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Single-step answer or multi-step summary string"
+                }
             },
             "required": ["answers", "value"]
         }
     });
     Ok(payload.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(v: serde_json::Value) -> AskArgs {
+        serde_json::from_value(v).unwrap()
+    }
+
+    #[test]
+    fn omit_mode_questions_only_is_question() {
+        let a = args(json!({
+            "questions": [{ "question": "Which env?" }]
+        }));
+        assert_eq!(resolve_ask_mode(&a).unwrap(), AskMode::Question);
+    }
+
+    #[test]
+    fn omit_mode_body_only_is_confirm() {
+        let a = args(json!({
+            "title": "Delete?",
+            "body": "Really?"
+        }));
+        assert_eq!(resolve_ask_mode(&a).unwrap(), AskMode::Confirm);
+    }
+
+    #[test]
+    fn omit_mode_mix_errors() {
+        let a = args(json!({
+            "questions": [{ "question": "x" }],
+            "body": "y"
+        }));
+        let err = resolve_ask_mode(&a).unwrap_err().to_string();
+        assert!(err.contains("mix"), "{err}");
+    }
+
+    #[test]
+    fn omit_mode_empty_errors() {
+        let a = args(json!({ "title": "only title" }));
+        let err = resolve_ask_mode(&a).unwrap_err().to_string();
+        assert!(err.contains("mode="), "{err}");
+    }
+
+    #[test]
+    fn explicit_confirm_rejects_questions() {
+        let a = args(json!({
+            "mode": "confirm",
+            "title": "t",
+            "body": "b",
+            "questions": [{ "question": "x" }]
+        }));
+        assert!(resolve_ask_mode(&a)
+            .unwrap_err()
+            .to_string()
+            .contains("confirm"));
+    }
+
+    #[test]
+    fn explicit_question_rejects_body() {
+        let a = args(json!({
+            "mode": "question",
+            "questions": [{ "question": "x" }],
+            "body": "b"
+        }));
+        assert!(resolve_ask_mode(&a)
+            .unwrap_err()
+            .to_string()
+            .contains("question"));
+    }
 }

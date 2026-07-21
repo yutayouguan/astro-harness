@@ -18,7 +18,7 @@ const DEFAULT_MESSAGE: &str =
 /// Arguments for `request_user_location`.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct RequestUserLocationArgs {
-    /// Why location is needed (optional; uses a default message when empty).
+    /// Why location is needed (optional; default message when empty).
     #[serde(default)]
     pub message: String,
 }
@@ -28,7 +28,11 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "request_user_location".to_string(),
         toolset: "request_user_location".to_string(),
-        description: "Request the user's location before local queries (weather, nearby places). Never assume a city.".to_string(),
+        description: "Request the user's location before local queries (weather, nearby places). \
+Never assume a city. Prefer this over ask(question) for location — resume is one of: \
+(1) latitude+longitude (+optional accuracy_m), (2) city string, (3) denied=true. \
+Not for mode switching (request_mode_switch) or generic confirmations (ask)."
+            .to_string(),
         schema: schema_for_args::<RequestUserLocationArgs>(),
         check_fn: None,
         icon: "map-pin",
@@ -68,13 +72,29 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
         "operations": operations,
         "response_schema": {
             "type": "object",
+            "description": "Exactly one shape: coords, city, or denied",
             "properties": {
                 "latitude": { "type": "number" },
                 "longitude": { "type": "number" },
                 "accuracy_m": { "type": "number" },
                 "city": { "type": "string" },
                 "denied": { "type": "boolean" }
-            }
+            },
+            "oneOf": [
+                {
+                    "required": ["latitude", "longitude"],
+                    "description": "Geolocation granted"
+                },
+                {
+                    "required": ["city"],
+                    "description": "User typed a city"
+                },
+                {
+                    "required": ["denied"],
+                    "properties": { "denied": { "const": true } },
+                    "description": "User denied location"
+                }
+            ]
         }
     });
     Ok(payload.to_string())

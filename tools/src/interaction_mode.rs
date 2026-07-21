@@ -56,8 +56,8 @@ Read-only: file_ops(read/list/search), web_search, task_plan. No writes, termina
             }
             Self::Ask => {
                 "# Interaction mode: Ask (read-only Q&A) / 交互模式：Ask（只读问答）\n\
-Explain and retrieve; do not modify files or run side effects. To implement, call request_mode_switch(to=\"agent\", …).\n\
-以解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 request_mode_switch(to=\"agent\", …)。"
+Explain and retrieve; do not modify files or run side effects. To implement, call request_mode_switch(to=\"agent\", reason=…, summary=plan).\n\
+以解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 request_mode_switch(to=\"agent\", reason=…, summary=计划摘要)。"
             }
             Self::Multitask => {
                 "# Interaction mode: MultiTask / 交互模式：MultiTask\n\
