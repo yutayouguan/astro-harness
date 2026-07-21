@@ -160,11 +160,7 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     let unified: TeamArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("team run 参数无效: {e}"))?;
     let parsed = TeamRunArgs {
-        team_id: unified
-            .team_id
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
+        team_id: unified.team_id.unwrap_or_default().trim().to_string(),
         goal: unified.goal.unwrap_or_default().trim().to_string(),
         mode: unified.mode,
         member_id: unified.member_id,

@@ -54,10 +54,11 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "persona_create".to_string(),
         toolset: "persona".to_string(),
-        description: "Create a durable Agent persona with persistent workspace (MEMORY/IDENTITY/SOUL). \
+        description:
+            "Create a durable Agent persona with persistent workspace (MEMORY/IDENTITY/SOUL). \
 FORBIDDEN for in-turn task splitting—use subagent (parallel one-shot) or pipeline (serial roles). \
 Prefer after loading the create-agent skill."
-            .to_string(),
+                .to_string(),
         schema: schema_for_args::<PersonaCreateArgs>(),
         check_fn: None,
         icon: "bot",

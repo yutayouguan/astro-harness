@@ -205,9 +205,10 @@ fn resolve_steps(
         return Ok(out);
     }
 
-    let agents = parsed.agents.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("pipeline run 需要 steps 或 agents")
-    })?;
+    let agents = parsed
+        .agents
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("pipeline run 需要 steps 或 agents"))?;
     if agents.is_empty() || agents.len() > MAX_STEPS {
         anyhow::bail!("pipeline agents 长度须为 1..={MAX_STEPS}");
     }

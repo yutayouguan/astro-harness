@@ -73,11 +73,12 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "subagent".to_string(),
         toolset: "subagent".to_string(),
-        description: "Spawn ephemeral in-turn sub-agent(s) for parallel one-shot work (isolated sessions). \
+        description:
+            "Spawn ephemeral in-turn sub-agent(s) for parallel one-shot work (isolated sessions). \
 action=run (default, sync) | async (returns task_id) | status | collect | cancel. \
 NOT for durable personas (use persona_create) and NOT for serial multi-role flows (use pipeline). \
 Pass full context; children have no parent history."
-            .to_string(),
+                .to_string(),
         schema: schema_for_args::<SubagentArgs>(),
         check_fn: None,
         icon: "send",
@@ -110,7 +111,9 @@ async fn handle(
         "status" => dispatch_status(args),
         "collect" => dispatch_collect(args).await,
         "cancel" => dispatch_cancel(args),
-        other => anyhow::bail!("未知 subagent action: {other}（应为 run|async|status|collect|cancel）"),
+        other => {
+            anyhow::bail!("未知 subagent action: {other}（应为 run|async|status|collect|cancel）")
+        }
     }
 }
 
