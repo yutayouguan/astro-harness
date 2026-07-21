@@ -35,7 +35,6 @@ pub enum MemoryTarget {
     User,
 }
 
-
 /// 单一 `memory` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MemoryArgs {

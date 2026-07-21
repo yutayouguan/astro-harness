@@ -1115,7 +1115,9 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
     while let Some(event) = stream.message().await.map_err(|e| e.to_string())? {
         match event.payload {
             Some(proto::chat_event::Payload::Token(token)) => {
-                let _ = p.app.emit(p.event_name, ChatStreamEvent::Token { content: token });
+                let _ = p
+                    .app
+                    .emit(p.event_name, ChatStreamEvent::Token { content: token });
             }
             Some(proto::chat_event::Payload::Reasoning(reasoning)) => {
                 let _ = p.app.emit(

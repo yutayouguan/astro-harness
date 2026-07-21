@@ -303,9 +303,10 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
     let targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
     if targets.preferred.provider.kind.requires_api_key()
         && targets.preferred.api_key.trim().is_empty()
-        && targets.fallback.as_ref().is_none_or(|fb| {
-            fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
-        })
+        && targets
+            .fallback
+            .as_ref()
+            .is_none_or(|fb| fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty())
     {
         return Err("未配置 API Key，无法运行进化".into());
     }
@@ -670,10 +671,7 @@ async fn score_grounded_examples(
     (verdict_scores, judgements)
 }
 
-/// 客观适应度：匹配评测集时用 optimize 分区 grounded 评分；否则泛化 judge。
-///
-/// 返回结构化 `FitnessResult`（对标 GEPA 的 `(score, side_info)`）。
-/// `None` 表示预算耗尽或 judge 失败（fail-closed）。
+/// [`fitness_score`] 入参打包。
 struct FitnessScoreArgs<'a> {
     targets: &'a AuxiliaryTargets,
     cand: &'a SkillCandidate,
@@ -686,6 +684,10 @@ struct FitnessScoreArgs<'a> {
     generation: u32,
 }
 
+/// 客观适应度：匹配评测集时用 optimize 分区 grounded 评分；否则泛化 judge。
+///
+/// 返回结构化 `FitnessResult`（对标 GEPA 的 `(score, side_info)`）。
+/// `None` 表示预算耗尽或 judge 失败（fail-closed）。
 async fn fitness_score(a: FitnessScoreArgs<'_>) -> Option<FitnessResult> {
     let all_matched = examples_for_skill(a.evalset, &a.cand.skill_id);
     if all_matched.is_empty() {
@@ -804,9 +806,10 @@ pub async fn run_evolution_search(
     let refl_targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
     if refl_targets.preferred.provider.kind.requires_api_key()
         && refl_targets.preferred.api_key.trim().is_empty()
-        && refl_targets.fallback.as_ref().is_none_or(|fb| {
-            fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty()
-        })
+        && refl_targets
+            .fallback
+            .as_ref()
+            .is_none_or(|fb| fb.provider.kind.requires_api_key() && fb.api_key.trim().is_empty())
     {
         return Err("未配置 API Key，无法运行进化".into());
     }
@@ -853,10 +856,9 @@ pub async fn run_evolution_search(
 
     // 定向且模型未产出：注入一条 patch 占位种子（空 patch 会被后续门禁/变异消化）
     // 更稳妥：若无种子，用当前技能内容作为 NewSkill 基线不可行；直接报错让用户重试。
-    if seeds.is_empty()
-        && focus_skill.is_some() {
-            return Err("定向技能未产出候选；可先积累 DecisionLog 失败信号后再试".into());
-        }
+    if seeds.is_empty() && focus_skill.is_some() {
+        return Err("定向技能未产出候选；可先积累 DecisionLog 失败信号后再试".into());
+    }
 
     let evalset = list_examples(&base);
     let generations = cfg.search.generations.max(1);

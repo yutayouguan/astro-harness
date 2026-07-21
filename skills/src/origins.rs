@@ -244,7 +244,7 @@ pub async fn fill_origin_remote_baseline(agent_id: Option<&str>, folder: &str) -
 mod tests {
     use super::*;
     use crate::models::SkillOriginRecord;
-        use tempfile::tempdir;
+    use tempfile::tempdir;
 
     static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 

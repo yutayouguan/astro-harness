@@ -20,7 +20,6 @@ pub enum TeamMode {
     Tasks,
 }
 
-
 impl TeamMode {
     pub fn parse(s: &str) -> Result<Self> {
         match s.trim().to_ascii_lowercase().as_str() {

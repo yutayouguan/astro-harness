@@ -20,8 +20,7 @@ pub struct HookPayload {
 }
 
 /// 钩子返回值；观察型应返回 [`Continue`](Self::Continue)。
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum HookOutcome {
     #[default]
     Continue,
@@ -42,7 +41,6 @@ pub enum HookOutcome {
     /// `pre_verify`：继续本轮并注入提示。
     KeepGoing(String),
 }
-
 
 impl HookOutcome {
     pub fn is_continue(&self) -> bool {

@@ -986,8 +986,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
 
-    let captured_pre: CapturedApproval =
-        Arc::new(std::sync::Mutex::new(None));
+    let captured_pre: CapturedApproval = Arc::new(std::sync::Mutex::new(None));
     let captured_pre2 = Arc::clone(&captured_pre);
     agent
         .hook_bus()
@@ -996,8 +995,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
                 Some((payload.message.clone(), payload.detail.clone()));
             hooks::HookOutcome::Continue
         });
-    let captured_post: CapturedApproval =
-        Arc::new(std::sync::Mutex::new(None));
+    let captured_post: CapturedApproval = Arc::new(std::sync::Mutex::new(None));
     let captured_post2 = Arc::clone(&captured_post);
     agent
         .hook_bus()

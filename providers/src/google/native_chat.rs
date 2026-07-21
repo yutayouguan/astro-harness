@@ -156,9 +156,7 @@ fn try_append_fn_response(contents: &mut [Value], part: Value) -> bool {
             && last
                 .get("parts")
                 .and_then(|p| p.as_array())
-                .is_some_and(|arr| {
-                    arr.iter().any(|p| p.get("functionResponse").is_some())
-                })
+                .is_some_and(|arr| arr.iter().any(|p| p.get("functionResponse").is_some()))
     });
     if is_fn_resp_turn {
         if let Some(last) = contents.last_mut() {

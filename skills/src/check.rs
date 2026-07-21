@@ -135,7 +135,7 @@ mod tests {
     use super::*;
     use crate::models::SkillUpdateStatus;
     use crate::origins::{load_origins, upsert_origin};
-        use tempfile::tempdir;
+    use tempfile::tempdir;
 
     static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 

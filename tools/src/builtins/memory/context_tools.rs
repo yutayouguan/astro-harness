@@ -33,7 +33,6 @@ pub enum SearchScope {
     All,
 }
 
-
 /// `search_context` 参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SearchContextArgs {

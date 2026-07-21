@@ -1,8 +1,8 @@
 //! 异步委派参数与 registry 冒烟测试。
 
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 use tools::{ToolContext, ToolRegistry};
 

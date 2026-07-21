@@ -152,11 +152,6 @@ pub(crate) async fn finish_usage_and_done(
     finish_success(tx, run_id).await;
 }
 
-/// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
-///
-/// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
-/// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
-/// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
     pub session: Arc<Mutex<AgentLoop>>,
@@ -169,6 +164,11 @@ pub struct MultiTurnStreamArgs {
     pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
 }
 
+/// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
+///
+/// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
+/// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
+/// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
 pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
     let MultiTurnStreamArgs {
         session,

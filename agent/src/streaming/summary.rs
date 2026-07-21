@@ -26,7 +26,7 @@ pub(crate) enum SummaryOutcome {
     Failed(String),
 }
 
-/// 预算耗尽后：注入总结提示，再发一轮 **无 tools** 的 completion（对齐 Hermes）。
+/// [`run_max_iterations_summary`] 入参打包。
 pub(crate) struct MaxIterationsSummaryArgs<'a> {
     pub session: &'a Arc<Mutex<AgentLoop>>,
     pub streamer: &'a ProviderStreamer,
@@ -41,10 +41,8 @@ pub(crate) struct MaxIterationsSummaryArgs<'a> {
     pub max_total: usize,
 }
 
-pub(crate) async fn run_max_iterations_summary(
-    a: MaxIterationsSummaryArgs<'_>,
-) -> SummaryOutcome {
-
+/// 预算耗尽后：注入总结提示，再发一轮 **无 tools** 的 completion（对齐 Hermes）。
+pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) -> SummaryOutcome {
     let MaxIterationsSummaryArgs {
         session,
         streamer,

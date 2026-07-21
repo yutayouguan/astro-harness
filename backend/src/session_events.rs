@@ -132,11 +132,13 @@ pub fn to_proto(msg: &SessionEventMsg) -> SessionEvent {
             pending_count: pend.pending_count,
             reason: pend.reason.clone(),
         }))
-    } else { msg.session_metadata_changed.as_ref().map(|meta| Payload::SessionMetadataChanged(
-            SessionMetadataChangedEvent {
+    } else {
+        msg.session_metadata_changed.as_ref().map(|meta| {
+            Payload::SessionMetadataChanged(SessionMetadataChangedEvent {
                 title: meta.title.clone(),
-            },
-        )) };
+            })
+        })
+    };
 
     SessionEvent {
         session_id: msg.session_id.clone().unwrap_or_default(),
