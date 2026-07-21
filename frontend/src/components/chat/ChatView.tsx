@@ -2491,8 +2491,10 @@ export default function ChatView({
                 <span
                   className="composer-cost-chip"
                   title={estimateCostLabel.full}
+                  aria-label={estimateCostLabel.short}
                 >
-                  {estimateCostLabel.short}
+                  <Coins size={13} strokeWidth={2} aria-hidden />
+                  <span>{estimateCostLabel.cost}</span>
                 </span>
               ) : null}
               <div className="composer-context-wrap" ref={contextWrapRef}>
