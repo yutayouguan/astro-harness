@@ -309,26 +309,21 @@ Agno 的 Team 是一等运行时，而不是简单「Agent 调 Agent」。核心
 | `tasks` | Leader 维护共享任务列表，循环执行直到目标完成 |
 
 ### Astro 现状
-Astro 已有可复用积木，但还没有 Agno 式一等 Team 抽象：
+Astro 已有可复用积木，工具入口已压成无歧义的两维 + 持久人设：
 
-- `delegate/` + `agent/src/exec/delegate.rs`：回合内并行瞬时子 Agent，子 Agent 独立 session，摘要回父
-- `orchestration/` + `agent/src/exec/orchestration.rs`：异步串行流水线，SQLite 状态机，可续跑
-- `tools/src/builtins/agents/multi_agent.rs`：多 Agent 工具入口，薄封装编排
-- `home` 的持久 Agent：可作为 Team 成员池
+- **工具 `subagent`**（crate `delegate/` + `agent/src/exec/delegate.rs`）：回合内并行瞬时子 Agent，独立 session，摘要回父
+- **工具 `pipeline`**（crate `orchestration/` + `agent/src/exec/orchestration.rs`）：异步串行流水线；`action=team_*` 管理持久 Team
+- **工具 `persona_create`**：新建长期助手 workspace（禁止用来拆当前任务）
 - Insights 协作图：已有 handoff 可观测基础
 
-缺口是「Team 配置 + 模式策略 + 团队状态」：
-
-| Team 概念 | Astro 现状 | 缺口 |
-|-----------|------------|------|
-| Team 实体 | 一次性工具参数 / 编排 DB 行 | 无持久 `TeamDefinition` |
-| Leader | 当前聊天主 Agent 隐式承担 | 无 Team 级 leader 策略 |
-| Members | 临时角色或已有 `agent_id` | 无成员表与路由约束 |
-| Modes | 并行 delegate / 串行 orchestration | 无 `coordinate` / `route` / `broadcast` 门面 |
-| 共享状态 | 显式 context / step output 接力 | 无 Team 级 session_state / blackboard |
+| 决策 | 用哪个工具 |
+|------|------------|
+| 并行临时子任务 | `subagent` |
+| 串行多角色 / 持久 Team | `pipeline` |
+| 新建可切换长期助手 | `persona_create` |
 
 ### 可借鉴
-1. **先做 Team 门面，不重写编排栈**：用现有 delegate/orchestration/create_agent 作为执行底座。
+1. **先做 Team 门面，不重写编排栈**：用现有 subagent / pipeline / persona_create 作为执行底座。
 2. **模式先落前三个**：
    - `coordinate`：Leader 可委派 Team 成员，随后继续合成。
    - `route`：委派一个成员后直接返回成员结果。
@@ -338,14 +333,14 @@ Astro 已有可复用积木，但还没有 Agno 式一等 Team 抽象：
 
 ### 已落地（本轮）
 - `orchestration::team`：`TeamDefinition` / `TeamMode` / `~/.astro/teams/{id}.json`
-- 工具：`team_list` / `team_create` / `team_run`（toolset=`multi_agent`）
+- 工具：`pipeline`（`action=run|status|team_list|team_create|team_run`）
 - `team_run` 模式映射：
-  - `coordinate`：对全部成员发起 delegate，Leader 继续合成
+  - `coordinate`：对全部成员发起 subagent，Leader 继续合成
   - `route`：单成员直出（多成员时需 `member_id`），`respond_directly=true`
-  - `broadcast`：对全部成员并行 delegate
+  - `broadcast`：对全部成员并行 subagent
   - `tasks`：串行执行共享任务板；可选 `tasks: string[]`（按成员 round-robin），缺省则每成员一步；前序结果写入 Shared Task Board 传给后续
 - `ToolEntry.exclusive_access` + `ToolRegistry::any_exclusive_access` 替代硬编码 `is_exclusive_tool`（后者 deprecated）
-- 成员执行仍走现有 delegate runtime；成员 `agent_id` 会写入定义，但本轮执行层先按角色/说明作为临时子 Agent 跑
+- 成员执行仍走现有 subagent runtime；成员 `agent_id` 会写入定义，但本轮执行层先按角色/说明作为临时子 Agent 跑
 
 ---
 
@@ -353,7 +348,7 @@ Astro 已有可复用积木，但还没有 Agno 式一等 Team 抽象：
 
 ```text
 P0  Mid-run tool 结果压缩（Agno CompressionManager）—— 与 compact_and_split 正交，改动面可控
-P0.5 TeamDefinition + coordinate/route/broadcast 门面（复用 delegate/orchestration）
+P0.5 TeamDefinition + coordinate/route/broadcast 门面（复用 subagent/pipeline）
 P1  ContextSource trait + budget（协议化现有 Static/Dynamic/FTS）
 P2  DecisionLog + Propose 写入（挂审批，扩展入梦/review）
 P3  Knowledge Content DB + FTS（可选再 embedding）

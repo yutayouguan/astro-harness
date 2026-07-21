@@ -1,21 +1,23 @@
-//! 多 Agent 串行编排：单一 `orchestrate`（action=run|status）。
+//! 多 Agent 串行流水线：单一 `pipeline`（action=run|status|team_*）。
 //!
 //! `run` 落库后经 spawn hook 后台执行；立即返回 `orchestration_id`。
 //! 真正执行在 `agent::exec::orchestration`，本模块不依赖 `agent` crate。
-//! 便捷形状：`agents: [role…]`（原 multi_agent）展开为临时角色 steps。
+//! 便捷形状：`agents: [role…]` 展开为临时角色 steps。
+//! 持久 Team：`team_list` / `team_create` / `team_run`（实现见 `team` 模块）。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::builtins::agents::team::{self, TeamMemberArgs};
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
 const MAX_STEPS: usize = 8;
 
-/// One step in an orchestration.
+/// One step in a pipeline.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct OrchestrationStepArgs {
+pub struct PipelineStepArgs {
     /// Role name (display and temporary role injection).
     pub role: String,
     pub prompt: String,
@@ -24,36 +26,60 @@ pub struct OrchestrationStepArgs {
     pub agent_id: Option<String>,
 }
 
-/// Arguments for the unified `orchestrate` tool.
+/// Arguments for the unified `pipeline` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct OrchestrateArgs {
-    /// `run` (default) | `status`.
+pub struct PipelineArgs {
+    /// `run` (default) | `status` | `team_list` | `team_create` | `team_run`.
     #[serde(default)]
     pub action: Option<String>,
-    /// Overall goal (run).
+    /// Overall goal (run / team_run).
     #[serde(default)]
     pub goal: Option<String>,
     /// Serial steps (1–8); preferred for run.
     #[serde(default)]
-    pub steps: Option<Vec<OrchestrationStepArgs>>,
-    /// Convenience: role name list → temporary steps (run); mutually exclusive with steps when both set prefer steps.
+    pub steps: Option<Vec<PipelineStepArgs>>,
+    /// Convenience: role name list → temporary steps (run).
     #[serde(default)]
     pub agents: Option<Vec<String>>,
     /// Orchestration id (status).
     #[serde(default)]
     pub orchestration_id: Option<String>,
+    /// Team id (team_list detail / team_run).
+    #[serde(default)]
+    pub team_id: Option<String>,
+    /// New team id (team_create).
+    #[serde(default)]
+    pub id: Option<String>,
+    /// New team display name (team_create).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Team mode: coordinate|route|broadcast|tasks.
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub leader_agent_id: Option<String>,
+    #[serde(default)]
+    pub members: Option<Vec<TeamMemberArgs>>,
+    #[serde(default)]
+    pub member_id: Option<String>,
+    #[serde(default)]
+    pub context: Option<String>,
+    #[serde(default)]
+    pub tasks: Option<Vec<String>>,
 }
 
-/// 向注册表登记 `orchestrate`。
+/// 向注册表登记 `pipeline`。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "orchestrate".to_string(),
-        toolset: "orchestrate".to_string(),
-        description: "Async serial multi-agent orchestration. \
-action=run (default): goal + steps[{role,prompt,agent_id?}] or convenience agents=[role…]. \
-Returns orchestration_id; action=status to poll. Use delegate for parallel one-shot subtasks."
+        name: "pipeline".to_string(),
+        toolset: "pipeline".to_string(),
+        description: "Serial multi-agent pipeline (async). \
+action=run (default): goal + steps[{role,prompt,agent_id?}] or agents=[role…]; returns orchestration_id. \
+action=status: poll by orchestration_id. \
+Persisted teams: team_list | team_create | team_run (team_id+goal; mode=coordinate|route|broadcast|tasks). \
+Use subagent for parallel one-shot tasks; persona_create for durable assistants—not this tool."
             .to_string(),
-        schema: schema_for_args::<OrchestrateArgs>(),
+        schema: schema_for_args::<PipelineArgs>(),
         check_fn: None,
         icon: "git-branch",
         ..ToolEntry::lifecycle_defaults()
@@ -62,7 +88,7 @@ Returns orchestration_id; action=status to poll. Use delegate for parallel one-s
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["orchestrate"],
+    names: ["pipeline"],
     sync_named: handle,
 }
 
@@ -81,8 +107,23 @@ fn handle(
     match action.as_str() {
         "run" => dispatch_run(ctx, args),
         "status" => dispatch_status(args),
-        other => anyhow::bail!("未知 orchestrate action: {other}（应为 run|status）"),
+        "team_list" => team::dispatch_list(ctx, &team_args_from_pipeline(args, "list")),
+        "team_create" => team::dispatch_create(ctx, &team_args_from_pipeline(args, "create")),
+        "team_run" => team::dispatch_run(ctx, &team_args_from_pipeline(args, "run")),
+        other => anyhow::bail!(
+            "未知 pipeline action: {other}（应为 run|status|team_list|team_create|team_run）"
+        ),
     }
+}
+
+fn team_args_from_pipeline(args: &serde_json::Value, action: &str) -> serde_json::Value {
+    let mut out = args.clone();
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert("action".into(), serde_json::json!(action));
+    } else {
+        out = serde_json::json!({ "action": action });
+    }
+    out
 }
 
 /// 创建编排并触发后台执行；立即返回 queued JSON。
@@ -94,11 +135,11 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
             home::effective_max_spawn_depth()
         );
     }
-    let parsed: OrchestrateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("orchestrate run 参数无效: {e}"))?;
+    let parsed: PipelineArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("pipeline run 参数无效: {e}"))?;
     let goal = parsed.goal.as_deref().unwrap_or("").trim();
     if goal.is_empty() {
-        anyhow::bail!("orchestrate run 需要非空 goal");
+        anyhow::bail!("pipeline run 需要非空 goal");
     }
 
     let steps = resolve_steps(&parsed, goal)?;
@@ -139,17 +180,17 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
 }
 
 fn resolve_steps(
-    parsed: &OrchestrateArgs,
+    parsed: &PipelineArgs,
     goal: &str,
 ) -> anyhow::Result<Vec<orchestration::NewOrchestrationStep>> {
     if let Some(steps) = &parsed.steps {
         if steps.is_empty() || steps.len() > MAX_STEPS {
-            anyhow::bail!("orchestrate steps 长度须为 1..={MAX_STEPS}");
+            anyhow::bail!("pipeline steps 长度须为 1..={MAX_STEPS}");
         }
         let mut out = Vec::with_capacity(steps.len());
         for (i, step) in steps.iter().enumerate() {
             if step.role.trim().is_empty() || step.prompt.trim().is_empty() {
-                anyhow::bail!("orchestrate steps[{i}] 需要非空 role 与 prompt");
+                anyhow::bail!("pipeline steps[{i}] 需要非空 role 与 prompt");
             }
             out.push(orchestration::NewOrchestrationStep {
                 role: step.role.trim().to_string(),
@@ -165,16 +206,16 @@ fn resolve_steps(
     }
 
     let agents = parsed.agents.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("orchestrate run 需要 steps 或 agents")
+        anyhow::anyhow!("pipeline run 需要 steps 或 agents")
     })?;
     if agents.is_empty() || agents.len() > MAX_STEPS {
-        anyhow::bail!("orchestrate agents 长度须为 1..={MAX_STEPS}");
+        anyhow::bail!("pipeline agents 长度须为 1..={MAX_STEPS}");
     }
     let mut out = Vec::with_capacity(agents.len());
     for (i, role) in agents.iter().enumerate() {
         let role = role.trim();
         if role.is_empty() {
-            anyhow::bail!("orchestrate agents[{i}] 不能为空");
+            anyhow::bail!("pipeline agents[{i}] 不能为空");
         }
         out.push(orchestration::NewOrchestrationStep {
             role: role.to_string(),
@@ -187,11 +228,11 @@ fn resolve_steps(
 
 /// 查询编排与步骤状态。
 pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: OrchestrateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("orchestrate status 参数无效: {e}"))?;
+    let parsed: PipelineArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("pipeline status 参数无效: {e}"))?;
     let id = parsed.orchestration_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("orchestrate status 需要 orchestration_id");
+        anyhow::bail!("pipeline status 需要 orchestration_id");
     }
 
     let db = orchestration::OrchestrationDb::open_default()?;
@@ -242,12 +283,21 @@ mod tests {
 
     #[test]
     fn agents_expand_to_steps() {
-        let parsed = OrchestrateArgs {
+        let parsed = PipelineArgs {
             action: None,
             goal: Some("写周报".into()),
             steps: None,
             agents: Some(vec!["writer".into(), "editor".into()]),
             orchestration_id: None,
+            team_id: None,
+            id: None,
+            name: None,
+            mode: None,
+            leader_agent_id: None,
+            members: None,
+            member_id: None,
+            context: None,
+            tasks: None,
         };
         let steps = resolve_steps(&parsed, "写周报").unwrap();
         assert_eq!(steps.len(), 2);
@@ -256,12 +306,21 @@ mod tests {
 
     #[test]
     fn reject_empty_agents() {
-        let parsed = OrchestrateArgs {
+        let parsed = PipelineArgs {
             action: None,
             goal: Some("g".into()),
             steps: None,
             agents: Some(vec![]),
             orchestration_id: None,
+            team_id: None,
+            id: None,
+            name: None,
+            mode: None,
+            leader_agent_id: None,
+            members: None,
+            member_id: None,
+            context: None,
+            tasks: None,
         };
         assert!(resolve_steps(&parsed, "g").is_err());
     }

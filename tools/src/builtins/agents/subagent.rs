@@ -1,7 +1,8 @@
-//! 委派工具：同步 / 异步真 spawn 子 Agent（单一 `delegate` + `action`）。
+//! 临时子 Agent：同步 / 异步真 spawn（单一 `subagent` + `action`）。
 //!
-//! 经 `memory` OnceLock 回调执行；未注册 runner/spawner 时返回错误。
-//! 用于回合内短暂子任务（不建持久 Agent）；新建长期助手请用 `agent_create`。
+//! 经 `delegate` crate 回调执行；未注册 runner/spawner 时返回错误。
+//! 用于回合内短暂并行子任务（不建持久 Agent）；串行多角色用 `pipeline`；
+//! 新建长期助手请用 `persona_create`（禁止用本工具「创建人设」）。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -31,9 +32,9 @@ pub struct DelegateTaskArgs {
     pub model: Option<String>,
 }
 
-/// Arguments for the unified `delegate` tool.
+/// Arguments for the unified `subagent` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct DelegateArgs {
+pub struct SubagentArgs {
     /// `run` (default) | `async` | `status` | `collect` | `cancel`.
     #[serde(default)]
     pub action: Option<String>,
@@ -67,17 +68,17 @@ pub struct DelegateArgs {
     pub timeout_secs: Option<u64>,
 }
 
-/// 向注册表登记 `delegate`。
+/// 向注册表登记 `subagent`。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "delegate".to_string(),
-        toolset: "delegate".to_string(),
-        description: "Spawn ephemeral sub-agent(s) in-turn (parallel, isolated). \
+        name: "subagent".to_string(),
+        toolset: "subagent".to_string(),
+        description: "Spawn ephemeral in-turn sub-agent(s) for parallel one-shot work (isolated sessions). \
 action=run (default, sync) | async (returns task_id) | status | collect | cancel. \
-No durable persona—use agent_create. Prefer orchestrate for serial pipelines. \
+NOT for durable personas (use persona_create) and NOT for serial multi-role flows (use pipeline). \
 Pass full context; children have no parent history."
             .to_string(),
-        schema: schema_for_args::<DelegateArgs>(),
+        schema: schema_for_args::<SubagentArgs>(),
         check_fn: None,
         icon: "send",
         ..ToolEntry::lifecycle_defaults().exclusive()
@@ -86,7 +87,7 @@ Pass full context; children have no parent history."
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["delegate"],
+    names: ["subagent"],
     async_named: handle,
 }
 
@@ -109,7 +110,7 @@ async fn handle(
         "status" => dispatch_status(args),
         "collect" => dispatch_collect(args).await,
         "cancel" => dispatch_cancel(args),
-        other => anyhow::bail!("未知 delegate action: {other}（应为 run|async|status|collect|cancel）"),
+        other => anyhow::bail!("未知 subagent action: {other}（应为 run|async|status|collect|cancel）"),
     }
 }
 
@@ -140,11 +141,11 @@ pub fn dispatch_async(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 
 /// 查询异步委派状态。
 pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: DelegateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("delegate status 参数无效: {e}"))?;
+    let parsed: SubagentArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("subagent status 参数无效: {e}"))?;
     let id = parsed.task_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("delegate status 需要非空 task_id");
+        anyhow::bail!("subagent status 需要非空 task_id");
     }
     let rec = delegate::async_delegate_status(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(record_to_json(&rec, true))
@@ -152,11 +153,11 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
 
 /// 等待异步委派完成。
 pub async fn dispatch_collect(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: DelegateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("delegate collect 参数无效: {e}"))?;
+    let parsed: SubagentArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("subagent collect 参数无效: {e}"))?;
     let id = parsed.task_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("delegate collect 需要非空 task_id");
+        anyhow::bail!("subagent collect 需要非空 task_id");
     }
     let timeout = parsed.timeout_secs.unwrap_or(600).clamp(1, 3600);
     let rec = delegate::async_delegate_collect(id, timeout)
@@ -167,11 +168,11 @@ pub async fn dispatch_collect(args: &serde_json::Value) -> anyhow::Result<String
 
 /// 取消异步委派。
 pub fn dispatch_cancel(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: DelegateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("delegate cancel 参数无效: {e}"))?;
+    let parsed: SubagentArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("subagent cancel 参数无效: {e}"))?;
     let id = parsed.task_id.as_deref().unwrap_or("").trim();
     if id.is_empty() {
-        anyhow::bail!("delegate cancel 需要非空 task_id");
+        anyhow::bail!("subagent cancel 需要非空 task_id");
     }
     let rec = delegate::async_delegate_cancel(id).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(record_to_json(&rec, true))
@@ -188,8 +189,8 @@ fn build_run_request(
             home::effective_max_spawn_depth()
         );
     }
-    let parsed: DelegateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("delegate 参数无效: {e}"))?;
+    let parsed: SubagentArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("subagent 参数无效: {e}"))?;
     let task_specs = resolve_tasks(&parsed)?;
     let cfg = hooks::config::load_config_or_default();
     let max_concurrent = parsed
@@ -215,7 +216,7 @@ fn build_run_request(
     })
 }
 
-fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<delegate::DelegateTaskSpec>> {
+fn resolve_tasks(parsed: &SubagentArgs) -> anyhow::Result<Vec<delegate::DelegateTaskSpec>> {
     if let Some(tasks) = &parsed.tasks {
         if tasks.is_empty() {
             anyhow::bail!("tasks 不能为空");
@@ -248,7 +249,7 @@ fn resolve_tasks(parsed: &DelegateArgs) -> anyhow::Result<Vec<delegate::Delegate
 
     let goal = parsed.goal.as_deref().unwrap_or("").trim();
     if goal.is_empty() {
-        anyhow::bail!("delegate 需要 goal 或 tasks");
+        anyhow::bail!("subagent 需要 goal 或 tasks");
     }
     Ok(vec![delegate::DelegateTaskSpec {
         goal: goal.to_string(),
@@ -298,7 +299,7 @@ mod resolve_tests {
 
     #[test]
     fn parses_role_toolsets_max_iterations() {
-        let parsed = DelegateArgs {
+        let parsed = SubagentArgs {
             action: None,
             goal: Some("do it".into()),
             context: Some("ctx".into()),

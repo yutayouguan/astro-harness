@@ -1,15 +1,11 @@
-//! Agno-inspired Team tools.
+//! Persisted Team 执行逻辑（经 `pipeline` 的 `team_*` action 调用）。
 //!
-//! The first slice keeps execution on top of the existing delegate runtime:
-//! members are constrained by a persisted TeamDefinition, while route/broadcast
-//! are mapped to one or many delegate tasks.
+//! 成员受 `TeamDefinition` 约束；route/broadcast/tasks 映射到 `delegate` crate 子任务。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::context::ToolContext;
-use crate::registry::{ToolEntry, ToolRegistry};
-use crate::schema::schema_for_args;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TeamMemberArgs {
@@ -40,25 +36,12 @@ struct TeamRunArgs {
     pub tasks: Option<Vec<String>>,
 }
 
-pub fn register(registry: &mut ToolRegistry) {
-    registry.register(ToolEntry {
-        name: "team".to_string(),
-        toolset: "orchestrate".to_string(),
-        description: "Manage persisted Teams. action=list|create|run. \
-list: optional team_id; create: id+name+members; run: team_id+goal (mode=coordinate|route|broadcast|tasks)."
-            .to_string(),
-        schema: schema_for_args::<TeamArgs>(),
-        check_fn: None,
-        icon: "users",
-        ..ToolEntry::lifecycle_defaults()
-    });
-}
-
-/// Unified args for `team` (fields used depend on action).
+/// Internal args for team_list / team_create / team_run (via `pipeline`).
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TeamArgs {
-    /// `list` | `create` | `run`.
-    pub action: String,
+    /// `list` | `create` | `run`（由 pipeline 注入）。
+    #[serde(default)]
+    pub action: Option<String>,
     #[serde(default)]
     pub team_id: Option<String>,
     #[serde(default)]
@@ -470,33 +453,6 @@ fn member_context(
         ctx.push('\n');
     }
     ctx
-}
-
-/// 本模块统一入口：按 `action` 分发。
-fn handle(
-    ctx: &mut ToolContext<'_>,
-    _name: &str,
-    args: &serde_json::Value,
-) -> anyhow::Result<String> {
-    let action = args
-        .get("action")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("team 需要 action=list|create|run"))?
-        .to_ascii_lowercase();
-    match action.as_str() {
-        "list" => dispatch_list(ctx, args),
-        "create" => dispatch_create(ctx, args),
-        "run" => dispatch_run(ctx, args),
-        other => anyhow::bail!("未知 team action: {other}（应为 list|create|run）"),
-    }
-}
-
-crate::submit_builtin_tool! {
-    register: register,
-    names: ["team"],
-    sync_named: handle,
 }
 
 #[cfg(test)]

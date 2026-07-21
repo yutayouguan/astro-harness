@@ -1,9 +1,9 @@
-//! orchestrate 转调 orchestration 冒烟测试。
+//! pipeline 转调 orchestration 冒烟测试。
 
 use tools::ToolContext;
 
 #[tokio::test]
-async fn orchestrate_queues_orchestration() {
+async fn pipeline_queues_orchestration() {
     let dir = tempfile::tempdir().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -36,7 +36,7 @@ async fn orchestrate_queues_orchestration() {
     let out = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "orchestrate",
+        "pipeline",
         &serde_json::json!({
             "goal": "ship feature",
             "agents": ["researcher", "writer"]
@@ -62,7 +62,7 @@ async fn orchestrate_queues_orchestration() {
 }
 
 #[tokio::test]
-async fn orchestrate_rejects_empty_agents() {
+async fn pipeline_rejects_empty_agents() {
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
@@ -92,7 +92,7 @@ async fn orchestrate_rejects_empty_agents() {
     let err = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "orchestrate",
+        "pipeline",
         &serde_json::json!({"goal": "x", "agents": []}),
     )
     .await

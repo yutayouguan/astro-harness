@@ -99,7 +99,7 @@ pub async fn run_delegate(req: DelegateRunRequest) -> anyhow::Result<String> {
         .iter()
         .any(|t| t.get("status").and_then(|s| s.as_str()) == Some("ok"));
     Ok(serde_json::json!({
-        "delegate": true,
+        "subagent": true,
         "parent_session_id": parent_session_id,
         "status": if any_ok { "done" } else { "failed" },
         "tasks": tasks,
@@ -275,10 +275,10 @@ async fn run_one_child_inner(
 
     let role_note = match role {
         DelegateRole::Leaf => {
-            "You are a leaf sub-agent: do NOT call delegate / orchestration tools; complete the goal yourself."
+            "You are a leaf sub-agent: do NOT call subagent / pipeline tools; complete the goal yourself."
         }
         DelegateRole::Orchestrator => {
-            "You are an orchestrator sub-agent: you MAY spawn leaf workers via delegate when independent subtasks parallelize well. Prefer leaf role for your children."
+            "You are an orchestrator sub-agent: you MAY spawn leaf workers via subagent when independent subtasks parallelize well. Prefer leaf role for your children."
         }
     };
 
@@ -295,7 +295,7 @@ async fn run_one_child_inner(
     };
 
     let result = async {
-        let turn_result = agent.run_turn(&user_message, "delegate").await?;
+        let turn_result = agent.run_turn(&user_message, "subagent").await?;
         let output = match turn_result {
             TurnResult::Finished(message) => message,
             TurnResult::Continue { system_prompt, .. } => {
@@ -375,14 +375,14 @@ fn apply_nested_agent_tool_strips_with_role(
     for name in [
         "memory",
         "search",
-        "agent_create",
+        "persona_create",
         "ask_user",
     ] {
         registry.unregister(name);
     }
     let strip_delegate = role == DelegateRole::Leaf || depth_ctx.is_leaf();
     if strip_delegate {
-        for name in ["delegate", "orchestrate"] {
+        for name in ["subagent", "pipeline"] {
             registry.unregister(name);
         }
     }
@@ -393,7 +393,9 @@ pub fn normalize_toolset_name(name: &str) -> String {
     match name.trim().to_ascii_lowercase().as_str() {
         "file" | "files" => "file_ops".into(),
         "web" | "websearch" => "web_search".into(),
-        "delegation" | "delegate_task" => "delegate".into(),
+        "delegation" | "delegate_task" | "delegate" => "subagent".into(),
+        "orchestrate" | "orchestration" | "multi_agent" => "pipeline".into(),
+        "agent_create" | "create_agent" | "persona" => "persona".into(),
         "code" | "code_execution" | "code-execution" => "code_exec".into(),
         other => other.to_string(),
     }
@@ -652,10 +654,10 @@ mod strip_tests {
             .iter()
             .map(|t| t.name.as_str())
             .collect();
-        assert!(!names.contains(&"delegate"));
-        assert!(!names.contains(&"orchestrate"));
+        assert!(!names.contains(&"subagent"));
+        assert!(!names.contains(&"pipeline"));
         assert!(!names.contains(&"ask_user"));
-        assert!(!names.contains(&"agent_create"));
+        assert!(!names.contains(&"persona_create"));
         assert!(!names.contains(&"memory"));
     }
 
@@ -676,8 +678,8 @@ mod strip_tests {
             .iter()
             .map(|t| t.name.as_str())
             .collect();
-        assert!(names.contains(&"delegate"));
-        assert!(names.contains(&"orchestrate"));
+        assert!(names.contains(&"subagent"));
+        assert!(names.contains(&"pipeline"));
         assert!(!names.contains(&"memory"));
         assert!(!names.contains(&"ask_user"));
     }
@@ -773,7 +775,7 @@ mod subagent_lifecycle_tests {
             AgentLoop::new(AgentConfig::with_defaults(mem_dir.path().to_path_buf())).unwrap();
         agent.set_hook_bus(Arc::clone(&bus));
         let _ = agent
-            .finalize_tool_call_result("delegate", &serde_json::json!({}), raw_result)
+            .finalize_tool_call_result("subagent", &serde_json::json!({}), raw_result)
             .await;
 
         let entries = log.lock().unwrap().clone();

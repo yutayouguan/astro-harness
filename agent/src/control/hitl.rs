@@ -283,7 +283,7 @@ pub fn is_interactive_tool(name: &str) -> bool {
 pub fn is_exclusive_tool(name: &str) -> bool {
     matches!(
         name,
-        "memory" | "pin_context" | "agent_create" | "delegate"
+        "memory" | "pin_context" | "persona_create" | "subagent"
     )
 }
 
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     #[allow(deprecated)]
     fn delegate_is_exclusive() {
-        assert!(is_exclusive_tool("delegate"));
+        assert!(is_exclusive_tool("subagent"));
         assert!(!is_exclusive_tool("web_search"));
         assert!(is_interactive_tool("ask_user"));
         assert!(!is_interactive_tool("switch_mode"));

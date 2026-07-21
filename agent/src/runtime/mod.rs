@@ -1426,7 +1426,7 @@ impl AgentLoop {
                 ..Default::default()
             },
         );
-        if name == "delegate" || name == "orchestrate" {
+        if name == "subagent" || name == "pipeline" {
             self.fire_subagent_stop_from_delegate_result(&raw_result)
                 .await;
         }
@@ -1797,7 +1797,7 @@ mod tests {
         });
 
         let raw_result = serde_json::json!({
-            "delegate": true,
+            "subagent": true,
             "status": "done",
             "tasks": [
                 {
@@ -1809,7 +1809,7 @@ mod tests {
         .to_string();
         let final_result = agent
             .finalize_tool_call_result(
-                "delegate",
+                "subagent",
                 &serde_json::json!({"ignored": true}),
                 raw_result,
             )

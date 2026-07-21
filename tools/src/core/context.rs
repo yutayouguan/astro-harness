@@ -133,7 +133,7 @@ impl ImageGenTargets {
 
 /// 单次工具调用的共享运行时上下文，由 AgentLoop 在每次 `dispatch_tool` 前构造。
 pub struct ToolContext<'a> {
-    /// 当前 Agent 的记忆管理器；`memory_*` 与 `agent_create`（激活时）会修改此字段。
+    /// 当前 Agent 的记忆管理器；`memory_*` 与 `persona_create`（激活时）会修改此字段。
     pub memory: &'a mut MemoryManager,
     /// 共享会话库（`{memory_dir}/sessions`），供 `search` 使用。
     pub sessions: &'a SessionStore,

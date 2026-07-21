@@ -48,7 +48,7 @@ async fn delegate_requires_goal() {
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
     let args = serde_json::json!({});
-    let err = tools::dispatch_tool(|_| true, &mut ctx, "delegate", &args)
+    let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args)
         .await
         .unwrap_err();
     let msg = err.to_string();
@@ -68,7 +68,7 @@ async fn delegate_goal_hits_runner_or_key() {
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
     let args = serde_json::json!({"goal": "do thing"});
-    let err = tools::dispatch_tool(|_| true, &mut ctx, "delegate", &args)
+    let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args)
         .await
         .unwrap_err();
     assert!(
@@ -103,7 +103,7 @@ async fn delegate_async_status_collect_cancel_flow() {
     let started = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate",
+        "subagent",
         &serde_json::json!({"action": "async", "goal": "async job"}),
     )
     .await
@@ -115,7 +115,7 @@ async fn delegate_async_status_collect_cancel_flow() {
     let status = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate",
+        "subagent",
         &serde_json::json!({"action": "status", "task_id": task_id}),
     )
     .await
@@ -129,7 +129,7 @@ async fn delegate_async_status_collect_cancel_flow() {
     let collected = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate",
+        "subagent",
         &serde_json::json!({"action": "collect", "task_id": task_id, "timeout_secs": 5}),
     )
     .await
@@ -162,7 +162,7 @@ async fn delegate_async_cancel_marks_cancelled() {
     let started = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate",
+        "subagent",
         &serde_json::json!({"action": "async", "goal": "cancel me"}),
     )
     .await
@@ -175,7 +175,7 @@ async fn delegate_async_cancel_marks_cancelled() {
     let cancelled = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "delegate",
+        "subagent",
         &serde_json::json!({"action": "cancel", "task_id": task_id}),
     )
     .await
@@ -203,7 +203,7 @@ async fn delegate_blocked_at_max_spawn_depth() {
         tools::dispatch_tool(
             |_| true,
             &mut ctx,
-            "delegate",
+            "subagent",
             &serde_json::json!({"goal": "nope"}),
         )
         .await

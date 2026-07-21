@@ -29,8 +29,8 @@ Astro 提供与常见 Agent 生命周期对齐的 **三套 Hook**：
 | `transform_terminal_output` | `terminal` 原始 stdout/stderr 后、64KiB 截断前 | `ReplaceText` |
 | `transform_tool_result` | 任意工具返回后、`post_tool_call` 前 | `ReplaceText` |
 | `post_tool_call` | 工具返回后（已应用 `transform_tool_result`） | 观察 |
-| `subagent_start` | `delegate` 子 Agent 构造完、真正 `run` 前（每个 child 一次，父侧） | 观察 |
-| `subagent_stop` | `delegate` 子 Agent 结束后（父侧） | 观察 |
+| `subagent_start` | `subagent` 子 Agent 构造完、真正 `run` 前（每个 child 一次，父侧） | 观察 |
+| `subagent_stop` | `subagent` 子 Agent 结束后（父侧） | 观察 |
 | `pre_verify` | 无工具调用的最终回复，且本轮执行过写盘工具（`terminal`；`file_ops` 的 `write`/`append`/`delete`/`mkdir`） | `KeepGoing(msg)` |
 | `transform_llm_output` | 最终 assistant 文本定稿、`post_llm_call` 前 | `ReplaceText` |
 | `post_llm_call` | 该 turn 成功结束后（已应用 `transform_llm_output`） | 观察 |
@@ -49,7 +49,7 @@ on_session_start（仅首轮）
       → pre_tool_call
           → (pre_approval_request → 降级/park → post_approval_response)?  ← 仅危险命令走 Ask
           → 工具执行 → transform_terminal_output?（仅 terminal，截断前） → transform_tool_result → post_tool_call
-          → (subagent_start … subagent_stop)?                             ← 仅 delegate/multi_agent
+          → (subagent_start … subagent_stop)?                             ← 仅 subagent / pipeline
   → pre_verify?（本轮写盘 && attempt < 2 时才 fire；KeepGoing 则注入提示、再进 API 循环）
   → transform_llm_output → post_llm_call
   → on_session_end

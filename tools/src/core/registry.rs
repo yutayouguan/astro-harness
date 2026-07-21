@@ -416,9 +416,9 @@ mod tests {
     fn registered_builtins_mark_exclusive_tools() {
         let mut reg = ToolRegistry::new();
         crate::register_all(&mut reg);
-        assert!(reg.any_exclusive_access(&["memory", "delegate", "pin_context"]));
+        assert!(reg.any_exclusive_access(&["memory", "subagent", "pin_context"]));
         assert!(!reg.any_exclusive_access(&["web_search"]));
-        assert!(reg.get("agent_create").unwrap().exclusive_access);
+        assert!(reg.get("persona_create").unwrap().exclusive_access);
         assert!(reg.get("search").is_some());
         assert!(reg.get("pin_context").unwrap().exclusive_access);
     }

@@ -51,9 +51,10 @@ export type AgentToolId =
   | "ask_user"
   | "switch_mode"
   | "present"
-  | "delegate"
+  | "subagent"
   | "cron"
-  | "orchestrate"
+  | "pipeline"
+  | "persona"
   | "todo";
 
 type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
@@ -369,9 +370,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "delegate",
-    titleKey: "agentTools.delegate.title",
-    descKey: "agentTools.delegate.desc",
+    id: "subagent",
+    titleKey: "agentTools.subagent.title",
+    descKey: "agentTools.subagent.desc",
     Icon: IconDelegate,
     tone: "sky",
     params: [
@@ -399,9 +400,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "orchestrate",
-    titleKey: "agentTools.orchestrate.title",
-    descKey: "agentTools.orchestrate.desc",
+    id: "pipeline",
+    titleKey: "agentTools.pipeline.title",
+    descKey: "agentTools.pipeline.desc",
     Icon: IconMultiAgent,
     tone: "fuchsia",
     params: [
@@ -410,6 +411,25 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "steps", type: "array", optional: true },
       { name: "agents", type: "array", optional: true },
       { name: "orchestration_id", type: "string", optional: true },
+      { name: "team_id", type: "string", optional: true },
+      { name: "id", type: "string", optional: true },
+      { name: "name", type: "string", optional: true },
+      { name: "members", type: "array", optional: true },
+      { name: "mode", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "persona",
+    titleKey: "agentTools.persona.title",
+    descKey: "agentTools.persona.desc",
+    Icon: IconMultiAgent,
+    tone: "indigo",
+    params: [
+      { name: "name", type: "string" },
+      { name: "id", type: "string", optional: true },
+      { name: "activate", type: "boolean", optional: true },
+      { name: "inherit_config", type: "boolean", optional: true },
+      { name: "profile", type: "object", optional: true },
     ],
   },
   {

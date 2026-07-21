@@ -207,7 +207,7 @@ mod inventory_register_tests {
             "video_gen",
             "tts",
             "ask_user",
-            "delegate",
+            "subagent",
             "present",
             "file_ops",
             "web_search",

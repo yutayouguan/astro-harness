@@ -1,7 +1,9 @@
-//! 创建 Agent 工具：在 `~/.astro` 下新建独立记忆空间与配置。
+//! 创建持久人设：在 `~/.astro` 下新建独立记忆空间与配置。
 //!
 //! 调用 [`home::create_agent_with_profile`]；若 `activate`，会就地更新
 //! [`ToolContext`] 的工作区与 MemoryManager，便于后续 file_ops 写到新空间。
+//!
+//! **禁止**用本工具拆解当前回合任务——并行临时子任务用 `subagent`，串行多角色用 `pipeline`。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -29,9 +31,9 @@ pub struct AgentProfileArgs {
     pub preferences: Option<String>,
 }
 
-/// Arguments for the `agent_create` tool.
+/// Arguments for the `persona_create` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct AgentCreateArgs {
+pub struct PersonaCreateArgs {
     /// Display name (any language; may collide; decoupled from immutable id).
     pub name: String,
     /// Optional explicit id (advanced / tests). Default `{slug}--{hex12}` from name.
@@ -47,13 +49,16 @@ pub struct AgentCreateArgs {
     pub profile: Option<AgentProfileArgs>,
 }
 
-/// 向注册表登记 `agent_create`（归入 `orchestrate` 工具集）。
+/// 向注册表登记 `persona_create`。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "agent_create".to_string(),
-        toolset: "orchestrate".to_string(),
-        description: "Create a durable Agent persona with persistent workspace. NOT for in-turn task splitting—use delegate for ephemeral sub-agents. Prefer after loading the create-agent skill.".to_string(),
-        schema: schema_for_args::<AgentCreateArgs>(),
+        name: "persona_create".to_string(),
+        toolset: "persona".to_string(),
+        description: "Create a durable Agent persona with persistent workspace (MEMORY/IDENTITY/SOUL). \
+FORBIDDEN for in-turn task splitting—use subagent (parallel one-shot) or pipeline (serial roles). \
+Prefer after loading the create-agent skill."
+            .to_string(),
+        schema: schema_for_args::<PersonaCreateArgs>(),
         check_fn: None,
         icon: "bot",
         ..ToolEntry::lifecycle_defaults().exclusive()
@@ -62,7 +67,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["agent_create"],
+    names: ["persona_create"],
     sync_ctx: dispatch,
 }
 
@@ -76,8 +81,8 @@ fn opt_str(v: &Option<String>) -> String {
 /// # 错误
 /// 缺少 `name`、参数无效，或底层 `create_agent_with_profile` 失败。
 pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: AgentCreateArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("agent_create 参数无效: {e}"))?;
+    let parsed: PersonaCreateArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("persona_create 参数无效: {e}"))?;
     let name = parsed.name.trim();
     if name.is_empty() {
         anyhow::bail!("缺少 name 参数");

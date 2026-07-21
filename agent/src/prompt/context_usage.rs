@@ -5,11 +5,7 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
 
-const SUBAGENT_TOOLS: &[&str] = &[
-    "delegate",
-    "delegate",
-    "orchestrate",
-];
+const SUBAGENT_TOOLS: &[&str] = &["subagent", "pipeline"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContextUsageSegmentMeta {
@@ -250,7 +246,7 @@ mod tests {
             "",
             vec![ToolCall {
                 id: "c1".into(),
-                name: "delegate".into(),
+                name: "subagent".into(),
                 arguments: serde_json::json!({}),
                 signature: None,
             }],

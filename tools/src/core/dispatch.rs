@@ -42,7 +42,7 @@ pub fn builtin_handler_names() -> Vec<&'static str> {
 ///
 /// # 参数
 /// - `registry_allows`：通常传入 `registry.is_tool_allowed`，用于读取 `tools-enabled.json` 状态。
-/// - `ctx`：可变执行上下文，部分工具（如 `memory`、`agent_create`）会修改其中的 `memory` 或 `workspace_dir`。
+/// - `ctx`：可变执行上下文，部分工具（如 `memory`、`persona_create`）会修改其中的 `memory` 或 `workspace_dir`。
 ///
 /// # 约束
 /// - 未知工具名返回 `未知工具` 错误；MCP 工具不由本函数处理。

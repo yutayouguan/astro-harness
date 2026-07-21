@@ -285,7 +285,8 @@ mod tests {
         let body = fs::read_to_string(dir.path().join("skills/create-agent/SKILL.md")).unwrap();
         assert!(body.contains("create-agent"));
         assert!(body.contains("astro_bundled_rev:"));
-        assert!(body.contains("delegate"));
+        assert!(body.contains("subagent"));
+        assert!(body.contains("persona_create"));
         let aihot = fs::read_to_string(dir.path().join("skills/aihot/SKILL.md")).unwrap();
         assert!(aihot.contains("aihot.virxact.com"));
         let creative =
@@ -314,7 +315,8 @@ mod tests {
         assert!(r.installed.contains(&"create-agent".to_string()));
         let body = fs::read_to_string(dest.join("SKILL.md")).unwrap();
         assert!(bundled_rev_in(&body) >= 1);
-        assert!(body.contains("delegate"));
+        assert!(body.contains("subagent"));
+        assert!(body.contains("persona_create"));
     }
 
     #[test]

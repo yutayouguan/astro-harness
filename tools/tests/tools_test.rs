@@ -32,10 +32,9 @@ async fn register_all_includes_panel_tools() {
         "tts",
         "skills",
         "ask_user",
-        "delegate",
-        "orchestrate",
-        "agent_create",
-        "team",
+        "subagent",
+        "pipeline",
+        "persona_create",
         "todo",
     ] {
         assert!(names.contains(&expected), "missing {expected}");
