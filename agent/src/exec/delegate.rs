@@ -376,15 +376,15 @@ fn apply_nested_agent_tool_strips_with_role(
         "memory",
         "search",
         "agent_create",
-        "orchestrate",
-        "team",
         "ask_user",
     ] {
         registry.unregister(name);
     }
     let strip_delegate = role == DelegateRole::Leaf || depth_ctx.is_leaf();
     if strip_delegate {
-        registry.unregister("delegate");
+        for name in ["delegate", "orchestrate"] {
+            registry.unregister(name);
+        }
     }
 }
 
