@@ -184,7 +184,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      const nodeType = e.dataTransfer.getData("application/loop-node-type") as NodeType;
+      const nodeType = e.dataTransfer.getData("text/plain") as NodeType;
       if (!nodeType) return;
 
       const meta = NODE_REGISTRY.find((m) => m.type === nodeType);
@@ -207,6 +207,31 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       setDirty(true);
     },
     [setNodes, reactFlowInstance],
+  );
+
+  // 点击 "+" 添加节点到画布中央
+  const addNodeToCenter = useCallback(
+    (nodeType: NodeType) => {
+      const meta = NODE_REGISTRY.find((m) => m.type === nodeType);
+      if (!meta) return;
+      const center = reactFlowInstance.screenToFlowPosition({
+        x: (reactFlowWrapper.current?.clientWidth ?? 600) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().left ?? 0),
+        y: (reactFlowWrapper.current?.clientHeight ?? 400) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().top ?? 0),
+      });
+      const newId = crypto.randomUUID();
+      const offset = nodes.length * 20;
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: newId,
+          type: "loopNode",
+          position: { x: center.x + offset, y: center.y + offset },
+          data: { label: meta.label, meta, config: {}, nodeType, disabled: false },
+        },
+      ]);
+      setDirty(true);
+    },
+    [setNodes, reactFlowInstance, nodes.length],
   );
 
   const toggleCategory = (cat: string) => {
@@ -298,13 +323,21 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                           className="loop-palette-item"
                           draggable
                           onDragStart={(e) => {
-                            e.dataTransfer.setData("application/loop-node-type", meta.type);
+                            e.dataTransfer.setData("text/plain", meta.type);
                             e.dataTransfer.effectAllowed = "move";
                           }}
                         >
                           {IconComp && <IconComp size={14} />}
                           <span>{meta.label}</span>
-                          <Plus size={12} className="loop-palette-item-plus" />
+                          <button
+                            className="loop-palette-item-plus"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addNodeToCenter(meta.type);
+                            }}
+                          >
+                            <Plus size={12} />
+                          </button>
                         </div>
                       );
                     })}
@@ -316,12 +349,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         </div>
 
         {/* ── Center: Canvas ── */}
-        <div
-          className="loop-canvas-container"
-          ref={reactFlowWrapper}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-        >
+        <div className="loop-canvas-container" ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
