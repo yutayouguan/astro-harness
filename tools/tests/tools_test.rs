@@ -18,7 +18,7 @@ async fn register_all_includes_panel_tools() {
         "session_search",
         "search_context",
         "pin_context",
-        "cron_add",
+        "cron",
         "image_gen",
         "video_gen",
         "video_understand",

@@ -54,7 +54,7 @@ export type AgentToolId =
   | "request_user_location"
   | "present_ui"
   | "delegate"
-  | "scheduled"
+  | "cron"
   | "multi_agent"
   | "task_plan";
 
@@ -381,15 +381,17 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "scheduled",
-    titleKey: "agentTools.scheduled.title",
-    descKey: "agentTools.scheduled.desc",
+    id: "cron",
+    titleKey: "agentTools.cron.title",
+    descKey: "agentTools.cron.desc",
     Icon: IconScheduled,
     tone: "emerald",
     params: [
-      { name: "cron", type: "string", optional: true },
+      { name: "action", type: "string" },
       { name: "schedule", type: "string", optional: true },
-      { name: "task", type: "string" },
+      { name: "cron", type: "string", optional: true },
+      { name: "task", type: "string", optional: true },
+      { name: "id", type: "string", optional: true },
     ],
   },
   {

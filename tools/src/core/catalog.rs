@@ -304,10 +304,13 @@ mod tests {
     }
 
     #[test]
-    fn scheduled_uses_calendar_check_icon() {
+    fn cron_uses_calendar_check_icon() {
         let cat = builtin_catalog();
-        let scheduled = cat.iter().find(|c| c.id == "scheduled").expect("scheduled");
-        assert_eq!(scheduled.icon, "calendar-check");
+        let cron = cat.iter().find(|c| c.id == "cron").expect("cron");
+        assert_eq!(cron.icon, "calendar-check");
+        assert_eq!(cron.functions.len(), 1);
+        assert_eq!(cron.functions[0].name, "cron");
+        assert!(cron.functions[0].params.iter().any(|p| p.name == "action"));
     }
 
     #[test]

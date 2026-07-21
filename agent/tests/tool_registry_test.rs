@@ -51,8 +51,8 @@ fn test_enabled_map_filters_toolset() {
         ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
-        name: "cron_list".to_string(),
-        toolset: "scheduled".to_string(),
+        name: "cron".to_string(),
+        toolset: "cron".to_string(),
         description: "list".to_string(),
         schema: serde_json::json!({}),
         check_fn: None,
@@ -61,14 +61,14 @@ fn test_enabled_map_filters_toolset() {
     });
     let mut enabled = std::collections::HashMap::new();
     enabled.insert("memory".into(), false);
-    enabled.insert("scheduled".into(), true);
+    enabled.insert("cron".into(), true);
     registry.set_enabled_map(enabled);
 
     let tools = registry.available_tools();
     assert_eq!(tools.len(), 1);
-    assert_eq!(tools[0].name, "cron_list");
+    assert_eq!(tools[0].name, "cron");
     assert!(!registry.is_tool_allowed("memory"));
-    assert!(registry.is_tool_allowed("cron_list"));
+    assert!(registry.is_tool_allowed("cron"));
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn reload_uses_agent_specific_tools_enabled() {
 
     let mut custom = HashMap::new();
     custom.insert("memory".into(), false);
-    custom.insert("scheduled".into(), true);
+    custom.insert("cron".into(), true);
     home::save_tools_enabled_for_agent(Some("custom-bot"), &custom).unwrap();
 
     let mut reg = ToolRegistry::new();

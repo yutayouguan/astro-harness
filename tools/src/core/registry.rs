@@ -323,8 +323,8 @@ mod tests {
             ..ToolEntry::lifecycle_defaults()
         });
         reg.register(ToolEntry {
-            name: "cron_list".into(),
-            toolset: "scheduled".into(),
+            name: "cron".into(),
+            toolset: "cron".into(),
             description: "list".into(),
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
@@ -333,14 +333,14 @@ mod tests {
         });
         let mut enabled = HashMap::new();
         enabled.insert("memory".into(), false);
-        enabled.insert("scheduled".into(), true);
+        enabled.insert("cron".into(), true);
         reg.set_enabled_map(enabled);
 
         let names = schema_names(&reg);
         assert!(!names.iter().any(|n| n == "memory"));
-        assert!(names.iter().any(|n| n == "cron_list"));
+        assert!(names.iter().any(|n| n == "cron"));
         assert!(!reg.is_tool_allowed("memory"));
-        assert!(reg.is_tool_allowed("cron_list"));
+        assert!(reg.is_tool_allowed("cron"));
     }
 
     #[test]
@@ -350,12 +350,12 @@ mod tests {
 
         let mut global = HashMap::new();
         global.insert("memory".into(), true);
-        global.insert("scheduled".into(), true);
+        global.insert("cron".into(), true);
         home::save_tools_enabled(&global).unwrap();
 
         let mut alice = HashMap::new();
         alice.insert("memory".into(), false);
-        alice.insert("scheduled".into(), true);
+        alice.insert("cron".into(), true);
         home::save_tools_enabled_for_agent(Some("alice"), &alice).unwrap();
 
         let mut reg = ToolRegistry::new();
@@ -369,8 +369,8 @@ mod tests {
             ..ToolEntry::lifecycle_defaults()
         });
         reg.register(ToolEntry {
-            name: "cron_list".into(),
-            toolset: "scheduled".into(),
+            name: "cron".into(),
+            toolset: "cron".into(),
             description: "list".into(),
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
@@ -385,10 +385,10 @@ mod tests {
         // 非默认 agent 读取专属配置
         reg.reload_enabled_from_disk(Some("alice"));
         assert!(!reg.is_tool_allowed("memory"));
-        assert!(reg.is_tool_allowed("cron_list"));
+        assert!(reg.is_tool_allowed("cron"));
         let names = schema_names(&reg);
         assert!(!names.iter().any(|n| n == "memory"));
-        assert!(names.iter().any(|n| n == "cron_list"));
+        assert!(names.iter().any(|n| n == "cron"));
     }
 
     #[test]

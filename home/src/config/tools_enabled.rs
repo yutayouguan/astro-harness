@@ -38,7 +38,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "request_user_location",
     "present_ui",
     "delegate",
-    "scheduled",
+    "cron",
     "multi_agent",
     "task_plan",
 ];
@@ -192,9 +192,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "session_search" => "session_search",
         "search_context" => "search_context",
         "pin_context" => "pin_context",
-        "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable" | "scheduled" => {
-            "scheduled"
-        }
+        "cron" => "cron",
         "image_gen" => "image_gen",
         "video_gen" => "video_gen",
         "video_understand" => "video_understand",
@@ -256,10 +254,10 @@ mod tests {
         let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         let mut state = HashMap::new();
         state.insert("memory".into(), false);
-        state.insert("scheduled".into(), true);
+        state.insert("cron".into(), true);
         save_tools_enabled(&state).unwrap();
         assert!(!is_tool_call_allowed("memory"));
-        assert!(is_tool_call_allowed("cron_list"));
+        assert!(is_tool_call_allowed("cron"));
     }
 
     #[test]

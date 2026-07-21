@@ -1,21 +1,30 @@
-//! Agent 工具分发入口。
+//! Agent 工具分发入口：单一 `cron` 工具按 `action` 分支。
 
 use super::store::CronStore;
 
-/// Agent 工具入口：根据 `name` 分发 cron_add / list / remove / enable / disable
-pub fn dispatch_cron_tool(name: &str, args: &serde_json::Value) -> anyhow::Result<String> {
+/// Agent 工具入口：根据 `args.action` 分发 add / list / remove / enable / disable。
+pub fn dispatch_cron_tool(args: &serde_json::Value) -> anyhow::Result<String> {
+    let action = args
+        .get("action")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("缺少 action（add|list|remove|enable|disable）"))?
+        .to_ascii_lowercase();
+
     let store = CronStore::open_default()?;
-    match name {
-        "cron_add" | "scheduled" => {
+
+    match action.as_str() {
+        "add" => {
             let schedule = args
-                .get("cron")
-                .or_else(|| args.get("schedule"))
+                .get("schedule")
+                .or_else(|| args.get("cron"))
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("缺少 cron/schedule 参数"))?;
+                .ok_or_else(|| anyhow::anyhow!("add 需要 schedule 或 cron"))?;
             let task = args
                 .get("task")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("缺少 task 参数"))?;
+                .ok_or_else(|| anyhow::anyhow!("add 需要 task"))?;
             let job = store.add(schedule, task)?;
             Ok(format!(
                 "已创建定时任务 {}\n调度: {}\n下次: {}\n任务: {}",
@@ -25,7 +34,7 @@ pub fn dispatch_cron_tool(name: &str, args: &serde_json::Value) -> anyhow::Resul
                 job.task
             ))
         }
-        "cron_list" => {
+        "list" => {
             let jobs = store.list()?;
             if jobs.is_empty() {
                 return Ok("暂无定时任务".into());
@@ -46,23 +55,23 @@ pub fn dispatch_cron_tool(name: &str, args: &serde_json::Value) -> anyhow::Resul
                 .join("\n");
             Ok(format!("## 定时任务\n{body}"))
         }
-        "cron_remove" => {
+        "remove" => {
             let id = args
                 .get("id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("缺少 id 参数"))?;
+                .ok_or_else(|| anyhow::anyhow!("remove 需要 id"))?;
             if store.remove(id)? {
                 Ok(format!("已删除定时任务: {id}"))
             } else {
                 Ok(format!("未找到定时任务: {id}"))
             }
         }
-        "cron_enable" | "cron_disable" => {
+        "enable" | "disable" => {
             let id = args
                 .get("id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("缺少 id 参数"))?;
-            let enabled = name == "cron_enable";
+                .ok_or_else(|| anyhow::anyhow!("{action} 需要 id"))?;
+            let enabled = action == "enable";
             if store.set_enabled(id, enabled)? {
                 Ok(format!(
                     "已{}定时任务: {id}",
@@ -72,6 +81,18 @@ pub fn dispatch_cron_tool(name: &str, args: &serde_json::Value) -> anyhow::Resul
                 Ok(format!("未找到定时任务: {id}"))
             }
         }
-        _ => anyhow::bail!("未知 cron 工具: {name}"),
+        other => anyhow::bail!("未知 cron action: {other}（add|list|remove|enable|disable）"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn rejects_missing_action() {
+        let err = dispatch_cron_tool(&json!({ "task": "x" })).unwrap_err();
+        assert!(err.to_string().contains("action"), "{err}");
     }
 }
