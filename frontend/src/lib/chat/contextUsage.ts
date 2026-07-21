@@ -1,6 +1,7 @@
 export type ContextUsageSegmentId =
   | "system"
   | "tools"
+  | "agents"
   | "mcp"
   | "memory"
   | "skills"
@@ -34,6 +35,7 @@ export type ContextUsageSnapshot = {
 export const SEGMENT_ORDER: ContextUsageSegmentId[] = [
   "system",
   "tools",
+  "agents",
   "mcp",
   "memory",
   "skills",
@@ -46,6 +48,7 @@ export const SEGMENT_ORDER: ContextUsageSegmentId[] = [
 export const SEGMENT_TONE: Record<string, string> = {
   system: "--ink-mute",
   tools: "--tone-purple",
+  agents: "--tone-indigo",
   mcp: "--tone-pink",
   memory: "--tone-green",
   skills: "--tone-amber",

@@ -1127,7 +1127,7 @@ impl AgentLoop {
         )
     }
 
-    /// 分层占用明细（含 memory / skills 子项），供 `context_usage` 快照。
+    /// 分层占用明细（含 system / memory / skills 子项），供 `context_usage` 快照。
     pub fn system_prompt_layer_breakdown(&self) -> crate::prompt::context_usage::LayerBreakdown {
         use crate::prompt::context_usage::{estimate_tokens, LayerBreakdown, NamedChars};
 
@@ -1138,10 +1138,28 @@ impl AgentLoop {
             .collect();
 
         let (guidance, timestamp) = self.system_prompt_guidance_timestamp();
-        let mut system_chars = guidance.len() + timestamp.len();
-        for part in [&static_ctx.soul, &static_ctx.identity, &static_ctx.agent_md] {
-            system_chars += part.trim().len();
-        }
+        let mode_guidance = self.interaction_mode.system_guidance();
+        let tool_guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
+
+        let mut system_items: Vec<NamedChars> = Vec::new();
+        let mut push_sys = |id: &str, label: &str, content: &str| {
+            let n = content.trim().len();
+            if n > 0 {
+                system_items.push((id.to_string(), label.to_string(), n));
+            }
+        };
+        push_sys("soul", "SOUL.md", &static_ctx.soul);
+        push_sys("identity", "身份", &static_ctx.identity);
+        push_sys("agent", "AGENT.md", &static_ctx.agent_md);
+        push_sys("mode", "交互模式引导", &mode_guidance);
+        push_sys("tool_guidance", "工具指引", tool_guidance);
+        push_sys("timestamp", "当前时间", &timestamp);
+
+        let system_chars = static_ctx.soul.trim().len()
+            + static_ctx.identity.trim().len()
+            + static_ctx.agent_md.trim().len()
+            + guidance.len()
+            + timestamp.len();
 
         let mut memory_items: Vec<NamedChars> = Vec::new();
         let mut push_mem = |id: &str, label: &str, content: &str| {
@@ -1175,6 +1193,7 @@ impl AgentLoop {
             memory_chars,
             skills_chars,
             recall_chars,
+            system_items,
             memory_items,
             skill_items,
         }

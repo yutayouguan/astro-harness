@@ -98,5 +98,5 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
 });
 
 test("SEGMENT_ORDER lists all known segments", () => {
-  assert.equal(SEGMENT_ORDER.length, 8);
+  assert.equal(SEGMENT_ORDER.length, 9);
 });

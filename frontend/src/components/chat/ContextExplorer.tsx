@@ -30,6 +30,7 @@ import {
 const SEG_LABEL: Record<string, MessageKey> = {
   system: "chat.contextSeg.system",
   tools: "chat.contextSeg.tools",
+  agents: "chat.contextSeg.agents",
   mcp: "chat.contextSeg.mcp",
   memory: "chat.contextSeg.memory",
   skills: "chat.contextSeg.skills",
@@ -41,6 +42,7 @@ const SEG_LABEL: Record<string, MessageKey> = {
 const SEG_HINT: Record<string, MessageKey> = {
   system: "chat.contextExplorer.hint.system",
   tools: "chat.contextExplorer.hint.tools",
+  agents: "chat.contextExplorer.hint.agents",
   mcp: "chat.contextExplorer.hint.mcp",
   memory: "chat.contextExplorer.hint.memory",
   skills: "chat.contextExplorer.hint.skills",
@@ -52,6 +54,7 @@ const SEG_HINT: Record<string, MessageKey> = {
 const SEG_ICON: Record<string, LucideIcon> = {
   system: Shield,
   tools: Wrench,
+  agents: Bot,
   mcp: Plug,
   memory: Brain,
   skills: Sparkles,

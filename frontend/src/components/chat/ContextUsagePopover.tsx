@@ -18,6 +18,7 @@ import ContextUsageBar from "./ContextUsageBar";
 const SEG_LABEL: Record<string, MessageKey> = {
   system: "chat.contextSeg.system",
   tools: "chat.contextSeg.tools",
+  agents: "chat.contextSeg.agents",
   mcp: "chat.contextSeg.mcp",
   memory: "chat.contextSeg.memory",
   skills: "chat.contextSeg.skills",

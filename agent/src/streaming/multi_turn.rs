@@ -418,6 +418,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     memory_chars: layers.memory_chars,
                     skills_chars: layers.skills_chars,
                     recall_chars: layers.recall_chars,
+                    system_items: &layers.system_items,
                     memory_items: &layers.memory_items,
                     skill_items: &layers.skill_items,
                     tools: &tools,

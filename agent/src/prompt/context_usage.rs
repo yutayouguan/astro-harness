@@ -8,6 +8,13 @@ pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
 
 const SUBAGENT_TOOLS: &[&str] = &["subagent", "pipeline"];
 
+/// 写入上下文的 Agent 编排工具定义（与「子 Agent 返回」区分）。
+const AGENT_DEF_TOOLS: &[&str] = &["subagent", "pipeline", "persona_create"];
+
+fn is_agent_def_tool_name(name: &str) -> bool {
+    AGENT_DEF_TOOLS.contains(&name)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContextUsageSegmentMeta {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,6 +63,8 @@ pub struct ContextUsageInput<'a> {
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
+    /// SOUL / guidance 等系统提示子项
+    pub system_items: &'a [NamedChars],
     /// MEMORY / USER / daily 等子项
     pub memory_items: &'a [NamedChars],
     /// 技能索引条目：(skill_id, 展示名, 该行字符数)
@@ -80,6 +89,7 @@ pub struct LayerBreakdown {
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
+    pub system_items: Vec<NamedChars>,
     pub memory_items: Vec<NamedChars>,
     pub skill_items: Vec<NamedChars>,
 }
@@ -136,8 +146,10 @@ fn tool_schema_name(tool: &serde_json::Value) -> Option<&str> {
 pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
     let mut tools_chars = 0usize;
     let mut mcp_chars = 0usize;
+    let mut agent_def_chars = 0usize;
     let mut tool_items: Vec<ContextUsageItem> = Vec::new();
     let mut mcp_items: Vec<ContextUsageItem> = Vec::new();
+    let mut agent_def_items: Vec<ContextUsageItem> = Vec::new();
     for t in input.tools {
         let s = t.to_string();
         let n = tool_schema_name(t).unwrap_or("unknown");
@@ -153,6 +165,9 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         if n.starts_with("mcp__") {
             mcp_chars += s.len();
             mcp_items.push(item);
+        } else if is_agent_def_tool_name(n) {
+            agent_def_chars += s.len();
+            agent_def_items.push(item);
         } else {
             tools_chars += s.len();
             tool_items.push(item);
@@ -160,6 +175,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
     }
     tool_items.sort_by(|a, b| b.tokens.cmp(&a.tokens).then_with(|| a.label.cmp(&b.label)));
     mcp_items.sort_by(|a, b| b.tokens.cmp(&a.tokens).then_with(|| a.label.cmp(&b.label)));
+    agent_def_items.sort_by(|a, b| b.tokens.cmp(&a.tokens).then_with(|| a.label.cmp(&b.label)));
 
     let mut call_names: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
@@ -175,8 +191,19 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
     let mut subagent_chars = 0usize;
     let mut subagent_n = 0u32;
     let mut msg_n = 0u32;
+    let mut role_chars: std::collections::HashMap<&'static str, (usize, u32)> =
+        std::collections::HashMap::new();
     let mut subagent_by_name: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
+
+    let bump_role = |map: &mut std::collections::HashMap<&'static str, (usize, u32)>,
+                     role: &'static str,
+                     chars: usize| {
+        let e = map.entry(role).or_insert((0, 0));
+        e.0 += chars;
+        e.1 += 1;
+    };
+
     for m in input.messages {
         let text = m.content_str();
         match m.role {
@@ -194,23 +221,31 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
                 } else {
                     conversation_chars += text.len();
                     msg_n += 1;
+                    bump_role(&mut role_chars, "tool", text.len());
                 }
             }
             Role::System => {
-                // system 已在分层字符中统计；会话里偶发 system 归入 conversation
                 conversation_chars += text.len();
                 msg_n += 1;
+                bump_role(&mut role_chars, "system", text.len());
             }
-            _ => {
+            Role::User => {
                 conversation_chars += text.len();
+                msg_n += 1;
+                bump_role(&mut role_chars, "user", text.len());
+            }
+            Role::Assistant => {
+                let mut chars = text.len();
                 if let Some(calls) = &m.tool_calls {
                     for c in calls {
                         if !is_subagent_tool_name(&c.name) {
-                            conversation_chars += c.name.len() + c.arguments.to_string().len();
+                            chars += c.name.len() + c.arguments.to_string().len();
                         }
                     }
                 }
+                conversation_chars += chars;
                 msg_n += 1;
+                bump_role(&mut role_chars, "assistant", chars);
             }
         }
     }
@@ -231,17 +266,57 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         items
     };
 
+    let conversation_items: Vec<ContextUsageItem> = {
+        let mut items: Vec<_> = role_chars
+            .into_iter()
+            .filter_map(|(role, (chars, count))| {
+                let tokens = estimate_tokens(chars);
+                if tokens == 0 {
+                    return None;
+                }
+                let (id, base) = match role {
+                    "user" => ("user", "用户消息"),
+                    "assistant" => ("assistant", "助手消息"),
+                    "tool" => ("tool", "工具结果"),
+                    "system" => ("system", "会话内 system"),
+                    other => (other, other),
+                };
+                Some(ContextUsageItem {
+                    id: id.to_string(),
+                    label: format!("{base} ×{count}"),
+                    tokens,
+                })
+            })
+            .collect();
+        items.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+        items
+    };
+
+    let system_items = items_from_named(input.system_items);
     let memory_items = items_from_named(input.memory_items);
     let skill_items = items_from_named(input.skill_items);
 
     let mut segments = Vec::new();
-    push_seg(&mut segments, "system", input.system_chars, None, vec![]);
+    push_seg(
+        &mut segments,
+        "system",
+        input.system_chars,
+        (!system_items.is_empty()).then_some(system_items.len() as u32),
+        system_items,
+    );
     push_seg(
         &mut segments,
         "tools",
         tools_chars,
         (!tool_items.is_empty()).then_some(tool_items.len() as u32),
         tool_items,
+    );
+    push_seg(
+        &mut segments,
+        "agents",
+        agent_def_chars,
+        (!agent_def_items.is_empty()).then_some(agent_def_items.len() as u32),
+        agent_def_items,
     );
     push_seg(
         &mut segments,
@@ -277,7 +352,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         "conversation",
         conversation_chars,
         (msg_n > 0).then_some(msg_n),
-        vec![],
+        conversation_items,
     );
 
     let total_tokens = segments.iter().map(|s| s.tokens).sum();
@@ -329,6 +404,7 @@ mod tests {
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
+            system_items: &[],
             memory_items: &[],
             skill_items: &[],
             tools: &tools,
@@ -349,6 +425,38 @@ mod tests {
     }
 
     #[test]
+    fn agent_def_tools_go_to_agents_segment() {
+        let tools: Vec<serde_json::Value> = serde_json::json!([
+            {"type":"function","function":{"name":"file_ops","parameters":{}}},
+            {"type":"function","function":{"name":"subagent","parameters":{"task":"x"}}},
+            {"type":"function","function":{"name":"pipeline","parameters":{}}}
+        ])
+        .as_array()
+        .unwrap()
+        .clone();
+        let snap = build_snapshot(ContextUsageInput {
+            system_chars: 0,
+            memory_chars: 0,
+            skills_chars: 0,
+            recall_chars: 0,
+            system_items: &[],
+            memory_items: &[],
+            skill_items: &[],
+            tools: &tools,
+            messages: &[],
+            context_window: 128_000,
+            updated_at_ms: 1,
+            recommend_compact: false,
+            recommend_compact_ratio: 0.85,
+        });
+        assert_eq!(snap.segment("tools").unwrap().items.len(), 1);
+        let agents = snap.segment("agents").unwrap();
+        assert_eq!(agents.items.len(), 2);
+        assert!(agents.items.iter().any(|i| i.id == "subagent"));
+        assert!(agents.items.iter().any(|i| i.id == "pipeline"));
+    }
+
+    #[test]
     fn skill_and_memory_items() {
         let memory = vec![
             ("memory".into(), "MEMORY.md".into(), 40usize),
@@ -363,6 +471,7 @@ mod tests {
             memory_chars: 48,
             skills_chars: 100,
             recall_chars: 0,
+            system_items: &[],
             memory_items: &memory,
             skill_items: &skills,
             tools: &[],
@@ -397,6 +506,7 @@ mod tests {
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
+            system_items: &[],
             memory_items: &[],
             skill_items: &[],
             tools: &[],
