@@ -83,10 +83,9 @@ const READONLY_ALLOW: &[&str] = &[
     "session_search",
     "search_context",
     "skills", // action 级仅 list/load/view/curate
-    "ask",
+    "ask_user",
     "task_plan", // Ask 模式下硬拦
     "request_mode_switch",
-    "request_user_location",
     "present_metrics",
 ];
 

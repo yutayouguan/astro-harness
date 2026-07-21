@@ -272,7 +272,7 @@ impl HitlRegistry {
     note = "use ToolEntry.needs_confirmation / ToolRegistry::any_needs_confirmation"
 )]
 pub fn is_interactive_tool(name: &str) -> bool {
-    matches!(name, "ask" | "request_user_location")
+    matches!(name, "ask_user")
 }
 
 /// 工具名是否需独占 `&mut MemoryManager`（整批强制串行）。
@@ -455,8 +455,8 @@ mod tests {
     fn delegate_is_exclusive() {
         assert!(is_exclusive_tool("delegate"));
         assert!(!is_exclusive_tool("web_search"));
-        assert!(is_interactive_tool("ask"));
-        assert!(is_interactive_tool("request_user_location"));
+        assert!(is_interactive_tool("ask_user"));
+        assert!(!is_interactive_tool("request_mode_switch"));
         assert!(!is_interactive_tool("terminal"));
     }
 }

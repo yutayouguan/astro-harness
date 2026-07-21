@@ -291,7 +291,7 @@ mod tests {
         let creative =
             fs::read_to_string(dir.path().join("skills/creative-media/SKILL.md")).unwrap();
         assert!(creative.contains("music_gen"));
-        assert!(creative.contains("ask"));
+        assert!(creative.contains("ask_user"));
         let r2 = seed_bundled_into(dir.path());
         assert!(r2.installed.is_empty());
         assert!(r2.skipped.contains(&"aihot".to_string()));

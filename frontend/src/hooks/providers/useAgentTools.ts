@@ -11,7 +11,6 @@ import {
   IconEye,
   IconFileOps,
   IconImageGen,
-  IconLocation,
   IconMemoryTool,
   IconMultiAgent,
   IconMusic,
@@ -49,9 +48,8 @@ export type AgentToolId =
   | "skills"
   | "memory"
   | "session_search"
-  | "ask"
+  | "ask_user"
   | "request_mode_switch"
-  | "request_user_location"
   | "present_ui"
   | "delegate"
   | "cron"
@@ -322,9 +320,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "ask",
-    titleKey: "agentTools.ask.title",
-    descKey: "agentTools.ask.desc",
+    id: "ask_user",
+    titleKey: "agentTools.askUser.title",
+    descKey: "agentTools.askUser.desc",
     Icon: IconClarify,
     tone: "red",
     params: [
@@ -332,6 +330,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "questions", type: "array", optional: true },
       { name: "title", type: "string", optional: true },
       { name: "body", type: "string", optional: true },
+      { name: "message", type: "string", optional: true },
     ],
   },
   {
@@ -345,14 +344,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "reason", type: "string" },
       { name: "summary", type: "string", optional: true },
     ],
-  },
-  {
-    id: "request_user_location",
-    titleKey: "agentTools.requestUserLocation.title",
-    descKey: "agentTools.requestUserLocation.desc",
-    Icon: IconLocation,
-    tone: "teal",
-    params: [{ name: "message", type: "string", optional: true }],
   },
   {
     id: "present_ui",

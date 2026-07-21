@@ -1,4 +1,4 @@
-//! ask（question/confirm）/ request_user_location HITL 工具输出须通过 A2UI catalog 校验。
+//! ask_user（question/confirm/location）HITL 工具输出须通过 A2UI catalog 校验。
 
 use tempfile::TempDir;
 use tools::{register_all, ToolContext, ToolRegistry};
@@ -50,7 +50,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "ask",
+        "ask_user",
         &serde_json::json!({
             "mode": "confirm",
             "title": "Delete file?",
@@ -95,7 +95,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "ask",
+        "ask_user",
         &serde_json::json!({
             "questions": [
                 {
@@ -155,7 +155,7 @@ async fn clarify_free_text_step_allows_empty_options() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "ask",
+        "ask_user",
         &serde_json::json!({
             "questions": [
                 {
@@ -221,7 +221,7 @@ async fn clarify_multi_emits_wizard_hitl() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "ask",
+        "ask_user",
         &serde_json::json!({
             "title": "开干前确认",
             "questions": [
@@ -265,7 +265,7 @@ async fn clarify_multi_emits_wizard_hitl() {
 }
 
 #[tokio::test]
-async fn request_user_location_emits_valid_a2ui_hitl() {
+async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
     let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
@@ -292,8 +292,9 @@ async fn request_user_location_emits_valid_a2ui_hitl() {
     let raw = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "request_user_location",
+        "ask_user",
         &serde_json::json!({
+            "mode": "location",
             "message": "Need location for weather"
         }),
     )
@@ -354,7 +355,7 @@ async fn present_ui_emits_valid_astro_ui() {
 }
 
 #[tokio::test]
-async fn ask_rejects_mixed_questions_and_body() {
+async fn ask_user_rejects_mixed_questions_and_body() {
     let dir = TempDir::new().unwrap();
     let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
@@ -381,7 +382,7 @@ async fn ask_rejects_mixed_questions_and_body() {
     let err = tools::dispatch_tool(
         |_| true,
         &mut ctx,
-        "ask",
+        "ask_user",
         &serde_json::json!({
             "questions": [{ "question": "Which?" }],
             "body": "approve?"
@@ -396,7 +397,7 @@ async fn ask_rejects_mixed_questions_and_body() {
 }
 
 #[tokio::test]
-async fn register_all_includes_ask() {
+async fn register_all_includes_ask_user() {
     let mut registry = ToolRegistry::new();
     register_all(&mut registry);
     let names: Vec<_> = registry
@@ -404,9 +405,10 @@ async fn register_all_includes_ask() {
         .iter()
         .map(|t| t.name.as_str())
         .collect();
-    assert!(names.contains(&"ask"));
+    assert!(names.contains(&"ask_user"));
+    assert!(!names.contains(&"ask"));
     assert!(!names.contains(&"confirm"));
     assert!(!names.contains(&"clarify"));
-    assert!(names.contains(&"request_user_location"));
+    assert!(!names.contains(&"request_user_location"));
     assert!(names.contains(&"present_ui"));
 }

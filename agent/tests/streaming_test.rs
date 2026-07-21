@@ -884,7 +884,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
                 tool_call_deltas: vec![ToolCallDeltaChunk {
                     index: 0,
                     id: Some("call_confirm".into()),
-                    name: Some("ask".into()),
+                    name: Some("ask_user".into()),
                     arguments: Some(
                         r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
                             .into(),
@@ -961,7 +961,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     assert!(items.iter().any(|i| matches!(
         i,
         MultiTurnStreamItem::ToolResult { name, result, .. }
-        if name == "ask" && result.contains("approved")
+        if name == "ask_user" && result.contains("approved")
     )));
     assert!(items.iter().any(|i| matches!(
         i,

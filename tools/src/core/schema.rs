@@ -257,11 +257,11 @@ macro_rules! tool_schema {
 /// ```ignore
 /// register_tool_schemars!(
 ///     registry,
-///     name = "ask",
-///     toolset = "ask",
+///     name = "ask_user",
+///     toolset = "ask_user",
 ///     description = "Ask the user a clarifying question",
 ///     icon = "circle-help",
-///     args = AskArgs,
+///     args = AskUserArgs,
 /// );
 /// ```
 #[macro_export]

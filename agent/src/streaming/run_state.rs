@@ -33,7 +33,7 @@ pub enum RunRequirements {
     None,
     /// 等待用户确认（`confirm` / 危险 terminal Ask）。
     UserConfirmation { interrupt_ids: Vec<String> },
-    /// 等待用户输入（`clarify` / `request_user_location`）。
+    /// 等待用户输入（`ask_user` question / location）。
     UserInput { interrupt_ids: Vec<String> },
 }
 

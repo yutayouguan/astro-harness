@@ -1,6 +1,6 @@
 //! `request_mode_switch`：请求切换 Agent ↔ Plan（流结束后由前端授权条确认）。
 //!
-//! 与 `ask`（同回合 HITL park）不同：本工具产出 `astro_mode_switch`，不走 HitlGate。
+//! 与 `ask_user`（同回合 HITL park）不同：本工具产出 `astro_mode_switch`，不走 HitlGate。
 
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -46,7 +46,7 @@ pub fn register(registry: &mut crate::registry::ToolRegistry) {
 or Plan→Agent when the plan is ready to execute. \
 User confirms via a post-stream countdown authorize bar — do not assume the switch until approved. \
 Always set `reason`; when `to=\"agent\"`, `summary` is required (confirmed plan text). \
-Do not use ask(confirm) for mode changes; do not use this tool for clarifying questions or location."
+Do not use ask_user(confirm) for mode changes; do not use this tool for clarifying questions or location."
             .to_string(),
         schema: schema_for_args::<ModeSwitchArgs>(),
         check_fn: None,

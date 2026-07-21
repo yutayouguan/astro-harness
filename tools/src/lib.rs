@@ -206,7 +206,7 @@ mod inventory_register_tests {
             "image_gen",
             "video_gen",
             "tts",
-            "ask",
+            "ask_user",
             "delegate",
             "present_ui",
             "file_ops",
