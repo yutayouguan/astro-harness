@@ -354,32 +354,6 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
                     </span>
                   </div>
                   <p>{t(task.descKey)}</p>
-                  <div className="aux-task-current">
-                    <span>{resolveRouteLabel(row, isAuto)}</span>
-                    {row?.unavailable && (
-                      <span className="aux-warning">
-                        <AlertTriangle size={13} />
-                        {t("aux.unavailable")}
-                      </span>
-                    )}
-                  </div>
-                  {(task.id === "compaction" ||
-                    task.id === "background_review" ||
-                    usesPrimaryModel(row, isAuto)) && (
-                    <div className="aux-task-hints">
-                      {task.id === "compaction" && (
-                        <span className="aux-hint">{t("aux.compactionThresholdHint")}</span>
-                      )}
-                      {task.id === "background_review" && (
-                        <span className="aux-hint">{t("aux.backgroundReviewHint")}</span>
-                      )}
-                      {usesPrimaryModel(row, isAuto) && (
-                        <span className="aux-hint aux-hint-cost">
-                          {t("aux.costSameAsPrimary")}
-                        </span>
-                      )}
-                    </div>
-                  )}
 
                   {isEditing && (
                     <div className="aux-editor">
@@ -413,37 +387,67 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
                     </div>
                   )}
                 </div>
-                <div className="aux-task-actions">
-                  <button
-                    type="button"
-                    className="aux-action aux-action-ghost"
-                    onClick={() => {
-                      void resetRoute(task.id);
-                      if (editingTask === task.id) setEditingTask(null);
-                    }}
-                    disabled={isAuto}
-                  >
-                    {t("aux.usePrimary")}
-                  </button>
-                  <button
-                    type="button"
-                    className="aux-action"
-                    onClick={() => {
-                      if (!providersState) void loadProviders();
-                      beginEdit(
-                        row ?? {
-                          id: task.id,
-                          provider: "auto",
-                          model: "auto",
-                          displayLabel: resolveRouteLabel(undefined, true),
-                          unavailable: false,
-                        },
-                      );
-                    }}
-                    disabled={enabledProviders.length === 0}
-                  >
-                    {t("aux.change")}
-                  </button>
+                <div className="aux-task-side">
+                  <div className="aux-task-meta">
+                    <div className="aux-task-current">
+                      <span>{resolveRouteLabel(row, isAuto)}</span>
+                      {row?.unavailable && (
+                        <span className="aux-warning">
+                          <AlertTriangle size={13} />
+                          {t("aux.unavailable")}
+                        </span>
+                      )}
+                    </div>
+                    {(task.id === "compaction" ||
+                      task.id === "background_review" ||
+                      usesPrimaryModel(row, isAuto)) && (
+                      <div className="aux-task-hints">
+                        {task.id === "compaction" && (
+                          <span className="aux-hint">{t("aux.compactionThresholdHint")}</span>
+                        )}
+                        {task.id === "background_review" && (
+                          <span className="aux-hint">{t("aux.backgroundReviewHint")}</span>
+                        )}
+                        {usesPrimaryModel(row, isAuto) && (
+                          <span className="aux-hint aux-hint-cost">
+                            {t("aux.costSameAsPrimary")}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="aux-task-actions">
+                    <button
+                      type="button"
+                      className="aux-action aux-action-ghost"
+                      onClick={() => {
+                        void resetRoute(task.id);
+                        if (editingTask === task.id) setEditingTask(null);
+                      }}
+                      disabled={isAuto}
+                    >
+                      {t("aux.usePrimary")}
+                    </button>
+                    <button
+                      type="button"
+                      className="aux-action"
+                      onClick={() => {
+                        if (!providersState) void loadProviders();
+                        beginEdit(
+                          row ?? {
+                            id: task.id,
+                            provider: "auto",
+                            model: "auto",
+                            displayLabel: resolveRouteLabel(undefined, true),
+                            unavailable: false,
+                          },
+                        );
+                      }}
+                      disabled={enabledProviders.length === 0}
+                    >
+                      {t("aux.change")}
+                    </button>
+                  </div>
                 </div>
               </article>
             );
