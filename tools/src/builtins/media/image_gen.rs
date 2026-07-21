@@ -164,7 +164,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate or edit images (Gemini Interactions; OpenAI fallback is prompt-only). If subject/style/composition/mood is unclear and not delegated, ask via `clarify` first. Put aspect ratio and resolution in aspect_ratio/image_size—not only in prompt. Supports reference_images (≤14), previous_interaction_id, search, thinking_level, video inputs. Saves under generated/images/."
+        description: "Generate or edit images (Gemini Interactions; OpenAI fallback is prompt-only). Clarify subject/style before generating. Use aspect_ratio/image_size fields—not only prompt. Saves under generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,

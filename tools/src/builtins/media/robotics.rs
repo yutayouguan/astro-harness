@@ -38,7 +38,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "robotics".to_string(),
         toolset: "robotics".to_string(),
-        description: "Spatial robotics perception and task planning via Google Gemini Robotics-ER (generateContent). Modes: point (default), detect, trajectory, plan. Pass image_urls or image_url. Optional queries, robot_api (plan), thinking_budget, model. Google-only; not vision and not multi-agent orchestration."
+        description: "Spatial robotics perception/planning via Gemini Robotics-ER. Modes: point, detect, trajectory, plan. Google-only."
             .to_string(),
         schema: schema_for_args::<RoboticsArgs>(),
         check_fn: None,

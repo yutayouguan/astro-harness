@@ -69,7 +69,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video via Google Veo. If shot direction is unclear and not delegated, ask via `clarify` first. Prefer extend_video for next shots; refs ≤3; extend/refs/last_frame/1080p/4K force duration_seconds=8. Saves under generated/videos/."
+        description: "Generate a short video via Google Veo. Clarify shot direction first. Prefer extend_video for next shots. Saves under generated/videos/."
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,

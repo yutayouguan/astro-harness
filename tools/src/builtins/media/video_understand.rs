@@ -125,7 +125,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_understand".into(),
         toolset: "video_understand".into(),
-        description: "Analyze a video with Google Gemini Interactions (workspace path, http(s), or public YouTube). Modes: qa, summarize, timeline (JSON events). Supports MM:SS timestamps in the prompt. Google only.".into(),
+        description: "Analyze a video (workspace path, http(s), or YouTube). Modes: qa, summarize, timeline. Google Interactions only.".into(),
         schema: schema_for_args::<VideoUnderstandArgs>(),
         check_fn: None,
         icon: "film",

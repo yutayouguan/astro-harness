@@ -41,7 +41,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "terminal".to_string(),
         toolset: "terminal".to_string(),
-        description: "Run a shell command. Default cwd is project_root when set (e.g. delegated git worktree), else the agent memory workspace (not a jail—commands can still touch paths outside it). Default timeout 60s, override with timeout_secs (max 900s) for builds/tests/installs. Set background=true for long-running commands to get a job id immediately and poll via terminal_job (status/wait/kill). stdout/stderr capped at 64KiB; for large files use file_ops read with offset/limit."
+        description: "Run a shell command. cwd=project_root (delegated worktree) or agent workspace. timeout_secs max 900s; background=true for async (returns job id, poll via terminal_job). stdout/stderr capped at 64KiB."
             .to_string(),
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,

@@ -66,7 +66,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "memory".to_string(),
         toolset: "memory".to_string(),
-        description: "Manage persistent memory. action=add|replace|remove; target=memory (MEMORY.md) or user (USER.md). Use content for add/replace and old_text substring for replace/remove. Writes update live/disk; session prompt snapshot is not refreshed until next session or refresh_memory.".to_string(),
+        description: "Manage persistent memory/user profile. action=add|replace|remove; target=memory|user. Session snapshot refreshes on next session or refresh_memory.".to_string(),
         schema: schema_for_args::<MemoryArgs>(),
         check_fn: None,
         icon: "brain",

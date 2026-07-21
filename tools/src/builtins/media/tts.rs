@@ -56,7 +56,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "tts".to_string(),
         toolset: "tts".to_string(),
-        description: "Convert text to speech. Google: Gemini Interactions TTS (voices, optional speakers[max 2], style director notes, stream). Optional title: short name for the saved file (default Speech). OpenAI: /audio/speech fallback when Google is not configured. Advanced speakers/style/stream are Google-only."
+        description: "Convert text to speech. Google: Gemini TTS (multi-speaker, style, stream). OpenAI: /audio/speech fallback. Advanced features are Google-only."
             .to_string(),
         schema: schema_for_args::<TtsArgs>(),
         check_fn: None,

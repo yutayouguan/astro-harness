@@ -48,7 +48,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "audio_understand".to_string(),
         toolset: "audio_understand".to_string(),
-        description: "Analyze audio. Modes: describe (default), transcribe (structured JSON with speakers/timestamps/emotion). Pass audio_url (workspace path, http(s), or YouTube). Google uses Interactions API; OpenAI uses chat input_audio for describe and Whisper for transcribe."
+        description: "Analyze audio (workspace path, http(s), or YouTube). Modes: describe, transcribe. Google Interactions API; OpenAI Whisper fallback for transcribe."
             .to_string(),
         schema: schema_for_args::<AudioUnderstandArgs>(),
         check_fn: None,

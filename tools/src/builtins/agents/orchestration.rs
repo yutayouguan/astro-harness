@@ -43,7 +43,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "orchestration_run".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Start an async serial multi-agent orchestration. Returns orchestration_id immediately; poll with orchestration_status. Prefer this (or multi_agent with a role list) for pipelines; use delegate for parallel one-shot subtasks."
+        description: "Async serial multi-agent orchestration. Returns orchestration_id; poll with orchestration_status. Use delegate for parallel one-shot subtasks."
             .to_string(),
         schema: schema_for_args::<OrchestrationRunArgs>(),
         check_fn: None,

@@ -80,7 +80,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "delegate".to_string(),
         toolset: "delegate".to_string(),
-        description: "Spawn ephemeral sub-agent(s) for in-turn goals (parallel, isolated; optional git worktree). Does NOT create a durable Agent persona—use `create_agent` for that. Pass full context; children have no parent history and cannot clarify/confirm or write MEMORY. Optional: role=leaf|orchestrator, toolsets, max_iterations. Prefer orchestration_run for serial pipelines; use delegate_async to not block.".to_string(),
+        description: "Spawn ephemeral sub-agent(s) in-turn (parallel, isolated). No durable persona—use create_agent for that. Pass full context; children have no parent history. Prefer orchestration_run for serial pipelines; delegate_async to not block.".to_string(),
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",
@@ -89,7 +89,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "delegate_async".to_string(),
         toolset: "delegate".to_string(),
-        description: "Start delegated sub-agent(s) in the background. Returns task_id immediately; poll with delegate_status or wait with delegate_collect. Same args as delegate (ephemeral only—not create_agent).".to_string(),
+        description: "Like delegate but async—returns task_id immediately; poll with delegate_status or delegate_collect.".to_string(),
         schema: schema_for_args::<DelegateArgs>(),
         check_fn: None,
         icon: "send",

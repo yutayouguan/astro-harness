@@ -52,7 +52,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "create_agent".to_string(),
         toolset: "multi_agent".to_string(),
-        description: "Create a durable Agent persona (MEMORY/IDENTITY workspace at ~/.astro/workspace-{id}/ + agents/{id}/config.json). id defaults to {slug}--{hex12} from name (readable dir, immutable). NOT for in-turn task splitting—use `delegate` for ephemeral sub-agents. activate defaults to false. Prefer after loading the create-agent skill.".to_string(),
+        description: "Create a durable Agent persona with persistent workspace. NOT for in-turn task splitting—use delegate for ephemeral sub-agents. Prefer after loading the create-agent skill.".to_string(),
         schema: schema_for_args::<CreateAgentArgs>(),
         check_fn: None,
         icon: "bot",

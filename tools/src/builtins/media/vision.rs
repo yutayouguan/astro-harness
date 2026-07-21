@@ -38,7 +38,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "vision".to_string(),
         toolset: "vision".to_string(),
-        description: "Analyze image(s). Modes: describe (default), detect (boxes JSON), segment (boxes+mask JSON). Pass image_urls (workspace paths or http(s)) or legacy image_url. Google uses Interactions API; OpenAI uses chat/completions fallback."
+        description: "Analyze image(s). Modes: describe, detect, segment. Pass image_urls or legacy image_url. Google Interactions API; OpenAI fallback."
             .to_string(),
         schema: schema_for_args::<VisionArgs>(),
         check_fn: None,

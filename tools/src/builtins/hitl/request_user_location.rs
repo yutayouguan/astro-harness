@@ -28,7 +28,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "request_user_location".to_string(),
         toolset: "request_user_location".to_string(),
-        description: "Request the user's location (GPS with permission, or a city name) before local queries such as weather or nearby places. Call this when the user has not specified a place; never assume a city.".to_string(),
+        description: "Request the user's location before local queries (weather, nearby places). Never assume a city.".to_string(),
         schema: schema_for_args::<RequestUserLocationArgs>(),
         check_fn: None,
         icon: "map-pin",
