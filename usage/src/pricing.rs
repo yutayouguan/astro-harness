@@ -214,7 +214,9 @@ struct PricingCacheFile {
 }
 
 fn openrouter_pricing_cache_path() -> PathBuf {
-    default_memory_dir().join(OPENROUTER_PRICING_CACHE_FILE)
+    let dir = default_memory_dir().join("cache");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(OPENROUTER_PRICING_CACHE_FILE)
 }
 
 fn is_cache_fetched_at_valid(fetched_at: DateTime<Utc>) -> bool {
