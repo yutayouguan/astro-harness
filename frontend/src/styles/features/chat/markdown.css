@@ -630,6 +630,9 @@ html[data-theme="dark"] .composer-agent-validate-hint {
 }
 
 .composer-cost-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
   max-width: 9.5rem;
   overflow: hidden;
@@ -639,13 +642,18 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
-  padding: 3px 8px;
+  padding: 3px 8px 3px 6px;
   border-radius: 999px;
   color: var(--ink-mute);
   background: color-mix(in srgb, currentColor 7%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
   cursor: default;
   user-select: none;
+}
+
+.composer-cost-chip svg {
+  flex-shrink: 0;
+  opacity: 0.88;
 }
 
 .composer-mode {

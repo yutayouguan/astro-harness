@@ -20,6 +20,7 @@ import {
   ChartPie,
   Check,
   ChevronDown,
+  Coins,
   Copy,
   File,
   FileVideo,
@@ -1165,6 +1166,7 @@ export default function ChatView({
     if (!cost) return null;
     const inTok = Math.max(0, Math.ceil(inChars / 4));
     return {
+      cost,
       short: t("chat.estimateCostShort", { cost }),
       full: t("chat.estimateCost", {
         cost,
