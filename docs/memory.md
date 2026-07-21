@@ -1,6 +1,6 @@
 # Astro 记忆系统
 
-Astro 将长期记忆与用户档案维护为**有界精炼条目**（`MEMORY.md` / `USER.md`），通过 **Frozen Snapshot** 注入 system prompt，并通过单一 **`memory`** 工具写入。会话全文检索走独立的 **`session_search`** 第二轨。
+Astro 将长期记忆与用户档案维护为**有界精炼条目**（`MEMORY.md` / `USER.md`），通过 **Frozen Snapshot** 注入 system prompt，并通过单一 **`memory`** 工具写入。会话全文检索走 **`search`（scope=session|memory|knowledge|all）**。
 
 设计规格见 [`docs/superpowers/specs/2026-07-14-memory-hermes-alignment-design.md`](./superpowers/specs/2026-07-14-memory-hermes-alignment-design.md)。
 
@@ -191,7 +191,7 @@ auxiliary:
 | `content` | `add` / `replace` 必填 |
 | `old_text` | `replace` / `remove` 必填 |
 
-**无 `read` 动作**——Agent 从 system prompt 中的 snapshot 阅读当前记忆；需要历史对话时用 `session_search`。
+**无 `read` 动作**——Agent 从 system prompt 中的 snapshot 阅读当前记忆；需要历史对话时用 `search`（`scope=session` 或 `all`）。
 
 成功写入后返回 live 用量（如 `1474/2200`），并注明：**已写盘（live）；当前会话 prompt 快照未刷新**。
 
@@ -226,24 +226,25 @@ auxiliary:
 
 ---
 
-## 第二轨：`session_search`
+## 第二轨：`search`
 
-与精炼记忆并列，保留 FTS 全文检索历史消息：
+与精炼记忆并列，按需 FTS / 记忆 / 知识库检索（默认 `scope=all`）：
 
 ```json
 {
-  "name": "session_search",
+  "name": "search",
   "parameters": {
     "query": "string",
+    "scope": "session|memory|knowledge|all?",
     "limit": "number?"
   }
 }
 ```
 
-- `limit` 默认 5，最大 10。
-- 匹配消息正文、工具名等；结果格式化为 Markdown 列表供 Agent 按需召回。
+- `limit` 默认 5，最大 10（各源分别截断）。
+- `scope=session` 匹配消息正文、工具名等；结果格式化为 Markdown 列表供 Agent 按需召回。
 
-动态召回（FTS）与 Frozen Snapshot **独立**：snapshot 稳定以利于 prefix cache；全历史检索走 `session_search`。
+动态召回（FTS）与 Frozen Snapshot **独立**：snapshot 稳定以利于 prefix cache；全历史检索走 `search`。
 
 ---
 
@@ -264,7 +265,7 @@ auxiliary:
 - [ ] 旧 `-` 列表 MEMORY 可加载，首次写入后盘上变为 `§` 格式
 - [ ] 超限 `memory` 调用报错且含用量（如 `2200/2200`）
 - [ ] 同会话写入后 system prompt 仍为旧 snapshot；新 session 或 `refresh_memory` 后更新
-- [ ] `session_search` 可检索历史消息
+- [ ] `search`（scope=session）可检索历史消息
 - [ ] 旧工具名 `memory_add` 等不再注册，调用报未知工具
 - [ ] 代码与 UI 无禁用品牌字符串（`rg -i hermes` 仅 spec 外链）
 

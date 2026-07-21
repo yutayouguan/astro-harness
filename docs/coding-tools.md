@@ -1,6 +1,6 @@
 # Astro 编码工具链
 
-面向「让 Agent 写代码」的一组内置系统工具：文件读写检索改（`file_ops`）、Shell 执行（`terminal`）、后台任务（`terminal_job`）、临时代码片段（`code_exec`）。本文档描述它们的能力边界、参数、上限与安全模型。
+面向「让 Agent 写代码」的一组内置系统工具：文件读写检索改（`file_ops`）、Shell 执行与后台任务（`terminal`）、临时代码片段（`code_exec`）。本文档描述它们的能力边界、参数、上限与安全模型。
 
 实现位于 `tools/src/builtins/system/`，参数 schema 由 `schemars` 自动生成后下发给模型。
 
@@ -131,9 +131,9 @@ HITL 确认卡提供三个按钮：**Approve**（本次）/ **Approve & always a
 
 ---
 
-## `terminal_job`（后台任务）
+## `terminal` 后台任务（`action=list|status|wait|kill`）
 
-`terminal(background=true)` 会立即返回一个 `job id`、命令脱离 60s 超时在后台跑；再用 `terminal_job` 轮询 / 等待 / 终止。
+`terminal(background=true)` 会立即返回一个 `job id`、命令脱离超时在后台跑；再用同一 `terminal` 工具的 `action=list|status|wait|kill` 轮询 / 等待 / 终止。
 
 ### 为什么需要进程级注册表
 
@@ -178,7 +178,7 @@ HITL 确认卡提供三个按钮：**Approve**（本次）/ **Approve & always a
 
 ## 工具集开关
 
-`file_ops`、`terminal`（含 `terminal_job`）、`code_exec` 各为独立 toolset，受 `tools-enabled.json` 控制；`terminal_job` 归入 `terminal` toolset，与终端开关一起启停。映射见 `home::tool_name_to_toolset`。
+`file_ops`、`terminal`、`code_exec` 各为独立 toolset，受 `tools-enabled.json` 控制；后台 job 管理归入 `terminal` toolset，与终端开关一起启停。映射见 `home::tool_name_to_toolset`。
 
 ---
 
@@ -192,4 +192,4 @@ HITL 确认卡提供三个按钮：**Approve**（本次）/ **Approve & always a
 4. **`search` / `list` 不读 `.gitignore`**：仅硬编码噪音目录表，真实仓库会污染结果 / 拖慢扫描。可引入 `ignore` crate。
 5. **`patch` 不支持一次多处编辑**：多点编辑需多次调用、逐次重读重写；可加 `patches: [{old,new}]` 批量原子应用。
 6. **无 `stat` 操作**：读大文件前探大小 / 判断存在只能靠 `list` 或试错。
-7. 锦上添花：`search` 上下文行、`read` 行号前缀（opt-in）、`move`/`copy` 的 `overwrite`、`terminal_job` 的 `remove`/`clear`。
+7. 锦上添花：`search` 上下文行、`read` 行号前缀（opt-in）、`move`/`copy` 的 `overwrite`、`terminal` job 的 `remove`/`clear`。

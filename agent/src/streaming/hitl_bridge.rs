@@ -1,7 +1,7 @@
 //! Astro HITL 桥：解析工具结果中的 `astro_hitl` 标记，并在父/子会话间转发 park/resume。
 //!
 //! - 同步 `delegate` 子路径：通过 [`PARENT_HITL_CTX`] task-local 上浮到父流。
-//! - 异步 `delegate_async` 子路径：通过 [`LIVE_PARENT_HITL`] 会话表按 `session_id` 查找。
+//! - 异步 `delegate(action=async)` 子路径：通过 [`LIVE_PARENT_HITL`] 会话表按 `session_id` 查找。
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
@@ -28,7 +28,7 @@ pub(crate) struct ParentHitlCtx {
     pub run_id: String,
 }
 
-/// 进行中聊天流的父 HITL 表（供 `delegate_async` 子任务上浮）。
+/// 进行中聊天流的父 HITL 表（供 `delegate(action=async)` 子任务上浮）。
 static LIVE_PARENT_HITL: OnceLock<tokio::sync::RwLock<HashMap<String, ParentHitlCtx>>> =
     OnceLock::new();
 
@@ -49,7 +49,7 @@ pub(crate) async fn unregister_live_parent_hitl(session_id: &str) {
 
 fn decorate_delegate_hitl(mut hitl: AstroHitlPayload, async_child: bool) -> AstroHitlPayload {
     let tag = if async_child {
-        "[delegate_async]"
+        "[delegate async]"
     } else {
         "[delegate]"
     };
@@ -372,7 +372,7 @@ mod child_hitl_tests {
             }
             let pending = gate_resolver.pending_interrupts().await;
             assert!(!pending.is_empty());
-            assert!(pending[0].reason.contains("delegate_async"));
+            assert!(pending[0].reason.contains("delegate async"));
             gate_resolver
                 .resolve(&[ResumeItem {
                     interrupt_id: pending[0].id.clone(),

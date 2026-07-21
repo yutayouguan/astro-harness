@@ -248,48 +248,6 @@ pub fn set_active_agent(base: &Path, agent_id: &str) -> anyhow::Result<String> {
 /// 每日流水日记目录（相对工作区根），与 OpenClaw `memory/*.md` 对齐。
 pub const DAILY_MEMORY_DIR: &str = "memory";
 
-/// 旧目录名（误用 mermaid 图表库名）；读取/写入前会迁移到 [`DAILY_MEMORY_DIR`]。
-pub const LEGACY_DAILY_MEMORY_DIR: &str = "mermaid";
-
-/// 将遗留的 `mermaid/` 迁到 `memory/`（若尚未迁移）。
-///
-/// - 仅有旧目录：整目录 rename
-/// - 两边都有：把旧目录中尚不存在的 `.md` 拷入新目录，再尽量删除旧目录
-pub fn migrate_daily_memory_dir(workspace: &Path) -> anyhow::Result<()> {
-    let legacy = workspace.join(LEGACY_DAILY_MEMORY_DIR);
-    let current = workspace.join(DAILY_MEMORY_DIR);
-    if !legacy.is_dir() {
-        return Ok(());
-    }
-    if !current.exists() {
-        fs::rename(&legacy, &current)?;
-        return Ok(());
-    }
-    if !current.is_dir() {
-        anyhow::bail!(
-            "无法迁移每日记忆：{} 已存在且不是目录",
-            current.display()
-        );
-    }
-    for entry in fs::read_dir(&legacy)? {
-        let entry = entry?;
-        let src = entry.path();
-        if src.extension().and_then(|x| x.to_str()) != Some("md") {
-            continue;
-        }
-        let Some(name) = src.file_name() else {
-            continue;
-        };
-        let dest = current.join(name);
-        if !dest.exists() {
-            fs::copy(&src, &dest)?;
-        }
-    }
-    // Best-effort cleanup; leftover non-md files may leave the old dir behind.
-    let _ = fs::remove_dir_all(&legacy);
-    Ok(())
-}
-
 /// 某 Agent 工作区内的日记忆路径：`memory/YYYY-MM-DD.md`
 pub fn daily_memory_path(workspace: &Path, date: &str) -> PathBuf {
     workspace.join(DAILY_MEMORY_DIR).join(format!("{date}.md"))
@@ -302,7 +260,6 @@ pub fn today_date_string() -> String {
 
 /// 列出工作区内已有的日记忆文件名（不含扩展名），新→旧
 pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
-    let _ = migrate_daily_memory_dir(workspace);
     let dir = workspace.join(DAILY_MEMORY_DIR);
     let Ok(entries) = fs::read_dir(&dir) else {
         return Vec::new();

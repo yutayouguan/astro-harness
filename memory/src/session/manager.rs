@@ -347,13 +347,13 @@ fn truncate_chars(s: &str, max: usize) -> String {
 ///
 /// - `"user"` → [`MemoryTarget::User`]
 /// - `"memory"` / 缺省 → [`MemoryTarget::Memory`]
-/// - `"daily"` / `"mermaid"`（遗留目录名）→ 错误（日记仅系统入口）
+/// - `"daily"` → 错误（日记仅系统入口）
 fn parse_memory_target(value: Option<&str>) -> anyhow::Result<MemoryTarget> {
     match value {
         None => Ok(MemoryTarget::Memory),
         Some("user") => Ok(MemoryTarget::User),
         Some("memory") => Ok(MemoryTarget::Memory),
-        Some("daily") | Some("mermaid") => {
+        Some("daily") => {
             anyhow::bail!("日记请使用系统入口，不支持 memory 工具 target=daily")
         }
         Some(other) => anyhow::bail!("未知的 memory target: {other}"),

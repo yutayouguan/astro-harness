@@ -77,7 +77,7 @@ learning:
 - **MEMORY / USER**：有界事实与偏好；可选 `write_approval`、background review、入梦。见 [`memory.md`](./memory.md)。  
 - **Skills**：可执行流程与脚本索引；Agent 主动 `manage`，本系统**不**在 Done 后自动写 Skill。  
 - **DecisionLog**：`~/.astro/learning/decisions.jsonl`；近期 `ToolFailure` 可强化「把正确路径 patch 进 skill」提示。  
-- **session_search**：跨会话原文召回；摘要仍由模型完成，不自动入库。
+- **search**：跨会话原文 / 记忆 / 知识库按需召回；摘要仍由模型完成，不自动入库。
 
 ---
 
