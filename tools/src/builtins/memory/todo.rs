@@ -63,8 +63,8 @@ crate::submit_builtin_tool! {
 /// # 错误
 /// 参数反序列化失败，或写文件失败。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: TodoArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("todo 参数无效: {e}"))?;
+    let parsed: TodoArgs =
+        serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("todo 参数无效: {e}"))?;
     let title = parsed.title.as_deref().unwrap_or("Todo");
 
     let mut lines = vec![format!("# {title}"), String::new()];

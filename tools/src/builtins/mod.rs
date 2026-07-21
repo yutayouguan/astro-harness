@@ -13,7 +13,8 @@ pub mod system;
 pub use agents::{persona_create, pipeline, subagent, team};
 pub use hitl::{ask_user, switch_mode};
 pub use media::{
-    audio_understand, image_gen, music_gen, robotics, tts, video_gen, video_understand, image_understand,
+    audio_understand, image_gen, image_understand, music_gen, robotics, tts, video_gen,
+    video_understand,
 };
 pub use memory::{context_tools, memory_tools, scheduled, skills_tool, todo};
 pub use present::present_shared;

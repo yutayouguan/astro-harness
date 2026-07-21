@@ -94,10 +94,18 @@ fn resolve_kind(parsed: &PresentArgs) -> anyhow::Result<PresentKind> {
     if !parsed.metrics.is_empty() {
         return Ok(PresentKind::Metrics);
     }
-    if parsed.status.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+    if parsed
+        .status
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty())
+    {
         return Ok(PresentKind::Result);
     }
-    if parsed.variant.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+    if parsed
+        .variant
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty())
+    {
         return Ok(PresentKind::Callout);
     }
     // Default shortcut card
