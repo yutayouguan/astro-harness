@@ -93,6 +93,10 @@
 .loop-icon-btn--danger:hover {
   color: #ef4444;
 }
+.loop-icon-btn.is-active {
+  background: color-mix(in srgb, var(--tone, #ec4899) 15%, transparent);
+  color: var(--tone, #ec4899);
+}
 
 /* ── Card list ─────────────────────────────────────────────────── */
 

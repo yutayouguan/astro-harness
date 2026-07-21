@@ -362,6 +362,21 @@ export default function LoopEditor({ workflowId, providers: _providers, onBack }
             onClose={() => setSelectedNodeId(null)}
           />
         )}
+
+        {/* ── Right: Run history panel ── */}
+        {showHistory && !selectedRunId && workflow && (
+          <LoopRunHistory
+            workflowId={workflow.id}
+            onSelectRun={(runId) => setSelectedRunId(runId)}
+            onClose={() => setShowHistory(false)}
+          />
+        )}
+        {showHistory && selectedRunId && (
+          <LoopRunDetail
+            runId={selectedRunId}
+            onBack={() => setSelectedRunId(null)}
+          />
+        )}
       </div>
     </div>
   );
