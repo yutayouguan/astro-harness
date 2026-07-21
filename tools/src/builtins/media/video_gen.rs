@@ -17,51 +17,51 @@ use crate::schema::schema_for_args;
 /// `video_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VideoGenArgs {
-    /// Detailed shot prompt (required): subject/action, camera, setting, lighting, style, mood—not a short summary. Pass thinking drafts verbatim.
+    /// 详细镜头提示词（必填）：主体/动作、运镜、场景、光影、风格、氛围；勿用短句。思考稿须原样传入。
     pub prompt: String,
-    /// Short Chinese title for the filename; default 视频.
+    /// 短中文标题，用于文件名；缺省「视频」。
     #[serde(default)]
     pub title: Option<String>,
-    /// Aspect ratio, e.g. `16:9` / `9:16`.
+    /// 宽高比，如 `16:9` / `9:16`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// Duration in seconds (forced to 8 for extend/refs/last_frame/1080p/4K).
+    /// 时长秒数（续拍/参考图/首尾帧/1080p/4K 时强制为 8）。
     #[serde(default)]
     pub duration_seconds: Option<u32>,
-    /// Output resolution: `720p` / `1080p` / `4K`.
+    /// 输出分辨率：`720p` / `1080p` / `4K`。
     #[serde(default)]
     pub resolution: Option<String>,
-    /// Negative prompt (optional; ignored by native Veo).
+    /// 负面提示（可选；原生 Veo 忽略）。
     #[serde(default)]
     pub negative_prompt: Option<String>,
-    /// Visual style: `cinematic` / `creative` (ignored by native Veo).
+    /// 视觉风格：`cinematic` / `creative`（原生 Veo 忽略）。
     #[serde(default)]
     pub style: Option<String>,
-    /// Extend from workspace video path (preferred for next shots).
+    /// 续拍：工作区内已有视频路径（优先用于下一镜）。
     #[serde(default)]
     pub extend_video: Option<String>,
-    /// Extend from remote video URI.
+    /// 续拍：远端视频 URI。
     #[serde(default)]
     pub extend_video_uri: Option<String>,
-    /// Extend from prior operation id.
+    /// 续拍：已有 operation id。
     #[serde(default)]
     pub extend_video_id: Option<String>,
-    /// Reference image paths (max 3; incompatible with image/last_frame).
+    /// 参考图路径（最多 3 张；不可与 image/last_frame 同用）。
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// Single reference image path (merged into reference_images).
+    /// 单张参考图路径（合并进 reference_images）。
     #[serde(default)]
     pub reference_image: Option<String>,
-    /// First-frame image path (image-to-video / interpolation).
+    /// 首帧图路径（图生视频 / 插值）。
     #[serde(default)]
     pub image: Option<String>,
-    /// Last-frame image path (requires `image`).
+    /// 尾帧图路径（须同时提供 `image`）。
     #[serde(default)]
     pub last_frame: Option<String>,
-    /// Person generation: `allow_adult` / `allow_all` / `dont_allow`.
+    /// 人物生成：`allow_adult` / `allow_all` / `dont_allow`。
     #[serde(default)]
     pub person_generation: Option<String>,
-    /// Random seed (integer).
+    /// 随机种子（整数）。
     #[serde(default)]
     pub seed: Option<i64>,
 }
@@ -71,7 +71,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "video_gen".to_string(),
         toolset: "video_gen".to_string(),
-        description: "Generate a short video via Google Veo. If shot direction is unclear and not delegated, ask via `clarify` first. Prefer extend_video for next shots; refs ≤3; extend/refs/last_frame/1080p/4K force duration_seconds=8. Saves under generated/videos/."
+        description: "用 Google Veo 生成短视频。镜头方向不明确且用户未授权自由发挥时，先用 `clarify` 询问。下一镜优先 extend_video；参考图 ≤3；续拍/参考图/首尾帧/1080p/4K 时 duration_seconds 强制为 8。结果写入 generated/videos/。"
             .to_string(),
         schema: schema_for_args::<VideoGenArgs>(),
         check_fn: None,

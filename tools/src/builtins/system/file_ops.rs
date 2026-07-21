@@ -39,47 +39,47 @@ const MAX_SEARCH_FILES_SCANNED: usize = 2000;
 /// `file_ops` 工具的参数结构。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct FileOpsArgs {
-    /// Workspace-relative path.
+    /// 工作区相对路径。
     pub path: String,
-    /// Operation: `read` | `write` | `append` | `list` | `delete` | `mkdir` | `search` | `patch` | `move` | `copy`.
+    /// 操作：`read` | `write` | `append` | `list` | `delete` | `mkdir` | `search` | `patch` | `move` | `copy`。
     pub operation: String,
-    /// Content for `write` / `append` (`write` required).
+    /// `write` / `append` 的内容（`write` 必填）。
     #[serde(default)]
     pub content: Option<String>,
-    /// Search query (filename or content; case-insensitive). `content` also accepted.
+    /// 搜索查询（文件名或内容，大小写不敏感）；也可用 `content`。
     #[serde(default)]
     pub query: Option<String>,
-    /// Patch: text to replace (must be unique unless `replace_all=true`).
+    /// `patch`：要替换的原文（默认须唯一，除非 `replace_all=true`）。
     #[serde(default)]
     pub old_string: Option<String>,
-    /// Patch: replacement text.
+    /// `patch`：替换后的新文本。
     #[serde(default)]
     pub new_string: Option<String>,
-    /// Patch: replace all matches when true.
+    /// `patch`：为 true 时替换全部匹配。
     #[serde(default)]
     pub replace_all: Option<bool>,
-    /// Destination path for `move` / `copy`.
+    /// `move` / `copy` 的目标路径。
     #[serde(default)]
     pub dest: Option<String>,
-    /// Read: byte offset (default 0).
+    /// `read`：字节偏移（默认 0）。
     #[serde(default)]
     pub offset: Option<u64>,
-    /// Read: max bytes (capped at 64KiB). Search: max hits (default/cap 50).
+    /// `read`：最多读取字节（上限 64KiB）。`search`：最多命中数（默认/上限 50）。
     #[serde(default)]
     pub limit: Option<usize>,
-    /// Read: start line (1-based, inclusive).
+    /// `read`：起始行（1 起，含）。
     #[serde(default)]
     pub start_line: Option<usize>,
-    /// Read: end line (1-based, inclusive); omitted reads to EOF (still byte-capped).
+    /// `read`：结束行（1 起，含）；缺省读到文件末尾（仍受字节上限约束）。
     #[serde(default)]
     pub end_line: Option<usize>,
-    /// Search: treat `query` as case-insensitive regex.
+    /// `search`：把 `query` 当大小写不敏感正则。
     #[serde(default)]
     pub regex: Option<bool>,
-    /// Search/list: extension filter, e.g. `rs,toml` (no dots).
+    /// `search` / `list`：扩展名过滤，如 `rs,toml`（不含点）。
     #[serde(default)]
     pub ext: Option<String>,
-    /// Delete dirs: true to remove trees. List: true for recursive listing.
+    /// `delete` 目录：true 才整树删除。`list`：true 则递归列出。
     #[serde(default)]
     pub recursive: Option<bool>,
 }
@@ -89,7 +89,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "file_ops".to_string(),
         toolset: "file_ops".to_string(),
-        description: "File ops under project_root (delegated worktree) or agent workspace: read, write, append, list, mkdir, delete, search, patch, move, copy. Paths are workspace-relative; read/list/search outputs are size-capped."
+        description: "在 project_root（委派 worktree）或 Agent 工作区内做文件操作：read、write、append、list、mkdir、delete、search、patch、move、copy。路径相对工作区；read/list/search 输出有体积上限。"
             .to_string(),
         schema: schema_for_args::<FileOpsArgs>(),
         check_fn: None,
