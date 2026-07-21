@@ -539,12 +539,37 @@ html[data-theme="dark"] .providers-badge--deprecated {
 .providers-media-model-select {
   width: 100%;
   min-width: 0;
+  --select-glass-shadow:
+    0 2px 8px color-mix(in srgb, var(--select-tone) 6%, rgba(15, 23, 42, 0.04)),
+    0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .providers-media-model-select .select-menu-trigger {
   width: 100%;
   min-height: 42px;
   justify-content: space-between;
+}
+
+.providers-media-model-select .select-menu-trigger:hover:not(:disabled),
+.providers-media-model-select.select-menu.is-open .select-menu-trigger {
+  box-shadow:
+    0 3px 10px color-mix(in srgb, var(--select-tone) 10%, rgba(15, 23, 42, 0.05)),
+    0 1px 3px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+}
+
+html[data-theme="dark"] .providers-media-model-select {
+  --select-glass-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+html[data-theme="dark"] .providers-media-model-select .select-menu-trigger:hover:not(:disabled),
+html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .select-menu-trigger {
+  box-shadow:
+    0 3px 10px color-mix(in srgb, var(--select-tone) 12%, rgba(0, 0, 0, 0.24)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .providers-form-grid {
@@ -1984,8 +2009,8 @@ html[data-theme="dark"] .providers-add-row {
 @media (max-width: 860px) {
   .providers-layout {
     grid-template-columns: 1fr;
-    /* 列表行保底可见；详情按内容增高，整体滚动，避免 1fr 挤掉列表 */
-    grid-template-rows: minmax(200px, 36vh) auto;
+    /* 列表行：表头 + 若干项 + 底部添加条；详情按内容增高，整页滚动 */
+    grid-template-rows: minmax(280px, 44vh) auto;
     overflow-y: auto;
     align-content: start;
   }
@@ -1995,8 +2020,8 @@ html[data-theme="dark"] .providers-add-row {
   }
 
   .providers-pane-list .providers-list {
-    /* 列表区内至少约 3 条供应商高度，多的可滚 */
-    min-height: calc(3 * 52px + 2 * 6px);
+    /* 不与添加条抢高度，列表内部滚动 */
+    min-height: 0;
   }
 
   .providers-pane-detail {
