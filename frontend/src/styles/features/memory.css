@@ -1310,18 +1310,55 @@ html[data-theme="dark"] .aux-warning {
 }
 
 @media (max-width: 900px) {
-  .aux-hero,
-  .aux-task-row {
-    grid-template-columns: 1fr;
-  }
-
-  .aux-hero,
-  .aux-task-actions {
+  .aux-hero {
+    flex-direction: column;
     align-items: stretch;
   }
 
+  .aux-hero-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .aux-hero-actions .aux-action {
+    flex: 1 1 auto;
+  }
+
+  .aux-task-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon main"
+      "actions actions";
+  }
+
+  .aux-task-icon {
+    grid-area: icon;
+    align-self: start;
+  }
+
+  .aux-task-main {
+    grid-area: main;
+  }
+
   .aux-task-actions {
-    justify-content: flex-start;
+    grid-area: actions;
+    width: 100%;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .aux-task-actions .aux-action {
+    flex: 1 1 auto;
+    min-width: max-content;
+  }
+
+  .aux-editor {
+    width: 100%;
+  }
+
+  .aux-editor .select-menu-root {
+    min-width: 0;
+    flex: 1 1 12rem;
   }
 }
 
