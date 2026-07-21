@@ -15,9 +15,10 @@ fn estimate_tokens(chars: usize) -> u32 {
 }
 
 fn main() -> anyhow::Result<()> {
-    let out = env::args().nth(1).map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tool-schemas.json")
-    });
+    let out = env::args()
+        .nth(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tool-schemas.json"));
 
     let mut reg = ToolRegistry::new();
     register_all(&mut reg);
