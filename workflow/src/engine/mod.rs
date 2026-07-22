@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{bail, Result};
 use chrono::Local;
+use futures::future::join_all;
 
 use crate::model::{NodeType, Workflow, WorkflowEdge, WorkflowNode};
 use crate::nodes;
@@ -114,58 +115,124 @@ async fn execute_inner_with_depth(
     let mut final_output: Option<serde_json::Value> = None;
 
     for layer in &plan.layers {
-        for node_id in layer {
-            if skipped.contains(node_id) {
-                continue;
-            }
+        // ── 2.2 层内并行执行 ──
+        // 收集本层可执行的节点
+        let mut layer_tasks: Vec<(&str, &WorkflowNode, String)> = Vec::new();
+        // 需要串行处理的特殊节点（子工作流、循环）
+        let mut serial_nodes: Vec<(&str, &WorkflowNode, String)> = Vec::new();
 
+        for node_id in layer {
+            if skipped.contains(node_id) { continue; }
             let node = match node_map.get(node_id.as_str()) {
                 Some(n) => *n,
                 None => continue,
             };
-
-            let executor = match executors.get(&node.node_type) {
-                Some(e) => e,
-                None => {
-                    tracing::warn!(node_type = ?node.node_type, "无可用执行器，跳过");
-                    continue;
-                }
-            };
-
-            // ── 2.1 错误处理：读取节点配置的重试和错误策略 ──
-            let retry_count = node.config.get("retry_count").and_then(|v| v.as_u64()).unwrap_or(0);
-            let retry_interval = node.config.get("retry_interval").and_then(|v| v.as_u64()).unwrap_or(1);
-            let on_error = node.config.get("on_error").and_then(|v| v.as_str()).unwrap_or("abort");
-            let fallback_value = node.config.get("fallback_value").cloned();
-
+            if executors.get(&node.node_type).is_none() {
+                tracing::warn!(node_type = ?node.node_type, "无可用执行器，跳过");
+                continue;
+            }
             let step_id = uuid::Uuid::new_v4().to_string();
             let step_started = Local::now().to_rfc3339();
             let _ = run_db.insert_step_log(
                 &step_id, run_id, node_id,
                 &format!("{:?}", node.node_type), &node.label, &step_started,
             );
+            if matches!(node.node_type, NodeType::RunLoop | NodeType::CustomLoop | NodeType::Loop) {
+                serial_nodes.push((node_id.as_str(), node, step_id));
+            } else {
+                layer_tasks.push((node_id.as_str(), node, step_id));
+            }
+        }
 
-            // ── 2.4 子工作流特殊处理 ──
+        // 并行执行普通节点
+        if !layer_tasks.is_empty() {
+            let ctx_ref = &ctx;
+            let futs = layer_tasks.iter().map(|(_, node, _)| {
+                let executor = executors.get(&node.node_type).unwrap();
+                let retry_count = node.config.get("retry_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                let retry_interval = node.config.get("retry_interval").and_then(|v| v.as_u64()).unwrap_or(1);
+                async move {
+                    let mut last_err = None;
+                    for attempt in 0..=retry_count {
+                        if attempt > 0 {
+                            tokio::time::sleep(std::time::Duration::from_secs(retry_interval)).await;
+                        }
+                        match executor.execute(node, ctx_ref).await {
+                            Ok(r) => return Ok(r),
+                            Err(e) => { last_err = Some(e); }
+                        }
+                    }
+                    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("执行失败")))
+                }
+            });
+
+            let results: Vec<Result<NodeResult>> = join_all(futs).await;
+
+            for ((node_id, node, step_id), result) in layer_tasks.iter().zip(results) {
+                let step_finished = Local::now().to_rfc3339();
+                steps_executed += 1;
+                let on_error = node.config.get("on_error").and_then(|v| v.as_str()).unwrap_or("abort");
+                let fallback_value = node.config.get("fallback_value").cloned();
+
+                match result {
+                    Ok(NodeResult::Success(output)) => {
+                        ctx.set_node_output(node_id, output.clone());
+                        if node.node_type == NodeType::Output { final_output = Some(output.clone()); }
+                        let out_str = serde_json::to_string(&output).ok();
+                        let _ = run_db.finish_step_log(&step_id, "success", &step_finished, out_str.as_deref(), None);
+                    }
+                    Ok(NodeResult::Branch(active_handles)) => {
+                        ctx.set_node_output(node_id, serde_json::json!({ "active_branches": &active_handles }));
+                        mark_inactive_downstream(node_id, &active_handles, &workflow.edges, &mut skipped);
+                        let _ = run_db.finish_step_log(&step_id, "success", &step_finished, Some(&format!("branches: {:?}", active_handles)), None);
+                    }
+                    Ok(NodeResult::Filtered) => {
+                        mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
+                        let _ = run_db.finish_step_log(&step_id, "skipped", &step_finished, Some("filtered"), None);
+                    }
+                    Ok(NodeResult::Approved) => {
+                        ctx.set_node_output(node_id, serde_json::json!({ "approved": true }));
+                        let _ = run_db.finish_step_log(&step_id, "success", &step_finished, Some("approved"), None);
+                    }
+                    Ok(NodeResult::PendingApproval { prompt }) => {
+                        let _ = run_db.finish_step_log(&step_id, "pending_approval", &step_finished,
+                            Some(&serde_json::json!({"prompt": prompt, "node_id": node_id}).to_string()), None);
+                        return Ok(WorkflowRunResult {
+                            run_id: run_id.to_string(), status: "pending_approval".to_string(),
+                            output: Some(serde_json::json!({"pending_node": node_id, "prompt": prompt})),
+                            error: None, steps_executed,
+                        });
+                    }
+                    Err(e) => {
+                        let err_msg = e.to_string();
+                        match on_error {
+                            "skip" => {
+                                mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
+                                let _ = run_db.finish_step_log(&step_id, "skipped", &step_finished, None, Some(&err_msg));
+                            }
+                            "fallback" => {
+                                let fb = fallback_value.unwrap_or(serde_json::json!(null));
+                                ctx.set_node_output(node_id, fb.clone());
+                                let fb_str = serde_json::to_string(&fb).ok();
+                                let _ = run_db.finish_step_log(&step_id, "fallback", &step_finished, fb_str.as_deref(), Some(&err_msg));
+                            }
+                            _ => {
+                                let _ = run_db.finish_step_log(&step_id, "failure", &step_finished, None, Some(&err_msg));
+                                bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 串行执行特殊节点（子工作流、循环）
+        for (node_id, node, step_id) in &serial_nodes {
             let result = if matches!(node.node_type, NodeType::RunLoop | NodeType::CustomLoop) {
                 execute_sub_workflow(node, &ctx, run_db, depth).await
             } else {
-                // 带重试的执行
-                let mut last_err = None;
-                let mut res = None;
-                for attempt in 0..=retry_count {
-                    if attempt > 0 {
-                        tokio::time::sleep(std::time::Duration::from_secs(retry_interval)).await;
-                        tracing::info!(node = %node.label, attempt, "重试执行");
-                    }
-                    match executor.execute(node, &ctx).await {
-                        Ok(r) => { res = Some(r); break; }
-                        Err(e) => { last_err = Some(e); }
-                    }
-                }
-                match res {
-                    Some(r) => Ok(r),
-                    None => Err(last_err.unwrap_or_else(|| anyhow::anyhow!("执行失败"))),
-                }
+                // Loop 节点
+                executors.get(&node.node_type).unwrap().execute(node, &ctx).await
             };
 
             let step_finished = Local::now().to_rfc3339();
@@ -173,7 +240,6 @@ async fn execute_inner_with_depth(
 
             match result {
                 Ok(NodeResult::Success(output)) => {
-                    // ── 2.3 Loop 节点迭代 ──
                     if node.node_type == NodeType::Loop {
                         let iter_steps = execute_loop_body(
                             node, &workflow.edges, &node_map, &executors,
@@ -182,59 +248,17 @@ async fn execute_inner_with_depth(
                         steps_executed += iter_steps;
                     }
                     ctx.set_node_output(node_id, output.clone());
-                    if node.node_type == NodeType::Output {
-                        final_output = Some(output.clone());
-                    }
+                    if node.node_type == NodeType::Output { final_output = Some(output.clone()); }
                     let out_str = serde_json::to_string(&output).ok();
-                    let _ = run_db.finish_step_log(&step_id, "success", &step_finished, out_str.as_deref(), None);
-                }
-                Ok(NodeResult::Branch(active_handles)) => {
-                    ctx.set_node_output(node_id, serde_json::json!({ "active_branches": &active_handles }));
-                    mark_inactive_downstream(node_id, &active_handles, &workflow.edges, &mut skipped);
-                    let _ = run_db.finish_step_log(&step_id, "success", &step_finished, Some(&format!("branches: {:?}", active_handles)), None);
-                }
-                Ok(NodeResult::Filtered) => {
-                    mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
-                    let _ = run_db.finish_step_log(&step_id, "skipped", &step_finished, Some("filtered"), None);
-                }
-                Ok(NodeResult::Approved) => {
-                    ctx.set_node_output(node_id, serde_json::json!({ "approved": true }));
-                    let _ = run_db.finish_step_log(&step_id, "success", &step_finished, Some("approved"), None);
-                }
-                Ok(NodeResult::PendingApproval { prompt }) => {
-                    let _ = run_db.finish_step_log(
-                        &step_id, "pending_approval", &step_finished,
-                        Some(&serde_json::json!({"prompt": prompt, "node_id": node_id}).to_string()), None,
-                    );
-                    return Ok(WorkflowRunResult {
-                        run_id: run_id.to_string(),
-                        status: "pending_approval".to_string(),
-                        output: Some(serde_json::json!({"pending_node": node_id, "prompt": prompt})),
-                        error: None,
-                        steps_executed,
-                    });
+                    let _ = run_db.finish_step_log(step_id, "success", &step_finished, out_str.as_deref(), None);
                 }
                 Err(e) => {
                     let err_msg = e.to_string();
-                    // ── 2.1 错误策略 ──
-                    match on_error {
-                        "skip" => {
-                            tracing::warn!(node = %node.label, error = %err_msg, "节点失败，策略=skip，跳过下游");
-                            mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
-                            let _ = run_db.finish_step_log(&step_id, "skipped", &step_finished, None, Some(&err_msg));
-                        }
-                        "fallback" => {
-                            let fb = fallback_value.clone().unwrap_or(serde_json::json!(null));
-                            tracing::warn!(node = %node.label, error = %err_msg, "节点失败，策略=fallback");
-                            ctx.set_node_output(node_id, fb.clone());
-                            let fb_str = serde_json::to_string(&fb).ok();
-                            let _ = run_db.finish_step_log(&step_id, "fallback", &step_finished, fb_str.as_deref(), Some(&err_msg));
-                        }
-                        _ => {
-                            let _ = run_db.finish_step_log(&step_id, "failure", &step_finished, None, Some(&err_msg));
-                            bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
-                        }
-                    }
+                    let _ = run_db.finish_step_log(step_id, "failure", &step_finished, None, Some(&err_msg));
+                    bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
+                }
+                other => {
+                    let _ = run_db.finish_step_log(step_id, "success", &step_finished, Some(&format!("{:?}", other)), None);
                 }
             }
         }
