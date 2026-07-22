@@ -1,5 +1,5 @@
 /** Lucide 图标选择器。 */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -36,6 +36,8 @@ type Props = {
   onUploadImage?: (file: File) => void;
   /** 异步操作进行中时禁止关闭与上传 */
   busy?: boolean;
+  /** portal 主题色继承（跨 tab 场景） */
+  toneStyle?: CSSProperties;
 };
 
 function paintKey(paint: LucidePaint): string {
@@ -85,6 +87,7 @@ export default function LucideIconPicker({
   onSelect,
   onUploadImage,
   busy,
+  toneStyle,
 }: Props) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -136,6 +139,7 @@ export default function LucideIconPicker({
     <div
       className="agent-icon-drawer-backdrop"
       role="presentation"
+      style={toneStyle}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
