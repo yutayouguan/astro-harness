@@ -44,10 +44,12 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "code_exec".to_string(),
         toolset: "code_exec".to_string(),
-        description: "Execute a short code snippet. language must be python|javascript|shell (default python). \
+        description: "Execute a short code snippet for quick computation or data processing. \
+language must be python|javascript|shell (default python). \
 Not a hard sandbox—runs on the host with the workspace as cwd. \
 Guardrails: env scrubbing (no API keys/tokens), Unix resource limits (CPU/memory/file size/fd), 30s timeout. \
-stdout/stderr capped at 64KiB."
+stdout/stderr capped at 64KiB. \
+For project build/dev/git commands, use terminal instead."
             .to_string(),
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,

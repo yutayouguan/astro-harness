@@ -454,7 +454,7 @@ export const zh = {
   "agentTools.fileOps.title": "文件操作",
   "agentTools.fileOps.desc": "读取、写入、搜索、精准 patch 与管理工作区文件",
   "agentTools.codeExec.title": "代码执行",
-  "agentTools.codeExec.desc": "执行短片段（python/js/shell；输出有长度上限）",
+  "agentTools.codeExec.desc": "快速计算/数据处理用短片段（python/js/shell）；项目构建/开发/git 命令请用终端",
   "agentTools.imageUnderstand.title": "图像理解",
   "agentTools.imageUnderstand.desc": "用 Google Interactions 原生接口看图（描述/检测/分割，支持多图）；OpenAI chat/completions 兜底",
   "agentTools.audioUnderstand.title": "音频理解",
@@ -2164,7 +2164,7 @@ export const en: Record<MessageKey, string> = {
   "agentTools.fileOps.title": "File Ops",
   "agentTools.fileOps.desc": "Read, write, search, unique patch, and manage workspace files",
   "agentTools.codeExec.title": "Code Execution",
-  "agentTools.codeExec.desc": "Run short python/js/shell snippets (output capped)",
+  "agentTools.codeExec.desc": "Quick computation/data processing via python/js/shell snippets; for project build/dev/git commands use terminal",
   "agentTools.imageUnderstand.title": "Image Understand",
   "agentTools.imageUnderstand.desc":
     "Analyze images via Google Interactions API (describe/detect/segment, multi-image); OpenAI chat/completions fallback",
