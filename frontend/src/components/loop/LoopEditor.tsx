@@ -124,6 +124,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [saving, setSaving] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
@@ -379,7 +380,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   );
 
   return (
-    <div className="loop-editor">
+    <div className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}>
       {/* ── Toolbar ── */}
       <div className="loop-editor-toolbar">
         <button className="loop-icon-btn" onClick={onBack} title="返回">
@@ -415,6 +416,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           )}
         </div>
         <div className="loop-editor-toolbar-right">
+          <button
+            className={`loop-icon-btn${fullscreen ? " is-active" : ""}`}
+            title={fullscreen ? "退出全屏" : "全屏编辑"}
+            onClick={() => setFullscreen((v) => !v)}
+          >
+            {fullscreen ? <LucideIcons.Minimize2 size={16} /> : <LucideIcons.Maximize2 size={16} />}
+          </button>
           <button
             className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
             title="运行日志"
