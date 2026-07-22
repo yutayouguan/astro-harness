@@ -97,7 +97,7 @@ pub fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
                         ..Default::default()
                     })
                 }
-                "text_delta" | _ if delta.get("text").is_some() => {
+                _ => {
                     let token = delta
                         .get("text")
                         .and_then(|t| t.as_str())
@@ -108,7 +108,6 @@ pub fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
                         ..Default::default()
                     })
                 }
-                _ => None,
             }
         }
         "message_delta" => {

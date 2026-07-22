@@ -39,15 +39,16 @@ pub async fn anthropic_chat_stream(
         body["system"] = json!(system);
     }
 
-    // Extended Thinking
+    // Extended Thinking（budget_tokens 须 >= 1024 且 < max_tokens）
     if config.thinking_enabled {
-        let budget = match config.reasoning_effort.trim() {
+        let raw_budget = match config.reasoning_effort.trim() {
             "max" => defaults::THINKING_BUDGET_MAX,
             "high" | "" => defaults::THINKING_BUDGET_HIGH,
             other => other
                 .parse::<u32>()
                 .unwrap_or(defaults::THINKING_BUDGET_HIGH),
         };
+        let budget = raw_budget.clamp(1024, config.max_tokens.saturating_sub(1).max(1024));
         body["thinking"] = json!({
             "type": "enabled",
             "budget_tokens": budget,

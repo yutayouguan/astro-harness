@@ -1,6 +1,6 @@
-//! 真实 HTTP 流式聊天：Chat Completions / Anthropic Messages / Azure quirk。
+//! 真实 HTTP 流式聊天：Chat Completions / Azure quirk + 共享 SSE 基础设施。
 //!
-//! 按 [`crate::profile::ApiMode`] 分发；不再保留 Google native / Ollama NDJSON。
+//! 按 [`crate::profile::ApiMode`] 分发；Anthropic / Google / Gemini Native 各自有独立模块。
 
 use anyhow::{anyhow, Context, Result};
 use futures::StreamExt;
