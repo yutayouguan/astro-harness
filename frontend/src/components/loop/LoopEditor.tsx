@@ -320,13 +320,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   className="loop-palette-group-header"
                   onClick={() => toggleCategory(cat.key)}
                 >
-                  {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                  <span
-                    className="loop-palette-cat-icon"
-                    style={{ background: `color-mix(in srgb, ${cat.color} 15%, transparent)`, color: cat.color }}
-                  >
-                    {CatIcon && <CatIcon size={13} />}
-                  </span>
+                  {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                  {CatIcon && <CatIcon size={14} className="loop-palette-cat-icon" />}
                   <span>{cat.label}</span>
                 </button>
                 {!isCollapsed && (

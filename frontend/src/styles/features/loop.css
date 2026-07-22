@@ -313,12 +313,7 @@
 }
 
 .loop-palette-cat-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  color: var(--ink-tertiary);
   flex-shrink: 0;
 }
 

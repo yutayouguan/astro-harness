@@ -123,12 +123,12 @@ export const NODE_CATEGORIES: {
   icon: string;
   color: string;
 }[] = [
-  { key: "trigger", label: "触发器", labelEn: "Triggers", icon: "Zap", color: "#60a5fa" },
-  { key: "ai", label: "AI", labelEn: "AI", icon: "Brain", color: "#a78bfa" },
-  { key: "media", label: "多媒体生成", labelEn: "Media", icon: "Clapperboard", color: "#f472b6" },
-  { key: "flow_control", label: "流程控制", labelEn: "Flow Control", icon: "GitFork", color: "#34d399" },
-  { key: "data_processing", label: "数据处理", labelEn: "Data Processing", icon: "Database", color: "#fbbf24" },
-  { key: "action", label: "动作", labelEn: "Actions", icon: "Rocket", color: "#fb923c" },
+  { key: "trigger", label: "触发器", labelEn: "Triggers", icon: "MousePointerClick", color: "#6366f1" },
+  { key: "ai", label: "AI", labelEn: "AI", icon: "Sparkles", color: "#6366f1" },
+  { key: "media", label: "多媒体生成", labelEn: "Media", icon: "Image", color: "#6366f1" },
+  { key: "flow_control", label: "流程控制", labelEn: "Flow Control", icon: "Route", color: "#6366f1" },
+  { key: "data_processing", label: "数据处理", labelEn: "Data Processing", icon: "Braces", color: "#6366f1" },
+  { key: "action", label: "动作", labelEn: "Actions", icon: "Play", color: "#6366f1" },
 ];
 
 export const NODE_REGISTRY: NodeMeta[] = [
