@@ -28,7 +28,7 @@ async fn register_all_includes_panel_tools() {
         "code_exec",
         "image_understand",
         "robotics",
-        "tts",
+        "speech_gen",
         "skills",
         "ask_user",
         "subagent",

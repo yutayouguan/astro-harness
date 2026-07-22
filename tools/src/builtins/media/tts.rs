@@ -54,8 +54,8 @@ pub struct TtsArgs {
 /// 向注册表登记 `tts` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "tts".to_string(),
-        toolset: "tts".to_string(),
+        name: "speech_gen".to_string(),
+        toolset: "speech_gen".to_string(),
         description: "Convert text to speech. Google: Gemini TTS (multi-speaker, style, stream). OpenAI: /audio/speech fallback. Advanced features are Google-only."
             .to_string(),
         schema: schema_for_args::<TtsArgs>(),
@@ -67,7 +67,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["tts"],
+    names: ["speech_gen"],
     async_ctx: dispatch,
 }
 
