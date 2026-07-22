@@ -236,12 +236,13 @@ pub const MUTATION_SYSTEM_PROMPT: &str = r#"你是技能进化的变异器。给
 - new_skill 用 content；patch 用 old_string/new_string。
 - 不要臆造事实；宁可少而精。"#;
 
-/// 构造变异 user 提示：种子 + 期望变体数 + 结构化 critique（缺口 + 保留项）。
+/// 构造变异 user 提示：种子 + 期望变体数 + 结构化 critique（缺口 + 保留项）+ 运行时机会 hints。
 pub fn build_mutation_prompt(
     seed: &SkillCandidate,
     variants: u32,
     critiques: &[String],
     strengths: &[String],
+    opportunity_hints: &[crate::opportunities::OpportunityHint],
 ) -> String {
     let mut s = String::new();
     s.push_str(&format!(
@@ -284,6 +285,12 @@ pub fn build_mutation_prompt(
             if !item.trim().is_empty() {
                 s.push_str(&format!("- {}\n", item.replace('\n', " ")));
             }
+        }
+    }
+    if !opportunity_hints.is_empty() {
+        s.push_str("\n## Runtime Signals（来自线上使用数据，请优先针对性优化）\n");
+        for h in opportunity_hints {
+            s.push_str(&format!("- [{}] {}\n", h.tag, h.focus.replace('\n', " ")));
         }
     }
     s.push_str("\n请输出变体 JSON。");

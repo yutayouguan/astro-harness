@@ -1,6 +1,7 @@
 //! Tauri IPC 薄封装 → `skills` 领域层
 
 use serde::Serialize;
+use chrono;
 use skills::models::SkillOriginRecord;
 use skills::origins::load_origins;
 use skills::{
@@ -12,7 +13,8 @@ use skills::{
     reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
     update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
     InstalledSkill, SkillBackupEntry, SkillBundle, SkillStoreFilter, SkillUpdateCheckResult,
-    SkillUpdateItemResult, SkillUpdatePreview, StoreSkill, StoreSkillDetail, UpdateSkillOpts,
+    SkillUpdateItemResult, SkillUpdatePreview, SkillSnapshot, StoreSkill, StoreSkillDetail,
+    UpdateSkillOpts,
 };
 
 #[derive(Serialize)]
@@ -275,4 +277,93 @@ pub fn list_skill_backups(agent_id: Option<String>) -> Result<Vec<SkillBackupEnt
 #[tauri::command]
 pub fn reveal_skill_backup(path: String) -> Result<(), String> {
     skills_reveal_skill_backup(&path).map_err(|e| e.to_string())
+}
+
+// ─── [P0] 冷却查询 ────────────────────────────────────────────────────────────
+
+/// 查询某 skill 距离批准冷却结束还剩多少秒。None = 无冷却（可立即进化）。
+#[tauri::command]
+pub async fn get_skill_cooldown_remaining(skill_id: String) -> Result<Option<u64>, String> {
+    use evolution::skill_last_approved_at;
+    use home::default_memory_dir;
+    let base = default_memory_dir();
+    let cfg = memory::load_evolution_config(&base);
+    let cooldown = cfg.search.post_approval_cooldown_secs;
+    if cooldown == 0 {
+        return Ok(None);
+    }
+    let Some(last_ts) = skill_last_approved_at(&base, &skill_id) else {
+        return Ok(None);
+    };
+    let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&last_ts) else {
+        return Ok(None);
+    };
+    let elapsed =
+        chrono::Utc::now().signed_duration_since(dt.with_timezone(&chrono::Utc));
+    let remain = cooldown as i64 - elapsed.num_seconds();
+    if remain > 0 {
+        Ok(Some(remain as u64))
+    } else {
+        Ok(None)
+    }
+}
+
+// ─── [P1] 快照管理 ───────────────────────────────────────────────────────────
+
+/// 列出某 skill 的所有快照（按时间倒序，最新在前）。
+#[tauri::command]
+pub async fn list_skill_snapshots(skill_id: String) -> Result<Vec<SkillSnapshot>, String> {
+    let Some(loaded) = load_skill_by_name(&skill_id).ok() else {
+        return Ok(Vec::new());
+    };
+    let Some(skill_dir) = std::path::Path::new(&loaded.path).parent() else {
+        return Ok(Vec::new());
+    };
+    Ok(skills::list_snapshots(skill_dir))
+}
+
+/// 恢复某 skill 的最新快照（覆盖当前 SKILL.md）。
+#[tauri::command]
+pub async fn restore_skill_snapshot(skill_id: String) -> Result<(), String> {
+    let loaded = load_skill_by_name(&skill_id)
+        .map_err(|e| format!("技能不存在：{e}"))?;
+    let skill_dir = std::path::Path::new(&loaded.path)
+        .parent()
+        .ok_or("无法确定技能目录")?;
+    let restored = skills::restore_skill_snapshot(skill_dir).map_err(|e| e.to_string())?;
+    if restored {
+        Ok(())
+    } else {
+        Err("该技能没有可用的快照".into())
+    }
+}
+
+// ─── [P2] Signal 摘要 ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillSignalDto {
+    pub skill_id: String,
+    pub failure_signals: usize,
+}
+
+/// 返回当前所有启用技能的失败信号摘要（只返回 ≥1 的）。
+#[tauri::command]
+pub async fn get_skill_signal_summary() -> Result<Vec<SkillSignalDto>, String> {
+    use evolution::skill_failure_signals;
+    use home::default_memory_dir;
+    let base = default_memory_dir();
+    let decisions = memory::list_recent_decisions(&base, 200).unwrap_or_default();
+    let known: Vec<String> = skills::list_enabled_for_prompt()
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    let counts = skill_failure_signals(&decisions, &known);
+    let mut result: Vec<SkillSignalDto> = counts
+        .into_iter()
+        .filter(|(_, n)| *n > 0)
+        .map(|(skill_id, failure_signals)| SkillSignalDto { skill_id, failure_signals })
+        .collect();
+    result.sort_by(|a, b| b.failure_signals.cmp(&a.failure_signals));
+    Ok(result)
 }

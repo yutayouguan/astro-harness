@@ -426,6 +426,10 @@ fn default_max_llm_calls() -> u32 {
     40
 }
 
+fn default_post_approval_cooldown_secs() -> u64 {
+    172_800 // 48h
+}
+
 /// GEPA-lite 遗传搜索参数（`config.yaml` 的 `evolution.search` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct EvolutionSearch {
@@ -458,6 +462,10 @@ pub struct EvolutionSearch {
     /// 对标 GEPA batch_sampler / epoch_shuffled。
     #[serde(default = "default_eval_sampling")]
     pub eval_sampling: String,
+    /// [P0] 技能批准后的冷却期（秒）。在此期间内对同一技能再次发起搜索会被提前返回。
+    /// 0 = 禁用。对标 AgentArk 72h 稳定观测窗口。
+    #[serde(default = "default_post_approval_cooldown_secs")]
+    pub post_approval_cooldown_secs: u64,
 }
 
 fn default_eval_sampling() -> String {
@@ -476,8 +484,17 @@ impl Default for EvolutionSearch {
             mutation_system_prompt: None,
             crossover_system_prompt: None,
             eval_sampling: "fixed".to_string(),
+            post_approval_cooldown_secs: 172_800,
         }
     }
+}
+
+fn default_min_skill_failure_signals() -> usize {
+    3
+}
+
+fn default_signal_window_days() -> u32 {
+    7
 }
 
 fn default_dspy_timeout() -> u64 {
@@ -514,6 +531,13 @@ pub struct EvolutionAuto {
     /// 每个 UTC 自然日最多自动运行次数。
     #[serde(default = "default_auto_max_runs_per_day")]
     pub max_runs_per_day: u32,
+    /// [P2] 触发定向进化所需的最少 skill 失败信号数（ToolFailure / UserCorrection）。
+    /// 0 = 禁用定向触发。
+    #[serde(default = "default_min_skill_failure_signals")]
+    pub min_skill_failure_signals: usize,
+    /// [P2] 统计失败信号的时间窗口（天）。
+    #[serde(default = "default_signal_window_days")]
+    pub signal_window_days: u32,
 }
 
 impl Default for EvolutionAuto {
@@ -523,6 +547,8 @@ impl Default for EvolutionAuto {
             cooldown_secs: 3_600,
             min_new_decisions: 3,
             max_runs_per_day: 3,
+            min_skill_failure_signals: 3,
+            signal_window_days: 7,
         }
     }
 }
@@ -1146,6 +1172,12 @@ pub fn set_evolution_search(
         "eval_sampling",
         &search.eval_sampling,
     )?;
+    set_nested_usize(
+        base,
+        &["evolution", "search"],
+        "post_approval_cooldown_secs",
+        search.post_approval_cooldown_secs as usize,
+    )?;
     Ok(load_evolution_config(base))
 }
 
@@ -1169,6 +1201,18 @@ pub fn set_evolution_auto(base: &Path, auto: &EvolutionAuto) -> anyhow::Result<E
         &["evolution", "auto"],
         "max_runs_per_day",
         auto.max_runs_per_day as usize,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "auto"],
+        "min_skill_failure_signals",
+        auto.min_skill_failure_signals,
+    )?;
+    set_nested_usize(
+        base,
+        &["evolution", "auto"],
+        "signal_window_days",
+        auto.signal_window_days as usize,
     )?;
     Ok(load_evolution_config(base))
 }

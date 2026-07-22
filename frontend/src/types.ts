@@ -303,6 +303,8 @@ export type EvolutionSearchDto = {
   populationSize: number;
   maxEvalExamples: number;
   maxLlmCalls: number;
+  /** [P0] 批准后冷却期（秒）。0 = 禁用。 */
+  postApprovalCooldownSecs: number;
 };
 
 /** 自动触发参数 */
@@ -311,6 +313,10 @@ export type EvolutionAutoDto = {
   cooldownSecs: number;
   minNewDecisions: number;
   maxRunsPerDay: number;
+  /** [P2] 触发定向进化所需的最少失败信号数 */
+  minSkillFailureSignals: number;
+  /** [P2] 失败信号统计窗口（天） */
+  signalWindowDays: number;
 };
 
 /** 技能策展参数 */
@@ -418,6 +424,21 @@ export type SearchProgressEvent = {
   gatedOut: number;
   judgedOut: number;
   critiques: string[];
+  /** [P3] 本代运行时机会 hints */
+  hints?: Array<{ tag: string; focus: string }>;
+};
+
+/** [P1] Skill 快照元数据 */
+export type SkillSnapshot = {
+  timestamp: string;
+  preview: string;
+  bytes: number;
+};
+
+/** [P2] Skill 失败信号摘要 */
+export type SkillSignalDto = {
+  skillId: string;
+  failureSignals: number;
 };
 
 /** 技能策展报告（Tauri `run_skill_curator`） */

@@ -39,6 +39,8 @@ pub struct EvolutionSearchDto {
     pub population_size: u32,
     pub max_eval_examples: usize,
     pub max_llm_calls: u32,
+    /// [P0] 批准后冷却期（秒）。0 = 禁用。
+    pub post_approval_cooldown_secs: u64,
 }
 
 /// 自动触发参数展示态。
@@ -49,6 +51,10 @@ pub struct EvolutionAutoDto {
     pub cooldown_secs: u64,
     pub min_new_decisions: u32,
     pub max_runs_per_day: u32,
+    /// [P2] 触发定向进化所需的最少失败信号数。
+    pub min_skill_failure_signals: u32,
+    /// [P2] 失败信号统计窗口（天）。
+    pub signal_window_days: u32,
 }
 
 /// 策展参数展示态。
@@ -167,12 +173,15 @@ fn build_settings_dto() -> Result<EvolutionSettingsDto, String> {
             population_size: cfg.search.population_size,
             max_eval_examples: cfg.search.max_eval_examples,
             max_llm_calls: cfg.search.max_llm_calls,
+            post_approval_cooldown_secs: cfg.search.post_approval_cooldown_secs,
         },
         auto: EvolutionAutoDto {
             enabled: cfg.auto.enabled,
             cooldown_secs: cfg.auto.cooldown_secs,
             min_new_decisions: cfg.auto.min_new_decisions as u32,
             max_runs_per_day: cfg.auto.max_runs_per_day,
+            min_skill_failure_signals: cfg.auto.min_skill_failure_signals as u32,
+            signal_window_days: cfg.auto.signal_window_days,
         },
         curator: EvolutionCuratorDto {
             enabled: cfg.curator.enabled,
@@ -256,6 +265,8 @@ pub async fn set_evolution_search(
     population_size: Option<u32>,
     max_eval_examples: Option<u32>,
     max_llm_calls: Option<u32>,
+    /// [P0] 批准后冷却期（秒）。None = 保持当前值；0 = 禁用；最大 7 天（604800）。
+    post_approval_cooldown_secs: Option<u64>,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
     let current = memory::load_evolution_config(&base);
@@ -276,6 +287,9 @@ pub async fn set_evolution_search(
         mutation_system_prompt: current.search.mutation_system_prompt,
         crossover_system_prompt: current.search.crossover_system_prompt,
         eval_sampling: current.search.eval_sampling,
+        post_approval_cooldown_secs: post_approval_cooldown_secs
+            .unwrap_or(current.search.post_approval_cooldown_secs)
+            .min(604_800),
     };
     memory::set_evolution_search(&base, &search).map_err(|e| e.to_string())?;
     build_settings_dto()
@@ -288,13 +302,24 @@ pub async fn set_evolution_auto(
     cooldown_secs: u64,
     min_new_decisions: u32,
     max_runs_per_day: u32,
+    /// [P2] 定向进化最少失败信号数。None = 保持当前值。
+    min_skill_failure_signals: Option<u32>,
+    /// [P2] 失败信号统计窗口（天）。None = 保持当前值。
+    signal_window_days: Option<u32>,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
+    let current = memory::load_evolution_config(&base);
     let auto = memory::EvolutionAuto {
         enabled,
         cooldown_secs: cooldown_secs.clamp(60, 86_400),
         min_new_decisions: (min_new_decisions.clamp(1, 50)) as usize,
         max_runs_per_day: max_runs_per_day.clamp(1, 24),
+        min_skill_failure_signals: min_skill_failure_signals
+            .unwrap_or(current.auto.min_skill_failure_signals as u32)
+            .clamp(0, 20) as usize,
+        signal_window_days: signal_window_days
+            .unwrap_or(current.auto.signal_window_days)
+            .clamp(1, 30),
     };
     memory::set_evolution_auto(&base, &auto).map_err(|e| e.to_string())?;
     build_settings_dto()

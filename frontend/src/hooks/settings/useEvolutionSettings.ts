@@ -22,12 +22,15 @@ type UseEvolutionSettings = {
     populationSize?: number,
     maxEvalExamples?: number,
     maxLlmCalls?: number,
+    postApprovalCooldownSecs?: number,
   ): Promise<void>;
   setAuto(
     enabled: boolean,
     cooldownSecs: number,
     minNewDecisions: number,
     maxRunsPerDay: number,
+    minSkillFailureSignals?: number,
+    signalWindowDays?: number,
   ): Promise<void>;
   setCurator(
     enabled: boolean,
@@ -134,6 +137,7 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
       populationSize?: number,
       maxEvalExamples?: number,
       maxLlmCalls?: number,
+      postApprovalCooldownSecs?: number,
     ) => {
       setError(null);
       try {
@@ -144,6 +148,7 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
           populationSize: populationSize ?? null,
           maxEvalExamples: maxEvalExamples ?? null,
           maxLlmCalls: maxLlmCalls ?? null,
+          postApprovalCooldownSecs: postApprovalCooldownSecs ?? null,
         });
         setSettings(next);
       } catch (err) {
@@ -159,6 +164,8 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
       cooldownSecs: number,
       minNewDecisions: number,
       maxRunsPerDay: number,
+      minSkillFailureSignals?: number,
+      signalWindowDays?: number,
     ) => {
       setError(null);
       try {
@@ -167,6 +174,8 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
           cooldownSecs,
           minNewDecisions,
           maxRunsPerDay,
+          minSkillFailureSignals: minSkillFailureSignals ?? null,
+          signalWindowDays: signalWindowDays ?? null,
         });
         setSettings(next);
       } catch (err) {

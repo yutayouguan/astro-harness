@@ -150,6 +150,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const [popDraft, setPopDraft] = useState("");
   const [evalExDraft, setEvalExDraft] = useState("");
   const [llmDraft, setLlmDraft] = useState("");
+  const [cooldownHDraft, setCooldownHDraft] = useState(""); // [P0] post-approval cooldown (hours)
+  const [minSignalsDraft, setMinSignalsDraft] = useState(""); // [P2]
+  const [signalWindowDraft, setSignalWindowDraft] = useState(""); // [P2]
   const {
     examples: evalExamples,
     importCandidates,
@@ -279,9 +282,12 @@ export default function EvolutionModelsPanel({ active }: Props) {
       setPopDraft(String(settings.search.populationSize));
       setEvalExDraft(String(settings.search.maxEvalExamples));
       setLlmDraft(String(settings.search.maxLlmCalls));
+      setCooldownHDraft(String(Math.round(settings.search.postApprovalCooldownSecs / 3600)));
       setCooldownDraft(String(settings.auto.cooldownSecs));
       setMinDecDraft(String(settings.auto.minNewDecisions));
       setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
+      setMinSignalsDraft(String(settings.auto.minSkillFailureSignals));
+      setSignalWindowDraft(String(settings.auto.signalWindowDays));
       setCuratorIntervalDraft(String(settings.curator.intervalDays));
       setCuratorMaxEnqueueDraft(String(settings.curator.maxEnqueue));
       setCuratorMaxLlmDraft(String(settings.curator.maxLlmCalls));
@@ -293,26 +299,36 @@ export default function EvolutionModelsPanel({ active }: Props) {
     const cd = Number.parseInt(cooldownDraft, 10);
     const md = Number.parseInt(minDecDraft, 10);
     const mr = Number.parseInt(maxRunsDraft, 10);
+    const ms = Number.parseInt(minSignalsDraft, 10);
+    const sw = Number.parseInt(signalWindowDraft, 10);
     const cooldown =
       Number.isFinite(cd) && cd >= 60 && cd <= 86400 ? cd : settings.auto.cooldownSecs;
     const minDec =
       Number.isFinite(md) && md >= 1 && md <= 50 ? md : settings.auto.minNewDecisions;
     const maxRuns =
       Number.isFinite(mr) && mr >= 1 && mr <= 24 ? mr : settings.auto.maxRunsPerDay;
+    const minSignals =
+      Number.isFinite(ms) && ms >= 0 && ms <= 20 ? ms : settings.auto.minSkillFailureSignals;
+    const sigWindow =
+      Number.isFinite(sw) && sw >= 1 && sw <= 30 ? sw : settings.auto.signalWindowDays;
     if (
       cooldown !== settings.auto.cooldownSecs ||
       minDec !== settings.auto.minNewDecisions ||
-      maxRuns !== settings.auto.maxRunsPerDay
+      maxRuns !== settings.auto.maxRunsPerDay ||
+      minSignals !== settings.auto.minSkillFailureSignals ||
+      sigWindow !== settings.auto.signalWindowDays
     ) {
-      void setAuto(settings.auto.enabled, cooldown, minDec, maxRuns).then(() =>
+      void setAuto(settings.auto.enabled, cooldown, minDec, maxRuns, minSignals, sigWindow).then(() =>
         reloadAutoStatus(),
       );
     } else {
       setCooldownDraft(String(settings.auto.cooldownSecs));
       setMinDecDraft(String(settings.auto.minNewDecisions));
       setMaxRunsDraft(String(settings.auto.maxRunsPerDay));
+      setMinSignalsDraft(String(settings.auto.minSkillFailureSignals));
+      setSignalWindowDraft(String(settings.auto.signalWindowDays));
     }
-  }, [settings, cooldownDraft, minDecDraft, maxRunsDraft, setAuto, reloadAutoStatus]);
+  }, [settings, cooldownDraft, minDecDraft, maxRunsDraft, minSignalsDraft, signalWindowDraft, setAuto, reloadAutoStatus]);
 
   const commitCuratorNums = useCallback(() => {
     if (!settings) return;
@@ -358,28 +374,35 @@ export default function EvolutionModelsPanel({ active }: Props) {
     const p = Number.parseInt(popDraft, 10);
     const e = Number.parseInt(evalExDraft, 10);
     const l = Number.parseInt(llmDraft, 10);
+    const cdh = Number.parseInt(cooldownHDraft, 10);
     const gen = Number.isFinite(g) && g >= 1 && g <= 6 ? g : settings.search.generations;
     const vari = Number.isFinite(v) && v >= 1 && v <= 6 ? v : settings.search.variants;
     const pop = Number.isFinite(p) && p >= 1 && p <= 8 ? p : settings.search.populationSize;
     const evalEx =
       Number.isFinite(e) && e >= 0 && e <= 32 ? e : settings.search.maxEvalExamples;
     const llm = Number.isFinite(l) && l >= 0 && l <= 500 ? l : settings.search.maxLlmCalls;
+    const cdSecs = Number.isFinite(cdh) && cdh >= 0 && cdh <= 168
+      ? cdh * 3600
+      : settings.search.postApprovalCooldownSecs;
+    const currentCdH = Math.round(settings.search.postApprovalCooldownSecs / 3600);
     if (
       gen !== settings.search.generations ||
       vari !== settings.search.variants ||
       pop !== settings.search.populationSize ||
       evalEx !== settings.search.maxEvalExamples ||
-      llm !== settings.search.maxLlmCalls
+      llm !== settings.search.maxLlmCalls ||
+      cdSecs !== settings.search.postApprovalCooldownSecs
     ) {
-      void setSearch(gen, vari, settings.search.crossover, pop, evalEx, llm);
+      void setSearch(gen, vari, settings.search.crossover, pop, evalEx, llm, cdSecs);
     } else {
       setGenDraft(String(settings.search.generations));
       setVarDraft(String(settings.search.variants));
       setPopDraft(String(settings.search.populationSize));
       setEvalExDraft(String(settings.search.maxEvalExamples));
       setLlmDraft(String(settings.search.maxLlmCalls));
+      setCooldownHDraft(String(currentCdH));
     }
-  }, [settings, genDraft, varDraft, popDraft, evalExDraft, llmDraft, setSearch]);
+  }, [settings, genDraft, varDraft, popDraft, evalExDraft, llmDraft, cooldownHDraft, setSearch]);
 
   const toggleCrossover = useCallback(() => {
     if (!settings) return;
@@ -390,6 +413,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
       settings.search.populationSize,
       settings.search.maxEvalExamples,
       settings.search.maxLlmCalls,
+      settings.search.postApprovalCooldownSecs,
     );
   }, [settings, setSearch]);
 
@@ -859,6 +883,8 @@ export default function EvolutionModelsPanel({ active }: Props) {
                         settings.auto.cooldownSecs,
                         settings.auto.minNewDecisions,
                         settings.auto.maxRunsPerDay,
+                        settings.auto.minSkillFailureSignals,
+                        settings.auto.signalWindowDays,
                       ).then(() => reloadAutoStatus())
                     }
                     disabled={loading || !settings || !settings.enabled}
@@ -914,6 +940,33 @@ export default function EvolutionModelsPanel({ active }: Props) {
                     onBlur={commitAutoNums}
                     disabled={!settings}
                     aria-label={t("evo.autoMaxRuns")}
+                  />
+                </label>
+                {/* [P2] 定向信号触发参数 */}
+                <label title="连续 N 次 DecisionLog 失败信号后，自动对该技能定向进化（0 = 禁用）">
+                  定向信号阈值
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={0}
+                    max={20}
+                    value={minSignalsDraft}
+                    onChange={(e) => setMinSignalsDraft(e.target.value)}
+                    onBlur={commitAutoNums}
+                    disabled={!settings}
+                  />
+                </label>
+                <label title="统计失败信号的时间窗口（天）">
+                  信号窗口（天）
+                  <input
+                    type="number"
+                    className="aux-number-input"
+                    min={1}
+                    max={30}
+                    value={signalWindowDraft}
+                    onChange={(e) => setSignalWindowDraft(e.target.value)}
+                    onBlur={commitAutoNums}
+                    disabled={!settings}
                   />
                 </label>
               </div>
@@ -1257,6 +1310,14 @@ export default function EvolutionModelsPanel({ active }: Props) {
                     ))}
                   </div>
                 )}
+                {/* [P3] Runtime opportunity hints */}
+                {ev.hints && ev.hints.length > 0 && (
+                  <div className="evo-critique-pills evo-hint-pills">
+                    {ev.hints.map((h, i) => (
+                      <span key={i} className="evo-hint-pill" title={h.focus}>[{h.tag}]</span>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -1339,6 +1400,20 @@ export default function EvolutionModelsPanel({ active }: Props) {
                   disabled={!settings}
                 />
               </label>
+              {/* [P0] 批准后冷却期 */}
+              <label title="批准该技能提案后，多少小时内不再对同一技能重复进化（0 = 禁用）">
+                批准冷却（小时）
+                <input
+                  type="number"
+                  className="aux-number-input"
+                  min={0}
+                  max={168}
+                  value={cooldownHDraft}
+                  onChange={(e) => setCooldownHDraft(e.target.value)}
+                  onBlur={commitSearch}
+                  disabled={!settings}
+                />
+              </label>
               <label className="evo-cfg-toggle">
                 {t("evo.crossover")}
                 <button
@@ -1366,7 +1441,9 @@ export default function EvolutionModelsPanel({ active }: Props) {
                 .replace("{proposals}", String(lastSearch.proposals.length))}
               {lastSearch.budgetUsed > 0
                 ? ` · LLM ${lastSearch.budgetUsed}${lastSearch.termination ? ` · ${lastSearch.termination}` : ""}`
-                : ""}
+                : lastSearch.termination?.startsWith("cooldown:")
+                  ? ` · ⏳ ${t("evo.cooldownActive" as MessageKey)} ${lastSearch.termination.replace("cooldown:", "")}`
+                  : ""}
               {lastSearch.holdoutEnabled ? ` · ${t("evo.holdoutUsed")}` : ""}
               {lastSearch.sandboxUsed
                 ? ` · ${t("evo.sandboxUsed").replace("{n}", String(lastSearch.sandboxSkills))}`
@@ -1941,6 +2018,25 @@ export default function EvolutionModelsPanel({ active }: Props) {
                                     {t("evo.curatorBytes").replace("{n}", String(row.bytes))}
                                   </span>
                                 )}
+                                {/* [P1] 快照回滚按钮 */}
+                                <button
+                                  type="button"
+                                  className="aux-action aux-action-ghost"
+                                  style={{ marginLeft: "auto", fontSize: "0.75rem" }}
+                                  title="恢复上一个版本快照"
+                                  onClick={() => {
+                                    if (window.confirm(`回滚 ${row.skillId} 到上一个版本快照？`)) {
+                                      void invoke("restore_skill_snapshot", { skillId: row.skillId })
+                                        .then(() => {
+                                          alert(`${row.skillId} 已回滚`);
+                                          void reloadCurator();
+                                        })
+                                        .catch((e: unknown) => alert(`回滚失败：${String(e)}`));
+                                    }
+                                  }}
+                                >
+                                  ↩ 回滚
+                                </button>
                               </div>
                               {row.description && (
                                 <p className="aux-muted">{row.description}</p>

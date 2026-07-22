@@ -190,6 +190,24 @@ pub struct HistorySummary {
     pub score_trend: Vec<f32>,
 }
 
+/// 返回 `skill_id` 最近一次被批准（outcome = "approved"）的 RFC3339 时间戳；无则 `None`。
+///
+/// 实现：顺序扫描全量 JSONL，RFC3339 可按字典序取最大值，无需额外排序。
+pub fn skill_last_approved_at(base: &Path, skill_id: &str) -> Option<String> {
+    list_all(base)
+        .into_iter()
+        .filter_map(|ev| match ev {
+            HistoryEvent::Outcome {
+                skill_id: sid,
+                outcome,
+                ts,
+                ..
+            } if sid == skill_id && outcome == "approved" => Some(ts),
+            _ => None,
+        })
+        .max()
+}
+
 /// 计算聚合统计。
 pub fn summarize(base: &Path) -> HistorySummary {
     let events = list_all(base);

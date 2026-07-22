@@ -17,16 +17,17 @@ use evolution::{
     aggregate_critiques, apply_patch_unique, approve_proposal, approve_proposal_checked,
     build_auto_status, build_crossover_prompt, build_curator_status, build_eval_judge_prompt,
     build_judge_user_prompt, build_mutation_prompt, build_reflection_user_prompt,
-    candidate_new_markdown, check_candidate, default_holdout_percent, effective_candidate_size,
-    enqueue_curator_suggestions, examples_for_skill, list_examples, list_proposals,
-    load_auto_state, load_curator_last, mark_auto_run, pareto_front, parse_candidates,
-    parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
+    candidate_new_markdown, check_candidate, default_holdout_percent, detect_opportunities,
+    effective_candidate_size, enqueue_curator_suggestions, examples_for_skill, list_examples,
+    list_proposals, load_auto_state, load_curator_last, mark_auto_run, pareto_front,
+    parse_candidates, parse_eval_judgement, parse_judge_output, parse_variants, reject_proposal,
     run_curator_and_save, sandbox_test_candidate, save_auto_state, save_proposals,
-    select_front_capped, select_population, split_eval_examples, weighted_eval_score, AutoGate,
-    AutoStatus, CandidateKind, CurateReport, CuratorStatus, EvalExample, EvalJudgement,
-    FitnessResult, FitnessSideInfo, ReflectionInput, ScoredVariant, SearchBudget, SearchRunMeta,
-    SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT, EVAL_JUDGE_SYSTEM_PROMPT,
-    JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT, REFLECTION_SYSTEM_PROMPT,
+    select_front_capped, select_population, skill_last_approved_at, split_eval_examples,
+    top_failing_skill, weighted_eval_score, AutoGate, AutoStatus, CandidateKind, CurateReport,
+    CuratorStatus, EvalExample, EvalJudgement, FitnessResult, FitnessSideInfo, ReflectionInput,
+    ScoredVariant, SearchBudget, SearchRunMeta, SkillCandidate, Verdict, CROSSOVER_SYSTEM_PROMPT,
+    EVAL_JUDGE_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
+    REFLECTION_SYSTEM_PROMPT,
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
@@ -93,7 +94,7 @@ pub struct EvolutionRunReport {
 }
 
 /// GEPA-lite 遗传搜索运行结果。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct EvolutionSearchReport {
     pub ok: bool,
@@ -292,7 +293,13 @@ fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<
 }
 
 /// 运行一次离线进化（生成待审提案）。`mode` 写入历史（`reflect` / `auto`）。
-async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunReport, String> {
+///
+/// `focus_skill`：[P2] signal 驱动定向进化时传入目标 skill_id，否则 None。
+async fn run_evolution_core(
+    app: &AppHandle,
+    mode: &str,
+    focus_skill: Option<String>,
+) -> Result<EvolutionRunReport, String> {
     let base = default_memory_dir();
     let cfg = memory::load_evolution_config(&base);
     if !cfg.enabled {
@@ -318,7 +325,7 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
         decisions,
         enabled_skills,
         transcripts,
-        focus_skill: None,
+        focus_skill,
     };
     let user = build_reflection_user_prompt(&input);
 
@@ -419,7 +426,7 @@ async fn run_evolution_core(app: &AppHandle, mode: &str) -> Result<EvolutionRunR
 /// 运行一次离线进化（生成待审提案）。
 #[tauri::command]
 pub async fn run_evolution(app: AppHandle) -> Result<EvolutionRunReport, String> {
-    run_evolution_core(&app, "reflect").await
+    run_evolution_core(&app, "reflect", None).await
 }
 
 fn auto_inflight() -> &'static AtomicBool {
@@ -525,7 +532,28 @@ pub async fn maybe_run_evolution_auto(app: AppHandle) -> Result<EvolutionAutoRun
     }
 
     let latest_id = decisions.last().map(|d| d.id.clone());
-    let result = run_evolution_core(&app, "auto").await;
+
+    // [P2] 信号驱动定向：若某 skill 失败信号超阈值，将其作为 reflect 焦点
+    let known_skills: Vec<String> = skills::list_enabled_for_prompt()
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    let signal_focus = if cfg.auto.min_skill_failure_signals > 0 {
+        // 取最近 signal_window_days 天的条目（决策日志最近 N 条近似）
+        top_failing_skill(&decisions, &known_skills, cfg.auto.min_skill_failure_signals)
+            .map(|s| {
+                tracing::info!(
+                    skill = %s.skill_id,
+                    signals = s.failure_signals,
+                    "[P2] auto-trigger: 定向进化高失败率技能"
+                );
+                s.skill_id
+            })
+    } else {
+        None
+    };
+
+    let result = run_evolution_core(&app, "auto", signal_focus).await;
 
     // 无论成败都记一次，挡住热重试；水位推进到当前最新决策。
     mark_auto_run(&mut state, chrono::Utc::now(), latest_id);
@@ -802,6 +830,32 @@ pub async fn run_evolution_search(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
+    // [P0] Post-Approval Cooldown Gate：避免对刚批准的技能重复进化
+    if let Some(ref focus) = focus_skill {
+        let cooldown = cfg.search.post_approval_cooldown_secs;
+        if cooldown > 0 {
+            if let Some(last_ts) = skill_last_approved_at(&base, focus) {
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&last_ts) {
+                    let elapsed =
+                        chrono::Utc::now().signed_duration_since(dt.with_timezone(&chrono::Utc));
+                    if elapsed.num_seconds() < cooldown as i64 {
+                        let remain_h =
+                            (cooldown as i64 - elapsed.num_seconds()).max(0) / 3600 + 1;
+                        tracing::info!(
+                            skill = %focus,
+                            remain_hours = remain_h,
+                            "[P0] 冷却期内，跳过进化"
+                        );
+                        return Ok(EvolutionSearchReport {
+                            termination: format!("cooldown:{remain_h}h"),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     let primary = active_primary_target()?;
     let refl_targets = resolve_evolution_targets(memory::EvolutionRouteKind::Reflection, &primary)?;
     if refl_targets.preferred.provider.kind.requires_api_key()
@@ -816,7 +870,7 @@ pub async fn run_evolution_search(
     let judge_targets = resolve_evolution_targets(memory::EvolutionRouteKind::Judge, &primary)?;
 
     // 种子：reflection 产候选
-    let decisions = memory::list_recent_decisions(&base, 20).unwrap_or_default();
+    let decisions = memory::list_recent_decisions(&base, 50).unwrap_or_default();
     let mut enabled_skills = skills::list_enabled_for_prompt();
     if let Some(ref focus) = focus_skill {
         // 定向：把目标技能提到前面，便于模型聚焦
@@ -825,6 +879,10 @@ pub async fn run_evolution_search(
             return Err(format!("定向技能 `{focus}` 未启用或不存在"));
         }
     }
+    // [P3] 预加载 curator 健康报告（可选，用于 opportunity hints）
+    let curator_report = load_curator_last(&base);
+    // [P3] 准备 known_skill_ids（用于信号提取）
+    let known_skill_ids: Vec<String> = enabled_skills.iter().map(|(n, _)| n.clone()).collect();
     let transcripts = build_transcripts(&base, &decisions);
     let seed_user = build_reflection_user_prompt(&ReflectionInput {
         decisions,
@@ -936,7 +994,16 @@ pub async fn run_evolution_search(
             }
 
             let parent = &population[gen as usize % population.len()].candidate;
-            let muser = build_mutation_prompt(parent, variants, &critiques, &strengths);
+            // [P3] 收集运行时机会 hints，注入 mutation prompt
+            let opp_hints = detect_opportunities(
+                &seed.skill_id,
+                &base,
+                &decisions,
+                curator_report.as_ref().map(|r| r.rows.as_slice()),
+                &known_skill_ids,
+            );
+            let muser =
+                build_mutation_prompt(parent, variants, &critiques, &strengths, &opp_hints);
             let raw = match reflect_over_targets(&refl_targets, mutation_prompt, &muser).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -1107,6 +1174,8 @@ pub async fn run_evolution_search(
                     "gatedOut": search_gated_out,
                     "judgedOut": search_judged_out,
                     "critiques": critiques.iter().take(3).cloned().collect::<Vec<_>>(),
+                    // [P3] 运行时机会 hints（当代，最多 4 条）
+                    "hints": opp_hints.iter().map(|h| serde_json::json!({"tag": h.tag, "focus": h.focus})).collect::<Vec<_>>(),
                 }),
             );
         }
@@ -1310,6 +1379,14 @@ fn proposal_meta(base: &Path, id: &str) -> (String, String, Option<f32>) {
 pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
     let base = default_memory_dir();
     let (skill_id, kind, score) = proposal_meta(&base, &id);
+
+    // [P1] 批准前保存当前版本快照，便于一键回滚
+    if let Some(loaded) = skills::load_skill_by_name(&skill_id).ok() {
+        if let Some(parent) = std::path::Path::new(&loaded.path).parent() {
+            let _ = skills::save_snapshot(parent); // 失败不阻塞审批
+        }
+    }
+
     let skip_tests = matches!(kind.as_str(), "disable" | "merge");
     let run_tests = !skip_tests && memory::load_evolution_config(&base).gates.run_tests;
     let res = if run_tests {

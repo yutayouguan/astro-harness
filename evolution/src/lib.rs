@@ -18,9 +18,11 @@ pub mod evalset;
 pub mod gates;
 pub mod history;
 pub mod judge;
+pub mod opportunities;
 pub mod proposal;
 pub mod reflect;
 pub mod search;
+pub mod signal;
 
 pub use auto::{
     auto_state_path, build_auto_status, count_new_decisions, evaluate_auto_gate, load_auto_state,
@@ -45,8 +47,11 @@ pub use gates::{
 };
 pub use history::{
     history_path, list_all as list_history, record_outcome, record_run, record_run_meta,
-    summarize as summarize_history, HistoryEvent, HistorySummary, SearchRunMeta,
+    skill_last_approved_at, summarize as summarize_history, HistoryEvent, HistorySummary,
+    SearchRunMeta,
 };
+pub use opportunities::{detect_opportunities, OpportunityHint};
+pub use signal::{skill_failure_signals, top_failing_skill, SkillSignalSummary};
 pub use judge::{build_judge_user_prompt, parse_judge_output, JudgeVerdict, JUDGE_SYSTEM_PROMPT};
 pub use proposal::{
     apply_patch_unique, approve_proposal, approve_proposal_checked, candidate_new_markdown,

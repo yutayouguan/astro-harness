@@ -20,6 +20,7 @@ pub mod preview;
 pub mod registry;
 pub mod seed;
 pub mod skill;
+pub mod snapshots;
 pub mod store;
 pub mod update;
 pub mod usage;
@@ -53,6 +54,7 @@ pub use update::{
     backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,
     update_outdated_skills,
 };
+pub use snapshots::{list_snapshots, restore_latest as restore_skill_snapshot, save_snapshot, SkillSnapshot};
 pub use usage::{
     curate_report, curate_report_at, last_loaded_at, record_skill_load, skill_usage_path,
 };

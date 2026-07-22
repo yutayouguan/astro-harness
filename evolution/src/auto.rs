@@ -280,6 +280,7 @@ mod tests {
             cooldown_secs: 3600,
             min_new_decisions: 3,
             max_runs_per_day: 3,
+            ..EvolutionAuto::default()
         }
     }
 
