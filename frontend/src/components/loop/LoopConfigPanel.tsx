@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Braces, Trash2 } from "lucide-react";
 import { useConfirm } from "../../hooks/ui/DialogContext";
+import { useI18n } from "../../i18n/LocaleContext";
 import * as LucideIcons from "lucide-react";
 import type { NodeType } from "./loopTypes";
 import { getNodeMeta } from "./loopTypes";
@@ -117,6 +118,7 @@ interface RunRow {
 }
 
 function NodeStepLogs({ nodeId, workflowId }: { nodeId: string; workflowId: string | null }) {
+  const { t } = useI18n();
   const [logs, setLogs] = useState<StepLog[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -143,8 +145,8 @@ function NodeStepLogs({ nodeId, workflowId }: { nodeId: string; workflowId: stri
     })();
   }, [nodeId, workflowId]);
 
-  if (loading) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">加载中…</div></div>;
-  if (logs.length === 0) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">暂无此节点的运行日志</div></div>;
+  if (loading) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">{t("loop.loading")}</div></div>;
+  if (logs.length === 0) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">{t("loop.logsEmpty")}</div></div>;
 
   return (
     <div className="loop-config-panel-body loop-config-logs">
@@ -179,6 +181,7 @@ export default function LoopConfigPanel({
   onDisabledChange,
   onDelete,
 }: Props) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<"config" | "logs">("config");
   const [showJson, setShowJson] = useState(false);
   const confirm = useConfirm();
@@ -195,13 +198,13 @@ export default function LoopConfigPanel({
           className={`loop-config-tab${tab === "config" ? " is-active" : ""}`}
           onClick={() => setTab("config")}
         >
-          配置
+          {t("loop.configTab")}
         </button>
         <button
           className={`loop-config-tab${tab === "logs" ? " is-active" : ""}`}
           onClick={() => setTab("logs")}
         >
-          运行日志
+          {t("loop.logsTab")}
         </button>
       </div>
 
@@ -218,14 +221,14 @@ export default function LoopConfigPanel({
               <span className="loop-config-node-type">{meta.label}</span>
             </div>
             <div className="loop-config-node-actions">
-              <button className={`loop-icon-btn${showJson ? " is-active" : ""}`} title="查看 JSON" onClick={() => setShowJson((v) => !v)}>
+              <button className={`loop-icon-btn${showJson ? " is-active" : ""}`} title={t("loop.viewJson")} onClick={() => setShowJson((v) => !v)}>
                 <Braces size={14} />
               </button>
               <button
                 className="loop-icon-btn loop-icon-btn--danger"
-                title="删除节点"
+                title={t("loop.deleteNode")}
                 onClick={async () => {
-                  const ok = await confirm({ title: "删除节点", message: `确定删除「${label}」吗？`, confirmLabel: "删除", variant: "danger" });
+                  const ok = await confirm({ title: t("loop.deleteNode"), message: t("loop.deleteNodeConfirm").replace("{name}", label), confirmLabel: t("loop.delete"), variant: "danger" });
                   if (ok) onDelete();
                 }}
               >
@@ -244,7 +247,7 @@ export default function LoopConfigPanel({
           {/* ── Label field ── */}
           <div className="loop-config-panel-body">
             <label className="loop-config-field">
-              <span className="loop-config-label">标签</span>
+              <span className="loop-config-label">{t("loop.configTab")}</span>
               <input
                 className="loop-config-input"
                 value={label}
@@ -255,7 +258,7 @@ export default function LoopConfigPanel({
             <div className="loop-config-divider" />
 
             {/* ── Node-specific config form ── */}
-            <Suspense fallback={<div className="loop-config-placeholder">加载配置…</div>}>
+            <Suspense fallback={<div className="loop-config-placeholder">{t("loop.loading")}</div>}>
               {ConfigForm && <ConfigForm config={config} onChange={onConfigChange} />}
             </Suspense>
 
@@ -274,7 +277,7 @@ export default function LoopConfigPanel({
                 checked={disabled}
                 onChange={(e) => onDisabledChange(e.target.checked)}
               />
-              <span className="loop-config-label">已禁用</span>
+              <span className="loop-config-label">{t("loop.enabledNo")}</span>
             </label>
 
             <div className="loop-config-divider" />

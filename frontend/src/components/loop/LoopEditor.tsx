@@ -64,32 +64,32 @@ interface LoopNodeData {
 }
 
 function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
+  const { t } = useI18n();
   const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
   return (
     <div
       className={`loop-rf-node${selected ? " is-selected" : ""}${data.disabled ? " is-disabled" : ""}`}
       style={{ "--node-color": data.meta.color } as React.CSSProperties}
     >
-      {/* 选中时顶部工具栏 */}
       {selected && (
         <div className="loop-rf-node-toolbar">
           <button
             className="loop-rf-toolbar-btn"
-            title="运行此节点"
+            title={t("loop.run")}
             onClick={(e) => { e.stopPropagation(); data.onRunNode?.(); }}
           >
             <LucideIcons.Play size={12} />
           </button>
           <button
             className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
-            title={data.disabled ? "启用" : "禁用"}
+            title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
             onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}
           >
             <LucideIcons.Power size={12} />
           </button>
           <button
             className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger"
-            title="删除"
+            title={t("loop.delete")}
             onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}
           >
             <LucideIcons.Trash2 size={12} />
@@ -118,6 +118,7 @@ interface BranchCondition {
 }
 
 function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
+  const { t } = useI18n();
   const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
   const config = (data as unknown as Record<string, unknown>).config as Record<string, unknown> | undefined;
   const conditionsRaw = config?.conditions ?? config?.branches;
@@ -127,7 +128,7 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
   } else if (Array.isArray(conditionsRaw)) {
     branches = conditionsRaw as BranchCondition[];
   }
-  if (branches.length === 0) branches = [{ id: "default", label: "默认" }];
+  if (branches.length === 0) branches = [{ id: "default", label: t("loop.branchDefault") }];
 
   return (
     <div
@@ -136,16 +137,16 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
     >
       {selected && (
         <div className="loop-rf-node-toolbar">
-          <button className="loop-rf-toolbar-btn" title="运行此节点"
+          <button className="loop-rf-toolbar-btn" title={t("loop.run")}
             onClick={(e) => { e.stopPropagation(); data.onRunNode?.(); }}>
             <LucideIcons.Play size={12} />
           </button>
           <button className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
-            title={data.disabled ? "启用" : "禁用"}
+            title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
             onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}>
             <LucideIcons.Power size={12} />
           </button>
-          <button className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger" title="删除"
+          <button className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger" title={t("loop.delete")}
             onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}>
             <LucideIcons.Trash2 size={12} />
           </button>
@@ -716,7 +717,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         </button>
         <button
           className="loop-editor-icon-btn"
-          title="选择图标"
+          title={t("loop.selectIcon")}
           onClick={() => setIconPickerOpen(true)}
         >
           <LoopIcon icon={iconData} size={20} />
@@ -759,7 +760,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         <div className="loop-editor-toolbar-right">
           <button
             className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
-            title="AI 助手"
+            title={t("loop.aiAssistant")}
             onClick={() => {
               setShowAiAssistant((v) => !v);
               if (!showAiAssistant) {
@@ -828,14 +829,14 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <button
             className="loop-collapse-toggle loop-collapse-toggle--left"
             onClick={() => setPaletteOpen(true)}
-            title="展开节点面板"
+            title={t("loop.expandPalette")}
           >
             <LucideIcons.ChevronRight size={14} />
           </button>
         )}
         {paletteOpen && (
         <div className="loop-node-palette">
-          <div className="loop-palette-title">节点</div>
+          <div className="loop-palette-title">{t("loop.paletteTitle")}</div>
           {NODE_CATEGORIES.map((cat) => {
             const items = getNodesByCategory(cat.key);
             const isCollapsed = !!collapsed[cat.key];
@@ -918,7 +919,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                     ))}
                     {cat.key === "custom" && savedLoops.length === 0 && (
                       <div className="loop-palette-empty">
-                        把任意节点保存为预设，或已有的 Loop 会出现在这里
+                        {t("loop.presetEmpty")}
                       </div>
                     )}
                   </div>
@@ -932,7 +933,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <button
             className="loop-collapse-toggle loop-collapse-toggle--palette-close"
             onClick={() => setPaletteOpen(false)}
-            title="收起节点面板"
+            title={t("loop.collapsePalette")}
           >
             <LucideIcons.ChevronLeft size={14} />
           </button>
@@ -977,7 +978,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <button
             className="loop-collapse-toggle loop-collapse-toggle--right"
             onClick={() => setSelectedNodeId(null)}
-            title="收起配置面板"
+            title={t("loop.collapseConfig")}
           >
             <LucideIcons.ChevronRight size={14} />
           </button>
@@ -1054,7 +1055,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <div className="loop-vars-panel">
             <div className="loop-vars-panel-header">
               <span className="loop-vars-panel-title">{t("loop.variables")}</span>
-              <button className="loop-icon-btn" onClick={() => setShowVarsPanel(false)} title="关闭">
+              <button className="loop-icon-btn" onClick={() => setShowVarsPanel(false)} title={t("loop.close")}>
                 <LucideIcons.X size={14} />
               </button>
             </div>
@@ -1072,7 +1073,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                       setVariables(next);
                       setDirty(true);
                     }}
-                    placeholder="变量名"
+                    placeholder={t("loop.varName")}
                   />
                   <input
                     className="loop-config-input loop-vars-val"
@@ -1081,7 +1082,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                       setVariables({ ...variables, [key]: e.target.value });
                       setDirty(true);
                     }}
-                    placeholder="值"
+                    placeholder={t("loop.varValue")}
                   />
                   <button
                     className="loop-icon-btn loop-icon-btn--danger"
@@ -1091,7 +1092,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                       setVariables(next);
                       setDirty(true);
                     }}
-                    title="删除"
+                    title={t("loop.delete")}
                   >
                     <LucideIcons.Trash2 size={12} />
                   </button>
