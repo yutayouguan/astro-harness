@@ -732,15 +732,12 @@
 }
 
 .loop-collapse-toggle--palette-close {
-  position: sticky;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 28px;
-  height: 20px;
-  border-radius: 5px;
-  margin: 6px auto;
-  flex-shrink: 0;
+  position: absolute;
+  left: 220px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 0 6px 6px 0;
+  border-left: none;
 }
 
 .loop-collapse-toggle--right {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ReactFlow,
@@ -33,11 +34,13 @@ import * as LucideIcons from "lucide-react";
 type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
 import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
 import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseLoopIcon, serializeLoopIcon } from "./loopTypes";
+import { clampPopover, pointAnchor, measurePopoverSize } from "../../lib/ui/clampPopover";
 import LoopConfigPanel from "./LoopConfigPanel";
 import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
 import { LucideIconPicker } from "../agents";
+import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 
 interface Props {
   workflowId: string | null;
@@ -241,6 +244,85 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       setDirty(true);
     },
     [setEdges],
+  );
+
+  // ── Connection-drop node picker ──────────────────────────────────
+  const [connectDrop, setConnectDrop] = useState<{
+    x: number; y: number;
+    flowPos: { x: number; y: number };
+    sourceNodeId: string;
+    sourceHandleId: string | null;
+  } | null>(null);
+
+  const connectStartRef = useRef<{ nodeId: string; handleId: string | null } | null>(null);
+
+  const onConnectStart = useCallback(
+    (_: unknown, params: { nodeId: string | null; handleId: string | null }) => {
+      if (params.nodeId) {
+        connectStartRef.current = { nodeId: params.nodeId, handleId: params.handleId };
+      }
+    },
+    [],
+  );
+
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const src = connectStartRef.current;
+      connectStartRef.current = null;
+      if (!src) return;
+
+      const target = (event as MouseEvent).target as Element | null;
+      if (target?.closest(".react-flow__handle")) return;
+
+      const clientX = "clientX" in event ? event.clientX : event.changedTouches?.[0]?.clientX ?? 0;
+      const clientY = "clientY" in event ? event.clientY : event.changedTouches?.[0]?.clientY ?? 0;
+
+      const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (!bounds) return;
+      if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) return;
+
+      const flowPos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
+      setConnectDrop({
+        x: clientX,
+        y: clientY,
+        flowPos,
+        sourceNodeId: src.nodeId,
+        sourceHandleId: src.handleId,
+      });
+    },
+    [reactFlowInstance],
+  );
+
+  const handleNodePickerSelect = useCallback(
+    (nodeType: NodeType, overrideLabel?: string, overrideConfig?: Record<string, unknown>) => {
+      if (!connectDrop) return;
+      const meta = getNodeMeta(nodeType);
+      const newId = crypto.randomUUID();
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: newId,
+          type: "loopNode",
+          position: connectDrop.flowPos,
+          data: {
+            label: overrideLabel ?? meta.label,
+            meta: overrideLabel ? { ...meta, label: overrideLabel } : meta,
+            config: overrideConfig ?? {},
+            nodeType,
+            disabled: false,
+          },
+        },
+      ]);
+      setEdges((eds) =>
+        addEdge(
+          { source: connectDrop.sourceNodeId, sourceHandle: connectDrop.sourceHandleId ?? undefined, target: newId, animated: true },
+          eds,
+        ),
+      );
+      setDirty(true);
+      setConnectDrop(null);
+    },
+    [connectDrop, setNodes, setEdges],
   );
 
   const handleSave = async () => {
@@ -579,6 +661,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               </div>
             );
           })}
+        </div>
+        )}
+        {paletteOpen && (
           <button
             className="loop-collapse-toggle loop-collapse-toggle--palette-close"
             onClick={() => setPaletteOpen(false)}
@@ -586,7 +671,6 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           >
             <LucideIcons.ChevronLeft size={14} />
           </button>
-        </div>
         )}
 
         {/* ── Center: Canvas ── */}
