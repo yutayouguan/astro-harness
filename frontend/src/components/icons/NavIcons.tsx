@@ -199,18 +199,18 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** 智能流程 — 三个六边形节点互联；默认空心线稿，选中填实 */
+/** 智能流程 — 循环弧线 + 中心闪电；默认空心线稿，选中填实 */
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      {/* 连线 */}
-      <path className="nav-icon-stroke" d="M8.5 8 15.5 8M6.5 13 10.5 17M17.5 13 13.5 17" />
-      {/* 左上六边形 */}
-      <path d="M5 4.3 8 2.6l3 1.7v3.4L8 9.4 5 7.7Z" />
-      {/* 右上六边形 */}
-      <path d="M13 4.3 16 2.6l3 1.7v3.4L16 9.4 13 7.7Z" />
-      {/* 下方六边形 */}
-      <path d="M9 15.3 12 13.6l3 1.7v3.4L12 20.4 9 18.7Z" />
+      {/* 上弧 + 箭头 */}
+      <path d="M16.5 4.5A8 8 0 0 0 4 12" />
+      <path className="nav-icon-stroke" d="M17 2v4h-4" />
+      {/* 下弧 + 箭头 */}
+      <path d="M7.5 19.5A8 8 0 0 0 20 12" />
+      <path className="nav-icon-stroke" d="M7 22v-4h4" />
+      {/* 中心闪电 */}
+      <path className="nav-icon-cutout" d="M13 8.5l-2.5 4h3L11 17" />
     </NavIconBase>
   );
 }

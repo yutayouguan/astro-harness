@@ -289,33 +289,60 @@ export function IllustEmptySkills(props: IllustProps) {
   );
 }
 
-/** Loop 空状态 — ∞ 循环 + 节点 */
+/** Loop 空状态 — 火箭起飞 */
 export function IllustEmptyLoop(props: IllustProps) {
   return frame(
     props,
     <>
       {ground()}
-      {/* ∞ infinity loop path */}
+      {/* 火箭主体 */}
       <path
-        d="M80 56c-8-12-14-20-22-20a16 16 0 1 0 0 32c8 0 14-8 22-20Zm0 0c8 12 14 20 22 20a16 16 0 1 0 0-32c-8 0-14 8-22 20Z"
+        d="M80 22c-6 10-10 24-10 38h20c0-14-4-28-10-38Z"
         fill="currentColor"
-        opacity="0.1"
+        opacity="0.12"
         stroke="currentColor"
         strokeWidth="2"
+        strokeLinejoin="round"
       />
-      {/* three nodes on the loop */}
-      <circle cx="42" cy="56" r="6" fill="currentColor" opacity="0.32" />
-      <circle cx="80" cy="56" r="6" fill="currentColor" opacity="0.32" />
-      <circle cx="118" cy="56" r="6" fill="currentColor" opacity="0.32" />
-      {/* directional arrow hint at top-right curve */}
+      {/* 火箭窗 */}
+      <circle cx="80" cy="44" r="5" fill="currentColor" opacity="0.28" />
+      {/* 左翼 */}
       <path
-        d="M100 40l4-4 4 4"
+        d="M70 60c-6 2-10 8-12 14h12Z"
+        fill="currentColor"
+        opacity="0.18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {/* 右翼 */}
+      <path
+        d="M90 60c6 2 10 8 12 14H90Z"
+        fill="currentColor"
+        opacity="0.18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {/* 尾焰 */}
+      <path
+        d="M74 74c2 8 4 14 6 18 2-4 4-10 6-18"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.5"
+        opacity="0.4"
       />
+      <path
+        d="M77 74c1 5 2 8 3 10 1-2 2-5 3-10"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.25"
+      />
+      {/* 星星装饰 */}
+      <circle cx="50" cy="34" r="2" fill="currentColor" opacity="0.2" />
+      <circle cx="114" cy="42" r="2.5" fill="currentColor" opacity="0.15" />
+      <circle cx="106" cy="28" r="1.5" fill="currentColor" opacity="0.18" />
     </>,
   );
 }
