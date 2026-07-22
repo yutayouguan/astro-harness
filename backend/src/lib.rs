@@ -7,6 +7,8 @@
 pub mod cron_runner;
 pub mod grpc;
 pub mod session_events;
+pub mod webhook_server;
+pub mod workflow_ticker;
 
 pub use session_events::{
     event_matches, to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub,
@@ -110,6 +112,54 @@ pub async fn serve(
             });
         })
         .context("spawn astro-cron thread")?;
+
+    // 后台工作流定时触发 ticker
+    std::thread::Builder::new()
+        .name("astro-workflow-ticker".into())
+        .spawn(|| {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(err) => {
+                    tracing::error!(error = %err, "workflow ticker runtime build failed");
+                    return;
+                }
+            };
+            rt.block_on(async move {
+                // 首次启动延迟 10s，让系统先稳定
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                let mut interval = tokio::time::interval(Duration::from_secs(30));
+                loop {
+                    interval.tick().await;
+                    workflow_ticker::tick_workflows().await;
+                }
+            });
+        })
+        .context("spawn astro-workflow-ticker thread")?;
+
+    // Webhook HTTP 服务器
+    std::thread::Builder::new()
+        .name("astro-webhook".into())
+        .spawn(|| {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(err) => {
+                    tracing::error!(error = %err, "webhook server runtime build failed");
+                    return;
+                }
+            };
+            rt.block_on(async move {
+                if let Err(e) = webhook_server::run_webhook_server().await {
+                    tracing::error!(error = %e, "webhook server failed");
+                }
+            });
+        })
+        .context("spawn astro-webhook thread")?;
 
     tracing::info!("Astro Backend v0.1.0");
     tracing::info!("gRPC Server: {}", addr_str);

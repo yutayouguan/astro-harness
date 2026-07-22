@@ -12,6 +12,7 @@ memory = { path = "../memory" }
 session = { path = "../session" }
 home = { path = "../home" }
 cron = { path = "../cron" }
+workflow = { path = "../workflow" }
 skills = { path = "../skills" }
 hooks = { path = "../hooks" }
 tools = { path = "../tools" }
