@@ -1,6 +1,6 @@
 /** 右侧节点配置面板 — 配置/运行日志 tabs + 通用底部区域 */
 
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Braces, Trash2, Star, UserRound } from "lucide-react";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -93,6 +93,64 @@ interface Props {
   onDisabledChange: (disabled: boolean) => void;
   onDelete: () => void;
   onClose: () => void;
+}
+
+interface StepLog {
+  id: string;
+  node_id: string;
+  node_type: string;
+  node_label: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  output: string | null;
+  error: string | null;
+}
+
+function NodeStepLogs({ nodeId }: { nodeId: string }) {
+  const [logs, setLogs] = useState<StepLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const runs = await invoke<{ runs: { id: string }[] }>("list_loop_runs", { workflowId: "", limit: 5 });
+        const allLogs: StepLog[] = [];
+        for (const run of runs.runs.slice(0, 3)) {
+          try {
+            const steps = await invoke<{ steps: StepLog[] }>("list_loop_step_logs", { runId: run.id });
+            allLogs.push(...steps.steps.filter((s: StepLog) => s.node_id === nodeId));
+          } catch { /* ignore */ }
+        }
+        setLogs(allLogs);
+      } catch { /* ignore */ }
+      setLoading(false);
+    })();
+  }, [nodeId]);
+
+  if (loading) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">加载中…</div></div>;
+  if (logs.length === 0) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">暂无此节点的运行日志</div></div>;
+
+  return (
+    <div className="loop-config-panel-body loop-config-logs">
+      {logs.map((log) => (
+        <div key={log.id} className={`loop-step-log loop-step-log--${log.status}`}>
+          <div className="loop-step-log-header">
+            <span className={`loop-step-log-dot loop-step-log-dot--${log.status}`} />
+            <span className="loop-step-log-status">{log.status}</span>
+            <span className="loop-step-log-time">{log.started_at}</span>
+          </div>
+          {log.output && (
+            <pre className="loop-step-log-output">{log.output}</pre>
+          )}
+          {log.error && (
+            <pre className="loop-step-log-error">{log.error}</pre>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function LoopConfigPanel({
@@ -213,11 +271,7 @@ export default function LoopConfigPanel({
       )}
 
       {tab === "logs" && (
-        <div className="loop-config-panel-body">
-          <div className="loop-config-placeholder">
-            选择一次运行后，此处显示该节点的执行日志。
-          </div>
-        </div>
+        <NodeStepLogs nodeId={nodeId} />
       )}
     </div>
   );

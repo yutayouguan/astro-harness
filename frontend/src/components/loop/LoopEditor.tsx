@@ -109,8 +109,83 @@ function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }
   );
 }
 
+interface BranchCondition {
+  id: string;
+  label?: string;
+  expression?: string;
+}
+
+function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
+  const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
+  const config = (data as unknown as Record<string, unknown>).config as Record<string, unknown> | undefined;
+  const conditionsRaw = config?.conditions ?? config?.branches;
+  let branches: BranchCondition[] = [];
+  if (typeof conditionsRaw === "string") {
+    try { branches = JSON.parse(conditionsRaw); } catch { /* ignore */ }
+  } else if (Array.isArray(conditionsRaw)) {
+    branches = conditionsRaw as BranchCondition[];
+  }
+  if (branches.length === 0) branches = [{ id: "default", label: "默认" }];
+
+  return (
+    <div
+      className={`loop-rf-node loop-rf-node--branch${selected ? " is-selected" : ""}${data.disabled ? " is-disabled" : ""}`}
+      style={{ "--node-color": data.meta.color } as React.CSSProperties}
+    >
+      {selected && (
+        <div className="loop-rf-node-toolbar">
+          <button className="loop-rf-toolbar-btn" title="运行此节点"
+            onClick={(e) => { e.stopPropagation(); data.onRunNode?.(); }}>
+            <LucideIcons.Play size={12} />
+          </button>
+          <button className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
+            title={data.disabled ? "启用" : "禁用"}
+            onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}>
+            <LucideIcons.Power size={12} />
+          </button>
+          <button className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger" title="删除"
+            onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}>
+            <LucideIcons.Trash2 size={12} />
+          </button>
+        </div>
+      )}
+      <Handle type="target" position={Position.Left} className="loop-rf-handle" />
+      <div className="loop-rf-node-header">
+        <span className="loop-rf-node-icon">
+          {IconComp && <IconComp size={16} />}
+        </span>
+        <div className="loop-rf-node-text">
+          <span className="loop-rf-node-label">{data.label}</span>
+          <span className="loop-rf-node-type-tag">{data.meta.labelEn}</span>
+        </div>
+      </div>
+      <div className="loop-rf-branch-handles">
+        {branches.map((b, i) => (
+          <div key={b.id} className="loop-rf-branch-row">
+            <span className="loop-rf-branch-label">{b.label || b.id}</span>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id={b.id}
+              className="loop-rf-handle"
+              style={{ top: `${30 + (i + 1) * (40 / (branches.length + 1))}px` }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const BRANCH_NODE_TYPES: Set<string> = new Set(["conditional", "multi_branch", "question_classification"]);
+
+function rfNodeType(nodeType: string): string {
+  return BRANCH_NODE_TYPES.has(nodeType) ? "branchNode" : "loopNode";
+}
+
 const nodeTypes: NodeTypes = {
   loopNode: LoopNode as unknown as NodeTypes[string],
+  branchNode: BranchNode as unknown as NodeTypes[string],
 };
 
 // ── Connection-drop node picker popup ───────────────────────────────
@@ -357,7 +432,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         setNodes(
           wf.nodes.map((n) => ({
             id: n.id,
-            type: "loopNode",
+            type: rfNodeType(n.node_type),
             position: { x: n.position.x, y: n.position.y },
             data: {
               label: n.label,
@@ -447,7 +522,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         ...nds,
         {
           id: newId,
-          type: "loopNode",
+          type: rfNodeType(nodeType),
           position: connectDrop.flowPos,
           data: {
             label: overrideLabel ?? meta.label,
@@ -526,7 +601,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           ...nds,
           {
             id: newId,
-            type: "loopNode",
+            type: rfNodeType(draggingType),
             position: flowPos,
             data: {
               label: nodeLabel,
@@ -566,7 +641,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         ...nds,
         {
           id: newId,
-          type: "loopNode",
+          type: rfNodeType(nodeType),
           position: { x: center.x + offset, y: center.y + offset },
           data: { label: meta.label, meta, config: {}, nodeType, disabled: false },
         },
@@ -589,7 +664,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         ...nds,
         {
           id: newId,
-          type: "loopNode",
+          type: rfNodeType("custom_loop"),
           position: { x: center.x + offset, y: center.y + offset },
           data: {
             label: loopName,
