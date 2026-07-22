@@ -320,20 +320,30 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
   font-size: 12px;
-  color: var(--ink-secondary);
+  font-weight: 500;
+  color: var(--ink);
   cursor: grab;
   user-select: none;
   transition: all 0.12s;
 }
 .loop-palette-item:hover {
   background: var(--glass-hover);
-  color: var(--ink);
 }
 .loop-palette-item:active {
   cursor: grabbing;
+}
+
+.loop-palette-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 .loop-palette-item-plus {
   margin-left: auto;
@@ -418,29 +428,62 @@
 /* ── React Flow Node ──────────────────────────────────────────── */
 
 .loop-rf-node {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 40%, var(--border));
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
   background: var(--bg0, #fff);
-  min-width: 140px;
-  font-size: 12px;
+  min-width: 170px;
+  max-width: 240px;
   color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   transition: border-color 0.15s, box-shadow 0.15s;
+}
+.loop-rf-node:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 .loop-rf-node.is-selected {
   border-color: var(--node-color, #888);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color, #888) 25%, transparent);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--node-color, #888) 20%, transparent);
 }
 
 .loop-rf-node-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 500;
+  gap: 10px;
 }
-.loop-rf-node-header svg {
+
+.loop-rf-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--node-color, #888) 12%, transparent);
   color: var(--node-color, #888);
   flex-shrink: 0;
+}
+
+.loop-rf-node-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.loop-rf-node-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loop-rf-node-type-tag {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  white-space: nowrap;
 }
 
 .loop-rf-handle {
@@ -448,7 +491,7 @@
   height: 8px !important;
   border-radius: 50% !important;
   background: var(--node-color, #888) !important;
-  border: 2px solid var(--glass-panel) !important;
+  border: 2px solid var(--bg0, #fff) !important;
 }
 
 /* ── Config panel (右侧) ──────────────────────────────────────── */

@@ -54,8 +54,13 @@ function LoopNode({ data, selected }: { data: { label: string; meta: NodeMeta };
     >
       <Handle type="target" position={Position.Left} className="loop-rf-handle" />
       <div className="loop-rf-node-header">
-        {IconComp && <IconComp size={14} />}
-        <span>{data.label}</span>
+        <span className="loop-rf-node-icon">
+          {IconComp && <IconComp size={16} />}
+        </span>
+        <div className="loop-rf-node-text">
+          <span className="loop-rf-node-label">{data.label}</span>
+          <span className="loop-rf-node-type-tag">{data.meta.labelEn}</span>
+        </div>
       </div>
       <Handle type="source" position={Position.Right} className="loop-rf-handle" />
     </div>
@@ -332,7 +337,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                             setDragGhostPos({ x: e.clientX, y: e.clientY });
                           }}
                         >
-                          {IconComp && <IconComp size={14} />}
+                          <span
+                            className="loop-palette-item-icon"
+                            style={{ background: `color-mix(in srgb, ${meta.color} 15%, transparent)`, color: meta.color }}
+                          >
+                            {IconComp && <IconComp size={14} />}
+                          </span>
                           <span>{meta.label}</span>
                           <button
                             className="loop-palette-item-plus"
@@ -459,7 +469,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             className="loop-drag-ghost"
             style={{ left: dragGhostPos.x, top: dragGhostPos.y }}
           >
-            {IconComp && <IconComp size={14} />}
+            <span
+              className="loop-palette-item-icon"
+              style={{ background: `color-mix(in srgb, ${meta.color} 15%, transparent)`, color: meta.color }}
+            >
+              {IconComp && <IconComp size={14} />}
+            </span>
             <span>{meta.label}</span>
           </div>
         );
