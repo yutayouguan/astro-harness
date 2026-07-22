@@ -90,13 +90,13 @@ struct PinnedStore {
 /// 向注册表登记 agentic 上下文工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "search".to_string(),
-        toolset: "search".to_string(),
+        name: "context_search".to_string(),
+        toolset: "context_search".to_string(),
         description: "On-demand context search across session history (FTS), MEMORY/USER, and knowledge DB. Prefer this over stuffing every recall into the system prompt. scope=session|memory|knowledge|all."
             .to_string(),
         schema: schema_for_args::<SearchArgs>(),
         check_fn: None,
-        icon: "search",
+        icon: "book-open",
         ..ToolEntry::lifecycle_defaults()
     });
     registry.register(ToolEntry {
@@ -118,7 +118,7 @@ pub fn dispatch(
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
     match name {
-        "search" => dispatch_search(ctx, args),
+        "context_search" => dispatch_search(ctx, args),
         "pin_context" => dispatch_pin(ctx, args),
         other => anyhow::bail!("未知上下文工具: {other}"),
     }
@@ -126,7 +126,7 @@ pub fn dispatch(
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["search", "pin_context"],
+    names: ["context_search", "pin_context"],
     sync_named: dispatch,
 }
 

@@ -419,7 +419,7 @@ mod tests {
         assert!(reg.any_exclusive_access(&["memory", "subagent", "pin_context"]));
         assert!(!reg.any_exclusive_access(&["web_search"]));
         assert!(reg.get("persona_create").unwrap().exclusive_access);
-        assert!(reg.get("search").is_some());
+        assert!(reg.get("context_search").is_some());
         assert!(reg.get("pin_context").unwrap().exclusive_access);
     }
 }

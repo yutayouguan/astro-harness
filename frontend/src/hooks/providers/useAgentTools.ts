@@ -47,7 +47,7 @@ export type AgentToolId =
   | "music_gen"
   | "skills"
   | "memory"
-  | "search"
+  | "context_search"
   | "ask_user"
   | "switch_mode"
   | "present"
@@ -315,9 +315,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "search",
-    titleKey: "agentTools.search.title",
-    descKey: "agentTools.search.desc",
+    id: "context_search",
+    titleKey: "agentTools.contextSearch.title",
+    descKey: "agentTools.contextSearch.desc",
     Icon: IconSessionSearch,
     tone: "lime",
     params: [

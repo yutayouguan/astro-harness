@@ -80,7 +80,7 @@ const READONLY_ALLOW: &[&str] = &[
     "web_search",
     "web_extract",
     "http_fetch",
-    "search",
+    "context_search",
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
     "todo", // Ask 模式下硬拦

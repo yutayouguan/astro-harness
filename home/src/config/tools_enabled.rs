@@ -30,7 +30,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "music_gen",
     "skills",
     "memory",
-    "search",
+    "context_search",
     "pin_context",
     "ask_user",
     "switch_mode",
@@ -188,7 +188,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
     }
     match name {
         "memory" => "memory",
-        "search" => "search",
+        "context_search" => "context_search",
         "pin_context" => "pin_context",
         "cron" => "cron",
         "image_gen" => "image_gen",

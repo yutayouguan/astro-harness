@@ -477,8 +477,8 @@ export const zh = {
   "agentTools.skills.desc": "列出、加载、策展建议、创建/patch/更新/删除可复用技能",
   "agentTools.memory.title": "记忆",
   "agentTools.memory.desc": "存储并召回持久知识",
-  "agentTools.search.title": "检索",
-  "agentTools.search.desc": "按需检索会话历史、记忆与知识库（scope=session|memory|knowledge|all）",
+  "agentTools.contextSearch.title": "上下文检索",
+  "agentTools.contextSearch.desc": "按需检索会话历史、记忆与知识库（scope=session|memory|knowledge|all）",
   "agentTools.askUser.title": "向用户提问 / 确认 / 定位",
   "agentTools.askUser.desc": "需求不清时提问，敏感操作前请求批准，本地查询前请求定位",
   "agentTools.switchMode.title": "请求切换模式",
@@ -2190,8 +2190,8 @@ export const en: Record<MessageKey, string> = {
   "agentTools.skills.desc": "List, load, curate suggestions, create/patch/update/delete reusable skills",
   "agentTools.memory.title": "Memory",
   "agentTools.memory.desc": "Store and recall persistent knowledge",
-  "agentTools.search.title": "Search",
-  "agentTools.search.desc":
+  "agentTools.contextSearch.title": "Context Search",
+  "agentTools.contextSearch.desc":
     "On-demand search across session history, memory, and knowledge (scope=session|memory|knowledge|all)",
   "agentTools.askUser.title": "Ask / Confirm / Locate",
   "agentTools.askUser.desc":
