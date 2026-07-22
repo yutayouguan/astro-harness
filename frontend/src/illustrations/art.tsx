@@ -289,6 +289,37 @@ export function IllustEmptySkills(props: IllustProps) {
   );
 }
 
+/** Loop 空状态 — ∞ 循环 + 节点 */
+export function IllustEmptyLoop(props: IllustProps) {
+  return frame(
+    props,
+    <>
+      {ground()}
+      {/* ∞ infinity loop path */}
+      <path
+        d="M80 56c-8-12-14-20-22-20a16 16 0 1 0 0 32c8 0 14-8 22-20Zm0 0c8 12 14 20 22 20a16 16 0 1 0 0-32c-8 0-14 8-22 20Z"
+        fill="currentColor"
+        opacity="0.1"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      {/* three nodes on the loop */}
+      <circle cx="42" cy="56" r="6" fill="currentColor" opacity="0.32" />
+      <circle cx="80" cy="56" r="6" fill="currentColor" opacity="0.32" />
+      <circle cx="118" cy="56" r="6" fill="currentColor" opacity="0.32" />
+      {/* directional arrow hint at top-right curve */}
+      <path
+        d="M100 40l4-4 4 4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.5"
+      />
+    </>,
+  );
+}
+
 /** Agent 封面：通用助手 */
 export function IllustCoverAssistant(props: IllustProps) {
   return frame(

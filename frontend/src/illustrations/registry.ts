@@ -22,18 +22,20 @@ import {
   IllustEmptyMemory,
   IllustEmptyProviders,
   IllustEmptySkills,
+  IllustEmptyLoop,
   IllustEmptyWorkspace,
   type IllustProps,
 } from "./art";
 
 export type EmptyScene =
   | "chat"
-  | "default"
+  | "workspace"
   | "memory"
   | "cron"
   | "files"
   | "providers"
-  | "skills";
+  | "skills"
+  | "loop";
 
 export type CoverId =
   | "assistant"
@@ -76,6 +78,7 @@ export const EMPTY_SCENE_ART: Record<EmptyScene, ComponentType<IllustProps>> = {
   files: IllustEmptyFiles,
   providers: IllustEmptyProviders,
   skills: IllustEmptySkills,
+  loop: IllustEmptyLoop,
 };
 
 export const AGENT_COVERS: CoverMeta[] = [

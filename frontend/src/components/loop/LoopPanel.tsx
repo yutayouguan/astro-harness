@@ -14,6 +14,7 @@ import type { LoopDto } from "./loopTypes";
 import LoopEditor from "./LoopEditor";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import { useI18n } from "../../i18n/LocaleContext";
+import { EmptyIllustration } from "../../illustrations";
 
 type LoopView = "gallery" | "list" | "detail";
 
@@ -462,18 +463,12 @@ export default function LoopPanel({ active, providers }: Props) {
       <div className="loop-content">
         {loading && <div className="loop-empty">加载中…</div>}
         {!loading && filtered.length === 0 && (
-          <div className="loop-empty">
-            {search.trim() ? (
-              <p>未找到匹配的 Loop</p>
-            ) : (
-              <>
-                <p>暂无 Loop 工作流</p>
-                <p className="loop-empty-hint">
-                  点击「新建」开始搭建你的第一条自动化流程
-                </p>
-              </>
-            )}
-          </div>
+          <EmptyIllustration
+            scene="loop"
+            className="loop-empty-illust"
+            title={search.trim() ? "未找到匹配的 Loop" : "暂无 Loop 工作流"}
+            hint={search.trim() ? undefined : "点击「新建」开始搭建你的第一条自动化流程"}
+          />
         )}
         {!loading && filtered.length > 0 && viewMode === "gallery" && renderGallery()}
         {!loading && filtered.length > 0 && viewMode === "list" && renderList()}

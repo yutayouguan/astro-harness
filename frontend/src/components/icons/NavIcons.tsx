@@ -199,11 +199,18 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** Loop 工作流 — ∞ 无限循环；默认空心线稿，选中填实 */
+/** 智能流程 — 三个六边形节点互联；默认空心线稿，选中填实 */
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <path d="M12 12c-2.4-3-4.2-5-6-5a4 4 0 1 0 0 8c1.8 0 3.6-2 6-5Zm0 0c2.4 3 4.2 5 6 5a4 4 0 1 0 0-8c-1.8 0-3.6 2-6 5Z" />
+      {/* 连线 */}
+      <path className="nav-icon-stroke" d="M8.5 8 15.5 8M6.5 13 10.5 17M17.5 13 13.5 17" />
+      {/* 左上六边形 */}
+      <path d="M5 4.3 8 2.6l3 1.7v3.4L8 9.4 5 7.7Z" />
+      {/* 右上六边形 */}
+      <path d="M13 4.3 16 2.6l3 1.7v3.4L16 9.4 13 7.7Z" />
+      {/* 下方六边形 */}
+      <path d="M9 15.3 12 13.6l3 1.7v3.4L12 20.4 9 18.7Z" />
     </NavIconBase>
   );
 }
