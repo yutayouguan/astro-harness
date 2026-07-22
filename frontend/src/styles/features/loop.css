@@ -454,52 +454,73 @@
 /* ── Config panel (右侧) ──────────────────────────────────────── */
 
 .loop-config-panel {
-  width: 340px;
+  width: 380px;
   border-left: 1px solid var(--border);
-  background: var(--glass-panel);
+  background: var(--bg0, #fff);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
+/* tabs */
 .loop-config-panel-tabs {
   display: flex;
+  gap: 0;
+  padding: 0 20px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .loop-config-tab {
-  flex: 1;
-  padding: 10px 16px;
-  font-size: 13px;
+  padding: 12px 4px;
+  margin-right: 24px;
+  font-size: 14px;
   font-weight: 500;
-  color: var(--ink-secondary);
+  color: var(--ink-tertiary);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: color 0.15s;
 }
 .loop-config-tab:hover {
   color: var(--ink);
 }
 .loop-config-tab.is-active {
-  color: var(--tone, #ec4899);
-  border-bottom-color: var(--tone, #ec4899);
+  color: var(--ink);
+  border-bottom-color: var(--tone, #6366f1);
 }
 
+/* scroll body */
 .loop-config-panel-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
+/* node type header row */
 .loop-config-node-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 16px 20px 12px;
+}
+
+.loop-config-node-type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loop-config-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
 .loop-config-node-type {
@@ -510,114 +531,161 @@
 
 .loop-config-node-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+}
+.loop-config-node-actions .loop-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+}
+.loop-config-node-actions .loop-icon-btn:hover {
+  background: var(--glass-hover);
 }
 
+/* body padding */
 .loop-config-panel-body {
-  padding: 16px;
+  padding: 0 20px 20px;
 }
 
+/* field */
 .loop-config-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 18px;
 }
 
 .loop-config-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
 }
 
+/* input */
 .loop-config-input {
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--bg0);
+  background: var(--bg0, #fff);
   color: var(--ink);
   font-size: 13px;
   outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.loop-config-input:hover {
+  border-color: color-mix(in srgb, var(--ink-secondary) 40%, var(--border));
 }
 .loop-config-input:focus {
-  border-color: var(--tone, #ec4899);
+  border-color: var(--tone, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+}
+.loop-config-input::placeholder {
+  color: var(--ink-tertiary);
 }
 
 .loop-config-placeholder {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink-tertiary);
   text-align: center;
-  padding: 20px 0;
+  padding: 32px 16px;
 }
 
+/* textarea */
 .loop-config-textarea {
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--bg0);
+  background: var(--bg0, #fff);
   color: var(--ink);
-  font-size: 12px;
-  font-family: "SF Mono", "Fira Code", monospace;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.6;
   outline: none;
   resize: vertical;
-  min-height: 80px;
+  min-height: 88px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.loop-config-textarea:hover {
+  border-color: color-mix(in srgb, var(--ink-secondary) 40%, var(--border));
 }
 .loop-config-textarea:focus {
-  border-color: var(--tone, #ec4899);
+  border-color: var(--tone, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+}
+.loop-config-textarea::placeholder {
+  color: var(--ink-tertiary);
 }
 
+/* select */
 .loop-config-select {
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--bg0);
+  background: var(--bg0, #fff);
   color: var(--ink);
   font-size: 13px;
   outline: none;
   cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.loop-config-select:hover {
+  border-color: color-mix(in srgb, var(--ink-secondary) 40%, var(--border));
 }
 .loop-config-select:focus {
-  border-color: var(--tone, #ec4899);
+  border-color: var(--tone, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+}
+.loop-config-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
+/* hint text */
 .loop-config-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-tertiary);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
+/* divider */
 .loop-config-divider {
   height: 1px;
   background: var(--border);
-  margin: 12px 0;
+  margin: 16px 0;
 }
 
+/* section */
 .loop-config-section {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .loop-config-section-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--ink-secondary);
-  margin-bottom: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--ink);
+  margin-bottom: 12px;
 }
 
+/* row layout */
 .loop-config-field--row {
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
 }
 
+/* toggle switch (used in cards) */
 .loop-config-checkbox {
-  width: 32px;
-  height: 18px;
+  width: 36px;
+  height: 20px;
   appearance: none;
-  background: var(--glass-dim);
-  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink-tertiary) 30%, transparent);
+  border-radius: 11px;
   position: relative;
   cursor: pointer;
   transition: background 0.2s;
@@ -628,23 +696,27 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   transition: transform 0.2s;
 }
 .loop-config-checkbox:checked {
-  background: var(--tone, #ec4899);
+  background: var(--tone, #6366f1);
 }
 .loop-config-checkbox:checked::after {
-  transform: translateX(14px);
+  transform: translateX(16px);
 }
 
 /* ── Upstream fields collapsible ──────────────────────────────── */
 
 .loop-config-upstream {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .loop-config-upstream-toggle {
@@ -652,8 +724,8 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 8px 0;
-  background: transparent;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--border) 30%, transparent);
   border: none;
   color: var(--ink);
   font-size: 13px;
@@ -661,13 +733,17 @@
   cursor: pointer;
   text-align: left;
 }
+.loop-config-upstream-toggle:hover {
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+}
 
 .loop-config-upstream-badge {
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--tone, #ec4899) 12%, transparent);
-  color: var(--tone, #ec4899);
+  background: color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+  color: var(--tone, #6366f1);
+  font-weight: 500;
 }
 
 .loop-config-upstream-add {
@@ -676,11 +752,16 @@
   align-items: center;
   gap: 3px;
   font-size: 12px;
-  color: var(--tone, #ec4899);
+  font-weight: 500;
+  color: var(--tone, #6366f1);
+}
+.loop-config-upstream-add:hover {
+  text-decoration: underline;
 }
 
 .loop-config-upstream-body {
-  padding: 8px 0 4px 20px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
 }
 
 /* ── Config row (side-by-side fields) ─────────────────────────── */
@@ -688,7 +769,7 @@
 .loop-config-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* ── Preset save row ──────────────────────────────────────────── */
@@ -696,20 +777,24 @@
 .loop-config-preset {
   margin-bottom: 8px;
 }
+.loop-config-preset .loop-config-label {
+  margin-bottom: 2px;
+}
 
 .loop-config-preset-row {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
-  margin-bottom: 4px;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 .loop-config-preset-row .loop-config-input {
   flex: 1;
 }
 
 .loop-btn--sm {
-  padding: 5px 10px;
+  padding: 6px 12px;
   font-size: 12px;
+  border-radius: 6px;
 }
 
 /* ── Native checkbox (not toggle) ─────────────────────────────── */
@@ -717,8 +802,9 @@
 .loop-config-checkbox-native {
   width: 16px;
   height: 16px;
-  accent-color: var(--tone, #ec4899);
+  accent-color: var(--tone, #6366f1);
   cursor: pointer;
+  border-radius: 4px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

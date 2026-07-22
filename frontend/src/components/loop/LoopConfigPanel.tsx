@@ -2,7 +2,8 @@
 
 import { lazy, Suspense, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { User, Braces, Trash2, Star } from "lucide-react";
+import { Braces, Trash2, Star, UserRound } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import type { NodeType } from "./loopTypes";
 import { getNodeMeta } from "./loopTypes";
 import ErrorHandlingConfig from "./configs/ErrorHandlingConfig";
@@ -107,6 +108,8 @@ export default function LoopConfigPanel({
   const [presetName, setPresetName] = useState(label);
   const meta = getNodeMeta(nodeType);
   const ConfigForm = CONFIG_MAP[nodeType];
+  type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
+  const NodeIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
 
   const handleSavePreset = async () => {
     // TODO: invoke save_node_preset
@@ -135,8 +138,18 @@ export default function LoopConfigPanel({
         <div className="loop-config-panel-scroll">
           {/* ── Node type header ── */}
           <div className="loop-config-node-header">
-            <span className="loop-config-node-type">{meta.label}</span>
+            <div className="loop-config-node-type-row">
+              {NodeIcon && (
+                <span className="loop-config-node-icon" style={{ color: meta.color }}>
+                  <NodeIcon size={18} />
+                </span>
+              )}
+              <span className="loop-config-node-type">{meta.label}</span>
+            </div>
             <div className="loop-config-node-actions">
+              <button className="loop-icon-btn" title="查看人设">
+                <UserRound size={14} />
+              </button>
               <button className="loop-icon-btn" title="查看 JSON">
                 <Braces size={14} />
               </button>
