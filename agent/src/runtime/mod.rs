@@ -1151,7 +1151,7 @@ impl AgentLoop {
         push_sys("soul", "SOUL.md", &static_ctx.soul);
         push_sys("identity", "身份", &static_ctx.identity);
         push_sys("agent", "AGENT.md", &static_ctx.agent_md);
-        push_sys("mode", "交互模式引导", mode_guidance);
+        push_sys("mode", "交互模式引导", &mode_guidance);
         push_sys("tool_guidance", "工具指引", tool_guidance);
         push_sys("timestamp", "当前时间", &timestamp);
 

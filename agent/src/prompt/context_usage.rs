@@ -262,7 +262,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
                 })
             })
             .collect();
-        items.sort_by_key(|b| std::cmp::Reverse(b.tokens));
+        items.sort_by(|a, b| b.tokens.cmp(&a.tokens));
         items
     };
 
@@ -288,7 +288,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
                 })
             })
             .collect();
-        items.sort_by_key(|b| std::cmp::Reverse(b.tokens));
+        items.sort_by(|a, b| b.tokens.cmp(&a.tokens));
         items
     };
 
@@ -521,6 +521,9 @@ mod tests {
             snap.segment("conversation").map(|s| s.tokens).unwrap_or(0),
             0
         );
-        assert_eq!(snap.segment("subagent").unwrap().items[0].id, "subagent");
+        assert_eq!(
+            snap.segment("subagent").unwrap().items[0].id,
+            "subagent"
+        );
     }
 }

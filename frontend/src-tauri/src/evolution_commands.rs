@@ -265,7 +265,6 @@ pub async fn set_evolution_search(
     population_size: Option<u32>,
     max_eval_examples: Option<u32>,
     max_llm_calls: Option<u32>,
-    /// [P0] 批准后冷却期（秒）。None = 保持当前值；0 = 禁用；最大 7 天（604800）。
     post_approval_cooldown_secs: Option<u64>,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
@@ -302,9 +301,7 @@ pub async fn set_evolution_auto(
     cooldown_secs: u64,
     min_new_decisions: u32,
     max_runs_per_day: u32,
-    /// [P2] 定向进化最少失败信号数。None = 保持当前值。
     min_skill_failure_signals: Option<u32>,
-    /// [P2] 失败信号统计窗口（天）。None = 保持当前值。
     signal_window_days: Option<u32>,
 ) -> Result<EvolutionSettingsDto, String> {
     let base = home::default_memory_dir();
