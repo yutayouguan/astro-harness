@@ -867,11 +867,12 @@
   transition: all 0.12s;
 }
 .loop-rf-toolbar-btn:hover {
-  background: var(--glass-hover);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
   color: var(--ink);
 }
 .loop-rf-toolbar-btn.is-active {
   color: var(--tone, #6366f1);
+  background: color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
 }
 .loop-rf-toolbar-btn--danger:hover {
   color: #ef4444;

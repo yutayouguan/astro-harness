@@ -199,14 +199,11 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** Loop 工作流 — 节点连线图标；默认空心线稿，选中填实 */
+/** Loop 工作流 — ∞ 无限循环；默认空心线稿，选中填实 */
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <circle cx="6" cy="6" r="3" />
-      <circle cx="18" cy="6" r="3" />
-      <circle cx="12" cy="18" r="3" />
-      <path className="nav-icon-stroke" d="M9 6h6M7.5 8.5 10.5 16M16.5 8.5 13.5 16" />
+      <path d="M12 12c-2.4-3-4.2-5-6-5a4 4 0 1 0 0 8c1.8 0 3.6-2 6-5Zm0 0c2.4 3 4.2 5 6 5a4 4 0 1 0 0-8c-1.8 0-3.6 2-6 5Z" />
     </NavIconBase>
   );
 }
