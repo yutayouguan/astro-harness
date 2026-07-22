@@ -45,13 +45,48 @@ interface Props {
 
 // ── Custom node component ────────────────────────────────────────────
 
-function LoopNode({ data, selected }: { data: { label: string; meta: NodeMeta }; selected?: boolean }) {
+interface LoopNodeData {
+  label: string;
+  meta: NodeMeta;
+  disabled?: boolean;
+  onRunNode?: () => void;
+  onToggleDisable?: () => void;
+  onDeleteNode?: () => void;
+}
+
+function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
   const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
   return (
     <div
-      className={`loop-rf-node loop-rf-node--${data.meta.category}${selected ? " is-selected" : ""}`}
+      className={`loop-rf-node${selected ? " is-selected" : ""}${data.disabled ? " is-disabled" : ""}`}
       style={{ "--node-color": data.meta.color } as React.CSSProperties}
     >
+      {/* 选中时顶部工具栏 */}
+      {selected && (
+        <div className="loop-rf-node-toolbar">
+          <button
+            className="loop-rf-toolbar-btn"
+            title="运行此节点"
+            onClick={(e) => { e.stopPropagation(); data.onRunNode?.(); }}
+          >
+            <LucideIcons.Play size={12} />
+          </button>
+          <button
+            className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
+            title={data.disabled ? "启用" : "禁用"}
+            onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}
+          >
+            <LucideIcons.Power size={12} />
+          </button>
+          <button
+            className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger"
+            title="删除"
+            onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}
+          >
+            <LucideIcons.Trash2 size={12} />
+          </button>
+        </div>
+      )}
       <Handle type="target" position={Position.Left} className="loop-rf-handle" />
       <div className="loop-rf-node-header">
         <span className="loop-rf-node-icon">
@@ -98,6 +133,40 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   // run history state
   const [showHistory, setShowHistory] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  // node action callbacks (injected into node data for toolbar buttons)
+  const deleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    setSelectedNodeId(null);
+    setDirty(true);
+  }, [setNodes, setEdges]);
+
+  const toggleNodeDisabled = useCallback((nodeId: string) => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === nodeId
+          ? { ...n, data: { ...n.data, disabled: !(n.data as Record<string, unknown>).disabled } }
+          : n,
+      ),
+    );
+    setDirty(true);
+  }, [setNodes]);
+
+  // inject callbacks into nodes so the toolbar buttons work
+  const nodesWithCallbacks = useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          onRunNode: () => console.log("run node", n.id),
+          onToggleDisable: () => toggleNodeDisabled(n.id),
+          onDeleteNode: () => deleteNode(n.id),
+        },
+      })),
+    [nodes, deleteNode, toggleNodeDisabled],
+  );
 
   // sidebar collapsed categories
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -460,7 +529,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         {/* ── Center: Canvas ── */}
         <div className="loop-canvas-container" ref={reactFlowWrapper}>
           <ReactFlow
-            nodes={nodes}
+            nodes={nodesWithCallbacks}
             edges={edges}
             onNodesChange={(changes) => {
               onNodesChange(changes);

@@ -445,9 +445,21 @@
   overflow: hidden;
 }
 
+/* 禁用 React Flow 自带的选中框模糊效果 */
+.loop-canvas-container .react-flow__node.selected > .loop-rf-node,
+.loop-canvas-container .react-flow__node:focus > .loop-rf-node,
+.loop-canvas-container .react-flow__node {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.loop-canvas-container .react-flow__node.selected {
+  z-index: 10 !important;
+}
+
 /* ── React Flow Node ──────────────────────────────────────────── */
 
 .loop-rf-node {
+  position: relative;
   padding: 10px 16px;
   border-radius: 12px;
   border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
@@ -464,6 +476,51 @@
 .loop-rf-node.is-selected {
   border-color: var(--node-color, #888);
   box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--node-color, #888) 20%, transparent);
+}
+.loop-rf-node.is-disabled {
+  opacity: 0.5;
+}
+
+/* ── Node toolbar (选中时悬浮在上方) ─────────────────────────── */
+
+.loop-rf-node-toolbar {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--bg0, #fff);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 20;
+}
+
+.loop-rf-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.loop-rf-toolbar-btn:hover {
+  background: var(--glass-hover);
+  color: var(--ink);
+}
+.loop-rf-toolbar-btn.is-active {
+  color: var(--tone, #6366f1);
+}
+.loop-rf-toolbar-btn--danger:hover {
+  color: #ef4444;
+  background: color-mix(in srgb, #ef4444 8%, transparent);
 }
 
 .loop-rf-node-header {
