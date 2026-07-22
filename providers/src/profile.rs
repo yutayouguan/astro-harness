@@ -85,7 +85,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         azure_deployment_style: false,
         default_model: "gemini-3.5-flash",
         supports_image_gen: true,
-        supports_embedding: false,
+        supports_embedding: true,
     },
     ProviderProfile {
         id: "ollama",

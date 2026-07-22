@@ -1377,6 +1377,166 @@ pub async fn google_interactions_music(
     parse_interaction_music_response(&v)
 }
 
+// ---------------------------------------------------------------------------
+// Embedding API
+// ---------------------------------------------------------------------------
+
+/// 批量生成文本 embedding 向量。
+///
+/// 调用 `POST /v1beta/models/{model}:batchEmbedContents`。
+pub async fn google_batch_embed(
+    client: &Client,
+    texts: &[String],
+    model: &str,
+    config: &ProviderConfig,
+) -> Result<Vec<Vec<f32>>> {
+    if texts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let base = google_native_base(config);
+    let model_path = if model.starts_with("models/") {
+        model.to_string()
+    } else {
+        format!("models/{model}")
+    };
+    let url = format!("{base}/v1beta/{model_path}:batchEmbedContents");
+
+    let requests: Vec<Value> = texts
+        .iter()
+        .map(|t| {
+            json!({
+                "model": model_path,
+                "content": { "parts": [{ "text": t }] }
+            })
+        })
+        .collect();
+    let body = json!({ "requests": requests });
+
+    let resp = client
+        .post(&url)
+        .header("x-goog-api-key", &config.api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .context("连接 Google Embedding 失败")?;
+    let status = resp.status();
+    let v: Value = resp
+        .json()
+        .await
+        .context("解析 Google Embedding 响应失败")?;
+    if !status.is_success() {
+        anyhow::bail!(
+            "Google Embedding HTTP {status}: {}",
+            error_message(&v)
+        );
+    }
+
+    let embeddings = v
+        .get("embeddings")
+        .and_then(|e| e.as_array())
+        .context("响应缺少 embeddings 数组")?;
+    embeddings
+        .iter()
+        .map(|emb| {
+            let vals = emb
+                .get("values")
+                .and_then(|v| v.as_array())
+                .context("embedding 缺少 values")?;
+            vals.iter()
+                .map(|x| {
+                    x.as_f64()
+                        .map(|f| f as f32)
+                        .context("embedding value 非数值")
+                })
+                .collect::<Result<Vec<f32>>>()
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Context Caching API
+// ---------------------------------------------------------------------------
+
+/// 创建缓存内容，返回 `cachedContents/{name}` 资源名。
+///
+/// 调用 `POST /v1beta/cachedContents`。
+pub async fn google_create_cached_content(
+    client: &Client,
+    model: &str,
+    system_instruction: Option<&str>,
+    contents: &[Value],
+    ttl_secs: u64,
+    config: &ProviderConfig,
+) -> Result<String> {
+    let base = google_native_base(config);
+    let url = format!("{base}/v1beta/cachedContents");
+
+    let model_path = if model.starts_with("models/") {
+        model.to_string()
+    } else {
+        format!("models/{model}")
+    };
+    let mut body = json!({
+        "model": model_path,
+        "contents": contents,
+        "ttl": format!("{ttl_secs}s"),
+    });
+    if let Some(sys) = system_instruction {
+        body["system_instruction"] = json!({
+            "parts": [{ "text": sys }]
+        });
+    }
+
+    let resp = client
+        .post(&url)
+        .header("x-goog-api-key", &config.api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .context("连接 Google CachedContents 失败")?;
+    let status = resp.status();
+    let v: Value = resp
+        .json()
+        .await
+        .context("解析 Google CachedContents 响应失败")?;
+    if !status.is_success() {
+        anyhow::bail!(
+            "Google CachedContents HTTP {status}: {}",
+            error_message(&v)
+        );
+    }
+
+    v.get("name")
+        .and_then(|n| n.as_str())
+        .map(str::to_string)
+        .context("CachedContents 响应缺少 name 字段")
+}
+
+/// 删除缓存内容。
+///
+/// 调用 `DELETE /v1beta/{name}`，其中 `name` 形如 `cachedContents/xxx`。
+pub async fn google_delete_cached_content(
+    client: &Client,
+    name: &str,
+    config: &ProviderConfig,
+) -> Result<()> {
+    let base = google_native_base(config);
+    let url = format!("{base}/v1beta/{name}");
+    let resp = client
+        .delete(&url)
+        .header("x-goog-api-key", &config.api_key)
+        .send()
+        .await
+        .context("连接 Google CachedContents DELETE 失败")?;
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Google CachedContents DELETE 失败: {body}");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

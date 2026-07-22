@@ -358,19 +358,45 @@ pub fn build_interactions_chat_body(
     if let Some(sys) = system {
         body["system_instruction"] = json!(sys);
     }
-    let ix_tools = openai_tools_to_interactions(tools);
+    let mut ix_tools = openai_tools_to_interactions(tools);
+    if config
+        .additional_params
+        .get("google_search")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        ix_tools.push(json!({"type": "google_search"}));
+    }
+    if config
+        .additional_params
+        .get("code_execution")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        ix_tools.push(json!({"type": "code_execution"}));
+    }
     if !ix_tools.is_empty() {
         body["tools"] = Value::Array(ix_tools);
     }
 
     let mut gen = serde_json::Map::new();
-    // Gemini 3.5 文档建议去掉 temperature；保留 max_tokens 若上游支持
+    gen.insert("temperature".into(), json!(config.temperature));
     if config.max_tokens > 0 {
         gen.insert("max_output_tokens".into(), json!(config.max_tokens));
     }
     gen.insert("thinking_level".into(), json!(thinking_level(config)));
     if !gen.is_empty() {
         body["generation_config"] = Value::Object(gen);
+    }
+
+    if let Some(rf) = config.additional_params.get("response_format") {
+        body["response_format"] = rf.clone();
+    }
+    if let Some(ss) = config.additional_params.get("safety_settings") {
+        body["safety_settings"] = ss.clone();
+    }
+    if let Some(cc) = config.additional_params.get("cached_content") {
+        body["cached_content"] = cc.clone();
     }
 
     merge_additional_params(&mut body, &config.additional_params);
