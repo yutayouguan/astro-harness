@@ -132,6 +132,13 @@ export function useSidebar() {
   const collapseSidebar = useCallback(() => {
     setSidebarPinned(false);
     setSidebarOpen(false);
+    try { localStorage.setItem("astro.sidebarPinned", "0"); } catch { /* ignore */ }
+  }, []);
+
+  const pinSidebar = useCallback(() => {
+    setSidebarPinned(true);
+    setSidebarOpen(true);
+    try { localStorage.setItem("astro.sidebarPinned", "1"); } catch { /* ignore */ }
   }, []);
 
   const sidebarVisible = sidebarOpen || sidebarPinned;
@@ -152,5 +159,6 @@ export function useSidebar() {
     closeSidebarContextMenu,
     onSidebarContextAction,
     collapseSidebar,
+    pinSidebar,
   };
 }
