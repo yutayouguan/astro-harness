@@ -1383,13 +1383,7 @@ html[data-theme="dark"] .cron-dt-time-input {
   color: var(--ink-mute);
 }
 
-/* Create cron dialog — 与计划任务页共用 teal，避免弹层掉到默认橙/琥珀色 */
 .cron-create-drawer-backdrop {
-  --tone: var(--tone-teal);
-  --tone-soft: var(--tone-teal-soft);
-  --tone-glow: var(--tone-teal-glow);
-  --select-tone: var(--tone-teal);
-  --select-tone-soft: var(--tone-teal-soft);
   position: fixed;
   inset: 0;
   z-index: var(--z-drawer);

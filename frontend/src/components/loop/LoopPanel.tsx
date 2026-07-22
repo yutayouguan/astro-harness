@@ -11,6 +11,8 @@ import {
   Bot,
 } from "lucide-react";
 import type { LoopDto } from "./loopTypes";
+import { parseLoopIcon } from "./loopTypes";
+import LoopIcon from "./LoopIcon";
 import LoopEditor from "./LoopEditor";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -249,7 +251,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         <article key={lp.id} className="loop-card">
           <div className="loop-card-header">
             <div className="loop-card-icon">
-              <Bot size={18} />
+              <LoopIcon icon={parseLoopIcon(lp.icon)} size={18} />
             </div>
             <div className="loop-card-info">
               <span className="loop-card-name">{lp.name}</span>
@@ -293,7 +295,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       {filtered.map((lp) => (
         <div key={lp.id} className="loop-list-row">
           <div className="loop-list-row-icon">
-            <Bot size={16} />
+            <LoopIcon icon={parseLoopIcon(lp.icon)} size={16} />
           </div>
           <div className="loop-list-row-body">
             <span className="loop-list-row-name">{lp.name}</span>
@@ -339,7 +341,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             onClick={() => setSelectedDetailId(lp.id)}
           >
             <div className="loop-detail-sidebar-icon">
-              <Bot size={14} />
+              <LoopIcon icon={parseLoopIcon(lp.icon)} size={14} />
             </div>
             <div className="loop-detail-sidebar-text">
               <span className="loop-detail-sidebar-name">{lp.name}</span>
@@ -354,7 +356,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
           <>
             <div className="loop-detail-panel-header">
               <div className="loop-detail-panel-icon">
-                <Bot size={22} />
+                <LoopIcon icon={parseLoopIcon(selectedDetail.icon)} size={22} />
               </div>
               <div>
                 <h3 className="loop-detail-panel-title">{selectedDetail.name}</h3>

@@ -18,6 +18,8 @@ pub struct LoopDto {
     pub variables: std::collections::HashMap<String, serde_json::Value>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +75,7 @@ fn to_dto(wf: Workflow) -> LoopDto {
         variables: wf.variables,
         created_at: wf.created_at,
         updated_at: wf.updated_at,
+        icon: wf.icon,
     }
 }
 
@@ -109,6 +112,7 @@ fn from_dto(dto: LoopDto) -> Workflow {
         variables: dto.variables,
         created_at: dto.created_at,
         updated_at: dto.updated_at,
+        icon: dto.icon,
     }
 }
 

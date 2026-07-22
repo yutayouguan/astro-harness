@@ -266,7 +266,7 @@
   width: 32px;
   height: 18px;
   appearance: none;
-  background: var(--glass-dim);
+  background: color-mix(in srgb, var(--ink) 25%, transparent);
   border-radius: 10px;
   position: relative;
   cursor: pointer;
@@ -606,6 +606,28 @@
 .loop-editor-toolbar .loop-btn--primary:hover {
   filter: brightness(1.08);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone, #ec4899) 30%, transparent);
+}
+
+/* 编辑器工具栏图标选择按钮 */
+.loop-editor-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px dashed color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-secondary);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.loop-editor-icon-btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 30%, transparent);
+  color: var(--ink);
 }
 
 .loop-editor-name-wrap {

@@ -20,6 +20,8 @@ pub struct Workflow {
     pub variables: HashMap<String, serde_json::Value>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +212,7 @@ impl Workflow {
             variables: HashMap::new(),
             created_at: now.clone(),
             updated_at: now,
+            icon: None,
         }
     }
 }

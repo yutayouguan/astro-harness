@@ -1,6 +1,7 @@
 /** 定时任务面板：任务列表、运行记录与创建抽屉。 */
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { createPortal } from "react-dom";
+import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Bot,
@@ -398,6 +399,7 @@ export default function CronPanel({
   const [drawerMessages, setDrawerMessages] = useState<ChatMessage[]>([]);
   const [drawerTraceLoading, setDrawerTraceLoading] = useState(false);
 
+  const pageRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const moreBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -1199,7 +1201,7 @@ export default function CronPanel({
   };
 
   return (
-    <div className="cron-page" data-tone="teal">
+    <div className="cron-page" data-tone="teal" ref={pageRef}>
       <section className="cron-pane">
         <div className="cron-toolbar">
           <nav className="cron-tabs" aria-label={t("page.cron.title")}>
@@ -1345,6 +1347,7 @@ export default function CronPanel({
         activeProviderId={activeProviderId}
         agents={agents}
         defaultAgentId={agentId}
+        toneStyle={toneStyleFromElement(pageRef.current)}
       />
 
       {menuJobId &&

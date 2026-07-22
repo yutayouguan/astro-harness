@@ -1,5 +1,27 @@
 /** Loop 工作流 TypeScript 类型（对齐 Rust workflow crate model.rs） */
 
+import type { LucidePaint, LucideRenderStyle } from "../../lib/agent/lucideAgentIcons";
+
+/** 解析后的 Loop 图标数据 */
+export interface LoopIconData {
+  id: string;
+  paint?: LucidePaint;
+  style?: LucideRenderStyle;
+}
+
+export function parseLoopIcon(raw?: string | null): LoopIconData | null {
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    if (typeof obj.id === "string") return obj as LoopIconData;
+  } catch { /* ignore */ }
+  return null;
+}
+
+export function serializeLoopIcon(data: LoopIconData): string {
+  return JSON.stringify(data);
+}
+
 export type NodeType =
   // 触发器
   | "manual_trigger"
@@ -81,6 +103,7 @@ export interface LoopDto {
   variables: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  icon?: string;
 }
 
 export interface LoopRunDto {

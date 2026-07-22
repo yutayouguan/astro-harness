@@ -1,5 +1,5 @@
 /** 工具面板：内置工具开关、调用统计与 MCP。 */
-import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type SVGProps } from "react";
 import { createPortal } from "react-dom";
 import {
   AlignLeft,
@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   Link2,
   List,
+  CirclePlus,
   Plus,
   Radio,
   ShieldAlert,
@@ -44,6 +45,7 @@ import ExpandableSearch from "../ui/ExpandableSearch";
 import LucideByName from "../icons/LucideByName";
 import { IconRefresh } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
+import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 
 /** 工具面板 Tab：内置 / MCP / 审批 */
 type ToolTab = "builtin" | "mcp" | "approvals";
@@ -302,9 +304,11 @@ function parseEnvOrHeaders(text: string): Record<string, string> {
 function McpAddDialog({
   onAdd,
   onClose,
+  toneStyle,
 }: {
   onAdd: (servers: McpServer[]) => void;
   onClose: () => void;
+  toneStyle?: CSSProperties;
 }) {
   const { t } = useI18n();
   const [addTab, setAddTab] = useState<AddTab>("json");
@@ -392,6 +396,7 @@ function McpAddDialog({
     <div
       className="mcp-add-drawer-backdrop"
       ref={backdropRef}
+      style={toneStyle}
       onClick={handleBackdrop}
     >
       <aside
@@ -765,6 +770,7 @@ export default function ToolsPanel({
 }: Props) {
   const { t } = useI18n();
   const [tab, setTab] = useState<ToolTab>("builtin");
+  const pageRef = useRef<HTMLDivElement>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState("");
   const { activeAgentId: agentId } = useActiveAgent();
@@ -885,7 +891,7 @@ export default function ToolsPanel({
     activeFn?.description ?? selectedTool?.apiDescription ?? null;
 
   return (
-    <div className="agent-tools-page">
+    <div className="agent-tools-page" ref={pageRef}>
       <div className="tools-toolbar">
         <div
           className="tool-main-tabs"
@@ -962,7 +968,7 @@ export default function ToolsPanel({
                 title={t("mcpTools.add")}
                 aria-label={t("mcpTools.add")}
               >
-                <McpIcon size={17} />
+                <CirclePlus size={17} />
               </button>
             )}
           </div>
@@ -1418,6 +1424,7 @@ export default function ToolsPanel({
         <McpAddDialog
           onAdd={(incoming) => { addServers(incoming); }}
           onClose={() => setShowAdd(false)}
+          toneStyle={toneStyleFromElement(pageRef.current)}
         />
       )}
     </div>

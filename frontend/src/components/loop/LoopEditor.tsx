@@ -31,11 +31,13 @@ import {
 import * as LucideIcons from "lucide-react";
 
 type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
-import type { LoopDto, NodeType, NodeMeta } from "./loopTypes";
-import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta } from "./loopTypes";
+import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
+import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseLoopIcon, serializeLoopIcon } from "./loopTypes";
 import LoopConfigPanel from "./LoopConfigPanel";
 import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
+import LoopIcon from "./LoopIcon";
+import { LucideIconPicker } from "../agents";
 
 interface Props {
   workflowId: string | null;
@@ -123,6 +125,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  const [iconData, setIconData] = useState<LoopIconData | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
@@ -201,6 +205,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         if (!wf) return;
         setWorkflow(wf);
         setName(wf.name);
+        setIconData(parseLoopIcon(wf.icon));
         setNodes(
           wf.nodes.map((n) => ({
             id: n.id,
@@ -245,6 +250,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       const dto: LoopDto = {
         ...workflow,
         name,
+        icon: iconData ? serializeLoopIcon(iconData) : undefined,
         nodes: nodes.map((n) => ({
           id: n.id,
           node_type: (n.data as Record<string, unknown>).nodeType as NodeType,
@@ -386,6 +392,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       <div className="loop-editor-toolbar">
         <button className="loop-icon-btn" onClick={onBack} title="返回">
           <ArrowLeft size={16} />
+        </button>
+        <button
+          className="loop-editor-icon-btn"
+          title="选择图标"
+          onClick={() => setIconPickerOpen(true)}
+        >
+          <LoopIcon icon={iconData} size={20} />
         </button>
         <div className="loop-editor-name-wrap">
           {editingName ? (
@@ -684,6 +697,19 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           />
         )}
       </div>
+
+      <LucideIconPicker
+        open={iconPickerOpen}
+        selectedId={iconData?.id}
+        initialPaint={iconData?.paint}
+        initialStyle={iconData?.style}
+        onClose={() => setIconPickerOpen(false)}
+        onSelect={(icon, paint, style) => {
+          setIconData({ id: icon.id, paint, style });
+          setIconPickerOpen(false);
+          setDirty(true);
+        }}
+      />
 
       {/* ── Drag ghost (follows cursor during custom drag) ── */}
       {draggingType && dragGhostPos && (() => {

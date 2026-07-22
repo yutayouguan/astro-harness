@@ -1,5 +1,5 @@
 /** 新建/编辑定时任务：右侧抽屉。 */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
   Bot,
@@ -52,6 +52,7 @@ type Props = {
   defaultAgentId?: string;
   /** 传入则进入编辑模式 */
   editingJob?: CronJobDto | null;
+  toneStyle?: CSSProperties;
 };
 
 const DEFAULT_DRAFT: ScheduleDraft = {
@@ -82,6 +83,7 @@ export function CreateCronDialog({
   agents = [],
   defaultAgentId = "default",
   editingJob = null,
+  toneStyle,
 }: Props) {
   const { t } = useI18n();
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -264,6 +266,7 @@ export function CreateCronDialog({
     <div
       className="cron-create-drawer-backdrop"
       ref={backdropRef}
+      style={toneStyle}
       onClick={handleBackdrop}
     >
       <aside

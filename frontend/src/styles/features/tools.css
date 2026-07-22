@@ -647,10 +647,6 @@ html[data-theme="light"] .mcp-add-drawer-backdrop {
 }
 
 .mcp-add-drawer {
-  --tone: var(--tone-orange);
-  --tone-soft: var(--tone-orange-soft);
-  --select-tone: var(--tone-orange);
-  --select-tone-soft: var(--tone-orange-soft);
   position: relative;
   isolation: isolate;
   width: min(480px, 92vw);
