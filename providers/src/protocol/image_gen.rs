@@ -31,6 +31,7 @@ pub fn default_image_model(provider: &str) -> &'static str {
     match provider {
         "google" => "gemini-3.1-flash-image",
         "openai" => "gpt-image-2",
+        "minimax" => "image-01",
         _ => "gpt-image-2",
     }
 }

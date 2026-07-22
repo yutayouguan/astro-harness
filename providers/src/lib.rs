@@ -15,6 +15,7 @@
 pub mod anthropic;
 pub mod api;
 pub mod google;
+pub mod minimax;
 pub mod openai;
 pub mod profile;
 pub mod protocol;
@@ -26,7 +27,7 @@ pub use google::{files_http, interactions_chat, interactions_http, native_chat, 
 pub use openai::{embeddings_http, image_http, responses, tts_http};
 pub use protocol::{extractor, http_stream, image_gen, media_http, tool_format, verify, vision};
 pub use vendors::{
-    azure, bailian, claude, deepseek, mimo, minimax, moonshot, nvidia, ollama, openrouter,
+    azure, bailian, claude, deepseek, mimo, moonshot, nvidia, ollama, openrouter,
     profile_backed, volcengine, zhipu,
 };
 

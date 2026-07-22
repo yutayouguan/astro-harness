@@ -302,7 +302,15 @@ fn supports_stream_include_usage(provider: &str) -> bool {
     // 部分兼容网关会拒 stream_options；仅对确认支持的上游开启
     matches!(
         provider,
-        "openai" | "azure" | "deepseek" | "openrouter" | "nvidia" | "moonshot" | "mimo" | "ollama"
+        "openai"
+            | "azure"
+            | "deepseek"
+            | "openrouter"
+            | "nvidia"
+            | "moonshot"
+            | "mimo"
+            | "minimax"
+            | "ollama"
     )
 }
 
@@ -410,7 +418,7 @@ mod tests {
         assert!(!supports_stream_include_usage("zhipu"));
         assert!(!supports_stream_include_usage("bailian"));
         assert!(!supports_stream_include_usage("volcengine"));
-        assert!(!supports_stream_include_usage("minimax"));
+        assert!(supports_stream_include_usage("minimax"));
     }
 
     #[test]

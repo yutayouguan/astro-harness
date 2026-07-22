@@ -92,6 +92,18 @@ impl AiProvider for ProfileBackedProvider {
                 let result = google_interactions_image(&self.client, &cfg, &request).await?;
                 Ok(vec![result.image])
             }
+            "minimax" => {
+                let request = crate::minimax::image_http::MiniMaxImageRequest {
+                    prompt: prompt.to_string(),
+                    ..Default::default()
+                };
+                crate::minimax::image_http::minimax_generate_image(
+                    &self.client,
+                    &cfg,
+                    &request,
+                )
+                .await
+            }
             other => anyhow::bail!("{other} 不支持图片生成"),
         }
     }

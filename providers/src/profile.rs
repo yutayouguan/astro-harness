@@ -178,11 +178,33 @@ pub static PROFILES: &[ProviderProfile] = &[
     ProviderProfile {
         id: "minimax",
         api_mode: ApiMode::ChatCompletions,
-        default_base_url: "https://api.minimax.chat/v1",
+        default_base_url: "https://api.minimaxi.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
         azure_deployment_style: false,
         default_model: "MiniMax-M2.5",
+        supports_image_gen: true,
+        supports_embedding: true,
+    },
+    ProviderProfile {
+        id: "minimax-anthropic",
+        api_mode: ApiMode::AnthropicMessages,
+        default_base_url: "https://api.minimaxi.com/anthropic",
+        auth: AuthKind::Bearer,
+        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+        azure_deployment_style: false,
+        default_model: "MiniMax-M2.5",
+        supports_image_gen: false,
+        supports_embedding: false,
+    },
+    ProviderProfile {
+        id: "minimax-responses",
+        api_mode: ApiMode::Responses,
+        default_base_url: "https://api.minimaxi.com/v1",
+        auth: AuthKind::Bearer,
+        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+        azure_deployment_style: false,
+        default_model: "MiniMax-M3",
         supports_image_gen: false,
         supports_embedding: false,
     },
@@ -239,6 +261,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
 pub fn normalize_provider_id(provider_id: &str) -> &str {
     match provider_id {
         "minmax" => "minimax",
+        "minmax-anthropic" => "minimax-anthropic",
         "anthropic" => "claude",
         other => other,
     }
@@ -299,7 +322,8 @@ mod tests {
     }
 
     #[test]
-    fn no_default_profile_uses_responses() {
-        assert!(PROFILES.iter().all(|p| p.api_mode != ApiMode::Responses));
+    fn minimax_responses_profile_exists() {
+        let p = resolve("minimax-responses").expect("minimax-responses profile");
+        assert_eq!(p.api_mode, ApiMode::Responses);
     }
 }
