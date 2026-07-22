@@ -31,7 +31,6 @@ import ToolsPanel from "./components/settings/ToolsPanel";
 import {
   AstroLogoMark,
   IconChat,
-  IconNewChat,
   IconPanelClose,
   IconPanelOpen,
   IconRightPanel,
@@ -812,16 +811,18 @@ export default function App() {
               )}
               {nav === "chat" && (
                 <div className="chat-header-tools">
-                  <button
-                    type="button"
-                    className="header-icon-btn"
-                    onClick={() => void startNewChat()}
-                    disabled={chat.emptyMode === "chat"}
-                    title={t("chat.newSession")}
-                    aria-label={t("chat.newSession")}
-                  >
-                    <IconNewChat width={16} height={16} />
-                  </button>
+                  <AgentPicker
+                    className="chat-header-agent-picker"
+                    agents={agents}
+                    value={activeAgentId}
+                    onChange={(id) => {
+                      void setActiveAgent(id).catch((e) => {
+                        console.warn("set_active_agent failed", e);
+                      });
+                    }}
+                    onCreateNew={startNewAgent}
+                    menuAlign="end"
+                  />
                   <button
                     type="button"
                     className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
