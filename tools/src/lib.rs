@@ -205,7 +205,7 @@ mod inventory_register_tests {
             "music_gen",
             "image_gen",
             "video_gen",
-            "tts",
+            "speech_gen",
             "ask_user",
             "subagent",
             "present",
