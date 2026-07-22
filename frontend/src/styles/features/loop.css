@@ -382,6 +382,13 @@
   opacity: 1 !important;
 }
 
+.loop-palette-empty {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+
 /* ── Drag ghost ───────────────────────────────────────────────── */
 
 .loop-drag-ghost {

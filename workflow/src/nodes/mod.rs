@@ -54,6 +54,7 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::DelayWait, Box::new(action::DelayWaitExec));
     m.insert(NodeType::Output, Box::new(action::OutputExec));
     m.insert(NodeType::AudioProcessing, Box::new(action::AudioProcessingExec));
+    m.insert(NodeType::CustomLoop, Box::new(action::RunLoopExec));
 
     m
 }

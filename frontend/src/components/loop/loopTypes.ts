@@ -35,7 +35,9 @@ export type NodeType =
   | "run_loop"
   | "delay_wait"
   | "output"
-  | "audio_processing";
+  | "audio_processing"
+  // 自定义（引用已保存的工作流）
+  | "custom_loop";
 
 export type NodeCategory =
   | "trigger"
@@ -43,7 +45,8 @@ export type NodeCategory =
   | "media"
   | "flow_control"
   | "data_processing"
-  | "action";
+  | "action"
+  | "custom";
 
 export interface Position {
   x: number;
@@ -129,6 +132,7 @@ export const NODE_CATEGORIES: {
   { key: "flow_control", label: "流程控制", labelEn: "Flow Control", icon: "Route", color: "#6366f1" },
   { key: "data_processing", label: "数据处理", labelEn: "Data Processing", icon: "Braces", color: "#6366f1" },
   { key: "action", label: "动作", labelEn: "Actions", icon: "Play", color: "#6366f1" },
+  { key: "custom", label: "自定义", labelEn: "Custom", icon: "Puzzle", color: "#6366f1" },
 ];
 
 export const NODE_REGISTRY: NodeMeta[] = [
@@ -167,6 +171,8 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: "delay_wait", category: "action", label: "延时等待", labelEn: "Delay / Wait", icon: "Timer", color: "#fb923c" },
   { type: "output", category: "action", label: "输出", labelEn: "Output", icon: "ArrowRightFromLine", color: "#fb923c" },
   { type: "audio_processing", category: "action", label: "音频处理", labelEn: "Audio Processing", icon: "AudioWaveform", color: "#fb923c" },
+  // 自定义
+  { type: "custom_loop", category: "custom", label: "自定义 Loop", labelEn: "Custom Loop", icon: "Puzzle", color: "#8b5cf6" },
 ];
 
 export function getNodeMeta(type: NodeType): NodeMeta {

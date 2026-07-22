@@ -39,6 +39,7 @@ const RunLoopConfig = lazy(() => import("./configs/RunLoopConfig"));
 const DelayWaitConfig = lazy(() => import("./configs/DelayWaitConfig"));
 const OutputConfig = lazy(() => import("./configs/OutputConfig"));
 const AudioProcessingConfig = lazy(() => import("./configs/AudioProcessingConfig"));
+const CustomLoopConfig = lazy(() => import("./configs/CustomLoopConfig"));
 
 // ── Config form registry ──
 
@@ -72,6 +73,7 @@ const CONFIG_MAP: Record<NodeType, React.LazyExoticComponent<React.ComponentType
   delay_wait: DelayWaitConfig,
   output: OutputConfig,
   audio_processing: AudioProcessingConfig,
+  custom_loop: CustomLoopConfig,
 };
 
 export interface ConfigProps {

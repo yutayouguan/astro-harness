@@ -94,6 +94,8 @@ pub enum NodeType {
     DelayWait,
     Output,
     AudioProcessing,
+    // 自定义（引用已保存的工作流）
+    CustomLoop,
 }
 
 impl NodeType {
@@ -128,6 +130,7 @@ impl NodeType {
             | Self::DelayWait
             | Self::Output
             | Self::AudioProcessing => NodeCategory::Action,
+            Self::CustomLoop => NodeCategory::Action,
         }
     }
 
@@ -162,6 +165,7 @@ impl NodeType {
             Self::DelayWait => "延时等待",
             Self::Output => "输出",
             Self::AudioProcessing => "音频处理",
+            Self::CustomLoop => "自定义 Loop",
         }
     }
 }

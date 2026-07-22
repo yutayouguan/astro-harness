@@ -32,7 +32,7 @@ import * as LucideIcons from "lucide-react";
 
 type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
 import type { LoopDto, NodeType, NodeMeta } from "./loopTypes";
-import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory } from "./loopTypes";
+import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta } from "./loopTypes";
 import LoopConfigPanel from "./LoopConfigPanel";
 import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
@@ -92,6 +92,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
+  // 已保存的工作流列表（自定义分组使用）
+  const [savedLoops, setSavedLoops] = useState<LoopDto[]>([]);
+
   // run history state
   const [showHistory, setShowHistory] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -104,6 +107,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [dragGhostPos, setDragGhostPos] = useState<{ x: number; y: number } | null>(null);
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const customLoopRef = useRef<string | null>(null);
+
+  // load saved loops for custom category
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await invoke<LoopDto[]>("list_loops");
+        setSavedLoops(list.filter((l) => l.id !== workflowId));
+      } catch { /* ignore */ }
+    })();
+  }, [workflowId]);
 
   // load workflow
   useEffect(() => {
@@ -196,19 +210,31 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       if (meta && bounds && e.clientX >= bounds.left && e.clientX <= bounds.right && e.clientY >= bounds.top && e.clientY <= bounds.bottom) {
         const flowPos = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const newId = crypto.randomUUID();
+        // custom_loop 节点使用引用的工作流名称和 ID
+        const refLoopId = customLoopRef.current;
+        const refLoop = refLoopId ? savedLoops.find((l) => l.id === refLoopId) : null;
+        const nodeLabel = refLoop ? refLoop.name : meta.label;
+        const nodeConfig = refLoop ? { workflow_id: refLoopId } : {};
         setNodes((nds) => [
           ...nds,
           {
             id: newId,
             type: "loopNode",
             position: flowPos,
-            data: { label: meta.label, meta, config: {}, nodeType: draggingType, disabled: false },
+            data: {
+              label: nodeLabel,
+              meta: refLoop ? { ...meta, label: nodeLabel } : meta,
+              config: nodeConfig,
+              nodeType: draggingType,
+              disabled: false,
+            },
           },
         ]);
         setDirty(true);
       }
       setDraggingType(null);
       setDragGhostPos(null);
+      customLoopRef.current = null;
     };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
@@ -236,6 +262,35 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           type: "loopNode",
           position: { x: center.x + offset, y: center.y + offset },
           data: { label: meta.label, meta, config: {}, nodeType, disabled: false },
+        },
+      ]);
+      setDirty(true);
+    },
+    [setNodes, reactFlowInstance, nodes.length],
+  );
+
+  const addCustomLoopNode = useCallback(
+    (loopId: string, loopName: string) => {
+      const meta = getNodeMeta("custom_loop");
+      const center = reactFlowInstance.screenToFlowPosition({
+        x: (reactFlowWrapper.current?.clientWidth ?? 600) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().left ?? 0),
+        y: (reactFlowWrapper.current?.clientHeight ?? 400) / 2 + (reactFlowWrapper.current?.getBoundingClientRect().top ?? 0),
+      });
+      const newId = crypto.randomUUID();
+      const offset = nodes.length * 20;
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: newId,
+          type: "loopNode",
+          position: { x: center.x + offset, y: center.y + offset },
+          data: {
+            label: loopName,
+            meta: { ...meta, label: loopName },
+            config: { workflow_id: loopId },
+            nodeType: "custom_loop" as NodeType,
+            disabled: false,
+          },
         },
       ]);
       setDirty(true);
@@ -326,7 +381,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 </button>
                 {!isCollapsed && (
                   <div className="loop-palette-items">
-                    {items.map((meta) => {
+                    {/* 静态节点列表 */}
+                    {items.filter((m) => m.type !== "custom_loop").map((meta) => {
                       const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
                       return (
                         <div
@@ -358,6 +414,42 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                         </div>
                       );
                     })}
+                    {/* 自定义分组：已保存的工作流 */}
+                    {cat.key === "custom" && savedLoops.map((lp) => (
+                      <div
+                        key={lp.id}
+                        className="loop-palette-item"
+                        onMouseDown={(e) => {
+                          if (e.button !== 0) return;
+                          e.preventDefault();
+                          setDraggingType("custom_loop");
+                          setDragGhostPos({ x: e.clientX, y: e.clientY });
+                          customLoopRef.current = lp.id;
+                        }}
+                      >
+                        <span
+                          className="loop-palette-item-icon"
+                          style={{ background: "color-mix(in srgb, #8b5cf6 15%, transparent)", color: "#8b5cf6" }}
+                        >
+                          <LucideIcons.Workflow size={14} />
+                        </span>
+                        <span>{lp.name}</span>
+                        <button
+                          className="loop-palette-item-plus"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addCustomLoopNode(lp.id, lp.name);
+                          }}
+                        >
+                          <Plus size={12} />
+                        </button>
+                      </div>
+                    ))}
+                    {cat.key === "custom" && savedLoops.length === 0 && (
+                      <div className="loop-palette-empty">
+                        把任意节点保存为预设，或已有的 Loop 会出现在这里
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
