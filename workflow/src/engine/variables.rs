@@ -25,6 +25,10 @@ impl VariableContext {
         self.node_outputs.get(node_id)
     }
 
+    pub fn snapshot_outputs(&self) -> serde_json::Value {
+        serde_json::json!(self.node_outputs)
+    }
+
     /// 解析变量引用路径，如 `node_id.field.nested`
     pub fn resolve(&self, path: &str) -> Option<serde_json::Value> {
         let parts: Vec<&str> = path.splitn(2, '.').collect();

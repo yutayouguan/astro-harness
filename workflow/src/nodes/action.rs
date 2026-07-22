@@ -79,12 +79,10 @@ pub struct RunLoopExec;
 #[async_trait]
 impl NodeExecutor for RunLoopExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
+        // 子工作流执行由引擎层 execute_sub_workflow 直接处理（绕过此 executor）
+        // 此处仅作 fallback 标记
         let workflow_id = node.config.get("workflow_id").and_then(|v| v.as_str()).unwrap_or("");
-        // 子工作流调用需要引擎层递归 — 当前返回引用信息
-        Ok(NodeResult::Success(serde_json::json!({
-            "sub_workflow": workflow_id,
-            "note": "子工作流执行待引擎层递归支持"
-        })))
+        Ok(NodeResult::Success(serde_json::json!({ "sub_workflow": workflow_id })))
     }
 }
 
