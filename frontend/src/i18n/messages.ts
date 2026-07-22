@@ -492,7 +492,7 @@ export const zh = {
   "agentTools.persona.title": "持久人设",
   "agentTools.persona.desc": "新建长期助手 workspace（禁止用来拆当前任务）",
   "agentTools.todo.title": "待办列表",
-  "agentTools.todo.desc": "为复杂任务创建 checklist 待办",
+  "agentTools.todo.desc": "创建或更新 checklist 待办（action=create|update）",
 
   "status.ready": "就绪",
   "status.connecting": "连接中",
@@ -2208,7 +2208,7 @@ export const en: Record<MessageKey, string> = {
   "agentTools.persona.title": "Persona",
   "agentTools.persona.desc": "Create a durable assistant workspace (not for task splitting)",
   "agentTools.todo.title": "Todo",
-  "agentTools.todo.desc": "Create a checklist todo list for complex tasks",
+  "agentTools.todo.desc": "Create or update a checklist todo (action=create|update)",
 
   "status.ready": "Ready",
   "status.connecting": "Connecting",

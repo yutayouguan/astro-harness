@@ -428,8 +428,10 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     Icon: IconTodo,
     tone: "violet",
     params: [
+      { name: "action", type: "string", optional: true },
       { name: "title", type: "string", optional: true },
       { name: "items", type: "array" },
+      { name: "plan_id", type: "string", optional: true },
     ],
   },
 ];

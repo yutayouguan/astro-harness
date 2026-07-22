@@ -1,4 +1,4 @@
-//! 待办工具：生成 checklist Markdown，并同步写入 JSON 元数据。
+//! 待办工具：生成/更新 checklist Markdown，并同步写入 JSON 元数据。
 //!
 //! 文件落在工作区 `plans/`，便于 UI 与后续回合引用。
 
@@ -28,22 +28,39 @@ pub enum TodoItem {
     Object(TodoItemObject),
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TodoAction {
+    /// Create a new checklist (default).
+    #[default]
+    Create,
+    /// Update an existing checklist by plan_id.
+    Update,
+}
+
 /// Arguments for the `todo` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TodoArgs {
+    /// Action: "create" (default) or "update".
+    #[serde(default)]
+    pub action: TodoAction,
     /// List title; default `Todo`.
     #[serde(default)]
     pub title: Option<String>,
     pub items: Vec<TodoItem>,
+    /// Plan file stem (e.g. "20260722-a1b2c3") for action=update.
+    #[serde(default)]
+    pub plan_id: Option<String>,
 }
 
-/// 向注册表登记 `todo` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "todo".to_string(),
         toolset: "todo".to_string(),
-        description: "Always creates a NEW todo checklist (does not update an existing list). \
-Writes Markdown+JSON under workspace/plans/."
+        description: "Create or update a todo checklist. \
+action=create (default): write a new checklist to workspace/plans/. \
+action=update: update an existing checklist by plan_id (the file stem, e.g. \"20260722-a1b2c3\"); \
+replaces all items with the provided list."
             .to_string(),
         schema: schema_for_args::<TodoArgs>(),
         check_fn: None,
@@ -58,18 +75,20 @@ crate::submit_builtin_tool! {
     sync_ctx: dispatch,
 }
 
-/// 规范化条目并写入 `.md` + `.json`，同时把 Markdown 正文返回给模型。
-///
-/// # 错误
-/// 参数反序列化失败，或写文件失败。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: TodoArgs =
         serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("todo 参数无效: {e}"))?;
-    let title = parsed.title.as_deref().unwrap_or("Todo");
 
-    let mut lines = vec![format!("# {title}"), String::new()];
+    match parsed.action {
+        TodoAction::Create => dispatch_create(ctx, &parsed),
+        TodoAction::Update => dispatch_update(ctx, &parsed),
+    }
+}
+
+fn normalize_items(items: &[TodoItem]) -> (Vec<String>, Vec<serde_json::Value>) {
+    let mut lines = Vec::new();
     let mut normalized = Vec::new();
-    for item in &parsed.items {
+    for item in items {
         let (text, done) = match item {
             TodoItem::Text(s) => (s.clone(), false),
             TodoItem::Object(o) => (o.text.clone(), o.done.unwrap_or(false)),
@@ -78,16 +97,22 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         lines.push(format!("- [{mark}] {text}"));
         normalized.push(serde_json::json!({ "text": text, "done": done }));
     }
+    (lines, normalized)
+}
+
+fn dispatch_create(ctx: &ToolContext<'_>, parsed: &TodoArgs) -> anyhow::Result<String> {
+    let title = parsed.title.as_deref().unwrap_or("Todo");
+    let (item_lines, normalized) = normalize_items(&parsed.items);
+
+    let mut lines = vec![format!("# {title}"), String::new()];
+    lines.extend(item_lines);
 
     let dir = ctx.workspace_dir.join("plans");
     std::fs::create_dir_all(&dir)?;
     let id = uuid::Uuid::new_v4().simple().to_string();
-    let md_path = dir.join(format!(
-        "{}-{}.md",
-        chrono::Local::now().format("%Y%m%d"),
-        &id[..6]
-    ));
-    let json_path = md_path.with_extension("json");
+    let stem = format!("{}-{}", chrono::Local::now().format("%Y%m%d"), &id[..6]);
+    let md_path = dir.join(format!("{stem}.md"));
+    let json_path = dir.join(format!("{stem}.json"));
     let body = lines.join("\n");
     std::fs::write(&md_path, &body)?;
     std::fs::write(
@@ -99,4 +124,69 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         }))?,
     )?;
     Ok(format!("{body}\n\n已保存: {}", md_path.display()))
+}
+
+fn dispatch_update(ctx: &ToolContext<'_>, parsed: &TodoArgs) -> anyhow::Result<String> {
+    let plan_id = parsed
+        .plan_id
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("action=update 需要 plan_id"))?;
+
+    let dir = ctx.workspace_dir.join("plans");
+    let md_path = dir.join(format!("{plan_id}.md"));
+    let json_path = dir.join(format!("{plan_id}.json"));
+    if !md_path.exists() {
+        anyhow::bail!("plan 不存在: {plan_id}");
+    }
+
+    let old_title = if json_path.exists() {
+        let raw = std::fs::read_to_string(&json_path)?;
+        serde_json::from_str::<serde_json::Value>(&raw)
+            .ok()
+            .and_then(|v| v.get("title").and_then(|t| t.as_str()).map(String::from))
+    } else {
+        None
+    };
+    let title = parsed
+        .title
+        .as_deref()
+        .or(old_title.as_deref())
+        .unwrap_or("Todo");
+
+    let (item_lines, normalized) = normalize_items(&parsed.items);
+    let mut lines = vec![format!("# {title}"), String::new()];
+    lines.extend(item_lines);
+
+    let body = lines.join("\n");
+    std::fs::write(&md_path, &body)?;
+    std::fs::write(
+        &json_path,
+        serde_json::to_string_pretty(&serde_json::json!({
+            "title": title,
+            "session_id": ctx.session_id,
+            "items": normalized,
+        }))?,
+    )?;
+    Ok(format!("{body}\n\n已更新: {}", md_path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_items_mixed() {
+        let items = vec![
+            TodoItem::Text("task A".into()),
+            TodoItem::Object(TodoItemObject {
+                text: "task B".into(),
+                done: Some(true),
+            }),
+        ];
+        let (lines, json) = normalize_items(&items);
+        assert_eq!(lines[0], "- [ ] task A");
+        assert_eq!(lines[1], "- [x] task B");
+        assert_eq!(json.len(), 2);
+    }
 }
