@@ -4,7 +4,6 @@ import type { ComponentType, SVGProps } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   IconAudioUnderstand,
-  IconHttpFetch,
   IconClarify,
   IconCodeExec,
   IconDelegate,
