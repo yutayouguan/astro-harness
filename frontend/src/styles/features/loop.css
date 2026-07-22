@@ -900,6 +900,18 @@
   border-radius: 8px;
   border: 1px solid var(--border);
   overflow: hidden;
+  background: var(--glass-panel) !important;
+}
+:root[data-theme="dark"] .loop-canvas-container .react-flow__minimap {
+  background: color-mix(in srgb, var(--surface) 85%, transparent) !important;
+}
+.loop-canvas-container .react-flow__minimap-mask {
+  fill: var(--ink);
+  opacity: 0.06;
+}
+:root[data-theme="dark"] .loop-canvas-container .react-flow__minimap-mask {
+  fill: #fff;
+  opacity: 0.08;
 }
 
 /*
