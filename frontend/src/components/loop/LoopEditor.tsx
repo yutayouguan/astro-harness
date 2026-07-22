@@ -315,7 +315,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             const isCollapsed = !!collapsed[cat.key];
             const CatIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[cat.icon];
             return (
-              <div key={cat.key} className="loop-palette-group">
+              <div key={cat.key} className={`loop-palette-group${!isCollapsed ? " is-open" : ""}`}>
                 <button
                   className="loop-palette-group-header"
                   onClick={() => toggleCategory(cat.key)}
