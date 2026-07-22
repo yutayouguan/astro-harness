@@ -77,15 +77,9 @@ pub struct CodeExec;
 #[async_trait]
 impl NodeExecutor for CodeExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let _lang = node.config.get("language").and_then(|v| v.as_str()).unwrap_or("javascript");
-        let source = node.config.get("source").and_then(|v| v.as_str()).unwrap_or("");
-        // 真实实现需要嵌入 JS/Python runtime（如 boa / RustPython）
-        // 当前返回代码文本作为输出
-        Ok(NodeResult::Success(serde_json::json!({
-            "executed": true,
-            "source_preview": &source[..source.len().min(200)],
-            "note": "代码执行引擎待接入"
-        })))
+        let lang = node.config.get("language").and_then(|v| v.as_str()).unwrap_or("javascript");
+        let _source = node.config.get("source").and_then(|v| v.as_str()).unwrap_or("");
+        anyhow::bail!("代码执行引擎正在开发中 — {} 运行时待集成 (boa/RustPython)", lang)
     }
 }
 

@@ -4,6 +4,7 @@ pub mod control;
 pub mod action;
 pub mod ai;
 pub mod ai_stub;
+pub mod media;
 pub mod media_stub;
 
 use std::collections::HashMap;
@@ -25,12 +26,12 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::ParameterExtraction, Box::new(ai::ParameterExtractionExec));
     m.insert(NodeType::QuestionClassification, Box::new(ai::QuestionClassificationExec));
 
-    // 多媒体（桩实现，待 providers crate 接入）
-    m.insert(NodeType::ImageGeneration, Box::new(media_stub::ImageGenExec));
-    m.insert(NodeType::VideoGeneration, Box::new(media_stub::VideoGenExec));
-    m.insert(NodeType::MusicGeneration, Box::new(media_stub::MusicGenExec));
-    m.insert(NodeType::TextToSpeech, Box::new(media_stub::TtsExec));
-    m.insert(NodeType::SubtitleGeneration, Box::new(media_stub::SubtitleGenExec));
+    // 多媒体 — 图片生成已接入，其余待开发
+    m.insert(NodeType::ImageGeneration, Box::new(media::ImageGenExec));
+    m.insert(NodeType::VideoGeneration, Box::new(media::VideoGenExec));
+    m.insert(NodeType::MusicGeneration, Box::new(media::MusicGenExec));
+    m.insert(NodeType::TextToSpeech, Box::new(media::TtsExec));
+    m.insert(NodeType::SubtitleGeneration, Box::new(media::SubtitleGenExec));
 
     // 流程控制
     m.insert(NodeType::Conditional, Box::new(control::ConditionalExec));

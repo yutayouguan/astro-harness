@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
@@ -133,14 +133,8 @@ pub struct AudioProcessingExec;
 
 #[async_trait]
 impl NodeExecutor for AudioProcessingExec {
-    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+    async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
         let op = node.config.get("operation").and_then(|v| v.as_str()).unwrap_or("convert");
-        let inputs = node.config.get("inputs").cloned().unwrap_or_default();
-        let resolved_inputs = ctx.interpolate_value(&inputs);
-        Ok(NodeResult::Success(serde_json::json!({
-            "operation": op,
-            "inputs": resolved_inputs,
-            "note": "音频处理引擎待接入 (ffmpeg/rodio)"
-        })))
+        bail!("音频处理功能正在开发中 — 待接入 ffmpeg/rodio 引擎。操作: {}", op)
     }
 }
