@@ -582,6 +582,13 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
                     round_usage = Some(u); // 覆盖：兼容累计式 usageMetadata
                 }
+                Some(Ok(StreamedAssistantContent::Citations(cites))) => {
+                    let _ = emit(
+                        &tx,
+                        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Citations(cites)),
+                    )
+                    .await;
+                }
                 Some(Err(err)) => {
                     pause.clear_abort();
                     if let Some(u) = round_usage {

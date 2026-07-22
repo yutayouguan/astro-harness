@@ -443,6 +443,13 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                 })),
             })
         }
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Citations(cites)) => {
+            Some(ChatEvent {
+                payload: Some(proto::chat_event::Payload::CitationsJson(
+                    serde_json::to_string(&cites).unwrap_or_default(),
+                )),
+            })
+        }
         MultiTurnStreamItem::ToolResult {
             id,
             name,

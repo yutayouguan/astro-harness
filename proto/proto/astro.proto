@@ -25,6 +25,13 @@ service AstroService {
   rpc ListFiles(FileListRequest) returns (FileListResponse);
   // 会话级副作用事件（记忆更新 / pending 变化）；与 Chat 流生命周期解耦。
   rpc SubscribeSessionEvents(SubscribeSessionEventsRequest) returns (stream SessionEvent);
+  // 统计消息 + 工具的 token 数（Anthropic count_tokens）。
+  rpc CountTokens(CountTokensRequest) returns (CountTokensResponse);
+  // Anthropic Message Batches：创建 / 查询 / 列表 / 结果。
+  rpc CreateBatch(BatchCreateRequest) returns (BatchResponse);
+  rpc GetBatch(BatchStatusRequest) returns (BatchResponse);
+  rpc ListBatches(BatchListRequest) returns (BatchResponse);
+  rpc GetBatchResults(BatchStatusRequest) returns (BatchResultsResponse);
 }
 
 // 空请求/响应占位。
@@ -184,6 +191,8 @@ message ChatEvent {
     // Plugin / Gateway / Shell 生命周期钩子（非 memory）
     HookEvent hook = 12;
     ContextUsageEvent context_usage = 13;
+    // Anthropic citations delta（JSON 数组序列化）
+    string citations_json = 14;
   }
 }
 
@@ -341,4 +350,36 @@ message PendingChangedEvent {
 
 message SessionMetadataChangedEvent {
   string title = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Token Counting & Batch API
+// ---------------------------------------------------------------------------
+
+message CountTokensRequest {
+  string agent_id = 1;
+  string model = 2;
+  string messages_json = 3;
+  string tools_json = 4;
+}
+message CountTokensResponse {
+  uint32 input_tokens = 1;
+}
+
+message BatchCreateRequest {
+  string agent_id = 1;
+  string requests_json = 2;
+}
+message BatchStatusRequest {
+  string agent_id = 1;
+  string batch_id = 2;
+}
+message BatchListRequest {
+  string agent_id = 1;
+}
+message BatchResponse {
+  string response_json = 1;
+}
+message BatchResultsResponse {
+  string results_jsonl = 1;
 }

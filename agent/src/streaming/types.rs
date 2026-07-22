@@ -20,6 +20,8 @@ pub enum StreamedAssistantContent {
     ToolCallDelta(ToolCallDeltaChunk),
     /// 本轮或累计 token 用量，通常在流末尾出现。
     FinalUsage(Usage),
+    /// Anthropic citations delta（引用信息）。
+    Citations(Vec<serde_json::Value>),
 }
 
 /// 多轮 Agent 流式事件，在 assistant 片段之上扩展工具结果与产品语义。
@@ -104,6 +106,11 @@ fn chunk_to_contents(chunk: ChatChunk) -> Vec<StreamedAssistantContent> {
     }
     if let Some(usage) = chunk.usage {
         out.push(StreamedAssistantContent::FinalUsage(usage));
+    }
+    if let Some(citations) = chunk.citations {
+        if !citations.is_empty() {
+            out.push(StreamedAssistantContent::Citations(citations));
+        }
     }
     out
 }

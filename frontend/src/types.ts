@@ -124,6 +124,8 @@ export type ChatMessage = {
   error?: boolean;
   attachments?: ChatAttachment[];
   activities?: ChatActivity[];
+  /** Anthropic citations（引用信息） */
+  citations?: Array<Record<string, unknown>>;
   /** A2UI / AG-UI activity 表面 */
   uiSurfaces?: UiSurface[];
   /**

@@ -122,6 +122,9 @@ pub enum ChatStreamEvent {
         outcome_type: String,
         interrupts_json: String,
     },
+    Citations {
+        citations: String,
+    },
     Done,
     Error {
         message: String,
@@ -1134,6 +1137,12 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                 let _ = p.app.emit(
                     p.event_name,
                     ChatStreamEvent::Reasoning { content: reasoning },
+                );
+            }
+            Some(proto::chat_event::Payload::CitationsJson(json)) => {
+                let _ = p.app.emit(
+                    p.event_name,
+                    ChatStreamEvent::Citations { citations: json },
                 );
             }
             Some(proto::chat_event::Payload::ToolCall(tc)) => {

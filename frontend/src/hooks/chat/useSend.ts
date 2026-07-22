@@ -455,6 +455,7 @@ export function useSend(deps: UseSendDeps) {
           replace?: boolean;
           outcome_type?: string;
           interrupts_json?: string;
+          citations?: string;
         }>(eventName, (event) => {
           if (streamGenRef.current !== gen) return;
           const payload = event.payload;
@@ -466,6 +467,17 @@ export function useSend(deps: UseSendDeps) {
             touchActivity();
             enqueueStreamReasoning(assistantId, payload.content);
             setStatusPhase("generating");
+          } else if (payload.type === "citations" && payload.citations) {
+            try {
+              const parsed = JSON.parse(payload.citations) as Array<Record<string, unknown>>;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, citations: [...(m.citations ?? []), ...parsed] }
+                    : m,
+                ),
+              );
+            } catch {}
           } else if (payload.type === "usage") {
             const usage: MessageTokenUsage = {
               promptTokens: payload.prompt_tokens ?? 0,

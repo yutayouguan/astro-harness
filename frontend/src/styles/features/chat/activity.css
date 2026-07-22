@@ -1439,3 +1439,38 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   max-height: 14rem;
   overflow: auto;
 }
+
+/* ──────────────────── Citations ──────────────────── */
+.msg-citations {
+  margin: 0.5rem 0;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 60%, transparent);
+  background: color-mix(in srgb, var(--glass-inner, rgba(255,255,255,0.06)) 40%, transparent);
+  overflow: hidden;
+}
+.msg-citations-toggle {
+  display: flex; align-items: center; gap: 0.4rem;
+  width: 100%; padding: 0.4rem 0.7rem;
+  border: none; background: transparent; cursor: pointer;
+  font-size: 0.78rem; color: var(--ink-mute);
+}
+.msg-citations-toggle:hover { color: var(--ink); }
+.msg-citations-icon { opacity: 0.7; flex-shrink: 0; }
+.msg-citations-list {
+  list-style: none; margin: 0; padding: 0 0.7rem 0.5rem;
+}
+.msg-citations-item {
+  padding: 0.3rem 0; border-top: 1px solid color-mix(in srgb, var(--glass-edge) 40%, transparent);
+  font-size: 0.76rem; color: var(--ink-soft);
+}
+.msg-citations-quote {
+  margin: 0; padding-left: 0.6rem;
+  border-left: 2px solid color-mix(in srgb, var(--tone, #3b82f6) 50%, transparent);
+  font-style: italic;
+}
+.msg-citations-source {
+  display: block; font-size: 0.7rem; color: var(--ink-mute); margin-top: 0.15rem;
+}
+.msg-citations-raw {
+  font-family: ui-monospace, monospace; font-size: 0.7rem; word-break: break-all;
+}

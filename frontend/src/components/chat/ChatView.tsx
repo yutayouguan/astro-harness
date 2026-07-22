@@ -111,6 +111,7 @@ import McpIcon from "../icons/McpIcon";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
 import MsgActivity from "./MsgActivity";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
+import MsgCitations from "./MsgCitations";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
 import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
@@ -1760,6 +1761,14 @@ export default function ChatView({
                           }
                           for (const surface of m.uiSurfaces ?? []) {
                             pushSurface(surface);
+                          }
+                          if (m.citations?.length) {
+                            steps.push({
+                              key: `cite-${m.id}`,
+                              kind: "reasoning" as MsgTimelineKind,
+                              active: false,
+                              node: <MsgCitations citations={m.citations} />,
+                            });
                           }
                         }
 
