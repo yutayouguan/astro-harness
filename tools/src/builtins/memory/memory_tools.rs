@@ -54,7 +54,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "memory".to_string(),
         toolset: "memory".to_string(),
-        description: "Manage persistent memory/user profile. action=add|replace|remove; target=memory|user. Session snapshot refreshes on next session or refresh_memory.".to_string(),
+        description: "Manage persistent memory/user profile (write). action=add|replace|remove; target=memory|user. Session snapshot refreshes on next session or refresh_memory. To search memory content use context_search.".to_string(),
         schema: schema_for_args::<MemoryArgs>(),
         check_fn: None,
         icon: "brain",

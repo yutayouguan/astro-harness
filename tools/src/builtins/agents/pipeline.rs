@@ -73,10 +73,9 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "pipeline".to_string(),
         toolset: "pipeline".to_string(),
-        description: "Serial multi-agent pipeline (async). \
-action=run (default): goal + steps[{role,prompt,agent_id?}] or agents=[role…]; returns orchestration_id. \
-action=status: poll by orchestration_id. \
-Persisted teams: team_list | team_create | team_run (team_id+goal; mode=coordinate|route|broadcast|tasks). \
+        description: "Multi-agent orchestration AND team management. \
+Pipeline: action=run (goal + steps[{role,prompt,agent_id?}] or agents=[role…]; returns orchestration_id), action=status. \
+Teams: action=team_create (create a persisted team), team_list, team_run (team_id+goal; mode=coordinate|route|broadcast|tasks). \
 Use subagent for parallel one-shot tasks; persona_create for durable assistants—not this tool."
             .to_string(),
         schema: schema_for_args::<PipelineArgs>(),

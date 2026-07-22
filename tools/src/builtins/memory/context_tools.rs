@@ -92,7 +92,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "context_search".to_string(),
         toolset: "context_search".to_string(),
-        description: "On-demand context search across session history (FTS), MEMORY/USER, and knowledge DB. Prefer this over stuffing every recall into the system prompt. scope=session|memory|knowledge|all."
+        description: "On-demand context search across session history (FTS), MEMORY/USER, and knowledge DB. Prefer this over stuffing every recall into the system prompt. scope=session|memory|knowledge|all. To add/update persistent memory use memory."
             .to_string(),
         schema: schema_for_args::<SearchArgs>(),
         check_fn: None,

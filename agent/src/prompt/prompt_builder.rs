@@ -15,7 +15,7 @@ pub const TOOL_GUIDANCE: &str = "\
 复杂可复用流程：skills manage create；纠错后的正确步骤：manage_action=patch（old_string 须唯一）。\n\
 长期偏好/环境事实：用 memory；跨会话原文：context_search（scope=session 或 all）。闲置技能：action=curate（只建议，确认后再 delete）。\n\
 需求含糊、有多种理解或缺关键信息时，别猜别硬做：用 ask_user（mode=question，questions）向用户提问；敏感/不可逆操作前用 ask_user（mode=confirm，title+body）；本地天气/附近定位用 ask_user（mode=location）。Agent↔Plan 切换只用 switch_mode（勿与 ask_user 混用）。\n\
-并行临时子任务用 subagent；串行多角色/持久 Team 用 pipeline（action=run|status|team_*）；新建长期助手用 persona_create（禁止用来拆当前任务）。\n\
+并行临时子任务用 subagent；串行多角色编排或创建/运行持久 Team 都用 pipeline（action=run|status|team_create|team_list|team_run）；新建长期助手用 persona_create（禁止用来拆当前任务）。\n\
 向用户展示本工作区媒体/网页时，在回复正文写 ![audio](path) / ![video](path) / ![image](path) / ![html](path)；path 用工具返回的工作区相对路径（如 generated/audio/…、generated/html/…），HTML 文件请写入 generated/html/ 目录；不要写绝对路径，也不要用「文件：`路径`」这类纯文本，更不要用 present / A2UI 挂媒体卡。\n\
 展示已写入的代码/文本文件（.py/.rs/.c/.ts/.json/.md 等）时，同样在正文写 ![code](path) 引用工作区相对路径，前端会按后缀语法高亮渲染成可复制/下载/引用的代码卡片；不要把文件全文再粘回正文，避免重复占用上下文。\n\
 每次思考用 <think>...</think> 标签包裹。";

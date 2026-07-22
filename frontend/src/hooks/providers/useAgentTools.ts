@@ -41,11 +41,12 @@ export type AgentToolId =
   | "image_gen"
   | "video_gen"
   | "video_understand"
-  | "tts"
+  | "speech_gen"
   | "music_gen"
   | "skills"
   | "memory"
   | "context_search"
+  | "pin_context"
   | "ask_user"
   | "switch_mode"
   | "present"
@@ -251,9 +252,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "tts",
-    titleKey: "agentTools.tts.title",
-    descKey: "agentTools.tts.desc",
+    id: "speech_gen",
+    titleKey: "agentTools.speechGen.title",
+    descKey: "agentTools.speechGen.desc",
     Icon: IconTts,
     tone: "teal",
     params: [
@@ -312,6 +313,19 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "query", type: "string" },
       { name: "scope", type: "string", optional: true },
       { name: "limit", type: "number", optional: true },
+    ],
+  },
+  {
+    id: "pin_context",
+    titleKey: "agentTools.pinContext.title",
+    descKey: "agentTools.pinContext.desc",
+    Icon: IconSessionSearch,
+    tone: "lime",
+    params: [
+      { name: "action", type: "string" },
+      { name: "content", type: "string", optional: true },
+      { name: "id", type: "string", optional: true },
+      { name: "title", type: "string", optional: true },
     ],
   },
   {
