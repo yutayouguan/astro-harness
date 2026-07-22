@@ -35,8 +35,8 @@ pub async fn anthropic_chat_stream(
         "temperature": config.temperature,
         "messages": api_messages,
     });
-    if !system.is_empty() {
-        body["system"] = json!(system);
+    if !system.is_null() {
+        body["system"] = system;
     }
 
     // Extended Thinking（budget_tokens 须 >= 1024 且 < max_tokens）

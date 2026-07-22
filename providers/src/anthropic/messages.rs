@@ -6,7 +6,9 @@ use crate::http_stream::parse_data_url;
 use crate::trait_::{ChatContentPart, ChatMessage};
 
 /// 将消息列表转为 Anthropic `(system, messages)` 二元组。
-pub fn to_anthropic_messages(messages: &[ChatMessage]) -> (String, Vec<Value>) {
+///
+/// `system` 返回结构化 content blocks（带 `cache_control`），空时为 `Value::Null`。
+pub fn to_anthropic_messages(messages: &[ChatMessage]) -> (Value, Vec<Value>) {
     let mut system = String::new();
     let mut api_messages = Vec::new();
     let mut pending_tool_results: Vec<Value> = Vec::new();
@@ -40,6 +42,17 @@ pub fn to_anthropic_messages(messages: &[ChatMessage]) -> (String, Vec<Value>) {
             "assistant" => {
                 flush_tool_results(&mut pending_tool_results, &mut api_messages);
                 let mut content_blocks = Vec::new();
+                // thinking block：多轮连续性（须在 text/tool_use 之前）
+                if m.reasoning.is_some() || m.thought_signature.is_some() {
+                    let mut block = json!({
+                        "type": "thinking",
+                        "thinking": m.reasoning.as_deref().unwrap_or(""),
+                    });
+                    if let Some(ref sig) = m.thought_signature {
+                        block["signature"] = json!(sig);
+                    }
+                    content_blocks.push(block);
+                }
                 if !m.content.is_empty() {
                     content_blocks.push(json!({
                         "type": "text",
@@ -81,7 +94,17 @@ pub fn to_anthropic_messages(messages: &[ChatMessage]) -> (String, Vec<Value>) {
         }
     }
     flush_tool_results(&mut pending_tool_results, &mut api_messages);
-    (system, api_messages)
+
+    let system_value = if system.is_empty() {
+        Value::Null
+    } else {
+        json!([{
+            "type": "text",
+            "text": system,
+            "cache_control": { "type": "ephemeral" }
+        }])
+    };
+    (system_value, api_messages)
 }
 
 /// Anthropic user content：纯字符串或 text + image base64 blocks。
@@ -145,7 +168,7 @@ pub fn anthropic_user_content(m: &ChatMessage) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::trait_::ChatContentPart;
+    use crate::trait_::{ChatContentPart, ChatToolCall};
 
     #[test]
     fn anthropic_user_content_parses_data_url() {
@@ -163,5 +186,75 @@ mod tests {
         assert_eq!(blocks[1]["type"], "image");
         assert_eq!(blocks[1]["source"]["media_type"], "image/jpeg");
         assert_eq!(blocks[1]["source"]["data"], "zzz");
+    }
+
+    #[test]
+    fn system_returns_structured_content_with_cache_control() {
+        let msgs = vec![ChatMessage::text("system", "You are helpful.")];
+        let (system, _) = to_anthropic_messages(&msgs);
+        let blocks = system.as_array().expect("system should be array");
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "text");
+        assert_eq!(blocks[0]["text"], "You are helpful.");
+        assert_eq!(blocks[0]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn empty_system_returns_null() {
+        let msgs = vec![ChatMessage::text("user", "hi")];
+        let (system, _) = to_anthropic_messages(&msgs);
+        assert!(system.is_null());
+    }
+
+    #[test]
+    fn assistant_includes_thinking_block() {
+        let mut m = ChatMessage::text("assistant", "The answer is 42.");
+        m.reasoning = Some("Let me think step by step...".into());
+        m.thought_signature = Some("sig_abc123".into());
+        let (_, msgs) = to_anthropic_messages(&[m]);
+        let content = msgs[0]["content"].as_array().expect("content array");
+        assert_eq!(content[0]["type"], "thinking");
+        assert_eq!(content[0]["thinking"], "Let me think step by step...");
+        assert_eq!(content[0]["signature"], "sig_abc123");
+        assert_eq!(content[1]["type"], "text");
+        assert_eq!(content[1]["text"], "The answer is 42.");
+    }
+
+    #[test]
+    fn assistant_with_signature_only() {
+        let mut m = ChatMessage::text("assistant", "result");
+        m.thought_signature = Some("sig_xyz".into());
+        let (_, msgs) = to_anthropic_messages(&[m]);
+        let content = msgs[0]["content"].as_array().expect("content array");
+        assert_eq!(content[0]["type"], "thinking");
+        assert_eq!(content[0]["thinking"], "");
+        assert_eq!(content[0]["signature"], "sig_xyz");
+    }
+
+    #[test]
+    fn assistant_without_reasoning_no_thinking_block() {
+        let m = ChatMessage::text("assistant", "plain response");
+        let (_, msgs) = to_anthropic_messages(&[m]);
+        let content = msgs[0]["content"].as_array().expect("content array");
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "text");
+    }
+
+    #[test]
+    fn assistant_thinking_before_tool_use() {
+        let mut m = ChatMessage::text("assistant", "");
+        m.reasoning = Some("thinking...".into());
+        m.thought_signature = Some("sig".into());
+        m.tool_calls = Some(vec![ChatToolCall {
+            id: "call_1".into(),
+            name: "read_file".into(),
+            arguments: json!({"path": "foo.rs"}),
+            signature: None,
+        }]);
+        let (_, msgs) = to_anthropic_messages(&[m]);
+        let content = msgs[0]["content"].as_array().expect("content array");
+        assert_eq!(content[0]["type"], "thinking");
+        assert_eq!(content[1]["type"], "tool_use");
+        assert_eq!(content[1]["name"], "read_file");
     }
 }
