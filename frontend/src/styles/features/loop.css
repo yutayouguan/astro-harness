@@ -359,6 +359,28 @@
   opacity: 1 !important;
 }
 
+/* ── Drag ghost ───────────────────────────────────────────────── */
+
+.loop-drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--glass-panel);
+  border: 1.5px solid var(--tone, #ec4899);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  opacity: 0.9;
+}
+
 /* ── Canvas ────────────────────────────────────────────────────── */
 
 .loop-canvas-container {

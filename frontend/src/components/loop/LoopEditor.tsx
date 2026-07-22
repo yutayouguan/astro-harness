@@ -94,6 +94,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   // sidebar collapsed categories
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
+  // custom drag state (HTML5 drag-and-drop doesn't work in Tauri WKWebView)
+  const [draggingType, setDraggingType] = useState<NodeType | null>(null);
+  const [dragGhostPos, setDragGhostPos] = useState<{ x: number; y: number } | null>(null);
+
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   // load workflow
@@ -175,39 +179,39 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     }
   };
 
-  // drag & drop from palette
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  }, []);
-
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const nodeType = e.dataTransfer.getData("text/plain") as NodeType;
-      if (!nodeType) return;
-
-      const meta = NODE_REGISTRY.find((m) => m.type === nodeType);
-      if (!meta) return;
-
-      // 用 React Flow 实例将屏幕坐标转换为画布坐标（支持缩放和平移）
-      const flowPosition = reactFlowInstance.screenToFlowPosition({
-        x: e.clientX,
-        y: e.clientY,
-      });
-
-      const newId = crypto.randomUUID();
-      const newNode: RFNode = {
-        id: newId,
-        type: "loopNode",
-        position: flowPosition,
-        data: { label: meta.label, meta, config: {}, nodeType },
-      };
-      setNodes((nds) => [...nds, newNode]);
-      setDirty(true);
-    },
-    [setNodes, reactFlowInstance],
-  );
+  // custom mouse-based drag (bypasses Tauri WKWebView HTML5 DnD issues)
+  useEffect(() => {
+    if (!draggingType) return;
+    const onMouseMove = (e: MouseEvent) => {
+      setDragGhostPos({ x: e.clientX, y: e.clientY });
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      const meta = NODE_REGISTRY.find((m) => m.type === draggingType);
+      const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (meta && bounds && e.clientX >= bounds.left && e.clientX <= bounds.right && e.clientY >= bounds.top && e.clientY <= bounds.bottom) {
+        const flowPos = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        const newId = crypto.randomUUID();
+        setNodes((nds) => [
+          ...nds,
+          {
+            id: newId,
+            type: "loopNode",
+            position: flowPos,
+            data: { label: meta.label, meta, config: {}, nodeType: draggingType, disabled: false },
+          },
+        ]);
+        setDirty(true);
+      }
+      setDraggingType(null);
+      setDragGhostPos(null);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [draggingType, reactFlowInstance, setNodes]);
 
   // 点击 "+" 添加节点到画布中央
   const addNodeToCenter = useCallback(
@@ -321,10 +325,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                         <div
                           key={meta.type}
                           className="loop-palette-item"
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData("text/plain", meta.type);
-                            e.dataTransfer.effectAllowed = "move";
+                          onMouseDown={(e) => {
+                            if (e.button !== 0) return;
+                            e.preventDefault();
+                            setDraggingType(meta.type);
+                            setDragGhostPos({ x: e.clientX, y: e.clientY });
                           }}
                         >
                           {IconComp && <IconComp size={14} />}
@@ -364,8 +369,6 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onConnect={onConnect}
             onNodeClick={(_, node) => setSelectedNodeId(node.id)}
             onPaneClick={() => setSelectedNodeId(null)}
-            onDragOver={onDragOver}
-            onDrop={onDrop}
             nodeTypes={nodeTypes}
             fitView
             proOptions={{ hideAttribution: true }}
@@ -445,6 +448,22 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           />
         )}
       </div>
+
+      {/* ── Drag ghost (follows cursor during custom drag) ── */}
+      {draggingType && dragGhostPos && (() => {
+        const meta = NODE_REGISTRY.find((m) => m.type === draggingType);
+        if (!meta) return null;
+        const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
+        return (
+          <div
+            className="loop-drag-ghost"
+            style={{ left: dragGhostPos.x, top: dragGhostPos.y }}
+          >
+            {IconComp && <IconComp size={14} />}
+            <span>{meta.label}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
