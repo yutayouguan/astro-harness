@@ -33,11 +33,19 @@ pub fn to_anthropic_messages(messages: &[ChatMessage]) -> (Value, Vec<Value>) {
             }
             "tool" => {
                 let id = m.tool_call_id.clone().unwrap_or_default();
-                pending_tool_results.push(json!({
+                let content: Value = serde_json::from_str(&m.content)
+                    .ok()
+                    .filter(|v: &Value| v.is_array())
+                    .unwrap_or_else(|| json!(m.content));
+                let mut block = json!({
                     "type": "tool_result",
                     "tool_use_id": id,
-                    "content": m.content,
-                }));
+                    "content": content,
+                });
+                if m.is_error {
+                    block["is_error"] = json!(true);
+                }
+                pending_tool_results.push(block);
             }
             "assistant" => {
                 flush_tool_results(&mut pending_tool_results, &mut api_messages);
@@ -94,6 +102,20 @@ pub fn to_anthropic_messages(messages: &[ChatMessage]) -> (Value, Vec<Value>) {
         }
     }
     flush_tool_results(&mut pending_tool_results, &mut api_messages);
+
+    // prompt caching：在最后一条 user 消息的最后一个 content block 上打 cache breakpoint
+    if let Some(last_user) = api_messages.iter_mut().rev().find(|m| m["role"] == "user") {
+        if let Some(blocks) = last_user.get_mut("content").and_then(|c| c.as_array_mut()) {
+            if let Some(last_block) = blocks.last_mut() {
+                if let Some(obj) = last_block.as_object_mut() {
+                    obj.insert(
+                        "cache_control".into(),
+                        json!({"type": "ephemeral"}),
+                    );
+                }
+            }
+        }
+    }
 
     let system_value = if system.is_empty() {
         Value::Null
@@ -155,6 +177,31 @@ pub fn anthropic_user_content(m: &ChatMessage) -> Value {
                         if mime_type.trim().is_empty() { "video/*" } else { mime_type }
                     )
                 }));
+            }
+            ChatContentPart::DocumentUrl { url, mime_type } => {
+                if let Some((media_type, data)) = parse_data_url(url) {
+                    blocks.push(json!({
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": data,
+                        }
+                    }));
+                } else if url.starts_with("http://") || url.starts_with("https://") {
+                    blocks.push(json!({
+                        "type": "document",
+                        "source": {
+                            "type": "url",
+                            "url": url,
+                        }
+                    }));
+                } else {
+                    blocks.push(json!({
+                        "type": "text",
+                        "text": format!("[document attached: {}]", mime_type)
+                    }));
+                }
             }
         }
     }

@@ -61,6 +61,9 @@ pub async fn anthropic_chat_stream(
     if !anthropic_tools.is_empty() {
         body["tools"] = Value::Array(anthropic_tools);
     }
+    if let Some(tc) = config.additional_params.get("tool_choice") {
+        body["tool_choice"] = tc.clone();
+    }
 
     merge_additional_params(&mut body, &config.additional_params);
 
@@ -68,7 +71,7 @@ pub async fn anthropic_chat_stream(
         .post(&url)
         .header("x-api-key", &config.api_key)
         .header("anthropic-version", defaults::ANTHROPIC_VERSION)
-        .header("anthropic-beta", defaults::PROMPT_CACHING_BETA)
+        .header("anthropic-beta", defaults::ANTHROPIC_BETA)
         .header("content-type", "application/json")
         .json(&body);
 

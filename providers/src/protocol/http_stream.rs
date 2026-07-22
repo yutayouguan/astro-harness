@@ -257,6 +257,13 @@ fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
                                     if mime_type.trim().is_empty() { "video/*" } else { mime_type }
                                 )
                             }),
+                            ChatContentPart::DocumentUrl { mime_type, .. } => json!({
+                                "type": "text",
+                                "text": format!(
+                                    "[document attached: {}]",
+                                    if mime_type.trim().is_empty() { "application/pdf" } else { mime_type }
+                                )
+                            }),
                         })
                         .collect();
                     obj.insert("content".into(), Value::Array(arr));
@@ -371,6 +378,7 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
         usage,
         interaction_id: None,
         thought_signature: None,
+        citations: None,
     })
 }
 

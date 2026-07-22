@@ -39,6 +39,8 @@ pub struct ChatMessage {
     pub reasoning: Option<String>,
     /// Google Interactions：`thought.signature`（`thought_signature` delta 或 step 下发）。
     pub thought_signature: Option<String>,
+    /// tool 角色消息：标记该工具执行是否失败（Anthropic `is_error`）。
+    pub is_error: bool,
 }
 
 /// OpenAI / Gemini 兼容 content 数组元素（含 audio/video 入模）。
@@ -52,6 +54,8 @@ pub enum ChatContentPart {
     AudioUrl { url: String, mime_type: String },
     /// 视频（data URL 或远程 URI）；Gemini 走 inlineData，其它厂商回落文本标注。
     VideoUrl { url: String, mime_type: String },
+    /// 文档（PDF 等）；Anthropic 走 `type: "document"`，其它厂商回落文本标注。
+    DocumentUrl { url: String, mime_type: String },
 }
 
 impl ChatMessage {
@@ -66,6 +70,7 @@ impl ChatMessage {
             name: None,
             reasoning: None,
             thought_signature: None,
+            is_error: false,
         }
     }
 
@@ -81,6 +86,7 @@ impl ChatMessage {
             name: None,
             reasoning: None,
             thought_signature: None,
+            is_error: false,
         }
     }
 }
@@ -117,6 +123,8 @@ pub struct ChatChunk {
     pub interaction_id: Option<String>,
     /// Google Interactions：`thought_signature` delta 或 thought step 上的 signature。
     pub thought_signature: Option<String>,
+    /// Anthropic citations delta（引用信息）。
+    pub citations: Option<Vec<serde_json::Value>>,
 }
 
 /// 生成的图片二进制与 MIME 类型。

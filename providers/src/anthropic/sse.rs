@@ -30,7 +30,7 @@ pub fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
             let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
             let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
             match block_type {
-                "tool_use" => Some(ChatChunk {
+                "tool_use" | "server_tool_use" => Some(ChatChunk {
                     tool_call_deltas: vec![ToolCallDeltaChunk {
                         index,
                         id: block.get("id").and_then(|s| s.as_str()).map(str::to_string),
@@ -46,6 +46,14 @@ pub fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
                 "thinking" => Some(ChatChunk {
                     thought_signature: block
                         .get("signature")
+                        .and_then(|s| s.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string),
+                    ..Default::default()
+                }),
+                "redacted_thinking" => Some(ChatChunk {
+                    thought_signature: block
+                        .get("data")
                         .and_then(|s| s.as_str())
                         .filter(|s| !s.is_empty())
                         .map(str::to_string),
@@ -94,6 +102,13 @@ pub fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
                         .map(str::to_string)?;
                     Some(ChatChunk {
                         thought_signature: Some(sig),
+                        ..Default::default()
+                    })
+                }
+                "citations_delta" => {
+                    let citation = delta.get("citation")?;
+                    Some(ChatChunk {
+                        citations: Some(vec![citation.clone()]),
                         ..Default::default()
                     })
                 }

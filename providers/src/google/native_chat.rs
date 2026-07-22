@@ -126,6 +126,12 @@ fn part_to_gemini(p: &ChatContentPart) -> Value {
             };
             gemini_inline_or_file(url, mime)
         }
+        ChatContentPart::DocumentUrl { mime_type, .. } => json!({
+            "text": format!(
+                "[document attached: {}]",
+                if mime_type.trim().is_empty() { "application/pdf" } else { mime_type.as_str() }
+            )
+        }),
     }
 }
 
@@ -313,6 +319,7 @@ pub fn extract_gemini_native_delta(data: &str) -> Option<ChatChunk> {
         usage,
         interaction_id: None,
         thought_signature: None,
+        citations: None,
     })
 }
 
@@ -387,6 +394,7 @@ mod tests {
                 name: None,
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -397,6 +405,7 @@ mod tests {
                 name: Some("get_weather".into()),
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
         ];
         let (_, contents) = to_gemini_contents(&messages);
@@ -432,6 +441,7 @@ mod tests {
                 name: None,
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -442,6 +452,7 @@ mod tests {
                 name: Some("get_weather".into()),
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -452,6 +463,7 @@ mod tests {
                 name: Some("get_weather".into()),
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
         ];
         let (_, contents) = to_gemini_contents(&messages);

@@ -90,6 +90,10 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
             name: tool_name,
             reasoning: message.reasoning.clone(),
             thought_signature: message.thought_signature.clone(),
+            is_error: message.role == Role::Tool
+                && message
+                    .content_text()
+                    .starts_with("Error"),
         });
     }
 
@@ -129,14 +133,16 @@ fn merge_media_parts(
             let url = match &p {
                 ChatContentPart::ImageUrl { url }
                 | ChatContentPart::AudioUrl { url, .. }
-                | ChatContentPart::VideoUrl { url, .. } => Some(url.as_str()),
+                | ChatContentPart::VideoUrl { url, .. }
+                | ChatContentPart::DocumentUrl { url, .. } => Some(url.as_str()),
                 ChatContentPart::Text { .. } => None,
             };
             let dup = url.is_some_and(|u| {
                 parts.iter().any(|e| match e {
                     ChatContentPart::ImageUrl { url }
                     | ChatContentPart::AudioUrl { url, .. }
-                    | ChatContentPart::VideoUrl { url, .. } => url == u,
+                    | ChatContentPart::VideoUrl { url, .. }
+                    | ChatContentPart::DocumentUrl { url, .. } => url == u,
                     _ => false,
                 })
             });
@@ -177,6 +183,10 @@ fn media_asset_to_part(asset: &common::MediaAsset) -> Option<ChatContentPart> {
             mime_type: mime,
         }),
         MediaKind::Video => Some(ChatContentPart::VideoUrl {
+            url,
+            mime_type: mime,
+        }),
+        MediaKind::File if mime.contains("pdf") => Some(ChatContentPart::DocumentUrl {
             url,
             mime_type: mime,
         }),

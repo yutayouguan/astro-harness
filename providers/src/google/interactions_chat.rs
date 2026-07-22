@@ -118,6 +118,13 @@ fn user_content_parts(m: &ChatMessage) -> Vec<Value> {
                         };
                         media_content_from_url("video", url, hint)
                     }
+                    ChatContentPart::DocumentUrl { mime_type, .. } => json!({
+                        "type": "text",
+                        "text": format!(
+                            "[document attached: {}]",
+                            if mime_type.trim().is_empty() { "application/pdf" } else { mime_type.as_str() }
+                        )
+                    }),
                 })
                 .collect();
         }
@@ -987,6 +994,7 @@ mod tests {
                 name: None,
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -997,6 +1005,7 @@ mod tests {
                 name: Some("get_weather".into()),
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
             ChatMessage::text("user", "thanks"),
         ];
@@ -1209,6 +1218,7 @@ mod tests {
             name: None,
             reasoning: None,
             thought_signature: None,
+            is_error: false,
         }];
         let (_, input) = messages_to_interactions_input(&messages);
         assert_eq!(input[0]["type"], "function_call");
@@ -1232,6 +1242,7 @@ mod tests {
             name: None,
             reasoning: Some("plan image".into()),
             thought_signature: Some("thought_sig".into()),
+            is_error: false,
         }];
         let (_, input) = messages_to_interactions_input(&messages);
         assert_eq!(input.len(), 2);
@@ -1283,6 +1294,7 @@ mod tests {
                 name: None,
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
             ChatMessage {
                 role: "tool".into(),
@@ -1293,6 +1305,7 @@ mod tests {
                 name: Some("get_weather".into()),
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
         ];
         let config = ProviderConfig {
@@ -1354,6 +1367,7 @@ mod tests {
                 name: Some("t".into()),
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
             ChatMessage::text("user", "again"),
             ChatMessage {
@@ -1365,6 +1379,7 @@ mod tests {
                 name: Some("t".into()),
                 reasoning: None,
                 thought_signature: None,
+                is_error: false,
             },
         ];
         let results = trailing_function_results(&messages);
