@@ -556,16 +556,32 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .loop-editor-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--glass-panel);
   flex-shrink: 0;
+}
+
+/* 工具栏按钮 hover 效果 */
+.loop-editor-toolbar .loop-icon-btn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.loop-editor-toolbar .loop-btn--secondary:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 20%, var(--border));
+}
+.loop-editor-toolbar .loop-btn--primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone, #ec4899) 30%, transparent);
 }
 
 .loop-editor-name {
@@ -770,15 +786,29 @@
   overflow: hidden;
 }
 
-/* 禁用 React Flow 自带的选中框模糊效果 */
-.loop-canvas-container .react-flow__node.selected > .loop-rf-node,
-.loop-canvas-container .react-flow__node:focus > .loop-rf-node,
+/* 禁用 React Flow 选中节点的一切模糊/滤镜/outline */
 .loop-canvas-container .react-flow__node {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  outline: none !important;
 }
 .loop-canvas-container .react-flow__node.selected {
   z-index: 10 !important;
+  outline: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+.loop-canvas-container .react-flow__node:focus,
+.loop-canvas-container .react-flow__node:focus-visible {
+  outline: none !important;
+  filter: none !important;
+}
+/* 防止 WebKit GPU 合成导致的文字模糊 */
+.loop-canvas-container .react-flow__node .loop-rf-node {
+  -webkit-font-smoothing: subpixel-antialiased;
+  -webkit-transform: translateZ(0);
 }
 
 /* ── React Flow Node ──────────────────────────────────────────── */
