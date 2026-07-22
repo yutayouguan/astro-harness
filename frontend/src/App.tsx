@@ -1005,6 +1005,8 @@ export default function App() {
                     model: p.model,
                     kind: p.kind,
                   }))}
+                  onCollapseSidebar={sidebar.collapseSidebar}
+                  onExpandSidebar={sidebar.openSidebar}
                 />
               )}
               {nav === "cron" && (

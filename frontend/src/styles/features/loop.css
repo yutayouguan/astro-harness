@@ -584,6 +584,14 @@
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone, #ec4899) 30%, transparent);
 }
 
+.loop-editor-name-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .loop-editor-name {
   flex: 1;
   font-size: 15px;
@@ -591,13 +599,32 @@
   color: var(--ink);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: 8px;
+  padding: 5px 10px;
   outline: none;
+  min-width: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+.loop-editor-name-wrap:hover .loop-editor-name {
+  border-color: var(--border);
+  background: var(--bg0, #fff);
 }
 .loop-editor-name:focus {
-  border-color: var(--tone, #ec4899);
-  background: var(--glass-panel);
+  border-color: var(--tone, #6366f1);
+  background: var(--bg0, #fff);
+}
+
+.loop-editor-name-edit {
+  color: var(--ink-tertiary);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.loop-editor-name-wrap:hover .loop-editor-name-edit {
+  opacity: 1;
+}
+.loop-editor-name:focus ~ .loop-editor-name-edit {
+  opacity: 0;
 }
 
 .loop-editor-toolbar-right {

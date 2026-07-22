@@ -383,14 +383,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         <button className="loop-icon-btn" onClick={onBack} title="返回">
           <ArrowLeft size={16} />
         </button>
-        <input
-          className="loop-editor-name"
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            setDirty(true);
-          }}
-        />
+        <div className="loop-editor-name-wrap">
+          <input
+            className="loop-editor-name"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setDirty(true);
+            }}
+          />
+          <LucideIcons.Pencil size={13} className="loop-editor-name-edit" />
+        </div>
         <div className="loop-editor-toolbar-right">
           <button
             className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
