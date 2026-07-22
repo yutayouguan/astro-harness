@@ -786,29 +786,32 @@
   overflow: hidden;
 }
 
-/* 禁用 React Flow 选中节点的一切模糊/滤镜/outline */
+/*
+ * 修复 React Flow 节点在 WebKit (Tauri WKWebView) 中模糊的问题。
+ * 根因：React Flow 用 transform: translate(x, y) 定位节点，
+ * 当 x/y 含小数时 WebKit 会做亚像素渲染导致文字和边框模糊。
+ * 解决：will-change: auto 阻止提升合成层，
+ *       image-rendering: pixelated 强制整像素，
+ *       禁用一切 filter/backdrop-filter/outline。
+ */
 .loop-canvas-container .react-flow__node {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   filter: none !important;
   -webkit-filter: none !important;
   outline: none !important;
+  will-change: auto !important;
+  image-rendering: auto !important;
 }
 .loop-canvas-container .react-flow__node.selected {
   z-index: 10 !important;
-  outline: none !important;
-  filter: none !important;
-  -webkit-filter: none !important;
 }
 .loop-canvas-container .react-flow__node:focus,
 .loop-canvas-container .react-flow__node:focus-visible {
   outline: none !important;
-  filter: none !important;
 }
-/* 防止 WebKit GPU 合成导致的文字模糊 */
 .loop-canvas-container .react-flow__node .loop-rf-node {
-  -webkit-font-smoothing: subpixel-antialiased;
-  -webkit-transform: translateZ(0);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ── React Flow Node ──────────────────────────────────────────── */

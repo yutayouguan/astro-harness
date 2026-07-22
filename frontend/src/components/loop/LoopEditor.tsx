@@ -543,6 +543,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onNodeClick={(_, node) => setSelectedNodeId(node.id)}
             onPaneClick={() => setSelectedNodeId(null)}
             nodeTypes={nodeTypes}
+            snapToGrid
+            snapGrid={[1, 1]}
             fitView
             proOptions={{ hideAttribution: true }}
           >
