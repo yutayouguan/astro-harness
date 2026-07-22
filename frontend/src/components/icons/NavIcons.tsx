@@ -199,18 +199,14 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** 智能流程 — 两节点箭头流 + 闪电：流程 × 智能 */
+/** 智能流程 — 流程菱形 + 内嵌播放键：决策引擎 × 自动执行 */
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      {/* 左节点 */}
-      <circle cx="5" cy="12" r="3.5" />
-      {/* 右节点 */}
-      <circle cx="19" cy="12" r="3.5" />
-      {/* 连接箭头 */}
-      <path className="nav-icon-stroke" d="M8.5 12h7M13.5 9.5 16 12l-2.5 2.5" />
-      {/* 闪电 */}
-      <path className="nav-icon-dot" d="M11.5 3.5 9 7h3l-2.5 3.5" strokeWidth="0" />
+      {/* 菱形主体（流程图决策符号） */}
+      <path d="M12 2 22 12 12 22 2 12Z" strokeLinejoin="round" />
+      {/* 内嵌播放三角（选中时镂空） */}
+      <path className="nav-icon-cutout" d="M10 8.5v7l6-3.5z" />
     </NavIconBase>
   );
 }
