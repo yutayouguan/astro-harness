@@ -242,3 +242,123 @@ pub async fn import_loop(json: String) -> Result<LoopDto, String> {
     let saved = store.save_workflow(wf).map_err(|e| e.to_string())?;
     Ok(to_dto(saved))
 }
+
+// ── AI 工作流生成 ────────────────────────────────────────────────
+
+/// AI 生成的工作流结构
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AiGeneratedWorkflow {
+    pub explanation: String,
+    pub nodes: Vec<AiGenNode>,
+    pub edges: Vec<AiGenEdge>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AiGenNode {
+    pub id: String,
+    pub node_type: String,
+    pub label: String,
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AiGenEdge {
+    pub source: String,
+    pub target: String,
+    #[serde(default)]
+    pub source_handle: Option<String>,
+}
+
+const AI_WORKFLOW_SYSTEM_PROMPT: &str = r#"你是一个工作流设计专家。用户会描述需求，你需要生成一个工作流的节点和连线。
+
+可用的节点类型（node_type）：
+【触发器】manual_trigger（手动触发）、scheduled_trigger（定时触发，config: {schedule, timezone}）、webhook_trigger（Webhook 触发，config: {path, method}）
+【AI】ai_agent_task（AI 智能体任务，config: {prompt_template, provider_id?, model?, reasoning_level?}）、parameter_extraction（参数提取，config: {prompt_template, output_schema}）、question_classification（问题分类，config: {classes: [{id, label, description}]}）
+【多媒体】image_generation（生成图片，config: {prompt_template, size?, style?}）、video_generation（生成视频，config: {prompt_template, duration_seconds?}）、music_generation（生成音乐，config: {prompt_template, duration_seconds?, instrumental?}）、text_to_speech（文字转语音，config: {text_template, voice?, speed?}）、subtitle_generation（字幕生成，config: {audio_source}）
+【流程控制】conditional（条件判断，config: {conditions: [{id, label, expression}]}）、multi_branch（多路分支）、filter（过滤，config: {condition}）、merge（合并）、loop（循环，config: {max_iterations, break_condition?}）、human_approval（人工审批，config: {prompt_template}）
+【数据处理】set_fields（设置字段，config: {assignments: [{field, value}]}）、format_text（格式化文本，config: {template}）、json（JSON 处理，config: {mode, expression}）、code（代码，config: {language, source}）、sort（排序）、slice（截取）、aggregate（聚合）
+【动作】http_request（HTTP 请求，config: {method, url_template, headers?, body_template?}）、run_loop（运行子 Loop）、delay_wait（延时等待，config: {seconds}）、output（输出，config: {fields?}）
+
+规则：
+1. 每个工作流必须以一个触发器节点开始
+2. 通常以 output 节点结束
+3. 节点 id 用简短的英文标识如 "trigger1", "ai1", "filter1"
+4. config 中的模板字段支持 {{node_id.field}} 引用上游输出
+5. 生成 explanation 简要说明设计思路
+6. edges 的 source 和 target 必须是已有节点的 id"#;
+
+#[tauri::command]
+pub async fn ai_generate_workflow(
+    prompt: String,
+    current_nodes: Option<Vec<AiGenNode>>,
+    provider_id: Option<String>,
+    model: Option<String>,
+) -> Result<AiGeneratedWorkflow, String> {
+    use crate::providers_commands::{find_provider, resolve_api_key};
+    use providers::client::ProviderClient;
+
+    if prompt.trim().is_empty() {
+        return Err("请描述你想要创建的工作流".into());
+    }
+
+    let provider_cfg = if let Some(id) = provider_id.as_deref().filter(|s| !s.is_empty()) {
+        find_provider(id)?
+    } else {
+        let state = crate::providers_commands::get_providers_state()?;
+        let id = state
+            .active_provider_id
+            .or_else(|| state.providers.first().map(|p| p.id.clone()))
+            .ok_or_else(|| "请先在「模型服务」中配置至少一个供应商".to_string())?;
+        find_provider(&id)?
+    };
+
+    let (has, _, _, key) = resolve_api_key(&provider_cfg);
+    if provider_cfg.kind.requires_api_key() && !has {
+        return Err(format!(
+            "未配置 API Key。请在「模型服务」中为 {} 保存密钥。",
+            provider_cfg.display_name
+        ));
+    }
+    let api_key = key.unwrap_or_default();
+    let model_name = model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(provider_cfg.model.as_str())
+        .to_string();
+    if model_name.trim().is_empty() {
+        return Err("当前供应商未设置默认模型".into());
+    }
+
+    let base_url = if provider_cfg.endpoint.trim().is_empty() {
+        None
+    } else {
+        Some(provider_cfg.endpoint.trim_end_matches('/').to_string())
+    };
+
+    let client = ProviderClient::from_config(provider_cfg.kind.backend_id(), api_key, base_url);
+
+    // 构建用户消息：包含当前画布状态
+    let mut user_msg = prompt.clone();
+    if let Some(nodes) = &current_nodes {
+        if !nodes.is_empty() {
+            let existing = serde_json::to_string(nodes).unwrap_or_default();
+            user_msg = format!(
+                "{}\n\n当前画布上已有的节点：\n{}\n\n请在此基础上修改或扩展。",
+                prompt, existing
+            );
+        }
+    }
+
+    let extractor = client
+        .extractor::<AiGeneratedWorkflow>(&model_name)
+        .preamble(AI_WORKFLOW_SYSTEM_PROMPT)
+        .build();
+
+    let result = extractor
+        .extract(&user_msg)
+        .await
+        .map_err(|e| format!("AI 生成失败: {e}"))?;
+
+    Ok(result)
+}

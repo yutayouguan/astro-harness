@@ -13,8 +13,10 @@ pub enum NodeResult {
     Branch(Vec<String>),
     /// 过滤节点：条件不满足，阻断下游
     Filtered,
-    /// 人工审批：暂停执行（当前实现直接放行）
+    /// 人工审批通过
     Approved,
+    /// 人工审批：暂停执行等待审批
+    PendingApproval { prompt: String },
 }
 
 /// 节点执行器 trait —— 每种 NodeType 实现一个

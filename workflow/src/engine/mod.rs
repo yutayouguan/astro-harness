@@ -201,6 +201,19 @@ async fn execute_inner_with_depth(
                     ctx.set_node_output(node_id, serde_json::json!({ "approved": true }));
                     let _ = run_db.finish_step_log(&step_id, "success", &step_finished, Some("approved"), None);
                 }
+                Ok(NodeResult::PendingApproval { prompt }) => {
+                    let _ = run_db.finish_step_log(
+                        &step_id, "pending_approval", &step_finished,
+                        Some(&serde_json::json!({"prompt": prompt, "node_id": node_id}).to_string()), None,
+                    );
+                    return Ok(WorkflowRunResult {
+                        run_id: run_id.to_string(),
+                        status: "pending_approval".to_string(),
+                        output: Some(serde_json::json!({"pending_node": node_id, "prompt": prompt})),
+                        error: None,
+                        steps_executed,
+                    });
+                }
                 Err(e) => {
                     let err_msg = e.to_string();
                     // ── 2.1 错误策略 ──

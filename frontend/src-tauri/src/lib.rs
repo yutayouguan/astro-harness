@@ -375,6 +375,7 @@ pub fn run() {
             loop_commands::list_loop_step_logs,
             loop_commands::export_loop,
             loop_commands::import_loop,
+            loop_commands::ai_generate_workflow,
             config_commands::get_tools_enabled,
             config_commands::set_tools_enabled,
             config_commands::get_tool_catalog,

@@ -127,8 +127,12 @@ impl NodeExecutor for HumanApprovalExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
         let prompt = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
         let resolved_prompt = ctx.interpolate(prompt);
-        tracing::info!(prompt = %resolved_prompt, "人工审批节点：当前自动放行");
-        // 真实实现需要暂停执行并等待用户审批
-        Ok(NodeResult::Approved)
+        let auto_approve = node.config.get("auto_approve").and_then(|v| v.as_bool()).unwrap_or(false);
+        if auto_approve {
+            tracing::info!(prompt = %resolved_prompt, "人工审批节点：自动放行");
+            return Ok(NodeResult::Approved);
+        }
+        tracing::info!(prompt = %resolved_prompt, "人工审批节点：等待用户审批");
+        Ok(NodeResult::PendingApproval { prompt: resolved_prompt })
     }
 }

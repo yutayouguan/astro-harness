@@ -755,6 +755,19 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         />
         <div className="loop-editor-toolbar-right">
           <button
+            className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
+            title="AI 助手"
+            onClick={() => {
+              setShowAiAssistant((v) => !v);
+              if (!showAiAssistant) {
+                setSelectedNodeId(null);
+                setShowHistory(false);
+              }
+            }}
+          >
+            <LucideIcons.Sparkles size={16} />
+          </button>
+          <button
             className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}
             title="工作流变量"
             onClick={() => setShowVarsPanel((v) => !v)}
@@ -1097,6 +1110,55 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               变量可在节点配置中通过 {"{{变量名}}"} 引用
             </div>
           </div>
+        )}
+
+        {/* ── Right: AI Assistant ── */}
+        {showAiAssistant && (
+          <LoopAiAssistant
+            currentNodes={nodes.map((n) => ({
+              id: n.id,
+              node_type: ((n.data as Record<string, unknown>).nodeType as string) ?? "",
+              label: ((n.data as Record<string, unknown>).label as string) ?? "",
+              config: ((n.data as Record<string, unknown>).config as Record<string, unknown>) ?? {},
+            }))}
+            onApply={(genNodes, genEdges) => {
+              // 自动布局：水平分层
+              const layoutX = 200;
+              const layoutY = 100;
+              const gapX = 250;
+              const gapY = 120;
+
+              const newRfNodes = genNodes.map((n, i) => {
+                const meta = NODE_REGISTRY.find((m) => m.type === n.node_type) ?? NODE_REGISTRY[0];
+                return {
+                  id: n.id,
+                  type: "loopNode" as const,
+                  position: { x: layoutX + (i % 4) * gapX, y: layoutY + Math.floor(i / 4) * gapY },
+                  data: {
+                    label: n.label,
+                    meta,
+                    config: n.config,
+                    nodeType: n.node_type as NodeType,
+                    disabled: false,
+                  },
+                };
+              });
+
+              const newRfEdges = genEdges.map((e, i) => ({
+                id: `ai-edge-${i}`,
+                source: e.source,
+                sourceHandle: e.source_handle ?? undefined,
+                target: e.target,
+                animated: true,
+              }));
+
+              setNodes(newRfNodes);
+              setEdges(newRfEdges);
+              setDirty(true);
+              setShowAiAssistant(false);
+            }}
+            onClose={() => setShowAiAssistant(false)}
+          />
         )}
       </div>
 
