@@ -10,9 +10,11 @@
 //! - [`defaults`]：默认模型 / 基址常量
 
 pub mod defaults;
+pub mod embeddings_http;
 pub mod image_http;
 pub mod media_compat;
 pub mod responses;
+pub mod tts_http;
 
 pub use defaults::{DEFAULT_API_BASE, DEFAULT_VISION_MODEL};
 
