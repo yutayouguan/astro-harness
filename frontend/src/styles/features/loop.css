@@ -585,46 +585,59 @@
 }
 
 .loop-editor-name-wrap {
-  flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
   min-width: 0;
 }
 
-.loop-editor-name {
-  flex: 1;
+/* 只读态：纯文本按钮 */
+.loop-editor-name-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 15px;
   font-weight: 600;
   color: var(--ink);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 5px 10px;
-  outline: none;
-  min-width: 0;
-  transition: border-color 0.15s, background 0.15s;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  max-width: 280px;
+  transition: background 0.12s;
 }
-.loop-editor-name-wrap:hover .loop-editor-name {
-  border-color: var(--border);
-  background: var(--bg0, #fff);
+.loop-editor-name-display:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
-.loop-editor-name:focus {
-  border-color: var(--tone, #6366f1);
-  background: var(--bg0, #fff);
+.loop-editor-name-display > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .loop-editor-name-edit {
   color: var(--ink-tertiary);
   opacity: 0;
   flex-shrink: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.12s;
 }
-.loop-editor-name-wrap:hover .loop-editor-name-edit {
+.loop-editor-name-display:hover .loop-editor-name-edit {
   opacity: 1;
 }
-.loop-editor-name:focus ~ .loop-editor-name-edit {
-  opacity: 0;
+
+/* 编辑态：input */
+.loop-editor-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--bg0, #fff);
+  border: 1px solid var(--tone, #6366f1);
+  border-radius: 6px;
+  padding: 4px 10px;
+  outline: none;
+  width: 240px;
+  max-width: 280px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
 }
 
 .loop-editor-toolbar-right {

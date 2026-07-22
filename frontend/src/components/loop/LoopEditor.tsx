@@ -122,6 +122,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [name, setName] = useState("未命名创建loop");
   const [, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
@@ -384,15 +386,33 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <ArrowLeft size={16} />
         </button>
         <div className="loop-editor-name-wrap">
-          <input
-            className="loop-editor-name"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setDirty(true);
-            }}
-          />
-          <LucideIcons.Pencil size={13} className="loop-editor-name-edit" />
+          {editingName ? (
+            <input
+              ref={nameInputRef}
+              className="loop-editor-name loop-editor-name--editing"
+              value={name}
+              autoFocus
+              onChange={(e) => {
+                setName(e.target.value);
+                setDirty(true);
+              }}
+              onBlur={() => setEditingName(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === "Escape") {
+                  setEditingName(false);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+            />
+          ) : (
+            <button
+              className="loop-editor-name-display"
+              onClick={() => setEditingName(true)}
+            >
+              <span>{name}</span>
+              <LucideIcons.Pencil size={12} className="loop-editor-name-edit" />
+            </button>
+          )}
         </div>
         <div className="loop-editor-toolbar-right">
           <button
