@@ -111,6 +111,143 @@ const nodeTypes: NodeTypes = {
   loopNode: LoopNode as unknown as NodeTypes[string],
 };
 
+// ── Connection-drop node picker popup ───────────────────────────────
+
+interface NodePickerProps {
+  x: number;
+  y: number;
+  savedLoops: LoopDto[];
+  onSelect: (nodeType: NodeType, label?: string, config?: Record<string, unknown>) => void;
+  onClose: () => void;
+}
+
+function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useLayoutEffect(() => {
+    if (!menuRef.current) return;
+    const size = measurePopoverSize(menuRef.current);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const bounds = { left: 0, top: 0, right: vw, bottom: vh };
+    const result = clampPopover({
+      anchorRect: pointAnchor(x, y),
+      popoverSize: size,
+      bounds,
+      pad: 12,
+      gap: 0,
+    });
+    setPos({ left: result.left, top: result.top });
+  }, [x, y]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onPointer = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onPointer);
+    };
+  }, [onClose]);
+
+  const q = search.toLowerCase().trim();
+
+  const menu = (
+    <div
+      ref={menuRef}
+      className="loop-node-picker"
+      style={{
+        position: "fixed",
+        left: pos?.left ?? x,
+        top: pos?.top ?? y,
+        zIndex: 9999,
+        visibility: pos ? "visible" : "hidden",
+      }}
+    >
+      <div className="loop-node-picker-search">
+        <LucideIcons.Search size={14} className="loop-node-picker-search-icon" />
+        <input
+          ref={inputRef}
+          type="text"
+          className="loop-node-picker-search-input"
+          placeholder="搜索节点…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+      <div className="loop-node-picker-body">
+        {NODE_CATEGORIES.filter((cat) => cat.key !== "custom").map((cat) => {
+          const items = getNodesByCategory(cat.key).filter(
+            (m) => !q || m.label.toLowerCase().includes(q) || m.labelEn.toLowerCase().includes(q),
+          );
+          if (items.length === 0) return null;
+          const CatIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[cat.icon];
+          return (
+            <div key={cat.key} className="loop-node-picker-group">
+              <div className="loop-node-picker-group-header">
+                {CatIcon && <CatIcon size={12} />}
+                <span>{cat.label}</span>
+              </div>
+              {items.map((meta) => {
+                const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
+                return (
+                  <button
+                    key={meta.type}
+                    className="loop-node-picker-item"
+                    onClick={() => onSelect(meta.type)}
+                  >
+                    <span className="loop-node-picker-item-icon" style={{ color: meta.color }}>
+                      {IconComp && <IconComp size={16} />}
+                    </span>
+                    <span>{meta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+        {savedLoops.length > 0 && (
+          <div className="loop-node-picker-group">
+            <div className="loop-node-picker-group-header">
+              <LucideIcons.Workflow size={12} />
+              <span>已保存流程</span>
+            </div>
+            {savedLoops
+              .filter((lp) => !q || lp.name.toLowerCase().includes(q))
+              .map((lp) => (
+                <button
+                  key={lp.id}
+                  className="loop-node-picker-item"
+                  onClick={() => onSelect("custom_loop" as NodeType, lp.name, { workflow_id: lp.id })}
+                >
+                  <span className="loop-node-picker-item-icon" style={{ color: "#8b5cf6" }}>
+                    <LucideIcons.Workflow size={16} />
+                  </span>
+                  <span>{lp.name}</span>
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return createPortal(menu, document.body);
+}
+
 // ── Editor (wrapped with ReactFlowProvider) ─────────────────────────
 
 export default function LoopEditor(props: Props) {
@@ -130,6 +267,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [iconData, setIconData] = useState<LoopIconData | null>(null);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
@@ -315,7 +453,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       ]);
       setEdges((eds) =>
         addEdge(
-          { source: connectDrop.sourceNodeId, sourceHandle: connectDrop.sourceHandleId ?? undefined, target: newId, animated: true },
+          { id: crypto.randomUUID(), source: connectDrop.sourceNodeId, sourceHandle: connectDrop.sourceHandleId ?? undefined, target: newId, animated: true },
           eds,
         ),
       );
@@ -469,7 +607,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   );
 
   return (
-    <div className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}>
+    <div ref={editorRef} className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}>
       {/* ── Toolbar ── */}
       <div className="loop-editor-toolbar">
         <button className="loop-icon-btn" onClick={onBack} title="返回">
@@ -687,8 +825,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               setDirty(true);
             }}
             onConnect={onConnect}
+            onConnectStart={onConnectStart}
+            onConnectEnd={onConnectEnd}
             onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-            onPaneClick={() => setSelectedNodeId(null)}
+            onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); }}
             nodeTypes={nodeTypes}
             snapToGrid
             snapGrid={[1, 1]}
@@ -787,6 +927,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         selectedId={iconData?.id}
         initialPaint={iconData?.paint}
         initialStyle={iconData?.style}
+        toneStyle={toneStyleFromElement(editorRef.current)}
         onClose={() => setIconPickerOpen(false)}
         onSelect={(icon, paint, style) => {
           setIconData({ id: icon.id, paint, style });
@@ -794,6 +935,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           setDirty(true);
         }}
       />
+
+      {/* ── Connection-drop node picker ── */}
+      {connectDrop && (
+        <LoopNodePicker
+          x={connectDrop.x}
+          y={connectDrop.y}
+          savedLoops={savedLoops}
+          onSelect={handleNodePickerSelect}
+          onClose={() => setConnectDrop(null)}
+        />
+      )}
 
       {/* ── Drag ghost (follows cursor during custom drag) ── */}
       {draggingType && dragGhostPos && (() => {

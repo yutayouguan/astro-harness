@@ -889,6 +889,108 @@
   opacity: 0.9;
 }
 
+/* ── Connection-drop node picker ──────────────────────────────── */
+
+.loop-node-picker {
+  width: 240px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--glass-panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  animation: loop-picker-in 0.15s ease;
+}
+
+@keyframes loop-picker-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.loop-node-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.loop-node-picker-search-icon {
+  color: var(--ink-tertiary);
+  flex-shrink: 0;
+}
+
+.loop-node-picker-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+}
+.loop-node-picker-search-input::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.loop-node-picker-body {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.loop-node-picker-group {
+  margin-bottom: 4px;
+}
+
+.loop-node-picker-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.loop-node-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  transition: background 0.1s;
+  text-align: left;
+}
+
+.loop-node-picker-item:hover {
+  background: color-mix(in srgb, var(--tone, #ec4899) 10%, transparent);
+}
+
+.loop-node-picker-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  flex-shrink: 0;
+}
+
 /* ── Canvas ────────────────────────────────────────────────────── */
 
 .loop-canvas-container {
