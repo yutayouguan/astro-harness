@@ -573,6 +573,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
+  padding-top: 38px;
   border-bottom: 1px solid var(--border);
   background: var(--glass-panel);
   flex-shrink: 0;
@@ -651,6 +652,7 @@
 .loop-editor-toolbar-right {
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
 .loop-editor-body {
