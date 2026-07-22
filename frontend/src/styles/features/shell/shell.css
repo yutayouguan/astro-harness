@@ -580,6 +580,11 @@ html[data-tone="twilight"] {
   pointer-events: auto;
 }
 
+/* 浮层模式（非固定）时必须盖住 content-header / header-actions(45) / model-picker(50) */
+.sidebar.is-open:not(.is-pinned) {
+  z-index: 60;
+}
+
 /* 固定：参与布局占位，不再浮层遮挡内容 */
 .sidebar.is-pinned {
   position: relative;
