@@ -46,8 +46,8 @@ pub struct AudioUnderstandArgs {
 /// 向注册表登记 `audio_understand` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "audio_understand".to_string(),
-        toolset: "audio_understand".to_string(),
+        name: "audio_analyze".to_string(),
+        toolset: "audio_analyze".to_string(),
         description: "Analyze audio (workspace path, http(s), or YouTube). Modes: describe, transcribe. Google Interactions API; OpenAI Whisper fallback for transcribe."
             .to_string(),
         schema: schema_for_args::<AudioUnderstandArgs>(),
@@ -59,7 +59,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["audio_understand"],
+    names: ["audio_analyze"],
     async_ctx: dispatch,
 }
 

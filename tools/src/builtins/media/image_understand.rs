@@ -36,8 +36,8 @@ pub struct ImageUnderstandArgs {
 /// 向注册表登记 `image_understand` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "image_understand".to_string(),
-        toolset: "image_understand".to_string(),
+        name: "image_analyze".to_string(),
+        toolset: "image_analyze".to_string(),
         description: "Analyze image(s). Modes: describe, detect, segment. Pass image_urls or legacy image_url. Google Interactions API; OpenAI fallback."
             .to_string(),
         schema: schema_for_args::<ImageUnderstandArgs>(),
@@ -49,7 +49,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["image_understand"],
+    names: ["image_analyze"],
     async_ctx: dispatch,
 }
 

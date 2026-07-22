@@ -123,8 +123,8 @@ fn mime_from_path(path: &std::path::Path) -> &'static str {
 /// 向注册表登记 `video_understand` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "video_understand".into(),
-        toolset: "video_understand".into(),
+        name: "video_analyze".into(),
+        toolset: "video_analyze".into(),
         description: "Analyze a video (workspace path, http(s), or YouTube). Modes: qa, summarize, timeline. Google Interactions only.".into(),
         schema: schema_for_args::<VideoUnderstandArgs>(),
         check_fn: None,
@@ -135,7 +135,7 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["video_understand"],
+    names: ["video_analyze"],
     async_ctx: dispatch,
 }
 

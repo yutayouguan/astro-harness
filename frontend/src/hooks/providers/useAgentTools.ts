@@ -35,12 +35,12 @@ export type AgentToolId =
   | "terminal"
   | "file_ops"
   | "code_exec"
-  | "image_understand"
+  | "image_analyze"
   | "robotics"
-  | "audio_understand"
+  | "audio_analyze"
   | "image_gen"
   | "video_gen"
-  | "video_understand"
+  | "video_analyze"
   | "speech_gen"
   | "music_gen"
   | "skills"
@@ -169,9 +169,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "image_understand",
-    titleKey: "agentTools.imageUnderstand.title",
-    descKey: "agentTools.imageUnderstand.desc",
+    id: "image_analyze",
+    titleKey: "agentTools.imageAnalyze.title",
+    descKey: "agentTools.imageAnalyze.desc",
     Icon: IconEye,
     tone: "pink",
     params: [
@@ -194,9 +194,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "audio_understand",
-    titleKey: "agentTools.audioUnderstand.title",
-    descKey: "agentTools.audioUnderstand.desc",
+    id: "audio_analyze",
+    titleKey: "agentTools.audioAnalyze.title",
+    descKey: "agentTools.audioAnalyze.desc",
     Icon: IconAudioUnderstand,
     tone: "cyan",
     params: [
@@ -240,9 +240,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "video_understand",
-    titleKey: "agentTools.videoUnderstand.title",
-    descKey: "agentTools.videoUnderstand.desc",
+    id: "video_analyze",
+    titleKey: "agentTools.videoAnalyze.title",
+    descKey: "agentTools.videoAnalyze.desc",
     Icon: IconVideoGen,
     tone: "rose",
     params: [
