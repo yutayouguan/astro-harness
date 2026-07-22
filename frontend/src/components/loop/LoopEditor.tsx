@@ -43,6 +43,7 @@ import LoopAiAssistant from "./LoopAiAssistant";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useI18n } from "../../i18n/LocaleContext";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 
 interface Props {
@@ -200,6 +201,7 @@ interface NodePickerProps {
 }
 
 function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps) {
+  const { t } = useI18n();
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [search, setSearch] = useState("");
@@ -261,7 +263,7 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
           ref={inputRef}
           type="text"
           className="loop-node-picker-search-input"
-          placeholder="搜索节点…"
+          placeholder={t("loop.searchNodes")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -301,7 +303,7 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
           <div className="loop-node-picker-group">
             <div className="loop-node-picker-group-header">
               <LucideIcons.Workflow size={12} />
-              <span>已保存流程</span>
+              <span>{t("loop.savedFlows")}</span>
             </div>
             {savedLoops
               .filter((lp) => !q || lp.name.toLowerCase().includes(q))
@@ -338,10 +340,11 @@ export default function LoopEditor(props: Props) {
 
 function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const reactFlowInstance = useReactFlow();
+  const { t } = useI18n();
   const { showToast, toastHost } = useTransientToast();
   const confirm = useConfirm();
   const [workflow, setWorkflow] = useState<LoopDto | null>(null);
-  const [name, setName] = useState("未命名创建loop");
+  const [name, setName] = useState(t("loop.defaultName"));
   const [description, setDescription] = useState("");
   const [variables, setVariables] = useState<Record<string, unknown>>({});
   const [showVarsPanel, setShowVarsPanel] = useState(false);
@@ -393,10 +396,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         ...n,
         data: {
           ...n.data,
-          onRunNode: () => showToast("暂不支持单节点运行", { tone: "info" }),
+          onRunNode: () => showToast(t("loop.runNodeUnsupported"), { tone: "info" }),
           onToggleDisable: () => toggleNodeDisabled(n.id),
           onDeleteNode: async () => {
-            const ok = await confirm({ title: "删除节点", message: `确定删除「${(n.data as Record<string, unknown>).label}」吗？`, confirmLabel: "删除", variant: "danger" });
+            const ok = await confirm({ title: t("loop.deleteNode"), message: t("loop.deleteNodeConfirm").replace("{name}", String((n.data as Record<string, unknown>).label)), confirmLabel: t("loop.delete"), variant: "danger" });
             if (ok) deleteNode(n.id);
           },
         },
@@ -581,7 +584,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       const saved = await invoke<LoopDto>("save_loop", { data: dto });
       setWorkflow(saved);
       setDirty(false);
-      showToast("已保存", { tone: "success" });
+      showToast(t("loop.saved"), { tone: "success" });
     } catch (e) {
       showToast(String(e), { tone: "error" });
     } finally {
@@ -704,11 +707,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       <div className="loop-editor-toolbar">
         <button className="loop-icon-btn" onClick={async () => {
           if (dirty) {
-            const ok = await confirm({ title: "未保存更改", message: "离开将丢失未保存的更改，确定吗？", confirmLabel: "离开", variant: "danger" });
+            const ok = await confirm({ title: t("loop.unsavedTitle"), message: t("loop.unsavedMessage"), confirmLabel: t("loop.unsavedLeave"), variant: "danger" });
             if (!ok) return;
           }
           onBack();
-        }} title="返回">
+        }} title={t("loop.back")}>
           <ArrowLeft size={16} />
         </button>
         <button
@@ -751,7 +754,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           className="loop-editor-desc"
           value={description}
           onChange={(e) => { setDescription(e.target.value); setDirty(true); }}
-          placeholder="添加工作流描述…"
+          placeholder={t("loop.descPlaceholder")}
         />
         <div className="loop-editor-toolbar-right">
           <button
@@ -769,21 +772,21 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           </button>
           <button
             className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}
-            title="工作流变量"
+            title={t("loop.variables")}
             onClick={() => setShowVarsPanel((v) => !v)}
           >
             <LucideIcons.Variable size={16} />
           </button>
           <button
             className={`loop-icon-btn${fullscreen ? " is-active" : ""}`}
-            title={fullscreen ? "退出全屏" : "全屏编辑"}
+            title={fullscreen ? t("loop.exitFullscreen") : t("loop.fullscreen")}
             onClick={() => setFullscreen((v) => !v)}
           >
             {fullscreen ? <LucideIcons.Minimize2 size={16} /> : <LucideIcons.Maximize2 size={16} />}
           </button>
           <button
             className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
-            title="运行日志"
+            title={t("loop.history")}
             onClick={() => {
               setShowHistory((v) => !v);
               setSelectedRunId(null);
@@ -797,7 +800,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             disabled={saving}
           >
             <Save size={14} />
-            <span>{saving ? "保存中…" : "保存"}</span>
+            <span>{saving ? t("loop.saving") : t("loop.save")}</span>
           </button>
           <button
             className="loop-btn loop-btn--primary"
@@ -806,7 +809,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               await handleSave();
               try {
                 const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: workflow.id });
-                showToast(`运行完成，执行了 ${result.steps_executed} 个节点`, { tone: "success" });
+                showToast(t("loop.runComplete").replace("{count}", String(result.steps_executed)), { tone: "success" });
                 setShowHistory(true);
               } catch (e) {
                 showToast(String(e), { tone: "error" });
@@ -814,7 +817,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             }}
           >
             <Play size={14} />
-            <span>运行一次</span>
+            <span>{t("loop.run")}</span>
           </button>
         </div>
       </div>
@@ -1050,7 +1053,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         {showVarsPanel && (
           <div className="loop-vars-panel">
             <div className="loop-vars-panel-header">
-              <span className="loop-vars-panel-title">工作流变量</span>
+              <span className="loop-vars-panel-title">{t("loop.variables")}</span>
               <button className="loop-icon-btn" onClick={() => setShowVarsPanel(false)} title="关闭">
                 <LucideIcons.X size={14} />
               </button>
@@ -1103,11 +1106,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 }}
               >
                 <LucideIcons.Plus size={12} />
-                <span>添加变量</span>
+                <span>{t("loop.addVariable")}</span>
               </button>
             </div>
             <div className="loop-vars-panel-hint">
-              变量可在节点配置中通过 {"{{变量名}}"} 引用
+              {t("loop.variablesHint")}
             </div>
           </div>
         )}

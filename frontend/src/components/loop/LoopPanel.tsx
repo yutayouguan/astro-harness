@@ -123,7 +123,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
   const handleCreate = async () => {
     try {
       const created = await invoke<LoopDto>("create_loop", {
-        name: "未命名创建loop",
+        name: t("loop.defaultName"),
         description: "",
       });
       setEditingId(created.id);
@@ -136,12 +136,12 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
   };
 
   const handleDelete = async (id: string, name: string) => {
-    const ok = await confirm({ title: "删除工作流", message: `确定删除「${name}」吗？此操作不可撤销。`, confirmLabel: "删除", variant: "danger" });
+    const ok = await confirm({ title: t("loop.deleteTitle"), message: t("loop.deleteConfirm").replace("{name}", name), confirmLabel: t("loop.delete"), variant: "danger" });
     if (!ok) return;
     try {
       await invoke("delete_loop", { id });
       if (selectedDetailId === id) setSelectedDetailId(null);
-      showToast("已删除", { tone: "success" });
+      showToast(t("loop.deleted"), { tone: "success" });
       void refresh();
     } catch (e) {
       showToast(String(e), { tone: "error" });
@@ -220,11 +220,11 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
     <div className="loop-card-actions">
       <button
         className="loop-icon-btn"
-        title="运行一次"
+        title={t("loop.run")}
         onClick={async () => {
           try {
             const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: lp.id });
-            showToast(`运行完成，执行了 ${result.steps_executed} 个节点`, { tone: "success" });
+            showToast(t("loop.runComplete").replace("{count}", String(result.steps_executed)), { tone: "success" });
             void refresh();
           } catch (e) {
             showToast(String(e), { tone: "error" });
@@ -235,7 +235,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       </button>
       <button
         className="loop-icon-btn"
-        title="编辑"
+        title={t("loop.edit")}
         onClick={() => {
           setEditingId(lp.id);
           setIsEditing(true);
@@ -246,14 +246,14 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       </button>
       <button
         className="loop-icon-btn"
-        title="导出"
+        title={t("loop.export")}
         onClick={() => void handleExport(lp.id)}
       >
         <Download size={14} />
       </button>
       <button
         className="loop-icon-btn loop-icon-btn--danger"
-        title="删除"
+        title={t("loop.delete")}
         onClick={() => void handleDelete(lp.id, lp.name)}
       >
         <Trash2 size={14} />
@@ -273,15 +273,15 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             <div className="loop-card-info">
               <span className="loop-card-name">{lp.name}</span>
               <span className={`loop-card-badge${lastRuns[lp.id]?.status === "running" ? " is-running" : ""}`}>
-                {lastRuns[lp.id]?.status === "running" ? "运行中" : "空闲"}
+                {lastRuns[lp.id]?.status === "running" ? t("loop.statusRunning") : t("loop.statusIdle")}
               </span>
             </div>
             {renderCardActions(lp)}
           </div>
           <div className="loop-card-meta">
-            <span>{lp.nodes.length} 个节点</span>
+            <span>{t("loop.nodeCount").replace("{count}", String(lp.nodes.length))}</span>
             <span>·</span>
-            <span>上次运行: {lastRuns[lp.id]?.time ?? "从未"}</span>
+            <span>{t("loop.lastRun")}: {lastRuns[lp.id]?.time ?? t("loop.lastRunNever")}</span>
           </div>
           <div className="loop-card-toggles">
             <label className="loop-toggle">
@@ -291,7 +291,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                 onChange={(e) => void handleToggleEnabled(lp.id, e.target.checked)}
               />
               <Power size={12} />
-              <span>启用</span>
+              <span>{t("loop.enabled")}</span>
             </label>
             <label className="loop-toggle">
               <input
@@ -300,7 +300,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                 onChange={(e) => void handleToggleAiCallable(lp.id, e.target.checked)}
               />
               <Bot size={12} />
-              <span>AI 可调用</span>
+              <span>{t("loop.aiCallable")}</span>
             </label>
           </div>
         </article>
@@ -319,7 +319,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
           <div className="loop-list-row-body">
             <span className="loop-list-row-name">{lp.name}</span>
             <span className="loop-list-row-meta">
-              {lp.nodes.length} 个节点 · 上次运行: {lastRuns[lp.id]?.time ?? "从未"}
+              {t("loop.nodeCount").replace("{count}", String(lp.nodes.length))} · {t("loop.lastRun")}: {lastRuns[lp.id]?.time ?? t("loop.lastRunNever")}
             </span>
           </div>
           <div className="loop-list-row-toggles">
@@ -329,7 +329,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                 checked={lp.enabled}
                 onChange={(e) => void handleToggleEnabled(lp.id, e.target.checked)}
               />
-              <span>启用</span>
+              <span>{t("loop.enabled")}</span>
             </label>
             <label className="loop-toggle loop-toggle--compact">
               <input
@@ -341,7 +341,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             </label>
           </div>
           <span className={`loop-list-row-badge${lp.enabled ? " is-active" : ""}`}>
-            {lp.enabled ? "已启用" : "未启用"}
+            {lp.enabled ? t("loop.enabledYes") : t("loop.enabledNo")}
           </span>
           {renderCardActions(lp)}
         </div>
@@ -364,7 +364,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             </div>
             <div className="loop-detail-sidebar-text">
               <span className="loop-detail-sidebar-name">{lp.name}</span>
-              <span className="loop-detail-sidebar-meta">{lp.nodes.length} 个节点</span>
+              <span className="loop-detail-sidebar-meta">{t("loop.nodeCount").replace("{count}", String(lp.nodes.length))}</span>
             </div>
             <span className={`loop-detail-sidebar-dot${lp.enabled ? " is-active" : ""}`} />
           </button>
@@ -380,27 +380,27 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
               <div>
                 <h3 className="loop-detail-panel-title">{selectedDetail.name}</h3>
                 <span className={`loop-detail-panel-badge${lastRuns[selectedDetail.id]?.status === "running" ? " is-running" : ""}`}>
-                  {lastRuns[selectedDetail.id]?.status === "running" ? "运行中" : "空闲"}
+                  {lastRuns[selectedDetail.id]?.status === "running" ? t("loop.statusRunning") : t("loop.statusIdle")}
                 </span>
               </div>
               {renderCardActions(selectedDetail)}
             </div>
             <div className="loop-detail-panel-grid">
               <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">节点数</span>
+                <span className="loop-detail-panel-cell-label">{t("loop.nodes")}</span>
                 <span className="loop-detail-panel-cell-value">{selectedDetail.nodes.length}</span>
               </div>
               <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">上次运行</span>
-                <span className="loop-detail-panel-cell-value">{lastRuns[selectedDetail.id]?.time ?? "从未"}</span>
+                <span className="loop-detail-panel-cell-label">{t("loop.lastRun")}</span>
+                <span className="loop-detail-panel-cell-value">{lastRuns[selectedDetail.id]?.time ?? t("loop.lastRunNever")}</span>
               </div>
               <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">状态</span>
-                <span className="loop-detail-panel-cell-value">{selectedDetail.enabled ? "已启用" : "未启用"}</span>
+                <span className="loop-detail-panel-cell-label">{t("loop.enabled")}</span>
+                <span className="loop-detail-panel-cell-value">{selectedDetail.enabled ? t("loop.enabledYes") : t("loop.enabledNo")}</span>
               </div>
               <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">AI 可调用</span>
-                <span className="loop-detail-panel-cell-value">{selectedDetail.ai_callable ? "是" : "否"}</span>
+                <span className="loop-detail-panel-cell-label">{t("loop.aiCallable")}</span>
+                <span className="loop-detail-panel-cell-value">{selectedDetail.ai_callable ? t("loop.yes") : t("loop.no")}</span>
               </div>
             </div>
             <div className="loop-detail-panel-toggles">
@@ -411,7 +411,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                   onChange={(e) => void handleToggleEnabled(selectedDetail.id, e.target.checked)}
                 />
                 <Power size={12} />
-                <span>启用</span>
+                <span>{t("loop.enabled")}</span>
               </label>
               <label className="loop-toggle">
                 <input
@@ -420,13 +420,13 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                   onChange={(e) => void handleToggleAiCallable(selectedDetail.id, e.target.checked)}
                 />
                 <Bot size={12} />
-                <span>AI 可调用</span>
+                <span>{t("loop.aiCallable")}</span>
               </label>
             </div>
           </>
         ) : (
           <div className="loop-detail-panel-empty">
-            选择一个 Loop 查看详情
+            {t("loop.detailSelect")}
           </div>
         )}
       </div>
@@ -466,24 +466,24 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
           </div>
           <button className="loop-btn loop-btn--secondary" onClick={handleImport}>
             <Upload size={14} />
-            <span>导入</span>
+            <span>{t("loop.import")}</span>
           </button>
           <button className="loop-btn loop-btn--primary" onClick={handleCreate}>
             <Plus size={14} />
-            <span>新建</span>
+            <span>{t("loop.create")}</span>
           </button>
         </div>
       </div>
 
       {/* ── Content ── */}
       <div className="loop-content">
-        {loading && <div className="loop-empty">加载中…</div>}
+        {loading && <div className="loop-empty">{t("loop.loading")}</div>}
         {!loading && filtered.length === 0 && (
           <EmptyIllustration
             scene="loop"
             className="loop-empty-illust"
-            title={search.trim() ? "未找到匹配的 Loop" : "暂无 Loop 工作流"}
-            hint={search.trim() ? undefined : "点击「新建」开始搭建你的第一条自动化流程"}
+            title={search.trim() ? t("loop.emptySearch") : t("loop.emptyTitle")}
+            hint={search.trim() ? undefined : t("loop.emptyHint")}
           />
         )}
         {!loading && filtered.length > 0 && viewMode === "gallery" && renderGallery()}
