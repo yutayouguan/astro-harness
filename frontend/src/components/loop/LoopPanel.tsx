@@ -60,9 +60,11 @@ function IconViewDetail(props: SVGProps<SVGSVGElement>) {
 interface Props {
   active: boolean;
   providers: { id: string; name: string; model: string; kind: string }[];
+  onCollapseSidebar?: () => void;
+  onExpandSidebar?: () => void;
 }
 
-export default function LoopPanel({ active, providers }: Props) {
+export default function LoopPanel({ active, providers, onCollapseSidebar, onExpandSidebar }: Props) {
   const { t } = useI18n();
   const [loops, setLoops] = useState<LoopDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,6 +113,7 @@ export default function LoopPanel({ active, providers }: Props) {
       });
       setEditingId(created.id);
       setIsEditing(true);
+      onCollapseSidebar?.();
       void refresh();
     } catch (e) {
       console.error("create_loop failed", e);
@@ -187,6 +190,7 @@ export default function LoopPanel({ active, providers }: Props) {
         onBack={() => {
           setIsEditing(false);
           setEditingId(null);
+          onExpandSidebar?.();
           void refresh();
         }}
       />
@@ -216,6 +220,7 @@ export default function LoopPanel({ active, providers }: Props) {
         onClick={() => {
           setEditingId(lp.id);
           setIsEditing(true);
+          onCollapseSidebar?.();
         }}
       >
         <Pencil size={14} />
@@ -413,18 +418,6 @@ export default function LoopPanel({ active, providers }: Props) {
 
   return (
     <div className="loop-panel">
-      {/* ── Header ── */}
-      <div className="loop-panel-header">
-        <div className="loop-panel-title-area">
-          <h2 className="loop-panel-title">Loop</h2>
-          <p className="loop-panel-desc">
-            用节点搭好一条自动化流程：手动运行、按定时 / Webhook
-            自动触发，或让 code 模式的智能体直接调用。每条流程下方有「启用」和「AI
-            可调用」两个开关。
-          </p>
-        </div>
-      </div>
-
       {/* ── Toolbar ── */}
       <div className="loop-toolbar">
         <div className="loop-toolbar-end">
