@@ -313,6 +313,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           {NODE_CATEGORIES.map((cat) => {
             const items = getNodesByCategory(cat.key);
             const isCollapsed = !!collapsed[cat.key];
+            const CatIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[cat.icon];
             return (
               <div key={cat.key} className="loop-palette-group">
                 <button
@@ -320,6 +321,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   onClick={() => toggleCategory(cat.key)}
                 >
                   {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  <span
+                    className="loop-palette-cat-icon"
+                    style={{ background: `color-mix(in srgb, ${cat.color} 15%, transparent)`, color: cat.color }}
+                  >
+                    {CatIcon && <CatIcon size={13} />}
+                  </span>
                   <span>{cat.label}</span>
                 </button>
                 {!isCollapsed && (

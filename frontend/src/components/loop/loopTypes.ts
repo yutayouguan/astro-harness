@@ -120,13 +120,15 @@ export const NODE_CATEGORIES: {
   key: NodeCategory;
   label: string;
   labelEn: string;
+  icon: string;
+  color: string;
 }[] = [
-  { key: "trigger", label: "触发器", labelEn: "Triggers" },
-  { key: "ai", label: "AI", labelEn: "AI" },
-  { key: "media", label: "多媒体生成", labelEn: "Media" },
-  { key: "flow_control", label: "流程控制", labelEn: "Flow Control" },
-  { key: "data_processing", label: "数据处理", labelEn: "Data Processing" },
-  { key: "action", label: "动作", labelEn: "Actions" },
+  { key: "trigger", label: "触发器", labelEn: "Triggers", icon: "Zap", color: "#60a5fa" },
+  { key: "ai", label: "AI", labelEn: "AI", icon: "Brain", color: "#a78bfa" },
+  { key: "media", label: "多媒体生成", labelEn: "Media", icon: "Clapperboard", color: "#f472b6" },
+  { key: "flow_control", label: "流程控制", labelEn: "Flow Control", icon: "GitFork", color: "#34d399" },
+  { key: "data_processing", label: "数据处理", labelEn: "Data Processing", icon: "Database", color: "#fbbf24" },
+  { key: "action", label: "动作", labelEn: "Actions", icon: "Rocket", color: "#fb923c" },
 ];
 
 export const NODE_REGISTRY: NodeMeta[] = [
