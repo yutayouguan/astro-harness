@@ -3,6 +3,7 @@
 import { lazy, Suspense, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Braces, Trash2, Star, UserRound } from "lucide-react";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import * as LucideIcons from "lucide-react";
 import type { NodeType } from "./loopTypes";
 import { getNodeMeta } from "./loopTypes";
@@ -107,16 +108,12 @@ export default function LoopConfigPanel({
   onClose,
 }: Props) {
   const [tab, setTab] = useState<"config" | "logs">("config");
-  const [presetName, setPresetName] = useState(label);
+  const [showJson, setShowJson] = useState(false);
+  const confirm = useConfirm();
   const meta = getNodeMeta(nodeType);
   const ConfigForm = CONFIG_MAP[nodeType];
   type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
   const NodeIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
-
-  const handleSavePreset = async () => {
-    // TODO: invoke save_node_preset
-    console.log("save preset:", presetName, config);
-  };
 
   return (
     <div className="loop-config-panel">
@@ -149,21 +146,28 @@ export default function LoopConfigPanel({
               <span className="loop-config-node-type">{meta.label}</span>
             </div>
             <div className="loop-config-node-actions">
-              <button className="loop-icon-btn" title="查看人设">
-                <UserRound size={14} />
-              </button>
-              <button className="loop-icon-btn" title="查看 JSON">
+              <button className={`loop-icon-btn${showJson ? " is-active" : ""}`} title="查看 JSON" onClick={() => setShowJson((v) => !v)}>
                 <Braces size={14} />
               </button>
               <button
                 className="loop-icon-btn loop-icon-btn--danger"
                 title="删除节点"
-                onClick={onDelete}
+                onClick={async () => {
+                  const ok = await confirm({ title: "删除节点", message: `确定删除「${label}」吗？`, confirmLabel: "删除", variant: "danger" });
+                  if (ok) onDelete();
+                }}
               >
                 <Trash2 size={14} />
               </button>
             </div>
           </div>
+
+          {/* ── JSON viewer ── */}
+          {showJson && (
+            <pre className="loop-config-json-viewer">
+              {JSON.stringify(config, null, 2)}
+            </pre>
+          )}
 
           {/* ── Label field ── */}
           <div className="loop-config-panel-body">
@@ -203,28 +207,7 @@ export default function LoopConfigPanel({
 
             <div className="loop-config-divider" />
 
-            {/* ── Save as preset ── */}
-            <div className="loop-config-preset">
-              <span className="loop-config-label">保存为预设</span>
-              <div className="loop-config-preset-row">
-                <input
-                  className="loop-config-input"
-                  value={presetName}
-                  onChange={(e) => setPresetName(e.target.value)}
-                  placeholder={meta.label}
-                />
-                <button
-                  className="loop-btn loop-btn--secondary loop-btn--sm"
-                  onClick={() => void handleSavePreset()}
-                >
-                  <Star size={12} />
-                  <span>保存</span>
-                </button>
-              </div>
-              <span className="loop-config-hint">
-                在「自定义」分组下新增一个带有当前配置的可复用项。
-              </span>
-            </div>
+            {/* 预设保存功能待后端支持 */}
           </div>
         </div>
       )}

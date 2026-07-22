@@ -41,6 +41,8 @@ import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 
 interface Props {
   workflowId: string | null;
@@ -260,9 +262,11 @@ export default function LoopEditor(props: Props) {
 
 function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const reactFlowInstance = useReactFlow();
+  const { showToast, toastHost } = useTransientToast();
+  const confirm = useConfirm();
   const [workflow, setWorkflow] = useState<LoopDto | null>(null);
   const [name, setName] = useState("未命名创建loop");
-  const [, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [iconData, setIconData] = useState<LoopIconData | null>(null);
@@ -309,9 +313,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         ...n,
         data: {
           ...n.data,
-          onRunNode: () => console.log("run node", n.id),
+          onRunNode: () => showToast("暂不支持单节点运行", { tone: "info" }),
           onToggleDisable: () => toggleNodeDisabled(n.id),
-          onDeleteNode: () => deleteNode(n.id),
+          onDeleteNode: async () => {
+            const ok = await confirm({ title: "删除节点", message: `确定删除「${(n.data as Record<string, unknown>).label}」吗？`, confirmLabel: "删除", variant: "danger" });
+            if (ok) deleteNode(n.id);
+          },
         },
       })),
     [nodes, deleteNode, toggleNodeDisabled],
@@ -371,7 +378,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           })),
         );
       } catch (e) {
-        console.error("get_loop failed", e);
+        showToast(String(e), { tone: "error" });
       }
     })();
   }, [workflowId, setNodes, setEdges]);
@@ -477,7 +484,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           label: (n.data as Record<string, unknown>).label as string,
           position: { x: n.position.x, y: n.position.y },
           config: ((n.data as Record<string, unknown>).config as Record<string, unknown>) ?? {},
-          disabled: false,
+          disabled: !!(n.data as Record<string, unknown>).disabled,
         })),
         edges: edges.map((e) => ({
           id: e.id,
@@ -490,8 +497,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       const saved = await invoke<LoopDto>("save_loop", { data: dto });
       setWorkflow(saved);
       setDirty(false);
+      showToast("已保存", { tone: "success" });
     } catch (e) {
-      console.error("save_loop failed", e);
+      showToast(String(e), { tone: "error" });
     } finally {
       setSaving(false);
     }
@@ -610,7 +618,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     <div ref={editorRef} className={`loop-editor${fullscreen ? " loop-editor--fullscreen" : ""}`}>
       {/* ── Toolbar ── */}
       <div className="loop-editor-toolbar">
-        <button className="loop-icon-btn" onClick={onBack} title="返回">
+        <button className="loop-icon-btn" onClick={async () => {
+          if (dirty) {
+            const ok = await confirm({ title: "未保存更改", message: "离开将丢失未保存的更改，确定吗？", confirmLabel: "离开", variant: "danger" });
+            if (!ok) return;
+          }
+          onBack();
+        }} title="返回">
           <ArrowLeft size={16} />
         </button>
         <button
@@ -682,10 +696,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               await handleSave();
               try {
                 const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: workflow.id });
-                console.log("run_loop result:", result);
+                showToast(`运行完成，执行了 ${result.steps_executed} 个节点`, { tone: "success" });
                 setShowHistory(true);
               } catch (e) {
-                console.error("run_loop failed", e);
+                showToast(String(e), { tone: "error" });
               }
             }}
           >
@@ -967,6 +981,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           </div>
         );
       })()}
+      {toastHost}
     </div>
   );
 }

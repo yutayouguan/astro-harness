@@ -17,6 +17,8 @@ import LoopEditor from "./LoopEditor";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import { useI18n } from "../../i18n/LocaleContext";
 import { EmptyIllustration } from "../../illustrations";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 
 type LoopView = "gallery" | "list" | "detail";
 
@@ -68,7 +70,10 @@ interface Props {
 
 export default function LoopPanel({ active, providers, onCollapseSidebar, onExpandSidebar }: Props) {
   const { t } = useI18n();
+  const { showToast, toastHost } = useTransientToast();
+  const confirm = useConfirm();
   const [loops, setLoops] = useState<LoopDto[]>([]);
+  const [lastRuns, setLastRuns] = useState<Record<string, { status: string; time: string } | null>>({});
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -85,12 +90,20 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
     try {
       const list = await invoke<LoopDto[]>("list_loops");
       setLoops(list);
+      const runs: Record<string, { status: string; time: string } | null> = {};
+      for (const lp of list) {
+        try {
+          const res = await invoke<{ runs: { status: string; started_at: string }[] }>("list_loop_runs", { workflowId: lp.id, limit: 1 });
+          runs[lp.id] = res.runs.length > 0 ? { status: res.runs[0].status, time: res.runs[0].started_at } : null;
+        } catch { runs[lp.id] = null; }
+      }
+      setLastRuns(runs);
     } catch (e) {
-      console.error("list_loops failed", e);
+      showToast(String(e), { tone: "error" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (active) void refresh();
@@ -118,17 +131,20 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       onCollapseSidebar?.();
       void refresh();
     } catch (e) {
-      console.error("create_loop failed", e);
+      showToast(String(e), { tone: "error" });
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirm({ title: "删除工作流", message: `确定删除「${name}」吗？此操作不可撤销。`, confirmLabel: "删除", variant: "danger" });
+    if (!ok) return;
     try {
       await invoke("delete_loop", { id });
       if (selectedDetailId === id) setSelectedDetailId(null);
+      showToast("已删除", { tone: "success" });
       void refresh();
     } catch (e) {
-      console.error("delete_loop failed", e);
+      showToast(String(e), { tone: "error" });
     }
   };
 
@@ -137,7 +153,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       await invoke("set_loop_enabled", { id, enabled });
       void refresh();
     } catch (e) {
-      console.error("set_loop_enabled failed", e);
+      showToast(String(e), { tone: "error" });
     }
   };
 
@@ -146,7 +162,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       await invoke("set_loop_ai_callable", { id, callable });
       void refresh();
     } catch (e) {
-      console.error("set_loop_ai_callable failed", e);
+      showToast(String(e), { tone: "error" });
     }
   };
 
@@ -161,7 +177,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      console.error("export_loop failed", e);
+      showToast(String(e), { tone: "error" });
     }
   };
 
@@ -177,7 +193,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         await invoke("import_loop", { json: text });
         void refresh();
       } catch (e) {
-        console.error("import_loop failed", e);
+        showToast(String(e), { tone: "error" });
       }
     };
     input.click();
@@ -208,9 +224,10 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         onClick={async () => {
           try {
             const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: lp.id });
-            console.log("run_loop result:", result);
+            showToast(`运行完成，执行了 ${result.steps_executed} 个节点`, { tone: "success" });
+            void refresh();
           } catch (e) {
-            console.error("run_loop failed", e);
+            showToast(String(e), { tone: "error" });
           }
         }}
       >
@@ -237,7 +254,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       <button
         className="loop-icon-btn loop-icon-btn--danger"
         title="删除"
-        onClick={() => void handleDelete(lp.id)}
+        onClick={() => void handleDelete(lp.id, lp.name)}
       >
         <Trash2 size={14} />
       </button>
@@ -255,14 +272,16 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             </div>
             <div className="loop-card-info">
               <span className="loop-card-name">{lp.name}</span>
-              <span className="loop-card-badge">空闲</span>
+              <span className={`loop-card-badge${lastRuns[lp.id]?.status === "running" ? " is-running" : ""}`}>
+                {lastRuns[lp.id]?.status === "running" ? "运行中" : "空闲"}
+              </span>
             </div>
             {renderCardActions(lp)}
           </div>
           <div className="loop-card-meta">
             <span>{lp.nodes.length} 个节点</span>
             <span>·</span>
-            <span>上次运行: 从未</span>
+            <span>上次运行: {lastRuns[lp.id]?.time ?? "从未"}</span>
           </div>
           <div className="loop-card-toggles">
             <label className="loop-toggle">
@@ -300,7 +319,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
           <div className="loop-list-row-body">
             <span className="loop-list-row-name">{lp.name}</span>
             <span className="loop-list-row-meta">
-              {lp.nodes.length} 个节点 · 上次运行: 从未
+              {lp.nodes.length} 个节点 · 上次运行: {lastRuns[lp.id]?.time ?? "从未"}
             </span>
           </div>
           <div className="loop-list-row-toggles">
@@ -360,7 +379,9 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
               </div>
               <div>
                 <h3 className="loop-detail-panel-title">{selectedDetail.name}</h3>
-                <span className="loop-detail-panel-badge">空闲</span>
+                <span className={`loop-detail-panel-badge${lastRuns[selectedDetail.id]?.status === "running" ? " is-running" : ""}`}>
+                  {lastRuns[selectedDetail.id]?.status === "running" ? "运行中" : "空闲"}
+                </span>
               </div>
               {renderCardActions(selectedDetail)}
             </div>
@@ -371,7 +392,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
               </div>
               <div className="loop-detail-panel-cell">
                 <span className="loop-detail-panel-cell-label">上次运行</span>
-                <span className="loop-detail-panel-cell-value">从未</span>
+                <span className="loop-detail-panel-cell-value">{lastRuns[selectedDetail.id]?.time ?? "从未"}</span>
               </div>
               <div className="loop-detail-panel-cell">
                 <span className="loop-detail-panel-cell-label">状态</span>
@@ -469,6 +490,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         {!loading && filtered.length > 0 && viewMode === "list" && renderList()}
         {!loading && filtered.length > 0 && viewMode === "detail" && renderDetail()}
       </div>
+      {toastHost}
     </div>
   );
 }
