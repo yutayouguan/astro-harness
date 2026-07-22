@@ -678,6 +678,55 @@
   overflow: hidden;
 }
 
+/* ── Collapse toggle buttons (展开/收起按钮) ──────────────────── */
+
+.loop-collapse-toggle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 40px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink-tertiary);
+  cursor: pointer;
+  z-index: 25;
+  transition: color 0.12s, background 0.12s;
+}
+.loop-collapse-toggle:hover {
+  color: var(--ink);
+  background: var(--glass-hover);
+}
+
+.loop-collapse-toggle--left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 0 8px 8px 0;
+  border-left: none;
+}
+
+.loop-collapse-toggle--palette-close {
+  position: sticky;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 24px;
+  border-radius: 6px;
+  margin: 8px auto;
+  flex-shrink: 0;
+}
+
+.loop-collapse-toggle--right {
+  right: 380px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 8px 0 0 8px;
+  border-right: none;
+}
+
 /* ── Node palette (左侧) ──────────────────────────────────────── */
 
 .loop-node-palette {

@@ -125,6 +125,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [editingName, setEditingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
@@ -463,6 +464,16 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
       <div className="loop-editor-body">
         {/* ── Left: Node palette ── */}
+        {!paletteOpen && (
+          <button
+            className="loop-collapse-toggle loop-collapse-toggle--left"
+            onClick={() => setPaletteOpen(true)}
+            title="展开节点面板"
+          >
+            <LucideIcons.ChevronRight size={14} />
+          </button>
+        )}
+        {paletteOpen && (
         <div className="loop-node-palette">
           <div className="loop-palette-title">节点</div>
           {NODE_CATEGORIES.map((cat) => {
@@ -555,7 +566,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               </div>
             );
           })}
+          <button
+            className="loop-collapse-toggle loop-collapse-toggle--palette-close"
+            onClick={() => setPaletteOpen(false)}
+            title="收起节点面板"
+          >
+            <LucideIcons.ChevronLeft size={14} />
+          </button>
         </div>
+        )}
 
         {/* ── Center: Canvas ── */}
         <div className="loop-canvas-container" ref={reactFlowWrapper}>
@@ -588,6 +607,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             />
           </ReactFlow>
         </div>
+
+        {/* ── Right: Config panel toggle ── */}
+        {selectedNode && (
+          <button
+            className="loop-collapse-toggle loop-collapse-toggle--right"
+            onClick={() => setSelectedNodeId(null)}
+            title="收起配置面板"
+          >
+            <LucideIcons.ChevronRight size={14} />
+          </button>
+        )}
 
         {/* ── Right: Config panel ── */}
         {selectedNode && (
