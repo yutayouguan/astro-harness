@@ -6,11 +6,13 @@
 //! 模块分层：
 //! - [`api`]：对外契约（trait / client / registry / streaming）
 //! - [`profile`]：Hermes 风格 ProviderProfile / ApiMode 表
-//! - [`protocol`]：共享协议（Chat Completions / Anthropic / 探测 / 抽取）
+//! - [`protocol`]：共享协议（Chat Completions / 探测 / 抽取）
+//! - [`anthropic`]：Anthropic Messages API（聊天 / thinking / 缓存 / 探测）
 //! - [`google`]：Gemini Interactions / Veo / Files / Robotics
 //! - [`openai`]：Images / Responses / Whisper·视觉兼容
 //! - [`vendors`]：其余供应商薄封装（ProfileBackedProvider）
 
+pub mod anthropic;
 pub mod api;
 pub mod google;
 pub mod openai;
@@ -33,7 +35,8 @@ pub use extractor::{parse_submit_payload, ExtractionError, Extractor, ExtractorB
 pub use http_stream::merge_additional_params;
 pub use profile::{ApiMode, ProviderProfile, PROFILES};
 pub use streaming::{PauseControl, Usage};
-pub use tool_format::{openai_tools_to_anthropic, openai_tools_to_gemini_native};
+pub use anthropic::tools::openai_tools_to_anthropic;
+pub use tool_format::openai_tools_to_gemini_native;
 pub use trait_::{
     AiProvider, AuthKind, ChatChunk, ChatMessage, ChatProvider, ChatStream, ChatToolCall,
     GeneratedImage, ImageGenProvider, ProviderConfig, ToolCallDeltaChunk, VerifyProvider,

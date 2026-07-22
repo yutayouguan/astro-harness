@@ -7,11 +7,6 @@ use crate::http_stream::{azure_base, openai_compatible_base, AZURE_API_VERSION};
 use crate::profile::{self, ApiMode};
 use crate::trait_::{ProviderConfig, VerifyResult};
 
-/// 去掉 endpoint 末尾斜杠。
-fn trim_slash(endpoint: &str) -> String {
-    endpoint.trim_end_matches('/').to_string()
-}
-
 /// 优先使用配置中的 `base_url`，否则使用给定 fallback。
 fn resolve_endpoint(config: &ProviderConfig, fallback: &str) -> String {
     config
@@ -73,34 +68,14 @@ pub async fn probe(
         match (p.api_mode, p.azure_deployment_style) {
             (ApiMode::AnthropicMessages, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
-                let url = format!("{}/v1/messages", trim_slash(&endpoint));
-                let body = json!({
-                    "model": model,
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "ping"}]
-                });
-                let resp = match client
-                    .post(&url)
-                    .header("x-api-key", &config.api_key)
-                    .header("anthropic-version", "2023-06-01")
-                    .header("content-type", "application/json")
-                    .json(&body)
-                    .send()
-                    .await
+                match crate::anthropic::verify::probe_anthropic(
+                    client, &model, &endpoint, config,
+                )
+                .await
                 {
-                    Ok(r) => r,
-                    Err(e) => return fail(format!("连接 Anthropic 失败: {e}")),
-                };
-                let status = resp.status();
-                let json: serde_json::Value = match resp.json().await {
-                    Ok(v) => v,
-                    Err(e) => return fail(e.to_string()),
-                };
-                if !status.is_success() {
-                    let msg = json["error"]["message"].as_str().unwrap_or("未知错误");
-                    return fail(format!("失败 ({status}): {msg}"));
+                    Ok(m) => m,
+                    Err(e) => return fail(e),
                 }
-                "调用成功".to_string()
             }
             (ApiMode::ChatCompletions, true) => {
                 let endpoint = resolve_endpoint(config, "");

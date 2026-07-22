@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use crate::profile::{self, ApiMode};
 use crate::streaming::Usage;
-use crate::tool_format::openai_tools_to_anthropic;
 use crate::trait_::{
     ChatChunk, ChatContentPart, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
 };
@@ -85,7 +84,7 @@ pub fn parse_openai_usage(v: &Value) -> Option<Usage> {
 }
 
 /// 去掉 endpoint 末尾斜杠。
-fn trim_slash(endpoint: &str) -> String {
+pub(crate) fn trim_slash(endpoint: &str) -> String {
     endpoint.trim_end_matches('/').to_string()
 }
 
@@ -147,7 +146,9 @@ pub async fn chat_stream_for_provider(
         ApiMode::ChatCompletions => {
             openai_compatible_chat_stream(client, id, messages, tools, config).await
         }
-        ApiMode::AnthropicMessages => anthropic_chat_stream(client, messages, tools, config).await,
+        ApiMode::AnthropicMessages => {
+            crate::anthropic::chat::anthropic_chat_stream(client, messages, tools, config).await
+        }
         ApiMode::Interactions => {
             crate::google::interactions_chat::interactions_chat_stream(
                 client, messages, tools, config,
@@ -166,7 +167,7 @@ pub async fn chat_stream_for_provider(
 }
 
 /// 优先使用配置中的 `base_url`，否则回退到供应商默认值。
-fn resolve_base(config: &ProviderConfig, provider: &str) -> String {
+pub(crate) fn resolve_base(config: &ProviderConfig, provider: &str) -> String {
     config
         .base_url
         .as_deref()
@@ -560,235 +561,6 @@ pub async fn openai_compatible_chat_stream(
     sse_chat_stream(response, Arc::new(extract_openai_delta)).await
 }
 
-/// 解析 Anthropic SSE 事件 JSON 为 [`ChatChunk`]。
-fn extract_anthropic_delta(data: &str) -> Option<ChatChunk> {
-    let v: Value = serde_json::from_str(data).ok()?;
-    let event_type = v.get("type")?.as_str()?;
-    match event_type {
-        "content_block_start" => {
-            let block = v.get("content_block")?;
-            if block.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
-                return None;
-            }
-            let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-            Some(ChatChunk {
-                tool_call_deltas: vec![ToolCallDeltaChunk {
-                    index,
-                    id: block.get("id").and_then(|s| s.as_str()).map(str::to_string),
-                    name: block
-                        .get("name")
-                        .and_then(|s| s.as_str())
-                        .map(str::to_string),
-                    arguments: None,
-                    signature: None,
-                }],
-                ..Default::default()
-            })
-        }
-        "content_block_delta" => {
-            let delta = v.get("delta")?;
-            let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-            let delta_type = delta.get("type").and_then(|t| t.as_str()).unwrap_or("");
-            if delta_type == "input_json_delta" {
-                let partial = delta
-                    .get("partial_json")
-                    .and_then(|s| s.as_str())
-                    .map(str::to_string);
-                return Some(ChatChunk {
-                    tool_call_deltas: vec![ToolCallDeltaChunk {
-                        index,
-                        id: None,
-                        name: None,
-                        arguments: partial,
-                        signature: None,
-                    }],
-                    ..Default::default()
-                });
-            }
-            let token = delta
-                .get("text")
-                .and_then(|t| t.as_str())
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)?;
-            Some(ChatChunk {
-                token: Some(token),
-                ..Default::default()
-            })
-        }
-        "message_delta" => {
-            let finish = v
-                .pointer("/delta/stop_reason")
-                .and_then(|s| s.as_str())
-                .map(str::to_string);
-            let usage = v.get("usage").and_then(|u| {
-                let out = u.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-                let input = u.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-                if out == 0 && input == 0 {
-                    None
-                } else {
-                    Some(Usage::from_parts(input, out))
-                }
-            });
-            if finish.is_none() && usage.is_none() {
-                return None;
-            }
-            Some(ChatChunk {
-                finish_reason: finish,
-                usage,
-                ..Default::default()
-            })
-        }
-        "error" => {
-            let msg = v
-                .pointer("/error/message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("Anthropic 错误");
-            Some(ChatChunk {
-                finish_reason: Some(format!("error:{msg}")),
-                ..Default::default()
-            })
-        }
-        _ => None,
-    }
-}
-
-/// 将消息列表转为 Anthropic `(system, messages)` 二元组。
-fn to_anthropic_messages(messages: &[ChatMessage]) -> (String, Vec<Value>) {
-    let mut system = String::new();
-    let mut api_messages = Vec::new();
-    let mut pending_tool_results: Vec<Value> = Vec::new();
-
-    let flush_tool_results = |pending: &mut Vec<Value>, out: &mut Vec<Value>| {
-        if pending.is_empty() {
-            return;
-        }
-        out.push(json!({
-            "role": "user",
-            "content": Value::Array(std::mem::take(pending)),
-        }));
-    };
-
-    for m in messages {
-        match m.role.as_str() {
-            "system" => {
-                if !system.is_empty() {
-                    system.push('\n');
-                }
-                system.push_str(&m.content);
-            }
-            "tool" => {
-                let id = m.tool_call_id.clone().unwrap_or_default();
-                pending_tool_results.push(json!({
-                    "type": "tool_result",
-                    "tool_use_id": id,
-                    "content": m.content,
-                }));
-            }
-            "assistant" => {
-                flush_tool_results(&mut pending_tool_results, &mut api_messages);
-                let mut content_blocks = Vec::new();
-                if !m.content.is_empty() {
-                    content_blocks.push(json!({
-                        "type": "text",
-                        "text": m.content,
-                    }));
-                }
-                if let Some(ref calls) = m.tool_calls {
-                    for c in calls {
-                        let input = if c.arguments.is_string() {
-                            serde_json::from_str(c.arguments.as_str().unwrap_or("{}"))
-                                .unwrap_or(json!({}))
-                        } else {
-                            c.arguments.clone()
-                        };
-                        content_blocks.push(json!({
-                            "type": "tool_use",
-                            "id": c.id,
-                            "name": c.name,
-                            "input": input,
-                        }));
-                    }
-                }
-                if content_blocks.is_empty() {
-                    content_blocks.push(json!({ "type": "text", "text": "" }));
-                }
-                api_messages.push(json!({
-                    "role": "assistant",
-                    "content": content_blocks,
-                }));
-            }
-            _ => {
-                flush_tool_results(&mut pending_tool_results, &mut api_messages);
-                let content = anthropic_user_content(m);
-                api_messages.push(json!({
-                    "role": "user",
-                    "content": content,
-                }));
-            }
-        }
-    }
-    flush_tool_results(&mut pending_tool_results, &mut api_messages);
-    (system, api_messages)
-}
-
-/// Anthropic user content：纯字符串或 text + image base64 blocks。
-fn anthropic_user_content(m: &ChatMessage) -> Value {
-    let Some(parts) = m.parts.as_ref().filter(|p| !p.is_empty()) else {
-        return json!(m.content);
-    };
-    let mut blocks = Vec::new();
-    for p in parts {
-        match p {
-            ChatContentPart::Text { text } => {
-                blocks.push(json!({ "type": "text", "text": text }));
-            }
-            ChatContentPart::ImageUrl { url } => {
-                if let Some((media_type, data)) = parse_data_url(url) {
-                    blocks.push(json!({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": data,
-                        }
-                    }));
-                } else if url.starts_with("http://") || url.starts_with("https://") {
-                    blocks.push(json!({
-                        "type": "image",
-                        "source": {
-                            "type": "url",
-                            "url": url,
-                        }
-                    }));
-                }
-            }
-            ChatContentPart::AudioUrl { mime_type, .. } => {
-                blocks.push(json!({
-                    "type": "text",
-                    "text": format!(
-                        "[audio attached: {}]",
-                        if mime_type.trim().is_empty() { "audio/*" } else { mime_type }
-                    )
-                }));
-            }
-            ChatContentPart::VideoUrl { mime_type, .. } => {
-                blocks.push(json!({
-                    "type": "text",
-                    "text": format!(
-                        "[video attached: {}]",
-                        if mime_type.trim().is_empty() { "video/*" } else { mime_type }
-                    )
-                }));
-            }
-        }
-    }
-    if blocks.is_empty() {
-        json!(m.content)
-    } else {
-        Value::Array(blocks)
-    }
-}
-
 pub(crate) fn parse_data_url(url: &str) -> Option<(String, String)> {
     let rest = url.strip_prefix("data:")?;
     let (meta, data) = rest.split_once(";base64,")?;
@@ -797,49 +569,6 @@ pub(crate) fn parse_data_url(url: &str) -> Option<(String, String)> {
         return None;
     }
     Some((media_type.to_string(), data.to_string()))
-}
-
-/// Anthropic Messages API 流式
-pub async fn anthropic_chat_stream(
-    client: &Client,
-    messages: Vec<ChatMessage>,
-    tools: Vec<Value>,
-    config: &ProviderConfig,
-) -> Result<ChatStream> {
-    if config.api_key.is_empty() {
-        return Err(anyhow!("缺少 Anthropic API Key"));
-    }
-    let base = trim_slash(&resolve_base(config, "claude"));
-    let url = format!("{base}/v1/messages");
-
-    let (system, api_messages) = to_anthropic_messages(&messages);
-
-    let mut body = json!({
-        "model": config.model,
-        "max_tokens": config.max_tokens,
-        "stream": true,
-        "messages": api_messages,
-    });
-    if !system.is_empty() {
-        body["system"] = json!(system);
-    }
-    let anthropic_tools = openai_tools_to_anthropic(&tools);
-    if !anthropic_tools.is_empty() {
-        body["tools"] = Value::Array(anthropic_tools);
-    }
-
-    merge_additional_params(&mut body, &config.additional_params);
-    let response = client
-        .post(&url)
-        .header("x-api-key", &config.api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .with_context(|| format!("连接 Anthropic 失败: {url}"))?;
-
-    sse_chat_stream(response, Arc::new(extract_anthropic_delta)).await
 }
 
 /// Azure OpenAI REST API 版本号。
@@ -964,24 +693,6 @@ mod tests {
         assert_eq!(content[0]["text"], "看图");
         assert_eq!(content[1]["type"], "image_url");
         assert_eq!(content[1]["image_url"]["url"], "data:image/png;base64,abc");
-    }
-
-    #[test]
-    fn anthropic_user_content_parses_data_url() {
-        let m = ChatMessage::user_parts(
-            "x",
-            vec![
-                ChatContentPart::Text { text: "x".into() },
-                ChatContentPart::ImageUrl {
-                    url: "data:image/jpeg;base64,zzz".into(),
-                },
-            ],
-        );
-        let v = anthropic_user_content(&m);
-        let blocks = v.as_array().expect("blocks");
-        assert_eq!(blocks[1]["type"], "image");
-        assert_eq!(blocks[1]["source"]["media_type"], "image/jpeg");
-        assert_eq!(blocks[1]["source"]["data"], "zzz");
     }
 
     #[test]

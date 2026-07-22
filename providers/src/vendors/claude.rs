@@ -1,3 +1,3 @@
-//! Anthropic Claude（Messages API）。
+//! Anthropic Claude — 协议实现见 [`crate::anthropic`]。
 
-pub use super::profile_backed::ProfileBackedProvider as ClaudeProvider;
+pub use crate::anthropic::ClaudeProvider;
