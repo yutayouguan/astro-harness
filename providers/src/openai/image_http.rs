@@ -6,7 +6,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_API_BASE;
-use crate::http_stream::openai_compatible_base;
+use super::chat::openai_compatible_base;
 use crate::trait_::{GeneratedImage, ProviderConfig};
 
 /// 解析 OpenAI 兼容 API 基址。

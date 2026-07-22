@@ -11,7 +11,7 @@ use std::sync::Arc;
 use super::veo_http::google_native_base;
 use crate::http_stream::merge_additional_params;
 use crate::streaming::Usage;
-use crate::tool_format::openai_tools_to_gemini_native;
+use super::tools::openai_tools_to_gemini_native;
 use crate::trait_::{
     ChatChunk, ChatContentPart, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
 };

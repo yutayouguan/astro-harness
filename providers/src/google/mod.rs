@@ -16,6 +16,7 @@ pub mod interactions_chat;
 pub mod interactions_http;
 pub mod native_chat;
 pub mod robotics_http;
+pub mod tools;
 pub mod veo_http;
 
 pub use defaults::{DEFAULT_API_HOST, DEFAULT_MODEL, DEFAULT_VISION_MODEL};

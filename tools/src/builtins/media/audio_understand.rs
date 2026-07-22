@@ -3,7 +3,7 @@
 //! 参考：https://ai.google.dev/gemini-api/docs/audio?hl=zh-cn
 
 use base64::Engine;
-use providers::http_stream::openai_compatible_base;
+use providers::openai::chat::openai_compatible_base;
 use providers::interactions_http::{
     default_audio_understand_prompt, google_interactions_audio, AudioMediaKind, AudioMediaPart,
     AudioUnderstandMode,

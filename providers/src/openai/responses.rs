@@ -9,10 +9,8 @@ use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::http_stream::{
-    merge_additional_params, openai_compatible_base, parse_openai_usage, resolve_base,
-    sse_chat_stream,
-};
+use super::chat::{openai_compatible_base, parse_openai_usage};
+use crate::http_stream::{merge_additional_params, resolve_base, sse_chat_stream};
 use crate::trait_::{
     ChatChunk, ChatContentPart, ChatMessage, ChatStream, ProviderConfig, ToolCallDeltaChunk,
 };

@@ -6,10 +6,10 @@
 //! 模块分层：
 //! - [`api`]：对外契约（trait / client / registry / streaming）
 //! - [`profile`]：Hermes 风格 ProviderProfile / ApiMode 表
-//! - [`protocol`]：共享协议（Chat Completions / 探测 / 抽取）
-//! - [`anthropic`]：Anthropic Messages API（聊天 / thinking / 缓存 / 探测）
-//! - [`google`]：Gemini Interactions / Veo / Files / Robotics
-//! - [`openai`]：Images / Responses / Whisper·视觉兼容
+//! - [`protocol`]：共享基础设施（SSE 框架 / 分发路由 / 探测入口 / 抽取）
+//! - [`anthropic`]：Anthropic Messages API（聊天 / thinking / 缓存 / batch / token counting）
+//! - [`google`]：Gemini Interactions / Native / Veo / Files / Robotics / Embedding
+//! - [`openai`]：Chat Completions / Azure / Images / Responses / TTS / Embedding
 //! - [`vendors`]：其余供应商薄封装（ProfileBackedProvider）
 
 pub mod anthropic;
