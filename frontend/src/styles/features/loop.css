@@ -485,7 +485,7 @@
 
 .loop-rf-node-toolbar {
   position: absolute;
-  top: -36px;
+  top: -44px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
