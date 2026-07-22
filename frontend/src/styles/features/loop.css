@@ -606,6 +606,7 @@
 }
 
 .loop-editor-body {
+  position: relative;
   display: flex;
   flex: 1;
   overflow: hidden;
@@ -933,13 +934,18 @@
 /* ── Config panel (右侧) ──────────────────────────────────────── */
 
 .loop-config-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   width: 380px;
   border-left: 1px solid var(--border);
   background: var(--bg0, #fff);
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  z-index: 30;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
 }
 
 /* tabs */
@@ -1300,14 +1306,18 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 .loop-run-history {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
   width: 340px;
   border-left: 1px solid var(--border);
-  background: var(--glass-panel);
-  flex-shrink: 0;
+  background: var(--bg0, #fff);
   overflow: hidden;
+  z-index: 30;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
 }
 
 .loop-run-history-header {
@@ -1381,9 +1391,18 @@
 /* ── Run Detail ──────────────────────────────────────────────────── */
 
 .loop-run-detail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  background: var(--bg0, #fff);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  z-index: 30;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
 }
 
 .loop-run-detail-header {
