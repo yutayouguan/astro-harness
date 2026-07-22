@@ -885,7 +885,7 @@ pub async fn run_evolution_search(
     let known_skill_ids: Vec<String> = enabled_skills.iter().map(|(n, _)| n.clone()).collect();
     let transcripts = build_transcripts(&base, &decisions);
     let seed_user = build_reflection_user_prompt(&ReflectionInput {
-        decisions,
+        decisions: decisions.clone(), // [P3] 保留 decisions 所有权用于后续 detect_opportunities
         enabled_skills: enabled_skills.clone(),
         transcripts,
         focus_skill: focus_skill.clone(),
