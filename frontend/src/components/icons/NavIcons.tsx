@@ -199,18 +199,18 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** 智能流程 — 树形层级：顶部节点分发到三个子节点 */
+/** 智能流程 — 两节点箭头流 + 闪电：流程 × 智能 */
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      {/* 顶部节点 */}
-      <rect x="8" y="2" width="8" height="5" rx="1.5" />
-      {/* 树形连接线 */}
-      <path className="nav-icon-stroke" d="M12 7v3m-8 0h16m-16 0v4m8-4v4m8-4v4" />
-      {/* 三个子节点 */}
-      <rect x="1" y="14" width="6" height="5" rx="1.5" />
-      <rect x="9" y="14" width="6" height="5" rx="1.5" />
-      <rect x="17" y="14" width="6" height="5" rx="1.5" />
+      {/* 左节点 */}
+      <circle cx="5" cy="12" r="3.5" />
+      {/* 右节点 */}
+      <circle cx="19" cy="12" r="3.5" />
+      {/* 连接箭头 */}
+      <path className="nav-icon-stroke" d="M8.5 12h7M13.5 9.5 16 12l-2.5 2.5" />
+      {/* 闪电 */}
+      <path className="nav-icon-dot" d="M11.5 3.5 9 7h3l-2.5 3.5" strokeWidth="0" />
     </NavIconBase>
   );
 }
