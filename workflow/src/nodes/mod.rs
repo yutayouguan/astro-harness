@@ -2,6 +2,7 @@ pub mod trigger;
 pub mod data;
 pub mod control;
 pub mod action;
+pub mod ai;
 pub mod ai_stub;
 pub mod media_stub;
 
@@ -19,10 +20,10 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::ScheduledTrigger, Box::new(trigger::ScheduledTriggerExec));
     m.insert(NodeType::WebhookTrigger, Box::new(trigger::WebhookTriggerExec));
 
-    // AI（桩实现，待 agent crate 接入）
-    m.insert(NodeType::AiAgentTask, Box::new(ai_stub::AiAgentTaskExec));
-    m.insert(NodeType::ParameterExtraction, Box::new(ai_stub::ParameterExtractionExec));
-    m.insert(NodeType::QuestionClassification, Box::new(ai_stub::QuestionClassificationExec));
+    // AI — 接入 providers crate 调用 LLM
+    m.insert(NodeType::AiAgentTask, Box::new(ai::AiAgentTaskExec));
+    m.insert(NodeType::ParameterExtraction, Box::new(ai::ParameterExtractionExec));
+    m.insert(NodeType::QuestionClassification, Box::new(ai::QuestionClassificationExec));
 
     // 多媒体（桩实现，待 providers crate 接入）
     m.insert(NodeType::ImageGeneration, Box::new(media_stub::ImageGenExec));

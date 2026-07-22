@@ -9,6 +9,8 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 common = { path = "../common" }
 home = { path = "../home" }
+providers = { path = "../providers" }
+futures = "0.3"
 chrono = { version = "0.4", features = ["clock", "serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }
