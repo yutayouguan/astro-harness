@@ -2,8 +2,7 @@
 
 pub mod code_exec;
 pub mod file_ops;
-pub mod http_fetch;
 pub mod jobs;
 pub mod terminal;
-pub mod web_extract;
+pub mod web_fetch;
 pub mod web_search;

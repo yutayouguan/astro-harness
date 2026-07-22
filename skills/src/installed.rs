@@ -1068,7 +1068,7 @@ mod tests {
 
         let inline = "---\nname: t2\ndescription: d\nastro_tools: [web_search, browser]\n---\n";
         let m2 = parse_skill_frontmatter_full(inline);
-        assert_eq!(m2.astro_tools, vec!["web_search", "http_fetch"]);
+        assert_eq!(m2.astro_tools, vec!["web_search", "browser"]);
     }
 
     #[test]

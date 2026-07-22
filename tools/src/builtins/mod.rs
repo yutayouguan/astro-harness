@@ -18,4 +18,4 @@ pub use media::{
 };
 pub use memory::{context_tools, memory_tools, scheduled, skills_tool, todo};
 pub use present::present_shared;
-pub use system::{code_exec, file_ops, http_fetch, terminal, web_extract, web_search};
+pub use system::{code_exec, file_ops, terminal, web_fetch, web_search};

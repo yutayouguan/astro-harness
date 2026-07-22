@@ -16,7 +16,6 @@ use crate::{
 /// 与前端 `AGENT_TOOLS` id 对齐的已知工具集标识列表。
 pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "web_search",
-    "http_fetch",
     "terminal",
     "file_ops",
     "code_exec",
@@ -196,8 +195,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "video_understand" => "video_understand",
         "file_ops" => "file_ops",
         "terminal" => "terminal",
-        "web_search" | "web_extract" => "web_search",
-        "http_fetch" => "http_fetch",
+        "web_search" | "web_fetch" | "web_extract" | "http_fetch" => "web_search",
         "code_exec" => "code_exec",
         "image_understand" => "image_understand",
         "robotics" => "robotics",
@@ -252,15 +250,17 @@ mod tests {
     }
 
     #[test]
-    fn web_extract_maps_to_web_search_toolset() {
+    fn web_fetch_maps_to_web_search_toolset() {
+        assert_eq!(tool_name_to_toolset("web_fetch"), "web_search");
         assert_eq!(tool_name_to_toolset("web_extract"), "web_search");
+        assert_eq!(tool_name_to_toolset("http_fetch"), "web_search");
         assert_eq!(tool_name_to_toolset("web_search"), "web_search");
         let dir = TempDir::new().unwrap();
         let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
         let mut state = HashMap::new();
         state.insert("web_search".into(), false);
         save_tools_enabled(&state).unwrap();
-        assert!(!is_tool_call_allowed("web_extract"));
+        assert!(!is_tool_call_allowed("web_fetch"));
     }
 
     #[test]

@@ -278,8 +278,8 @@ mod tests {
             .find(|c| c.id == "web_search")
             .expect("web_search");
         assert!(
-            web.functions.iter().any(|f| f.name == "web_extract"),
-            "web_search toolset should include web_extract"
+            web.functions.iter().any(|f| f.name == "web_fetch"),
+            "web_search toolset should include web_fetch"
         );
     }
 

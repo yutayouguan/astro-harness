@@ -33,7 +33,6 @@ const IS_TAURI =
 
 export type AgentToolId =
   | "web_search"
-  | "http_fetch"
   | "terminal"
   | "file_ops"
   | "code_exec"
@@ -122,16 +121,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "url", type: "string", optional: true },
       { name: "urls", type: "string", optional: true },
       { name: "max_chars", type: "number", optional: true },
-    ],
-  },
-  {
-    id: "http_fetch",
-    titleKey: "agentTools.httpFetch.title",
-    descKey: "agentTools.httpFetch.desc",
-    Icon: IconHttpFetch,
-    tone: "cyan",
-    params: [
-      { name: "url", type: "string" },
     ],
   },
   {

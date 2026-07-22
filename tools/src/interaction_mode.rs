@@ -78,8 +78,7 @@ Split the goal with subagent (parallel one-shot) or pipeline (serial roles); the
 const READONLY_ALLOW: &[&str] = &[
     "file_ops", // action 级再拦写
     "web_search",
-    "web_extract",
-    "http_fetch",
+    "web_fetch",
     "context_search",
     "skills", // action 级仅 list/load/view/curate
     "ask_user",

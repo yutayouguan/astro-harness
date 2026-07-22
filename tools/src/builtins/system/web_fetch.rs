@@ -1,7 +1,8 @@
-//! 网页正文抽取：HTTP GET 后将 HTML 粗过滤为可读文本。
+//! 统一网页抓取工具：合并原 `web_extract`（HTML→文本）与 `http_fetch`（原始 body）。
 //!
-//! 与 Hermes `web_extract` 意图对齐：抓取公开 URL、抽正文、截断过长结果。
-//! 不做 Firecrawl/Tavily 等多后端；SSRF 防护对齐 [`super::browser`]。
+//! `mode=text`（默认）：HTML 粗过滤为可读文本，支持多 URL、max_chars 截断。
+//! `mode=raw`：返回原始 HTTP body（不跟随重定向），单 URL。
+//! SSRF 防护对齐 [`super::browser`]。
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 
@@ -18,37 +19,49 @@ const USER_AGENT: &str = concat!(
     "Chrome/122.0.0.0 Safari/537.36"
 );
 
-/// 单 URL 抽取正文的默认字符上限。
 const DEFAULT_MAX_CHARS: usize = 12_000;
-
-/// 硬上限，防止把整页塞进上下文。
 const HARD_MAX_CHARS: usize = 48_000;
+const RAW_MAX_BYTES: usize = 12_000;
 
-/// Arguments for the `web_extract` tool.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WebFetchMode {
+    /// Extract readable text from HTML (default).
+    #[default]
+    Text,
+    /// Return raw HTTP body as-is (no HTML stripping, no redirects).
+    Raw,
+}
+
+/// Arguments for the `web_fetch` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct WebExtractArgs {
+pub struct WebFetchArgs {
     /// Single URL (mutually exclusive with `urls`; `urls` wins if both set).
     #[serde(default)]
     pub url: Option<String>,
-    /// Multiple URLs (max 5).
+    /// Multiple URLs (max 5, text mode only).
     #[serde(default)]
     pub urls: Option<Vec<String>>,
-    /// Max characters of body text per URL (default 12000, hard cap 48000).
+    /// Max characters of body text per URL (default 12000, hard cap 48000, text mode only).
     #[serde(default)]
     pub max_chars: Option<usize>,
+    /// Fetch mode: "text" (default, HTML stripped) or "raw" (original body, no redirects).
+    #[serde(default)]
+    pub mode: WebFetchMode,
 }
 
-/// 向注册表注册 `web_extract`（归属 `web_search` 工具集）。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
-        name: "web_extract".to_string(),
+        name: "web_fetch".to_string(),
         toolset: "web_search".to_string(),
         description:
-            "Fetch one or more public http(s) URLs and extract readable text (HTML stripped). \
+            "Fetch public http(s) URLs. mode=text (default): extract readable text (HTML stripped), \
+             supports multiple URLs, each capped by max_chars (default 12000). \
+             mode=raw: return raw HTTP body (no redirects, no HTML stripping, single URL, ~12KB cap). \
              Use after web_search when you need page body, not just snippets. \
-             Rejects localhost/private IPs. Each page capped by max_chars (default 12000)."
+             Rejects localhost/private IPs."
                 .to_string(),
-        schema: schema_for_args::<WebExtractArgs>(),
+        schema: schema_for_args::<WebFetchArgs>(),
         check_fn: None,
         icon: "file-text",
         ..ToolEntry::lifecycle_defaults()
@@ -57,14 +70,23 @@ pub fn register(registry: &mut ToolRegistry) {
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["web_extract"],
+    names: ["web_fetch"],
     async_ctx: dispatch,
 }
 
-/// 拉取并抽取网页正文。
 pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: WebExtractArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("web_extract 参数无效: {e}"))?;
+    let parsed: WebFetchArgs = serde_json::from_value(args.clone())
+        .map_err(|e| anyhow::anyhow!("web_fetch 参数无效: {e}"))?;
+
+    match parsed.mode {
+        WebFetchMode::Text => dispatch_text(parsed).await,
+        WebFetchMode::Raw => dispatch_raw(parsed).await,
+    }
+}
+
+// ── mode=text（原 web_extract 逻辑）──────────────────────────────
+
+async fn dispatch_text(parsed: WebFetchArgs) -> anyhow::Result<String> {
     let max_chars = parsed
         .max_chars
         .unwrap_or(DEFAULT_MAX_CHARS)
@@ -90,10 +112,10 @@ pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyho
         }
     }
     if targets.is_empty() {
-        anyhow::bail!("web_extract 需要 url 或 urls");
+        anyhow::bail!("web_fetch 需要 url 或 urls");
     }
     if targets.len() > 5 {
-        anyhow::bail!("web_extract 一次最多 5 个 URL");
+        anyhow::bail!("web_fetch 一次最多 5 个 URL");
     }
 
     let client = reqwest::Client::builder()
@@ -124,6 +146,47 @@ pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyho
     Ok(sections.join("\n\n---\n\n"))
 }
 
+// ── mode=raw（原 http_fetch 逻辑）──────────────────────────────
+
+async fn dispatch_raw(parsed: WebFetchArgs) -> anyhow::Result<String> {
+    let url = parsed
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("web_fetch mode=raw 需要 url"))?;
+    assert_public_http_url(url)?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let resp = client.get(url).send().await?;
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let body = resp.text().await?;
+    let truncated = if body.len() > RAW_MAX_BYTES {
+        let kept = common::truncate_utf8(&body, RAW_MAX_BYTES);
+        format!(
+            "{kept}…\n\n[已截断，返回 {}/{} 字节（上限 {RAW_MAX_BYTES}）]",
+            kept.len(),
+            body.len()
+        )
+    } else {
+        body
+    };
+    Ok(format!(
+        "status={status}\ncontent-type={content_type}\n\n{truncated}"
+    ))
+}
+
+// ── 共享：HTML 解析、SSRF 防护 ──────────────────────────────────
+
 async fn fetch_and_extract(
     client: &reqwest::Client,
     url: &str,
@@ -141,7 +204,6 @@ async fn fetch_and_extract(
         .unwrap_or("")
         .to_string();
     let bytes = resp.bytes().await?;
-    // 防止超大响应占满内存
     const MAX_DOWNLOAD: usize = 2 * 1024 * 1024;
     let slice = if bytes.len() > MAX_DOWNLOAD {
         &bytes[..MAX_DOWNLOAD]
@@ -171,11 +233,9 @@ async fn fetch_and_extract(
 
 fn html_to_text(html: &str) -> String {
     let mut s = html.to_string();
-    // 去掉 script / style / noscript
     for tag in ["script", "style", "noscript"] {
         s = strip_tag_blocks(&s, tag);
     }
-    // 常见块级标签换行
     let mut out = String::with_capacity(s.len());
     let mut in_tag = false;
     let mut tag_buf = String::new();
@@ -235,7 +295,6 @@ fn strip_tag_blocks(html: &str, tag: &str) -> String {
         if let Some(rel) = find_substr(&lower_bytes[i..], open.as_bytes()) {
             out.push_str(&html[i..i + rel]);
             let after_open = i + rel + open.len();
-            // 找到开标签结束
             let gt = html[after_open..]
                 .find('>')
                 .map(|n| after_open + n + 1)
@@ -381,5 +440,13 @@ mod tests {
     fn accepts_public_host_shape() {
         let parsed = reqwest::Url::parse("https://example.com/path").unwrap();
         assert!(!is_blocked_host(parsed.host_str().unwrap()));
+    }
+
+    #[test]
+    fn truncate_raw_respects_utf8() {
+        let body = "你好".repeat(5000);
+        let kept = common::truncate_utf8(&body, RAW_MAX_BYTES);
+        assert!(kept.len() <= RAW_MAX_BYTES);
+        assert!(std::str::from_utf8(kept.as_bytes()).is_ok());
     }
 }
