@@ -39,6 +39,7 @@ import LoopConfigPanel from "./LoopConfigPanel";
 import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
+import LoopAiAssistant from "./LoopAiAssistant";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -341,6 +342,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const confirm = useConfirm();
   const [workflow, setWorkflow] = useState<LoopDto | null>(null);
   const [name, setName] = useState("未命名创建loop");
+  const [description, setDescription] = useState("");
+  const [variables, setVariables] = useState<Record<string, unknown>>({});
+  const [showVarsPanel, setShowVarsPanel] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -361,6 +365,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   // run history state
   const [showHistory, setShowHistory] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
 
   // node action callbacks (injected into node data for toolbar buttons)
   const deleteNode = useCallback((nodeId: string) => {
@@ -428,6 +433,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         if (!wf) return;
         setWorkflow(wf);
         setName(wf.name);
+        setDescription(wf.description ?? "");
+        setVariables(wf.variables ?? {});
         setIconData(parseLoopIcon(wf.icon));
         setNodes(
           wf.nodes.map((n) => ({
@@ -552,6 +559,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       const dto: LoopDto = {
         ...workflow,
         name,
+        description,
+        variables,
         icon: iconData ? serializeLoopIcon(iconData) : undefined,
         nodes: nodes.map((n) => ({
           id: n.id,
@@ -738,7 +747,20 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             </button>
           )}
         </div>
+        <input
+          className="loop-editor-desc"
+          value={description}
+          onChange={(e) => { setDescription(e.target.value); setDirty(true); }}
+          placeholder="添加工作流描述…"
+        />
         <div className="loop-editor-toolbar-right">
+          <button
+            className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}
+            title="工作流变量"
+            onClick={() => setShowVarsPanel((v) => !v)}
+          >
+            <LucideIcons.Variable size={16} />
+          </button>
           <button
             className={`loop-icon-btn${fullscreen ? " is-active" : ""}`}
             title={fullscreen ? "退出全屏" : "全屏编辑"}
@@ -953,6 +975,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             label={(selectedNode.data as Record<string, unknown>).label as string}
             config={((selectedNode.data as Record<string, unknown>).config as Record<string, unknown>) ?? {}}
             disabled={!!((selectedNode.data as Record<string, unknown>).disabled)}
+            workflowId={workflowId}
             onLabelChange={(label) => {
               setNodes((nds) =>
                 nds.map((n) =>
@@ -1008,6 +1031,72 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             runId={selectedRunId}
             onBack={() => setSelectedRunId(null)}
           />
+        )}
+
+        {/* ── Right: Variables panel ── */}
+        {showVarsPanel && (
+          <div className="loop-vars-panel">
+            <div className="loop-vars-panel-header">
+              <span className="loop-vars-panel-title">工作流变量</span>
+              <button className="loop-icon-btn" onClick={() => setShowVarsPanel(false)} title="关闭">
+                <LucideIcons.X size={14} />
+              </button>
+            </div>
+            <div className="loop-vars-panel-body">
+              {Object.entries(variables).map(([key, val]) => (
+                <div key={key} className="loop-vars-row">
+                  <input
+                    className="loop-config-input loop-vars-key"
+                    value={key}
+                    onChange={(e) => {
+                      const next = { ...variables };
+                      const v = next[key];
+                      delete next[key];
+                      next[e.target.value] = v;
+                      setVariables(next);
+                      setDirty(true);
+                    }}
+                    placeholder="变量名"
+                  />
+                  <input
+                    className="loop-config-input loop-vars-val"
+                    value={typeof val === "string" ? val : JSON.stringify(val)}
+                    onChange={(e) => {
+                      setVariables({ ...variables, [key]: e.target.value });
+                      setDirty(true);
+                    }}
+                    placeholder="值"
+                  />
+                  <button
+                    className="loop-icon-btn loop-icon-btn--danger"
+                    onClick={() => {
+                      const next = { ...variables };
+                      delete next[key];
+                      setVariables(next);
+                      setDirty(true);
+                    }}
+                    title="删除"
+                  >
+                    <LucideIcons.Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+              <button
+                className="loop-btn loop-btn--secondary loop-btn--sm"
+                onClick={() => {
+                  const key = `var_${Object.keys(variables).length + 1}`;
+                  setVariables({ ...variables, [key]: "" });
+                  setDirty(true);
+                }}
+              >
+                <LucideIcons.Plus size={12} />
+                <span>添加变量</span>
+              </button>
+            </div>
+            <div className="loop-vars-panel-hint">
+              变量可在节点配置中通过 {"{{变量名}}"} 引用
+            </div>
+          </div>
         )}
       </div>
 

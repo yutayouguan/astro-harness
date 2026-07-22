@@ -2,7 +2,7 @@
 
 import { lazy, Suspense, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Braces, Trash2, Star, UserRound } from "lucide-react";
+import { Braces, Trash2 } from "lucide-react";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import * as LucideIcons from "lucide-react";
 import type { NodeType } from "./loopTypes";
@@ -88,11 +88,12 @@ interface Props {
   label: string;
   config: Record<string, unknown>;
   disabled: boolean;
+  workflowId: string | null;
   onLabelChange: (label: string) => void;
   onConfigChange: (config: Record<string, unknown>) => void;
   onDisabledChange: (disabled: boolean) => void;
   onDelete: () => void;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 interface StepLog {
@@ -107,7 +108,15 @@ interface StepLog {
   error: string | null;
 }
 
-function NodeStepLogs({ nodeId }: { nodeId: string }) {
+interface RunRow {
+  id: string;
+  workflow_id: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+}
+
+function NodeStepLogs({ nodeId, workflowId }: { nodeId: string; workflowId: string | null }) {
   const [logs, setLogs] = useState<StepLog[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -115,19 +124,24 @@ function NodeStepLogs({ nodeId }: { nodeId: string }) {
     (async () => {
       setLoading(true);
       try {
-        const runs = await invoke<{ runs: { id: string }[] }>("list_loop_runs", { workflowId: "", limit: 5 });
+        // list_loop_runs returns Vec<WorkflowRunRow> directly
+        const runs = await invoke<RunRow[]>("list_loop_runs", {
+          workflowId: workflowId ?? null,
+          limit: 5,
+        });
         const allLogs: StepLog[] = [];
-        for (const run of runs.runs.slice(0, 3)) {
+        for (const run of runs.slice(0, 3)) {
           try {
-            const steps = await invoke<{ steps: StepLog[] }>("list_loop_step_logs", { runId: run.id });
-            allLogs.push(...steps.steps.filter((s: StepLog) => s.node_id === nodeId));
+            // list_loop_step_logs returns Vec<WorkflowStepLogRow> directly
+            const steps = await invoke<StepLog[]>("list_loop_step_logs", { runId: run.id });
+            allLogs.push(...steps.filter((s) => s.node_id === nodeId));
           } catch { /* ignore */ }
         }
         setLogs(allLogs);
       } catch { /* ignore */ }
       setLoading(false);
     })();
-  }, [nodeId]);
+  }, [nodeId, workflowId]);
 
   if (loading) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">加载中…</div></div>;
   if (logs.length === 0) return <div className="loop-config-panel-body"><div className="loop-config-placeholder">暂无此节点的运行日志</div></div>;
@@ -159,11 +173,11 @@ export default function LoopConfigPanel({
   label,
   config,
   disabled,
+  workflowId,
   onLabelChange,
   onConfigChange,
   onDisabledChange,
   onDelete,
-  onClose,
 }: Props) {
   const [tab, setTab] = useState<"config" | "logs">("config");
   const [showJson, setShowJson] = useState(false);
@@ -271,7 +285,7 @@ export default function LoopConfigPanel({
       )}
 
       {tab === "logs" && (
-        <NodeStepLogs nodeId={nodeId} />
+        <NodeStepLogs nodeId={nodeId} workflowId={workflowId} />
       )}
     </div>
   );
