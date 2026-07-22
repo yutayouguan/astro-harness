@@ -11,6 +11,7 @@ use providers::interactions_http::{
     google_interactions_music, music_extension, resolve_lyria_model_id, InteractionMusicRequest,
     MusicAudioFormat, MusicImagePart,
 };
+use providers::minimax::music_http::{minimax_generate_music, MiniMaxMusicRequest};
 use providers::trait_::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -124,8 +125,12 @@ crate::submit_builtin_tool! {
 pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: MusicGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("music_gen 参数无效: {e}"))?;
+    if let Some(creds) = ctx.image_gen_targets.minimax() {
+        return dispatch_minimax_music(ctx, &parsed, creds).await;
+    }
+
     let creds = ctx.image_gen_targets.google().ok_or_else(|| {
-        anyhow::anyhow!("music_gen 需要 Google API Key（未配置 Google，且不回退 OpenAI）")
+        anyhow::anyhow!("music_gen 需要 Google 或 MiniMax API Key")
     })?;
     let (model_id, format) = validate_music_gen_args(&parsed, &creds.music_model)?;
 
@@ -240,6 +245,73 @@ fn mime_from_name(name: &str) -> &'static str {
     } else {
         "image/jpeg"
     }
+}
+
+async fn dispatch_minimax_music(
+    ctx: &ToolContext<'_>,
+    parsed: &MusicGenArgs,
+    creds: &crate::context::ImageGenCreds,
+) -> anyhow::Result<String> {
+    let model = if creds.music_model.trim().is_empty() {
+        providers::minimax::defaults::DEFAULT_MUSIC_MODEL.to_string()
+    } else {
+        creds.music_model.trim().to_string()
+    };
+    let config = ProviderConfig {
+        api_key: creds.api_key.clone(),
+        base_url: if creds.base_url.trim().is_empty() {
+            None
+        } else {
+            Some(creds.base_url.clone())
+        },
+        model: model.clone(),
+        ..ProviderConfig::default()
+    };
+
+    let is_instrumental = parsed.lyrics.as_deref().is_none()
+        || parsed
+            .lyrics
+            .as_deref()
+            .is_some_and(|l| l.trim().is_empty());
+
+    let req = MiniMaxMusicRequest {
+        model: model.clone(),
+        prompt: parsed.prompt.clone(),
+        lyrics: parsed.lyrics.as_deref().unwrap_or("").to_string(),
+        output_format: "url".to_string(),
+        is_instrumental,
+        ..MiniMaxMusicRequest::default()
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()?;
+    let result = minimax_generate_music(&client, &config, &req).await?;
+
+    let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(super::media_out::generated_media_filename(
+        parsed.title.as_deref(),
+        "音乐",
+        "mp3",
+    ));
+    std::fs::write(&path, &result.audio_bytes)?;
+    let rel = path
+        .strip_prefix(&ctx.workspace_dir)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.display().to_string());
+
+    Ok(super::media_out::with_generated_media(
+        format!(
+            "音乐已生成：{rel}\nprovider=minimax\nmodel={model}\nduration_ms={}",
+            result.duration_ms
+        ),
+        common::MediaKind::Audio,
+        &rel,
+        &result.mime_type,
+        "音乐已生成",
+    ))
 }
 
 #[cfg(test)]

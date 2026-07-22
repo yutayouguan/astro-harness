@@ -1023,6 +1023,7 @@ fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
     match kind {
         ProviderKind::Google => Some("gemini-3.1-flash-image"),
         ProviderKind::Openai => Some("gpt-image-2"),
+        ProviderKind::Minimax => Some("image-01"),
         _ => None,
     }
 }
@@ -1030,6 +1031,7 @@ fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
 fn default_video_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Google => "veo-3.1-generate-preview",
+        ProviderKind::Minimax => "MiniMax-Hailuo-2.3",
         _ => "",
     }
 }
@@ -1037,6 +1039,7 @@ fn default_video_model_for_kind(kind: &ProviderKind) -> &'static str {
 fn default_music_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Google => "lyria-3-clip-preview",
+        ProviderKind::Minimax => "music-3.0",
         _ => "",
     }
 }
@@ -1045,6 +1048,7 @@ fn default_tts_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Google => "gemini-3.1-flash-tts-preview",
         ProviderKind::Openai => "gpt-4o-mini-tts",
+        ProviderKind::Minimax => "speech-2.8-hd",
         _ => "",
     }
 }
@@ -1053,6 +1057,7 @@ fn default_vision_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Google => "gemini-3.5-flash",
         ProviderKind::Openai => "gpt-4o",
+        ProviderKind::Minimax => "gpt-4o",
         _ => "",
     }
 }
@@ -1071,6 +1076,7 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
     with_state(|s| {
         let mut google: Option<ImageGenTarget> = None;
         let mut openai: Option<ImageGenTarget> = None;
+        let mut minimax: Option<ImageGenTarget> = None;
 
         for p in &s.providers {
             if !p.enabled {
@@ -1109,6 +1115,7 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
             match p.kind {
                 ProviderKind::Google if google.is_none() => google = Some(target),
                 ProviderKind::Openai if openai.is_none() => openai = Some(target),
+                ProviderKind::Minimax if minimax.is_none() => minimax = Some(target),
                 _ => {}
             }
         }
@@ -1119,6 +1126,9 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
         }
         if let Some(o) = openai {
             targets.push(o);
+        }
+        if let Some(m) = minimax {
+            targets.push(m);
         }
         if targets.is_empty() {
             return Err(IMAGE_GEN_NO_PROVIDER_MSG.to_string());

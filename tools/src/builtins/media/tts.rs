@@ -6,6 +6,7 @@
 //! 音频写入工作区 `generated/audio/`。
 
 use home::{generated_dir, GeneratedKind};
+use providers::minimax::tts_http::{minimax_tts, MiniMaxTtsRequest, VoiceSetting};
 use providers::openai::chat::openai_compatible_base;
 use providers::interactions_http::{
     build_tts_input, google_interactions_tts, InteractionSpeechConfig, InteractionTtsRequest,
@@ -103,6 +104,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         return synthesize_google(ctx, text, &parsed, style, stream, creds).await;
     }
 
+    if let Some(creds) = ctx.image_gen_targets.minimax() {
+        return synthesize_minimax(ctx, text, &parsed, creds).await;
+    }
+
     let voice = parsed
         .voice
         .as_deref()
@@ -174,6 +179,73 @@ async fn synthesize_google(
         common::MediaKind::Audio,
         &rel,
         "audio/wav",
+        "语音已生成",
+    ))
+}
+
+async fn synthesize_minimax(
+    ctx: &ToolContext<'_>,
+    text: &str,
+    parsed: &TtsArgs,
+    creds: &crate::context::ImageGenCreds,
+) -> anyhow::Result<String> {
+    let model = if creds.tts_model.trim().is_empty() {
+        providers::minimax::defaults::DEFAULT_TTS_MODEL.to_string()
+    } else {
+        creds.tts_model.trim().to_string()
+    };
+    let voice_id = parsed
+        .voice
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("")
+        .to_string();
+    let config = ProviderConfig {
+        api_key: creds.api_key.clone(),
+        base_url: if creds.base_url.trim().is_empty() {
+            None
+        } else {
+            Some(creds.base_url.clone())
+        },
+        model: model.clone(),
+        ..ProviderConfig::default()
+    };
+    let req = MiniMaxTtsRequest {
+        model: model.clone(),
+        text: text.to_string(),
+        voice_setting: VoiceSetting {
+            voice_id,
+            ..VoiceSetting::default()
+        },
+        output_format: "url".to_string(),
+        ..MiniMaxTtsRequest::default()
+    };
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()?;
+    let result = minimax_tts(&client, &config, &req).await?;
+
+    let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Audio);
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(super::media_out::generated_media_filename(
+        parsed.title.as_deref(),
+        "语音",
+        "mp3",
+    ));
+    std::fs::write(&path, &result.audio_bytes)?;
+    let rel = path
+        .strip_prefix(&ctx.workspace_dir)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.display().to_string());
+    Ok(super::media_out::with_generated_media(
+        format!(
+            "语音已生成：{rel}\nprovider=minimax\nmodel={model}\nduration_ms={}",
+            result.duration_ms
+        ),
+        common::MediaKind::Audio,
+        &rel,
+        &result.mime_type,
         "语音已生成",
     ))
 }

@@ -178,10 +178,17 @@ const MEDIA_MODEL_DEFAULTS: Record<
     music: "",
     vision: "gpt-4o",
   },
+  minimax: {
+    image: "image-01",
+    video: "MiniMax-Hailuo-2.3",
+    tts: "speech-2.8-hd",
+    music: "music-3.0",
+    vision: "",
+  },
 };
 
 function supportsMediaModels(kind: string): boolean {
-  return kind === "google" || kind === "openai";
+  return kind === "google" || kind === "openai" || kind === "minimax";
 }
 
 function draftFromProvider(p: ProviderDto): Draft {

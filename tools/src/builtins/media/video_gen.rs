@@ -6,6 +6,10 @@ use home::{generated_dir, GeneratedKind};
 use providers::media_http::{
     default_video_model, google_native_generate_video, VideoGenExtras, VideoImagePart,
 };
+use providers::minimax::video_http::{
+    minimax_create_video, minimax_download_video, minimax_query_video, MiniMaxVideoRequest,
+    VideoTaskStatus,
+};
 use providers::trait_::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -93,6 +97,10 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         anyhow::bail!("video_gen 需要 prompt");
     }
 
+    if let Some(creds) = ctx.image_gen_targets.minimax() {
+        return dispatch_minimax_video(ctx, &parsed, creds).await;
+    }
+
     let mut refs: Vec<String> = parsed
         .reference_images
         .unwrap_or_default()
@@ -154,7 +162,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 
     let creds = ctx.image_gen_targets.google().ok_or_else(|| {
         anyhow::anyhow!(
-            "未找到可用的 Google 提供商。请在「模型提供商」中开启 Google 并配置 API Key。"
+            "未找到可用的 Google 或 MiniMax 提供商。请在「模型提供商」中开启并配置 API Key。"
         )
     })?;
 
@@ -378,5 +386,122 @@ fn mime_from_video_name(name: &str) -> &'static str {
         "video/quicktime"
     } else {
         "video/mp4"
+    }
+}
+
+async fn dispatch_minimax_video(
+    ctx: &ToolContext<'_>,
+    parsed: &VideoGenArgs,
+    creds: &crate::context::ImageGenCreds,
+) -> anyhow::Result<String> {
+    let model = if creds.video_model.trim().is_empty() {
+        providers::minimax::defaults::DEFAULT_VIDEO_MODEL.to_string()
+    } else {
+        creds.video_model.trim().to_string()
+    };
+    let config = ProviderConfig {
+        api_key: creds.api_key.clone(),
+        base_url: if creds.base_url.trim().is_empty() {
+            None
+        } else {
+            Some(creds.base_url.clone())
+        },
+        model: model.clone(),
+        ..ProviderConfig::default()
+    };
+    let first_frame = parsed
+        .image
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|p| {
+            let abs = ctx.workspace_dir.join(p);
+            let bytes = std::fs::read(&abs)?;
+            let b64 = base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                &bytes,
+            );
+            let mime = mime_from_video_name(p);
+            Ok::<_, anyhow::Error>(format!("data:{mime};base64,{b64}"))
+        })
+        .transpose()?;
+
+    let duration = parsed.duration_seconds.unwrap_or(6).clamp(6, 10);
+    let resolution = parsed
+        .resolution
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("768P")
+        .to_string();
+
+    let req = MiniMaxVideoRequest {
+        model: model.clone(),
+        prompt: parsed.prompt.clone(),
+        first_frame_image: first_frame,
+        duration,
+        resolution,
+        ..MiniMaxVideoRequest::default()
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()?;
+
+    let task_id = minimax_create_video(&client, &config, &req).await?;
+    eprintln!("[minimax video] 任务已创建: {task_id}，轮询中…");
+
+    let mut poll_count = 0u32;
+    let max_polls = 60u32;
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        poll_count += 1;
+        let result = minimax_query_video(&client, &config, &task_id).await?;
+        match result.status {
+            VideoTaskStatus::Success => {
+                let file_id = result
+                    .file_id
+                    .ok_or_else(|| anyhow::anyhow!("视频生成成功但缺少 file_id"))?;
+                eprintln!("[minimax video] 视频生成完成，正在下载…");
+                let video = minimax_download_video(&client, &config, &file_id).await?;
+
+                let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Videos);
+                std::fs::create_dir_all(&dir)?;
+                let path = dir.join(super::media_out::generated_media_filename(
+                    parsed.title.as_deref(),
+                    "视频",
+                    "mp4",
+                ));
+                std::fs::write(&path, &video.data)?;
+                let rel = path
+                    .strip_prefix(&ctx.workspace_dir)
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_else(|_| path.display().to_string());
+                return Ok(super::media_out::with_generated_media(
+                    format!(
+                        "视频已生成：{rel}\nprovider=minimax\nmodel={model}\ntask_id={task_id}"
+                    ),
+                    common::MediaKind::Video,
+                    &rel,
+                    "video/mp4",
+                    "视频已生成",
+                ));
+            }
+            VideoTaskStatus::Fail => {
+                anyhow::bail!("MiniMax 视频生成失败 (task_id={task_id})");
+            }
+            _ => {
+                if poll_count >= max_polls {
+                    anyhow::bail!(
+                        "MiniMax 视频生成超时 (task_id={task_id}, 已轮询 {poll_count} 次)"
+                    );
+                }
+                eprintln!(
+                    "[minimax video] 视频生成中… ({:?}, 第 {poll_count}/{max_polls} 次)",
+                    result.status
+                );
+            }
+        }
     }
 }

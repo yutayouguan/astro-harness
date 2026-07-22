@@ -129,6 +129,11 @@ impl ImageGenTargets {
     pub fn openai(&self) -> Option<&ImageGenCreds> {
         self.find_provider("openai")
     }
+
+    /// MiniMax 媒体凭证。
+    pub fn minimax(&self) -> Option<&ImageGenCreds> {
+        self.find_provider("minimax")
+    }
 }
 
 /// 单次工具调用的共享运行时上下文，由 AgentLoop 在每次 `dispatch_tool` 前构造。
