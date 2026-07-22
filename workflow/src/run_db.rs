@@ -174,11 +174,13 @@ impl WorkflowRunDb {
     }
 
     pub fn delete_run(&self, id: &str) -> Result<bool> {
+        self.conn.execute_batch("BEGIN")?;
         self.conn
             .execute("DELETE FROM workflow_step_logs WHERE run_id=?1", rusqlite::params![id])?;
         let n = self
             .conn
             .execute("DELETE FROM workflow_runs WHERE id=?1", rusqlite::params![id])?;
+        self.conn.execute_batch("COMMIT")?;
         Ok(n > 0)
     }
 

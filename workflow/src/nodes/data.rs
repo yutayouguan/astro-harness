@@ -124,14 +124,14 @@ pub struct SliceExec;
 #[async_trait]
 impl NodeExecutor for SliceExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let start = node.config.get("start").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+        let start = node.config.get("start").and_then(|v| v.as_i64()).unwrap_or(0).max(0) as usize;
         let end = node.config.get("end").and_then(|v| v.as_i64());
         let input_ref = node.config.get("input").and_then(|v| v.as_str()).unwrap_or("");
 
         let data = if !input_ref.is_empty() { ctx.resolve(&ctx.interpolate(input_ref)) } else { None };
         match data {
             Some(serde_json::Value::Array(arr)) => {
-                let end_idx = end.map(|e| (e as usize).min(arr.len())).unwrap_or(arr.len());
+                let end_idx = end.map(|e| (e.max(0) as usize).min(arr.len())).unwrap_or(arr.len());
                 let sliced: Vec<_> = arr.into_iter().skip(start).take(end_idx.saturating_sub(start)).collect();
                 Ok(NodeResult::Success(serde_json::Value::Array(sliced)))
             }

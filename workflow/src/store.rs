@@ -43,10 +43,25 @@ impl WorkflowStore {
 
     fn save(&self, file: &WorkflowsFile) -> Result<()> {
         let path = self.file_path();
-        let tmp = path.with_extension("json.tmp");
+        let unique = format!("json.tmp.{}", uuid::Uuid::new_v4());
+        let tmp = path.with_extension(unique);
         let data = serde_json::to_string_pretty(file)?;
         fs::write(&tmp, &data).context("写入临时文件失败")?;
         fs::rename(&tmp, &path).context("重命名临时文件失败")?;
+        Ok(())
+    }
+
+    /// 校验工作流结构合法性
+    pub fn validate_workflow(wf: &Workflow) -> Result<()> {
+        if wf.nodes.len() > 500 {
+            anyhow::bail!("节点数量过多（{}），上限 500", wf.nodes.len());
+        }
+        if wf.edges.len() > 2000 {
+            anyhow::bail!("连线数量过多（{}），上限 2000", wf.edges.len());
+        }
+        if wf.name.len() > 200 {
+            anyhow::bail!("工作流名称过长（{} 字节），上限 200", wf.name.len());
+        }
         Ok(())
     }
 
@@ -118,6 +133,7 @@ impl WorkflowStore {
 
     /// Upsert：id 已存在则更新，否则插入
     pub fn save_workflow(&self, wf: Workflow) -> Result<Workflow> {
+        Self::validate_workflow(&wf)?;
         let mut file = self.load()?;
         let mut wf = wf;
         wf.updated_at = Local::now().to_rfc3339();

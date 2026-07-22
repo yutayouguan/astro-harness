@@ -5,6 +5,35 @@ use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
 use crate::model::WorkflowNode;
 
+const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024; // 10 MB
+const MAX_DELAY_SECONDS: u64 = 86_400; // 24 hours
+
+/// 校验 URL：必须是 http/https，禁止内网和云元数据地址
+fn validate_url(url: &str) -> Result<()> {
+    let parsed: url::Url = url.parse().map_err(|_| anyhow::anyhow!("无效的 URL: {}", url))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        s => bail!("不允许的 URL scheme: {s}，仅支持 http/https"),
+    }
+    if let Some(host) = parsed.host_str() {
+        let h = host.to_lowercase();
+        if h == "localhost"
+            || h == "127.0.0.1"
+            || h == "::1"
+            || h == "0.0.0.0"
+            || h.starts_with("10.")
+            || h.starts_with("192.168.")
+            || h.starts_with("172.16.")
+            || h == "169.254.169.254"
+            || h.ends_with(".internal")
+            || h.ends_with(".local")
+        {
+            bail!("不允许请求内网地址: {host}");
+        }
+    }
+    Ok(())
+}
+
 // ── HttpRequest ──────────────────────────────────────────────────────
 
 pub struct HttpRequestExec;
@@ -15,7 +44,9 @@ impl NodeExecutor for HttpRequestExec {
         let method = node.config.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
         let url_tpl = node.config.get("url_template").and_then(|v| v.as_str()).unwrap_or("");
         let url = ctx.interpolate(url_tpl);
-        let timeout = node.config.get("timeout_seconds").and_then(|v| v.as_u64()).unwrap_or(30);
+        let timeout = node.config.get("timeout_seconds").and_then(|v| v.as_u64()).unwrap_or(30).min(300);
+
+        validate_url(&url)?;
 
         let body_tpl = node.config.get("body_template").and_then(|v| v.as_str()).unwrap_or("");
         let body = if body_tpl.is_empty() {
@@ -40,6 +71,7 @@ impl NodeExecutor for HttpRequestExec {
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(timeout))
+            .redirect(reqwest::redirect::Policy::limited(5))
             .build()?;
 
         let mut req = match method.to_uppercase().as_str() {
@@ -60,7 +92,17 @@ impl NodeExecutor for HttpRequestExec {
 
         let resp = req.send().await?;
         let status = resp.status().as_u16();
-        let resp_text = resp.text().await.unwrap_or_default();
+
+        // 限制响应大小，防止 OOM
+        let content_len = resp.content_length().unwrap_or(0) as usize;
+        if content_len > MAX_RESPONSE_BYTES {
+            bail!("响应体过大 ({} bytes)，上限 {} bytes", content_len, MAX_RESPONSE_BYTES);
+        }
+        let resp_bytes = resp.bytes().await?;
+        if resp_bytes.len() > MAX_RESPONSE_BYTES {
+            bail!("响应体过大 ({} bytes)，上限 {} bytes", resp_bytes.len(), MAX_RESPONSE_BYTES);
+        }
+        let resp_text = String::from_utf8_lossy(&resp_bytes).to_string();
 
         let resp_body: serde_json::Value = serde_json::from_str(&resp_text)
             .unwrap_or(serde_json::Value::String(resp_text));
@@ -93,7 +135,7 @@ pub struct DelayWaitExec;
 #[async_trait]
 impl NodeExecutor for DelayWaitExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let seconds = node.config.get("seconds").and_then(|v| v.as_u64()).unwrap_or(1);
+        let seconds = node.config.get("seconds").and_then(|v| v.as_u64()).unwrap_or(1).min(MAX_DELAY_SECONDS);
         tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
         Ok(NodeResult::Success(serde_json::json!({
             "waited_seconds": seconds,

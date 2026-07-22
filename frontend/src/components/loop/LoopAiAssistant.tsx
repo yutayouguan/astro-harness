@@ -49,7 +49,6 @@ export default function LoopAiAssistant({ currentNodes, onApply, onClose }: Prop
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [lastResult, setLastResult] = useState<AiResult | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -72,7 +71,6 @@ export default function LoopAiAssistant({ currentNodes, onApply, onClose }: Prop
         currentNodes: currentNodes.length > 0 ? currentNodes : null,
       });
 
-      setLastResult(result);
       setMessages((prev) => [
         ...prev,
         {
