@@ -45,11 +45,11 @@ pub fn register(registry: &mut ToolRegistry) {
         name: "code_exec".to_string(),
         toolset: "code_exec".to_string(),
         description: "Execute a short code snippet for quick computation or data processing. \
-language must be python|javascript|shell (default python). \
+language must be python|javascript (default python). \
 Not a hard sandbox—runs on the host with the workspace as cwd. \
 Guardrails: env scrubbing (no API keys/tokens), Unix resource limits (CPU/memory/file size/fd), 30s timeout. \
 stdout/stderr capped at 64KiB. \
-For project build/dev/git commands, use terminal instead."
+For shell commands, use terminal."
             .to_string(),
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,
@@ -152,9 +152,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let (program, script_args, ext): (&str, Vec<&str>, &str) = match lang.as_str() {
         "python" | "python3" | "py" => ("python3", vec![], "py"),
         "javascript" | "js" => ("node", vec![], "js"),
-        "shell" | "bash" | "sh" => ("sh", vec![], "sh"),
+        "shell" | "bash" | "sh" => {
+            anyhow::bail!("code_exec 不再支持 shell；请使用 terminal 工具执行 shell 命令")
+        }
         other => {
-            anyhow::bail!("code_exec 不支持 language={other}；请使用 python、javascript 或 shell")
+            anyhow::bail!("code_exec 不支持 language={other}；请使用 python 或 javascript")
         }
     };
 
@@ -318,8 +320,8 @@ mod tests {
         let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
         // 两个并发的同语言调用共享同一个 .code_exec 目录；
         // sleep 制造重叠窗口——若临时文件名固定会相互覆盖。
-        let a = serde_json::json!({"language": "shell", "code": "sleep 0.3; echo MARKER_AAA"});
-        let b = serde_json::json!({"language": "shell", "code": "sleep 0.3; echo MARKER_BBB"});
+        let a = serde_json::json!({"language": "python", "code": "import time; time.sleep(0.3); print('MARKER_AAA')"});
+        let b = serde_json::json!({"language": "python", "code": "import time; time.sleep(0.3); print('MARKER_BBB')"});
         let (r1, r2) = tokio::join!(dispatch(&ctx, &a), dispatch(&ctx, &b));
         let r1 = r1.unwrap();
         let r2 = r2.unwrap();
@@ -362,14 +364,12 @@ mod tests {
         let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
-        // 30s 固定超时对单测太慢；用 shell 的超长 sleep 无法缩短超时。
-        // 改为：正常成功路径后确认目录可清理；超时清理由 TempScript Drop 保证。
-        // 这里用极短 shell 验证文件最终不残留。
+        // 正常成功路径后确认目录可清理；超时清理由 TempScript Drop 保证。
         let _ = dispatch(
             &ctx,
             &serde_json::json!({
-                "language": "shell",
-                "code": "echo ok"
+                "language": "python",
+                "code": "print('ok')"
             }),
         )
         .await
@@ -386,5 +386,20 @@ mod tests {
                 "temp scripts should be cleaned: {leftovers:?}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn shell_language_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let providers = providers::registry::ProviderRegistry::new();
+        let targets = ImageGenTargets::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        let err = dispatch(&ctx, &serde_json::json!({"language": "shell", "code": "echo hi"}))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("terminal"), "{err}");
     }
 }
