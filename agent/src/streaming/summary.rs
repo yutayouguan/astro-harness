@@ -166,6 +166,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
             Some(Ok(StreamedAssistantContent::ToolCallDelta(_))) => {}
             Some(Ok(StreamedAssistantContent::ThoughtSignature(_))) => {}
             Some(Ok(StreamedAssistantContent::Citations(_))) => {}
+            Some(Ok(StreamedAssistantContent::InteractionId(_))) => {}
             Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
                 round_usage = Some(u);
             }

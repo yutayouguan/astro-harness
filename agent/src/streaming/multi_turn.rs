@@ -589,6 +589,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     )
                     .await;
                 }
+                Some(Ok(StreamedAssistantContent::InteractionId(_))) => {}
                 Some(Err(err)) => {
                     pause.clear_abort();
                     if let Some(u) = round_usage {

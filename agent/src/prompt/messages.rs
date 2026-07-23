@@ -1,10 +1,11 @@
 //! 会话消息 → Provider 消息转换。
 //!
-//! 将应用内 `common::message::Message` 序列转为各 LLM Provider 统一的 `ChatMessage` 格式，
-//! 并补齐 system 前缀与 tool 角色的 `name` 回溯（Provider 要求 tool 消息关联原调用名）。
+//! 将应用内 `common::message::Message` 序列转为各 LLM Provider 统一的消息格式。
+//! 支持旧 `ChatMessage` 和新 `providers::types::Message` 两种输出。
 
 use common::message::{Message, MessageContent, Role};
 use providers::trait_::{ChatContentPart, ChatMessage as ProviderMessage, ChatToolCall};
+use providers::types::message as new_msg;
 
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
@@ -194,6 +195,14 @@ fn media_asset_to_part(asset: &common::MediaAsset) -> Option<ChatContentPart> {
             text: format!("[file attached: {mime}]"),
         }),
     }
+}
+
+/// 将会话历史转为新 `providers::types::Message` 格式。
+///
+/// 与 `to_provider_messages` 功能相同，但输出新统一消息类型。
+pub fn to_new_messages(system_prompt: &str, session: &[Message]) -> Vec<new_msg::Message> {
+    let old_msgs = to_provider_messages(system_prompt, session);
+    old_msgs.iter().map(providers::bridge::legacy_to_message).collect()
 }
 
 #[cfg(test)]
