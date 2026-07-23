@@ -91,7 +91,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_vision_model: "gpt-4o",
         supports_stream_usage: true,
         default_tts_model: "tts-1",
-        default_video_model: "",
+        default_video_model: "sora",
         default_music_model: "",
     },
     ProviderProfile {
