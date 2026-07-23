@@ -14,12 +14,18 @@ use crate::trait_::ProviderConfig;
 pub struct VoiceSetting {
     /// 音色 ID。
     pub voice_id: String,
-    /// 语速倍率（默认 1.0）。
+    /// 语速倍率 [0.5, 2]（默认 1.0）。
     pub speed: f32,
-    /// 音量倍率（默认 1.0）。
+    /// 音量倍率 (0, 10]（默认 1.0）。
     pub vol: f32,
-    /// 音高偏移（默认 0）。
+    /// 音高偏移 [-12, 12]（默认 0）。
     pub pitch: i32,
+    /// 情绪控制（happy/sad/angry/fearful/disgusted/surprised/calm/fluent/whisper）。
+    pub emotion: Option<String>,
+    /// 是否启用文本规范化（数字阅读场景）。
+    pub text_normalization: bool,
+    /// 是否朗读 LaTeX 公式。
+    pub latex_read: bool,
 }
 
 impl Default for VoiceSetting {
@@ -29,8 +35,31 @@ impl Default for VoiceSetting {
             speed: 1.0,
             vol: 1.0,
             pitch: 0,
+            emotion: None,
+            text_normalization: false,
+            latex_read: false,
         }
     }
+}
+
+/// 混合音色权重。
+#[derive(Debug, Clone)]
+pub struct TimbreWeight {
+    pub voice_id: String,
+    pub weight: u32,
+}
+
+/// 声音效果器。
+#[derive(Debug, Clone)]
+pub struct VoiceModify {
+    /// 音高调整 [-100, 100]。
+    pub pitch: Option<i32>,
+    /// 强度调整 [-100, 100]。
+    pub intensity: Option<i32>,
+    /// 音色调整 [-100, 100]。
+    pub timbre: Option<i32>,
+    /// 音效：spacious_echo / auditorium_echo / lofi_telephone / robotic。
+    pub sound_effects: Option<String>,
 }
 
 /// 音频输出设置。
@@ -40,10 +69,12 @@ pub struct AudioSetting {
     pub sample_rate: u32,
     /// 比特率（默认 128000）。
     pub bitrate: u32,
-    /// 音频格式（默认 `"mp3"`）。
+    /// 音频格式：mp3/pcm/flac/wav/pcmu_raw/pcmu_wav/opus（默认 `"mp3"`）。
     pub format: String,
     /// 声道数（默认 1）。
     pub channel: u8,
+    /// 是否恒定比特率（仅流式 mp3）。
+    pub force_cbr: bool,
 }
 
 impl Default for AudioSetting {
@@ -53,6 +84,7 @@ impl Default for AudioSetting {
             bitrate: 128000,
             format: "mp3".to_string(),
             channel: 1,
+            force_cbr: false,
         }
     }
 }
@@ -70,8 +102,20 @@ pub struct MiniMaxTtsRequest {
     pub audio_setting: AudioSetting,
     /// 输出格式：`"url"` 或 `"hex"`。
     pub output_format: String,
-    /// 语言增强（如 `"zh"` / `"en"`）。
+    /// 语言增强。
     pub language_boost: Option<String>,
+    /// 发音词典（注音/替换规则）。
+    pub pronunciation_dict: Option<Vec<String>>,
+    /// 混合音色权重。
+    pub timbre_weights: Option<Vec<TimbreWeight>>,
+    /// 声音效果器。
+    pub voice_modify: Option<VoiceModify>,
+    /// 是否开启字幕。
+    pub subtitle_enable: bool,
+    /// 字幕粒度：sentence / word / word_streaming。
+    pub subtitle_type: Option<String>,
+    /// 是否添加 AIGC 水印（仅非流式）。
+    pub aigc_watermark: bool,
 }
 
 impl Default for MiniMaxTtsRequest {
@@ -83,6 +127,12 @@ impl Default for MiniMaxTtsRequest {
             audio_setting: AudioSetting::default(),
             output_format: "url".to_string(),
             language_boost: None,
+            pronunciation_dict: None,
+            timbre_weights: None,
+            voice_modify: None,
+            subtitle_enable: false,
+            subtitle_type: None,
+            aigc_watermark: false,
         }
     }
 }
@@ -115,9 +165,10 @@ pub(crate) fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
 fn mime_for_format(fmt: &str) -> &'static str {
     match fmt {
         "mp3" => "audio/mpeg",
-        "pcm" => "audio/L16",
+        "pcm" | "pcmu_raw" => "audio/L16",
         "flac" => "audio/flac",
-        "wav" => "audio/wav",
+        "wav" | "pcmu_wav" => "audio/wav",
+        "opus" => "audio/ogg",
         _ => "audio/mpeg",
     }
 }
@@ -158,27 +209,69 @@ pub async fn minimax_tts(
         req.model.trim()
     };
 
+    let mut vs = json!({
+        "voice_id": req.voice_setting.voice_id,
+        "speed": req.voice_setting.speed,
+        "vol": req.voice_setting.vol,
+        "pitch": req.voice_setting.pitch,
+    });
+    if let Some(ref emotion) = req.voice_setting.emotion {
+        vs["emotion"] = json!(emotion);
+    }
+    if req.voice_setting.text_normalization {
+        vs["text_normalization"] = json!(true);
+    }
+    if req.voice_setting.latex_read {
+        vs["latex_read"] = json!(true);
+    }
+
+    let mut aus = json!({
+        "sample_rate": req.audio_setting.sample_rate,
+        "bitrate": req.audio_setting.bitrate,
+        "format": req.audio_setting.format,
+        "channel": req.audio_setting.channel,
+    });
+    if req.audio_setting.force_cbr {
+        aus["force_cbr"] = json!(true);
+    }
+
     let mut body = json!({
         "model": model,
         "text": req.text,
         "stream": false,
-        "voice_setting": {
-            "voice_id": req.voice_setting.voice_id,
-            "speed": req.voice_setting.speed,
-            "vol": req.voice_setting.vol,
-            "pitch": req.voice_setting.pitch,
-        },
-        "audio_setting": {
-            "sample_rate": req.audio_setting.sample_rate,
-            "bitrate": req.audio_setting.bitrate,
-            "format": req.audio_setting.format,
-            "channel": req.audio_setting.channel,
-        },
+        "voice_setting": vs,
+        "audio_setting": aus,
         "output_format": req.output_format,
     });
 
     if let Some(ref lang) = req.language_boost {
         body["language_boost"] = json!(lang);
+    }
+    if let Some(ref dict) = req.pronunciation_dict {
+        body["pronunciation_dict"] = json!({"tone": dict});
+    }
+    if let Some(ref tw) = req.timbre_weights {
+        let arr: Vec<Value> = tw.iter().map(|t| json!({"voice_id": t.voice_id, "weight": t.weight})).collect();
+        body["timbre_weights"] = Value::Array(arr);
+    }
+    if let Some(ref vm) = req.voice_modify {
+        let mut obj = serde_json::Map::new();
+        if let Some(p) = vm.pitch { obj.insert("pitch".into(), json!(p)); }
+        if let Some(i) = vm.intensity { obj.insert("intensity".into(), json!(i)); }
+        if let Some(t) = vm.timbre { obj.insert("timbre".into(), json!(t)); }
+        if let Some(ref se) = vm.sound_effects { obj.insert("sound_effects".into(), json!(se)); }
+        if !obj.is_empty() {
+            body["voice_modify"] = Value::Object(obj);
+        }
+    }
+    if req.subtitle_enable {
+        body["subtitle_enable"] = json!(true);
+        if let Some(ref st) = req.subtitle_type {
+            body["subtitle_type"] = json!(st);
+        }
+    }
+    if req.aigc_watermark {
+        body["aigc_watermark"] = json!(true);
     }
 
     let response = client
