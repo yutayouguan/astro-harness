@@ -382,6 +382,7 @@ mod tests {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
+            api_mode: String::new(),
         }
     }
 

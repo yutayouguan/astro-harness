@@ -132,7 +132,7 @@ impl ProviderKind {
             Self::Nvidia => "https://integrate.api.nvidia.com/v1",
             Self::Moonshot => "https://api.moonshot.cn/v1",
             Self::Volcengine => "https://ark.cn-beijing.volces.com/api/v3",
-            Self::Minimax => "https://api.minimax.io/v1",
+            Self::Minimax => "https://api.minimaxi.com/v1",
             Self::Hunyuan => "https://api.hunyuan.cloud.tencent.com/v1",
             Self::Custom => "http://localhost:11434/v1",
         }
@@ -369,11 +369,14 @@ impl ProvidersState {
                     p.model = "ep-".to_string();
                     changed = true;
                 }
-                ProviderKind::Minimax
-                    if p.endpoint.trim_end_matches('/') == "https://api.minimax.chat/v1" =>
-                {
-                    p.endpoint = "https://api.minimax.io/v1".to_string();
-                    changed = true;
+                ProviderKind::Minimax => {
+                    let ep = p.endpoint.trim_end_matches('/');
+                    if ep == "https://api.minimax.chat/v1"
+                        || ep == "https://api.minimaxi.com/v1"
+                    {
+                        p.endpoint = "https://api.minimaxi.com/v1".to_string();
+                        changed = true;
+                    }
                 }
                 ProviderKind::Google => {
                     // 旧默认走 OpenAI 兼容；聊天已迁 Interactions，回写原生 host。
@@ -1881,14 +1884,14 @@ mod tests {
         assert_eq!(ProviderKind::Volcengine.default_model(), "ep-");
         assert_eq!(
             ProviderKind::Minimax.default_endpoint(),
-            "https://api.minimax.io/v1"
+            "https://api.minimaxi.com/v1"
         );
         assert_eq!(ProviderKind::Minimax.default_model(), "MiniMax-M2.5");
     }
 
     #[test]
     fn serde_accepts_minmax_alias() {
-        let raw = r#"{"id":"x","kind":"minmax","display_name":"M","endpoint":"https://api.minimax.io/v1","model":"MiniMax-M2.5","enabled":false}"#;
+        let raw = r#"{"id":"x","kind":"minmax","display_name":"M","endpoint":"https://api.minimaxi.com/v1","model":"MiniMax-M2.5","enabled":false}"#;
         let p: ProviderConfig = serde_json::from_str(raw).expect("minmax alias");
         assert_eq!(p.kind, ProviderKind::Minimax);
         assert!(p.fallback.is_empty());
@@ -1956,6 +1959,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    api_mode: String::new(),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -1970,6 +1974,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    api_mode: String::new(),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -1984,6 +1989,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    api_mode: String::new(),
                 },
                 ProviderConfig {
                     id: "g1".into(),
@@ -1998,13 +2004,14 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
+                    api_mode: String::new(),
                 },
             ],
         };
         assert!(s.migrate_stale_defaults());
         assert_eq!(s.providers[0].model, "kimi-k2.5");
         assert_eq!(s.providers[1].model, "ep-");
-        assert_eq!(s.providers[2].endpoint, "https://api.minimax.io/v1");
+        assert_eq!(s.providers[2].endpoint, "https://api.minimaxi.com/v1");
         assert_eq!(
             s.providers[3].endpoint,
             "https://generativelanguage.googleapis.com"

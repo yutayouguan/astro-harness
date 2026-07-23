@@ -182,6 +182,16 @@ mod tests {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
+            asr_model: String::new(),
+            embedding_model: String::new(),
+            supports_image: false,
+            supports_video: false,
+            supports_tts: false,
+            supports_music: false,
+            supports_asr: false,
+            supports_embedding: false,
+            api_mode: "chat_completions".into(),
+            supports_responses_api: false,
         }
     }
 
