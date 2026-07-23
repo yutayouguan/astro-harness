@@ -49,7 +49,6 @@ pub async fn probe_openai_responses(
         "model": model,
         "input": "ping",
         "max_output_tokens": 1,
-        "store": false,
     });
     let mut req = client.post(&url).json(&body);
     if !api_key.is_empty() {
@@ -62,7 +61,10 @@ pub async fn probe_openai_responses(
     let status = resp.status();
     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        let msg = json["error"]["message"].as_str().unwrap_or("未知错误");
+        let msg = json["error"]["message"]
+            .as_str()
+            .or_else(|| json["base_resp"]["status_msg"].as_str())
+            .unwrap_or("未知错误");
         return Err(format!("失败 ({status}): {msg}"));
     }
     Ok("调用成功".to_string())
