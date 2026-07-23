@@ -21,23 +21,42 @@ pub struct SubjectRef {
     pub image_file: String,
 }
 
+/// 画风设置（仅 `image-01-live` 生效）。
+#[derive(Debug, Clone)]
+pub struct ImageStyle {
+    /// 风格类型：`漫画` / `元气` / `中世纪` / `水彩`。
+    pub style_type: String,
+    /// 风格权重 (0, 1]，默认 0.8。
+    pub style_weight: f32,
+}
+
 /// MiniMax 图像生成请求参数。
 #[derive(Debug, Clone)]
 pub struct MiniMaxImageRequest {
-    /// 模型名称。
+    /// 模型名称：`image-01` / `image-01-live`。
     pub model: String,
     /// 提示词。
     pub prompt: String,
     /// 宽高比，如 `"1:1"`、`"16:9"`。
     pub aspect_ratio: String,
+    /// 自定义宽度（像素，[512, 2048]，8 的倍数，仅 image-01）。
+    pub width: Option<u32>,
+    /// 自定义高度（像素，[512, 2048]，8 的倍数，仅 image-01）。
+    pub height: Option<u32>,
     /// 响应格式：`"url"` 或 `"base64"`。
     pub response_format: String,
-    /// 生成数量。
+    /// 生成数量 [1, 9]。
     pub n: u32,
     /// 是否启用提示词优化。
     pub prompt_optimizer: bool,
     /// 主体参考列表（角色一致性）。
     pub subject_reference: Option<Vec<SubjectRef>>,
+    /// 画风设置（仅 image-01-live）。
+    pub style: Option<ImageStyle>,
+    /// 随机种子。
+    pub seed: Option<i64>,
+    /// 是否添加 AIGC 水印。
+    pub aigc_watermark: bool,
 }
 
 impl Default for MiniMaxImageRequest {
@@ -46,10 +65,15 @@ impl Default for MiniMaxImageRequest {
             model: "image-01".to_string(),
             prompt: String::new(),
             aspect_ratio: "1:1".to_string(),
+            width: None,
+            height: None,
             response_format: "url".to_string(),
             n: 1,
             prompt_optimizer: false,
             subject_reference: None,
+            style: None,
+            seed: None,
+            aigc_watermark: false,
         }
     }
 }
@@ -81,6 +105,12 @@ fn build_image_body(req: &MiniMaxImageRequest) -> Value {
         "prompt_optimizer": req.prompt_optimizer,
     });
 
+    if let Some(w) = req.width {
+        body["width"] = json!(w);
+    }
+    if let Some(h) = req.height {
+        body["height"] = json!(h);
+    }
     if let Some(refs) = &req.subject_reference {
         let arr: Vec<Value> = refs
             .iter()
@@ -92,6 +122,18 @@ fn build_image_body(req: &MiniMaxImageRequest) -> Value {
             })
             .collect();
         body["subject_reference"] = Value::Array(arr);
+    }
+    if let Some(ref style) = req.style {
+        body["style"] = json!({
+            "style_type": style.style_type,
+            "style_weight": style.style_weight,
+        });
+    }
+    if let Some(seed) = req.seed {
+        body["seed"] = json!(seed);
+    }
+    if req.aigc_watermark {
+        body["aigc_watermark"] = json!(true);
     }
 
     body
