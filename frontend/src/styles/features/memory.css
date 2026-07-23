@@ -355,9 +355,15 @@ html[data-theme="dark"] .aux-error {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-/* Offline evolution — instrument / lab panel
- * 不要套 prefs-page：后者默认横向 flex（侧栏+主栏），会把卡片挤成竖条。 */
+/* 自主进化 — 独立面板（不再嵌入 ProvidersPanel）
+ * 不要套 prefs-page：后者默认横向 flex（侧栏+主栏），会把卡片挤成竖条。
+ * 强制使用 amber tone 变量，不依赖 shell 的 html[data-tone]（统一/灵动模式下 shellTone 固定 blue）。 */
 .evo-page {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+  --tone-glow: var(--tone-amber-glow);
+  --accent: var(--tone-amber);
+  --accent-2: var(--tone-amber);
   gap: 14px;
 }
 
