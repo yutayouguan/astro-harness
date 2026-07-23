@@ -811,18 +811,6 @@ export default function App() {
               )}
               {nav === "chat" && (
                 <div className="chat-header-tools">
-                  <AgentPicker
-                    className="chat-header-agent-picker"
-                    agents={agents}
-                    value={activeAgentId}
-                    onChange={(id) => {
-                      void setActiveAgent(id).catch((e) => {
-                        console.warn("set_active_agent failed", e);
-                      });
-                    }}
-                    onCreateNew={startNewAgent}
-                    menuAlign="end"
-                  />
                   <button
                     type="button"
                     className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
