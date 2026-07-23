@@ -2,7 +2,6 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 
 use providers::registry::ProviderRegistry;
-use providers::ProviderClient;
 use providers::trait_::ProviderConfig;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
@@ -12,10 +11,19 @@ use crate::model::WorkflowNode;
 fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
     let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("openai");
     let model = node.config.get("model").and_then(|v| v.as_str()).unwrap_or("");
-    let client = ProviderClient::from_env(provider_id)?;
+    let auth = providers::trait_::AuthKind::for_provider(provider_id);
+    let api_key = if auth == providers::trait_::AuthKind::None {
+        String::new()
+    } else {
+        providers::profile::read_env_api_key(provider_id).ok_or_else(|| {
+            anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id)
+        })?
+    };
+    let base_url = Some(providers::profile::default_base_for(provider_id).to_string())
+        .filter(|s| !s.is_empty());
     Ok((provider_id.to_string(), ProviderConfig {
-        api_key: client.api_key.clone(),
-        base_url: client.base_url.clone(),
+        api_key,
+        base_url,
         model: model.to_string(),
         temperature: 0.7,
         max_tokens: 4096,

@@ -295,8 +295,6 @@ pub async fn ai_generate_workflow(
     model: Option<String>,
 ) -> Result<AiGeneratedWorkflow, String> {
     use crate::providers_commands::{find_provider, resolve_api_key};
-    use providers::client::ProviderClient;
-
     if prompt.trim().is_empty() {
         return Err("请描述你想要创建的工作流".into());
     }
@@ -336,7 +334,17 @@ pub async fn ai_generate_workflow(
         Some(provider_cfg.endpoint.trim_end_matches('/').to_string())
     };
 
-    let client = ProviderClient::from_config(provider_cfg.kind.backend_id(), api_key, base_url);
+    let config = providers::ProviderConfig {
+        api_key,
+        base_url,
+        model: String::new(),
+        temperature: 0.2,
+        max_tokens: 4096,
+        thinking_enabled: false,
+        reasoning_effort: "high".into(),
+        additional_params: serde_json::json!(serde_json::Value::Null),
+        previous_interaction_id: None,
+    };
 
     // 构建用户消息：包含当前画布状态
     let mut user_msg = prompt.clone();
@@ -350,10 +358,13 @@ pub async fn ai_generate_workflow(
         }
     }
 
-    let extractor = client
-        .extractor::<AiGeneratedWorkflow>(&model_name)
-        .preamble(AI_WORKFLOW_SYSTEM_PROMPT)
-        .build();
+    let extractor = providers::build_extractor::<AiGeneratedWorkflow>(
+        provider_cfg.kind.backend_id(),
+        &model_name,
+        config,
+    )
+    .preamble(AI_WORKFLOW_SYSTEM_PROMPT)
+    .build();
 
     let result = extractor
         .extract(&user_msg)

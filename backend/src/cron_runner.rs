@@ -64,7 +64,7 @@ fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
         return None;
     }
     let backend_id = kind_to_backend(&entry.kind).to_string();
-    let api_key = providers::client::read_env_api_key(&backend_id).unwrap_or_default();
+    let api_key = providers::read_env_api_key(&backend_id).unwrap_or_default();
     let allow_empty_key = backend_id == "ollama";
     if api_key.trim().is_empty() && !allow_empty_key {
         return None;
@@ -153,7 +153,7 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
         .unwrap_or_else(|| "ollama".into());
     let backend = kind_to_backend(&provider).to_string();
     let model = job.model.clone().unwrap_or_default();
-    let api_key = providers::client::read_env_api_key(&backend).unwrap_or_default();
+    let api_key = providers::read_env_api_key(&backend).unwrap_or_default();
     let base_url =
         std::env::var(format!("{}_BASE_URL", backend.to_uppercase())).unwrap_or_default();
     CronExecCredentials {

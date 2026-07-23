@@ -195,6 +195,50 @@ where
     }
 }
 
+/// 从 provider id、model、config 快速构造 [`ExtractorBuilder`]（替代旧 `ProviderClient.extractor()`）。
+pub fn extractor<T>(
+    provider: impl Into<String>,
+    model: impl Into<String>,
+    config: ProviderConfig,
+) -> ExtractorBuilder<T>
+where
+    T: DeserializeOwned + Serialize + JsonSchema + Send + Sync,
+{
+    ExtractorBuilder::new(provider, model, config)
+}
+
+/// 从 provider id 和环境变量快速构造 [`ExtractorBuilder`]。
+pub fn extractor_from_env<T>(
+    provider_id: &str,
+    model: impl Into<String>,
+) -> anyhow::Result<ExtractorBuilder<T>>
+where
+    T: DeserializeOwned + Serialize + JsonSchema + Send + Sync,
+{
+    let auth = crate::trait_::AuthKind::for_provider(provider_id);
+    let api_key = if auth == crate::trait_::AuthKind::None {
+        String::new()
+    } else {
+        crate::profile::read_env_api_key(provider_id).ok_or_else(|| {
+            anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id)
+        })?
+    };
+    let base_url = Some(crate::profile::default_base_for(provider_id).to_string())
+        .filter(|s| !s.is_empty());
+    let config = ProviderConfig {
+        api_key,
+        base_url,
+        model: String::new(),
+        temperature: 0.2,
+        max_tokens: 4096,
+        thinking_enabled: false,
+        reasoning_effort: "high".into(),
+        additional_params: serde_json::Value::Null,
+        previous_interaction_id: None,
+    };
+    Ok(ExtractorBuilder::new(provider_id, model, config))
+}
+
 /// 已配置的结构化抽取器，对指定文本调用模型并反序列化为 `T`。
 pub struct Extractor<T> {
     /// 供应商标识符。

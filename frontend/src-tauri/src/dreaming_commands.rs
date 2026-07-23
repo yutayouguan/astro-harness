@@ -11,7 +11,6 @@ use memory::dreaming::{
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
 use memory::{list_pending, load_memory_config};
-use providers::client::ProviderClient;
 use providers::registry::ProviderRegistry;
 use providers::trait_::{ChatMessage, ProviderConfig};
 
@@ -121,12 +120,21 @@ async fn extract_or_fallback_dream(
     } else {
         Some(base_url.trim_end_matches('/').to_string())
     };
-    let client = ProviderClient::from_config(backend_id, api_key.to_string(), base);
+    let config = ProviderConfig {
+        api_key: api_key.to_string(),
+        base_url: base,
+        model: String::new(),
+        temperature: 0.2,
+        max_tokens: 4096,
+        thinking_enabled: false,
+        reasoning_effort: "high".into(),
+        additional_params: serde_json::Value::Null,
+        previous_interaction_id: None,
+    };
     let (preamble, text) =
         build_dream_extract_inputs(&job.agent_name, &job.memory_before, &job.diaries);
 
-    let extractor = client
-        .extractor::<DreamMemoryUpdate>(model)
+    let extractor = providers::build_extractor::<DreamMemoryUpdate>(backend_id, model, config)
         .preamble(preamble)
         .build();
 

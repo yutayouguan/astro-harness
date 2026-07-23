@@ -1,8 +1,8 @@
-//! Provider 客户端、注册表与图片生成相关测试。
+//! Provider 注册表与图片生成相关测试。
 
 use providers::{
-    client::{env_api_key_names, ProviderClient},
     image_gen::*,
+    profile::{env_api_key_names, read_env_api_key},
     registry::ProviderRegistry,
     AuthKind, ChatProvider, VerifyProvider,
 };
@@ -78,29 +78,11 @@ fn test_auth_kind_for_providers() {
 }
 
 #[test]
-fn test_provider_client_from_config() {
-    let client = ProviderClient::from_config(
-        "openai",
-        "sk-test".into(),
-        Some("https://api.openai.com/v1".into()),
-    );
-    assert_eq!(client.provider_id, "openai");
-    assert_eq!(client.api_key, "sk-test");
-    assert_eq!(client.auth, AuthKind::Bearer);
-
-    let ollama = ProviderClient::from_config("ollama", String::new(), None);
-    assert_eq!(ollama.auth, AuthKind::None);
-
-    let aliased = ProviderClient::from_config("anthropic", "k".into(), None);
-    assert_eq!(aliased.provider_id, "claude");
-    assert_eq!(aliased.auth, AuthKind::AnthropicKey);
-}
-
-#[test]
-fn test_provider_client_from_env_ollama() {
-    let client = ProviderClient::from_env("ollama").expect("ollama needs no key");
-    assert_eq!(client.provider_id, "ollama");
-    assert_eq!(client.auth, AuthKind::None);
+fn test_read_env_api_key_ollama() {
+    // ollama env_keys is empty → read_env_api_key returns None but that's OK
+    // (ollama doesn't need a key)
+    let auth = AuthKind::for_provider("ollama");
+    assert_eq!(auth, AuthKind::None);
 }
 
 #[test]

@@ -37,15 +37,12 @@ async fn tts_inner(
     _voice: Option<&str>,
 ) -> Result<TtsResult, String> {
     use providers::registry::ProviderRegistry;
-    use providers::ProviderClient;
     use providers::trait_::ProviderConfig;
 
     let pid = provider_id.unwrap_or_else(|| {
-        // 尝试从活跃供应商配置读取
         let state = crate::providers_commands::get_providers_state();
         if let Ok(s) = &state {
             if let Some(ref id) = s.active_provider_id {
-                // 返回静态 str 不行，用 leak 或 fallback
                 return match id.as_str() {
                     "google" => "google",
                     "minimax" => "minimax",
@@ -57,10 +54,18 @@ async fn tts_inner(
         "openai"
     });
 
-    let client = ProviderClient::from_env(pid).map_err(|e| e.to_string())?;
+    let auth = providers::AuthKind::for_provider(pid);
+    let api_key = if auth == providers::AuthKind::None {
+        String::new()
+    } else {
+        providers::profile::read_env_api_key(pid)
+            .ok_or_else(|| format!("未找到 {} 的 API Key 环境变量", pid))?
+    };
+    let base_url = Some(providers::profile::default_base_for(pid).to_string())
+        .filter(|s| !s.is_empty());
     let config = ProviderConfig {
-        api_key: client.api_key.clone(),
-        base_url: client.base_url.clone(),
+        api_key,
+        base_url,
         model: model.unwrap_or("").to_string(),
         temperature: 0.7,
         max_tokens: 4096,
@@ -118,7 +123,6 @@ async fn stt_inner(
     provider_id: Option<&str>,
     model: Option<&str>,
 ) -> Result<String, String> {
-    use providers::ProviderClient;
     use providers::trait_::ProviderConfig;
 
     let audio_bytes = base64_decode(audio_base64).map_err(|e| format!("base64 解码失败: {e}"))?;
@@ -127,10 +131,18 @@ async fn stt_inner(
     }
 
     let pid = provider_id.unwrap_or("openai");
-    let client = ProviderClient::from_env(pid).map_err(|e| e.to_string())?;
+    let auth = providers::AuthKind::for_provider(pid);
+    let api_key = if auth == providers::AuthKind::None {
+        String::new()
+    } else {
+        providers::profile::read_env_api_key(pid)
+            .ok_or_else(|| format!("未找到 {} 的 API Key 环境变量", pid))?
+    };
+    let base_url = Some(providers::profile::default_base_for(pid).to_string())
+        .filter(|s| !s.is_empty());
     let config = ProviderConfig {
-        api_key: client.api_key.clone(),
-        base_url: client.base_url.clone(),
+        api_key,
+        base_url,
         model: model.unwrap_or("whisper-v3-turbo").to_string(),
         temperature: 0.0,
         max_tokens: 4096,
@@ -141,8 +153,9 @@ async fn stt_inner(
     };
 
     let fname = filename.unwrap_or("recording.webm");
+    let http = reqwest::Client::new();
     providers::openai::media_compat::openai_audio_transcriptions(
-        &client.http, &audio_bytes, fname, &config,
+        &http, &audio_bytes, fname, &config,
     )
     .await
     .map_err(|e| e.to_string())

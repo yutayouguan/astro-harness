@@ -526,6 +526,19 @@ pub fn env_api_key_names(provider_id: &str) -> &'static [&'static str] {
         .unwrap_or(&["OPENAI_API_KEY"])
 }
 
+/// 从环境变量读取第一个非空的 API Key。
+pub fn read_env_api_key(provider_id: &str) -> Option<String> {
+    for name in env_api_key_names(provider_id) {
+        if let Ok(value) = std::env::var(name) {
+            let trimmed = value.trim().to_string();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

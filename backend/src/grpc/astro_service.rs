@@ -990,7 +990,7 @@ impl AstroService for AstroServiceImpl {
                     if !from_req.is_empty() {
                         from_req
                     } else {
-                        providers::client::read_env_api_key(&provider_name).unwrap_or_default()
+                        providers::read_env_api_key(&provider_name).unwrap_or_default()
                     }
                 },
                 base_url: {
@@ -1201,7 +1201,7 @@ impl AstroService for AstroServiceImpl {
                     if !from_req.is_empty() {
                         from_req
                     } else {
-                        providers::client::read_env_api_key(&provider_name).unwrap_or_default()
+                        providers::read_env_api_key(&provider_name).unwrap_or_default()
                     }
                 },
                 base_url: {
@@ -1465,7 +1465,7 @@ impl AstroService for AstroServiceImpl {
         request: Request<proto::CountTokensRequest>,
     ) -> Result<Response<proto::CountTokensResponse>, Status> {
         let req = request.into_inner();
-        let api_key = providers::client::read_env_api_key("claude").unwrap_or_default();
+        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
@@ -1490,7 +1490,7 @@ impl AstroService for AstroServiceImpl {
         request: Request<proto::BatchCreateRequest>,
     ) -> Result<Response<proto::BatchResponse>, Status> {
         let req = request.into_inner();
-        let api_key = providers::client::read_env_api_key("claude").unwrap_or_default();
+        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
@@ -1516,7 +1516,7 @@ impl AstroService for AstroServiceImpl {
         request: Request<proto::BatchStatusRequest>,
     ) -> Result<Response<proto::BatchResponse>, Status> {
         let req = request.into_inner();
-        let api_key = providers::client::read_env_api_key("claude").unwrap_or_default();
+        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
@@ -1540,7 +1540,7 @@ impl AstroService for AstroServiceImpl {
         request: Request<proto::BatchListRequest>,
     ) -> Result<Response<proto::BatchResponse>, Status> {
         let _req = request.into_inner();
-        let api_key = providers::client::read_env_api_key("claude").unwrap_or_default();
+        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
@@ -1562,7 +1562,7 @@ impl AstroService for AstroServiceImpl {
         request: Request<proto::BatchStatusRequest>,
     ) -> Result<Response<proto::BatchResultsResponse>, Status> {
         let req = request.into_inner();
-        let api_key = providers::client::read_env_api_key("claude").unwrap_or_default();
+        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }

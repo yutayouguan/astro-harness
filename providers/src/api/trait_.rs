@@ -1,72 +1,53 @@
-//! 供应商核心 trait 与共享数据类型（旧架构，逐步淘汰）。
+//! 供应商核心 trait 与共享数据类型。
 //!
-//! 定义聊天消息、流式分片、配置、认证方式，以及
-//! [`ChatProvider`]、[`ImageGenProvider`]、[`VerifyProvider`]、[`AiProvider`] 等能力接口。
-//!
-//! **新架构请使用**：
-//! - [`crate::types::Message`] 替代 [`ChatMessage`]
-//! - [`crate::types::StreamChunk`] 替代 [`ChatChunk`]
-//! - [`crate::types::stream::Usage`] 替代 [`crate::streaming::Usage`]
-//! - [`crate::traits::CompletionModel`] 替代 [`ChatProvider`]
-//! - [`crate::bridge`] 提供新旧类型互转
+//! 规范消息类型为 [`crate::types::Message`]、[`crate::types::StreamChunk`]。
+//! 本模块保留 trait 定义（`ChatProvider`、`AiProvider` 等）及活跃辅助类型。
 
 use async_trait::async_trait;
-use futures::Stream;
-use std::pin::Pin;
+
+// ── 新类型 re-exports ──
+pub use crate::types::message::{
+    AssistantContent, Message, Role, ToolCall, ToolDefinition, UserContent,
+};
+pub use crate::types::request::ProviderConfig;
+pub use crate::types::stream::{CompletionStream, PauseControl, StreamChunk, Usage};
+
+// ── 旧类型保留（interactions_chat / responses 等活跃代码仍使用） ──
 
 /// 原生 function calling 的一次工具调用（OpenAI 风格语义）。
 #[derive(Debug, Clone)]
 pub struct ChatToolCall {
-    /// 工具调用唯一标识，用于关联 tool 角色回复。
     pub id: String,
-    /// 被调用的函数名。
     pub name: String,
-    /// 已解析的 JSON 对象；序列化到上游时会再 stringify。
     pub arguments: serde_json::Value,
-    /// Google Interactions：`function_call.signature`（Gemini 3 严格模式回放必需）。
     pub signature: Option<String>,
 }
 
 /// 单条聊天消息，兼容多轮对话与工具调用。
 #[derive(Debug, Clone)]
 pub struct ChatMessage {
-    /// 角色：`system` / `user` / `assistant` / `tool`。
     pub role: String,
-    /// 文本内容；纯 tool_calls 时可为空；有 `parts` 时作摘要。
     pub content: String,
-    /// 多模态 parts（OpenAI 兼容 text + image_url）；`None` 则 content 为纯字符串。
     pub parts: Option<Vec<ChatContentPart>>,
-    /// assistant 消息附带的工具调用列表。
     pub tool_calls: Option<Vec<ChatToolCall>>,
-    /// tool 角色消息对应的 `tool_call_id`。
     pub tool_call_id: Option<String>,
-    /// tool 角色消息对应的函数名（部分厂商需要）。
     pub name: Option<String>,
-    /// 助手侧推理文本（落盘 `reasoning` 列）；Interactions 无状态回放编 `thought` content。
     pub reasoning: Option<String>,
-    /// Google Interactions：`thought.signature`（`thought_signature` delta 或 step 下发）。
     pub thought_signature: Option<String>,
-    /// tool 角色消息：标记该工具执行是否失败（Anthropic `is_error`）。
     pub is_error: bool,
 }
 
-/// OpenAI / Gemini 兼容 content 数组元素（含 audio/video 入模）。
+/// OpenAI / Gemini 兼容 content 数组元素。
 #[derive(Debug, Clone)]
 pub enum ChatContentPart {
-    /// 文本。
     Text { text: String },
-    /// 图片（data URL 或 http(s)）。
     ImageUrl { url: String },
-    /// 音频（data URL 或远程 URI）；Gemini 走 inlineData，其它厂商回落文本标注。
     AudioUrl { url: String, mime_type: String },
-    /// 视频（data URL 或远程 URI）；Gemini 走 inlineData，其它厂商回落文本标注。
     VideoUrl { url: String, mime_type: String },
-    /// 文档（PDF 等）；Anthropic 走 `type: "document"`，其它厂商回落文本标注。
     DocumentUrl { url: String, mime_type: String },
 }
 
 impl ChatMessage {
-    /// 构造纯文本消息（无工具调用字段）。
     pub fn text(role: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             role: role.into(),
@@ -81,7 +62,6 @@ impl ChatMessage {
         }
     }
 
-    /// 构造带多模态 parts 的用户消息。
     pub fn user_parts(text: impl Into<String>, parts: Vec<ChatContentPart>) -> Self {
         let content = text.into();
         Self {
@@ -98,203 +78,38 @@ impl ChatMessage {
     }
 }
 
-/// 流式 `delta.tool_calls` 片段（与 tools::ToolCallDelta 对齐）。
+/// 流式 `delta.tool_calls` 片段。
 #[derive(Debug, Clone, Default)]
 pub struct ToolCallDeltaChunk {
-    /// 工具调用在数组中的索引。
     pub index: u32,
-    /// 工具调用 ID 增量（首次出现时下发）。
     pub id: Option<String>,
-    /// 函数名增量。
     pub name: Option<String>,
-    /// 参数字符串增量（JSON 片段）。
     pub arguments: Option<String>,
-    /// Google Interactions：`function_call.signature`（通常随 step.start 一次性下发）。
     pub signature: Option<String>,
 }
 
-/// 流式聊天响应分片。
+/// 流式聊天响应分片（旧格式，interactions_chat / responses 仍使用）。
 #[derive(Debug, Clone, Default)]
 pub struct ChatChunk {
-    /// 正文 token 增量。
     pub token: Option<String>,
-    /// DeepSeek V4 等：thinking 模式下的 reasoning_content 增量。
     pub reasoning: Option<String>,
-    /// 结束原因，如 `stop`、`tool_calls`；错误时为 `error:...`。
     pub finish_reason: Option<String>,
-    /// 工具调用增量列表。
     pub tool_call_deltas: Vec<ToolCallDeltaChunk>,
-    /// 本轮 token 用量（部分上游在末包或独立包下发）。
-    pub usage: Option<crate::streaming::Usage>,
-    /// Google Interactions：本轮 `interaction.id`（供下一轮 `previous_interaction_id`）。
+    pub usage: Option<Usage>,
     pub interaction_id: Option<String>,
-    /// Google Interactions：`thought_signature` delta 或 thought step 上的 signature。
     pub thought_signature: Option<String>,
-    /// Anthropic citations delta（引用信息）。
     pub citations: Option<Vec<serde_json::Value>>,
 }
+
+/// 聊天流式响应的类型别名（旧格式）。
+pub type ChatStream =
+    std::pin::Pin<Box<dyn futures::Stream<Item = anyhow::Result<ChatChunk>> + Send>>;
 
 /// 生成的图片二进制与 MIME 类型。
 #[derive(Debug, Clone)]
 pub struct GeneratedImage {
-    /// 图片原始字节。
     pub data: Vec<u8>,
-    /// MIME 类型，如 `image/png`。
     pub mime_type: String,
-}
-
-/// 单次模型调用的运行时配置。
-///
-/// **已迁移**：规范路径为 [`crate::types::ProviderConfig`]，此处为兼容性再导出。
-pub use crate::types::request::ProviderConfig;
-
-/// 提供商认证方式（运行时，非编译期泛型）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AuthKind {
-    /// `Authorization: Bearer <key>`
-    Bearer,
-    /// Anthropic `x-api-key`
-    AnthropicKey,
-    /// Google `x-goog-api-key` header（Interactions / 原生 API）
-    GoogleApiKey,
-    /// Azure `api-key` header
-    AzureHeader,
-    /// 本地 Ollama 等无需密钥
-    None,
-}
-
-impl AuthKind {
-    /// 根据 provider id 推断认证方式（表驱动）。
-    pub fn for_provider(provider_id: &str) -> Self {
-        crate::profile::resolve(provider_id)
-            .map(|p| p.auth)
-            .unwrap_or(Self::Bearer)
-    }
-}
-
-/// 连通性探测结果。
-#[derive(Debug, Clone)]
-pub struct VerifyResult {
-    /// 探测是否成功。
-    pub ok: bool,
-    /// 往返耗时（毫秒）。
-    pub latency_ms: u64,
-    /// 被探测的模型名。
-    pub model: String,
-    /// 人类可读的状态说明。
-    pub message: String,
-}
-
-/// 聊天流式响应的类型别名。
-pub type ChatStream = Pin<Box<dyn Stream<Item = anyhow::Result<ChatChunk>> + Send>>;
-
-/// 流式聊天能力。
-#[async_trait]
-pub trait ChatProvider: Send + Sync {
-    /// 发起流式聊天请求，返回 token / 工具调用 / usage 分片流。
-    async fn chat_stream(
-        &self,
-        messages: Vec<ChatMessage>,
-        tools: Vec<serde_json::Value>,
-        config: &ProviderConfig,
-    ) -> anyhow::Result<ChatStream>;
-}
-
-/// 图片生成能力。
-#[async_trait]
-pub trait ImageGenProvider: Send + Sync {
-    /// 根据提示词生成一张或多张图片。
-    async fn generate_image(
-        &self,
-        prompt: &str,
-        config: &ProviderConfig,
-    ) -> anyhow::Result<Vec<GeneratedImage>>;
-}
-
-/// 连通性探测能力。
-#[async_trait]
-pub trait VerifyProvider: Send + Sync {
-    /// 用最小请求探测指定模型是否可用。
-    async fn verify(&self, model: &str, config: &ProviderConfig) -> VerifyResult;
-}
-
-/// 门面：Chat + Verify；图片生成仍通过本 trait 的默认/覆盖方法暴露给 dyn。
-#[async_trait]
-pub trait AiProvider: ChatProvider + VerifyProvider + Send + Sync {
-    /// 供应商标识符，如 `openai`、`claude`。
-    fn name(&self) -> &str;
-
-    /// 是否支持原生 function calling。
-    fn supports_tools(&self) -> bool {
-        true
-    }
-
-    /// 是否支持图片生成。
-    fn supports_image_gen(&self) -> bool {
-        false
-    }
-
-    /// 是否支持 embedding（预留能力位）。
-    fn supports_embedding(&self) -> bool {
-        false
-    }
-
-    /// 默认推荐模型名。
-    fn default_model(&self) -> &str;
-
-    /// 本供应商使用的认证方式。
-    fn auth_kind(&self) -> AuthKind {
-        AuthKind::for_provider(self.name())
-    }
-
-    /// 生成图片；默认实现返回不支持错误，由具体供应商覆盖。
-    async fn generate_image(
-        &self,
-        _prompt: &str,
-        _config: &ProviderConfig,
-    ) -> anyhow::Result<Vec<GeneratedImage>> {
-        anyhow::bail!("{} 不支持图片生成", self.name())
-    }
-
-    /// 语音合成 (TTS)；返回音频字节 + MIME 类型。
-    async fn text_to_speech(
-        &self,
-        text: &str,
-        _config: &ProviderConfig,
-    ) -> anyhow::Result<GeneratedAudio> {
-        let _ = text;
-        anyhow::bail!("{} 不支持语音合成 (TTS)", self.name())
-    }
-
-    /// 视频生成；返回视频文件 URL 或字节。异步轮询类接口返回 task_id。
-    async fn generate_video(
-        &self,
-        prompt: &str,
-        _config: &ProviderConfig,
-    ) -> anyhow::Result<GeneratedVideo> {
-        let _ = prompt;
-        anyhow::bail!("{} 不支持视频生成", self.name())
-    }
-
-    /// 音乐生成；返回音频字节。
-    async fn generate_music(
-        &self,
-        prompt: &str,
-        _config: &ProviderConfig,
-    ) -> anyhow::Result<GeneratedAudio> {
-        let _ = prompt;
-        anyhow::bail!("{} 不支持音乐生成", self.name())
-    }
-
-    /// 文本嵌入；返回向量。
-    async fn embed(
-        &self,
-        texts: &[String],
-        _config: &ProviderConfig,
-    ) -> anyhow::Result<Vec<Vec<f32>>> {
-        let _ = texts;
-        anyhow::bail!("{} 不支持文本嵌入", self.name())
-    }
 }
 
 /// 生成的音频（TTS / 音乐共用）。
@@ -308,11 +123,132 @@ pub struct GeneratedAudio {
 /// 生成的视频。
 #[derive(Debug, Clone)]
 pub struct GeneratedVideo {
-    /// 视频文件 URL（异步任务完成后可下载）。
     pub url: Option<String>,
-    /// 任务 ID（需轮询获取最终结果）。
     pub task_id: Option<String>,
-    /// 视频字节（同步返回时）。
     pub data: Option<Vec<u8>>,
     pub mime_type: String,
+}
+
+/// 提供商认证方式（运行时，非编译期泛型）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthKind {
+    Bearer,
+    AnthropicKey,
+    GoogleApiKey,
+    AzureHeader,
+    None,
+}
+
+impl AuthKind {
+    pub fn for_provider(provider_id: &str) -> Self {
+        crate::profile::resolve(provider_id)
+            .map(|p| p.auth)
+            .unwrap_or(Self::Bearer)
+    }
+}
+
+/// 连通性探测结果。
+#[derive(Debug, Clone)]
+pub struct VerifyResult {
+    pub ok: bool,
+    pub latency_ms: u64,
+    pub model: String,
+    pub message: String,
+}
+
+// ── Trait 定义 ──
+
+/// 流式聊天能力。
+#[async_trait]
+pub trait ChatProvider: Send + Sync {
+    async fn chat_stream(
+        &self,
+        messages: Vec<ChatMessage>,
+        tools: Vec<serde_json::Value>,
+        config: &ProviderConfig,
+    ) -> anyhow::Result<ChatStream>;
+}
+
+/// 图片生成能力。
+#[async_trait]
+pub trait ImageGenProvider: Send + Sync {
+    async fn generate_image(
+        &self,
+        prompt: &str,
+        config: &ProviderConfig,
+    ) -> anyhow::Result<Vec<GeneratedImage>>;
+}
+
+/// 连通性探测能力。
+#[async_trait]
+pub trait VerifyProvider: Send + Sync {
+    async fn verify(&self, model: &str, config: &ProviderConfig) -> VerifyResult;
+}
+
+/// 门面 trait：Chat + Verify + 媒体能力。
+#[async_trait]
+pub trait AiProvider: ChatProvider + VerifyProvider + Send + Sync {
+    fn name(&self) -> &str;
+
+    fn supports_tools(&self) -> bool {
+        true
+    }
+
+    fn supports_image_gen(&self) -> bool {
+        false
+    }
+
+    fn supports_embedding(&self) -> bool {
+        false
+    }
+
+    fn default_model(&self) -> &str;
+
+    fn auth_kind(&self) -> AuthKind {
+        AuthKind::for_provider(self.name())
+    }
+
+    async fn generate_image(
+        &self,
+        _prompt: &str,
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<Vec<GeneratedImage>> {
+        anyhow::bail!("{} 不支持图片生成", self.name())
+    }
+
+    async fn text_to_speech(
+        &self,
+        text: &str,
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<GeneratedAudio> {
+        let _ = text;
+        anyhow::bail!("{} 不支持语音合成 (TTS)", self.name())
+    }
+
+    async fn generate_video(
+        &self,
+        prompt: &str,
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<GeneratedVideo> {
+        let _ = prompt;
+        anyhow::bail!("{} 不支持视频生成", self.name())
+    }
+
+    async fn generate_music(
+        &self,
+        prompt: &str,
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<GeneratedAudio> {
+        let _ = prompt;
+        anyhow::bail!("{} 不支持音乐生成", self.name())
+    }
+
+    async fn embed(
+        &self,
+        texts: &[String],
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<Vec<Vec<f32>>> {
+        let _ = texts;
+        anyhow::bail!("{} 不支持文本嵌入", self.name())
+    }
 }

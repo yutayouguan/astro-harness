@@ -1,3 +1,4 @@
 //! 跨厂商共享基础设施。
 
+pub mod http;
 pub mod sse;

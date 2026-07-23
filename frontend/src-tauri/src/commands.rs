@@ -2623,7 +2623,6 @@ pub async fn extract_cron_job(args: ExtractCronJobArgs) -> Result<ExtractCronJob
     }
 
     use crate::providers_commands::{find_provider, resolve_api_key};
-    use providers::client::ProviderClient;
 
     let provider_cfg = if let Some(id) = args.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id)?
@@ -2660,12 +2659,24 @@ pub async fn extract_cron_job(args: ExtractCronJobArgs) -> Result<ExtractCronJob
     } else {
         Some(provider_cfg.endpoint.trim_end_matches('/').to_string())
     };
-    let client = ProviderClient::from_config(provider_cfg.kind.backend_id(), api_key, base_url);
-
-    let extractor = client
-        .extractor::<cron::CronJobExtract>(&model)
-        .preamble(cron::cron_extract_preamble())
-        .build();
+    let config = providers::ProviderConfig {
+        api_key,
+        base_url,
+        model: String::new(),
+        temperature: 0.2,
+        max_tokens: 4096,
+        thinking_enabled: false,
+        reasoning_effort: "high".into(),
+        additional_params: serde_json::Value::Null,
+        previous_interaction_id: None,
+    };
+    let extractor = providers::build_extractor::<cron::CronJobExtract>(
+        provider_cfg.kind.backend_id(),
+        &model,
+        config,
+    )
+    .preamble(cron::cron_extract_preamble())
+    .build();
 
     let raw = extractor
         .extract(text)

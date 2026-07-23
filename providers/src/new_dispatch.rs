@@ -11,8 +11,8 @@ use crate::types::message::{
     AssistantContent, Message, ToolCall, ToolDefinition, UserContent,
 };
 use crate::types::request::{CompletionRequest, ProviderConfig, ThinkingConfig};
-use crate::types::stream::{CompletionStream, StreamChunk};
-use crate::trait_::{ChatMessage, ChatStream, ChatToolCall, ChatContentPart, ChatChunk, ToolCallDeltaChunk};
+use crate::types::stream::{CompletionStream, StreamChunk, Usage};
+use crate::trait_::{ChatMessage, ChatStream, ChatContentPart, ChatChunk, ToolCallDeltaChunk};
 
 /// 新管线分发（新类型签名）。
 ///
@@ -45,7 +45,7 @@ pub async fn chat_stream_new(
     // 1. 旧消息 → 新消息（内联转换）
     let new_messages: Vec<Message> = messages
         .iter()
-        .map(legacy_to_message_inline)
+        .map(legacy_to_message)
         .collect();
 
     // 2. 旧工具 → 新工具定义
@@ -104,8 +104,8 @@ pub async fn chat_stream_new(
 
 // ── 内联转换函数（不依赖 bridge 模块） ──
 
-/// 旧 `ChatMessage` → 新 `Message`（内联版本）。
-fn legacy_to_message_inline(old: &ChatMessage) -> Message {
+/// 旧 `ChatMessage` → 新 `Message`。
+pub fn legacy_to_message(old: &ChatMessage) -> Message {
     match old.role.as_str() {
         "system" => Message::system(&old.content),
         "tool" => Message::Tool {
@@ -227,7 +227,7 @@ fn stream_chunk_to_legacy_inline(chunk: &StreamChunk) -> Option<ChatChunk> {
             ..Default::default()
         }),
         StreamChunk::Usage(u) => Some(ChatChunk {
-            usage: Some(crate::streaming::Usage {
+            usage: Some(Usage {
                 input_tokens: u.input_tokens,
                 output_tokens: u.output_tokens,
                 cache_read_tokens: u.cache_read_tokens,
@@ -269,7 +269,6 @@ fn register_provider(
     match provider {
         "anthropic" | "claude" => reg.register_anthropic(key, base, model),
         "google" => reg.register_google(key, base, model),
-        // OpenAI 兼容厂商 — 使用泛型方法
         "openai" => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
         "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
@@ -282,7 +281,6 @@ fn register_provider(
         "openrouter" => register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model),
         "minimax" | "minmax" => register_compat::<crate::impls::minimax_new::MiniMaxNew>(reg, key, base, model),
         "hunyuan" => register_compat::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
-        // 未知 → OpenAI 兼容回退
         _ => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
     }
 }
@@ -328,7 +326,7 @@ mod tests {
     #[test]
     fn legacy_conversion_roundtrip() {
         let old = ChatMessage::text("system", "Be helpful");
-        let new = legacy_to_message_inline(&old);
+        let new = legacy_to_message(&old);
         assert_eq!(new.text_content(), "Be helpful");
     }
 }
