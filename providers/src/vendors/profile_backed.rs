@@ -3,7 +3,7 @@
 use crate::http_stream::chat_stream_for_provider;
 use crate::image_http::openai_generate_image;
 use crate::interactions_http::{google_interactions_image, InteractionImageRequest};
-use crate::profile::{resolve, ProviderProfile};
+use crate::profile::{resolve, ImageGenMode, ProviderProfile};
 use crate::trait_::*;
 use crate::verify;
 use async_trait::async_trait;
@@ -75,16 +75,21 @@ impl AiProvider for ProfileBackedProvider {
         prompt: &str,
         config: &ProviderConfig,
     ) -> anyhow::Result<Vec<GeneratedImage>> {
-        if !self.profile.supports_image_gen {
-            anyhow::bail!("{} 不支持图片生成", self.profile.id);
-        }
+        let mode = self
+            .profile
+            .image_mode
+            .ok_or_else(|| anyhow::anyhow!("{} 不支持图片生成", self.profile.id))?;
         let mut cfg = config.clone();
         if cfg.model.trim().is_empty() {
-            cfg.model = crate::image_gen::default_image_model(self.profile.id).to_string();
+            cfg.model = if self.profile.default_image_model.is_empty() {
+                "gpt-image-2".to_string()
+            } else {
+                self.profile.default_image_model.to_string()
+            };
         }
-        match self.profile.id {
-            "openai" => openai_generate_image(&self.client, prompt, &cfg).await,
-            "google" => {
+        match mode {
+            ImageGenMode::OpenAi => openai_generate_image(&self.client, prompt, &cfg).await,
+            ImageGenMode::GoogleInteractions => {
                 let request = InteractionImageRequest {
                     prompt: prompt.to_string(),
                     ..Default::default()
@@ -92,19 +97,14 @@ impl AiProvider for ProfileBackedProvider {
                 let result = google_interactions_image(&self.client, &cfg, &request).await?;
                 Ok(vec![result.image])
             }
-            "minimax" => {
+            ImageGenMode::MiniMax => {
                 let request = crate::minimax::image_http::MiniMaxImageRequest {
                     prompt: prompt.to_string(),
                     ..Default::default()
                 };
-                crate::minimax::image_http::minimax_generate_image(
-                    &self.client,
-                    &cfg,
-                    &request,
-                )
-                .await
+                crate::minimax::image_http::minimax_generate_image(&self.client, &cfg, &request)
+                    .await
             }
-            other => anyhow::bail!("{other} 不支持图片生成"),
         }
     }
 }

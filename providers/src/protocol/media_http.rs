@@ -6,12 +6,13 @@
 pub use crate::google::veo_http::*;
 pub use crate::openai::media_compat::*;
 
-/// 默认视觉（图片理解）模型：按 provider id 转发到各厂商常量。
+/// 默认视觉（图片理解）模型（表驱动）。
 pub fn default_vision_model(provider: &str) -> &'static str {
-    match provider {
-        "google" => crate::google::DEFAULT_VISION_MODEL,
-        "openai" => crate::openai::DEFAULT_VISION_MODEL,
-        _ => crate::openai::DEFAULT_VISION_MODEL,
+    let p = crate::profile::resolve_or_openai_compat(provider);
+    if p.default_vision_model.is_empty() {
+        crate::openai::DEFAULT_VISION_MODEL
+    } else {
+        p.default_vision_model
     }
 }
 

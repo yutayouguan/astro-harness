@@ -297,21 +297,9 @@ pub fn extract_openai_delta(data: &str) -> Option<ChatChunk> {
     })
 }
 
-/// 判断该供应商是否支持 `stream_options.include_usage`。
+/// 判断该供应商是否支持 `stream_options.include_usage`（表驱动）。
 fn supports_stream_include_usage(provider: &str) -> bool {
-    // 部分兼容网关会拒 stream_options；仅对确认支持的上游开启
-    matches!(
-        provider,
-        "openai"
-            | "azure"
-            | "deepseek"
-            | "openrouter"
-            | "nvidia"
-            | "moonshot"
-            | "mimo"
-            | "minimax"
-            | "ollama"
-    )
+    crate::profile::resolve_or_openai_compat(provider).supports_stream_usage
 }
 
 /// OpenAI 兼容：`POST {base}/chat/completions` + SSE

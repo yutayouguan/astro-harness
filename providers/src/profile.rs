@@ -1,4 +1,4 @@
-//! Hermes 风格 `ProviderProfile` 表：id → ApiMode / 默认 base / 认证。
+//! Hermes 风格 `ProviderProfile` 表：id → ApiMode / 默认 base / 认证 / 媒体能力。
 
 use crate::trait_::AuthKind;
 
@@ -17,27 +17,61 @@ pub enum ApiMode {
     GeminiNative,
 }
 
+/// 图片生成协议路由。新厂商走 OpenAI 兼容 API 只需设 `OpenAi`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageGenMode {
+    /// OpenAI `POST /images/generations`（OpenAI / Azure / 兼容网关）。
+    OpenAi,
+    /// Google Interactions `POST /v1beta/interactions` with generateImage。
+    GoogleInteractions,
+    /// MiniMax T2I `POST /v1/text/image`。
+    MiniMax,
+}
+
 /// 单个供应商的静态配置。
+///
+/// 新增纯聊天厂商：加一行 PROFILES + 一行 vendor type alias。
+/// 新增带媒体能力的厂商：额外设 `image_mode` / `default_*_model` 字段即可。
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderProfile {
-    /// 注册表 id，如 `openai`、`google`。
     pub id: &'static str,
-    /// 协议模式。
     pub api_mode: ApiMode,
-    /// 默认 API 基址；Azure 为空字符串表示必须由用户配置。
     pub default_base_url: &'static str,
-    /// 认证方式。
     pub auth: AuthKind,
-    /// 依次尝试的环境变量名。
     pub env_keys: &'static [&'static str],
-    /// Azure：deployment 风格 URL + `api-key` header。
     pub azure_deployment_style: bool,
-    /// 默认推荐模型 / deployment id。
     pub default_model: &'static str,
-    /// 是否支持图片生成。
     pub supports_image_gen: bool,
-    /// 是否支持 embedding。
     pub supports_embedding: bool,
+
+    // ── 媒体能力（表驱动，消除 provider-id 硬编码） ──
+
+    /// 图片生成协议模式。`None` = 不支持。
+    pub image_mode: Option<ImageGenMode>,
+    /// 图片生成默认模型名（空 = 不支持或用 fallback）。
+    pub default_image_model: &'static str,
+    /// 视觉理解默认模型名（空 = 不支持独立视觉模型）。
+    pub default_vision_model: &'static str,
+    /// 是否支持 `stream_options.include_usage`（部分 OpenAI 兼容网关不支持）。
+    pub supports_stream_usage: bool,
+    /// TTS 默认模型名（空 = 不支持）。
+    pub default_tts_model: &'static str,
+    /// 视频生成默认模型名（空 = 不支持）。
+    pub default_video_model: &'static str,
+    /// 音乐生成默认模型名（空 = 不支持）。
+    pub default_music_model: &'static str,
+}
+
+impl ProviderProfile {
+    pub fn supports_tts(&self) -> bool {
+        !self.default_tts_model.is_empty()
+    }
+    pub fn supports_video(&self) -> bool {
+        !self.default_video_model.is_empty()
+    }
+    pub fn supports_music(&self) -> bool {
+        !self.default_music_model.is_empty()
+    }
 }
 
 /// 内置 profile 表（含全部 registry id）。
@@ -52,6 +86,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "gpt-5.6",
         supports_image_gen: true,
         supports_embedding: true,
+        image_mode: Some(ImageGenMode::OpenAi),
+        default_image_model: "gpt-image-2",
+        default_vision_model: "gpt-4o",
+        supports_stream_usage: true,
+        default_tts_model: "tts-1",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "claude",
@@ -63,6 +104,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "claude-opus-4-8",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: false,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "deepseek",
@@ -74,11 +122,17 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "deepseek-chat",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "google",
         api_mode: ApiMode::Interactions,
-        // Gemini Interactions：https://ai.google.dev/gemini-api/docs/interactions
         default_base_url: "https://generativelanguage.googleapis.com",
         auth: AuthKind::GoogleApiKey,
         env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
@@ -86,6 +140,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "gemini-3.5-flash",
         supports_image_gen: true,
         supports_embedding: true,
+        image_mode: Some(ImageGenMode::GoogleInteractions),
+        default_image_model: "gemini-3.1-flash-image",
+        default_vision_model: "gemini-3.5-flash",
+        supports_stream_usage: false,
+        default_tts_model: "gemini-3.5-flash",
+        default_video_model: "veo-3.0-generate-preview",
+        default_music_model: "lyria-v2",
     },
     ProviderProfile {
         id: "ollama",
@@ -97,6 +158,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "llama3.3",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "azure",
@@ -108,6 +176,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "gpt-5.6",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "zhipu",
@@ -119,6 +194,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "glm-4.7-flash",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: false,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "openrouter",
@@ -130,6 +212,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "openai/gpt-5.6",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "bailian",
@@ -141,6 +230,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "qwen3.6-plus",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: false,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "nvidia",
@@ -152,6 +248,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "meta/llama-3.3-70b-instruct",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "moonshot",
@@ -163,6 +266,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "kimi-k2.5",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "volcengine",
@@ -174,6 +284,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "ep-",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: false,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "minimax",
@@ -185,6 +302,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "MiniMax-M2.5",
         supports_image_gen: true,
         supports_embedding: true,
+        image_mode: Some(ImageGenMode::MiniMax),
+        default_image_model: "image-01",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "speech-2.8-hd",
+        default_video_model: "MiniMax-Hailuo-2.3",
+        default_music_model: "music-3.0",
     },
     ProviderProfile {
         id: "minimax-anthropic",
@@ -196,6 +320,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "MiniMax-M2.5",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: false,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "minimax-responses",
@@ -207,6 +338,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "MiniMax-M3",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: false,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "mimo",
@@ -218,11 +356,17 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "mimo-v2-flash",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: true,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
     ProviderProfile {
         id: "gemini-native",
         api_mode: ApiMode::GeminiNative,
-        // 原生 generateContent / streamGenerateContent（API key 作 query 参数）
         default_base_url: "https://generativelanguage.googleapis.com",
         auth: AuthKind::GoogleApiKey,
         env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
@@ -230,6 +374,13 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "gemini-3.5-flash",
         supports_image_gen: false,
         supports_embedding: false,
+        image_mode: None,
+        default_image_model: "",
+        default_vision_model: "",
+        supports_stream_usage: false,
+        default_tts_model: "",
+        default_video_model: "",
+        default_music_model: "",
     },
 ];
 
@@ -255,6 +406,13 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     default_model: "gpt-5.6",
     supports_image_gen: false,
     supports_embedding: false,
+    image_mode: None,
+    default_image_model: "",
+    default_vision_model: "",
+    supports_stream_usage: false,
+    default_tts_model: "",
+    default_video_model: "",
+    default_music_model: "",
 };
 
 /// 将常见别名规范化为表内 id。
@@ -325,5 +483,34 @@ mod tests {
     fn minimax_responses_profile_exists() {
         let p = resolve("minimax-responses").expect("minimax-responses profile");
         assert_eq!(p.api_mode, ApiMode::Responses);
+    }
+
+    #[test]
+    fn media_capabilities_table_driven() {
+        let openai = resolve("openai").unwrap();
+        assert_eq!(openai.image_mode, Some(ImageGenMode::OpenAi));
+        assert!(openai.supports_stream_usage);
+        assert!(openai.supports_tts());
+        assert!(!openai.supports_video());
+
+        let google = resolve("google").unwrap();
+        assert_eq!(google.image_mode, Some(ImageGenMode::GoogleInteractions));
+        assert!(google.supports_tts());
+        assert!(google.supports_video());
+        assert!(google.supports_music());
+
+        let minimax = resolve("minimax").unwrap();
+        assert_eq!(minimax.image_mode, Some(ImageGenMode::MiniMax));
+        assert!(minimax.supports_tts());
+        assert!(minimax.supports_video());
+        assert!(minimax.supports_music());
+
+        let deepseek = resolve("deepseek").unwrap();
+        assert_eq!(deepseek.image_mode, None);
+        assert!(deepseek.supports_stream_usage);
+        assert!(!deepseek.supports_tts());
+
+        let zhipu = resolve("zhipu").unwrap();
+        assert!(!zhipu.supports_stream_usage);
     }
 }

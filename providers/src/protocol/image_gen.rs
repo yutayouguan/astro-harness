@@ -26,13 +26,13 @@ impl ImageGenRequest {
     }
 }
 
-/// 按 provider 返回默认图片模型。
+/// 按 provider 返回默认图片模型（表驱动）。
 pub fn default_image_model(provider: &str) -> &'static str {
-    match provider {
-        "google" => "gemini-3.1-flash-image",
-        "openai" => "gpt-image-2",
-        "minimax" => "image-01",
-        _ => "gpt-image-2",
+    let p = crate::profile::resolve_or_openai_compat(provider);
+    if p.default_image_model.is_empty() {
+        "gpt-image-2"
+    } else {
+        p.default_image_model
     }
 }
 
