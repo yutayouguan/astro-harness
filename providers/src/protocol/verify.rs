@@ -52,7 +52,15 @@ pub async fn probe(
                 }
             }
             (ApiMode::Responses, _) => {
-                return fail("ApiMode::Responses 探测尚未接线".into());
+                let endpoint = resolve_endpoint(config, p.default_base_url);
+                match crate::openai::verify::probe_openai_responses(
+                    client, &endpoint, &model, &config.api_key,
+                )
+                .await
+                {
+                    Ok(m) => m,
+                    Err(e) => return fail(e),
+                }
             }
             (ApiMode::Interactions, _) => {
                 match crate::google::interactions_chat::probe_interactions(client, &model, config)

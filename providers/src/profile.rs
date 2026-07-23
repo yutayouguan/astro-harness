@@ -9,7 +9,7 @@ pub enum ApiMode {
     ChatCompletions,
     /// Anthropic Messages API。
     AnthropicMessages,
-    /// OpenAI Responses API（骨架；默认表暂无绑定）。
+    /// OpenAI Responses API（`POST /v1/responses`）。
     Responses,
     /// Google Gemini Interactions API（`POST /v1beta/interactions`）。
     Interactions,

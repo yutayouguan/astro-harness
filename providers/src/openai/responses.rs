@@ -1,7 +1,8 @@
 //! OpenAI Responses API 流式适配器。
 //!
 //! POST `{base}/responses` + SSE → [`ChatStream`]。
-//! 分发入口已在 [`crate::http_stream::chat_stream_for_provider`] 接线。
+//! 分发入口在 [`crate::http_stream::chat_stream_for_provider`]，
+//! 通过 [`crate::profile::ApiMode::Responses`] 路由到本模块。
 
 use std::sync::Arc;
 
@@ -154,7 +155,7 @@ fn extract_responses_delta(data: &str) -> Option<ChatChunk> {
     let event_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
 
     match event_type {
-        // 文本 delta
+        // ── 文本 ──
         "response.output_text.delta" => {
             let delta = v.get("delta").and_then(|d| d.as_str())?;
             if delta.is_empty() {
@@ -166,7 +167,31 @@ fn extract_responses_delta(data: &str) -> Option<ChatChunk> {
             })
         }
 
-        // 新建 function_call 输出项
+        // ── reasoning ──
+        "response.reasoning_summary_text.delta" => {
+            let delta = v.get("delta").and_then(|d| d.as_str())?;
+            if delta.is_empty() {
+                return None;
+            }
+            Some(ChatChunk {
+                reasoning: Some(delta.to_string()),
+                ..Default::default()
+            })
+        }
+
+        // ── refusal（模型拒绝回答，作为文本下发） ──
+        "response.refusal.delta" => {
+            let delta = v.get("delta").and_then(|d| d.as_str())?;
+            if delta.is_empty() {
+                return None;
+            }
+            Some(ChatChunk {
+                token: Some(delta.to_string()),
+                ..Default::default()
+            })
+        }
+
+        // ── 新建 function_call 输出项 ──
         "response.output_item.added" => {
             let item = v.get("item")?;
             if item.get("type").and_then(|t| t.as_str()) != Some("function_call") {
@@ -194,7 +219,39 @@ fn extract_responses_delta(data: &str) -> Option<ChatChunk> {
             })
         }
 
-        // function call 参数 delta
+        // ── function_call 完成（兜底：即使 delta 丢包也能恢复完整调用） ──
+        "response.output_item.done" => {
+            let item = v.get("item")?;
+            if item.get("type").and_then(|t| t.as_str()) != Some("function_call") {
+                return None;
+            }
+            let index = v
+                .get("output_index")
+                .and_then(|i| i.as_u64())
+                .unwrap_or(0) as u32;
+            let id = item
+                .get("call_id")
+                .or_else(|| item.get("id"))
+                .and_then(|s| s.as_str())
+                .map(str::to_string);
+            let name = item.get("name").and_then(|s| s.as_str()).map(str::to_string);
+            let arguments = item
+                .get("arguments")
+                .and_then(|a| a.as_str())
+                .map(str::to_string);
+            Some(ChatChunk {
+                tool_call_deltas: vec![ToolCallDeltaChunk {
+                    index,
+                    id,
+                    name,
+                    arguments,
+                    signature: None,
+                }],
+                ..Default::default()
+            })
+        }
+
+        // ── function call 参数 delta ──
         "response.function_call_arguments.delta" => {
             let delta = v.get("delta").and_then(|d| d.as_str())?;
             let index = v
@@ -213,30 +270,38 @@ fn extract_responses_delta(data: &str) -> Option<ChatChunk> {
             })
         }
 
-        // function call 参数完成
-        "response.function_call_arguments.done" => {
-            Some(ChatChunk {
-                finish_reason: Some("tool_calls".to_string()),
-                ..Default::default()
-            })
-        }
+        // ── function call 参数完成（不发 finish_reason，由 completed 统一处理） ──
+        "response.function_call_arguments.done" => None,
 
-        // 响应完成
+        // ── 响应完成 ──
         "response.completed" => {
-            let usage = v
-                .get("response")
-                .and_then(parse_openai_usage);
+            let resp = v.get("response");
+            let usage = resp.and_then(parse_openai_usage);
+            let has_tool_calls = resp
+                .and_then(|r| r.get("output"))
+                .and_then(|o| o.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .any(|item| item.get("type").and_then(|t| t.as_str()) == Some("function_call"))
+                })
+                .unwrap_or(false);
+            let finish = if has_tool_calls {
+                "tool_calls"
+            } else {
+                "stop"
+            };
             Some(ChatChunk {
-                finish_reason: Some("stop".to_string()),
+                finish_reason: Some(finish.to_string()),
                 usage,
                 ..Default::default()
             })
         }
 
-        // 错误 / 失败
+        // ── 错误 / 失败 ──
         "response.failed" => {
             let msg = v
                 .pointer("/response/status_details/error/message")
+                .or_else(|| v.pointer("/response/error/message"))
                 .and_then(|m| m.as_str())
                 .unwrap_or("Responses API 请求失败");
             Some(ChatChunk {
@@ -260,6 +325,18 @@ fn extract_responses_delta(data: &str) -> Option<ChatChunk> {
                 ..Default::default()
             })
         }
+
+        // 生命周期 / 边界事件 — 不需要转为 ChatChunk
+        "response.created"
+        | "response.in_progress"
+        | "response.queued"
+        | "response.output_text.done"
+        | "response.content_part.added"
+        | "response.content_part.done"
+        | "response.reasoning_summary_part.added"
+        | "response.reasoning_summary_part.done"
+        | "response.reasoning_summary_text.done"
+        | "response.refusal.done" => None,
 
         _ => None,
     }
@@ -295,6 +372,7 @@ pub async fn responses_chat_stream(
         "model": config.model,
         "input": input,
         "stream": true,
+        "store": false,
     });
     if let Some(inst) = instructions {
         if !inst.is_empty() {
@@ -311,18 +389,32 @@ pub async fn responses_chat_stream(
     let resp_tools = to_responses_tools(&tools);
     if !resp_tools.is_empty() {
         body["tools"] = Value::Array(resp_tools);
+        body["tool_choice"] = json!("auto");
+        body["parallel_tool_calls"] = json!(true);
+    }
+
+    if config.thinking_enabled {
+        let effort = match config.reasoning_effort.trim() {
+            "" | "high" => "high",
+            other => other,
+        };
+        body["reasoning"] = json!({ "effort": effort, "summary": "auto" });
     }
 
     merge_additional_params(&mut body, &config.additional_params);
 
-    let response = client
+    let mut req = client
         .post(&url)
-        .bearer_auth(config.api_key.trim())
         .header("content-type", "application/json")
-        .json(&body)
+        .json(&body);
+    if !config.api_key.is_empty() {
+        req = req.bearer_auth(config.api_key.trim());
+    }
+
+    let response = req
         .send()
         .await
-        .map_err(|e| anyhow!("连接 OpenAI Responses API 失败: {url}: {e}"))?;
+        .map_err(|e| anyhow!("连接 Responses API 失败: {url}: {e}"))?;
 
     sse_chat_stream(response, Arc::new(extract_responses_delta)).await
 }
@@ -335,6 +427,8 @@ pub async fn responses_chat_stream(
 mod tests {
     use super::*;
     use crate::trait_::ChatToolCall;
+
+    // ── 消息转换 ──
 
     #[test]
     fn to_responses_input_user_and_assistant() {
@@ -418,25 +512,59 @@ mod tests {
     }
 
     #[test]
+    fn system_message_extracted_as_instructions() {
+        let msgs = vec![
+            ChatMessage::text("system", "You are helpful"),
+            ChatMessage::text("user", "hello"),
+        ];
+        let input = to_responses_input(&msgs);
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[0]["role"], "system");
+    }
+
+    // ── 文本 delta ──
+
+    #[test]
     fn extract_text_delta() {
         let data = r#"{"type":"response.output_text.delta","delta":"Hello"}"#;
         let chunk = extract_responses_delta(data).unwrap();
         assert_eq!(chunk.token.as_deref(), Some("Hello"));
     }
 
+    // ── reasoning delta ──
+
+    #[test]
+    fn extract_reasoning_delta() {
+        let data = r#"{"type":"response.reasoning_summary_text.delta","delta":"Let me think..."}"#;
+        let chunk = extract_responses_delta(data).unwrap();
+        assert_eq!(chunk.reasoning.as_deref(), Some("Let me think..."));
+        assert!(chunk.token.is_none());
+    }
+
+    #[test]
+    fn extract_reasoning_empty_delta_returns_none() {
+        let data = r#"{"type":"response.reasoning_summary_text.delta","delta":""}"#;
+        assert!(extract_responses_delta(data).is_none());
+    }
+
+    // ── refusal delta ──
+
+    #[test]
+    fn extract_refusal_delta() {
+        let data = r#"{"type":"response.refusal.delta","delta":"I cannot help with that."}"#;
+        let chunk = extract_responses_delta(data).unwrap();
+        assert_eq!(chunk.token.as_deref(), Some("I cannot help with that."));
+    }
+
+    // ── function call ──
+
     #[test]
     fn extract_function_call_added() {
         let data = r#"{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"search"}}"#;
         let chunk = extract_responses_delta(data).unwrap();
         assert_eq!(chunk.tool_call_deltas.len(), 1);
-        assert_eq!(
-            chunk.tool_call_deltas[0].id.as_deref(),
-            Some("call_1")
-        );
-        assert_eq!(
-            chunk.tool_call_deltas[0].name.as_deref(),
-            Some("search")
-        );
+        assert_eq!(chunk.tool_call_deltas[0].id.as_deref(), Some("call_1"));
+        assert_eq!(chunk.tool_call_deltas[0].name.as_deref(), Some("search"));
     }
 
     #[test]
@@ -451,11 +579,48 @@ mod tests {
     }
 
     #[test]
-    fn extract_completed() {
-        let data = r#"{"type":"response.completed","response":{"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}}"#;
+    fn extract_function_call_args_done_returns_none() {
+        let data = r#"{"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"q\":\"rust\"}"}"#;
+        assert!(extract_responses_delta(data).is_none());
+    }
+
+    #[test]
+    fn extract_output_item_done_function_call() {
+        let data = r#"{"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_2","name":"read_file","arguments":"{\"path\":\"src/main.rs\"}","status":"completed"}}"#;
+        let chunk = extract_responses_delta(data).unwrap();
+        assert_eq!(chunk.tool_call_deltas.len(), 1);
+        assert_eq!(chunk.tool_call_deltas[0].id.as_deref(), Some("call_2"));
+        assert_eq!(
+            chunk.tool_call_deltas[0].name.as_deref(),
+            Some("read_file")
+        );
+        assert_eq!(
+            chunk.tool_call_deltas[0].arguments.as_deref(),
+            Some("{\"path\":\"src/main.rs\"}")
+        );
+    }
+
+    #[test]
+    fn extract_output_item_done_message_returns_none() {
+        let data = r#"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}}"#;
+        assert!(extract_responses_delta(data).is_none());
+    }
+
+    // ── 完成 / 错误 ──
+
+    #[test]
+    fn extract_completed_text_only() {
+        let data = r#"{"type":"response.completed","response":{"output":[{"type":"message"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
         let chunk = extract_responses_delta(data).unwrap();
         assert_eq!(chunk.finish_reason.as_deref(), Some("stop"));
         assert!(chunk.usage.is_some());
+    }
+
+    #[test]
+    fn extract_completed_with_tool_calls() {
+        let data = r#"{"type":"response.completed","response":{"output":[{"type":"function_call","call_id":"c1","name":"f","arguments":"{}"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
+        let chunk = extract_responses_delta(data).unwrap();
+        assert_eq!(chunk.finish_reason.as_deref(), Some("tool_calls"));
     }
 
     #[test]
@@ -471,19 +636,40 @@ mod tests {
     }
 
     #[test]
-    fn extract_unknown_event_returns_none() {
-        let data = r#"{"type":"response.output_text.done","text":"hi"}"#;
-        assert!(extract_responses_delta(data).is_none());
+    fn extract_error_event() {
+        let data = r#"{"type":"error","message":"invalid request"}"#;
+        let chunk = extract_responses_delta(data).unwrap();
+        assert_eq!(
+            chunk.finish_reason.as_deref(),
+            Some("error:invalid request")
+        );
+    }
+
+    // ── 忽略的事件 ──
+
+    #[test]
+    fn extract_lifecycle_events_return_none() {
+        for event in [
+            r#"{"type":"response.created","response":{}}"#,
+            r#"{"type":"response.in_progress","response":{}}"#,
+            r#"{"type":"response.output_text.done","text":"hi"}"#,
+            r#"{"type":"response.content_part.added"}"#,
+            r#"{"type":"response.content_part.done"}"#,
+            r#"{"type":"response.reasoning_summary_part.added"}"#,
+            r#"{"type":"response.reasoning_summary_part.done"}"#,
+            r#"{"type":"response.reasoning_summary_text.done","text":"ok"}"#,
+            r#"{"type":"response.refusal.done","refusal":"no"}"#,
+        ] {
+            assert!(
+                extract_responses_delta(event).is_none(),
+                "expected None for {event}"
+            );
+        }
     }
 
     #[test]
-    fn system_message_extracted_as_instructions() {
-        let msgs = vec![
-            ChatMessage::text("system", "You are helpful"),
-            ChatMessage::text("user", "hello"),
-        ];
-        let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 2);
-        assert_eq!(input[0]["role"], "system");
+    fn extract_unknown_event_returns_none() {
+        let data = r#"{"type":"response.some_future_event","data":"x"}"#;
+        assert!(extract_responses_delta(data).is_none());
     }
 }

@@ -6,7 +6,7 @@
 //!
 //! - [`image_http`]：Images API
 //! - [`media_compat`]：Whisper / 视觉 / 音频描述
-//! - [`responses`]：Responses API 骨架
+//! - [`responses`]：Responses API 流式适配器
 //! - [`defaults`]：默认模型 / 基址常量
 
 pub mod azure;
