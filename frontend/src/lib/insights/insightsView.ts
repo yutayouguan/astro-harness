@@ -4,7 +4,8 @@ export type InsightsViewMode =
   | "models"
   | "tools"
   | "collab"
-  | "tracing";
+  | "tracing"
+  | "api";
 
 export const DEFAULT_INSIGHTS_VIEW: InsightsViewMode = "overview";
 
@@ -14,6 +15,7 @@ export const INSIGHTS_VIEW_ORDER: readonly InsightsViewMode[] = [
   "tools",
   "collab",
   "tracing",
+  "api",
 ] as const;
 
 export function needsUsageInsights(view: InsightsViewMode): boolean {
