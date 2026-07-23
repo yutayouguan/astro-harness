@@ -91,32 +91,40 @@ impl VariableContext {
     }
 
     /// 评估简单条件表达式，如 `{{status}} == "active"` 或 `{{count}} > 5`
+    ///
+    /// 先在**原始表达式**中定位操作符，再对两侧分别插值，
+    /// 避免变量值中包含操作符时错误分割。
     pub fn evaluate_condition(&self, expr: &str) -> Result<bool> {
         let expr = expr.trim();
         if expr.is_empty() {
             return Ok(true);
         }
 
-        // 先做变量插值
-        let resolved = self.interpolate(expr);
+        // 在原始表达式（插值前）中查找操作符
+        // 跳过 {{ }} 内部的内容，只在顶层文本中匹配
+        let ops: &[(&str, fn(&str, &str) -> bool)] = &[
+            ("==", compare_eq),
+            ("!=", compare_ne),
+            (">=", compare_gte),
+            ("<=", compare_lte),
+            (">", compare_gt),
+            ("<", compare_lt),
+        ];
 
-        // 支持的操作符
-        for (op, cmp_fn) in &[
-            ("==", compare_eq as fn(&str, &str) -> bool),
-            ("!=", compare_ne as fn(&str, &str) -> bool),
-            (">=", compare_gte as fn(&str, &str) -> bool),
-            ("<=", compare_lte as fn(&str, &str) -> bool),
-            (">", compare_gt as fn(&str, &str) -> bool),
-            ("<", compare_lt as fn(&str, &str) -> bool),
-        ] {
-            if let Some(pos) = resolved.find(op) {
-                let lhs = resolved[..pos].trim().trim_matches('"');
-                let rhs = resolved[pos + op.len()..].trim().trim_matches('"');
+        for (op, cmp_fn) in ops {
+            if let Some(pos) = find_operator_outside_braces(expr, op) {
+                let lhs_raw = expr[..pos].trim();
+                let rhs_raw = expr[pos + op.len()..].trim();
+                let lhs = self.interpolate(lhs_raw);
+                let rhs = self.interpolate(rhs_raw);
+                let lhs = lhs.trim().trim_matches('"');
+                let rhs = rhs.trim().trim_matches('"');
                 return Ok(cmp_fn(lhs, rhs));
             }
         }
 
-        // 无操作符：truthy 判断
+        // 无操作符：对整个表达式插值后做 truthy 判断
+        let resolved = self.interpolate(expr);
         let resolved = resolved.trim();
         Ok(!resolved.is_empty()
             && resolved != "false"
@@ -144,6 +152,33 @@ impl VariableContext {
             other => other.clone(),
         }
     }
+}
+
+/// 在字符串中查找操作符，跳过 `{{ }}` 内部
+fn find_operator_outside_braces(s: &str, op: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let op_bytes = op.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // 进入 {{ }} 块时跳过
+        if i + 1 < bytes.len() && bytes[i] == b'{' && bytes[i + 1] == b'{' {
+            i += 2;
+            while i + 1 < bytes.len() {
+                if bytes[i] == b'}' && bytes[i + 1] == b'}' {
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        // 检查操作符匹配
+        if i + op_bytes.len() <= bytes.len() && &bytes[i..i + op_bytes.len()] == op_bytes {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
 }
 
 fn resolve_json_path(val: &serde_json::Value, path: &str) -> Option<serde_json::Value> {

@@ -8,9 +8,16 @@ pub mod media;
 pub mod media_stub;
 
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use crate::engine::executor::NodeExecutor;
 use crate::model::NodeType;
+
+/// 获取全局共享的执行器注册表（只构建一次）
+pub fn executor_registry() -> &'static HashMap<NodeType, Box<dyn NodeExecutor>> {
+    static REGISTRY: OnceLock<HashMap<NodeType, Box<dyn NodeExecutor>>> = OnceLock::new();
+    REGISTRY.get_or_init(build_executor_registry)
+}
 
 /// 构建全部节点类型的执行器注册表
 pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {

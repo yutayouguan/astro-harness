@@ -99,7 +99,7 @@ async fn execute_inner_with_depth(
 ) -> Result<WorkflowRunResult> {
     let plan = resolve_dag(&workflow.nodes, &workflow.edges)?;
 
-    let executors = nodes::build_executor_registry();
+    let executors = nodes::executor_registry();
 
     let mut ctx = VariableContext::new(workflow.variables.clone());
 

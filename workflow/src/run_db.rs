@@ -77,7 +77,7 @@ impl WorkflowRunDb {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(&path).context("打开 workflow.db 失败")?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(DDL).context("workflow.db DDL 失败")?;
         Ok(Self { conn })
     }
@@ -236,6 +236,28 @@ impl WorkflowRunDb {
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
+    }
+
+    /// 清理旧运行记录，保留最近 max_keep 条
+    pub fn prune_old_runs(&self, max_keep: i64) -> Result<usize> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM workflow_runs", [], |r| r.get(0),
+        )?;
+        if count <= max_keep {
+            return Ok(0);
+        }
+        let to_delete = count - max_keep;
+        self.conn.execute_batch("BEGIN")?;
+        self.conn.execute(
+            "DELETE FROM workflow_step_logs WHERE run_id IN (SELECT id FROM workflow_runs ORDER BY started_at ASC LIMIT ?1)",
+            rusqlite::params![to_delete],
+        )?;
+        let n = self.conn.execute(
+            "DELETE FROM workflow_runs WHERE id IN (SELECT id FROM workflow_runs ORDER BY started_at ASC LIMIT ?1)",
+            rusqlite::params![to_delete],
+        )?;
+        self.conn.execute_batch("COMMIT")?;
+        Ok(n)
     }
 }
 

@@ -1,11 +1,14 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{NewWorkflow, Workflow};
+
+static STORE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct WorkflowsFile {
@@ -96,6 +99,7 @@ impl WorkflowStore {
     }
 
     pub fn delete(&self, id: &str) -> Result<bool> {
+        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         let before = file.workflows.len();
         file.workflows.retain(|w| w.id != id);
@@ -131,9 +135,10 @@ impl WorkflowStore {
         }
     }
 
-    /// Upsert：id 已存在则更新，否则插入
+    /// Upsert：id 已存在则更新，否则插入。加锁防并发写入丢数据。
     pub fn save_workflow(&self, wf: Workflow) -> Result<Workflow> {
         Self::validate_workflow(&wf)?;
+        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         let mut wf = wf;
         wf.updated_at = Local::now().to_rfc3339();
