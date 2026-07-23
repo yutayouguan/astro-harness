@@ -1,4 +1,4 @@
-/** 供应商 + 模型选择器 —— 只显示已启用且已配置 API Key 的供应商 */
+/** 供应商 + 模型选择器 —— 显示已启用供应商，默认继承主模型 */
 
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -10,6 +10,11 @@ interface ProviderDto {
   model: string;
   enabled: boolean;
   has_api_key: boolean;
+}
+
+interface ProvidersState {
+  providers: ProviderDto[];
+  active_provider_id: string | null;
 }
 
 interface Props {
@@ -26,41 +31,63 @@ export default function ProviderModelSelect({
   onModelChange,
 }: Props) {
   const [providers, setProviders] = useState<ProviderDto[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [models, setModels] = useState<string[]>([]);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const state = await invoke<{ providers: ProviderDto[] }>("get_providers_state");
+        const state = await invoke<ProvidersState>("get_providers_state");
         const available = (state.providers ?? []).filter(
           (p) => p.enabled && p.has_api_key,
         );
         setProviders(available);
+        setActiveId(state.active_provider_id ?? null);
+
+        // 如果父组件没有设置 providerId，自动继承主模型的提供商和模型
+        if (!providerId && state.active_provider_id) {
+          const active = available.find((p) => p.id === state.active_provider_id);
+          if (active) {
+            onProviderChange(active.id);
+            if (!model && active.model) {
+              onModelChange(active.model);
+            }
+          }
+        }
+        setInitialized(true);
       } catch {
-        /* providers not available */
+        setInitialized(true);
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 当选中的供应商变化时，加载该供应商的模型列表
+  const effectiveProvider = providerId || activeId || "";
   useEffect(() => {
-    if (!providerId) {
+    if (!effectiveProvider) {
       setModels([]);
       return;
     }
     (async () => {
       try {
         const cached = await invoke<string[]>("get_cached_provider_models", {
-          providerId,
+          providerId: effectiveProvider,
         });
         setModels(cached ?? []);
       } catch {
-        const provider = providers.find((p) => p.id === providerId);
+        const provider = providers.find((p) => p.id === effectiveProvider);
         if (provider?.model) {
           setModels([provider.model]);
         }
       }
     })();
-  }, [providerId, providers]);
+  }, [effectiveProvider, providers]);
+
+  const activeProvider = providers.find((p) => p.id === activeId);
+  const selectedProvider = providers.find((p) => p.id === providerId);
+  const displayModel = model || selectedProvider?.model || activeProvider?.model || "";
 
   return (
     <>
@@ -70,18 +97,23 @@ export default function ProviderModelSelect({
           className="loop-config-select"
           value={providerId}
           onChange={(e) => {
-            onProviderChange(e.target.value);
-            onModelChange("");
+            const newId = e.target.value;
+            onProviderChange(newId);
+            // 切换供应商时自动设置该供应商的默认模型
+            const p = providers.find((pp) => pp.id === newId);
+            onModelChange(p?.model || "");
           }}
         >
-          <option value="">—</option>
           {providers.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.display_name}
+              {p.display_name}{p.id === activeId ? " (当前主模型)" : ""}
             </option>
           ))}
         </select>
-        {providers.length === 0 && (
+        {!initialized && (
+          <span className="loop-config-hint">加载供应商列表…</span>
+        )}
+        {initialized && providers.length === 0 && (
           <span className="loop-config-hint">
             暂无可用供应商，请先在「模型服务」中配置并启用。
           </span>
@@ -90,22 +122,32 @@ export default function ProviderModelSelect({
 
       <label className="loop-config-field">
         <span className="loop-config-label">模型</span>
-        <select
-          className="loop-config-select"
-          value={model}
-          onChange={(e) => onModelChange(e.target.value)}
-          disabled={!providerId}
-        >
-          <option value="">{providerId ? "请选择模型" : "请先选择供应商"}</option>
-          {models.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-        {!providerId && (
+        {models.length > 0 ? (
+          <select
+            className="loop-config-select"
+            value={displayModel}
+            onChange={(e) => onModelChange(e.target.value)}
+          >
+            {!models.includes(displayModel) && displayModel && (
+              <option value={displayModel}>{displayModel}</option>
+            )}
+            {models.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="loop-config-input"
+            value={model}
+            onChange={(e) => onModelChange(e.target.value)}
+            placeholder={activeProvider?.model || "输入模型名称"}
+          />
+        )}
+        {activeProvider && !model && (
           <span className="loop-config-hint">
-            未选择则使用当前的默认模型（和对话用的一致）。
+            当前继承主模型: {activeProvider.display_name} / {activeProvider.model}
           </span>
         )}
       </label>
