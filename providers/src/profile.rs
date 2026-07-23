@@ -40,6 +40,7 @@ pub struct ProviderProfile {
     pub auth: AuthKind,
     pub env_keys: &'static [&'static str],
     pub azure_deployment_style: bool,
+    /// 默认模型名（**离线 fallback**；运行时优先从缓存选最新模型）。
     pub default_model: &'static str,
     pub supports_image_gen: bool,
     pub supports_embedding: bool,

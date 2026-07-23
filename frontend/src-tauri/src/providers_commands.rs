@@ -271,7 +271,7 @@ impl ProviderConfig {
         Self {
             display_name: kind.display_name().to_string(),
             endpoint: kind.default_endpoint().to_string(),
-            model: kind.default_model().to_string(),
+            model: resolve_latest_chat_model(&kind),
             enabled: true,
             id: format!("prov-{}", uuid::Uuid::new_v4().simple()),
             kind,
@@ -664,9 +664,9 @@ pub(crate) fn resolve_api_key(
     (false, "none".into(), None, None)
 }
 
-/// 支持 Responses API 切换的厂商。
+/// 支持 Responses API 切换的厂商（仅官方支持 `/v1/responses` 的）。
 fn supports_responses_toggle(kind: ProviderKind) -> bool {
-    matches!(kind, ProviderKind::Openai | ProviderKind::Minimax)
+    matches!(kind, ProviderKind::Openai)
 }
 
 /// 根据 api_mode 覆盖计算实际 backend_id。
@@ -1094,10 +1094,11 @@ pub struct ImageGenTarget {
 const IMAGE_GEN_NO_PROVIDER_MSG: &str =
     "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google 或 OpenAI，并配置 API Key。";
 
-/// 按供应商类型选择默认图片模型。
+/// 按供应商类型选择默认图片模型（动态优先，硬编码 fallback）。
 fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
+    // 硬编码 fallback — 仅在缓存为空时使用
     match kind {
-        ProviderKind::Google => Some("gemini-3.1-flash-image"),
+        ProviderKind::Google => Some("nanobanana-v2"),
         ProviderKind::Openai => Some("gpt-image-2"),
         ProviderKind::Minimax => Some("image-01"),
         _ => None,
@@ -1106,7 +1107,7 @@ fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
 
 fn default_video_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
-        ProviderKind::Google => "veo-3.1-generate-preview",
+        ProviderKind::Google => "veo-3.1",
         ProviderKind::Minimax => "MiniMax-Hailuo-2.3",
         _ => "",
     }
@@ -1114,7 +1115,7 @@ fn default_video_model_for_kind(kind: &ProviderKind) -> &'static str {
 
 fn default_music_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
-        ProviderKind::Google => "lyria-3-clip-preview",
+        ProviderKind::Google => "lyria-3-pro",
         ProviderKind::Minimax => "music-3.0",
         _ => "",
     }
@@ -1122,8 +1123,8 @@ fn default_music_model_for_kind(kind: &ProviderKind) -> &'static str {
 
 fn default_tts_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
-        ProviderKind::Google => "gemini-3.1-flash-tts-preview",
-        ProviderKind::Openai => "gpt-4o-mini-tts",
+        ProviderKind::Google => "gemini-3.1-flash-tts",
+        ProviderKind::Openai => "openai-tts-v3",
         ProviderKind::Minimax => "speech-2.8-hd",
         _ => "",
     }
@@ -1131,9 +1132,9 @@ fn default_tts_model_for_kind(kind: &ProviderKind) -> &'static str {
 
 fn default_vision_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
-        ProviderKind::Google => "gemini-3.5-flash",
+        ProviderKind::Google => "gemini-3.1-ultra",
         ProviderKind::Openai => "gpt-4o",
-        ProviderKind::Minimax => "gpt-4o",
+        ProviderKind::Minimax => "MiniMax-M3",
         _ => "",
     }
 }
@@ -1145,6 +1146,86 @@ fn resolve_media_model(configured: &str, default: &str) -> String {
     } else {
         t.to_string()
     }
+}
+
+/// 从模型缓存中选取该 provider 最新的聊天模型 id。
+/// 缓存为空时回退到 `ProviderKind::default_model()` 硬编码值。
+pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
+    let kind_str = kind.as_str();
+    let cache = load_models_cache();
+    // 遍历缓存中该 kind 的所有 provider entry
+    let mut best: Option<(u64, String)> = None;
+    for entry in cache.providers.values() {
+        if entry.kind != kind_str {
+            continue;
+        }
+        for compat in &entry.models {
+            let info = match compat {
+                crate::model_meta::ModelEntryCompat::Full(boxed) => boxed.as_ref(),
+                _ => continue,
+            };
+            // 过滤非聊天模型
+            let id_lower = info.id.to_ascii_lowercase();
+            if id_lower.contains("embed")
+                || id_lower.contains("tts")
+                || id_lower.contains("whisper")
+                || id_lower.contains("veo")
+                || id_lower.contains("lyria")
+                || id_lower.contains("imagen")
+                || id_lower.contains("dall-e")
+                || id_lower.contains("sora")
+                || id_lower.contains("robotics")
+            {
+                continue;
+            }
+            // 纯媒体模型跳过
+            if info.capabilities.image_gen
+                && !info.capabilities.tools
+                && !info.capabilities.vision
+            {
+                continue;
+            }
+            let created = info.created.unwrap_or(0);
+            if best.as_ref().map_or(true, |(c, _)| created > *c) {
+                best = Some((created, info.id.clone()));
+            }
+        }
+    }
+    best.map(|(_, id)| id).unwrap_or_else(|| kind.default_model().to_string())
+}
+
+/// 从模型缓存中选取该 provider 最新的指定能力模型。
+/// `capability`：`"image_gen"` / `"video_gen"` / `"audio_gen"` / `"music_gen"`。
+pub fn resolve_latest_media_model(kind: &ProviderKind, capability: &str, fallback: &str) -> String {
+    let kind_str = kind.as_str();
+    let cache = load_models_cache();
+    let mut best: Option<(u64, String)> = None;
+    for entry in cache.providers.values() {
+        if entry.kind != kind_str {
+            continue;
+        }
+        for compat in &entry.models {
+            let info = match compat {
+                crate::model_meta::ModelEntryCompat::Full(boxed) => boxed.as_ref(),
+                _ => continue,
+            };
+            let has_cap = match capability {
+                "image_gen" => info.capabilities.image_gen,
+                "video_gen" => info.capabilities.video_gen,
+                "audio_gen" | "tts" => info.capabilities.audio_gen,
+                "music_gen" => info.capabilities.music_gen,
+                _ => false,
+            };
+            if !has_cap {
+                continue;
+            }
+            let created = info.created.unwrap_or(0);
+            if best.as_ref().map_or(true, |(c, _)| created > *c) {
+                best = Some((created, info.id.clone()));
+            }
+        }
+    }
+    best.map(|(_, id)| id).unwrap_or_else(|| fallback.to_string())
 }
 
 /// 从 providers 面板解析图片生成候选：Google 优先，OpenAI 备用。
