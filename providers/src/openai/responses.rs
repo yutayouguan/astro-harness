@@ -87,12 +87,9 @@ fn build_content(m: &ChatMessage) -> Value {
                         "type": "input_image",
                         "image_url": url,
                     }),
-                    ChatContentPart::AudioUrl { mime_type, .. } => json!({
-                        "type": "input_text",
-                        "text": format!(
-                            "[audio attached: {}]",
-                            if mime_type.trim().is_empty() { "audio/*" } else { mime_type }
-                        )
+                    ChatContentPart::AudioUrl { url, .. } => json!({
+                        "type": "input_audio",
+                        "data": url,
                     }),
                     ChatContentPart::VideoUrl { mime_type, .. } => json!({
                         "type": "input_text",
@@ -101,12 +98,9 @@ fn build_content(m: &ChatMessage) -> Value {
                             if mime_type.trim().is_empty() { "video/*" } else { mime_type }
                         )
                     }),
-                    ChatContentPart::DocumentUrl { mime_type, .. } => json!({
-                        "type": "input_text",
-                        "text": format!(
-                            "[document attached: {}]",
-                            if mime_type.trim().is_empty() { "application/pdf" } else { mime_type }
-                        )
+                    ChatContentPart::DocumentUrl { url, .. } => json!({
+                        "type": "input_file",
+                        "file_url": url,
                     }),
                 })
                 .collect();
@@ -116,30 +110,40 @@ fn build_content(m: &ChatMessage) -> Value {
     json!(m.content)
 }
 
-/// Chat Completions 工具 schema → Responses API 工具 schema。
+/// 工具 schema 转换。
 ///
-/// Chat Completions: `{ type:"function", function:{ name, description, parameters, strict } }`
-/// Responses API:    `{ type:"function", name, description, parameters, strict }`
+/// - Chat Completions 函数: `{ type:"function", function:{ name, … } }` → 展平
+/// - Responses 原生函数: `{ type:"function", name, … }` → 透传
+/// - 内置工具 (`file_search` / `web_search_preview` / `code_interpreter` 等) → 透传
 fn to_responses_tools(tools: &[Value]) -> Vec<Value> {
     tools
         .iter()
         .filter_map(|t| {
-            let func = t.get("function")?;
-            let mut out = serde_json::Map::new();
-            out.insert("type".into(), json!("function"));
-            if let Some(name) = func.get("name") {
-                out.insert("name".into(), name.clone());
+            let ty = t.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            if ty == "function" {
+                if let Some(func) = t.get("function") {
+                    let mut out = serde_json::Map::new();
+                    out.insert("type".into(), json!("function"));
+                    if let Some(name) = func.get("name") {
+                        out.insert("name".into(), name.clone());
+                    }
+                    if let Some(desc) = func.get("description") {
+                        out.insert("description".into(), desc.clone());
+                    }
+                    if let Some(params) = func.get("parameters") {
+                        out.insert("parameters".into(), params.clone());
+                    }
+                    if let Some(strict) = func.get("strict") {
+                        out.insert("strict".into(), strict.clone());
+                    }
+                    return Some(Value::Object(out));
+                }
+                return Some(t.clone());
             }
-            if let Some(desc) = func.get("description") {
-                out.insert("description".into(), desc.clone());
+            if !ty.is_empty() {
+                return Some(t.clone());
             }
-            if let Some(params) = func.get("parameters") {
-                out.insert("parameters".into(), params.clone());
-            }
-            if let Some(strict) = func.get("strict") {
-                out.insert("strict".into(), strict.clone());
-            }
-            Some(Value::Object(out))
+            None
         })
         .collect()
 }
@@ -509,6 +513,102 @@ mod tests {
         assert_eq!(resp[0]["name"], "get_weather");
         assert_eq!(resp[0]["strict"], true);
         assert!(resp[0].get("function").is_none());
+    }
+
+    #[test]
+    fn to_responses_tools_flat_function_passthrough() {
+        let tools = vec![json!({
+            "type": "function",
+            "name": "search",
+            "description": "Search the web",
+            "parameters": { "type": "object", "properties": {} }
+        })];
+        let resp = to_responses_tools(&tools);
+        assert_eq!(resp.len(), 1);
+        assert_eq!(resp[0]["name"], "search");
+    }
+
+    #[test]
+    fn to_responses_tools_builtin_passthrough() {
+        let tools = vec![
+            json!({ "type": "web_search_preview" }),
+            json!({ "type": "file_search", "vector_store_ids": ["vs_123"], "max_num_results": 20 }),
+            json!({ "type": "code_interpreter" }),
+        ];
+        let resp = to_responses_tools(&tools);
+        assert_eq!(resp.len(), 3);
+        assert_eq!(resp[0]["type"], "web_search_preview");
+        assert_eq!(resp[1]["type"], "file_search");
+        assert_eq!(resp[1]["vector_store_ids"][0], "vs_123");
+        assert_eq!(resp[2]["type"], "code_interpreter");
+    }
+
+    #[test]
+    fn to_responses_tools_mixed() {
+        let tools = vec![
+            json!({
+                "type": "function",
+                "function": { "name": "f1", "parameters": {} }
+            }),
+            json!({ "type": "web_search_preview" }),
+        ];
+        let resp = to_responses_tools(&tools);
+        assert_eq!(resp.len(), 2);
+        assert_eq!(resp[0]["type"], "function");
+        assert_eq!(resp[0]["name"], "f1");
+        assert_eq!(resp[1]["type"], "web_search_preview");
+    }
+
+    // ── 内容构建 ──
+
+    #[test]
+    fn build_content_document_as_input_file() {
+        let msg = ChatMessage::user_parts(
+            "what is in this file?",
+            vec![
+                ChatContentPart::Text {
+                    text: "what is in this file?".into(),
+                },
+                ChatContentPart::DocumentUrl {
+                    url: "https://example.com/doc.pdf".into(),
+                    mime_type: "application/pdf".into(),
+                },
+            ],
+        );
+        let content = build_content(&msg);
+        let arr = content.as_array().unwrap();
+        assert_eq!(arr[0]["type"], "input_text");
+        assert_eq!(arr[1]["type"], "input_file");
+        assert_eq!(arr[1]["file_url"], "https://example.com/doc.pdf");
+    }
+
+    #[test]
+    fn build_content_audio_as_input_audio() {
+        let msg = ChatMessage::user_parts(
+            "transcribe",
+            vec![ChatContentPart::AudioUrl {
+                url: "data:audio/mp3;base64,AAAA".into(),
+                mime_type: "audio/mp3".into(),
+            }],
+        );
+        let content = build_content(&msg);
+        let arr = content.as_array().unwrap();
+        assert_eq!(arr[0]["type"], "input_audio");
+        assert_eq!(arr[0]["data"], "data:audio/mp3;base64,AAAA");
+    }
+
+    #[test]
+    fn build_content_image_as_input_image() {
+        let msg = ChatMessage::user_parts(
+            "describe",
+            vec![ChatContentPart::ImageUrl {
+                url: "https://example.com/img.jpg".into(),
+            }],
+        );
+        let content = build_content(&msg);
+        let arr = content.as_array().unwrap();
+        assert_eq!(arr[0]["type"], "input_image");
+        assert_eq!(arr[0]["image_url"], "https://example.com/img.jpg");
     }
 
     #[test]
