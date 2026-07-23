@@ -156,7 +156,7 @@ type Draft = {
   vision_model: string;
 };
 
-type DetailTab = "chat" | "models" | "media";
+type DetailTab = "chat" | "models" | "media" | "embedding";
 
 type PageTab = "providers" | "auxiliary" | "evolution";
 
@@ -187,8 +187,12 @@ const MEDIA_MODEL_DEFAULTS: Record<
   },
 };
 
-function supportsMediaModels(kind: string): boolean {
-  return kind === "google" || kind === "openai" || kind === "minimax";
+function supportsMediaModels(p: ProviderDto): boolean {
+  return !!(p.supports_image || p.supports_video || p.supports_tts || p.supports_music || p.supports_asr);
+}
+
+function supportsEmbedding(kind: string): boolean {
+  return kind === "openai" || kind === "google" || kind === "zhipu" || kind === "bailian" || kind === "minimax";
 }
 
 function draftFromProvider(p: ProviderDto): Draft {
@@ -565,7 +569,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
 
   // 切到不支持媒体的提供商时，避免停在空的媒体页
   useEffect(() => {
-    if (detailTab === "media" && selected && !supportsMediaModels(selected.kind)) {
+    if (detailTab === "media" && selected && !supportsMediaModels(selected)) {
+      setDetailTab("chat");
+    }
+    if (detailTab === "embedding" && selected && !supportsEmbedding(selected.kind)) {
       setDetailTab("chat");
     }
   }, [detailTab, selected]);
@@ -1651,7 +1658,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     <span className="providers-detail-tab-count">{models.length}</span>
                   ) : null}
                 </button>
-                {supportsMediaModels(selected.kind) ? (
+                {supportsMediaModels(selected) ? (
                   <button
                     type="button"
                     role="tab"
@@ -1661,6 +1668,18 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                   >
                     <Image size={14} strokeWidth={2} aria-hidden />
                     {t("providers.tabMedia")}
+                  </button>
+                ) : null}
+                {supportsEmbedding(selected.kind) ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "embedding"}
+                    className={`providers-detail-tab ${detailTab === "embedding" ? "is-active" : ""}`}
+                    onClick={() => setDetailTab("embedding")}
+                  >
+                    <Layers size={14} strokeWidth={2} aria-hidden />
+                    {t("providers.tabEmbedding")}
                   </button>
                 ) : null}
               </div>
@@ -2557,7 +2576,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
               </div>
               )}
 
-              {detailTab === "media" && supportsMediaModels(selected.kind) && (
+              {detailTab === "media" && supportsMediaModels(selected) && (
                 <div className="providers-media-panel">
                   <p className="providers-field-hint providers-media-hint">
                     {t("providers.mediaHint")}
@@ -2583,7 +2602,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         )}
                       />
                     </label>
-                    {selected.kind === "google" ? (
+                    {selected.supports_video ? (
                       <label className="providers-field providers-field-span">
                         <span className="providers-field-label">
                           <IconBox />
@@ -2600,7 +2619,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                           }
                           options={mediaOptions(
                             "video_gen",
-                            MEDIA_MODEL_DEFAULTS.google.video,
+                            MEDIA_MODEL_DEFAULTS[selected.kind]?.video ?? "",
                           )}
                         />
                       </label>
@@ -2625,7 +2644,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         )}
                       />
                     </label>
-                    {selected.kind === "google" ? (
+                    {selected.supports_music ? (
                       <label className="providers-field providers-field-span">
                         <span className="providers-field-label">
                           <IconBox />
@@ -2642,7 +2661,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                           }
                           options={mediaOptions(
                             "music_gen",
-                            MEDIA_MODEL_DEFAULTS.google.music,
+                            MEDIA_MODEL_DEFAULTS[selected.kind]?.music ?? "",
                           )}
                         />
                       </label>
@@ -2666,6 +2685,41 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                           MEDIA_MODEL_DEFAULTS[selected.kind]?.vision ?? "",
                         )}
                       />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {detailTab === "embedding" && supportsEmbedding(selected.kind) && (
+                <div className="providers-media-panel">
+                  <p className="providers-field-hint providers-media-hint">
+                    {t("providers.embeddingHint")}
+                  </p>
+                  <div className="providers-form-grid">
+                    <label className="providers-field providers-field-span">
+                      <span className="providers-field-label">
+                        <IconBox />
+                        {t("providers.embeddingModel")}
+                      </span>
+                      <input
+                        className="providers-input"
+                        value={draft.model}
+                        onChange={(e) =>
+                          setDraft((current) =>
+                            current ? { ...current, model: e.target.value } : current,
+                          )
+                        }
+                        placeholder={
+                          selected.kind === "openai" ? "text-embedding-3-large" :
+                          selected.kind === "google" ? "text-embedding-005" :
+                          selected.kind === "zhipu" ? "embedding-3" :
+                          selected.kind === "bailian" ? "text-embedding-v3" :
+                          "embedding model"
+                        }
+                      />
+                      <span className="providers-field-hint">
+                        {t("providers.embeddingModelHint")}
+                      </span>
                     </label>
                   </div>
                 </div>

@@ -220,6 +220,13 @@ export type ProviderDto = {
   music_model?: string;
   /** 视觉（图片理解）模型（空=内置默认） */
   vision_model?: string;
+  /** ASR 模型 */
+  asr_model?: string;
+  supports_image?: boolean;
+  supports_video?: boolean;
+  supports_tts?: boolean;
+  supports_music?: boolean;
+  supports_asr?: boolean;
 };
 
 /** 全部供应商 + 当前激活 id */
