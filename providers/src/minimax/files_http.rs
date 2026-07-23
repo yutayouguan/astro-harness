@@ -20,6 +20,8 @@ pub enum FileUploadPurpose {
     VoiceClone,
     /// 提示音频。
     PromptAudio,
+    /// 异步长文本语音合成输入。
+    T2aAsyncInput,
     /// 视频理解。
     VideoUnderstanding,
 }
@@ -29,6 +31,7 @@ impl fmt::Display for FileUploadPurpose {
         let s = match self {
             Self::VoiceClone => "voice_clone",
             Self::PromptAudio => "prompt_audio",
+            Self::T2aAsyncInput => "t2a_async_input",
             Self::VideoUnderstanding => "video_understanding",
         };
         f.write_str(s)
@@ -211,6 +214,111 @@ pub async fn minimax_retrieve_file(
         filename,
         download_url,
     })
+}
+
+/// 列出指定分类下的文件。
+///
+/// `GET {base}/files/list?purpose={purpose}`。
+pub async fn minimax_list_files(
+    client: &Client,
+    config: &ProviderConfig,
+    purpose: &str,
+) -> Result<Vec<MiniMaxFileInfo>> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("MiniMax API Key 为空");
+    }
+    let base = minimax_base(config);
+    let url = format!("{base}/files/list?purpose={purpose}");
+    let resp = client
+        .get(&url)
+        .bearer_auth(config.api_key.trim())
+        .send()
+        .await
+        .with_context(|| format!("连接 MiniMax 文件列表 API 失败: {url}"))?;
+    let status = resp.status();
+    let v: Value = resp.json().await.context("解析文件列表响应失败")?;
+    if !status.is_success() {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 文件列表 HTTP {status}: {msg}");
+    }
+    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    if code != 0 {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 文件列表业务错误 ({code}): {msg}");
+    }
+    let files = v.get("files").and_then(|f| f.as_array()).cloned().unwrap_or_default();
+    Ok(files
+        .iter()
+        .filter_map(|f| {
+            Some(MiniMaxFileInfo {
+                file_id: f.get("file_id")?.as_u64()?,
+                filename: f.get("filename").and_then(|n| n.as_str()).unwrap_or("").to_string(),
+                download_url: None,
+            })
+        })
+        .collect())
+}
+
+/// 下载文件内容（字节流）。
+///
+/// `GET {base}/files/retrieve_content?file_id={file_id}`。
+pub async fn minimax_retrieve_content(
+    client: &Client,
+    config: &ProviderConfig,
+    file_id: u64,
+) -> Result<Vec<u8>> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("MiniMax API Key 为空");
+    }
+    let base = minimax_base(config);
+    let url = format!("{base}/files/retrieve_content?file_id={file_id}");
+    let resp = client
+        .get(&url)
+        .bearer_auth(config.api_key.trim())
+        .send()
+        .await
+        .with_context(|| format!("连接 MiniMax 文件下载 API 失败: {url}"))?;
+    if !resp.status().is_success() {
+        anyhow::bail!("MiniMax 文件下载 HTTP {}", resp.status());
+    }
+    Ok(resp.bytes().await.context("读取文件内容失败")?.to_vec())
+}
+
+/// 删除文件。
+///
+/// `POST {base}/files/delete`。
+pub async fn minimax_delete_file(
+    client: &Client,
+    config: &ProviderConfig,
+    file_id: u64,
+    purpose: &str,
+) -> Result<()> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("MiniMax API Key 为空");
+    }
+    let base = minimax_base(config);
+    let url = format!("{base}/files/delete");
+    let body = serde_json::json!({ "file_id": file_id, "purpose": purpose });
+    let resp = client
+        .post(&url)
+        .bearer_auth(config.api_key.trim())
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("连接 MiniMax 文件删除 API 失败: {url}"))?;
+    let status = resp.status();
+    let v: Value = resp.json().await.context("解析文件删除响应失败")?;
+    if !status.is_success() {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 文件删除 HTTP {status}: {msg}");
+    }
+    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    if code != 0 {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 文件删除业务错误 ({code}): {msg}");
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
