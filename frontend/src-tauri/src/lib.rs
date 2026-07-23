@@ -200,36 +200,12 @@ fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
 /// 底色保持不透明 underlay，勿清成 clearColor（露白边）。
 #[cfg(target_os = "macos")]
 fn configure_macos_window(win: &tauri::WebviewWindow) {
-    use objc::runtime::{Class, Object, Sel};
+    use objc::runtime::Object;
     use objc::{msg_send, sel, sel_impl};
-    use std::os::raw::c_void;
-    use std::sync::Once;
-
-    type Imp = unsafe extern "C" fn(*mut Object, Sel, *mut Object);
-
-    #[link(name = "objc")]
-    extern "C" {
-        fn class_getInstanceMethod(cls: *const Class, name: Sel) -> *mut c_void;
-        fn method_setImplementation(method: *mut c_void, imp: Imp) -> Imp;
-    }
-
-    unsafe extern "C" fn ns_window_zoom_noop(_this: *mut Object, _cmd: Sel, _sender: *mut Object) {}
-
-    static PATCH_ZOOM: Once = Once::new();
-    PATCH_ZOOM.call_once(|| unsafe {
-        if let Some(cls) = Class::get("NSWindow") {
-            let method = class_getInstanceMethod(cls, sel!(zoom:));
-            if !method.is_null() {
-                let _ = method_setImplementation(method, ns_window_zoom_noop);
-            }
-        }
-    });
 
     if let Ok(ns_window) = win.ns_window() {
         unsafe {
             let ns_window = ns_window as *mut Object;
-            // NSWindowAnimationBehaviorNone = 0：禁止系统缩放动画（WebView 跟不上）
-            let _: () = msg_send![ns_window, setAnimationBehavior: 0i64];
 
             let content_view: *mut Object = msg_send![ns_window, contentView];
             if content_view.is_null() {
