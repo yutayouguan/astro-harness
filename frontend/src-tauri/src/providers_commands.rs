@@ -1197,40 +1197,6 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
     best.map(|(_, id)| id).unwrap_or_else(|| kind.default_model().to_string())
 }
 
-/// 从模型缓存中选取该 provider 最新的指定能力模型。
-/// `capability`：`"image_gen"` / `"video_gen"` / `"audio_gen"` / `"music_gen"`。
-pub fn resolve_latest_media_model(kind: &ProviderKind, capability: &str, fallback: &str) -> String {
-    let kind_str = kind.as_str();
-    let cache = load_models_cache();
-    let mut best: Option<(u64, String)> = None;
-    for entry in cache.providers.values() {
-        if entry.kind != kind_str {
-            continue;
-        }
-        for compat in &entry.models {
-            let info = match compat {
-                crate::model_meta::ModelEntryCompat::Full(boxed) => boxed.as_ref(),
-                _ => continue,
-            };
-            let has_cap = match capability {
-                "image_gen" => info.capabilities.image_gen,
-                "video_gen" => info.capabilities.video_gen,
-                "audio_gen" | "tts" => info.capabilities.audio_gen,
-                "music_gen" => info.capabilities.music_gen,
-                _ => false,
-            };
-            if !has_cap {
-                continue;
-            }
-            let created = info.created.unwrap_or(0);
-            if best.as_ref().map_or(true, |(c, _)| created > *c) {
-                best = Some((created, info.id.clone()));
-            }
-        }
-    }
-    best.map(|(_, id)| id).unwrap_or_else(|| fallback.to_string())
-}
-
 /// 从 providers 面板解析图片生成候选：Google 优先，OpenAI 备用。
 pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
     with_state(|s| {
