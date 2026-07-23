@@ -1,4 +1,5 @@
 import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
+import ProviderModelSelect from "./ProviderModelSelect";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -32,16 +33,11 @@ export default function TtsConfig({ config, onChange }: ConfigProps) {
         multiline
         hint="支持 {{var}} 引用上游变量"
       />
-      <TextField
-        label="供应商 (可选)"
-        value={cfgStr(config, "provider_id")}
-        onChange={(v) => onChange({ ...config, provider_id: v })}
-      />
-      <TextField
-        label="模型"
-        value={cfgStr(config, "model")}
-        onChange={(v) => onChange({ ...config, model: v })}
-        placeholder="tts-1 / tts-1-hd / azure-neural"
+      <ProviderModelSelect
+        providerId={cfgStr(config, "provider_id")}
+        model={cfgStr(config, "model")}
+        onProviderChange={(v) => onChange({ ...config, provider_id: v })}
+        onModelChange={(v) => onChange({ ...config, model: v })}
       />
       <SelectField
         label="音色"

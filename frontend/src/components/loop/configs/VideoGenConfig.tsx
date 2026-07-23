@@ -1,4 +1,5 @@
 import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
+import ProviderModelSelect from "./ProviderModelSelect";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -22,16 +23,11 @@ export default function VideoGenConfig({ config, onChange }: ConfigProps) {
         placeholder="描述你要生成的视频…"
         multiline
       />
-      <TextField
-        label="供应商 (可选)"
-        value={cfgStr(config, "provider_id")}
-        onChange={(v) => onChange({ ...config, provider_id: v })}
-      />
-      <TextField
-        label="模型"
-        value={cfgStr(config, "model")}
-        onChange={(v) => onChange({ ...config, model: v })}
-        placeholder="runway-gen3 / kling-v2 / minimax-video"
+      <ProviderModelSelect
+        providerId={cfgStr(config, "provider_id")}
+        model={cfgStr(config, "model")}
+        onProviderChange={(v) => onChange({ ...config, provider_id: v })}
+        onModelChange={(v) => onChange({ ...config, model: v })}
       />
       <NumberField
         label="时长 (秒)"

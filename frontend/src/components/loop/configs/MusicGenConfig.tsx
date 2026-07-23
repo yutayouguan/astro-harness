@@ -1,4 +1,5 @@
 import { TextField, NumberField, ToggleField, cfgStr, cfgNum, cfgBool } from "./ConfigField";
+import ProviderModelSelect from "./ProviderModelSelect";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -15,16 +16,11 @@ export default function MusicGenConfig({ config, onChange }: ConfigProps) {
         placeholder="轻快的电子乐，适合产品宣传…"
         multiline
       />
-      <TextField
-        label="供应商 (可选)"
-        value={cfgStr(config, "provider_id")}
-        onChange={(v) => onChange({ ...config, provider_id: v })}
-      />
-      <TextField
-        label="模型"
-        value={cfgStr(config, "model")}
-        onChange={(v) => onChange({ ...config, model: v })}
-        placeholder="suno-v4 / minimax-music"
+      <ProviderModelSelect
+        providerId={cfgStr(config, "provider_id")}
+        model={cfgStr(config, "model")}
+        onProviderChange={(v) => onChange({ ...config, provider_id: v })}
+        onModelChange={(v) => onChange({ ...config, model: v })}
       />
       <NumberField
         label="时长 (秒)"

@@ -1,4 +1,5 @@
 import { TextField, SelectField, cfgStr } from "./ConfigField";
+import ProviderModelSelect from "./ProviderModelSelect";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -21,16 +22,11 @@ export default function SubtitleGenConfig({ config, onChange }: ConfigProps) {
         placeholder="{{node_id.audio_path}}"
         hint="引用上游节点输出的文件路径"
       />
-      <TextField
-        label="供应商 (可选)"
-        value={cfgStr(config, "provider_id")}
-        onChange={(v) => onChange({ ...config, provider_id: v })}
-      />
-      <TextField
-        label="模型"
-        value={cfgStr(config, "model")}
-        onChange={(v) => onChange({ ...config, model: v })}
-        placeholder="whisper-1"
+      <ProviderModelSelect
+        providerId={cfgStr(config, "provider_id")}
+        model={cfgStr(config, "model")}
+        onProviderChange={(v) => onChange({ ...config, provider_id: v })}
+        onModelChange={(v) => onChange({ ...config, model: v })}
       />
       <TextField
         label="语言 (可选)"
