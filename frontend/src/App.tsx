@@ -28,6 +28,7 @@ import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
 import SkillsPanel from "./components/settings/SkillsPanel";
 import ToolsPanel from "./components/settings/ToolsPanel";
+import EvolutionModelsPanel from "./components/settings/EvolutionModelsPanel";
 import {
   AstroLogoMark,
   IconChat,
@@ -981,6 +982,9 @@ export default function App() {
                   initialTab={toolsInitialTab}
                   onInitialTabConsumed={() => setToolsInitialTab(null)}
                 />
+              )}
+              {nav === "evolution" && (
+                <EvolutionModelsPanel active={nav === "evolution"} />
               )}
               {nav === "insights" && (
                 <InsightsPanel active={nav === "insights"} />

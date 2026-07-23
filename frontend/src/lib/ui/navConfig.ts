@@ -2,6 +2,7 @@ import type { ComponentType, SVGProps } from "react";
 import {
   IconChat,
   IconCron,
+  IconEvolution,
   IconInsights,
   IconLoop,
   IconMemory,
@@ -25,6 +26,7 @@ export type NavId =
   | "files"
   | "skills"
   | "tools"
+  | "evolution"
   | "loop"
   | "insights"
   | "cron"
@@ -62,6 +64,12 @@ export const NAV: {
   },
   { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
   { id: "tools", labelKey: "nav.tools", Icon: IconTools, tone: "orange" },
+  {
+    id: "evolution",
+    labelKey: "nav.evolution",
+    Icon: IconEvolution,
+    tone: "amber",
+  },
   { id: "loop", labelKey: "nav.loop", Icon: IconLoop, tone: "pink" },
   { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "teal" },
   {
@@ -96,6 +104,10 @@ export const PAGE_META: Record<
   },
   skills: { titleKey: "page.skills.title", subKey: "page.skills.sub" },
   tools: { titleKey: "page.tools.title", subKey: "page.tools.sub" },
+  evolution: {
+    titleKey: "page.evolution.title",
+    subKey: "page.evolution.sub",
+  },
   insights: { titleKey: "page.insights.title", subKey: "page.insights.sub" },
   loop: { titleKey: "page.loop.title", subKey: "page.loop.sub" },
   cron: { titleKey: "page.cron.title", subKey: "page.cron.sub" },

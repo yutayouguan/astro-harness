@@ -15,7 +15,6 @@ import {
   Brain,
   Calendar,
   CircleDollarSign,
-  Dna,
   ExternalLink,
   Eye,
   EyeOff,
@@ -59,7 +58,6 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { EmptyIllustration } from "../../illustrations";
 import AuxiliaryModelsPanel from "./AuxiliaryModelsPanel";
-import EvolutionModelsPanel from "./EvolutionModelsPanel";
 import {
   compareModelsByCreatedDesc,
   formatContextWindow,
@@ -156,9 +154,9 @@ type Draft = {
   vision_model: string;
 };
 
-type DetailTab = "chat" | "models" | "media" | "embedding";
+type DetailTab = "chat" | "models" | "media" | "voice" | "embedding";
 
-type PageTab = "providers" | "auxiliary" | "evolution";
+type PageTab = "providers" | "auxiliary";
 
 const MEDIA_MODEL_DEFAULTS: Record<
   string,
@@ -189,6 +187,10 @@ const MEDIA_MODEL_DEFAULTS: Record<
 
 function supportsMediaModels(p: ProviderDto): boolean {
   return !!(p.supports_image || p.supports_video || p.supports_tts || p.supports_music || p.supports_asr);
+}
+
+function supportsVoice(p: ProviderDto): boolean {
+  return !!(p.supports_tts || p.supports_asr);
 }
 
 function supportsEmbedding(kind: string): boolean {
@@ -570,6 +572,9 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   // 切到不支持媒体的提供商时，避免停在空的媒体页
   useEffect(() => {
     if (detailTab === "media" && selected && !supportsMediaModels(selected)) {
+      setDetailTab("chat");
+    }
+    if (detailTab === "voice" && selected && !supportsVoice(selected)) {
       setDetailTab("chat");
     }
     if (detailTab === "embedding" && selected && !supportsEmbedding(selected.kind)) {
@@ -1382,22 +1387,10 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           <Brain size={14} strokeWidth={2.2} aria-hidden />
           {t("providers.tabAuxiliary")}
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pageTab === "evolution"}
-          className={`providers-page-tab ${pageTab === "evolution" ? "is-active" : ""}`}
-          onClick={() => setPageTab("evolution")}
-        >
-          <Dna size={14} strokeWidth={2.2} aria-hidden />
-          {t("providers.tabEvolution")}
-        </button>
       </div>
 
       {pageTab === "auxiliary" ? (
         <AuxiliaryModelsPanel active={active} embedded />
-      ) : pageTab === "evolution" ? (
-        <EvolutionModelsPanel active={active} />
       ) : (
       <div className="providers-layout">
         <aside className="providers-pane providers-pane-list">
@@ -1668,6 +1661,18 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                   >
                     <Image size={14} strokeWidth={2} aria-hidden />
                     {t("providers.tabMedia")}
+                  </button>
+                ) : null}
+                {supportsVoice(selected) ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "voice"}
+                    className={`providers-detail-tab ${detailTab === "voice" ? "is-active" : ""}`}
+                    onClick={() => setDetailTab("voice")}
+                  >
+                    <Layers size={14} strokeWidth={2} aria-hidden />
+                    {t("providers.tabVoice")}
                   </button>
                 ) : null}
                 {supportsEmbedding(selected.kind) ? (
