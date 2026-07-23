@@ -40,6 +40,7 @@ export default function ImageGenConfig({ config, onChange }: ConfigProps) {
         model={cfgStr(config, "model")}
         onProviderChange={(v) => onChange({ ...config, provider_id: v })}
         onModelChange={(v) => onChange({ ...config, model: v })}
+        mediaType="image"
       />
       <SelectField
         label="尺寸"

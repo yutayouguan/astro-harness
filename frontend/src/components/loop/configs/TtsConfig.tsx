@@ -38,6 +38,7 @@ export default function TtsConfig({ config, onChange }: ConfigProps) {
         model={cfgStr(config, "model")}
         onProviderChange={(v) => onChange({ ...config, provider_id: v })}
         onModelChange={(v) => onChange({ ...config, model: v })}
+        mediaType="tts"
       />
       <SelectField
         label="音色"

@@ -21,6 +21,7 @@ export default function MusicGenConfig({ config, onChange }: ConfigProps) {
         model={cfgStr(config, "model")}
         onProviderChange={(v) => onChange({ ...config, provider_id: v })}
         onModelChange={(v) => onChange({ ...config, model: v })}
+        mediaType="music"
       />
       <NumberField
         label="时长 (秒)"
