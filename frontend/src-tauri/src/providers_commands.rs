@@ -141,7 +141,7 @@ impl ProviderKind {
     /// 该供应商的默认模型 id。
     pub fn default_model(&self) -> &'static str {
         match self {
-            Self::Openai => "gpt-5-ultra",
+            Self::Openai => "gpt-5.6-ultra",
             Self::Anthropic => "claude-opus-4-8",
             Self::Deepseek => "deepseek-chat",
             Self::Ollama => "llama3.3",

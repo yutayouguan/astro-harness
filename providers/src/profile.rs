@@ -91,7 +91,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         auth: AuthKind::Bearer,
         env_keys: &["OPENAI_API_KEY"],
         azure_deployment_style: false,
-        default_model: "gpt-5-ultra",
+        default_model: "gpt-5.6-ultra",
         supports_image_gen: true,
         supports_embedding: true,
         image_mode: Some(ImageGenMode::OpenAi),
