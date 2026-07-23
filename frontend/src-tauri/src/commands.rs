@@ -2892,6 +2892,101 @@ fn _proto_file_list_request() -> FileListRequest {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Token Counting & Batch API
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn count_tokens(model: String) -> Result<u32, String> {
+    let grpc_address = default_grpc_address();
+    let endpoint = endpoint_url(&grpc_address);
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| friendly_error(&e.to_string()))?;
+    let result = client
+        .count_tokens(proto::CountTokensRequest {
+            agent_id: String::new(),
+            model,
+            messages_json: String::new(),
+            tools_json: String::new(),
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    Ok(result.input_tokens)
+}
+
+#[tauri::command]
+pub async fn create_batch(requests_json: String) -> Result<String, String> {
+    let grpc_address = default_grpc_address();
+    let endpoint = endpoint_url(&grpc_address);
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| friendly_error(&e.to_string()))?;
+    let result = client
+        .create_batch(proto::BatchCreateRequest {
+            agent_id: String::new(),
+            requests_json,
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    Ok(result.response_json)
+}
+
+#[tauri::command]
+pub async fn get_batch(batch_id: String) -> Result<String, String> {
+    let grpc_address = default_grpc_address();
+    let endpoint = endpoint_url(&grpc_address);
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| friendly_error(&e.to_string()))?;
+    let result = client
+        .get_batch(proto::BatchStatusRequest {
+            agent_id: String::new(),
+            batch_id,
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    Ok(result.response_json)
+}
+
+#[tauri::command]
+pub async fn list_batches() -> Result<String, String> {
+    let grpc_address = default_grpc_address();
+    let endpoint = endpoint_url(&grpc_address);
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| friendly_error(&e.to_string()))?;
+    let result = client
+        .list_batches(proto::BatchListRequest {
+            agent_id: String::new(),
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    Ok(result.response_json)
+}
+
+#[tauri::command]
+pub async fn get_batch_results(batch_id: String) -> Result<String, String> {
+    let grpc_address = default_grpc_address();
+    let endpoint = endpoint_url(&grpc_address);
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| friendly_error(&e.to_string()))?;
+    let result = client
+        .get_batch_results(proto::BatchStatusRequest {
+            agent_id: String::new(),
+            batch_id,
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    Ok(result.results_jsonl)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_session_filter, validate_session_title};
