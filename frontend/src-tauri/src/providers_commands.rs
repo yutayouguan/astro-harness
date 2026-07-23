@@ -149,7 +149,7 @@ impl ProviderKind {
             Self::Azure => "gpt-5.6",
             Self::Zhipu => "glm-5.2-plus",
             Self::Openrouter => "openai/gpt-5.6",
-            Self::Bailian => "qwen3.6-plus",
+            Self::Bailian => "qwen3.8-max",
             Self::Nvidia => "meta/llama-3.3-70b-instruct",
             Self::Moonshot => "kimi-k2.5",
             Self::Volcengine => "doubao-seed-2.1-pro",
