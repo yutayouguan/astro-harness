@@ -1,11 +1,28 @@
 //! OpenAI / Azure / Responses API 连通性探测。
 
 use reqwest::Client;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use super::azure::{azure_base, AZURE_API_VERSION};
 use super::chat::openai_compatible_base;
 use crate::trait_::ProviderConfig;
+
+/// 从各厂商错误响应中提取人类可读消息。
+///
+/// 覆盖格式：
+/// - OpenAI / Azure: `{"error":{"message":"..."}}`
+/// - MiniMax base_resp: `{"base_resp":{"status_msg":"..."}}`
+/// - Anthropic 兼容: `{"error":{"type":"...","message":"..."}}`
+/// - 纯字符串: `{"error":"..."}`
+fn extract_error_message(v: &Value) -> &str {
+    v.pointer("/error/message")
+        .and_then(|m| m.as_str())
+        .or_else(|| v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()))
+        .or_else(|| v.get("error").and_then(|e| e.as_str()))
+        .or_else(|| v.get("message").and_then(|m| m.as_str()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or("未知错误")
+}
 
 /// OpenAI 兼容 chat/completions 最小探测。
 pub async fn probe_openai_compat(
@@ -29,10 +46,9 @@ pub async fn probe_openai_compat(
         .await
         .map_err(|e| format!("连接模型服务失败: {e}"))?;
     let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        let msg = json["error"]["message"].as_str().unwrap_or("未知错误");
-        return Err(format!("失败 ({status}): {msg}"));
+        return Err(format!("失败 ({status}): {}", extract_error_message(&json)));
     }
     Ok("调用成功".to_string())
 }
@@ -59,13 +75,9 @@ pub async fn probe_openai_responses(
         .await
         .map_err(|e| format!("连接 Responses API 失败: {e}"))?;
     let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        let msg = json["error"]["message"]
-            .as_str()
-            .or_else(|| json["base_resp"]["status_msg"].as_str())
-            .unwrap_or("未知错误");
-        return Err(format!("失败 ({status}): {msg}"));
+        return Err(format!("失败 ({status}): {}", extract_error_message(&json)));
     }
     Ok("调用成功".to_string())
 }
@@ -99,10 +111,9 @@ pub async fn probe_azure(
         .await
         .map_err(|e| format!("连接 Azure OpenAI 失败: {e}"))?;
     let status = resp.status();
-    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        let msg = json["error"]["message"].as_str().unwrap_or("未知错误");
-        return Err(format!("失败 ({status}): {msg}"));
+        return Err(format!("失败 ({status}): {}", extract_error_message(&json)));
     }
     Ok("调用成功".to_string())
 }

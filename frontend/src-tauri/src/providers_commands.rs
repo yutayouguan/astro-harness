@@ -1310,6 +1310,17 @@ fn trim_slash(endpoint: &str) -> String {
     endpoint.trim_end_matches('/').to_string()
 }
 
+/// 从各厂商 API 错误响应中提取人类可读消息。
+fn extract_api_error(body: &serde_json::Value) -> &str {
+    body.pointer("/error/message")
+        .and_then(|m| m.as_str())
+        .or_else(|| body.pointer("/base_resp/status_msg").and_then(|m| m.as_str()))
+        .or_else(|| body.get("error").and_then(|e| e.as_str()))
+        .or_else(|| body.get("message").and_then(|m| m.as_str()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or("未知错误")
+}
+
 /// 仅允许 http(s) Endpoint，拒绝 file:// 等危险 scheme（防 SSRF）。
 fn validate_http_endpoint(endpoint: &str) -> Result<(), String> {
     let trimmed = endpoint.trim();
@@ -1437,11 +1448,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                let msg = body["error"]["message"]
-                    .as_str()
-                    .or_else(|| body["error"].as_str())
-                    .unwrap_or("未知错误");
-                return Err(format!("Anthropic 列表失败 ({status}): {msg}"));
+                return Err(format!("Anthropic 列表失败 ({status}): {}", extract_api_error(&body)));
             }
             let models = body["data"]
                 .as_array()
@@ -1474,8 +1481,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                let msg = body["error"]["message"].as_str().unwrap_or("未知错误");
-                return Err(format!("Google 列表失败 ({status}): {msg}"));
+                return Err(format!("Google 列表失败 ({status}): {}", extract_api_error(&body)));
             }
             let models = body["models"]
                 .as_array()
@@ -1524,11 +1530,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                let msg = body["error"]["message"]
-                    .as_str()
-                    .or_else(|| body["error"].as_str())
-                    .unwrap_or("未知错误");
-                return Err(format!("模型列表失败 ({status}): {msg}"));
+                return Err(format!("模型列表失败 ({status}): {}", extract_api_error(&body)));
             }
             let models = body["data"]
                 .as_array()
@@ -1569,11 +1571,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                let msg = body["error"]["message"]
-                    .as_str()
-                    .or_else(|| body["error"].as_str())
-                    .unwrap_or("未知错误");
-                return Err(format!("Azure 模型列表失败 ({status}): {msg}"));
+                return Err(format!("Azure 模型列表失败 ({status}): {}", extract_api_error(&body)));
             }
             let models = body["data"]
                 .as_array()
