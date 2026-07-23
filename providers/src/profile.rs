@@ -198,7 +198,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_image_model: "cogview-4",
         default_vision_model: "glm-5.2-plus",
         supports_stream_usage: false,
-        default_tts_model: "",
+        default_tts_model: "glm-tts",
         default_video_model: "cogvideox-v1.5",
         default_music_model: "cogmusic-v1",
     },
