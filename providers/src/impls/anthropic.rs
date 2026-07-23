@@ -161,6 +161,11 @@ impl CompletionModel for AnthropicCompletionModel {
 
 // ─── Message Conversion ──────────────────────────────────
 
+/// 公开供 token_count 等旧模块调用。
+pub fn to_anthropic_messages_public(messages: &[crate::types::Message]) -> (Value, Vec<Value>) {
+    to_anthropic_messages(messages)
+}
+
 fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Value>) {
     use crate::types::message::*;
     let mut system = String::new();

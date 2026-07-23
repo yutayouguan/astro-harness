@@ -40,10 +40,7 @@ pub use api::{client, registry, streaming, trait_};
 pub use google::{files_http, interactions_chat, interactions_http, native_chat, robotics_http};
 pub use openai::{embeddings_http, image_http, responses, tts_http};
 pub use protocol::{extractor, http_stream, image_gen, media_http, tool_format, verify, vision};
-pub use vendors::{
-    azure, bailian, claude, deepseek, mimo, moonshot, nvidia, ollama, openrouter,
-    profile_backed, volcengine, zhipu,
-};
+pub use vendors::{azure, claude, profile_backed};
 
 pub use client::ProviderClient;
 pub use extractor::{parse_submit_payload, ExtractionError, Extractor, ExtractorBuilder};

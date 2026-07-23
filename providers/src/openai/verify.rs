@@ -3,7 +3,7 @@
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use super::azure::{azure_base, AZURE_API_VERSION};
+use crate::impls::azure::{azure_base, azure_deployment_url};
 use super::chat::openai_compatible_base;
 use crate::trait_::ProviderConfig;
 
@@ -94,10 +94,7 @@ pub async fn probe_azure(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("");
-    let base = azure_base(endpoint);
-    let url = format!(
-        "{base}/openai/deployments/{model}/chat/completions?api-version={AZURE_API_VERSION}"
-    );
+    let url = azure_deployment_url(endpoint, model);
     let body = json!({
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "ping"}]

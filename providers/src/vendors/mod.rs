@@ -1,19 +1,9 @@
-//! 各供应商薄封装；协议细节在 [`crate::protocol`] / [`crate::google`] / [`crate::openai`]，
-//! 配置在 [`crate::profile`]。
+//! 旧供应商兼容层（逐步淘汰）。
 //!
-//! Google / OpenAI 见顶层 [`crate::google`]、[`crate::openai`]。
+//! 新厂商实现在 [`crate::impls`]。
+//! `ProfileBackedProvider` 仅用于 verify / image_gen 旧路径。
 
 pub mod profile_backed;
 
 pub mod azure;
-pub mod bailian;
 pub mod claude;
-pub mod deepseek;
-pub mod mimo;
-pub mod minimax;
-pub mod moonshot;
-pub mod nvidia;
-pub mod ollama;
-pub mod openrouter;
-pub mod volcengine;
-pub mod zhipu;
