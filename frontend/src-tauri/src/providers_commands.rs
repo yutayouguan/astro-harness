@@ -664,9 +664,9 @@ pub(crate) fn resolve_api_key(
     (false, "none".into(), None, None)
 }
 
-/// 支持 Responses API 切换的厂商（仅官方支持 `/v1/responses` 的）。
+/// 支持 Responses API 切换的厂商。
 fn supports_responses_toggle(kind: ProviderKind) -> bool {
-    matches!(kind, ProviderKind::Openai)
+    matches!(kind, ProviderKind::Openai | ProviderKind::Minimax)
 }
 
 /// 根据 api_mode 覆盖计算实际 backend_id。

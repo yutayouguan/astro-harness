@@ -91,12 +91,9 @@ fn build_content(m: &ChatMessage) -> Value {
                         "type": "input_audio",
                         "data": url,
                     }),
-                    ChatContentPart::VideoUrl { mime_type, .. } => json!({
-                        "type": "input_text",
-                        "text": format!(
-                            "[video attached: {}]",
-                            if mime_type.trim().is_empty() { "video/*" } else { mime_type }
-                        )
+                    ChatContentPart::VideoUrl { url, .. } => json!({
+                        "type": "input_video",
+                        "video_url": url,
                     }),
                     ChatContentPart::DocumentUrl { url, .. } => json!({
                         "type": "input_file",
@@ -359,11 +356,13 @@ pub async fn responses_chat_stream(
     config: &ProviderConfig,
 ) -> Result<ChatStream> {
     if config.api_key.trim().is_empty() {
-        return Err(anyhow!("OpenAI Responses API Key 为空"));
+        return Err(anyhow!("Responses API Key 为空"));
     }
 
     let base = openai_compatible_base(&resolve_base(config, provider));
     let url = format!("{base}/responses");
+
+    let is_openai = provider.starts_with("openai");
 
     let input = to_responses_input(&messages);
 
@@ -376,8 +375,11 @@ pub async fn responses_chat_stream(
         "model": config.model,
         "input": input,
         "stream": true,
-        "store": false,
     });
+    // `store` / `parallel_tool_calls` 仅 OpenAI 官方支持为请求参数
+    if is_openai {
+        body["store"] = json!(false);
+    }
     if let Some(inst) = instructions {
         if !inst.is_empty() {
             body["instructions"] = json!(inst);
@@ -394,7 +396,9 @@ pub async fn responses_chat_stream(
     if !resp_tools.is_empty() {
         body["tools"] = Value::Array(resp_tools);
         body["tool_choice"] = json!("auto");
-        body["parallel_tool_calls"] = json!(true);
+        if is_openai {
+            body["parallel_tool_calls"] = json!(true);
+        }
     }
 
     if config.thinking_enabled {
@@ -402,7 +406,11 @@ pub async fn responses_chat_stream(
             "" | "high" => "high",
             other => other,
         };
-        body["reasoning"] = json!({ "effort": effort, "summary": "auto" });
+        if is_openai {
+            body["reasoning"] = json!({ "effort": effort, "summary": "auto" });
+        } else {
+            body["reasoning"] = json!({ "effort": effort });
+        }
     }
 
     merge_additional_params(&mut body, &config.additional_params);
