@@ -27,6 +27,7 @@ pub enum ProviderKind {
     Volcengine,
     #[serde(alias = "minmax")]
     Minimax,
+    Hunyuan,
     Custom,
 }
 
@@ -47,6 +48,7 @@ impl ProviderKind {
             "moonshot" => Some(Self::Moonshot),
             "volcengine" => Some(Self::Volcengine),
             "minimax" | "minmax" => Some(Self::Minimax),
+            "hunyuan" | "tencent" => Some(Self::Hunyuan),
             "custom" => Some(Self::Custom),
             _ => None,
         }
@@ -68,6 +70,7 @@ impl ProviderKind {
             Self::Moonshot => "moonshot",
             Self::Volcengine => "volcengine",
             Self::Minimax => "minimax",
+            Self::Hunyuan => "hunyuan",
             Self::Custom => "custom",
         }
     }
@@ -88,6 +91,7 @@ impl ProviderKind {
             Self::Moonshot => "月之暗面",
             Self::Volcengine => "火山引擎",
             Self::Minimax => "MiniMax",
+            Self::Hunyuan => "腾讯混元",
             Self::Custom => "Custom",
         }
     }
@@ -108,6 +112,7 @@ impl ProviderKind {
             Self::Moonshot => "moonshot",
             Self::Volcengine => "volcengine",
             Self::Minimax => "minimax",
+            Self::Hunyuan => "hunyuan",
             Self::Custom => "openai",
         }
     }
@@ -128,6 +133,7 @@ impl ProviderKind {
             Self::Moonshot => "https://api.moonshot.cn/v1",
             Self::Volcengine => "https://ark.cn-beijing.volces.com/api/v3",
             Self::Minimax => "https://api.minimax.io/v1",
+            Self::Hunyuan => "https://api.hunyuan.cloud.tencent.com/v1",
             Self::Custom => "http://localhost:11434/v1",
         }
     }
@@ -147,7 +153,8 @@ impl ProviderKind {
             Self::Nvidia => "meta/llama-3.3-70b-instruct",
             Self::Moonshot => "kimi-k2.5",
             Self::Volcengine => "ep-",
-            Self::Minimax => "MiniMax-M2.5",
+            Self::Minimax => "MiniMax-M3",
+            Self::Hunyuan => "hunyuan-hy3",
             Self::Custom => "custom-model",
         }
     }
@@ -179,6 +186,7 @@ impl ProviderKind {
             Self::Minimax => Some(
                 "https://platform.minimaxi.com/user-center/basic-information/interface-key",
             ),
+            Self::Hunyuan => Some("https://console.cloud.tencent.com/hunyuan/api-key"),
             Self::Custom => None,
         }
     }
@@ -199,6 +207,7 @@ impl ProviderKind {
             Self::Moonshot => &["MOONSHOT_API_KEY", "KIMI_API_KEY"],
             Self::Volcengine => &["ARK_API_KEY", "VOLCENGINE_API_KEY"],
             Self::Minimax => &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+            Self::Hunyuan => &["HUNYUAN_API_KEY", "TENCENT_API_KEY"],
             Self::Custom => &["CUSTOM_API_KEY", "OPENAI_API_KEY"],
         }
     }
@@ -308,6 +317,7 @@ impl ProvidersState {
             ProviderKind::Moonshot,
             ProviderKind::Volcengine,
             ProviderKind::Minimax,
+            ProviderKind::Hunyuan,
         ] {
             s.providers.push(ProviderConfig::new_disabled(kind));
         }
@@ -1359,6 +1369,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
         | ProviderKind::Moonshot
         | ProviderKind::Volcengine
         | ProviderKind::Minimax
+        | ProviderKind::Hunyuan
         | ProviderKind::Custom => {
             let url = format!("{}/models", openai_compatible_base(&provider.endpoint));
             let mut req = client.get(&url);
