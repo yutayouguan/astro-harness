@@ -633,14 +633,14 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
           buildMediaModelOptions(models, "vision", defaults.vision),
         ),
         video_model:
-          selected.kind === "google"
+          selected.supports_video
             ? sanitizeMediaModelValue(
                 current.video_model,
                 buildMediaModelOptions(models, "video_gen", defaults.video),
               )
             : "",
         music_model:
-          selected.kind === "google"
+          selected.supports_music
             ? sanitizeMediaModelValue(
                 current.music_model,
                 buildMediaModelOptions(models, "music_gen", defaults.music),

@@ -759,6 +759,8 @@ impl AstroService for AstroServiceImpl {
             video_model: &req.image_gen_video_model,
             music_model: &req.image_gen_music_model,
             tts_model: &req.image_gen_tts_model,
+            fb_video_model: &req.image_gen_fallback_video_model,
+            fb_music_model: &req.image_gen_fallback_music_model,
             fb_tts_model: &req.image_gen_fallback_tts_model,
             vision_model: &req.image_gen_vision_model,
             fb_vision_model: &req.image_gen_fallback_vision_model,

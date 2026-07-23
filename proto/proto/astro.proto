@@ -111,6 +111,9 @@ message ChatRequest {
   optional float temperature = 33;
   // JSON object，合并进 ProviderConfig.additional_params（如 top_p / top_k）
   string additional_params_json = 34;
+  // 备用供应商的视频/音乐模型覆盖
+  string image_gen_fallback_video_model = 35;
+  string image_gen_fallback_music_model = 36;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

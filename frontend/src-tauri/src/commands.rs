@@ -1104,6 +1104,8 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
             image_gen_video_model: primary.map(|t| t.video_model.clone()).unwrap_or_default(),
             image_gen_music_model: primary.map(|t| t.music_model.clone()).unwrap_or_default(),
             image_gen_tts_model: primary.map(|t| t.tts_model.clone()).unwrap_or_default(),
+            image_gen_fallback_video_model: fallback.map(|t| t.video_model.clone()).unwrap_or_default(),
+            image_gen_fallback_music_model: fallback.map(|t| t.music_model.clone()).unwrap_or_default(),
             image_gen_fallback_tts_model: fallback.map(|t| t.tts_model.clone()).unwrap_or_default(),
             image_gen_vision_model: primary.map(|t| t.vision_model.clone()).unwrap_or_default(),
             image_gen_fallback_vision_model: fallback
