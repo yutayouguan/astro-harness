@@ -1671,7 +1671,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     className={`providers-detail-tab ${detailTab === "voice" ? "is-active" : ""}`}
                     onClick={() => setDetailTab("voice")}
                   >
-                    <Layers size={14} strokeWidth={2} aria-hidden />
+                    <Mic size={14} strokeWidth={2} aria-hidden />
                     {t("providers.tabVoice")}
                   </button>
                 ) : null}
@@ -2629,26 +2629,6 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         />
                       </label>
                     ) : null}
-                    <label className="providers-field providers-field-span">
-                      <span className="providers-field-label">
-                        <IconBox />
-                        {t("providers.ttsModel")}
-                      </span>
-                      <SelectMenu
-                        className="providers-media-model-select"
-                        value={draft.tts_model}
-                        aria-label={t("providers.ttsModel")}
-                        onChange={(value) =>
-                          setDraft((current) =>
-                            current ? { ...current, tts_model: value } : current,
-                          )
-                        }
-                        options={mediaOptions(
-                          "audio_gen",
-                          MEDIA_MODEL_DEFAULTS[selected.kind]?.tts ?? "",
-                        )}
-                      />
-                    </label>
                     {selected.supports_music ? (
                       <label className="providers-field providers-field-span">
                         <span className="providers-field-label">
@@ -2691,6 +2671,55 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                         )}
                       />
                     </label>
+                  </div>
+                </div>
+              )}
+
+              {detailTab === "voice" && supportsVoice(selected) && (
+                <div className="providers-media-panel">
+                  <p className="providers-field-hint providers-media-hint">
+                    {t("providers.voiceHint")}
+                  </p>
+                  <div className="providers-form-grid">
+                    {selected.supports_tts ? (
+                      <label className="providers-field providers-field-span">
+                        <span className="providers-field-label">
+                          <IconBox />
+                          {t("providers.ttsModel")}
+                        </span>
+                        <SelectMenu
+                          className="providers-media-model-select"
+                          value={draft.tts_model}
+                          aria-label={t("providers.ttsModel")}
+                          onChange={(value) =>
+                            setDraft((current) =>
+                              current ? { ...current, tts_model: value } : current,
+                            )
+                          }
+                          options={mediaOptions(
+                            "audio_gen",
+                            MEDIA_MODEL_DEFAULTS[selected.kind]?.tts ?? "",
+                          )}
+                        />
+                      </label>
+                    ) : null}
+                    {selected.supports_asr ? (
+                      <label className="providers-field providers-field-span">
+                        <span className="providers-field-label">
+                          <IconBox />
+                          {t("providers.asrModel")}
+                        </span>
+                        <input
+                          className="providers-input"
+                          value={selected.asr_model ?? ""}
+                          readOnly
+                          placeholder="—"
+                        />
+                        <span className="providers-field-hint">
+                          {t("providers.asrModelHint")}
+                        </span>
+                      </label>
+                    ) : null}
                   </div>
                 </div>
               )}
