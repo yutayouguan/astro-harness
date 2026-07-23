@@ -1,4 +1,4 @@
-/** 供应商 + 模型选择器 —— 显示已启用供应商，支持按媒体类型选择专用模型 */
+/** 供应商 + 模型选择器 —— 按媒体能力过滤，自动选配默认模型 */
 
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -15,6 +15,10 @@ interface ProviderDto {
   tts_model: string;
   music_model: string;
   vision_model: string;
+  supports_image: boolean;
+  supports_video: boolean;
+  supports_tts: boolean;
+  supports_music: boolean;
 }
 
 interface ProvidersState {
@@ -23,6 +27,17 @@ interface ProvidersState {
 }
 
 export type MediaType = "chat" | "image" | "video" | "tts" | "music" | "subtitle";
+
+function supportsMedia(provider: ProviderDto, mediaType: MediaType): boolean {
+  switch (mediaType) {
+    case "image": return provider.supports_image;
+    case "video": return provider.supports_video;
+    case "tts": return provider.supports_tts;
+    case "music": return provider.supports_music;
+    case "subtitle": return true;
+    default: return true;
+  }
+}
 
 function getMediaModel(provider: ProviderDto, mediaType: MediaType): string {
   switch (mediaType) {
@@ -61,10 +76,13 @@ export default function ProviderModelSelect({
   onModelChange,
   mediaType = "chat",
 }: Props) {
-  const [providers, setProviders] = useState<ProviderDto[]>([]);
+  const [allProviders, setAllProviders] = useState<ProviderDto[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [initialized, setInitialized] = useState(false);
+
+  // 按能力过滤的可用供应商
+  const providers = allProviders.filter((p) => supportsMedia(p, mediaType));
 
   useEffect(() => {
     (async () => {
@@ -73,15 +91,17 @@ export default function ProviderModelSelect({
         const available = (state.providers ?? []).filter(
           (p) => p.enabled && p.has_api_key,
         );
-        setProviders(available);
+        setAllProviders(available);
         setActiveId(state.active_provider_id ?? null);
 
-        if (!providerId && state.active_provider_id) {
-          const active = available.find((p) => p.id === state.active_provider_id);
-          if (active) {
-            onProviderChange(active.id);
+        // 自动选中第一个有能力的供应商 + 其默认模型
+        if (!providerId) {
+          const capable = available.filter((p) => supportsMedia(p, mediaType));
+          const best = capable.find((p) => p.id === state.active_provider_id) ?? capable[0];
+          if (best) {
+            onProviderChange(best.id);
             if (!model) {
-              const defaultModel = getMediaModel(active, mediaType);
+              const defaultModel = getMediaModel(best, mediaType);
               if (defaultModel) onModelChange(defaultModel);
             }
           }
@@ -94,7 +114,7 @@ export default function ProviderModelSelect({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const effectiveProvider = providerId || activeId || "";
+  const effectiveProvider = providerId || "";
   useEffect(() => {
     if (!effectiveProvider) {
       setModels([]);
@@ -107,22 +127,17 @@ export default function ProviderModelSelect({
         });
         setModels(cached ?? []);
       } catch {
-        const provider = providers.find((p) => p.id === effectiveProvider);
+        const provider = allProviders.find((p) => p.id === effectiveProvider);
         if (provider) {
           const m = getMediaModel(provider, mediaType);
           if (m) setModels([m]);
         }
       }
     })();
-  }, [effectiveProvider, providers, mediaType]);
+  }, [effectiveProvider, allProviders, mediaType]);
 
-  const activeProvider = providers.find((p) => p.id === activeId);
   const selectedProvider = providers.find((p) => p.id === providerId);
-  const defaultMediaModel = selectedProvider
-    ? getMediaModel(selectedProvider, mediaType)
-    : activeProvider
-      ? getMediaModel(activeProvider, mediaType)
-      : "";
+  const defaultMediaModel = selectedProvider ? getMediaModel(selectedProvider, mediaType) : "";
   const displayModel = model || defaultMediaModel;
 
   return (
@@ -139,6 +154,7 @@ export default function ProviderModelSelect({
             onModelChange(p ? getMediaModel(p, mediaType) : "");
           }}
         >
+          {providers.length === 0 && <option value="">无可用供应商</option>}
           {providers.map((p) => (
             <option key={p.id} value={p.id}>
               {p.display_name}{p.id === activeId ? " (当前)" : ""}
@@ -150,13 +166,15 @@ export default function ProviderModelSelect({
         )}
         {initialized && providers.length === 0 && (
           <span className="loop-config-hint">
-            暂无可用供应商，请先在「模型服务」中配置并启用。
+            暂无支持{mediaLabel(mediaType)}的供应商，请先在「模型服务」中配置。
           </span>
         )}
       </label>
 
       <label className="loop-config-field">
-        <span className="loop-config-label">{mediaType !== "chat" ? `${mediaLabel(mediaType)}模型` : "模型"}</span>
+        <span className="loop-config-label">
+          {mediaType !== "chat" ? `${mediaLabel(mediaType)}模型` : "模型"}
+        </span>
         {models.length > 0 ? (
           <select
             className="loop-config-select"
@@ -167,9 +185,7 @@ export default function ProviderModelSelect({
               <option value={displayModel}>{displayModel}</option>
             )}
             {models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
+              <option key={m} value={m}>{m}</option>
             ))}
           </select>
         ) : (
@@ -182,7 +198,7 @@ export default function ProviderModelSelect({
         )}
         {defaultMediaModel && !model && (
           <span className="loop-config-hint">
-            使用已配置的{mediaLabel(mediaType)}模型: {defaultMediaModel}
+            默认: {defaultMediaModel}
           </span>
         )}
       </label>

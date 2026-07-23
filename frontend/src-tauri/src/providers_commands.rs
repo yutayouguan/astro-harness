@@ -439,6 +439,10 @@ pub struct ProviderConfigDto {
     pub tts_model: String,
     pub vision_model: String,
     pub music_model: String,
+    pub supports_image: bool,
+    pub supports_video: bool,
+    pub supports_tts: bool,
+    pub supports_music: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -639,6 +643,7 @@ pub(crate) fn resolve_api_key(
 /// 单条 Provider → 前端 DTO。
 fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
     let (has_api_key, key_source, env_key_name, _) = resolve_api_key(p);
+    let profile = providers::profile::resolve_or_openai_compat(p.kind.backend_id());
     ProviderConfigDto {
         id: p.id.clone(),
         kind: p.kind.as_str().to_string(),
@@ -652,11 +657,15 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         backend_id: p.kind.backend_id().to_string(),
         official_key_url: p.kind.official_key_url().map(str::to_string),
         fallback: p.fallback.clone(),
-        image_model: p.image_model.clone(),
-        video_model: p.video_model.clone(),
-        tts_model: p.tts_model.clone(),
-        vision_model: p.vision_model.clone(),
-        music_model: p.music_model.clone(),
+        image_model: if p.image_model.is_empty() { profile.default_image_model.to_string() } else { p.image_model.clone() },
+        video_model: if p.video_model.is_empty() { profile.default_video_model.to_string() } else { p.video_model.clone() },
+        tts_model: if p.tts_model.is_empty() { profile.default_tts_model.to_string() } else { p.tts_model.clone() },
+        vision_model: if p.vision_model.is_empty() { profile.default_vision_model.to_string() } else { p.vision_model.clone() },
+        music_model: if p.music_model.is_empty() { profile.default_music_model.to_string() } else { p.music_model.clone() },
+        supports_image: profile.supports_image_gen,
+        supports_video: profile.supports_video(),
+        supports_tts: profile.supports_tts(),
+        supports_music: profile.supports_music(),
     }
 }
 
