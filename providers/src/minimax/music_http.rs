@@ -50,6 +50,12 @@ pub struct MiniMaxMusicRequest {
     pub lyrics_optimizer: bool,
     /// 翻唱模式：参考音频 URL。
     pub audio_url: Option<String>,
+    /// 翻唱模式：参考音频 base64。
+    pub audio_base64: Option<String>,
+    /// 两步翻唱：前处理返回的特征 ID（与 audio_url/audio_base64 互斥）。
+    pub cover_feature_id: Option<String>,
+    /// 是否添加 AIGC 水印（仅非流式模式）。
+    pub aigc_watermark: bool,
 }
 
 impl Default for MiniMaxMusicRequest {
@@ -63,8 +69,28 @@ impl Default for MiniMaxMusicRequest {
             is_instrumental: false,
             lyrics_optimizer: false,
             audio_url: None,
+            audio_base64: None,
+            cover_feature_id: None,
+            aigc_watermark: false,
         }
     }
+}
+
+/// 歌词生成结果。
+#[derive(Debug, Clone)]
+pub struct MiniMaxLyricsResult {
+    pub song_title: String,
+    pub style_tags: String,
+    pub lyrics: String,
+}
+
+/// 翻唱前处理结果。
+#[derive(Debug, Clone)]
+pub struct MiniMaxCoverPreprocessResult {
+    pub cover_feature_id: String,
+    pub formatted_lyrics: String,
+    pub structure_result: String,
+    pub audio_duration: f64,
 }
 
 /// 音乐生成结果。
@@ -145,6 +171,15 @@ pub async fn minimax_generate_music(
     }
     if let Some(ref audio_url) = req.audio_url {
         body["audio_url"] = json!(audio_url);
+    }
+    if let Some(ref audio_b64) = req.audio_base64 {
+        body["audio_base64"] = json!(audio_b64);
+    }
+    if let Some(ref cfi) = req.cover_feature_id {
+        body["cover_feature_id"] = json!(cfi);
+    }
+    if req.aigc_watermark {
+        body["aigc_watermark"] = json!(true);
     }
 
     let response = client
@@ -227,6 +262,121 @@ pub async fn minimax_generate_music(
         audio_bytes,
         mime_type: mime_for_format(fmt).to_string(),
         duration_ms,
+    })
+}
+
+// ── 歌词生成 ────────────────────────────────────────────
+
+/// 调用 MiniMax 歌词生成 API。
+///
+/// `mode`：`"write_full_song"` 或 `"edit"`。
+pub async fn minimax_generate_lyrics(
+    client: &Client,
+    config: &ProviderConfig,
+    mode: &str,
+    prompt: &str,
+    lyrics: Option<&str>,
+    title: Option<&str>,
+) -> Result<MiniMaxLyricsResult> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("MiniMax API Key 为空");
+    }
+
+    let base = minimax_base(config);
+    let url = format!("{base}/lyrics_generation");
+
+    let mut body = json!({ "mode": mode });
+    if !prompt.is_empty() {
+        body["prompt"] = json!(prompt);
+    }
+    if let Some(l) = lyrics.filter(|s| !s.is_empty()) {
+        body["lyrics"] = json!(l);
+    }
+    if let Some(t) = title.filter(|s| !s.is_empty()) {
+        body["title"] = json!(t);
+    }
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(config.api_key.trim())
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .context("连接 MiniMax 歌词生成 API 失败")?;
+
+    let status = resp.status();
+    let v: Value = resp.json().await.context("解析歌词生成响应失败")?;
+    if !status.is_success() {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 歌词生成 HTTP {status}: {msg}");
+    }
+    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    if code != 0 {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 歌词生成业务错误 ({code}): {msg}");
+    }
+
+    Ok(MiniMaxLyricsResult {
+        song_title: v.get("song_title").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        style_tags: v.get("style_tags").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        lyrics: v.get("lyrics").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+    })
+}
+
+// ── 翻唱前处理 ──────────────────────────────────────────
+
+/// 调用 MiniMax 翻唱前处理 API，提取音频特征和歌词。
+pub async fn minimax_cover_preprocess(
+    client: &Client,
+    config: &ProviderConfig,
+    audio_url: Option<&str>,
+    audio_base64: Option<&str>,
+) -> Result<MiniMaxCoverPreprocessResult> {
+    if config.api_key.trim().is_empty() {
+        anyhow::bail!("MiniMax API Key 为空");
+    }
+    if audio_url.is_none() && audio_base64.is_none() {
+        anyhow::bail!("翻唱前处理需要 audio_url 或 audio_base64");
+    }
+
+    let base = minimax_base(config);
+    let url = format!("{base}/music_cover_preprocess");
+
+    let mut body = json!({ "model": "music-cover" });
+    if let Some(u) = audio_url {
+        body["audio_url"] = json!(u);
+    }
+    if let Some(b) = audio_base64 {
+        body["audio_base64"] = json!(b);
+    }
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(config.api_key.trim())
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .context("连接 MiniMax 翻唱前处理 API 失败")?;
+
+    let status = resp.status();
+    let v: Value = resp.json().await.context("解析翻唱前处理响应失败")?;
+    if !status.is_success() {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 翻唱前处理 HTTP {status}: {msg}");
+    }
+    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    if code != 0 {
+        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        anyhow::bail!("MiniMax 翻唱前处理业务错误 ({code}): {msg}");
+    }
+
+    Ok(MiniMaxCoverPreprocessResult {
+        cover_feature_id: v.get("cover_feature_id").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        formatted_lyrics: v.get("formatted_lyrics").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        structure_result: v.get("structure_result").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        audio_duration: v.get("audio_duration").and_then(|n| n.as_f64()).unwrap_or(0.0),
     })
 }
 

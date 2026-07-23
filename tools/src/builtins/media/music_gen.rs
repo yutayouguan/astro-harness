@@ -39,6 +39,12 @@ pub struct MusicGenArgs {
     /// `mp3` (default) or `wav` (pro only).
     #[serde(default)]
     pub format: Option<String>,
+    /// Cover reference audio URL (MiniMax music-cover model).
+    #[serde(default)]
+    pub cover_audio_url: Option<String>,
+    /// Auto-generate lyrics from prompt (MiniMax lyrics_optimizer).
+    #[serde(default)]
+    pub auto_lyrics: Option<bool>,
 }
 
 /// 将风格 prompt 与可选歌词合成 Lyria 输入。
@@ -280,6 +286,8 @@ async fn dispatch_minimax_music(
         lyrics: parsed.lyrics.as_deref().unwrap_or("").to_string(),
         output_format: "url".to_string(),
         is_instrumental,
+        lyrics_optimizer: parsed.auto_lyrics.unwrap_or(false),
+        audio_url: parsed.cover_audio_url.clone(),
         ..MiniMaxMusicRequest::default()
     };
 
