@@ -101,7 +101,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_vision_model: "gpt-4o",
         supports_stream_usage: true,
         default_tts_model: "openai-tts-v3",
-        default_video_model: "sora-2",
+        default_video_model: "",
         default_music_model: "",
         default_asr_model: "whisper-v3-turbo",
         default_embedding_model: "text-embedding-4-large",
