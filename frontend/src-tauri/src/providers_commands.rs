@@ -145,7 +145,7 @@ impl ProviderKind {
             Self::Anthropic => "claude-opus-4-8",
             Self::Deepseek => "deepseek-chat",
             Self::Ollama => "llama3.3",
-            Self::Google => "gemini-3.5-flash",
+            Self::Google => "gemini-3.1-ultra",
             Self::Azure => "gpt-5.6",
             Self::Zhipu => "glm-5.2-plus",
             Self::Openrouter => "openai/gpt-5.6",
