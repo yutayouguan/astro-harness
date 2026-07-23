@@ -3,7 +3,7 @@
 //! 支持 describe / detect / segment 模式与多图输入。
 
 use base64::Engine;
-use providers::openai::chat::openai_compatible_base;
+use providers::compat::openai_compatible_base;
 use providers::interactions_http::{
     default_vision_prompt, google_interactions_vision, VisionImagePart, VisionMode,
 };

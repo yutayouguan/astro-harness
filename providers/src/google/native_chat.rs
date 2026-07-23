@@ -2,6 +2,9 @@
 //!
 //! 与 Interactions API 隔离，直接对接 `POST /v1beta/models/{model}:streamGenerateContent`，
 //! 支持 `function_declarations` 工具调用、`system_instruction`、思考（thought）部分。
+//!
+//! **注意**：本模块仍使用旧 [`ChatMessage`] 类型。如需从新 `Message` 类型调用，
+//! 请通过 [`crate::bridge::message_to_legacy`] 转换后再传入。
 
 use anyhow::{Context, Result};
 use reqwest::Client;

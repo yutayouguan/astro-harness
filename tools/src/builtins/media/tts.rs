@@ -7,7 +7,7 @@
 
 use home::{generated_dir, GeneratedKind};
 use providers::minimax::tts_http::{minimax_tts, MiniMaxTtsRequest, VoiceSetting};
-use providers::openai::chat::openai_compatible_base;
+use providers::compat::openai_compatible_base;
 use providers::interactions_http::{
     build_tts_input, google_interactions_tts, InteractionSpeechConfig, InteractionTtsRequest,
 };

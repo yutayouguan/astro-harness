@@ -346,6 +346,44 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
     }
 }
 
+// ─── 连通性探测 ─────────────────────────────────────────
+
+/// Interactions 连通性探测（非流式最小请求）。
+pub async fn probe_interactions(
+    client: &HttpClient,
+    model: &str,
+    config: &crate::trait_::ProviderConfig,
+) -> Result<String, String> {
+    if config.api_key.trim().is_empty() {
+        return Err("Google API Key 为空".into());
+    }
+    let url = crate::google::interactions_http::interactions_url(config);
+    let body = serde_json::json!({
+        "model": model,
+        "input": "ping",
+        "generation_config": { "max_output_tokens": 1 }
+    });
+    let resp = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .header("x-goog-api-key", config.api_key.trim())
+        .header("Api-Revision", API_REVISION)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("连接 Google Interactions 失败: {e}"))?;
+    let status = resp.status();
+    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        let msg = json
+            .pointer("/error/message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
+        return Err(format!("失败 ({status}): {msg}"));
+    }
+    Ok("调用成功".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

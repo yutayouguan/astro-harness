@@ -1,7 +1,8 @@
-//! Azure OpenAI — deployment URL + `api-key` header 认证。
+//! Azure OpenAI — deployment URL + `api-key` header 认证 + 连通性探测。
 
 use reqwest::header::{HeaderMap, HeaderValue};
-use serde_json::Value;
+use reqwest::Client;
+use serde_json::{json, Value};
 
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
 use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
@@ -56,4 +57,40 @@ pub fn azure_base(endpoint: &str) -> String {
 pub fn azure_deployment_url(endpoint: &str, deployment: &str) -> String {
     let base = azure_base(endpoint);
     format!("{base}/openai/deployments/{deployment}/chat/completions?api-version={API_VERSION}")
+}
+
+/// Azure OpenAI 连通性探测（deployment URL + api-key 认证）。
+pub async fn probe_azure(
+    client: &Client,
+    model: &str,
+    config: &crate::trait_::ProviderConfig,
+) -> Result<String, String> {
+    let endpoint = config
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("");
+    let url = azure_deployment_url(endpoint, model);
+    let body = json!({
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "ping"}]
+    });
+    let resp = client
+        .post(&url)
+        .header("api-key", &config.api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("连接 Azure OpenAI 失败: {e}"))?;
+    let status = resp.status();
+    let json: Value = resp.json().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(format!(
+            "失败 ({status}): {}",
+            super::openai::extract_error_message(&json)
+        ));
+    }
+    Ok("调用成功".to_string())
 }

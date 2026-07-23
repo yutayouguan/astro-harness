@@ -15,8 +15,7 @@
 //! - [`api`]：旧 trait（`AiProvider` / `ChatProvider`）+ 旧类型（`ChatMessage`）
 //! - [`profile`]：静态配置表（`ProviderProfile` / `ApiMode`）
 //! - [`protocol`]：旧 SSE 工具 + 探测路由
-//! - [`anthropic`] / [`google`] / [`openai`]：旧协议实现（媒体/探测仍在用）
-//! - [`vendors`]：`ProfileBackedProvider` 薄封装
+//! - [`anthropic`] / [`google`] / [`openai`]：旧协议实现（媒体/batch/token_count 仍在用）
 
 pub mod anthropic;
 pub mod api;
@@ -40,9 +39,9 @@ pub use api::{client, registry, streaming, trait_};
 pub use google::{files_http, interactions_chat, interactions_http, native_chat, robotics_http};
 pub use openai::{embeddings_http, image_http, responses, tts_http};
 pub use protocol::{extractor, http_stream, image_gen, media_http, tool_format, verify, vision};
-pub use vendors::{azure, claude, profile_backed};
 
 pub use client::ProviderClient;
+pub use compat::openai_compatible_base;
 pub use extractor::{parse_submit_payload, ExtractionError, Extractor, ExtractorBuilder};
 pub use http_stream::merge_additional_params;
 pub use profile::{ApiMode, ProviderProfile, PROFILES};
