@@ -152,6 +152,7 @@ type Draft = {
   tts_model: string;
   music_model: string;
   vision_model: string;
+  api_mode: string;
 };
 
 type DetailTab = "chat" | "models" | "media" | "voice" | "embedding";
@@ -209,6 +210,7 @@ function draftFromProvider(p: ProviderDto): Draft {
     tts_model: p.tts_model?.trim() ?? "",
     music_model: p.music_model?.trim() ?? "",
     vision_model: p.vision_model?.trim() ?? "",
+    api_mode: p.api_mode ?? "",
   };
 }
 
@@ -230,6 +232,7 @@ function providerSaveInput(
     tts_model: draft.tts_model.trim(),
     music_model: draft.music_model.trim(),
     vision_model: draft.vision_model.trim(),
+    api_mode: draft.api_mode,
   };
 }
 
@@ -1751,6 +1754,27 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     }
                   />
                 </label>
+
+                {selected.supports_responses_api && (
+                  <label className="providers-field providers-field-span">
+                    <span className="providers-field-label">
+                      <Zap size={14} />
+                      API 模式
+                    </span>
+                    <SelectMenu
+                      value={draft.api_mode === "responses" ? "responses" : "chat_completions"}
+                      onChange={(v) =>
+                        setDraft((d) =>
+                          d ? { ...d, api_mode: v === "responses" ? "responses" : "" } : d,
+                        )
+                      }
+                      options={[
+                        { value: "chat_completions", label: "Chat Completions" },
+                        { value: "responses", label: "Responses API" },
+                      ]}
+                    />
+                  </label>
+                )}
               </div>
 
               <div className="providers-fallback-block">

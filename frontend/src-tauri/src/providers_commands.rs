@@ -10,7 +10,7 @@ use crate::keystore::{
     delete_api_key, has_api_key, keyring_service_for_provider, load_api_key, save_api_key,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderKind {
     Openai,
@@ -260,6 +260,9 @@ pub struct ProviderConfig {
     /// 音乐生成模型（空=内置默认；主要 Google）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub music_model: String,
+    /// API 协议模式覆盖。空 = 使用 profile 默认；`"responses"` = Responses API。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub api_mode: String,
 }
 
 impl ProviderConfig {
@@ -278,6 +281,7 @@ impl ProviderConfig {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
+            api_mode: String::new(),
         }
     }
 
@@ -457,6 +461,10 @@ pub struct ProviderConfigDto {
     pub supports_music: bool,
     pub supports_asr: bool,
     pub supports_embedding: bool,
+    /// 当前 API 协议模式（`"chat_completions"` / `"responses"` 等）。
+    pub api_mode: String,
+    /// 是否支持 Responses API 模式切换。
+    pub supports_responses_api: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -485,6 +493,8 @@ pub struct ProviderConfigInput {
     pub vision_model: String,
     #[serde(default)]
     pub music_model: String,
+    #[serde(default)]
+    pub api_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -654,10 +664,45 @@ pub(crate) fn resolve_api_key(
     (false, "none".into(), None, None)
 }
 
+/// 支持 Responses API 切换的厂商。
+fn supports_responses_toggle(kind: ProviderKind) -> bool {
+    matches!(kind, ProviderKind::Openai | ProviderKind::Minimax)
+}
+
+/// 根据 api_mode 覆盖计算实际 backend_id。
+fn effective_backend_id(kind: ProviderKind, api_mode: &str) -> &'static str {
+    if api_mode == "responses" {
+        match kind {
+            ProviderKind::Openai => "openai-responses",
+            ProviderKind::Minimax => "minimax-responses",
+            _ => kind.backend_id(),
+        }
+    } else {
+        kind.backend_id()
+    }
+}
+
+/// 当前生效的 api_mode 名称（用于前端展示）。
+fn effective_api_mode(kind: ProviderKind, api_mode: &str) -> &'static str {
+    if api_mode == "responses" && supports_responses_toggle(kind) {
+        "responses"
+    } else {
+        let profile = providers::profile::resolve_or_openai_compat(kind.backend_id());
+        match profile.api_mode {
+            providers::ApiMode::ChatCompletions => "chat_completions",
+            providers::ApiMode::AnthropicMessages => "anthropic_messages",
+            providers::ApiMode::Responses => "responses",
+            providers::ApiMode::Interactions => "interactions",
+            providers::ApiMode::GeminiNative => "gemini_native",
+        }
+    }
+}
+
 /// 单条 Provider → 前端 DTO。
 fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
     let (has_api_key, key_source, env_key_name, _) = resolve_api_key(p);
-    let profile = providers::profile::resolve_or_openai_compat(p.kind.backend_id());
+    let bid = effective_backend_id(p.kind, &p.api_mode);
+    let profile = providers::profile::resolve_or_openai_compat(bid);
     ProviderConfigDto {
         id: p.id.clone(),
         kind: p.kind.as_str().to_string(),
@@ -668,7 +713,7 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         has_api_key,
         key_source,
         env_key_name,
-        backend_id: p.kind.backend_id().to_string(),
+        backend_id: bid.to_string(),
         official_key_url: p.kind.official_key_url().map(str::to_string),
         fallback: p.fallback.clone(),
         image_model: if p.image_model.is_empty() { profile.default_image_model.to_string() } else { p.image_model.clone() },
@@ -684,6 +729,8 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         supports_music: profile.supports_music(),
         supports_asr: profile.supports_asr(),
         supports_embedding: profile.supports_embedding,
+        api_mode: effective_api_mode(p.kind, &p.api_mode).to_string(),
+        supports_responses_api: supports_responses_toggle(p.kind),
     }
 }
 
@@ -799,6 +846,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             tts_model: provider.tts_model.trim().to_string(),
             vision_model: provider.vision_model.trim().to_string(),
             music_model: provider.music_model.trim().to_string(),
+            api_mode: provider.api_mode.trim().to_string(),
         };
         Ok(to_state_dto(s))
     })
@@ -988,7 +1036,7 @@ pub fn resolve_chat_targets(
 
     let primary = common::ChatTarget {
         provider_id: cfg.id.clone(),
-        backend_id: cfg.kind.backend_id().to_string(),
+        backend_id: effective_backend_id(cfg.kind, &cfg.api_mode).to_string(),
         model,
         api_key: key.unwrap_or_default(),
         base_url: cfg.endpoint.clone(),
@@ -1012,13 +1060,14 @@ pub fn resolve_chat_targets(
         }
         let (_has, _source, _env, key) = resolve_api_key(&p);
         let api_key = key.unwrap_or_default();
-        let allow_empty_key = p.kind.backend_id() == "ollama";
+        let bid = effective_backend_id(p.kind, &p.api_mode);
+        let allow_empty_key = bid == "ollama";
         if api_key.trim().is_empty() && !allow_empty_key {
             return None;
         }
         Some(common::ChatTarget {
             provider_id: p.id.clone(),
-            backend_id: p.kind.backend_id().to_string(),
+            backend_id: bid.to_string(),
             model: p.model.clone(),
             api_key,
             base_url: p.endpoint.clone(),
@@ -1554,7 +1603,7 @@ async fn probe_one_model(
 ) -> ProviderTestResult {
     let probe_id = match provider.kind {
         ProviderKind::Custom => "custom",
-        _ => provider.kind.backend_id(),
+        _ => effective_backend_id(provider.kind, &provider.api_mode),
     };
     let config = providers::ProviderConfig {
         api_key: api_key.to_string(),

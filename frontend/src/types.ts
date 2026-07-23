@@ -229,6 +229,10 @@ export type ProviderDto = {
   supports_asr?: boolean;
   supports_embedding?: boolean;
   embedding_model?: string;
+  /** 当前 API 协议模式（chat_completions / responses / anthropic_messages 等） */
+  api_mode?: string;
+  /** 是否支持 Responses API 模式切换 */
+  supports_responses_api?: boolean;
 };
 
 /** 全部供应商 + 当前激活 id */
