@@ -97,10 +97,10 @@ fn parse_identity_field_line(line: &str) -> Option<(String, String)> {
     Some((key, value))
 }
 
-/// 合并读取 `IDENTITY.md` 与 `AGENT.md` 中的 Name/Emoji/Avatar/Vibe（前者优先）
+/// 从 `IDENTITY.md` 中读取 Name/Emoji/Avatar/Vibe
 fn read_agent_identity_fields(ws: &Path) -> AgentIdentityFields {
     let mut fields = AgentIdentityFields::default();
-    for file in ["IDENTITY.md", "AGENT.md"] {
+    for file in ["IDENTITY.md"] {
         let Ok(text) = fs::read_to_string(ws.join(file)) else {
             continue;
         };
@@ -331,56 +331,23 @@ fn allocate_agent_id(base: &Path, name: &str) -> anyhow::Result<String> {
     anyhow::bail!("无法生成唯一 Agent id，请重试")
 }
 
-/// 按 `AgentProfile` 写入 AGENT/IDENTITY/SOUL/USER/MEMORY 初始内容
+/// 按 `AgentProfile` 写入 IDENTITY/SOUL/USER/MEMORY 初始内容
 fn apply_agent_profile(ws: &Path, id: &str, name: &str, p: &AgentProfile) -> anyhow::Result<()> {
-    let agent_md = format!(
-        r#"# AGENT.md — 本记忆空间的 Agent
+    let identity = format!(
+        r#"# IDENTITY.md — {name}
 
 - **Name:** {name}
 - **Id:** {id}
+- **Role:** {focus}
+- **Vibe:** {style}
 - **Focus:** {focus}
-- **Scope / 不要做:** {avoid}
+- **Scope:** {avoid}
+- **Emoji:** _(可选：上传到 assets/emoji.png)_
+- **Avatar:** _(可选：上传到 assets/avatar.png)_
 
 ## 背景经历
 
 {background}
-
-## 记忆空间
-
-- **长期精炼：** `MEMORY.md`
-- **每日记忆：** `memory/YYYY-MM-DD.md`
-- **专属技能：** `skills/`
-- **公共技能：** `~/.astro/skills`
-- **运行配置：** `~/.astro/agents/{id}/config.json`
-"#,
-        name = name,
-        id = id,
-        focus = if p.focus.is_empty() {
-            "_(待补充)_"
-        } else {
-            &p.focus
-        },
-        avoid = if p.avoid.is_empty() {
-            "_(待补充)_"
-        } else {
-            &p.avoid
-        },
-        background = if p.background.is_empty() {
-            "_(待补充)_"
-        } else {
-            &p.background
-        },
-    );
-    fs::write(ws.join("AGENT.md"), agent_md)?;
-
-    let identity = format!(
-        r#"# IDENTITY.md — {name} 是谁
-
-- **Name:** {name}
-- **Role:** {focus}
-- **Vibe:** {style}
-- **Emoji:** _(可选：上传到 assets/emoji.png)_
-- **Avatar:** _(可选：上传到 assets/avatar.png)_
 
 ## 职责
 
@@ -389,6 +356,7 @@ fn apply_agent_profile(ws: &Path, id: &str, name: &str, p: &AgentProfile) -> any
 - 不越界：{avoid}
 "#,
         name = name,
+        id = id,
         focus = if p.focus.is_empty() {
             "自我进化的 AI 助手"
         } else {
@@ -403,6 +371,11 @@ fn apply_agent_profile(ws: &Path, id: &str, name: &str, p: &AgentProfile) -> any
             "破坏性操作前先确认"
         } else {
             &p.avoid
+        },
+        background = if p.background.is_empty() {
+            "_(待补充)_"
+        } else {
+            &p.background
         },
     );
     fs::write(ws.join("IDENTITY.md"), identity)?;
@@ -703,7 +676,6 @@ mod tests {
         let content = fs::read_to_string(&soul).unwrap();
         assert_eq!(content, "custom soul");
         assert!(ws.join("IDENTITY.md").is_file());
-        assert!(ws.join("AGENT.md").is_file());
     }
 
     #[test]
@@ -732,7 +704,7 @@ mod tests {
             .any(|a| a.id == info.id && a.name == "PPT Expert"));
 
         let ws = PathBuf::from(&info.path);
-        assert!(ws.join("AGENT.md").is_file());
+        assert!(ws.join("IDENTITY.md").is_file());
         assert!(ws.join("MEMORY.md").is_file());
         assert!(ws.join("memory").is_dir());
         assert!(ws.join("skills").is_dir());
@@ -826,8 +798,8 @@ mod tests {
         assert_eq!(info.id, "demo-expert");
         assert!(info.path.ends_with("workspace-demo-expert"));
         let ws = PathBuf::from(&info.path);
-        let agent = fs::read_to_string(ws.join("AGENT.md")).unwrap();
-        assert!(agent.contains("十年 PPT"));
+        let identity = fs::read_to_string(ws.join("IDENTITY.md")).unwrap();
+        assert!(identity.contains("十年 PPT"));
         let user = fs::read_to_string(ws.join("USER.md")).unwrap();
         assert!(user.contains("老板"));
         assert_eq!(active_agent_id(dir.path()), info.id);

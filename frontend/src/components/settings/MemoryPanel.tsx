@@ -3,7 +3,6 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import {
   ArrowLeft,
   Book,
-  Bot,
   Check,
   ClipboardList,
   Files,
@@ -103,10 +102,9 @@ type PendingMemoryWrite = {
 };
 
 /** 长期记忆归档文件 id */
-type ArchiveId = "agent" | "identity" | "user" | "soul" | "agents" | "tools";
+type ArchiveId = "identity" | "user" | "soul" | "agents" | "tools";
 
 const ARCHIVE_FILES: { id: ArchiveId; filename: string; Icon: LucideIcon }[] = [
-  { id: "agent", filename: "AGENT.md", Icon: Bot },
   { id: "identity", filename: "IDENTITY.md", Icon: Fingerprint },
   { id: "user", filename: "USER.md", Icon: User },
   { id: "soul", filename: "SOUL.md", Icon: Sparkles },

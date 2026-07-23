@@ -41,7 +41,6 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON artifacts(agent_id, created_at
 
 /// Agent 工作区内不参与 reconcile 的核心模板文件名
 const MEMORY_TEMPLATES: &[&str] = &[
-    "AGENT.md",
     "IDENTITY.md",
     "USER.md",
     "SOUL.md",

@@ -10,7 +10,7 @@ pub struct StaticContext {
     pub soul: String,
     /// IDENTITY 层：对外身份与语气设定。
     pub identity: String,
-    /// AGENT 层：Agent 专用指令（`AGENT.md` 等）。
+    /// AGENTS 层：工作空间工作方式（`AGENTS.md`）。
     pub agent_md: String,
     /// 长期精炼记忆（`MEMORY.md` 摘要）。
     pub memory: String,

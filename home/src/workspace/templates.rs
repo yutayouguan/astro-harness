@@ -2,7 +2,6 @@
 
 /// 工作区核心 Markdown 模板（文件名 → 模板正文，含 `{{ID}}` / `{{NAME}}` 占位符）
 pub(crate) const CORE_FILES: &[(&str, &str)] = &[
-    ("AGENT.md", TEMPLATE_AGENT),
     ("IDENTITY.md", TEMPLATE_IDENTITY),
     ("USER.md", TEMPLATE_USER),
     ("SOUL.md", TEMPLATE_SOUL),
@@ -14,34 +13,16 @@ pub(crate) const CORE_FILES: &[(&str, &str)] = &[
 /// Agent 工作区内需要确保存在的子目录
 pub(crate) const AGENT_SUBDIRS: &[&str] = &["memory", "skills"];
 
-pub(crate) const TEMPLATE_AGENT: &str = r#"# AGENT.md — 本记忆空间的 Agent
+pub(crate) const TEMPLATE_IDENTITY: &str = r#"# IDENTITY.md — Agent 身份
 
-_描述这个 Agent 的定位、擅长领域与边界。新建 Agent 时请改写。_
+_描述这个 Agent 是谁、擅长什么、怎么协作。新建 Agent 时请改写。_
 
 - **Name:** {{NAME}}
 - **Id:** {{ID}}
-- **Focus:** _(擅长什么？服务哪类任务？)_
-- **Scope:** _(不做什么？)_
-
-## 记忆空间
-
-- **长期精炼：** `MEMORY.md` — 跨会话稳定事实与决策
-- **每日记忆：** `memory/YYYY-MM-DD.md` — 当日流水，可再提炼进 MEMORY.md
-- **专属技能：** `skills/` — 仅本 Agent 可用
-- **公共技能：** `~/.astro/skills` — 所有 Agent 共享
-
-## 启动检查
-
-会话开始时优先依赖运行时注入的上下文；需要细节时再读本目录文件。
-"#;
-
-pub(crate) const TEMPLATE_IDENTITY: &str = r#"# IDENTITY.md — Astro Agent 是谁
-
-_首次对话时填写，并随协作一起演化。_
-
-- **Name:** {{NAME}}
 - **Role:** 自我进化的 AI 助手与数字搭档
 - **Vibe:** 干练、有主见、务实
+- **Focus:** _(擅长什么？服务哪类任务？)_
+- **Scope:** _(不做什么？)_
 - **Emoji:** _(可选：上传到 assets/emoji.png)_
 - **Avatar:** _(可选：上传到 assets/avatar.png)_
 
@@ -111,7 +92,7 @@ pub(crate) const TEMPLATE_AGENTS: &str = r#"# AGENTS.md — 本记忆空间的�
 
 优先使用运行时注入的启动上下文。其中可能已包含：
 
-- `AGENT.md` / `IDENTITY.md` / `SOUL.md` / `USER.md`
+- `IDENTITY.md` / `SOUL.md` / `USER.md`
 - `MEMORY.md`（长期精炼记忆）
 - 当日 `memory/YYYY-MM-DD.md`（每日记忆）
 
