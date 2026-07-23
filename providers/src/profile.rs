@@ -62,6 +62,8 @@ pub struct ProviderProfile {
     pub default_music_model: &'static str,
     /// ASR / 语音识别默认模型名（空 = 不支持）。
     pub default_asr_model: &'static str,
+    /// 嵌入模型默认名（空 = 不支持或用通用 fallback）。
+    pub default_embedding_model: &'static str,
 }
 
 impl ProviderProfile {
@@ -91,7 +93,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         auth: AuthKind::Bearer,
         env_keys: &["OPENAI_API_KEY"],
         azure_deployment_style: false,
-        default_model: "gpt-5.6-ultra",
+        default_model: "gpt-5.6-sol",
         supports_image_gen: true,
         supports_embedding: true,
         image_mode: Some(ImageGenMode::OpenAi),
@@ -102,6 +104,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "sora-2",
         default_music_model: "",
         default_asr_model: "whisper-v3-turbo",
+        default_embedding_model: "text-embedding-4-large",
     },
     ProviderProfile {
         id: "claude",
@@ -121,6 +124,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "deepseek",
@@ -140,6 +144,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "google",
@@ -159,6 +164,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "veo-3.1",
         default_music_model: "lyria-3-pro",
         default_asr_model: "google-stt-v2-live",
+        default_embedding_model: "gemini-embedding-v3",
     },
     ProviderProfile {
         id: "ollama",
@@ -178,6 +184,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "azure",
@@ -197,6 +204,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "zhipu",
@@ -207,7 +215,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         azure_deployment_style: false,
         default_model: "glm-5.2-plus",
         supports_image_gen: true,
-        supports_embedding: false,
+        supports_embedding: true,
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "cogview-4",
         default_vision_model: "glm-5.2-plus",
@@ -216,6 +224,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "cogvideox-v1.5",
         default_music_model: "cogmusic-v1.1",
         default_asr_model: "glm-asr-v1.2",
+        default_embedding_model: "cogembedding-v2",
     },
     ProviderProfile {
         id: "openrouter",
@@ -235,6 +244,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "bailian",
@@ -254,6 +264,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "wan-2.7",
         default_music_model: "",
         default_asr_model: "qwen-asr-v2.5",
+        default_embedding_model: "qwen-embedding-v3",
     },
     ProviderProfile {
         id: "nvidia",
@@ -273,6 +284,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "moonshot",
@@ -292,6 +304,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "volcengine",
@@ -302,7 +315,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         azure_deployment_style: false,
         default_model: "doubao-seed-2.1-pro",
         supports_image_gen: true,
-        supports_embedding: false,
+        supports_embedding: true,
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "seedream-5.0-pro",
         default_vision_model: "doubao-seed-2.1-pro",
@@ -311,6 +324,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "seedance-2.5",
         default_music_model: "bytedance-music-v2.1",
         default_asr_model: "seed-asr-2.1",
+        default_embedding_model: "doubao-embedding-vision-v2",
     },
     ProviderProfile {
         id: "minimax",
@@ -330,6 +344,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "MiniMax-Hailuo-2.3",
         default_music_model: "music-3.0",
         default_asr_model: "speech-asr-v2.2",
+        default_embedding_model: "minimax-embedding-v3",
     },
     ProviderProfile {
         id: "hunyuan",
@@ -340,7 +355,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         azure_deployment_style: false,
         default_model: "hunyuan-hy3",
         supports_image_gen: true,
-        supports_embedding: false,
+        supports_embedding: true,
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "hunyuan-image-v2.1",
         default_vision_model: "hunyuan-hy3",
@@ -349,6 +364,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "hunyuan-video-v1.5",
         default_music_model: "hunyuan-music-v2",
         default_asr_model: "hunyuan-asr-v2.1",
+        default_embedding_model: "hunyuan-embedding-v3",
     },
     ProviderProfile {
         id: "minimax-anthropic",
@@ -368,6 +384,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "minimax-responses",
@@ -387,6 +404,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "mimo",
@@ -406,6 +424,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
     ProviderProfile {
         id: "gemini-native",
@@ -425,6 +444,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
     },
 ];
 
@@ -458,6 +478,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     default_video_model: "",
     default_music_model: "",
         default_asr_model: "",
+        default_embedding_model: "",
 };
 
 /// 将常见别名规范化为表内 id。

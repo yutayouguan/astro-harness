@@ -193,8 +193,8 @@ function supportsVoice(p: ProviderDto): boolean {
   return !!(p.supports_tts || p.supports_asr);
 }
 
-function supportsEmbedding(kind: string): boolean {
-  return kind === "openai" || kind === "google" || kind === "zhipu" || kind === "bailian" || kind === "minimax";
+function supportsEmbedding(p: ProviderDto): boolean {
+  return !!p.supports_embedding;
 }
 
 function draftFromProvider(p: ProviderDto): Draft {
@@ -577,7 +577,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
     if (detailTab === "voice" && selected && !supportsVoice(selected)) {
       setDetailTab("chat");
     }
-    if (detailTab === "embedding" && selected && !supportsEmbedding(selected.kind)) {
+    if (detailTab === "embedding" && selected && !supportsEmbedding(selected)) {
       setDetailTab("chat");
     }
   }, [detailTab, selected]);
@@ -1675,7 +1675,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     {t("providers.tabVoice")}
                   </button>
                 ) : null}
-                {supportsEmbedding(selected.kind) ? (
+                {supportsEmbedding(selected) ? (
                   <button
                     type="button"
                     role="tab"
@@ -2724,7 +2724,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                 </div>
               )}
 
-              {detailTab === "embedding" && supportsEmbedding(selected.kind) && (
+              {detailTab === "embedding" && supportsEmbedding(selected) && (
                 <div className="providers-media-panel">
                   <p className="providers-field-hint providers-media-hint">
                     {t("providers.embeddingHint")}
@@ -2743,13 +2743,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                             current ? { ...current, model: e.target.value } : current,
                           )
                         }
-                        placeholder={
-                          selected.kind === "openai" ? "text-embedding-3-large" :
-                          selected.kind === "google" ? "text-embedding-005" :
-                          selected.kind === "zhipu" ? "embedding-3" :
-                          selected.kind === "bailian" ? "text-embedding-v3" :
-                          "embedding model"
-                        }
+                        placeholder={selected.embedding_model || "embedding model"}
                       />
                       <span className="providers-field-hint">
                         {t("providers.embeddingModelHint")}

@@ -141,7 +141,7 @@ impl ProviderKind {
     /// 该供应商的默认模型 id。
     pub fn default_model(&self) -> &'static str {
         match self {
-            Self::Openai => "gpt-5.6-ultra",
+            Self::Openai => "gpt-5.6-sol",
             Self::Anthropic => "claude-opus-4-8",
             Self::Deepseek => "deepseek-chat",
             Self::Ollama => "llama3.3",
@@ -450,11 +450,13 @@ pub struct ProviderConfigDto {
     pub vision_model: String,
     pub music_model: String,
     pub asr_model: String,
+    pub embedding_model: String,
     pub supports_image: bool,
     pub supports_video: bool,
     pub supports_tts: bool,
     pub supports_music: bool,
     pub supports_asr: bool,
+    pub supports_embedding: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -675,11 +677,13 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         vision_model: if p.vision_model.is_empty() { profile.default_vision_model.to_string() } else { p.vision_model.clone() },
         music_model: if p.music_model.is_empty() { profile.default_music_model.to_string() } else { p.music_model.clone() },
         asr_model: profile.default_asr_model.to_string(),
+        embedding_model: profile.default_embedding_model.to_string(),
         supports_image: profile.supports_image_gen,
         supports_video: profile.supports_video(),
         supports_tts: profile.supports_tts(),
         supports_music: profile.supports_music(),
         supports_asr: profile.supports_asr(),
+        supports_embedding: profile.supports_embedding,
     }
 }
 
