@@ -147,7 +147,7 @@ impl ProviderKind {
             Self::Ollama => "llama3.3",
             Self::Google => "gemini-3.5-flash",
             Self::Azure => "gpt-5.6",
-            Self::Zhipu => "glm-4.7-flash",
+            Self::Zhipu => "glm-5.2-plus",
             Self::Openrouter => "openai/gpt-5.6",
             Self::Bailian => "qwen3.6-plus",
             Self::Nvidia => "meta/llama-3.3-70b-instruct",
