@@ -17,6 +17,7 @@ pub mod api;
 pub mod bridge;
 pub mod compat;
 pub mod impls;
+pub mod new_dispatch;
 pub mod new_registry;
 pub mod google;
 pub mod minimax;

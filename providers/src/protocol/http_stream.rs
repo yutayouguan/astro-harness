@@ -1,7 +1,7 @@
-//! 共享 SSE 基础设施 + [`ApiMode`] 路由入口。
+//! 共享基础设施 + 中央分发入口。
 //!
-//! 各 provider 协议实现分别在 [`crate::anthropic`]、[`crate::google`]、[`crate::openai`]。
-//! 本模块只保留跨 provider 共用的工具函数和中央分发。
+//! 聊天分发已迁移到 trait-based `new_dispatch`。
+//! 本模块保留 SSE 工具函数供旧代码路径使用。
 
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
@@ -9,7 +9,6 @@ use reqwest::Client;
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::profile::{self, ApiMode};
 use crate::trait_::{ChatChunk, ChatMessage, ChatStream, ProviderConfig};
 
 /// 将 `additional_params` 浅合并进请求体（对象字段覆盖同名键；非对象则忽略）
@@ -29,7 +28,7 @@ pub(crate) fn trim_slash(endpoint: &str) -> String {
 
 /// 返回各内置供应商的默认 API 基址（表驱动）。
 pub fn default_base_for(provider: &str) -> &'static str {
-    profile::default_base_for(provider)
+    crate::profile::default_base_for(provider)
 }
 
 /// 优先使用配置中的 `base_url`，否则回退到供应商默认值。
@@ -169,44 +168,16 @@ pub(crate) async fn sse_chat_stream(
     Ok(Box::pin(stream))
 }
 
-/// 按 [`ApiMode`] 分发流式聊天。
+/// 按 provider id 分发流式聊天。
+///
+/// **新管线**：通过 trait-based `NewRegistry` 分发。
+/// 旧 `ApiMode` match 已移除 — 所有厂商通过统一 trait 系统处理。
 pub async fn chat_stream_for_provider(
-    client: &Client,
+    _client: &Client,
     provider: &str,
     messages: Vec<ChatMessage>,
     tools: Vec<Value>,
     config: &ProviderConfig,
 ) -> Result<ChatStream> {
-    let p = profile::resolve_or_openai_compat(provider);
-    let id = if profile::resolve(provider).is_some() {
-        p.id
-    } else {
-        provider
-    };
-    match p.api_mode {
-        ApiMode::ChatCompletions if p.azure_deployment_style => {
-            crate::openai::azure::azure_chat_stream(client, messages, tools, config).await
-        }
-        ApiMode::ChatCompletions => {
-            crate::openai::chat::openai_compatible_chat_stream(client, id, messages, tools, config)
-                .await
-        }
-        ApiMode::AnthropicMessages => {
-            crate::anthropic::chat::anthropic_chat_stream(client, messages, tools, config).await
-        }
-        ApiMode::Interactions => {
-            crate::google::interactions_chat::interactions_chat_stream(
-                client, messages, tools, config,
-            )
-            .await
-        }
-        ApiMode::Responses => {
-            crate::openai::responses::responses_chat_stream(client, id, messages, tools, config)
-                .await
-        }
-        ApiMode::GeminiNative => {
-            crate::google::native_chat::gemini_native_chat_stream(client, messages, tools, config)
-                .await
-        }
-    }
+    crate::new_dispatch::chat_stream_new(provider, messages, tools, config).await
 }
