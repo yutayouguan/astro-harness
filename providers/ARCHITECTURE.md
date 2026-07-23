@@ -323,32 +323,31 @@ providers/src/
   profile.rs          — 静态配置表（fallback defaults）
 ```
 
-## 7. 迁移清单
+## 7. 迁移状态
 
-### Phase 1: 类型系统 + trait 骨架
-1. `types/` — Message, Role, UserContent, AssistantContent, CompletionRequest, StreamChunk
-2. `traits/` — CompletionModel, Capability, Capable/Nothing, Client<Ext>
-3. `compat/` — OpenAICompatible trait + OpenAICompletionModel<Ext>
-4. 编译通过，旧代码暂不删
+### Phase 1: 类型系统 + trait 骨架 ✅
+- `types/` — Message, Role, UserContent, AssistantContent, CompletionRequest, StreamChunk
+- `traits/` — CompletionModel, Capability, Capable/Nothing, Client<Ext>, DynProvider
+- `compat/` — OpenAICompatible trait + OpenAICompletionModel<Ext>
+- `shared/` — SSE 流解析基础设施
 
-### Phase 2: 厂商迁移
-5. `vendors/` — 10+ OpenAI 兼容厂商迁移（每个 ~30 行）
-6. `anthropic/` — 重写为 AnthropicCompletionModel impl CompletionModel
-7. `google/` — 重写为 InteractionsCompletionModel impl CompletionModel
-8. `minimax/` — 重写媒体模型
-9. `registry.rs` — 新注册表（dyn dispatch wrapper）
+### Phase 2: 厂商实现 ✅
+- `impls/` — 14 个厂商（11 OpenAI 兼容 + Anthropic/Google 原生 + MiniMax）
 
-### Phase 3: 下游适配
-10. `agent/src/prompt/messages.rs` — 使用新 Message enum
-11. `agent/src/streaming/types.rs` — 使用新 StreamChunk
-12. `tools/src/builtins/media/` — 使用新 trait 方法
-13. `backend/src/grpc/` — 适配新类型
-14. `frontend/src-tauri/` — 适配新 DTO
+### Phase 3: 注册表 + 桥接 ✅
+- `new_registry.rs` — 基于 trait 的动态注册表
+- `bridge.rs` — 新旧类型双向转换
+- `new_dispatch.rs` — 新管线聊天分发（旧签名兼容）
 
-### Phase 4: 清理
-15. 删除旧 `api/trait_.rs`、`protocol/http_stream.rs`、`vendors/profile_backed.rs`
-16. 删除 `ApiMode` enum
-17. 更新 CLAUDE.md
+### Phase 4: 管线切换 ✅
+- `chat_stream_for_provider()` 已委托给 `new_dispatch::chat_stream_new()`
+- agent 层有 `map_new_provider_stream()` 和 `to_new_messages()` 新函数
+
+### Phase 5: 旧代码淘汰（进行中）
+- 旧 `api/trait_.rs` 类型保留作为兼容层（下游仍在用）
+- 旧 `vendors/profile_backed.rs` 保留（verify/image_gen 路径仍在用）
+- 旧 `anthropic/` `google/` `openai/` 模块保留（媒体/探测路径仍在用）
+- 需要逐步将下游 15+ 文件的 import 从 `providers::trait_::ChatMessage` 迁移到 `providers::types::Message`
 
 ## 8. 不变量
 

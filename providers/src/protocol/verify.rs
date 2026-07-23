@@ -36,7 +36,7 @@ pub async fn probe(
         match (p.api_mode, p.azure_deployment_style) {
             (ApiMode::AnthropicMessages, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
-                match crate::anthropic::verify::probe_anthropic(
+                match crate::impls::anthropic::probe_anthropic(
                     client, &model, &endpoint, config,
                 )
                 .await
@@ -46,14 +46,14 @@ pub async fn probe(
                 }
             }
             (ApiMode::ChatCompletions, true) => {
-                match crate::openai::verify::probe_azure(client, &model, config).await {
+                match crate::impls::azure::probe_azure(client, &model, config).await {
                     Ok(m) => m,
                     Err(e) => return fail(e),
                 }
             }
             (ApiMode::Responses, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
-                match crate::openai::verify::probe_openai_responses(
+                match crate::impls::openai::probe_openai_responses(
                     client, &endpoint, &model, &config.api_key,
                 )
                 .await
@@ -63,7 +63,7 @@ pub async fn probe(
                 }
             }
             (ApiMode::Interactions, _) => {
-                match crate::google::interactions_chat::probe_interactions(client, &model, config)
+                match crate::impls::google::probe_interactions(client, &model, config)
                     .await
                 {
                     Ok(m) => m,
@@ -72,7 +72,7 @@ pub async fn probe(
             }
             (ApiMode::GeminiNative, _) | (ApiMode::ChatCompletions, false) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
-                match crate::openai::verify::probe_openai_compat(
+                match crate::impls::openai::probe_openai_compat(
                     client, &endpoint, &model, &config.api_key,
                 )
                 .await
@@ -84,7 +84,7 @@ pub async fn probe(
         }
     } else {
         let endpoint = resolve_endpoint(config, crate::openai::DEFAULT_API_BASE);
-        match crate::openai::verify::probe_openai_compat(
+        match crate::impls::openai::probe_openai_compat(
             client, &endpoint, &model, &config.api_key,
         )
         .await

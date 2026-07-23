@@ -7,7 +7,6 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use super::defaults;
-use super::messages::to_anthropic_messages;
 use super::tools::openai_tools_to_anthropic;
 use crate::http_stream::{resolve_base, trim_slash};
 use crate::trait_::ProviderConfig;
@@ -23,7 +22,13 @@ pub async fn anthropic_count_tokens(
     let base = trim_slash(&resolve_base(config, "claude"));
     let url = format!("{base}/v1/messages/count_tokens");
 
-    let (system, api_messages) = to_anthropic_messages(messages);
+    // 旧 ChatMessage → 新 Message → Anthropic wire format
+    let new_msgs: Vec<crate::types::Message> = messages
+        .iter()
+        .map(crate::bridge::legacy_to_message)
+        .collect();
+    let (system, api_messages) =
+        crate::impls::anthropic::to_anthropic_messages_public(&new_msgs);
 
     let mut body = json!({
         "model": config.model,

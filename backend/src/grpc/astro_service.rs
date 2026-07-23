@@ -450,6 +450,7 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                 )),
             })
         }
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::InteractionId(_)) => None,
         MultiTurnStreamItem::ToolResult {
             id,
             name,

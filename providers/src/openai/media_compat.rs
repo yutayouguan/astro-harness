@@ -9,7 +9,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use super::defaults::{DEFAULT_API_BASE, DEFAULT_VISION_MODEL};
-use super::chat::openai_compatible_base;
+use crate::compat::openai_compatible_base;
 use crate::protocol::vision::VisionMode;
 use crate::trait_::ProviderConfig;
 

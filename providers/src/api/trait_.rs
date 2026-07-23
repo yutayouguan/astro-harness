@@ -1,7 +1,14 @@
-//! 供应商核心 trait 与共享数据类型。
+//! 供应商核心 trait 与共享数据类型（旧架构，逐步淘汰）。
 //!
 //! 定义聊天消息、流式分片、配置、认证方式，以及
 //! [`ChatProvider`]、[`ImageGenProvider`]、[`VerifyProvider`]、[`AiProvider`] 等能力接口。
+//!
+//! **新架构请使用**：
+//! - [`crate::types::Message`] 替代 [`ChatMessage`]
+//! - [`crate::types::StreamChunk`] 替代 [`ChatChunk`]
+//! - [`crate::types::stream::Usage`] 替代 [`crate::streaming::Usage`]
+//! - [`crate::traits::CompletionModel`] 替代 [`ChatProvider`]
+//! - [`crate::bridge`] 提供新旧类型互转
 
 use async_trait::async_trait;
 use futures::Stream;

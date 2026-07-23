@@ -1,18 +1,11 @@
-//! Anthropic Messages API 协议实现。
+//! Anthropic 旧兼容模块（Batch / Token Count / Tools / Defaults）。
 //!
-//! 包含聊天流式、消息转换、SSE 解析、工具格式转换、连通性探测、
-//! Batch API、Token Counting。
+//! 聊天流式已迁移到 [`crate::impls::anthropic`]。
+//! 探测已迁移到 [`crate::impls::anthropic`]。
 
 pub mod batch;
-pub mod chat;
 pub mod defaults;
-pub mod messages;
-pub mod sse;
 pub mod token_count;
 pub mod tools;
-pub mod verify;
 
-pub use chat::anthropic_chat_stream;
 pub use tools::openai_tools_to_anthropic;
-
-pub type ClaudeProvider = crate::vendors::profile_backed::ProfileBackedProvider;
