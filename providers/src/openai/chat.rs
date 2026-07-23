@@ -98,7 +98,6 @@ pub(crate) fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
                                 "type": "image_url",
                                 "image_url": { "url": url }
                             }),
-                            // OpenAI chat completions 无通用 audio/video part：回落为文本标注
                             ChatContentPart::AudioUrl { mime_type, .. } => json!({
                                 "type": "text",
                                 "text": format!(
@@ -106,12 +105,10 @@ pub(crate) fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
                                     if mime_type.trim().is_empty() { "audio/*" } else { mime_type }
                                 )
                             }),
-                            ChatContentPart::VideoUrl { mime_type, .. } => json!({
-                                "type": "text",
-                                "text": format!(
-                                    "[video attached: {}]",
-                                    if mime_type.trim().is_empty() { "video/*" } else { mime_type }
-                                )
+                            // MiniMax 等支持 video_url content part
+                            ChatContentPart::VideoUrl { url, .. } => json!({
+                                "type": "video_url",
+                                "video_url": { "url": url }
                             }),
                             ChatContentPart::DocumentUrl { mime_type, .. } => json!({
                                 "type": "text",
@@ -318,12 +315,16 @@ pub async fn openai_compatible_chat_stream(
         "messages": to_openai_messages(&messages),
         "stream": true,
         "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
     });
+    // MiniMax 用 max_completion_tokens（max_tokens 已 deprecated）
+    if provider == "minimax" {
+        body["max_completion_tokens"] = json!(config.max_tokens);
+    } else {
+        body["max_tokens"] = json!(config.max_tokens);
+    }
     if supports_stream_include_usage(provider) {
         body["stream_options"] = json!({ "include_usage": true });
     }
-    // 原生 function calling：下发 OpenAI tools；无 tools 时仍可走 XML <tool_call> 回退
     if !tools.is_empty() {
         body["tools"] = Value::Array(tools);
         body["tool_choice"] = json!("auto");
@@ -334,7 +335,6 @@ pub async fn openai_compatible_chat_stream(
             "type": if config.thinking_enabled { "enabled" } else { "disabled" }
         });
         if config.thinking_enabled {
-            // DeepSeek V4：官方档位为 high / xhigh；max 映射到 xhigh
             let effort = match config.reasoning_effort.trim() {
                 "max" | "xhigh" => "xhigh",
                 "high" => "high",
@@ -343,6 +343,13 @@ pub async fn openai_compatible_chat_stream(
             };
             body["reasoning_effort"] = json!(effort);
         }
+    }
+    // MiniMax M3：adaptive 思考 + reasoning_split 分离到 reasoning_content 字段
+    if provider == "minimax" {
+        body["thinking"] = json!({
+            "type": if config.thinking_enabled { "adaptive" } else { "disabled" }
+        });
+        body["reasoning_split"] = json!(true);
     }
 
     merge_additional_params(&mut body, &config.additional_params);
