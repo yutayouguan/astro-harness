@@ -8,7 +8,7 @@ use providers::media_http::{
 };
 use providers::minimax::video_http::{
     minimax_create_video, minimax_download_video, minimax_query_video, MiniMaxVideoRequest,
-    VideoTaskStatus,
+    VideoSubjectRef, VideoTaskStatus,
 };
 use providers::trait_::ProviderConfig;
 use schemars::JsonSchema;
@@ -66,6 +66,12 @@ pub struct VideoGenArgs {
     pub person_generation: Option<String>,
     #[serde(default)]
     pub seed: Option<i64>,
+    /// Subject reference image path (MiniMax S2V-01: character consistency).
+    #[serde(default)]
+    pub subject_reference_image: Option<String>,
+    /// Disable prompt optimization (MiniMax: more precise control).
+    #[serde(default)]
+    pub disable_prompt_optimizer: Option<bool>,
 }
 
 /// 向注册表登记 `video_gen` 工具。
@@ -409,20 +415,49 @@ async fn dispatch_minimax_video(
         model: model.clone(),
         ..ProviderConfig::default()
     };
+    let encode_image = |p: &str| -> anyhow::Result<String> {
+        let abs = if std::path::Path::new(p).is_absolute() {
+            std::path::PathBuf::from(p)
+        } else {
+            ctx.workspace_dir.join(p)
+        };
+        let bytes = std::fs::read(&abs)
+            .map_err(|e| anyhow::anyhow!("读取图片失败 {}: {e}", abs.display()))?;
+        let b64 = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            &bytes,
+        );
+        let mime = mime_from_name(p);
+        Ok(format!("data:{mime};base64,{b64}"))
+    };
+
     let first_frame = parsed
         .image
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|p| {
-            let abs = ctx.workspace_dir.join(p);
-            let bytes = std::fs::read(&abs)?;
-            let b64 = base64::Engine::encode(
-                &base64::engine::general_purpose::STANDARD,
-                &bytes,
-            );
-            let mime = mime_from_video_name(p);
-            Ok::<_, anyhow::Error>(format!("data:{mime};base64,{b64}"))
+        .map(|p| encode_image(p))
+        .transpose()?;
+
+    let last_frame = parsed
+        .last_frame
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|p| encode_image(p))
+        .transpose()?;
+
+    let subject_ref = parsed
+        .subject_reference_image
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|p| -> anyhow::Result<Vec<VideoSubjectRef>> {
+            let encoded = encode_image(p)?;
+            Ok(vec![VideoSubjectRef {
+                ref_type: "character".to_string(),
+                images: vec![encoded],
+            }])
         })
         .transpose()?;
 
@@ -439,8 +474,11 @@ async fn dispatch_minimax_video(
         model: model.clone(),
         prompt: parsed.prompt.clone(),
         first_frame_image: first_frame,
+        last_frame_image: last_frame,
+        subject_reference: subject_ref,
         duration,
         resolution,
+        prompt_optimizer: !parsed.disable_prompt_optimizer.unwrap_or(false),
         ..MiniMaxVideoRequest::default()
     };
 

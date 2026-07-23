@@ -41,6 +41,10 @@ pub struct MiniMaxVideoRequest {
     pub resolution: String,
     /// 是否启用提示词优化。
     pub prompt_optimizer: bool,
+    /// 是否缩短 prompt_optimizer 优化耗时（Hailuo-2.3 / Hailuo-02）。
+    pub fast_pretreatment: bool,
+    /// 是否添加 AIGC 水印。
+    pub aigc_watermark: bool,
 }
 
 impl Default for MiniMaxVideoRequest {
@@ -54,6 +58,8 @@ impl Default for MiniMaxVideoRequest {
             duration: 6,
             resolution: "768P".to_string(),
             prompt_optimizer: true,
+            fast_pretreatment: false,
+            aigc_watermark: false,
         }
     }
 }
@@ -166,6 +172,8 @@ pub async fn minimax_create_video(
         "duration": req.duration,
         "resolution": req.resolution,
         "prompt_optimizer": req.prompt_optimizer,
+        "fast_pretreatment": req.fast_pretreatment,
+        "aigc_watermark": req.aigc_watermark,
     });
 
     if let Some(ref img) = req.first_frame_image {
