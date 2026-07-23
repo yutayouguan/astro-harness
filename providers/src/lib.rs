@@ -15,6 +15,7 @@
 pub mod anthropic;
 pub mod api;
 pub mod compat;
+pub mod impls;
 pub mod google;
 pub mod minimax;
 pub mod openai;

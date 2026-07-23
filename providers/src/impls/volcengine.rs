@@ -1,0 +1,30 @@
+//! 火山引擎 (Doubao) — OpenAI 兼容。
+
+use reqwest::header::HeaderMap;
+use crate::compat::{OpenAICompatible, OpenAICompletionModel};
+use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
+
+#[derive(Debug, Clone, Copy)]
+pub struct Volcengine;
+
+impl ProviderExt for Volcengine {
+    const NAME: &'static str = "volcengine";
+    const BASE_URL: &'static str = "https://ark.cn-beijing.volces.com/api/v3";
+    fn auth_headers(&self, key: &str) -> HeaderMap {
+        crate::impls::openai::bearer_headers(key)
+    }
+}
+
+impl OpenAICompatible for Volcengine {
+    const STREAM_USAGE: bool = false;
+}
+
+impl Capabilities for Volcengine {
+    type Chat = Capable<OpenAICompletionModel<Self>>;
+    type Embedding = Nothing;
+    type ImageGen = Nothing;
+    type VideoGen = Nothing;
+    type TTS = Nothing;
+    type MusicGen = Nothing;
+    type ASR = Nothing;
+}
