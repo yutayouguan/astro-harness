@@ -42,6 +42,8 @@ import {
   Trash2,
   Volume2,
   Loader2,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import {
   isActivityVisible,
@@ -664,6 +666,10 @@ export default function ChatView({
   const [modeSwitchSecLeft, setModeSwitchSecLeft] = useState(MODE_SWITCH_COUNTDOWN_SEC);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -1486,6 +1492,41 @@ export default function ChatView({
     [parallelTasks],
   );
   /** 主会话流式 / HITL 等待 / MultiTask 有并行：显示 Stop；Pause 仅主会话 streaming */
+  const toggleMic = useCallback(async () => {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        if (blob.size < 100) return;
+        setTranscribing(true);
+        try {
+          const buf = await blob.arrayBuffer();
+          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+          const text = await invoke<string>("speech_to_text", { audioBase64: b64, filename: "recording.webm" });
+          if (text.trim()) onInputChange(input ? input + " " + text.trim() : text.trim());
+        } catch (e) {
+          console.error("STT failed:", e);
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      // 用户拒绝麦克风权限
+    }
+  }, [recording, onInputChange, input]);
+
   const showStopControl =
     streaming ||
     (turnInFlight && chatMode !== "multitask") ||
@@ -2594,6 +2635,22 @@ export default function ChatView({
                 aria-label={t("chat.attach")}
               >
                 <Paperclip size={17} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                className={`composer-icon-btn${recording ? " is-recording" : ""}`}
+                disabled={transcribing}
+                onClick={() => void toggleMic()}
+                title={recording ? t("chat.micStop") : transcribing ? t("chat.micTranscribing") : t("chat.micStart")}
+                aria-label={recording ? t("chat.micStop") : t("chat.micStart")}
+              >
+                {transcribing ? (
+                  <Loader2 size={17} strokeWidth={2} style={{ animation: "msg-tts-spin 0.9s linear infinite" }} />
+                ) : recording ? (
+                  <MicOff size={17} strokeWidth={2} />
+                ) : (
+                  <Mic size={17} strokeWidth={2} />
+                )}
               </button>
               {showStopControl ? (
                 <>

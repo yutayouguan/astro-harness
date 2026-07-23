@@ -1025,6 +1025,18 @@ html[data-theme="light"] .composer-mode-menu {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
+.composer-icon-btn.is-recording {
+  color: #ef4444;
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  border-color: color-mix(in srgb, #ef4444 25%, transparent);
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 html[data-theme="dark"] .composer-icon-btn:hover:not(:disabled) {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),

@@ -90,3 +90,73 @@ async fn tts_inner(
         duration_ms: result.duration_ms,
     })
 }
+
+/// 语音识别：将音频字节转写为文本（OpenAI Whisper 兼容 API）。
+#[tauri::command]
+pub async fn speech_to_text(
+    audio_base64: String,
+    filename: Option<String>,
+    provider_id: Option<String>,
+    model: Option<String>,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| e.to_string())?;
+        rt.block_on(async {
+            stt_inner(&audio_base64, filename.as_deref(), provider_id.as_deref(), model.as_deref()).await
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+async fn stt_inner(
+    audio_base64: &str,
+    filename: Option<&str>,
+    provider_id: Option<&str>,
+    model: Option<&str>,
+) -> Result<String, String> {
+    use providers::ProviderClient;
+    use providers::trait_::ProviderConfig;
+
+    let audio_bytes = base64_decode(audio_base64).map_err(|e| format!("base64 解码失败: {e}"))?;
+    if audio_bytes.is_empty() {
+        return Err("音频数据为空".into());
+    }
+
+    let pid = provider_id.unwrap_or("openai");
+    let client = ProviderClient::from_env(pid).map_err(|e| e.to_string())?;
+    let config = ProviderConfig {
+        api_key: client.api_key.clone(),
+        base_url: client.base_url.clone(),
+        model: model.unwrap_or("whisper-v3-turbo").to_string(),
+        temperature: 0.0,
+        max_tokens: 4096,
+        thinking_enabled: false,
+        reasoning_effort: String::new(),
+        additional_params: serde_json::json!({}),
+        previous_interaction_id: None,
+    };
+
+    let fname = filename.unwrap_or("recording.webm");
+    providers::openai::media_compat::openai_audio_transcriptions(
+        &client.http, &audio_bytes, fname, &config,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    use base64::Engine;
+    let input = input.trim();
+    let input = if let Some(rest) = input.strip_prefix("data:") {
+        rest.split_once(',').map(|(_, b)| b).unwrap_or(input)
+    } else {
+        input
+    };
+    base64::engine::general_purpose::STANDARD
+        .decode(input)
+        .map_err(|e| e.to_string())
+}

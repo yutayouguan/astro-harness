@@ -383,6 +383,7 @@ pub fn run() {
             loop_commands::import_loop,
             loop_commands::ai_generate_workflow,
             media_commands::tts_synthesize,
+            media_commands::speech_to_text,
             config_commands::get_tools_enabled,
             config_commands::set_tools_enabled,
             config_commands::get_tool_catalog,
