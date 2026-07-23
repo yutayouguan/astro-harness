@@ -20,6 +20,7 @@ mod grpc;
 mod icon_commands;
 mod ip_location;
 mod loop_commands;
+mod media_commands;
 mod keystore;
 mod memory_commands;
 mod menu_locale;
@@ -381,6 +382,7 @@ pub fn run() {
             loop_commands::export_loop,
             loop_commands::import_loop,
             loop_commands::ai_generate_workflow,
+            media_commands::tts_synthesize,
             config_commands::get_tools_enabled,
             config_commands::set_tools_enabled,
             config_commands::get_tool_catalog,

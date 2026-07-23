@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
   ArrowDown,
@@ -40,6 +40,8 @@ import {
   Slash,
   Square,
   Trash2,
+  Volume2,
+  Loader2,
 } from "lucide-react";
 import {
   isActivityVisible,
@@ -468,6 +470,8 @@ function MessageActions({
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const [ttsState, setTtsState] = useState<"idle" | "loading" | "playing">("idle");
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const onCopy = async () => {
     if (!content) return;
@@ -477,6 +481,30 @@ function MessageActions({
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       // ignore
+    }
+  };
+
+  const onReadAloud = async () => {
+    if (ttsState === "playing") {
+      ttsAudioRef.current?.pause();
+      setTtsState("idle");
+      return;
+    }
+    if (!content.trim()) return;
+    setTtsState("loading");
+    try {
+      const result = await invoke<{ path: string }>("tts_synthesize", {
+        text: content.slice(0, 4000),
+      });
+      const url = convertFileSrc(result.path);
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+      audio.onended = () => setTtsState("idle");
+      audio.onerror = () => setTtsState("idle");
+      audio.play();
+      setTtsState("playing");
+    } catch {
+      setTtsState("idle");
     }
   };
 
@@ -496,6 +524,22 @@ function MessageActions({
           <Copy size={14} strokeWidth={2} aria-hidden />
         )}
       </button>
+      {role === "assistant" && (
+        <button
+          type="button"
+          className={`msg-action-btn ${ttsState === "playing" ? "is-active" : ""}`}
+          disabled={disabled || !content || ttsState === "loading"}
+          onClick={() => void onReadAloud()}
+          aria-label={t("chat.readAloud")}
+          title={t("chat.readAloud")}
+        >
+          {ttsState === "loading" ? (
+            <Loader2 size={14} strokeWidth={2} style={{ animation: "msg-tts-spin 0.9s linear infinite" }} aria-hidden />
+          ) : (
+            <Volume2 size={14} strokeWidth={2} aria-hidden />
+          )}
+        </button>
+      )}
       {role === "assistant" ? (
         <button
           type="button"
