@@ -76,7 +76,7 @@ export const NAV: {
     id: "providers",
     labelKey: "nav.providers",
     Icon: IconProviders,
-    tone: "blue",
+    tone: "cyan",
   },
   {
     id: "insights",
