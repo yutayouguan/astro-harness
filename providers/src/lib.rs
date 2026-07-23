@@ -14,11 +14,15 @@
 
 pub mod anthropic;
 pub mod api;
+pub mod compat;
 pub mod google;
 pub mod minimax;
 pub mod openai;
 pub mod profile;
 pub mod protocol;
+pub mod shared;
+pub mod traits;
+pub mod types;
 pub mod vendors;
 
 // 保持原有顶层路径，避免破坏下游 crate 的 `providers::trait_` 等引用。
