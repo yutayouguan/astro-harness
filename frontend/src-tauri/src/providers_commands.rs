@@ -152,7 +152,7 @@ impl ProviderKind {
             Self::Bailian => "qwen3.6-plus",
             Self::Nvidia => "meta/llama-3.3-70b-instruct",
             Self::Moonshot => "kimi-k2.5",
-            Self::Volcengine => "doubao-2.1",
+            Self::Volcengine => "doubao-seed-2.1-pro",
             Self::Minimax => "MiniMax-M3",
             Self::Hunyuan => "hunyuan-hy3",
             Self::Custom => "custom-model",
