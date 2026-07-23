@@ -56,9 +56,11 @@ export default function LoopRunHistory({
 }: Props) {
   const [runs, setRuns] = useState<LoopRunDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const list = await invoke<LoopRunDto[]>("list_loop_runs", {
         workflowId,
@@ -66,7 +68,7 @@ export default function LoopRunHistory({
       });
       setRuns(list);
     } catch (e) {
-      console.error("list_loop_runs failed", e);
+      setError(String(e));
     } finally {
       setLoading(false);
     }
@@ -95,9 +97,10 @@ export default function LoopRunHistory({
       </div>
 
       <div className="loop-run-history-list">
-        {loading && <div className="loop-empty">加载中…</div>}
+        {loading && <div className="loop-empty">Loading…</div>}
+        {error && <div className="loop-empty" style={{ color: "var(--ink-error, #ef4444)" }}>{error}</div>}
 
-        {!loading && runs.length === 0 && (
+        {!loading && !error && runs.length === 0 && (
           <div className="loop-empty">
             <p>暂无运行记录</p>
             <p className="loop-empty-hint">

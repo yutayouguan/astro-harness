@@ -134,10 +134,12 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
   const [run, setRun] = useState<LoopRunDto | null>(null);
   const [steps, setSteps] = useState<LoopStepLogDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [outputExpanded, setOutputExpanded] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [runData, stepData] = await Promise.all([
         invoke<LoopRunDto>("get_loop_run", { runId }),
@@ -146,7 +148,7 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
       setRun(runData);
       setSteps(stepData);
     } catch (e) {
-      console.error("load run detail failed", e);
+      setError(String(e));
     } finally {
       setLoading(false);
     }
@@ -159,7 +161,15 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
   if (loading) {
     return (
       <div className="loop-run-detail">
-        <div className="loop-empty">加载中…</div>
+        <div className="loop-empty">Loading…</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="loop-run-detail">
+        <div className="loop-empty" style={{ color: "var(--ink-error, #ef4444)" }}>{error}</div>
       </div>
     );
   }
