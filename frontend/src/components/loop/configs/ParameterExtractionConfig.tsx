@@ -1,4 +1,5 @@
 import { TextField, cfgStr } from "./ConfigField";
+import ProviderModelSelect from "./ProviderModelSelect";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -23,15 +24,11 @@ export default function ParameterExtractionConfig({ config, onChange }: ConfigPr
         multiline
         hint="定义需要提取的字段列表"
       />
-      <TextField
-        label="供应商 (可选)"
-        value={cfgStr(config, "provider_id")}
-        onChange={(v) => onChange({ ...config, provider_id: v })}
-      />
-      <TextField
-        label="模型 (可选)"
-        value={cfgStr(config, "model")}
-        onChange={(v) => onChange({ ...config, model: v })}
+      <ProviderModelSelect
+        providerId={cfgStr(config, "provider_id")}
+        model={cfgStr(config, "model")}
+        onProviderChange={(v) => onChange({ ...config, provider_id: v })}
+        onModelChange={(v) => onChange({ ...config, model: v })}
       />
     </>
   );

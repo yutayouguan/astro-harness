@@ -1,4 +1,5 @@
 import { TextField, cfgStr } from "./ConfigField";
+import ProviderModelSelect from "./ProviderModelSelect";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -16,15 +17,11 @@ export default function QuestionClassificationConfig({ config, onChange }: Confi
         multiline
         hint="每个分类对应一个输出端口"
       />
-      <TextField
-        label="供应商 (可选)"
-        value={cfgStr(config, "provider_id")}
-        onChange={(v) => onChange({ ...config, provider_id: v })}
-      />
-      <TextField
-        label="模型 (可选)"
-        value={cfgStr(config, "model")}
-        onChange={(v) => onChange({ ...config, model: v })}
+      <ProviderModelSelect
+        providerId={cfgStr(config, "provider_id")}
+        model={cfgStr(config, "model")}
+        onProviderChange={(v) => onChange({ ...config, provider_id: v })}
+        onModelChange={(v) => onChange({ ...config, model: v })}
       />
     </>
   );
