@@ -324,7 +324,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_image_model: "hunyuan-image-v2",
         default_vision_model: "hunyuan-hy3",
         supports_stream_usage: true,
-        default_tts_model: "",
+        default_tts_model: "hunyuan-tts-v2",
         default_video_model: "hunyuan-video-v1.5",
         default_music_model: "hunyuan-music",
     },
