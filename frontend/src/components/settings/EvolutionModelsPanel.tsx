@@ -541,7 +541,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const adoptionPct = history ? Math.round(history.summary.adoptionRate * 100) : null;
 
   return (
-    <div className="evo-page aux-page aux-page-embedded" data-tone="blue">
+    <div className="evo-page aux-page" data-tone="amber">
       <header className="evo-toolbar">
         <div className="evo-toolbar-main">
           <div className="evo-brand">
