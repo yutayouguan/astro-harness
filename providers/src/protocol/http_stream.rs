@@ -172,6 +172,8 @@ pub(crate) async fn sse_chat_stream(
 ///
 /// **新管线**：通过 trait-based `NewRegistry` 分发。
 /// 旧 `ApiMode` match 已移除 — 所有厂商通过统一 trait 系统处理。
+///
+/// 内部将旧 `ChatMessage` 内联转为新 `Message`，调用 `new_dispatch::chat_stream_new`。
 pub async fn chat_stream_for_provider(
     _client: &Client,
     provider: &str,
@@ -179,5 +181,6 @@ pub async fn chat_stream_for_provider(
     tools: Vec<Value>,
     config: &ProviderConfig,
 ) -> Result<ChatStream> {
+    // 直接委托给 new_dispatch（内含内联转换，不走 bridge）
     crate::new_dispatch::chat_stream_new(provider, messages, tools, config).await
 }

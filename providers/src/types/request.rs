@@ -1,9 +1,49 @@
-//! 统一补全请求。
+//! 统一补全请求与运行时配置。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::message::{Message, ToolDefinition};
+
+/// 单次模型调用的运行时配置。
+#[derive(Debug, Clone)]
+pub struct ProviderConfig {
+    /// API 密钥。
+    pub api_key: String,
+    /// 自定义 API 基址；为空时使用供应商默认。
+    pub base_url: Option<String>,
+    /// 模型名称或部署 ID。
+    pub model: String,
+    /// 采样温度。
+    pub temperature: f32,
+    /// 最大生成 token 数。
+    pub max_tokens: u32,
+    /// DeepSeek V4 等：是否开启 thinking。
+    pub thinking_enabled: bool,
+    /// DeepSeek：`high` | `max`（仅 thinking 开启时生效）。
+    pub reasoning_effort: String,
+    /// Provider 扩展参数（对齐 Rig additional_params），合并进请求 JSON。
+    pub additional_params: serde_json::Value,
+    /// Google Interactions：续写上一轮 interaction（工具多轮保留 thought/signature）。
+    pub previous_interaction_id: Option<String>,
+}
+
+impl Default for ProviderConfig {
+    /// 返回适用于 OpenAI 风格模型的默认配置。
+    fn default() -> Self {
+        ProviderConfig {
+            api_key: String::new(),
+            base_url: None,
+            model: "gpt-5.6".to_string(),
+            temperature: 0.7,
+            max_tokens: 4096,
+            thinking_enabled: false,
+            reasoning_effort: "high".to_string(),
+            additional_params: serde_json::Value::Null,
+            previous_interaction_id: None,
+        }
+    }
+}
 
 /// Thinking / 推理配置。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

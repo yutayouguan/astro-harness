@@ -199,10 +199,96 @@ fn media_asset_to_part(asset: &common::MediaAsset) -> Option<ChatContentPart> {
 
 /// 将会话历史转为新 `providers::types::Message` 格式。
 ///
-/// 与 `to_provider_messages` 功能相同，但输出新统一消息类型。
+/// 直接从 session 构建新消息类型，不经 bridge。
 pub fn to_new_messages(system_prompt: &str, session: &[Message]) -> Vec<new_msg::Message> {
     let old_msgs = to_provider_messages(system_prompt, session);
-    old_msgs.iter().map(providers::bridge::legacy_to_message).collect()
+    old_msgs.iter().map(|old| legacy_to_new_message(old)).collect()
+}
+
+/// 旧 `ProviderMessage` → 新 `providers::types::Message`（内联转换，不依赖 bridge）。
+fn legacy_to_new_message(old: &ProviderMessage) -> new_msg::Message {
+    match old.role.as_str() {
+        "system" => new_msg::Message::system(&old.content),
+        "tool" => new_msg::Message::Tool {
+            tool_call_id: old.tool_call_id.clone().unwrap_or_default(),
+            content: old.content.clone(),
+            is_error: old.is_error,
+        },
+        "assistant" => {
+            let mut content = Vec::new();
+            if let (Some(reasoning), sig) = (&old.reasoning, &old.thought_signature) {
+                content.push(new_msg::AssistantContent::Thinking {
+                    text: reasoning.clone(),
+                    signature: sig.clone(),
+                });
+            } else if let Some(sig) = &old.thought_signature {
+                content.push(new_msg::AssistantContent::Thinking {
+                    text: String::new(),
+                    signature: Some(sig.clone()),
+                });
+            }
+            if !old.content.is_empty() {
+                content.push(new_msg::AssistantContent::Text {
+                    text: old.content.clone(),
+                });
+            }
+            if let Some(ref calls) = old.tool_calls {
+                for c in calls {
+                    content.push(new_msg::AssistantContent::ToolCall(new_msg::ToolCall {
+                        id: c.id.clone(),
+                        name: c.name.clone(),
+                        arguments: c.arguments.clone(),
+                        signature: c.signature.clone(),
+                    }));
+                }
+            }
+            if content.is_empty() {
+                content.push(new_msg::AssistantContent::Text {
+                    text: String::new(),
+                });
+            }
+            new_msg::Message::Assistant { content }
+        }
+        _ => {
+            let mut parts = Vec::new();
+            if let Some(ref old_parts) = old.parts {
+                for p in old_parts {
+                    match p {
+                        ChatContentPart::Text { text } => {
+                            parts.push(new_msg::UserContent::Text { text: text.clone() });
+                        }
+                        ChatContentPart::ImageUrl { url } => {
+                            parts.push(new_msg::UserContent::Image { url: url.clone() });
+                        }
+                        ChatContentPart::AudioUrl { url, mime_type } => {
+                            parts.push(new_msg::UserContent::Audio {
+                                url: url.clone(),
+                                mime_type: mime_type.clone(),
+                            });
+                        }
+                        ChatContentPart::VideoUrl { url, mime_type } => {
+                            parts.push(new_msg::UserContent::Video {
+                                url: url.clone(),
+                                mime_type: mime_type.clone(),
+                            });
+                        }
+                        ChatContentPart::DocumentUrl { url, mime_type } => {
+                            parts.push(new_msg::UserContent::Document {
+                                url: url.clone(),
+                                mime_type: mime_type.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+            if parts.is_empty() {
+                parts.push(new_msg::UserContent::Text {
+                    text: old.content.clone(),
+                });
+            }
+            new_msg::Message::User { content: parts }
+        }
+    }
 }
 
 #[cfg(test)]

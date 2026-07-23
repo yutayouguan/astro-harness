@@ -2,13 +2,12 @@
 //!
 //! ## 新架构（trait-based，推荐）
 //!
-//! - [`types`]：统一消息模型（`Message` enum + `StreamChunk` + `Usage`）
+//! - [`types`]：统一消息模型（`Message` enum + `StreamChunk` + `Usage` + `ProviderConfig`）
 //! - [`traits`]：能力 trait 系统（`CompletionModel` + `Capable<M>/Nothing` 编译期检查）
 //! - [`compat`]：OpenAI 兼容层（`OpenAICompatible` trait — 一行接厂商）
 //! - [`impls`]：14 个厂商实现（Anthropic / Google 原生 + 11 个 OpenAI 兼容）
 //! - [`new_registry`]：基于 trait 的动态注册表
-//! - [`new_dispatch`]：新管线聊天分发（bridge 兼容旧签名）
-//! - [`bridge`]：新旧类型双向转换
+//! - [`new_dispatch`]：新管线聊天分发（直接接受新类型 + 旧签名兼容函数）
 //!
 //! ## 旧架构（兼容层，逐步淘汰）
 //!
@@ -19,7 +18,6 @@
 
 pub mod anthropic;
 pub mod api;
-pub mod bridge;
 pub mod compat;
 pub mod impls;
 pub mod new_dispatch;
@@ -32,7 +30,6 @@ pub mod protocol;
 pub mod shared;
 pub mod traits;
 pub mod types;
-pub mod vendors;
 
 // 保持原有顶层路径，避免破坏下游 crate 的 `providers::trait_` 等引用。
 pub use api::{client, registry, streaming, trait_};
@@ -44,12 +41,16 @@ pub use client::ProviderClient;
 pub use compat::openai_compatible_base;
 pub use extractor::{parse_submit_payload, ExtractionError, Extractor, ExtractorBuilder};
 pub use http_stream::merge_additional_params;
-pub use profile::{ApiMode, ProviderProfile, PROFILES};
+pub use profile::{ProviderProfile, PROFILES};
 pub use streaming::{PauseControl, Usage};
 pub use anthropic::tools::openai_tools_to_anthropic;
 pub use tool_format::openai_tools_to_gemini_native;
+
+// ProviderConfig 规范路径：types::ProviderConfig；同时通过 trait_ 再导出保持兼容。
+pub use types::ProviderConfig;
+
 pub use trait_::{
     AiProvider, AuthKind, ChatChunk, ChatMessage, ChatProvider, ChatStream, ChatToolCall,
-    GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenProvider, ProviderConfig,
+    GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenProvider,
     ToolCallDeltaChunk, VerifyProvider, VerifyResult,
 };
