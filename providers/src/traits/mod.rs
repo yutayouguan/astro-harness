@@ -2,6 +2,7 @@
 
 pub mod capability;
 pub mod client;
+pub mod dyn_provider;
 pub mod models;
 
 pub use capability::*;

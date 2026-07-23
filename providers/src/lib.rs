@@ -14,8 +14,10 @@
 
 pub mod anthropic;
 pub mod api;
+pub mod bridge;
 pub mod compat;
 pub mod impls;
+pub mod new_registry;
 pub mod google;
 pub mod minimax;
 pub mod openai;
