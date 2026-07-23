@@ -212,10 +212,10 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_image_model: "cogview-4",
         default_vision_model: "glm-5.2-plus",
         supports_stream_usage: false,
-        default_tts_model: "glm-tts",
+        default_tts_model: "glm-tts-v1.2",
         default_video_model: "cogvideox-v1.5",
-        default_music_model: "cogmusic-v1",
-        default_asr_model: "glm-asr",
+        default_music_model: "cogmusic-v1.1",
+        default_asr_model: "glm-asr-v1.2",
     },
     ProviderProfile {
         id: "openrouter",
