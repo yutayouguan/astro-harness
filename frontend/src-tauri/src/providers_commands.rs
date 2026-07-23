@@ -152,7 +152,7 @@ impl ProviderKind {
             Self::Bailian => "qwen3.6-plus",
             Self::Nvidia => "meta/llama-3.3-70b-instruct",
             Self::Moonshot => "kimi-k2.5",
-            Self::Volcengine => "ep-",
+            Self::Volcengine => "doubao-2.1",
             Self::Minimax => "MiniMax-M3",
             Self::Hunyuan => "hunyuan-hy3",
             Self::Custom => "custom-model",
@@ -449,10 +449,12 @@ pub struct ProviderConfigDto {
     pub tts_model: String,
     pub vision_model: String,
     pub music_model: String,
+    pub asr_model: String,
     pub supports_image: bool,
     pub supports_video: bool,
     pub supports_tts: bool,
     pub supports_music: bool,
+    pub supports_asr: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -672,10 +674,12 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         tts_model: if p.tts_model.is_empty() { profile.default_tts_model.to_string() } else { p.tts_model.clone() },
         vision_model: if p.vision_model.is_empty() { profile.default_vision_model.to_string() } else { p.vision_model.clone() },
         music_model: if p.music_model.is_empty() { profile.default_music_model.to_string() } else { p.music_model.clone() },
+        asr_model: profile.default_asr_model.to_string(),
         supports_image: profile.supports_image_gen,
         supports_video: profile.supports_video(),
         supports_tts: profile.supports_tts(),
         supports_music: profile.supports_music(),
+        supports_asr: profile.supports_asr(),
     }
 }
 

@@ -60,6 +60,14 @@ pub struct ProviderProfile {
     pub default_video_model: &'static str,
     /// 音乐生成默认模型名（空 = 不支持）。
     pub default_music_model: &'static str,
+    /// ASR / 语音识别默认模型名（空 = 不支持）。
+    pub default_asr_model: &'static str,
+}
+
+impl ProviderProfile {
+    pub fn supports_asr(&self) -> bool {
+        !self.default_asr_model.is_empty()
+    }
 }
 
 impl ProviderProfile {
@@ -93,6 +101,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "tts-1",
         default_video_model: "sora",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "claude",
@@ -111,6 +120,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "deepseek",
@@ -129,6 +139,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "google",
@@ -147,6 +158,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "gemini-3.5-flash",
         default_video_model: "veo-3.0-generate-preview",
         default_music_model: "lyria-v2",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "ollama",
@@ -165,6 +177,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "azure",
@@ -183,6 +196,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "zhipu",
@@ -201,6 +215,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "glm-tts",
         default_video_model: "cogvideox-v1.5",
         default_music_model: "cogmusic-v1",
+        default_asr_model: "glm-asr",
     },
     ProviderProfile {
         id: "openrouter",
@@ -219,6 +234,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "bailian",
@@ -237,6 +253,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "nvidia",
@@ -255,6 +272,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "moonshot",
@@ -273,6 +291,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "volcengine",
@@ -281,16 +300,17 @@ pub static PROFILES: &[ProviderProfile] = &[
         auth: AuthKind::Bearer,
         env_keys: &["ARK_API_KEY", "VOLCENGINE_API_KEY"],
         azure_deployment_style: false,
-        default_model: "ep-",
-        supports_image_gen: false,
+        default_model: "doubao-2.1",
+        supports_image_gen: true,
         supports_embedding: false,
-        image_mode: None,
-        default_image_model: "",
-        default_vision_model: "",
+        image_mode: Some(ImageGenMode::OpenAi),
+        default_image_model: "seedream-5.0-pro",
+        default_vision_model: "doubao-2.1",
         supports_stream_usage: false,
-        default_tts_model: "",
-        default_video_model: "",
-        default_music_model: "",
+        default_tts_model: "seed-tts-2.0",
+        default_video_model: "seedance-2.5",
+        default_music_model: "bytedance-music-v2",
+        default_asr_model: "seed-asr-2.0",
     },
     ProviderProfile {
         id: "minimax",
@@ -309,6 +329,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "speech-2.8-hd",
         default_video_model: "MiniMax-Hailuo-2.3",
         default_music_model: "music-2.6",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "hunyuan",
@@ -327,6 +348,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "hunyuan-tts-v2",
         default_video_model: "hunyuan-video-v1.5",
         default_music_model: "hunyuan-music",
+        default_asr_model: "hunyuan-asr-v2",
     },
     ProviderProfile {
         id: "minimax-anthropic",
@@ -345,6 +367,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "minimax-responses",
@@ -363,6 +386,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "mimo",
@@ -381,6 +405,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
     ProviderProfile {
         id: "gemini-native",
@@ -399,6 +424,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
+        default_asr_model: "",
     },
 ];
 
@@ -431,6 +457,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     default_tts_model: "",
     default_video_model: "",
     default_music_model: "",
+        default_asr_model: "",
 };
 
 /// 将常见别名规范化为表内 id。
