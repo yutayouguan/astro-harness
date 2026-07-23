@@ -283,4 +283,64 @@ pub trait AiProvider: ChatProvider + VerifyProvider + Send + Sync {
     ) -> anyhow::Result<Vec<GeneratedImage>> {
         anyhow::bail!("{} 不支持图片生成", self.name())
     }
+
+    /// 语音合成 (TTS)；返回音频字节 + MIME 类型。
+    async fn text_to_speech(
+        &self,
+        text: &str,
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<GeneratedAudio> {
+        let _ = text;
+        anyhow::bail!("{} 不支持语音合成 (TTS)", self.name())
+    }
+
+    /// 视频生成；返回视频文件 URL 或字节。异步轮询类接口返回 task_id。
+    async fn generate_video(
+        &self,
+        prompt: &str,
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<GeneratedVideo> {
+        let _ = prompt;
+        anyhow::bail!("{} 不支持视频生成", self.name())
+    }
+
+    /// 音乐生成；返回音频字节。
+    async fn generate_music(
+        &self,
+        prompt: &str,
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<GeneratedAudio> {
+        let _ = prompt;
+        anyhow::bail!("{} 不支持音乐生成", self.name())
+    }
+
+    /// 文本嵌入；返回向量。
+    async fn embed(
+        &self,
+        texts: &[String],
+        _config: &ProviderConfig,
+    ) -> anyhow::Result<Vec<Vec<f32>>> {
+        let _ = texts;
+        anyhow::bail!("{} 不支持文本嵌入", self.name())
+    }
+}
+
+/// 生成的音频（TTS / 音乐共用）。
+#[derive(Debug, Clone)]
+pub struct GeneratedAudio {
+    pub data: Vec<u8>,
+    pub mime_type: String,
+    pub duration_ms: Option<u64>,
+}
+
+/// 生成的视频。
+#[derive(Debug, Clone)]
+pub struct GeneratedVideo {
+    /// 视频文件 URL（异步任务完成后可下载）。
+    pub url: Option<String>,
+    /// 任务 ID（需轮询获取最终结果）。
+    pub task_id: Option<String>,
+    /// 视频字节（同步返回时）。
+    pub data: Option<Vec<u8>>,
+    pub mime_type: String,
 }

@@ -40,6 +40,6 @@ pub use anthropic::tools::openai_tools_to_anthropic;
 pub use tool_format::openai_tools_to_gemini_native;
 pub use trait_::{
     AiProvider, AuthKind, ChatChunk, ChatMessage, ChatProvider, ChatStream, ChatToolCall,
-    GeneratedImage, ImageGenProvider, ProviderConfig, ToolCallDeltaChunk, VerifyProvider,
-    VerifyResult,
+    GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenProvider, ProviderConfig,
+    ToolCallDeltaChunk, VerifyProvider, VerifyResult,
 };
