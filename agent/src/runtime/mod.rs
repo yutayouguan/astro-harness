@@ -1056,7 +1056,7 @@ impl AgentLoop {
             Vec::new()
         };
 
-        let static_ctx = if let Some(ref over) = self.config.static_override {
+        let mut static_ctx = if let Some(ref over) = self.config.static_override {
             over.clone()
         } else {
             StaticContext::from_workspace_files(
@@ -1066,6 +1066,12 @@ impl AgentLoop {
                 &daily,
             )
         };
+        if static_ctx.agent_md.is_empty() {
+            let ws = self.resolve_workspace_dir();
+            if let Ok(content) = std::fs::read_to_string(ws.join("AGENTS.md")) {
+                static_ctx.agent_md = content;
+            }
+        }
         let dynamic_ctx = {
             let mut dyn_ctx = DynamicContext::from_recalled(
                 self.config.dynamic_max_items,

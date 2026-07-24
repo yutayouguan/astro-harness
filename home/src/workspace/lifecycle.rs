@@ -60,7 +60,7 @@ pub fn write_agent_config(
     Ok(cfg)
 }
 
-/// 从 AGENT.md / IDENTITY.md 解析的人设字段（内部缓存结构）
+/// 从 IDENTITY.md 解析的人设字段（内部缓存结构）
 #[derive(Debug, Clone, Default)]
 struct AgentIdentityFields {
     name: Option<String>,
@@ -120,7 +120,7 @@ fn read_agent_identity_fields(ws: &Path) -> AgentIdentityFields {
     fields
 }
 
-/// 从 AGENT.md / IDENTITY.md 提取显示名
+/// 从 IDENTITY.md 提取显示名
 fn read_agent_display_name(ws: &Path, fallback: &str) -> String {
     let fields = read_agent_identity_fields(ws);
     if let Some(name) = fields.name.filter(|n| !n.is_empty()) {
@@ -216,7 +216,7 @@ pub fn list_agents(base: &Path) -> Vec<AgentInfo> {
 /// 创建 Agent 时由技能/工具填入的人设模板字段
 #[derive(Debug, Clone, Default)]
 pub struct AgentProfile {
-    /// 背景经历（写入 AGENT.md）
+    /// 背景经历（写入 IDENTITY.md）
     pub background: String,
     /// 说话风格（写入 SOUL.md / IDENTITY.md）
     pub style: String,
