@@ -62,7 +62,7 @@ Prefer after loading the create-agent skill."
         schema: schema_for_args::<PersonaCreateArgs>(),
         check_fn: None,
         icon: "user-plus",
-        ..ToolEntry::lifecycle_defaults().exclusive()
+        ..ToolEntry::lifecycle_defaults().exclusive().top_level_only()
     });
 }
 

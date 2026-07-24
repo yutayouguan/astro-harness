@@ -24,6 +24,23 @@ pub type BuiltinToolHandler =
 
 /// 单个可注册工具的完整元数据条目。
 ///
+/// 工具在嵌套子 Agent 中的可用性策略。
+///
+/// 在工具注册时声明，取代硬编码的 `apply_nested_agent_tool_strips` 字符串列表。
+/// 新增工具只需在注册时选择正确的 policy，无需改动 `delegate.rs`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NestingPolicy {
+    /// 所有嵌套层级均可用（terminal、file_ops、web_search 等）。
+    #[default]
+    Always,
+    /// 仅顶层 Agent 可用；所有子 Agent 均不可用。
+    /// 适用于：memory、context_search、persona_create、ask_user。
+    TopLevelOnly,
+    /// 顶层 + Orchestrator 角色可用；Leaf 子 Agent 不可用。
+    /// 适用于：subagent、pipeline。
+    OrchestratorAndAbove,
+}
+
 /// 注册后由 [`ToolRegistry`] 以 `name` 为键存储；`schema` 在导出 API 前会经
 /// [`crate::schema::sanitize_tool_schema`] 清理，以兼容各 LLM 厂商的 function calling 格式。
 pub struct ToolEntry {
@@ -45,6 +62,8 @@ pub struct ToolEntry {
     pub stop_after_tool_call: bool,
     /// 需独占 `&mut MemoryManager` / 会话可变状态：同批工具强制串行。
     pub exclusive_access: bool,
+    /// 嵌套子 Agent 中的可用性策略；默认 [`NestingPolicy::Always`]。
+    pub nesting_policy: NestingPolicy,
 }
 
 impl ToolEntry {
@@ -60,6 +79,7 @@ impl ToolEntry {
             needs_confirmation: false,
             stop_after_tool_call: false,
             exclusive_access: false,
+            nesting_policy: NestingPolicy::Always,
         }
     }
 
@@ -75,6 +95,16 @@ impl ToolEntry {
 
     pub fn exclusive(mut self) -> Self {
         self.exclusive_access = true;
+        self
+    }
+
+    pub fn top_level_only(mut self) -> Self {
+        self.nesting_policy = NestingPolicy::TopLevelOnly;
+        self
+    }
+
+    pub fn orchestrator_and_above(mut self) -> Self {
+        self.nesting_policy = NestingPolicy::OrchestratorAndAbove;
         self
     }
 }
@@ -184,6 +214,26 @@ impl ToolRegistry {
     /// 按名称移除单个工具（不存在则 no-op）。
     pub fn unregister(&mut self, name: &str) {
         self.tools.remove(name);
+    }
+
+    /// 根据各工具声明的 [`NestingPolicy`] 移除不适合当前嵌套层级的工具。
+    ///
+    /// - `is_leaf_role`: 当前子 Agent 角色是否为 Leaf（不可再委派）。
+    /// - `is_leaf_depth`: 嵌套深度是否已达上限（`SpawnDepthCtx::is_leaf()`）。
+    pub fn strip_by_nesting_policy(&mut self, is_leaf_role: bool, is_leaf_depth: bool) {
+        let to_remove: Vec<String> = self
+            .tools
+            .values()
+            .filter(|t| match t.nesting_policy {
+                NestingPolicy::Always => false,
+                NestingPolicy::TopLevelOnly => true,
+                NestingPolicy::OrchestratorAndAbove => is_leaf_role || is_leaf_depth,
+            })
+            .map(|t| t.name.clone())
+            .collect();
+        for name in to_remove {
+            self.unregister(&name);
+        }
     }
 
     /// 检查是否已注册指定名称的工具。

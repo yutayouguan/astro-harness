@@ -372,15 +372,7 @@ fn apply_nested_agent_tool_strips_with_role(
     depth_ctx: home::SpawnDepthCtx,
     role: DelegateRole,
 ) {
-    for name in ["memory", "context_search", "persona_create", "ask_user"] {
-        registry.unregister(name);
-    }
-    let strip_delegate = role == DelegateRole::Leaf || depth_ctx.is_leaf();
-    if strip_delegate {
-        for name in ["subagent", "pipeline"] {
-            registry.unregister(name);
-        }
-    }
+    registry.strip_by_nesting_policy(role == DelegateRole::Leaf, depth_ctx.is_leaf());
 }
 
 /// 将常用别名规范为 Astro toolset id。

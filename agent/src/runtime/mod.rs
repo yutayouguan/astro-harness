@@ -33,7 +33,10 @@ use crate::prompt::prompt_builder::PromptBuilder;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 
 pub mod budget;
+pub(crate) mod compression_state;
+pub(crate) mod model_ctx;
 mod session;
+pub(crate) mod turn_budget;
 pub(crate) mod usage;
 mod validate;
 
@@ -98,60 +101,35 @@ impl AgentConfig {
 pub struct AgentLoop {
     config: AgentConfig,
     session_id: String,
-    /// 当前会话已消耗的用户轮次数。
-    current_turn: usize,
-    /// 当前用户消息内已使用的工具轮次。
-    tool_rounds: usize,
     /// 内存中的会话消息镜像，与磁盘记忆同步追加。
     pub session_messages: Vec<Message>,
+
+    // ── 提取的子结构体 ──────────────────────────────────────
+    /// LLM 模型配置、凭证与 fallback 链。
+    pub(crate) model_ctx: model_ctx::ModelContext,
+    /// 压缩与上下文维护状态。
+    pub(crate) compression: compression_state::CompressionState,
+    /// 轮次与工具深度追踪。
+    pub(crate) turn: turn_budget::TurnState,
+
+    // ── 不可拆（非 Send 或强耦合） ──────────────────────────
     memory: MemoryManager,
     sessions: SessionStore,
     tool_registry: ToolRegistry,
     mcp_hub: McpHub,
-    /// 最近一次 `run_turn` 召回并格式化后的记忆上下文。
-    last_recalled_context: String,
-    image_gen_targets: tools::ImageGenTargets,
-    providers: ProviderRegistry,
-    chat_api_key: String,
-    chat_base_url: String,
-    chat_provider: String,
-    chat_model: String,
-    /// 当前主模型上下文窗口（token）；压缩阶段按占用比例选用。`0` = 用默认 128k。
-    context_window: u32,
-    /// 含 primary 的聊天 fallback 链（供工具/委派下传）。
-    chat_targets: Vec<common::ChatTarget>,
-    /// 主模型声明（Agno 风格 `model=`）；与 `chat_targets` 同步，不含 API key。
-    model_spec: Option<common::ModelSpec>,
-    /// 五类辅助任务的已解析目标链（preferred + 可选 fallback）；由 backend 每次
-    /// `Chat` 请求时下传，仅存于内存（含 API key），不落盘。缺失的任务在
-    /// [`Self::auxiliary_targets`] 中回退当前主 `ChatTarget`。
-    auxiliary_targets: std::collections::HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>>,
+
+    // ── 注入的依赖 ─────────────────────────────────────────
     /// 进程内插件钩子总线（Block / Modify / Inject）。
     hook_bus: Arc<::hooks::PluginHookBus>,
-    /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
-    pending_inject_context: Option<String>,
+    /// 子 Agent 执行调度器（统一 delegate/orchestration）。
+    execution: Arc<dyn tools::ExecutionDispatch>,
+
+    // ── 轻量状态 ───────────────────────────────────────────
     cancel: CancelSignal,
     /// 代码/项目根（委派 worktree 或会话级 ASTRO_PROJECT_ROOT）。
     project_root: Option<PathBuf>,
-    /// 当前多轮流式 run 的 turn_id（与 streaming `run_id` 相同）；未在 run 内为 None。
-    current_turn_id: Option<String>,
-    /// 同步委派执行器（由 from_memory 构造）。
-    delegate_runner: delegate::DelegateRunner,
-    /// 异步委派 spawner（由 from_memory 构造）。
-    async_spawner: delegate::DelegateAsyncSpawner,
-    /// 编排 spawner（由 from_memory 构造）。
-    orchestration_spawner: orchestration::OrchestrationSpawner,
-    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）；
-    /// `begin_user_turn` 时清零，供 `pre_verify` 等下游钩子（Task 7）判断是否需要校验。
-    turn_wrote_disk: bool,
-    /// 本轮 tool 上下文维护 thrashing 保护（Claude Code 风格）。
-    compression_guard: CompressionThrashingGuard,
-    /// mid-run 交接摘要（仅折叠 Provider 视图；不拆 session）。
-    mid_run_handoff: Option<String>,
-    /// 本轮是否已尝试过 mid-run 摘要（成功或跳过）。
-    mid_run_summary_done: bool,
-    /// 建议前端提示 `/compact`（会话级拆分）。
-    pending_recommend_compact: bool,
+    /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
+    pending_inject_context: Option<String>,
     /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
     pending_learning_nudge: Option<String>,
     /// 当前聊天交互模式（Plan/Ask 只读门禁）；由 ChatRequest 下传。
@@ -199,44 +177,25 @@ impl AgentLoop {
         let mut mcp_hub = McpHub::new();
         mcp_hub.set_agent_id(Some(agent_id));
 
-        let orchestration_spawner: orchestration::OrchestrationSpawner = Arc::new(|req| {
-            tokio::spawn(async move {
-                if let Err(e) = crate::exec::orchestration::run_orchestration(req).await {
-                    tracing::warn!(error = %e, "orchestration failed");
-                }
-            });
-        });
-        let delegate_runner: delegate::DelegateRunner =
-            Arc::new(crate::exec::delegate::run_delegate_blocking);
-        let async_spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, req| {
-            tokio::spawn(async move {
-                let reg = delegate::AsyncDelegateRegistry::global();
-                if reg.is_cancel_requested(&task_id) {
-                    return;
-                }
-                match crate::exec::delegate::run_delegate(req).await {
-                    Ok(json) => {
-                        if !reg.is_cancel_requested(&task_id) {
-                            reg.finish_ok(&task_id, json);
-                        }
-                    }
-                    Err(e) => {
-                        if !reg.is_cancel_requested(&task_id) {
-                            reg.finish_err(&task_id, e.to_string());
-                        }
-                    }
-                }
-            });
-        });
+        let execution: Arc<dyn tools::ExecutionDispatch> =
+            Arc::new(crate::exec::dispatch::DefaultExecutionDispatch);
+
         static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
-        let async_spawner_resume = async_spawner.clone();
-        let orch_spawner_resume = orchestration_spawner.clone();
+        let exec_resume = Arc::clone(&execution);
         RESUME_ONCE.call_once(move || {
-            delegate::resume_incomplete_async_delegates(&async_spawner_resume);
+            let spawner: delegate::DelegateAsyncSpawner = {
+                let exec = Arc::clone(&exec_resume);
+                Arc::new(move |task_id, req| exec.spawn_async(task_id, req))
+            };
+            delegate::resume_incomplete_async_delegates(&spawner);
+            let orch_spawner: orchestration::OrchestrationSpawner = {
+                let exec = Arc::clone(&exec_resume);
+                Arc::new(move |req| exec.spawn_orchestration(req))
+            };
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 handle.spawn(async move {
                     if let Err(e) = crate::exec::orchestration::resume_incomplete_orchestrations(
-                        &orch_spawner_resume,
+                        &orch_spawner,
                     )
                     .await
                     {
@@ -249,37 +208,19 @@ impl AgentLoop {
         Ok(AgentLoop {
             config,
             session_id,
-            current_turn: 0,
-            tool_rounds: 0,
             session_messages,
+            model_ctx: model_ctx::ModelContext::default(),
+            compression: compression_state::CompressionState::default(),
+            turn: turn_budget::TurnState::default(),
             memory,
             sessions,
             tool_registry,
             mcp_hub,
-            last_recalled_context: String::new(),
-            image_gen_targets: tools::ImageGenTargets::default(),
-            providers: ProviderRegistry::new(),
-            chat_api_key: String::new(),
-            chat_base_url: String::new(),
-            chat_provider: String::new(),
-            chat_model: String::new(),
-            context_window: crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW,
-            chat_targets: Vec::new(),
-            model_spec: None,
-            auxiliary_targets: std::collections::HashMap::new(),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
-            pending_inject_context: None,
+            execution,
             cancel: CancelSignal::new(),
             project_root: resolve_session_project_root(),
-            current_turn_id: None,
-            delegate_runner,
-            async_spawner,
-            orchestration_spawner,
-            turn_wrote_disk: false,
-            compression_guard: CompressionThrashingGuard::default(),
-            mid_run_handoff: None,
-            mid_run_summary_done: false,
-            pending_recommend_compact: false,
+            pending_inject_context: None,
             pending_learning_nudge: None,
             interaction_mode: tools::InteractionMode::Agent,
         })
@@ -287,32 +228,22 @@ impl AgentLoop {
 
     /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
     pub fn set_current_turn_id(&mut self, turn_id: impl Into<String>) {
-        self.current_turn_id = Some(turn_id.into());
+        self.turn.current_turn_id = Some(turn_id.into());
     }
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
     pub fn clear_current_turn_id(&mut self) {
-        self.current_turn_id = None;
+        self.turn.current_turn_id = None;
     }
 
     /// 当前绑定的 turn_id（若有）。
     pub fn current_turn_id(&self) -> Option<&str> {
-        self.current_turn_id.as_deref()
+        self.turn.current_turn_id.as_deref()
     }
 
-    /// 克隆同步委派执行器，供 streaming 快照使用。
-    pub fn delegate_runner(&self) -> delegate::DelegateRunner {
-        Arc::clone(&self.delegate_runner)
-    }
-
-    /// 克隆异步委派 spawner，供 streaming 快照使用。
-    pub fn async_spawner(&self) -> delegate::DelegateAsyncSpawner {
-        Arc::clone(&self.async_spawner)
-    }
-
-    /// 克隆编排 spawner，供 streaming 快照使用。
-    pub fn orchestration_spawner(&self) -> orchestration::OrchestrationSpawner {
-        Arc::clone(&self.orchestration_spawner)
+    /// 子 Agent 执行调度器。
+    pub fn execution(&self) -> Arc<dyn tools::ExecutionDispatch> {
+        Arc::clone(&self.execution)
     }
 
     /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。
@@ -351,7 +282,7 @@ impl AgentLoop {
 
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub fn session_turn(&self) -> usize {
-        self.current_turn
+        self.turn.current_turn
     }
 
     /// 返回可克隆的取消信号，供上层 streaming 或 UI 触发中断。
@@ -386,21 +317,21 @@ impl AgentLoop {
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。
     pub fn is_tool_depth_exhausted(&self) -> bool {
-        self.tool_rounds >= self.config.multi_turn
+        self.turn.tool_rounds >= self.config.multi_turn
     }
 
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
     pub fn begin_user_turn(&mut self) {
-        let prev_rounds = self.tool_rounds;
-        self.tool_rounds = 0;
-        self.turn_wrote_disk = false;
+        let prev_rounds = self.turn.tool_rounds;
+        self.turn.tool_rounds = 0;
+        self.turn.turn_wrote_disk = false;
         let compression = memory::load_compression_config(&self.memory.base_dir);
-        self.compression_guard = CompressionThrashingGuard::from_config(&compression);
-        self.mid_run_handoff = None;
-        self.mid_run_summary_done = false;
-        self.pending_recommend_compact = false;
+        self.compression.guard = CompressionThrashingGuard::from_config(&compression);
+        self.compression.mid_run_handoff = None;
+        self.compression.mid_run_summary_done = false;
+        self.compression.pending_recommend_compact = false;
         self.pending_learning_nudge =
             Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
     }
@@ -445,35 +376,35 @@ impl AgentLoop {
     }
 
     pub fn mid_run_summary_done(&self) -> bool {
-        self.mid_run_summary_done
+        self.compression.mid_run_summary_done
     }
 
     pub fn mid_run_handoff(&self) -> Option<&str> {
-        self.mid_run_handoff.as_deref()
+        self.compression.mid_run_handoff.as_deref()
     }
 
     pub fn set_mid_run_handoff(&mut self, text: String) {
-        self.mid_run_handoff = Some(text);
-        self.mid_run_summary_done = true;
+        self.compression.mid_run_handoff = Some(text);
+        self.compression.mid_run_summary_done = true;
     }
 
     pub fn mark_mid_run_summary_skipped(&mut self) {
-        self.mid_run_summary_done = true;
+        self.compression.mid_run_summary_done = true;
     }
 
     pub fn should_recommend_compact(&self) -> bool {
-        self.pending_recommend_compact
+        self.compression.pending_recommend_compact
     }
 
     pub fn take_recommend_compact(&mut self) -> bool {
-        let v = self.pending_recommend_compact;
-        self.pending_recommend_compact = false;
+        let v = self.compression.pending_recommend_compact;
+        self.compression.pending_recommend_compact = false;
         v
     }
 
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
     pub fn provider_history(&self) -> Vec<Message> {
-        match self.mid_run_handoff.as_deref() {
+        match self.compression.mid_run_handoff.as_deref() {
             Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
                 &self.session_messages,
                 handoff,
@@ -493,7 +424,7 @@ impl AgentLoop {
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
     pub fn turn_wrote_disk(&self) -> bool {
-        self.turn_wrote_disk
+        self.turn.turn_wrote_disk
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
@@ -501,16 +432,16 @@ impl AgentLoop {
         if self.is_tool_depth_exhausted() {
             return Err(MaxDepthError {
                 limit: self.config.multi_turn,
-                used: self.tool_rounds,
+                used: self.turn.tool_rounds,
             });
         }
-        self.tool_rounds += 1;
+        self.turn.tool_rounds += 1;
         Ok(())
     }
 
     /// 设置图像生成工具的输出目标路径。
     pub fn set_image_gen_targets(&mut self, targets: tools::ImageGenTargets) {
-        self.image_gen_targets = targets;
+        self.model_ctx.image_gen_targets = targets;
     }
 
     /// 配置 LLM 对话凭据，供需要调用 Provider 的内置工具使用。
@@ -521,12 +452,12 @@ impl AgentLoop {
         api_key: &str,
         base_url: &str,
     ) {
-        self.chat_provider = provider.to_string();
-        self.chat_model = model.to_string();
-        self.chat_api_key = api_key.to_string();
-        self.chat_base_url = base_url.to_string();
+        self.model_ctx.chat_provider = provider.to_string();
+        self.model_ctx.chat_model = model.to_string();
+        self.model_ctx.chat_api_key = api_key.to_string();
+        self.model_ctx.chat_base_url = base_url.to_string();
         if !provider.trim().is_empty() || !model.trim().is_empty() {
-            self.model_spec = Some(common::ModelSpec::new(provider, model));
+            self.model_ctx.model_spec = Some(common::ModelSpec::new(provider, model));
         }
     }
 
@@ -536,23 +467,23 @@ impl AgentLoop {
     /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
     pub fn set_model(&mut self, spec: common::ModelSpec) {
         if !spec.provider_id.trim().is_empty() {
-            self.chat_provider = spec.provider_id.trim().to_string();
+            self.model_ctx.chat_provider = spec.provider_id.trim().to_string();
         }
         if !spec.model_id.trim().is_empty() {
-            self.chat_model = spec.model_id.trim().to_string();
+            self.model_ctx.chat_model = spec.model_id.trim().to_string();
         }
         if let Some(t) = spec.temperature {
             self.config.temperature = t;
         }
-        if let Some(primary) = self.chat_targets.first_mut() {
+        if let Some(primary) = self.model_ctx.chat_targets.first_mut() {
             *primary = spec.apply_to(primary);
-            self.chat_api_key = primary.api_key.clone();
-            self.chat_base_url = primary.base_url.clone();
-        } else if !self.chat_api_key.is_empty() || !self.chat_base_url.is_empty() {
-            let target = spec.to_chat_target(&self.chat_api_key, &self.chat_base_url);
-            self.chat_targets = vec![target];
+            self.model_ctx.chat_api_key = primary.api_key.clone();
+            self.model_ctx.chat_base_url = primary.base_url.clone();
+        } else if !self.model_ctx.chat_api_key.is_empty() || !self.model_ctx.chat_base_url.is_empty() {
+            let target = spec.to_chat_target(&self.model_ctx.chat_api_key, &self.model_ctx.chat_base_url);
+            self.model_ctx.chat_targets = vec![target];
         }
-        self.model_spec = Some(spec);
+        self.model_ctx.model_spec = Some(spec);
     }
 
     /// 按角色设置模型（主聊或辅助任务）。
@@ -562,7 +493,7 @@ impl AgentLoop {
             common::ModelRole::Auxiliary(task) => {
                 let base = self.primary_chat_target();
                 let target = spec.apply_to(&base);
-                self.auxiliary_targets.insert(task, vec![target]);
+                self.model_ctx.auxiliary_targets.insert(task, vec![target]);
             }
         }
     }
@@ -588,7 +519,7 @@ impl AgentLoop {
             }
             chain.push(t);
         }
-        self.chat_targets = chain;
+        self.model_ctx.chat_targets = chain;
     }
 
     /// 按角色设置 fallback 链（主聊或辅助任务）。
@@ -603,6 +534,7 @@ impl AgentLoop {
             common::ModelRole::Main => self.set_fallback_models(specs),
             common::ModelRole::Auxiliary(task) => {
                 let preferred = self
+                    .model_ctx
                     .auxiliary_targets
                     .get(&task)
                     .and_then(|v| v.first())
@@ -621,27 +553,18 @@ impl AgentLoop {
                     }
                     chain.push(t);
                 }
-                self.auxiliary_targets.insert(task, chain);
+                self.model_ctx.auxiliary_targets.insert(task, chain);
             }
         }
     }
 
     /// 当前主模型声明（若有）。
     pub fn model_spec(&self) -> Option<&common::ModelSpec> {
-        self.model_spec.as_ref()
+        self.model_ctx.model_spec.as_ref()
     }
 
     fn primary_chat_target(&self) -> common::ChatTarget {
-        self.chat_targets
-            .first()
-            .cloned()
-            .unwrap_or_else(|| common::ChatTarget {
-                provider_id: self.chat_provider.clone(),
-                backend_id: self.chat_provider.clone(),
-                model: self.chat_model.clone(),
-                api_key: self.chat_api_key.clone(),
-                base_url: self.chat_base_url.clone(),
-            })
+        self.model_ctx.primary_chat_target()
     }
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
@@ -657,18 +580,18 @@ impl AgentLoop {
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / delegate 共用）。
     pub fn set_chat_targets(&mut self, targets: Vec<common::ChatTarget>) {
         if let Some(primary) = targets.first() {
-            self.chat_provider = primary.backend_id.clone();
-            self.chat_model = primary.model.clone();
-            self.chat_api_key = primary.api_key.clone();
-            self.chat_base_url = primary.base_url.clone();
-            self.model_spec = Some(common::ModelSpec::new(&primary.backend_id, &primary.model));
+            self.model_ctx.chat_provider = primary.backend_id.clone();
+            self.model_ctx.chat_model = primary.model.clone();
+            self.model_ctx.chat_api_key = primary.api_key.clone();
+            self.model_ctx.chat_base_url = primary.base_url.clone();
+            self.model_ctx.model_spec = Some(common::ModelSpec::new(&primary.backend_id, &primary.model));
         }
-        self.chat_targets = targets;
+        self.model_ctx.chat_targets = targets;
     }
 
     /// 当前聊天 fallback 链。
     pub fn chat_targets(&self) -> &[common::ChatTarget] {
-        &self.chat_targets
+        &self.model_ctx.chat_targets
     }
 
     /// 设置五类辅助任务的已解析目标链（每次 `Chat` 请求由 backend 下传后调用）。
@@ -678,7 +601,7 @@ impl AgentLoop {
         &mut self,
         targets: std::collections::HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>>,
     ) {
-        self.auxiliary_targets = targets;
+        self.model_ctx.auxiliary_targets = targets;
     }
 
     /// 返回指定辅助任务的目标链（preferred + 可选 fallback）。
@@ -686,19 +609,19 @@ impl AgentLoop {
     /// 未传输该任务目标时回退当前主 `ChatTarget`（`chat_targets` 的首项，缺失时
     /// 由 `set_chat_credentials` 字段现造一条），保持旧客户端兼容。
     pub fn auxiliary_targets(&self, task: common::AuxiliaryTask) -> Vec<common::ChatTarget> {
-        if let Some(targets) = self.auxiliary_targets.get(&task) {
+        if let Some(targets) = self.model_ctx.auxiliary_targets.get(&task) {
             if !targets.is_empty() {
                 return targets.clone();
             }
         }
-        match self.chat_targets.first() {
+        match self.model_ctx.chat_targets.first() {
             Some(primary) => vec![primary.clone()],
             None => vec![common::ChatTarget {
                 provider_id: String::new(),
-                backend_id: self.chat_provider.clone(),
-                model: self.chat_model.clone(),
-                api_key: self.chat_api_key.clone(),
-                base_url: self.chat_base_url.clone(),
+                backend_id: self.model_ctx.chat_provider.clone(),
+                model: self.model_ctx.chat_model.clone(),
+                api_key: self.model_ctx.chat_api_key.clone(),
+                base_url: self.model_ctx.chat_base_url.clone(),
             }],
         }
     }
@@ -734,28 +657,28 @@ impl AgentLoop {
     }
 
     pub fn chat_api_key(&self) -> &str {
-        &self.chat_api_key
+        &self.model_ctx.chat_api_key
     }
 
     pub fn chat_base_url(&self) -> &str {
-        &self.chat_base_url
+        &self.model_ctx.chat_base_url
     }
 
     pub fn chat_provider(&self) -> &str {
-        &self.chat_provider
+        &self.model_ctx.chat_provider
     }
 
     pub fn chat_model(&self) -> &str {
-        &self.chat_model
+        &self.model_ctx.chat_model
     }
 
     pub fn image_gen_targets(&self) -> &tools::ImageGenTargets {
-        &self.image_gen_targets
+        &self.model_ctx.image_gen_targets
     }
 
     /// Provider 注册表的共享副本（并发工具快照用）。
     pub fn providers_arc(&self) -> Arc<ProviderRegistry> {
-        Arc::new(self.providers.clone())
+        self.model_ctx.providers_arc()
     }
 
     /// 内置与 MCP 工具的注册表只读引用。
@@ -816,7 +739,7 @@ impl AgentLoop {
 
     /// 最近一次记忆召回的格式化文本，已注入动态上下文。
     pub fn recalled_context(&self) -> &str {
-        &self.last_recalled_context
+        &self.compression.last_recalled_context
     }
 
     /// 生成新的任务 UUID，供上层追踪单次 LLM 请求。
@@ -826,17 +749,17 @@ impl AgentLoop {
 
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub fn is_budget_exhausted(&self) -> bool {
-        self.current_turn >= self.config.max_turns
+        self.turn.current_turn >= self.config.max_turns
     }
 
     /// 递增会话轮次计数（每处理一条用户消息调用一次）。
     pub fn increment_turn(&mut self) {
-        self.current_turn += 1;
+        self.turn.current_turn += 1;
     }
 
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
     pub fn set_context_window(&mut self, window: u32) {
-        self.context_window = if window == 0 {
+        self.model_ctx.context_window = if window == 0 {
             crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW
         } else {
             window
@@ -858,10 +781,10 @@ impl AgentLoop {
     }
 
     pub fn context_window(&self) -> u32 {
-        if self.context_window == 0 {
+        if self.model_ctx.context_window == 0 {
             crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW
         } else {
-            self.context_window
+            self.model_ctx.context_window
         }
     }
 
@@ -874,7 +797,7 @@ impl AgentLoop {
         if !cfg.enabled {
             return Ok(result);
         }
-        if !self.compression_guard.allow_run() {
+        if !self.compression.guard.allow_run() {
             result.thrashing_disabled = true;
             return Ok(result);
         }
@@ -1010,12 +933,12 @@ impl AgentLoop {
         }
 
         result.occupancy_after = manager.occupancy_ratio(&self.session_messages);
-        self.compression_guard
+        self.compression.guard
             .record_outcome(result.occupancy_before, result.occupancy_after);
-        result.thrashing_disabled = self.compression_guard.disabled;
+        result.thrashing_disabled = self.compression.guard.disabled;
         result.recommend_session_compact = result.occupancy_after >= cfg.recommend_compact_ratio;
         if result.recommend_session_compact {
-            self.pending_recommend_compact = true;
+            self.compression.pending_recommend_compact = true;
         }
         Ok(result)
     }
@@ -1075,7 +998,7 @@ impl AgentLoop {
         let dynamic_ctx = {
             let mut dyn_ctx = DynamicContext::from_recalled(
                 self.config.dynamic_max_items,
-                &self.last_recalled_context,
+                &self.compression.last_recalled_context,
             );
             let pinned = tools::render_pinned_for_prompt(&self.memory.workspace_dir);
             if !pinned.trim().is_empty() {
@@ -1241,7 +1164,7 @@ impl AgentLoop {
                 anyhow::bail!("MCP 工具未启用或不存在: {name}");
             }
             let agent_id = self.memory.agent_id.clone();
-            let turn_id = self.current_turn_id.clone();
+            let turn_id = self.turn.current_turn_id.clone();
             let _ = home::record_tool_call(&agent_id, name, args);
             let _ = ::usage::record_tool_call(
                 &agent_id,
@@ -1278,19 +1201,17 @@ impl AgentLoop {
         let allowed = self.tool_registry.is_tool_allowed(name);
         let workspace_dir = self.resolve_workspace_dir();
         std::env::set_var("ASTRO_WORKSPACE", &workspace_dir);
-        let image_gen_targets = self.image_gen_targets.clone();
+        let image_gen_targets = self.model_ctx.image_gen_targets.clone();
         let session_id = self.session_id.clone();
-        let turn_id = self.current_turn_id.clone();
-        let chat_api_key = self.chat_api_key.clone();
-        let chat_base_url = self.chat_base_url.clone();
-        let chat_provider = self.chat_provider.clone();
-        let chat_model = self.chat_model.clone();
-        let chat_targets = self.chat_targets.clone();
+        let turn_id = self.turn.current_turn_id.clone();
+        let chat_api_key = self.model_ctx.chat_api_key.clone();
+        let chat_base_url = self.model_ctx.chat_base_url.clone();
+        let chat_provider = self.model_ctx.chat_provider.clone();
+        let chat_model = self.model_ctx.chat_model.clone();
+        let chat_targets = self.model_ctx.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
         let sessions = &self.sessions;
-        let delegate_runner = Some(self.delegate_runner());
-        let async_spawner = Some(self.async_spawner());
-        let orchestration_spawner = Some(self.orchestration_spawner());
+        let execution = Some(self.execution());
         let hook_bus = Some(self.hook_bus());
         let mut ctx = ToolContext {
             memory: &mut self.memory,
@@ -1299,7 +1220,7 @@ impl AgentLoop {
             workspace_dir,
             project_root: self.project_root.clone(),
             image_gen_targets: &image_gen_targets,
-            providers: &self.providers,
+            providers: &self.model_ctx.providers,
             session_id,
             turn_id,
             chat_api_key,
@@ -1307,9 +1228,7 @@ impl AgentLoop {
             chat_provider,
             chat_model,
             chat_targets,
-            delegate_runner,
-            async_spawner,
-            orchestration_spawner,
+            execution,
             hook_bus,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args).await
@@ -1351,7 +1270,7 @@ impl AgentLoop {
             ::hooks::PRE_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.current_turn_id.clone(),
+                turn_id: self.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args.clone()),
                 detail: format!("{name} {args}"),
@@ -1420,7 +1339,7 @@ impl AgentLoop {
             );
         }
         if tool_writes_disk(exec_name, &exec_args) {
-            self.turn_wrote_disk = true;
+            self.turn.turn_wrote_disk = true;
         }
         Ok(self
             .finalize_tool_call_result(exec_name, &exec_args, raw_result)
@@ -1466,7 +1385,7 @@ impl AgentLoop {
             ::hooks::TRANSFORM_TOOL_RESULT,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.current_turn_id.clone(),
+                turn_id: self.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args_owned.clone()),
                 tool_result: Some(raw_result.clone()),
@@ -1481,7 +1400,7 @@ impl AgentLoop {
             ::hooks::POST_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.current_turn_id.clone(),
+                turn_id: self.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_result: Some(result.clone()),
                 detail: {
@@ -1523,7 +1442,7 @@ impl AgentLoop {
                 ::hooks::SUBAGENT_STOP,
                 ::hooks::HookPayload {
                     session_id: child.into(),
-                    turn_id: self.current_turn_id.clone(),
+                    turn_id: self.turn.current_turn_id.clone(),
                     detail: summary.chars().take(200).collect(),
                     ..Default::default()
                 },
@@ -1773,7 +1692,7 @@ impl AgentLoop {
             ..NewMessage::empty(&self.session_id, "user")
         })?;
 
-        let fts_keywords = if self.current_turn >= self.config.recent_turns {
+        let fts_keywords = if self.turn.current_turn >= self.config.recent_turns {
             Some(user_message)
         } else {
             None
@@ -1784,7 +1703,7 @@ impl AgentLoop {
             self.config.recent_turns,
             fts_keywords,
         )?;
-        self.last_recalled_context = format_recalled_context(&recalled);
+        self.compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.session_messages
             .push(Message::user_with_images(user_message, image_data_urls));
@@ -1794,7 +1713,7 @@ impl AgentLoop {
             ::hooks::ON_SESSION_START,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.current_turn_id.clone(),
+                turn_id: self.turn.current_turn_id.clone(),
                 detail: format!("session={}", self.session_id),
                 ..Default::default()
             },
@@ -1803,7 +1722,7 @@ impl AgentLoop {
             ::hooks::PRE_LLM_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.current_turn_id.clone(),
+                turn_id: self.turn.current_turn_id.clone(),
                 system_prompt_chars: Some(system_prompt.len()),
                 detail: format!("system_prompt_chars={}", system_prompt.len()),
                 ..Default::default()
@@ -1816,7 +1735,7 @@ impl AgentLoop {
             return Ok(TurnResult::Interrupted);
         }
         Ok(TurnResult::Continue {
-            turn: self.current_turn,
+            turn: self.turn.current_turn,
             system_prompt,
         })
     }

@@ -83,7 +83,7 @@ Not for Agent↔Plan switching (use switch_mode). Prefer asking over guessing."
         check_fn: None,
         icon: "circle-help",
         needs_confirmation: true,
-        ..crate::registry::ToolEntry::lifecycle_defaults()
+        ..crate::registry::ToolEntry::lifecycle_defaults().top_level_only()
     });
 }
 

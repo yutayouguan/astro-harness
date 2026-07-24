@@ -36,7 +36,10 @@ pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
 pub use path_safe::resolve_safe;
-pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
+pub use core::execution::ExecutionDispatch;
+pub use registry::{
+    BuiltinToolHandler, BuiltinToolRegistrar, NestingPolicy, ToolEntry, ToolRegistry,
+};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};
 
 // 宏：`tool_schema!` / `register_tool_schemars!` / `define_tool_args!` / `submit_builtin_tool!`

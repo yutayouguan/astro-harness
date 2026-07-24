@@ -168,12 +168,8 @@ pub struct ToolContext<'a> {
     pub chat_model: String,
     /// 含 primary 的聊天 fallback 链，供 `delegate` 下传给子 Agent。
     pub chat_targets: Vec<common::ChatTarget>,
-    /// 同步委派执行器（由 AgentLoop 注入；工具层测试可为 None）。
-    pub delegate_runner: Option<delegate::DelegateRunner>,
-    /// 异步委派 spawner（由 AgentLoop 注入；工具层测试可为 None）。
-    pub async_spawner: Option<delegate::DelegateAsyncSpawner>,
-    /// 编排 spawner（由 AgentLoop 注入；工具层测试可为 None）。
-    pub orchestration_spawner: Option<orchestration::OrchestrationSpawner>,
+    /// 子 Agent 执行调度器（由 AgentLoop 注入；工具层测试可为 None）。
+    pub execution: Option<Arc<dyn crate::ExecutionDispatch>>,
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }

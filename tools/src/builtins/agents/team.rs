@@ -201,10 +201,10 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         })
         .collect();
 
-    let runner = ctx
-        .delegate_runner
+    let exec = ctx
+        .execution
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no delegate runner configured"))?;
+        .ok_or_else(|| anyhow::anyhow!("no execution dispatch configured"))?;
     let req = delegate::DelegateRunRequest {
         parent_agent_id: ctx.memory.agent_id.clone(),
         parent_session_id: ctx.session_id.clone(),
@@ -224,7 +224,7 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         project_root: ctx.project_root.clone(),
         hook_bus: ctx.hook_bus.clone(),
     };
-    let delegate_result = runner(req)?;
+    let delegate_result = exec.run_sync(req)?;
 
     Ok(serde_json::json!({
         "team_id": team.id,
@@ -250,10 +250,10 @@ fn run_tasks_mode(
     goal: &str,
 ) -> anyhow::Result<String> {
     let work = build_task_work(team, parsed.tasks.as_ref(), parsed.member_id.as_deref())?;
-    let runner = ctx
-        .delegate_runner
+    let exec = ctx
+        .execution
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no delegate runner configured"))?;
+        .ok_or_else(|| anyhow::anyhow!("no execution dispatch configured"))?;
 
     let mut board: Vec<serde_json::Value> = Vec::new();
     let mut step_results = Vec::new();
@@ -305,7 +305,7 @@ fn run_tasks_mode(
             project_root: ctx.project_root.clone(),
             hook_bus: ctx.hook_bus.clone(),
         };
-        let raw = runner(req)?;
+        let raw = exec.run_sync(req)?;
         let parsed_result = serde_json::from_str::<serde_json::Value>(&raw)
             .unwrap_or(serde_json::Value::String(raw.clone()));
         board.push(serde_json::json!({

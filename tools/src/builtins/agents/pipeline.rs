@@ -81,7 +81,7 @@ Use subagent for parallel one-shot tasks; persona_create for durable assistantsâ
         schema: schema_for_args::<PipelineArgs>(),
         check_fn: None,
         icon: "git-branch",
-        ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().orchestrator_and_above()
     });
 }
 
@@ -167,8 +167,8 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         max_spawn_depth: home::effective_max_spawn_depth(),
         allow_reclaim: false,
     };
-    if let Some(spawner) = ctx.orchestration_spawner.as_ref() {
-        spawner(spawn_req);
+    if let Some(exec) = ctx.execution.as_ref() {
+        exec.spawn_orchestration(spawn_req);
     }
 
     Ok(serde_json::json!({

@@ -97,7 +97,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<SearchArgs>(),
         check_fn: None,
         icon: "book-open",
-        ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().top_level_only()
     });
     registry.register(ToolEntry {
         name: "pin_context".to_string(),

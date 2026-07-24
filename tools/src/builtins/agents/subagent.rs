@@ -82,7 +82,7 @@ Pass full context; children have no parent history."
         schema: schema_for_args::<SubagentArgs>(),
         check_fn: None,
         icon: "send",
-        ..ToolEntry::lifecycle_defaults().exclusive()
+        ..ToolEntry::lifecycle_defaults().exclusive().orchestrator_and_above()
     });
 }
 
@@ -120,21 +120,25 @@ async fn handle(
 /// 同步执行真委派并返回摘要 JSON。
 pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let req = build_run_request(ctx, args)?;
-    let runner = ctx
-        .delegate_runner
+    let exec = ctx
+        .execution
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no delegate runner configured"))?;
-    runner(req)
+        .ok_or_else(|| anyhow::anyhow!("no execution dispatch configured"))?;
+    exec.run_sync(req)
 }
 
 /// 异步启动委派；立即返回 `task_id`。
 pub fn dispatch_async(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let req = build_run_request(ctx, args)?;
-    let spawner = ctx
-        .async_spawner
+    let exec = ctx
+        .execution
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no async_spawner configured"))?;
-    let task_id = delegate::start_delegate_async(req, spawner)?;
+        .ok_or_else(|| anyhow::anyhow!("no execution dispatch configured"))?;
+    let spawner: delegate::DelegateAsyncSpawner = {
+        let exec = std::sync::Arc::clone(exec);
+        std::sync::Arc::new(move |task_id, req| exec.spawn_async(task_id, req))
+    };
+    let task_id = delegate::start_delegate_async(req, &spawner)?;
     Ok(serde_json::json!({
         "task_id": task_id,
         "status": "running",
