@@ -127,9 +127,21 @@ inventory::collect!(BuiltinToolRegistrar);
 ///
 /// 同时维护 toolset 级别的启用映射；MCP 工具（`mcp__` 前缀）的开关在注册阶段
 /// 已过滤，不走 `tools-enabled.json`。
+/// 动态工具 handler（MCP 工具等运行时注册的异步调用闭包）。
+///
+/// 与 `BuiltinToolHandler` 不同，这不需要 `ToolContext` — MCP 工具通过
+/// 捕获的 `Arc<McpHub>` 自行完成调用。
+pub type DynToolHandler = Box<
+    dyn Fn(&str, &serde_json::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<common::ToolOutput>> + Send>>
+        + Send
+        + Sync,
+>;
+
 pub struct ToolRegistry {
     /// 已注册的全部工具条目。
     tools: HashMap<String, ToolEntry>,
+    /// 运行时动态注册的 handler（MCP 工具等）— 按工具名查找。
+    dynamic_handlers: HashMap<String, DynToolHandler>,
     /// 与当前 Agent / 全局 `tools-enabled` 对齐的 toolset 开关；缺失键视为启用。
     enabled: HashMap<String, bool>,
     /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
@@ -141,9 +153,22 @@ impl ToolRegistry {
     pub fn new() -> Self {
         ToolRegistry {
             tools: HashMap::new(),
+            dynamic_handlers: HashMap::new(),
             enabled: HashMap::new(),
             skill_override_enabled: std::collections::HashSet::new(),
         }
+    }
+
+    /// 注册一个动态工具（含 handler 闭包）。MCP 工具用此方法注册。
+    pub fn register_dynamic(&mut self, entry: ToolEntry, handler: DynToolHandler) {
+        let name = entry.name.clone();
+        self.tools.insert(name.clone(), entry);
+        self.dynamic_handlers.insert(name, handler);
+    }
+
+    /// 获取动态 handler 的引用（供 `dispatch_tool` 使用）。
+    pub fn dynamic_handler(&self, name: &str) -> Option<&DynToolHandler> {
+        self.dynamic_handlers.get(name)
     }
 
     /// 用外部加载的 toolset 启用映射覆盖当前状态（通常来自 Tauri 或磁盘同步）。
@@ -208,7 +233,14 @@ impl ToolRegistry {
     ///
     /// 主要用于 MCP 热重载：先 `unregister_toolset("mcp")` 再重新注册最新工具列表。
     pub fn unregister_toolset(&mut self, toolset: &str) {
-        self.tools.retain(|_, e| e.toolset != toolset);
+        let removed: Vec<String> = self.tools.iter()
+            .filter(|(_, e)| e.toolset == toolset)
+            .map(|(k, _)| k.clone())
+            .collect();
+        for name in &removed {
+            self.tools.remove(name);
+            self.dynamic_handlers.remove(name);
+        }
     }
 
     /// 按名称移除单个工具（不存在则 no-op）。

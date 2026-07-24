@@ -32,6 +32,7 @@ pub use catalog::{
 };
 pub use context::{ImageGenCreds, ImageGenParts, ImageGenTargets, ToolContext};
 pub use dispatch::{builtin_handler_names, dispatch_tool};
+pub use registry::DynToolHandler;
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };

@@ -33,31 +33,24 @@ pub fn builtin_handler_names() -> Vec<&'static str> {
     names
 }
 
-/// 按工具名将调用路由到对应内置实现。
+/// 按工具名将调用路由到对应实现（内置 + 动态 MCP 统一入口）。
 ///
 /// # 流程
-/// 1. 通过 `registry_allows` 闭包检查 toolset 是否启用，禁用时立即返回错误。
-/// 2. 调用 `home::record_tool_call` 写审计日志，并 `record_usage_tool_call` 累加用量。
-/// 3. 从自注册 handler 表按 `name` 查找并 `await`；未命中时尝试 Skill soft-alias。
-///
-/// # 参数
-/// - `registry_allows`：通常传入 `registry.is_tool_allowed`，用于读取 `tools-enabled.json` 状态。
-/// - `ctx`：可变执行上下文，部分工具（如 `memory`、`persona_create`）会修改其中的 `memory` 或 `workspace_dir`。
-///
-/// # 约束
-/// - 未知工具名返回 `未知工具` 错误；MCP 工具不由本函数处理。
+/// 1. 通过 `registry_allows` 闭包检查 toolset 是否启用
+/// 2. 记账（审计日志 + 用量统计）
+/// 3. 内置 handler 表查找 → 动态 handler 查找 → Skill soft-alias → 未知工具
 pub async fn dispatch_tool(
     registry_allows: impl Fn(&str) -> bool,
     ctx: &mut ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
+    dynamic_handler: Option<&crate::registry::DynToolHandler>,
 ) -> anyhow::Result<common::ToolOutput> {
     if !registry_allows(name) {
         let toolset = home::tool_name_to_toolset(name);
         anyhow::bail!("工具已禁用（tools-enabled.json → {toolset}=false）: {name}");
     }
 
-    // 先记账再执行：即使失败也计入一次「发起调用」
     let agent_id = ctx.memory.agent_id.clone();
     let _ = home::record_tool_call(&agent_id, name, args);
     let _ = usage::record_tool_call(
@@ -68,11 +61,17 @@ pub async fn dispatch_tool(
         ctx.turn_id.as_deref(),
     );
 
+    // 1. 内置 handler（静态 inventory 注册）
     if let Some(handler) = handler_table().get(name) {
         return handler(ctx, name, args).await;
     }
 
-    // Soft-alias：模型常把 Skill 名当成工具名；若命中已启用 Skill，改走 skills 工具。
+    // 2. 动态 handler（MCP 工具等运行时注册）
+    if let Some(dyn_handler) = dynamic_handler {
+        return dyn_handler(name, args).await;
+    }
+
+    // 3. Skill soft-alias
     if home::is_tool_call_allowed("skills")
         && skills::list_installed()
             .into_iter()

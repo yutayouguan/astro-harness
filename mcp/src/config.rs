@@ -93,6 +93,9 @@ pub struct McpServerConfig {
     pub headers: HashMap<String, String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// 工具调用超时（秒）；缺失默认 300s。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_timeout_secs: Option<u64>,
     /// 单工具开关；缺失视为 true
     #[serde(default)]
     pub tools: HashMap<String, bool>,

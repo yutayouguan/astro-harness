@@ -1112,48 +1112,27 @@ impl AgentLoop {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
 
+        // MCP 工具：同步 enablement + 构建动态 handler
         if is_mcp_tool_name(name) {
             let _ = self.mcp_hub.sync_enablement_from_disk();
             self.attach_mcp_tools();
-            if !self.tool_registry.is_tool_allowed(name) {
-                anyhow::bail!("MCP 工具未启用或不存在: {name}");
-            }
-            let agent_id = self.memory.agent_id.clone();
-            let turn_id = self.turn.current_turn_id.clone();
-            let _ = home::record_tool_call(&agent_id, name, args);
-            let _ = ::usage::record_tool_call(
-                &agent_id,
-                name,
-                args,
-                Some(self.session_id.as_str()),
-                turn_id.as_deref(),
-            );
-            ::usage::UsageDb::try_record(::usage::NewUsageEvent {
-                ts: chrono::Utc::now().to_rfc3339(),
-                kind: "mcp".into(),
-                name: name.to_string(),
-                agent_id,
-                session_id: Some(self.session_id.clone()),
-                turn_id,
-                input_tokens: 0,
-                output_tokens: 0,
-                cache_read_tokens: 0,
-                cache_write_tokens: 0,
-                reasoning_tokens: 0,
-                total_tokens: 0,
-                cost_usd: 0.0,
-                cost_status: None,
-                cost_source: None,
-                pricing_version: None,
-                billing_provider: None,
-                billing_base_url: None,
-                billing_mode: None,
-                meta_json: None,
-            });
-            return self.mcp_hub.call_tool(name, args).await.map(common::ToolOutput::from);
         }
 
         let allowed = self.tool_registry.is_tool_allowed(name);
+        // MCP 工具：通过 mcp_hub 直接调用（在 ctx 构造前完成，避免 borrow 冲突）
+        if is_mcp_tool_name(name) {
+            if !allowed {
+                anyhow::bail!("MCP 工具未启用或不存在: {name}");
+            }
+            let agent_id = self.memory.agent_id.clone();
+            let _ = home::record_tool_call(&agent_id, name, args);
+            let _ = ::usage::record_tool_call(
+                &agent_id, name, args,
+                Some(self.session_id.as_str()),
+                self.turn.current_turn_id.as_deref(),
+            );
+            return self.mcp_hub.call_tool(name, args).await.map(common::ToolOutput::from);
+        }
         let workspace_dir = self.resolve_workspace_dir();
         std::env::set_var("ASTRO_WORKSPACE", &workspace_dir);
         let image_gen_targets = self.model_ctx.image_gen_targets.clone();
@@ -1186,7 +1165,7 @@ impl AgentLoop {
             execution,
             hook_bus,
         };
-        dispatch_tool(|_| allowed, &mut ctx, name, args).await
+        dispatch_tool(|_| allowed, &mut ctx, name, args, None).await
     }
 
     /// 同步执行工具调用：在无 tokio runtime 时自建 current_thread runtime。

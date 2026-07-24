@@ -261,6 +261,11 @@ impl McpHub {
             if rs.status != "connected" || !rs.config.enabled {
                 continue;
             }
+            // 活性检测：transport 已关闭的 server 跳过
+            if rs.peer.is_transport_closed() {
+                tracing::debug!(server = %sid, "MCP server transport closed, skipping tools");
+                continue;
+            }
             for tool in &rs.tools {
                 let native = tool.name.as_ref();
                 if !rs.config.is_tool_enabled(native) {
@@ -348,11 +353,15 @@ impl McpHub {
             params = params.with_arguments(args_map);
         }
 
-        let result = rs
-            .peer
-            .call_tool(params)
-            .await
-            .with_context(|| format!("call_tool {qualified_name}"))?;
+        // per-tool 超时（默认 300s）
+        let timeout_secs = rs.config.tool_timeout_secs.unwrap_or(300);
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs),
+            rs.peer.call_tool(params),
+        )
+        .await
+        .map_err(|_| anyhow!("MCP tool 调用超时 ({timeout_secs}s): {qualified_name}"))?
+        .with_context(|| format!("call_tool {qualified_name}"))?;
 
         if result.is_error == Some(true) {
             let msg = format_content(&result.content);

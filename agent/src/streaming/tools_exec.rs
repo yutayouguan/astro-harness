@@ -474,7 +474,7 @@ fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::
             execution: Some(snap.execution.clone()),
             hook_bus: snap.hook_bus.clone(),
         };
-        tools::dispatch_tool(|_| true, &mut ctx, name, args)
+        tools::dispatch_tool(|_| true, &mut ctx, name, args, None)
             .await
             .unwrap_or_else(|e| {
                 memory::try_append_decision(
