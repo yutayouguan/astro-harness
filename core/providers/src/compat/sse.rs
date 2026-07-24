@@ -44,6 +44,8 @@ pub fn extract_openai_delta(data: &str) -> Option<StreamChunk> {
     let reasoning = choice
         .pointer("/delta/reasoning_content")
         .or_else(|| choice.pointer("/message/reasoning_content"))
+        .or_else(|| choice.pointer("/delta/reasoning_details"))
+        .or_else(|| choice.pointer("/message/reasoning_details"))
         .and_then(|c| c.as_str())
         .filter(|s| !s.is_empty())
         .map(|s| StreamChunk::Thinking(s.to_string()));

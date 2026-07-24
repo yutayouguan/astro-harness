@@ -159,6 +159,8 @@ where
             .await
             .with_context(|| format!("连接 {} 失败: {url}", Ext::NAME))?;
 
-        crate::shared::sse::sse_stream(response, Arc::new(extract_openai_delta)).await
+        let stream =
+            crate::shared::sse::sse_stream(response, Arc::new(extract_openai_delta)).await?;
+        Ok(super::think_tag::wrap_think_tag_extraction(stream))
     }
 }

@@ -1,6 +1,8 @@
 //! MiniMax — OpenAI 兼容聊天 + 多媒体能力。
 
 use reqwest::header::HeaderMap;
+use serde_json::Value;
+
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
 use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
 
@@ -17,6 +19,19 @@ impl ProviderExt for MiniMaxNew {
 
 impl OpenAICompatible for MiniMaxNew {
     const STREAM_USAGE: bool = true;
+
+    fn finalize_body(&self, body: &mut Value) {
+        // reasoning_split=true → thinking 通过 reasoning_content 字段返回（而非 <think> 标签）
+        body["reasoning_split"] = Value::Bool(true);
+
+        if let Some(tc) = body.get("thinking_config").cloned() {
+            body.as_object_mut().unwrap().remove("thinking_config");
+            let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+            body["thinking"] = serde_json::json!({
+                "type": if enabled { "adaptive" } else { "disabled" }
+            });
+        }
+    }
 }
 
 impl Capabilities for MiniMaxNew {

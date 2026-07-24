@@ -26,6 +26,7 @@ fn message_to_openai(msg: &Message) -> Option<Value> {
         Message::Assistant { content } => {
             let mut obj = json!({"role": "assistant"});
             let mut text_parts = Vec::new();
+            let mut thinking_parts = Vec::new();
             let mut tool_calls = Vec::new();
 
             for c in content {
@@ -45,7 +46,9 @@ fn message_to_openai(msg: &Message) -> Option<Value> {
                             }
                         }));
                     }
-                    AssistantContent::Thinking { .. } => {}
+                    AssistantContent::Thinking { text, .. } => {
+                        thinking_parts.push(text.clone());
+                    }
                 }
             }
 
@@ -60,6 +63,13 @@ fn message_to_openai(msg: &Message) -> Option<Value> {
                 };
                 obj["tool_calls"] = Value::Array(tool_calls);
             }
+
+            // 保留 thinking → reasoning_content，MiniMax/DeepSeek 多轮工具调用需要
+            let reasoning = thinking_parts.join("");
+            if !reasoning.is_empty() {
+                obj["reasoning_content"] = json!(reasoning);
+            }
+
             Some(obj)
         }
 

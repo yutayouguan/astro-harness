@@ -3,6 +3,7 @@
 pub mod completion;
 pub mod messages;
 pub mod sse;
+pub mod think_tag;
 
 pub use completion::{OpenAICompatible, OpenAICompletionModel};
 
