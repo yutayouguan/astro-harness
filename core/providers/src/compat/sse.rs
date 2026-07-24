@@ -44,23 +44,46 @@ pub fn extract_openai_delta(data: &str) -> Option<StreamChunk> {
     let reasoning = choice
         .pointer("/delta/reasoning_content")
         .or_else(|| choice.pointer("/message/reasoning_content"))
-        .or_else(|| choice.pointer("/delta/reasoning_details"))
-        .or_else(|| choice.pointer("/message/reasoning_details"))
         .and_then(|c| c.as_str())
         .filter(|s| !s.is_empty())
-        .map(|s| StreamChunk::Thinking(s.to_string()));
+        .map(|s| StreamChunk::Thinking(s.to_string()))
+        .or_else(|| {
+            // MiniMax reasoning_details: [{type:"reasoning.text", text:"..."}]
+            let arr = choice
+                .pointer("/delta/reasoning_details")
+                .or_else(|| choice.pointer("/message/reasoning_details"))
+                .and_then(|v| v.as_array())?;
+            let text: String = arr
+                .iter()
+                .filter_map(|item| item.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join("");
+            if text.is_empty() {
+                None
+            } else {
+                Some(StreamChunk::Thinking(text))
+            }
+        });
 
     let tool_deltas = parse_tool_deltas(choice);
 
-    // 返回优先级：token > reasoning > tool_delta > finish > usage
-    if let Some(t) = token {
-        return Some(t);
+    // MiniMax interleaved thinking: 一个 delta 可能同时含 content="\n" 和 tool_calls。
+    // 纯空白 text 不应遮蔽 tool_calls / reasoning。
+    let meaningful_text = token
+        .as_ref()
+        .map_or(false, |t| matches!(t, StreamChunk::Text(s) if !s.trim().is_empty()));
+
+    if meaningful_text {
+        return token;
     }
     if let Some(r) = reasoning {
         return Some(r);
     }
     if let Some(td) = tool_deltas {
         return Some(td);
+    }
+    if let Some(t) = token {
+        return Some(t);
     }
     if let Some(f) = finish {
         return Some(f);
@@ -189,6 +212,38 @@ mod tests {
         match extract_openai_delta(data) {
             Some(StreamChunk::Error(msg)) => assert_eq!(msg, "Rate limited"),
             other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn whitespace_content_with_tool_call_yields_tool() {
+        // MiniMax interleaved thinking: content="\n" + tool_calls 同时出现
+        let data = r#"{"choices":[{"delta":{"content":"\n","tool_calls":[{"index":0,"id":"call_1","function":{"name":"get_weather","arguments":""}}]}}]}"#;
+        match extract_openai_delta(data) {
+            Some(StreamChunk::ToolCallStart { id, name, .. }) => {
+                assert_eq!(id, "call_1");
+                assert_eq!(name, "get_weather");
+            }
+            other => panic!("expected ToolCallStart (not whitespace Text), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn meaningful_content_still_wins_over_tool_call() {
+        let data = r#"{"choices":[{"delta":{"content":"hello","tool_calls":[{"index":0,"id":"call_1","function":{"name":"f","arguments":""}}]}}]}"#;
+        match extract_openai_delta(data) {
+            Some(StreamChunk::Text(t)) => assert_eq!(t, "hello"),
+            other => panic!("expected Text, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reasoning_details_array_format() {
+        // MiniMax reasoning_details 是数组格式
+        let data = r#"{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"thinking..."}]}}]}"#;
+        match extract_openai_delta(data) {
+            Some(StreamChunk::Thinking(t)) => assert_eq!(t, "thinking..."),
+            other => panic!("expected Thinking, got {other:?}"),
         }
     }
 }

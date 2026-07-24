@@ -64,10 +64,15 @@ fn message_to_openai(msg: &Message) -> Option<Value> {
                 obj["tool_calls"] = Value::Array(tool_calls);
             }
 
-            // 保留 thinking → reasoning_content，MiniMax/DeepSeek 多轮工具调用需要
+            // 保留 thinking：MiniMax/DeepSeek 多轮工具调用要求思维链连续
             let reasoning = thinking_parts.join("");
             if !reasoning.is_empty() {
-                obj["reasoning_content"] = json!(reasoning);
+                obj["reasoning_content"] = json!(&reasoning);
+                // MiniMax 期望 reasoning_details 数组格式
+                obj["reasoning_details"] = json!([{
+                    "type": "reasoning.text",
+                    "text": reasoning,
+                }]);
             }
 
             Some(obj)
