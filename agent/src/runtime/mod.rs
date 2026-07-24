@@ -989,7 +989,8 @@ impl AgentLoop {
     /// 副作用：设置 `ASTRO_WORKSPACE` 环境变量供工具读取。
     pub fn build_system_prompt(&self) -> String {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
-        std::env::set_var("ASTRO_WORKSPACE", &self.memory.workspace_dir);
+        // SAFETY: env var set before spawning child processes; single-threaded at this call site
+        unsafe { std::env::set_var("ASTRO_WORKSPACE", &self.memory.workspace_dir) };
         let skill_index: Vec<(&str, &str)> = skill_pairs
             .iter()
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
@@ -1154,7 +1155,8 @@ impl AgentLoop {
         };
 
         let workspace_dir = self.resolve_workspace_dir();
-        std::env::set_var("ASTRO_WORKSPACE", &workspace_dir);
+        // SAFETY: env var set before spawning child processes; single-threaded at this call site
+        unsafe { std::env::set_var("ASTRO_WORKSPACE", &workspace_dir) };
         let image_gen_targets = self.model_ctx.image_gen_targets.clone();
         let session_id = self.session_id.clone();
         let turn_id = self.turn.current_turn_id.clone();
@@ -1197,13 +1199,17 @@ impl AgentLoop {
         args: &serde_json::Value,
     ) -> anyhow::Result<common::ToolOutput> {
         let fut = self.handle_tool_call_async(name, args);
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.block_on(fut)
-        } else {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()?;
-            rt.block_on(fut)
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                // 在 blocking 线程上安全执行异步任务（避免在 async 上下文中 block_on panic）
+                tokio::task::block_in_place(|| handle.block_on(fut))
+            }
+            Err(_) => {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?;
+                rt.block_on(fut)
+            }
         }
     }
 

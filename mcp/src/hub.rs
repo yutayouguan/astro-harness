@@ -57,11 +57,19 @@ pub struct ServerStatus {
     pub error: Option<String>,
 }
 
+/// 通知处理器与 RunningServer 共享的工具状态。
+struct SharedToolState {
+    tools: Vec<RmcpTool>,
+    generation: u64,
+}
+
 /// `tools/list_changed` 通知处理器 — 自动重新拉取工具列表。
 #[derive(Clone)]
 struct ToolChangeHandler {
-    tools: Arc<TokioMutex<Vec<RmcpTool>>>,
+    state: Arc<TokioMutex<SharedToolState>>,
     server_id: String,
+    /// 单调递增序列号，确保旧响应不覆盖新响应。
+    next_seq: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl rmcp::handler::client::ClientHandler for ToolChangeHandler {
@@ -73,12 +81,20 @@ impl rmcp::handler::client::ClientHandler for ToolChangeHandler {
         &self,
         context: rmcp::service::NotificationContext<rmcp::service::RoleClient>,
     ) {
-        info!(server = %self.server_id, "MCP tools/list_changed notification received, refreshing");
+        let seq = self.next_seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        info!(server = %self.server_id, seq, "MCP tools/list_changed, refreshing");
         match context.peer.list_all_tools().await {
             Ok(new_tools) => {
                 let count = new_tools.len();
-                *self.tools.lock().await = new_tools;
-                info!(server = %self.server_id, tool_count = count, "MCP tool list refreshed via notification");
+                let mut guard = self.state.lock().await;
+                // 只接受比当前更新的序列号，防止旧响应覆盖新响应
+                if seq > guard.generation {
+                    guard.tools = new_tools;
+                    guard.generation = seq;
+                    info!(server = %self.server_id, tool_count = count, seq, "MCP tool list refreshed");
+                } else {
+                    info!(server = %self.server_id, seq, current = guard.generation, "skipping stale refresh");
+                }
             }
             Err(e) => {
                 warn!(server = %self.server_id, error = %e, "Failed to refresh tool list on notification");
@@ -95,10 +111,12 @@ struct RunningServer {
     peer: Peer<RoleClient>,
     /// 持有连接生命周期（泛型擦除为 trait object 以兼容不同 handler 类型）。
     _service: Box<dyn std::any::Any + Send>,
-    /// 原生工具列表（通知驱动更新时通过 shared_tools 同步）。
+    /// 原生工具列表（通知驱动更新时通过 shared_state 同步）。
     tools: Vec<RmcpTool>,
-    /// 与通知处理器共享的工具列表（通知更新后在 enabled_tool_entries 中同步）。
-    shared_tools: Arc<TokioMutex<Vec<RmcpTool>>>,
+    /// 上次同步的 generation。
+    synced_generation: u64,
+    /// 与通知处理器共享的工具状态。
+    shared_state: Arc<TokioMutex<SharedToolState>>,
     /// 对应配置。
     config: McpServerConfig,
     /// 状态文案。
@@ -291,11 +309,12 @@ impl McpHub {
 
     /// 仅暴露：server.enabled && tool.enabled && 已连接
     pub fn enabled_tool_entries(&mut self) -> Vec<ToolEntrySpec> {
-        // 同步通知驱动的工具列表更新
+        // 同步通知驱动的工具列表更新（基于 generation 精确检测变更）
         for rs in self.servers.values_mut() {
-            if let Ok(updated) = rs.shared_tools.try_lock() {
-                if updated.len() != rs.tools.len() {
-                    rs.tools = updated.clone();
+            if let Ok(state) = rs.shared_state.try_lock() {
+                if state.generation > rs.synced_generation {
+                    rs.tools = state.tools.clone();
+                    rs.synced_generation = state.generation;
                 }
             }
         }
@@ -448,6 +467,9 @@ impl McpHub {
     }
 }
 
+/// 单次工具调用返回的最大媒体资产数（防止 MCP server 返回过多大 blob）。
+const MAX_MEDIA_ASSETS: usize = 20;
+
 /// 将 MCP content blocks 转为结构化 ToolOutput（保留 image/media 信息）。
 fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
     let mut text_parts = Vec::new();
@@ -458,12 +480,11 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
             ContentBlock::Text(t) => {
                 text_parts.push(t.text.clone());
             }
-            ContentBlock::Image(img) => {
-                let kind = common::MediaKind::Image;
+            ContentBlock::Image(img) if media_assets.len() < MAX_MEDIA_ASSETS => {
                 let mime = img.mime_type.clone();
                 let data_url = format!("data:{};base64,{}", mime, img.data);
                 media_assets.push(common::MediaAsset {
-                    kind,
+                    kind: common::MediaKind::Image,
                     mime_type: mime,
                     reference: common::MediaRef::DataUrl(data_url),
                     label: None,
@@ -471,7 +492,7 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
                 });
                 text_parts.push("[image from MCP tool]".to_string());
             }
-            ContentBlock::Audio(audio) => {
+            ContentBlock::Audio(audio) if media_assets.len() < MAX_MEDIA_ASSETS => {
                 let mime = audio.mime_type.clone();
                 let data_url = format!("data:{};base64,{}", mime, audio.data);
                 media_assets.push(common::MediaAsset {
@@ -482,6 +503,9 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
                     id: None,
                 });
                 text_parts.push("[audio from MCP tool]".to_string());
+            }
+            ContentBlock::Image(_) | ContentBlock::Audio(_) => {
+                text_parts.push("[media skipped: asset limit reached]".to_string());
             }
             ContentBlock::Resource(res) => {
                 // 简化处理：序列化为 JSON 保留结构信息
@@ -565,10 +589,14 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
     let sid = sanitize_server_id(&cfg.id);
     let fingerprint = cfg.connection_fingerprint();
 
-    let shared_tools: Arc<TokioMutex<Vec<RmcpTool>>> = Arc::new(TokioMutex::new(Vec::new()));
+    let shared_state = Arc::new(TokioMutex::new(SharedToolState {
+        tools: Vec::new(),
+        generation: 0,
+    }));
     let handler = ToolChangeHandler {
-        tools: Arc::clone(&shared_tools),
+        state: Arc::clone(&shared_state),
         server_id: sid.clone(),
+        next_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
     };
 
     let service = match cfg.r#type {
@@ -609,7 +637,11 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
 
     let peer = service.peer().clone();
     let tools = peer.list_all_tools().await.context("list_all_tools")?;
-    *shared_tools.lock().await = tools.clone();
+    {
+        let mut state = shared_state.lock().await;
+        state.tools = tools.clone();
+        state.generation = 1;
+    }
     info!(
         server = %sid,
         tool_count = tools.len(),
@@ -621,7 +653,8 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
         peer,
         _service: Box::new(service),
         tools,
-        shared_tools,
+        synced_generation: 1,
+        shared_state,
         config: cfg.clone(),
         status: "connected".into(),
         error: None,
