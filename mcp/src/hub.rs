@@ -16,6 +16,9 @@ use serde_json::{json, Value};
 use tokio::process::Command;
 use tracing::{info, warn};
 
+use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
+
 use crate::config::{
     load_for_active_agent, load_mcp_servers, merge_discovered, persist_discovered,
     save_mcp_servers, DiscoveredTool, McpServerConfig, McpTransportType,
@@ -54,16 +57,48 @@ pub struct ServerStatus {
     pub error: Option<String>,
 }
 
+/// `tools/list_changed` 通知处理器 — 自动重新拉取工具列表。
+#[derive(Clone)]
+struct ToolChangeHandler {
+    tools: Arc<TokioMutex<Vec<RmcpTool>>>,
+    server_id: String,
+}
+
+impl rmcp::handler::client::ClientHandler for ToolChangeHandler {
+    fn get_info(&self) -> rmcp::model::ClientInfo {
+        rmcp::model::ClientInfo::default()
+    }
+
+    async fn on_tool_list_changed(
+        &self,
+        context: rmcp::service::NotificationContext<rmcp::service::RoleClient>,
+    ) {
+        info!(server = %self.server_id, "MCP tools/list_changed notification received, refreshing");
+        match context.peer.list_all_tools().await {
+            Ok(new_tools) => {
+                let count = new_tools.len();
+                *self.tools.lock().await = new_tools;
+                info!(server = %self.server_id, tool_count = count, "MCP tool list refreshed via notification");
+            }
+            Err(e) => {
+                warn!(server = %self.server_id, error = %e, "Failed to refresh tool list on notification");
+            }
+        }
+    }
+}
+
 /// 已建立连接的服务器运行时状态。
 struct RunningServer {
     /// 配置指纹，变更时需重连。
     fingerprint: String,
     /// MCP peer。
     peer: Peer<RoleClient>,
-    /// 持有连接生命周期。
-    _service: RunningService<RoleClient, ()>,
-    /// 原生工具列表。
+    /// 持有连接生命周期（泛型擦除为 trait object 以兼容不同 handler 类型）。
+    _service: Box<dyn std::any::Any + Send>,
+    /// 原生工具列表（通知驱动更新时通过 shared_tools 同步）。
     tools: Vec<RmcpTool>,
+    /// 与通知处理器共享的工具列表（通知更新后在 enabled_tool_entries 中同步）。
+    shared_tools: Arc<TokioMutex<Vec<RmcpTool>>>,
     /// 对应配置。
     config: McpServerConfig,
     /// 状态文案。
@@ -255,7 +290,16 @@ impl McpHub {
     }
 
     /// 仅暴露：server.enabled && tool.enabled && 已连接
-    pub fn enabled_tool_entries(&self) -> Vec<ToolEntrySpec> {
+    pub fn enabled_tool_entries(&mut self) -> Vec<ToolEntrySpec> {
+        // 同步通知驱动的工具列表更新
+        for rs in self.servers.values_mut() {
+            if let Ok(updated) = rs.shared_tools.try_lock() {
+                if updated.len() != rs.tools.len() {
+                    rs.tools = updated.clone();
+                }
+            }
+        }
+
         let mut out = Vec::new();
         for (sid, rs) in &self.servers {
             if rs.status != "connected" || !rs.config.enabled {
@@ -494,6 +538,8 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
     let sid = sanitize_server_id(&cfg.id);
     let fingerprint = cfg.connection_fingerprint();
 
+    let shared_tools: Arc<TokioMutex<Vec<RmcpTool>>> = Arc::new(TokioMutex::new(Vec::new()));
+
     let service = match cfg.r#type {
         McpTransportType::Stdio => {
             validate_stdio_command(&cfg.command)?;
@@ -509,7 +555,6 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
             ().serve(transport).await.context("stdio serve")?
         }
         McpTransportType::Sse | McpTransportType::StreamableHttp => {
-            // rmcp 2.x 以 Streamable HTTP 为主；UI 的 sse 同样走该传输
             if cfg.url.trim().is_empty() {
                 anyhow::bail!("HTTP MCP server 缺少 url");
             }
@@ -533,6 +578,7 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
 
     let peer = service.peer().clone();
     let tools = peer.list_all_tools().await.context("list_all_tools")?;
+    *shared_tools.lock().await = tools.clone();
     info!(
         server = %sid,
         tool_count = tools.len(),
@@ -542,8 +588,9 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
     Ok(RunningServer {
         fingerprint,
         peer,
-        _service: service,
+        _service: Box::new(service),
         tools,
+        shared_tools,
         config: cfg.clone(),
         status: "connected".into(),
         error: None,
