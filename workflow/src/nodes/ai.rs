@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use futures::StreamExt;
 
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
@@ -45,15 +47,15 @@ async fn one_shot_llm(provider_id: &str, config: &ProviderConfig, system: &str, 
         .ok_or_else(|| anyhow::anyhow!("未找到 provider: {}", provider_id))?;
 
     let messages = vec![
-        ChatMessage::text("system", system),
-        ChatMessage::text("user", user),
+        ProviderMessage::system(system),
+        ProviderMessage::user_text(user),
     ];
 
     let mut stream = provider.chat_stream(messages, vec![], config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
-        if let Some(token) = chunk.token {
+        if let StreamChunk::Text(token) = chunk {
             out.push_str(&token);
         }
     }

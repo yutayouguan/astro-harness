@@ -1662,7 +1662,9 @@ pub async fn regenerate_session_title(
 ) -> Result<String, String> {
     use futures::StreamExt;
     use providers::registry::ProviderRegistry;
-    use providers::trait_::{ChatMessage, ProviderConfig};
+    use providers::trait_::ProviderConfig;
+    use providers::types::message::Message as ProviderMessage;
+    use providers::types::stream::StreamChunk;
 
     use crate::auxiliary_resolver::{
         primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
@@ -1721,7 +1723,7 @@ pub async fn regenerate_session_title(
             additional_params: serde_json::Value::Null,
             previous_interaction_id: None,
         };
-        let messages = vec![ChatMessage::text("user", prompt)];
+        let messages = vec![ProviderMessage::user_text(prompt)];
         let mut stream = provider
             .chat_stream(messages, vec![], &config)
             .await
@@ -1729,7 +1731,7 @@ pub async fn regenerate_session_title(
         let mut out = String::new();
         while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| e.to_string())?;
-            if let Some(token) = chunk.token {
+            if let StreamChunk::Text(token) = chunk {
                 out.push_str(&token);
             }
         }

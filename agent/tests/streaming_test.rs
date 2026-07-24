@@ -6,10 +6,12 @@ use std::time::Duration;
 use async_trait::async_trait;
 use providers::streaming::{PauseControl, Usage};
 use providers::trait_::{
-    AiProvider, ChatChunk, ChatMessage, ChatProvider, ChatStream, ProviderConfig,
-    ToolCallDeltaChunk, VerifyProvider, VerifyResult,
+    AiProvider, ChatProvider, CompletionStream, ProviderConfig, VerifyProvider, VerifyResult,
 };
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 use tokio::sync::Mutex;
+use tools::ToolCallDelta;
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
@@ -17,24 +19,25 @@ use agent::streaming::{
 };
 
 struct ScriptedProvider {
-    rounds: Mutex<Vec<Vec<ChatChunk>>>,
+    rounds: Mutex<Vec<Vec<StreamChunk>>>,
 }
 
 #[async_trait]
 impl ChatProvider for ScriptedProvider {
     async fn chat_stream(
         &self,
-        _messages: Vec<ChatMessage>,
+        _messages: Vec<ProviderMessage>,
         _tools: Vec<serde_json::Value>,
         _config: &ProviderConfig,
-    ) -> anyhow::Result<ChatStream> {
+    ) -> anyhow::Result<CompletionStream> {
         let mut rounds = self.rounds.lock().await;
         let chunks = if rounds.is_empty() {
-            vec![ChatChunk {
-                token: Some("done".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }]
+            vec![
+                StreamChunk::Text("done".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ]
         } else {
             rounds.remove(0)
         };
@@ -81,29 +84,28 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
             vec![
-                ChatChunk {
-                    token: Some("thinking…".into()),
-                    ..Default::default()
+                StreamChunk::Text("thinking…".into()),
+                StreamChunk::ToolCallStart {
+                    index: 0,
+                    id: "call_1".into(),
+                    name: "echo".into(),
                 },
-                ChatChunk {
-                    tool_call_deltas: vec![ToolCallDeltaChunk {
-                        index: 0,
-                        id: Some("call_1".into()),
-                        name: Some("echo".into()),
-                        arguments: Some(r#"{"text":"hi"}"#.into()),
-                        signature: None,
-                    }],
-                    finish_reason: Some("tool_calls".into()),
-                    usage: Some(Usage::from_parts(10, 5)),
-                    ..Default::default()
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: r#"{"text":"hi"}"#.into(),
+                },
+                StreamChunk::Usage(Usage::from_parts(10, 5)),
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
                 },
             ],
-            vec![ChatChunk {
-                token: Some("ok".into()),
-                finish_reason: Some("stop".into()),
-                usage: Some(Usage::from_parts(12, 3)),
-                ..Default::default()
-            }],
+            vec![
+                StreamChunk::Text("ok".into()),
+                StreamChunk::Usage(Usage::from_parts(12, 3)),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 
@@ -205,37 +207,30 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
             vec![
-                ChatChunk {
-                    reasoning: Some("deep ".into()),
-                    ..Default::default()
+                StreamChunk::Thinking("deep ".into()),
+                StreamChunk::Thinking("thought".into()),
+                StreamChunk::Text("calling…".into()),
+                StreamChunk::ToolCallStart {
+                    index: 0,
+                    id: "call_persist".into(),
+                    name: "echo".into(),
                 },
-                ChatChunk {
-                    reasoning: Some("thought".into()),
-                    ..Default::default()
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: r#"{"text":"hi"}"#.into(),
                 },
-                ChatChunk {
-                    token: Some("calling…".into()),
-                    ..Default::default()
-                },
-                ChatChunk {
-                    tool_call_deltas: vec![ToolCallDeltaChunk {
-                        index: 0,
-                        id: Some("call_persist".into()),
-                        name: Some("echo".into()),
-                        arguments: Some(r#"{"text":"hi"}"#.into()),
-                        signature: None,
-                    }],
-                    finish_reason: Some("tool_calls".into()),
-                    usage: Some(Usage::from_parts(10, 5)),
-                    ..Default::default()
+                StreamChunk::Usage(Usage::from_parts(10, 5)),
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
                 },
             ],
-            vec![ChatChunk {
-                token: Some("ok".into()),
-                finish_reason: Some("stop".into()),
-                usage: Some(Usage::from_parts(4, 2)),
-                ..Default::default()
-            }],
+            vec![
+                StreamChunk::Text("ok".into()),
+                StreamChunk::Usage(Usage::from_parts(4, 2)),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 
@@ -299,12 +294,13 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     let session = Arc::new(Mutex::new(agent));
 
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![vec![ChatChunk {
-            token: Some("hello".into()),
-            finish_reason: Some("stop".into()),
-            usage: Some(Usage::from_parts(3, 2)),
-            ..Default::default()
-        }]]),
+        rounds: Mutex::new(vec![vec![
+            StreamChunk::Text("hello".into()),
+            StreamChunk::Usage(Usage::from_parts(3, 2)),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ]]),
     });
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -357,12 +353,13 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     let session_for_check = Arc::clone(&session);
 
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![vec![ChatChunk {
-            token: Some("hello world".into()),
-            finish_reason: Some("stop".into()),
-            usage: Some(Usage::from_parts(3, 2)),
-            ..Default::default()
-        }]]),
+        rounds: Mutex::new(vec![vec![
+            StreamChunk::Text("hello world".into()),
+            StreamChunk::Usage(Usage::from_parts(3, 2)),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ]]),
     });
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -422,11 +419,12 @@ async fn pre_verify_never_fires_without_disk_write() {
     let session = Arc::new(Mutex::new(agent));
 
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![vec![ChatChunk {
-            token: Some("hi there".into()),
-            finish_reason: Some("stop".into()),
-            ..Default::default()
-        }]]),
+        rounds: Mutex::new(vec![vec![
+            StreamChunk::Text("hi there".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ]]),
     });
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -485,37 +483,41 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
             // round 1: 写盘工具调用，置位 turn_wrote_disk
-            vec![ChatChunk {
-                tool_call_deltas: vec![ToolCallDeltaChunk {
+            vec![
+                StreamChunk::ToolCallStart {
                     index: 0,
-                    id: Some("call_write".into()),
-                    name: Some("file_ops".into()),
-                    arguments: Some(
-                        r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
-                    ),
-                    signature: None,
-                }],
-                finish_reason: Some("tool_calls".into()),
-                ..Default::default()
-            }],
+                    id: "call_write".into(),
+                    name: "file_ops".into(),
+                },
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
+                },
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
+                },
+            ],
             // round 2: 无工具终态草稿一 -> pre_verify attempt 1 -> KeepGoing
-            vec![ChatChunk {
-                token: Some("draft one".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }],
+            vec![
+                StreamChunk::Text("draft one".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
             // round 3: 无工具终态草稿二 -> pre_verify attempt 2 -> KeepGoing
-            vec![ChatChunk {
-                token: Some("draft two".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }],
+            vec![
+                StreamChunk::Text("draft two".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
             // round 4: 尝试次数已达上限，直接收尾
-            vec![ChatChunk {
-                token: Some("final answer".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }],
+            vec![
+                StreamChunk::Text("final answer".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 
@@ -618,17 +620,18 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     }
 
     // hydrate/reload 场景：转换为 Provider 消息后，相邻 user/assistant 仍不得连续同角色
-    // （逐条相邻比较，与 `validate_message_order` 的约束一致，而非过滤后再比较）。
     let provider_messages =
         agent::prompt::messages::to_provider_messages("sys", &agent.session_messages);
     for window in provider_messages.windows(2) {
-        let (a, b) = (window[0].role.as_str(), window[1].role.as_str());
+        let (a, b) = (window[0].role(), window[1].role());
         assert!(
-            !(a == "assistant" && b == "assistant"),
+            !(a == providers::types::message::Role::Assistant
+                && b == providers::types::message::Role::Assistant),
             "to_provider_messages must not contain consecutive assistant entries"
         );
         assert!(
-            !(a == "user" && b == "user"),
+            !(a == providers::types::message::Role::User
+                && b == providers::types::message::Role::User),
             "to_provider_messages must not contain consecutive user entries"
         );
     }
@@ -660,16 +663,12 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     }
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![vec![
-            ChatChunk {
-                token: Some("a".into()),
-                usage: Some(Usage::from_parts(1, 1)),
-                ..Default::default()
-            },
-            ChatChunk {
-                token: Some("b".into()),
-                finish_reason: Some("stop".into()),
-                usage: Some(Usage::from_parts(10, 5)),
-                ..Default::default()
+            StreamChunk::Text("a".into()),
+            StreamChunk::Usage(Usage::from_parts(1, 1)),
+            StreamChunk::Text("b".into()),
+            StreamChunk::Usage(Usage::from_parts(10, 5)),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
             },
         ]]),
     });
@@ -717,10 +716,10 @@ async fn error_is_followed_by_done() {
     impl ChatProvider for Boom {
         async fn chat_stream(
             &self,
-            _messages: Vec<ChatMessage>,
+            _messages: Vec<ProviderMessage>,
             _tools: Vec<serde_json::Value>,
             _config: &ProviderConfig,
-        ) -> anyhow::Result<ChatStream> {
+        ) -> anyhow::Result<CompletionStream> {
             Err(anyhow::anyhow!("boom"))
         }
     }
@@ -790,31 +789,30 @@ async fn tool_call_delta_and_memory_path() {
 
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
-            vec![ChatChunk {
-                tool_call_deltas: vec![
-                    ToolCallDeltaChunk {
-                        index: 0,
-                        id: Some("c1".into()),
-                        name: Some("memory".into()),
-                        arguments: Some(r#"{"action":"add","content":""#.into()),
-                        signature: None,
-                    },
-                    ToolCallDeltaChunk {
-                        index: 0,
-                        id: None,
-                        name: None,
-                        arguments: Some(r#"hello from test","target":"memory"}"#.into()),
-                        signature: None,
-                    },
-                ],
-                finish_reason: Some("tool_calls".into()),
-                ..Default::default()
-            }],
-            vec![ChatChunk {
-                token: Some("saved".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }],
+            vec![
+                StreamChunk::ToolCallStart {
+                    index: 0,
+                    id: "c1".into(),
+                    name: "memory".into(),
+                },
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: r#"{"action":"add","content":""#.into(),
+                },
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: r#"hello from test","target":"memory"}"#.into(),
+                },
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
+                },
+            ],
+            vec![
+                StreamChunk::Text("saved".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 
@@ -880,25 +878,27 @@ async fn hitl_waiting_parks_then_continues_same_run() {
 
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
-            vec![ChatChunk {
-                tool_call_deltas: vec![ToolCallDeltaChunk {
+            vec![
+                StreamChunk::ToolCallStart {
                     index: 0,
-                    id: Some("call_confirm".into()),
-                    name: Some("ask_user".into()),
-                    arguments: Some(
-                        r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
-                            .into(),
-                    ),
-                    signature: None,
-                }],
-                finish_reason: Some("tool_calls".into()),
-                ..Default::default()
-            }],
-            vec![ChatChunk {
-                token: Some("confirmed".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }],
+                    id: "call_confirm".into(),
+                    name: "ask_user".into(),
+                },
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
+                        .into(),
+                },
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
+                },
+            ],
+            vec![
+                StreamChunk::Text("confirmed".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 
@@ -1015,22 +1015,26 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let cmd = "rm -rf /tmp/astro-approval-test-allow";
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
-            vec![ChatChunk {
-                tool_call_deltas: vec![ToolCallDeltaChunk {
+            vec![
+                StreamChunk::ToolCallStart {
                     index: 0,
-                    id: Some("call_term_allow".into()),
-                    name: Some("terminal".into()),
-                    arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
-                    signature: None,
-                }],
-                finish_reason: Some("tool_calls".into()),
-                ..Default::default()
-            }],
-            vec![ChatChunk {
-                token: Some("done".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }],
+                    id: "call_term_allow".into(),
+                    name: "terminal".into(),
+                },
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: format!(r#"{{"command":"{cmd}"}}"#),
+                },
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
+                },
+            ],
+            vec![
+                StreamChunk::Text("done".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 
@@ -1167,22 +1171,26 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let cmd = "rm -rf /tmp/astro-approval-test-deny";
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
-            vec![ChatChunk {
-                tool_call_deltas: vec![ToolCallDeltaChunk {
+            vec![
+                StreamChunk::ToolCallStart {
                     index: 0,
-                    id: Some("call_term_deny".into()),
-                    name: Some("terminal".into()),
-                    arguments: Some(format!(r#"{{"command":"{cmd}"}}"#)),
-                    signature: None,
-                }],
-                finish_reason: Some("tool_calls".into()),
-                ..Default::default()
-            }],
-            vec![ChatChunk {
-                token: Some("acknowledged".into()),
-                finish_reason: Some("stop".into()),
-                ..Default::default()
-            }],
+                    id: "call_term_deny".into(),
+                    name: "terminal".into(),
+                },
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: format!(r#"{{"command":"{cmd}"}}"#),
+                },
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
+                },
+            ],
+            vec![
+                StreamChunk::Text("acknowledged".into()),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 
@@ -1287,25 +1295,29 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
 
     let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
         rounds: Mutex::new(vec![
-            vec![ChatChunk {
-                tool_call_deltas: vec![ToolCallDeltaChunk {
+            vec![
+                StreamChunk::ToolCallStart {
                     index: 0,
-                    id: Some("call_b".into()),
-                    name: Some("echo".into()),
-                    arguments: Some(r#"{"text":"x"}"#.into()),
-                    signature: None,
-                }],
-                finish_reason: Some("tool_calls".into()),
-                usage: Some(Usage::from_parts(5, 2)),
-                ..Default::default()
-            }],
+                    id: "call_b".into(),
+                    name: "echo".into(),
+                },
+                StreamChunk::ToolCallDelta {
+                    index: 0,
+                    arguments: r#"{"text":"x"}"#.into(),
+                },
+                StreamChunk::Usage(Usage::from_parts(5, 2)),
+                StreamChunk::Done {
+                    finish_reason: "tool_calls".into(),
+                },
+            ],
             // 预算耗尽后的无工具总结轮
-            vec![ChatChunk {
-                token: Some("summary-after-budget".into()),
-                finish_reason: Some("stop".into()),
-                usage: Some(Usage::from_parts(6, 4)),
-                ..Default::default()
-            }],
+            vec![
+                StreamChunk::Text("summary-after-budget".into()),
+                StreamChunk::Usage(Usage::from_parts(6, 4)),
+                StreamChunk::Done {
+                    finish_reason: "stop".into(),
+                },
+            ],
         ]),
     });
 

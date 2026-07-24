@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::profile::{ImageGenMode, ProviderProfile, PROFILES};
-use crate::trait_::*;
+use crate::trait_::{
+    AiProvider, AuthKind, ChatProvider, CompletionStream, GeneratedAudio, GeneratedImage,
+    GeneratedVideo, Message, ProviderConfig, VerifyProvider, VerifyResult,
+};
 use crate::verify;
 use async_trait::async_trait;
 
@@ -93,11 +96,53 @@ impl RegistryProvider {
 impl ChatProvider for RegistryProvider {
     async fn chat_stream(
         &self,
-        messages: Vec<ChatMessage>,
+        messages: Vec<Message>,
         tools: Vec<serde_json::Value>,
         config: &ProviderConfig,
-    ) -> anyhow::Result<ChatStream> {
-        crate::new_dispatch::chat_stream_new(self.profile.id, messages, tools, config).await
+    ) -> anyhow::Result<CompletionStream> {
+        use crate::types::request::{CompletionRequest, ThinkingConfig};
+        use crate::types::message::ToolDefinition;
+
+        // tools JSON → ToolDefinition
+        let new_tools: Vec<ToolDefinition> = tools
+            .iter()
+            .filter_map(|t| {
+                let f = t.get("function").unwrap_or(t);
+                Some(ToolDefinition {
+                    name: f.get("name")?.as_str()?.to_string(),
+                    description: f
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    parameters: f
+                        .get("parameters")
+                        .cloned()
+                        .unwrap_or(serde_json::json!({"type": "object", "properties": {}})),
+                })
+            })
+            .collect();
+
+        let request = CompletionRequest {
+            model: config.model.clone(),
+            messages,
+            tools: new_tools,
+            temperature: Some(config.temperature),
+            max_tokens: Some(config.max_tokens),
+            thinking: if config.thinking_enabled {
+                Some(ThinkingConfig {
+                    enabled: true,
+                    budget_tokens: None,
+                    effort: config.reasoning_effort.clone(),
+                })
+            } else {
+                None
+            },
+            additional_params: config.additional_params.clone(),
+            previous_interaction_id: config.previous_interaction_id.clone(),
+        };
+
+        crate::new_dispatch::chat_stream_direct(self.profile.id, request, config).await
     }
 }
 

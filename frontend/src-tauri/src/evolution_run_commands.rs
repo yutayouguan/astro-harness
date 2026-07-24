@@ -32,7 +32,9 @@ use evolution::{
 use home::default_memory_dir;
 use memory::DecisionKind;
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
@@ -161,8 +163,8 @@ async fn complete_chat(
         previous_interaction_id: None,
     };
     let messages = vec![
-        ChatMessage::text("system", system),
-        ChatMessage::text("user", user),
+        ProviderMessage::system(system),
+        ProviderMessage::user_text(user),
     ];
     let mut stream = provider
         .chat_stream(messages, vec![], &config)
@@ -171,7 +173,7 @@ async fn complete_chat(
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| format!("进化流式读取失败: {e}"))?;
-        if let Some(token) = chunk.token {
+        if let StreamChunk::Text(token) = chunk {
             out.push_str(&token);
         }
     }

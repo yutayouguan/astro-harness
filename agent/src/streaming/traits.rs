@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use common::message::Message;
-use providers::trait_::ChatMessage as ProviderMessage;
+use providers::types::message::Message as ProviderMessage;
 
 use super::types::AssistantContentStream;
 

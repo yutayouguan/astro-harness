@@ -7,13 +7,15 @@ use common::message::Message;
 use common::ChatTarget;
 use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::trait_::{AiProvider, ChatMessage as ProviderMessage, ChatStream, ProviderConfig};
+use providers::trait_::{AiProvider, ProviderConfig};
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::{CompletionStream, StreamChunk};
 
 use crate::prompt::messages::to_provider_messages;
 
 use super::fallback::{try_stream_completion_with_fallback, ActiveTargetMeta};
 use super::traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
-use super::types::{map_provider_stream, AssistantContentStream};
+use super::types::{map_new_provider_stream, AssistantContentStream};
 
 /// 包装 [`ProviderRegistry`] + fallback 链，实现三层 Streaming trait。
 pub struct ProviderStreamer {
@@ -97,7 +99,7 @@ pub fn targets_and_registry_from_primary(
 
 #[async_trait]
 impl StreamingCompletion for ProviderStreamer {
-    /// 经 [`try_stream_completion_with_fallback`] 再 [`map_provider_stream`] 归一化。
+    /// 经 [`try_stream_completion_with_fallback`] 再 [`map_new_provider_stream`] 归一化。
     ///
     /// Google Interactions：自动注入/更新 `previous_interaction_id`，使工具多轮
     /// 保留服务端 thought/signature。
@@ -144,16 +146,16 @@ impl StreamingCompletion for ProviderStreamer {
         } else {
             None
         };
-        let tracked: ChatStream = Box::pin(futures::stream::unfold(
+        let tracked: CompletionStream = Box::pin(futures::stream::unfold(
             (stream, prev_slot),
             |(mut stream, prev_slot)| async move {
                 match stream.next().await {
                     Some(item) => {
-                        if let (Some(ref slot), Ok(ref chunk)) = (&prev_slot, &item) {
-                            if let Some(ref id) = chunk.interaction_id {
-                                if let Ok(mut g) = slot.lock() {
-                                    *g = Some(id.clone());
-                                }
+                        if let (Some(ref slot), Ok(StreamChunk::InteractionId(ref id))) =
+                            (&prev_slot, &item)
+                        {
+                            if let Ok(mut g) = slot.lock() {
+                                *g = Some(id.clone());
                             }
                         }
                         Some((item, (stream, prev_slot)))
@@ -166,7 +168,7 @@ impl StreamingCompletion for ProviderStreamer {
         if let Ok(mut guard) = self.last_hit.lock() {
             *guard = Some(meta);
         }
-        Ok(map_provider_stream(tracked))
+        Ok(map_new_provider_stream(tracked))
     }
 }
 

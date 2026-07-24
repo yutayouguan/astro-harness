@@ -14,7 +14,9 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::registry::ProviderRegistry;
-use crate::trait_::{ChatMessage, ProviderConfig};
+use crate::trait_::ProviderConfig;
+use crate::types::message::Message;
+use crate::types::stream::StreamChunk;
 
 /// 结构化抽取过程中的错误类型。
 #[derive(Debug, Error)]
@@ -267,7 +269,7 @@ where
     }
 
     /// 构造 system + user 消息，引导模型通过 `submit` 输出符合 Schema 的 JSON。
-    fn build_messages(&self, text: &str) -> Vec<ChatMessage> {
+    fn build_messages(&self, text: &str) -> Vec<Message> {
         let schema = schema_value_for::<T>();
         let schema_pretty =
             serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string());
@@ -290,8 +292,8 @@ where
 
         let user = format!("请从以下文本抽取结构化数据：\n\n{text}");
         vec![
-            ChatMessage::text("system", system),
-            ChatMessage::text("user", user),
+            Message::system(system),
+            Message::user_text(user),
         ]
     }
 
@@ -311,13 +313,12 @@ where
         let mut out = String::new();
         while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| ExtractionError::PromptError(e.to_string()))?;
-            if let Some(token) = chunk.token {
-                out.push_str(&token);
-            }
-            if let Some(reason) = chunk.finish_reason {
-                if reason.starts_with("error:") {
-                    return Err(ExtractionError::PromptError(reason));
+            match chunk {
+                StreamChunk::Text(token) => out.push_str(&token),
+                StreamChunk::Error(msg) => {
+                    return Err(ExtractionError::PromptError(format!("error:{msg}")));
                 }
+                _ => {}
             }
         }
 

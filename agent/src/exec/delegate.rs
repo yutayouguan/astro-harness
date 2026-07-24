@@ -461,11 +461,14 @@ async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, U
         let mut round_usage: Option<Usage> = None;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result.map_err(|e| anyhow::anyhow!("{e}"))?;
-            if let Some(token) = chunk.token {
-                full_response.push_str(&token);
-            }
-            if let Some(u) = chunk.usage {
-                round_usage = Some(u);
+            match chunk {
+                providers::types::stream::StreamChunk::Text(token) => {
+                    full_response.push_str(&token);
+                }
+                providers::types::stream::StreamChunk::Usage(u) => {
+                    round_usage = Some(u);
+                }
+                _ => {}
             }
         }
         if let Some(u) = round_usage {

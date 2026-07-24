@@ -5,7 +5,9 @@
 
 use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 use tracing::warn;
 
 use common::TOOL_LLM_COMPRESS_MARK;
@@ -79,17 +81,16 @@ async fn complete_compaction_chat(
         ..ProviderConfig::default()
     };
     let messages = vec![
-        ChatMessage::text(
-            "system",
+        ProviderMessage::system(
             "You compress tool outputs for coding agents. Preserve critical facts.",
         ),
-        ChatMessage::text("user", prompt),
+        ProviderMessage::user_text(prompt),
     ];
     let mut stream = provider.chat_stream(messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
-        if let Some(token) = chunk.token {
+        if let StreamChunk::Text(token) = chunk {
             out.push_str(&token);
         }
     }

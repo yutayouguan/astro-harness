@@ -111,20 +111,32 @@ pub async fn run_headless_multi_turn(
 
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result.map_err(|e| anyhow::anyhow!("{e}"))?;
-            if let Some(token) = chunk.token {
-                full_text.push_str(&token);
-            }
-            for delta in &chunk.tool_call_deltas {
-                tool_acc.push(&ToolCallDelta {
-                    index: delta.index,
-                    id: delta.id.clone(),
-                    name: delta.name.clone(),
-                    arguments: delta.arguments.clone(),
-                    signature: delta.signature.clone(),
-                });
-            }
-            if let Some(u) = chunk.usage {
-                round_usage = Some(u);
+            match chunk {
+                providers::types::stream::StreamChunk::Text(token) => {
+                    full_text.push_str(&token);
+                }
+                providers::types::stream::StreamChunk::ToolCallStart { index, id, name } => {
+                    tool_acc.push(&ToolCallDelta {
+                        index,
+                        id: Some(id),
+                        name: Some(name),
+                        arguments: None,
+                        signature: None,
+                    });
+                }
+                providers::types::stream::StreamChunk::ToolCallDelta { index, arguments } => {
+                    tool_acc.push(&ToolCallDelta {
+                        index,
+                        id: None,
+                        name: None,
+                        arguments: Some(arguments),
+                        signature: None,
+                    });
+                }
+                providers::types::stream::StreamChunk::Usage(u) => {
+                    round_usage = Some(u);
+                }
+                _ => {}
             }
         }
 

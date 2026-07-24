@@ -10,26 +10,20 @@ use super::defaults;
 use super::tools::openai_tools_to_anthropic;
 use crate::http_stream::{resolve_base, trim_slash};
 use crate::types::ProviderConfig;
-use crate::trait_::ChatMessage;
 use crate::types::message::Message;
 
 /// 统计消息和工具的 token 数。
 pub async fn anthropic_count_tokens(
     client: &Client,
-    messages: &[ChatMessage],
+    messages: &[Message],
     tools: &[Value],
     config: &ProviderConfig,
 ) -> Result<u32> {
     let base = trim_slash(&resolve_base(config, "claude"));
     let url = format!("{base}/v1/messages/count_tokens");
 
-    // 旧 ChatMessage → 新 Message（通过 new_dispatch 内联转换）
-    let new_msgs: Vec<Message> = messages
-        .iter()
-        .map(crate::new_dispatch::legacy_to_message)
-        .collect();
     let (system, api_messages) =
-        crate::impls::anthropic::to_anthropic_messages_public(&new_msgs);
+        crate::impls::anthropic::to_anthropic_messages_public(messages);
 
     let mut body = json!({
         "model": config.model,

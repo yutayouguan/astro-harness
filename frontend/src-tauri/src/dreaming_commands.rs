@@ -12,7 +12,9 @@ use memory::dreaming::{
 };
 use memory::{list_pending, load_memory_config};
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 
 use crate::auxiliary_resolver::{resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget};
 use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
@@ -87,8 +89,8 @@ async fn complete_chat(
         previous_interaction_id: None,
     };
     let messages = vec![
-        ChatMessage::text("system", system),
-        ChatMessage::text("user", user),
+        ProviderMessage::system(system),
+        ProviderMessage::user_text(user),
     ];
     let mut stream = provider
         .chat_stream(messages, vec![], &config)
@@ -97,7 +99,7 @@ async fn complete_chat(
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| format!("入梦流式读取失败: {e}"))?;
-        if let Some(token) = chunk.token {
+        if let StreamChunk::Text(token) = chunk {
             out.push_str(&token);
         }
     }

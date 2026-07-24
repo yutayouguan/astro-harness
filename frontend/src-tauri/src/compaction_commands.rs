@@ -5,7 +5,9 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 use session::StoredMessage;
 
 use crate::auxiliary_resolver::{
@@ -102,8 +104,8 @@ Cover: goals, constraints, done, in-progress, key paths/decisions, next steps. \
 Reply in the same language as the transcript. No preamble.";
     let user = format!("Transcript:\n\n{transcript}");
     let messages = vec![
-        ChatMessage::text("system", system),
-        ChatMessage::text("user", user),
+        ProviderMessage::system(system),
+        ProviderMessage::user_text(user),
     ];
     let mut stream = provider
         .chat_stream(messages, vec![], &config)
@@ -112,7 +114,7 @@ Reply in the same language as the transcript. No preamble.";
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| format!("压实流式读取失败: {e}"))?;
-        if let Some(token) = chunk.token {
+        if let StreamChunk::Text(token) = chunk {
             out.push_str(&token);
         }
     }

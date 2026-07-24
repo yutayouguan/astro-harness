@@ -48,7 +48,7 @@ pub use anthropic::tools::openai_tools_to_anthropic;
 pub use google::tools::openai_tools_to_gemini_native;
 
 pub use trait_::{
-    AiProvider, AuthKind, ChatChunk, ChatMessage, ChatProvider, ChatStream, ChatToolCall,
+    AiProvider, AuthKind, ChatProvider, CompletionStream,
     GeneratedAudio, GeneratedImage, GeneratedVideo,
-    ToolCallDeltaChunk, VerifyProvider, VerifyResult,
+    Message, VerifyProvider, VerifyResult,
 };

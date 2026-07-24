@@ -16,7 +16,9 @@ use memory::{
     MemoryManager, REVIEW_SYSTEM_PROMPT,
 };
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 use tracing::{info, warn};
 
 use crate::runtime::AgentLoop;
@@ -244,14 +246,14 @@ async fn complete_review_chat(
         previous_interaction_id: None,
     };
     let messages = vec![
-        ChatMessage::text("system", system),
-        ChatMessage::text("user", user),
+        ProviderMessage::system(system),
+        ProviderMessage::user_text(user),
     ];
     let mut stream = provider.chat_stream(messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
-        if let Some(token) = chunk.token {
+        if let StreamChunk::Text(token) = chunk {
             out.push_str(&token);
         }
     }

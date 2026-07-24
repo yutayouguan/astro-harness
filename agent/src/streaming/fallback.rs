@@ -3,7 +3,9 @@
 use common::ChatTarget;
 use futures::{stream, StreamExt};
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatChunk, ChatMessage as ProviderMessage, ChatStream, ProviderConfig};
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::{CompletionStream, StreamChunk};
+use providers::trait_::ProviderConfig;
 
 /// 实际命中目标的可观测元数据（写入 usage 等，不改会话默认模型）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,38 +78,32 @@ fn has_5xx_status(s: &str) -> bool {
     false
 }
 
-fn chunk_has_meaningful_content(chunk: &ChatChunk) -> bool {
-    let token_ok = chunk
-        .token
-        .as_deref()
-        .map(|t| !t.is_empty())
-        .unwrap_or(false);
-    let reasoning_ok = chunk
-        .reasoning
-        .as_deref()
-        .map(|t| !t.is_empty())
-        .unwrap_or(false);
-    token_ok || reasoning_ok || !chunk.tool_call_deltas.is_empty()
+fn chunk_has_meaningful_content(chunk: &StreamChunk) -> bool {
+    match chunk {
+        StreamChunk::Text(t) if !t.is_empty() => true,
+        StreamChunk::Thinking(t) if !t.is_empty() => true,
+        StreamChunk::ToolCallStart { .. } | StreamChunk::ToolCallDelta { .. } => true,
+        _ => false,
+    }
 }
 
-fn is_error_only_pre_content_chunk(chunk: &ChatChunk) -> bool {
-    matches!(
-        chunk.finish_reason.as_deref(),
-        Some(fr) if fr.starts_with("error:")
-    ) && !chunk_has_meaningful_content(chunk)
+fn is_error_only_pre_content_chunk(chunk: &StreamChunk) -> bool {
+    matches!(chunk, StreamChunk::Error(_)) && !chunk_has_meaningful_content(chunk)
 }
 
 /// Peek 首个流事件：首包前错误（流 Err 或 error-only chunk）直接失败；否则还原含已 peek 项的流。
-pub async fn probe_or_wrap_pre_content(mut stream: ChatStream) -> anyhow::Result<ChatStream> {
+pub async fn probe_or_wrap_pre_content(
+    mut stream: CompletionStream,
+) -> anyhow::Result<CompletionStream> {
     match stream.next().await {
         None => Ok(stream),
         Some(Err(e)) => Err(e),
         Some(Ok(chunk)) => {
             if is_error_only_pre_content_chunk(&chunk) {
-                let msg = chunk
-                    .finish_reason
-                    .unwrap_or_else(|| "error: unknown".into());
-                return Err(anyhow::anyhow!("{msg}"));
+                if let StreamChunk::Error(msg) = chunk {
+                    return Err(anyhow::anyhow!("error: {msg}"));
+                }
+                unreachable!()
             }
             Ok(Box::pin(
                 stream::once(async move { Ok(chunk) }).chain(stream),
@@ -124,7 +120,7 @@ pub async fn try_stream_completion_with_fallback(
     tools: Vec<serde_json::Value>,
     base_config: &ProviderConfig,
     mut on_failover: impl FnMut(&ChatTarget, &ChatTarget, &anyhow::Error),
-) -> anyhow::Result<(ChatStream, ActiveTargetMeta)> {
+) -> anyhow::Result<(CompletionStream, ActiveTargetMeta)> {
     if targets.is_empty() {
         anyhow::bail!("聊天目标列表为空，无法发起补全");
     }
@@ -181,7 +177,7 @@ pub async fn try_stream_completion_with_fallback(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use providers::trait_::ToolCallDeltaChunk;
+    use tools::ToolCallDelta;
 
     #[test]
     fn failover_eligible_for_429_and_5xx() {
@@ -231,10 +227,9 @@ mod tests {
 
     #[tokio::test]
     async fn probe_treats_error_only_first_chunk_as_failure() {
-        let stream: ChatStream = Box::pin(stream::iter(vec![Ok(ChatChunk {
-            finish_reason: Some("error: rate limit".into()),
-            ..Default::default()
-        })]));
+        let stream: CompletionStream = Box::pin(stream::iter(vec![Ok(StreamChunk::Error(
+            "rate limit".into(),
+        ))]));
         let err = match probe_or_wrap_pre_content(stream).await {
             Ok(_) => panic!("error-only chunk should fail"),
             Err(e) => e,
@@ -245,40 +240,28 @@ mod tests {
 
     #[tokio::test]
     async fn probe_preserves_meaningful_first_chunk() {
-        let stream: ChatStream = Box::pin(stream::iter(vec![
-            Ok(ChatChunk {
-                token: Some("hi".into()),
-                ..Default::default()
-            }),
-            Ok(ChatChunk {
-                token: Some("!".into()),
-                ..Default::default()
-            }),
+        let stream: CompletionStream = Box::pin(stream::iter(vec![
+            Ok(StreamChunk::Text("hi".into())),
+            Ok(StreamChunk::Text("!".into())),
         ]));
         let mut wrapped = probe_or_wrap_pre_content(stream).await.expect("ok");
         let first = wrapped.next().await.unwrap().unwrap();
-        assert_eq!(first.token.as_deref(), Some("hi"));
+        assert!(matches!(first, StreamChunk::Text(ref t) if t == "hi"));
         let second = wrapped.next().await.unwrap().unwrap();
-        assert_eq!(second.token.as_deref(), Some("!"));
+        assert!(matches!(second, StreamChunk::Text(ref t) if t == "!"));
     }
 
     #[tokio::test]
     async fn probe_keeps_error_chunk_when_content_already_present() {
-        let stream: ChatStream = Box::pin(stream::iter(vec![Ok(ChatChunk {
-            token: Some("partial".into()),
-            finish_reason: Some("error: mid-stream".into()),
-            tool_call_deltas: vec![ToolCallDeltaChunk {
-                index: 0,
-                id: Some("c1".into()),
-                name: Some("t".into()),
-                arguments: None,
-                signature: None,
-            }],
-            ..Default::default()
-        })]));
+        // In the new model, a single chunk can only be one variant.
+        // Simulate: a text chunk followed by an error chunk.
+        let stream: CompletionStream = Box::pin(stream::iter(vec![
+            Ok(StreamChunk::Text("partial".into())),
+            Ok(StreamChunk::Error("mid-stream".into())),
+        ]));
         let mut wrapped = probe_or_wrap_pre_content(stream).await.expect("locked");
         let chunk = wrapped.next().await.unwrap().unwrap();
-        assert_eq!(chunk.token.as_deref(), Some("partial"));
+        assert!(matches!(chunk, StreamChunk::Text(ref t) if t == "partial"));
     }
 
     #[tokio::test]

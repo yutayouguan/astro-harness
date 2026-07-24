@@ -562,13 +562,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     thought_signature = Some(sig);
                 }
                 Some(Ok(StreamedAssistantContent::ToolCallDelta(d))) => {
-                    tool_acc.push(&tools::ToolCallDelta {
-                        index: d.index,
-                        id: d.id.clone(),
-                        name: d.name.clone(),
-                        arguments: d.arguments.clone(),
-                        signature: d.signature.clone(),
-                    });
+                    tool_acc.push(&d);
                     if !emit(
                         &tx,
                         MultiTurnStreamItem::Assistant(StreamedAssistantContent::ToolCallDelta(d)),

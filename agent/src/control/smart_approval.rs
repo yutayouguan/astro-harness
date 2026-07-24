@@ -7,7 +7,9 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::trait_::{ChatMessage, ProviderConfig};
+use providers::trait_::ProviderConfig;
+use providers::types::message::Message as ProviderMessage;
+use providers::types::stream::StreamChunk;
 use tools::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
@@ -162,7 +164,7 @@ async fn ask_model(
         },
         ..ProviderConfig::default()
     };
-    let messages = vec![ChatMessage::text("user", prompt)];
+    let messages = vec![ProviderMessage::user_text(prompt)];
     let mut stream = provider
         .chat_stream(messages, vec![], &config)
         .await
@@ -171,7 +173,7 @@ async fn ask_model(
     let mut full = String::new();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
-        if let Some(token) = chunk.token {
+        if let StreamChunk::Text(token) = chunk {
             full.push_str(&token);
         }
     }
