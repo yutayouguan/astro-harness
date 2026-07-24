@@ -327,7 +327,7 @@ impl McpHub {
     }
 
     /// 调用已连接 MCP 工具（按服务器与工具名）。
-    pub async fn call_tool(&self, qualified_name: &str, args: &Value) -> anyhow::Result<String> {
+    pub async fn call_tool(&self, qualified_name: &str, args: &Value) -> anyhow::Result<common::ToolOutput> {
         if !is_mcp_tool_name(qualified_name) {
             anyhow::bail!("不是 MCP 工具: {qualified_name}");
         }
@@ -372,15 +372,12 @@ impl McpHub {
         }
 
         if let Some(structured) = result.structured_content {
-            return Ok(common::truncate_tool_result(
+            return Ok(common::ToolOutput::Text(common::truncate_tool_result(
                 &structured.to_string(),
                 common::MAX_TOOL_RESULT_BYTES,
-            ));
+            )));
         }
-        Ok(common::truncate_tool_result(
-            &format_content(&result.content),
-            common::MAX_TOOL_RESULT_BYTES,
-        ))
+        Ok(content_to_tool_output(&result.content))
     }
 
     /// 短连刷新某 server 的 discovered（供 UI refresh_mcp_tools）
@@ -425,21 +422,71 @@ impl McpHub {
     }
 }
 
-/// 将 MCP 工具返回内容格式化为纯文本。
-fn format_content(blocks: &[ContentBlock]) -> String {
-    let mut parts = Vec::new();
+/// 将 MCP content blocks 转为结构化 ToolOutput（保留 image/media 信息）。
+fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
+    let mut text_parts = Vec::new();
+    let mut media_assets = Vec::new();
+
     for b in blocks {
-        if let Some(t) = b.as_text() {
-            parts.push(t.text.clone());
-        } else {
-            parts.push(json!(b).to_string());
+        match b {
+            ContentBlock::Text(t) => {
+                text_parts.push(t.text.clone());
+            }
+            ContentBlock::Image(img) => {
+                let kind = common::MediaKind::Image;
+                let mime = img.mime_type.clone();
+                let data_url = format!("data:{};base64,{}", mime, img.data);
+                media_assets.push(common::MediaAsset {
+                    kind,
+                    mime_type: mime,
+                    reference: common::MediaRef::DataUrl(data_url),
+                    label: None,
+                    id: None,
+                });
+                text_parts.push("[image from MCP tool]".to_string());
+            }
+            ContentBlock::Audio(audio) => {
+                let mime = audio.mime_type.clone();
+                let data_url = format!("data:{};base64,{}", mime, audio.data);
+                media_assets.push(common::MediaAsset {
+                    kind: common::MediaKind::Audio,
+                    mime_type: mime,
+                    reference: common::MediaRef::DataUrl(data_url),
+                    label: None,
+                    id: None,
+                });
+                text_parts.push("[audio from MCP tool]".to_string());
+            }
+            ContentBlock::Resource(res) => {
+                // 简化处理：序列化为 JSON 保留结构信息
+                text_parts.push(json!(res).to_string());
+            }
+            _ => {
+                text_parts.push(json!(b).to_string());
+            }
         }
     }
-    if parts.is_empty() {
-        "{}".into()
+
+    let text = if text_parts.is_empty() {
+        "{}".to_string()
     } else {
-        parts.join("\n")
+        text_parts.join("\n")
+    };
+    let text = common::truncate_tool_result(&text, common::MAX_TOOL_RESULT_BYTES);
+
+    if media_assets.is_empty() {
+        common::ToolOutput::Text(text)
+    } else {
+        common::ToolOutput::Media {
+            text,
+            assets: media_assets,
+        }
     }
+}
+
+/// 向下兼容的纯文本格式化（保持旧接口）。
+fn format_content(blocks: &[ContentBlock]) -> String {
+    content_to_tool_output(blocks).into_text()
 }
 
 /// 按配置建立 MCP 连接并拉取工具列表。

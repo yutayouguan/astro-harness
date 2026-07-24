@@ -1131,7 +1131,7 @@ impl AgentLoop {
                 Some(self.session_id.as_str()),
                 self.turn.current_turn_id.as_deref(),
             );
-            return self.mcp_hub.call_tool(name, args).await.map(common::ToolOutput::from);
+            return self.mcp_hub.call_tool(name, args).await;
         }
         let workspace_dir = self.resolve_workspace_dir();
         std::env::set_var("ASTRO_WORKSPACE", &workspace_dir);
@@ -1189,7 +1189,7 @@ impl AgentLoop {
 
     /// 异步执行单次工具调用：检查取消 → 递增深度 → hooks → 分发 → hooks。
     ///
-    /// 取消或深度耗尽时返回错误；成功时返回工具输出字符串。
+    /// 取消或深度耗尽时返回错误；成功时返回 `ToolOutput`。
     pub async fn handle_tool_call_async(
         &mut self,
         name: &str,
@@ -1328,7 +1328,12 @@ impl AgentLoop {
             },
         );
         let result = match transformed {
-            ::hooks::HookOutcome::ReplaceText(s) => common::ToolOutput::from(s),
+            ::hooks::HookOutcome::ReplaceText(s) => match raw_result {
+                common::ToolOutput::Media { assets, .. } => {
+                    common::ToolOutput::Media { text: s, assets }
+                }
+                _ => common::ToolOutput::from(s),
+            },
             _ => raw_result,
         };
         let _ = self.fire_hook(
