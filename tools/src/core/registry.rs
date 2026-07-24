@@ -20,7 +20,7 @@ pub type BuiltinToolHandler =
         &'a mut ToolContext<'b>,
         &'a str,
         &'a serde_json::Value,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<common::ToolOutput>> + 'a>>;
 
 /// 单个可注册工具的完整元数据条目。
 ///

@@ -393,21 +393,25 @@ async fn run_provider_loop(
         }
 
         for call in calls {
-            let mut result =
+            let result =
                 tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
-                    .unwrap_or_else(|e| format!("工具错误: {e}"));
+                    .unwrap_or_else(|e| format!("工具错误: {e}").into());
+
+            let result_text = result.text().to_string();
 
             // 编排后台无 UI：HITL 视为 cancelled，不 park
-            if is_orchestration_hitl_payload(&result) {
-                result = "HITL (confirm/clarify) is not available in background orchestration; treated as cancelled. Continue without user input or skip the action that required approval.".to_string();
-            }
+            let result_text = if is_orchestration_hitl_payload(&result_text) {
+                "HITL (confirm/clarify) is not available in background orchestration; treated as cancelled. Continue without user input or skip the action that required approval.".to_string()
+            } else {
+                result_text
+            };
 
             agent.record_tool_result_with_id(
                 Some(&call.id),
                 Some(&call.name),
                 &format!(
                     "tool={} args={} result={}",
-                    call.name, call.arguments, result
+                    call.name, call.arguments, result_text
                 ),
             )?;
         }

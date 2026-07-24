@@ -51,7 +51,7 @@ pub async fn dispatch_tool(
     ctx: &mut ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     if !registry_allows(name) {
         let toolset = home::tool_name_to_toolset(name);
         anyhow::bail!("工具已禁用（tools-enabled.json → {toolset}=false）: {name}");

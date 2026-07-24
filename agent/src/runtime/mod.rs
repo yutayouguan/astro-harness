@@ -1147,7 +1147,7 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<common::ToolOutput> {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
 
@@ -1189,7 +1189,7 @@ impl AgentLoop {
                 billing_mode: None,
                 meta_json: None,
             });
-            return self.mcp_hub.call_tool(name, args).await;
+            return self.mcp_hub.call_tool(name, args).await.map(common::ToolOutput::from);
         }
 
         let allowed = self.tool_registry.is_tool_allowed(name);
@@ -1235,7 +1235,7 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<common::ToolOutput> {
         let fut = self.handle_tool_call_async(name, args);
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.block_on(fut)
@@ -1254,7 +1254,7 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<common::ToolOutput> {
         if self.cancel.is_cancelled() {
             anyhow::bail!("prompt cancelled");
         }
@@ -1274,7 +1274,7 @@ impl AgentLoop {
         let mut args_owned = args.clone();
         match bus_out {
             ::hooks::HookOutcome::Block(reason) => {
-                return Ok(format!("[blocked by hook] {reason}"));
+                return Ok(format!("[blocked by hook] {reason}").into());
             }
             ::hooks::HookOutcome::Modify(v) => {
                 args_owned = v;
@@ -1304,7 +1304,7 @@ impl AgentLoop {
             (name, args_owned)
         };
         if let Err(msg) = tools::check_tool_call(self.interaction_mode, exec_name, &exec_args) {
-            return Ok(msg);
+            return Ok(msg.into());
         }
         let raw_result = self.dispatch_named_tool(exec_name, &exec_args).await?;
         if exec_name == "skills" {
@@ -1373,8 +1373,9 @@ impl AgentLoop {
         &self,
         name: &str,
         args_owned: &serde_json::Value,
-        raw_result: String,
-    ) -> String {
+        raw_result: common::ToolOutput,
+    ) -> common::ToolOutput {
+        let raw_text = raw_result.text().to_string();
         let transformed = self.fire_hook(
             ::hooks::TRANSFORM_TOOL_RESULT,
             ::hooks::HookPayload {
@@ -1382,13 +1383,13 @@ impl AgentLoop {
                 turn_id: self.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args_owned.clone()),
-                tool_result: Some(raw_result.clone()),
+                tool_result: Some(raw_text.clone()),
                 ..Default::default()
             },
         );
         let result = match transformed {
-            ::hooks::HookOutcome::ReplaceText(s) => s,
-            _ => raw_result.clone(),
+            ::hooks::HookOutcome::ReplaceText(s) => common::ToolOutput::from(s),
+            _ => raw_result,
         };
         let _ = self.fire_hook(
             ::hooks::POST_TOOL_CALL,
@@ -1396,16 +1397,16 @@ impl AgentLoop {
                 session_id: self.session_id.clone(),
                 turn_id: self.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
-                tool_result: Some(result.clone()),
+                tool_result: Some(result.text().to_string()),
                 detail: {
-                    let preview: String = result.chars().take(200).collect();
+                    let preview: String = result.text().chars().take(200).collect();
                     format!("{name} → {preview}")
                 },
                 ..Default::default()
             },
         );
         if name == "subagent" || name == "pipeline" {
-            self.fire_subagent_stop_from_delegate_result(&raw_result)
+            self.fire_subagent_stop_from_delegate_result(&raw_text)
                 .await;
         }
         result
@@ -1789,11 +1790,11 @@ mod tests {
             .finalize_tool_call_result(
                 "subagent",
                 &serde_json::json!({"ignored": true}),
-                raw_result,
+                common::ToolOutput::from(raw_result),
             )
             .await;
 
-        assert_eq!(final_result, "REDACTED");
+        assert_eq!(final_result.text(), "REDACTED");
         assert_eq!(post_result.lock().unwrap().as_deref(), Some("REDACTED"));
         assert_eq!(
             subagent_stop.lock().unwrap().as_slice(),

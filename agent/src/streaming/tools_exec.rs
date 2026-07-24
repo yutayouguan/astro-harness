@@ -81,7 +81,7 @@ pub(crate) async fn execute_tools_serial(
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
-) -> Option<Vec<String>> {
+) -> Option<Vec<common::ToolOutput>> {
     let ctx = hitl_gate.map(|gate| ParentHitlCtx {
         gate: gate.clone(),
         tx: tx.clone(),
@@ -102,8 +102,8 @@ async fn execute_tools_serial_inner(
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
-) -> Option<Vec<String>> {
-    let mut out = Vec::with_capacity(calls.len());
+) -> Option<Vec<common::ToolOutput>> {
+    let mut out: Vec<common::ToolOutput> = Vec::with_capacity(calls.len());
     for call in calls {
         if pause.is_cancelled() {
             return None;
@@ -125,7 +125,7 @@ async fn execute_tools_serial_inner(
                         out.push(format!(
                             "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
                             decision.description
-                        ));
+                        ).into());
                         continue;
                     }
                     tools::ApprovalAction::Auto => {
@@ -172,7 +172,7 @@ async fn execute_tools_serial_inner(
                         if route == ApprovalRoute::Deny {
                             out.push(
                                 "Command denied by hardline policy. Do not retry without changing the command."
-                                    .to_string(),
+                                    .into(),
                             );
                             continue;
                         } else if route == ApprovalRoute::Allowlist {
@@ -252,7 +252,7 @@ async fn execute_tools_serial_inner(
                                 .await;
                                 if !confirm.approved {
                                     out.push(
-                                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".to_string(),
+                                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".into(),
                                     );
                                     continue;
                                 }
@@ -278,7 +278,7 @@ async fn execute_tools_serial_inner(
                                 out.push(format!(
                                     "Command blocked: dangerous ({}) and no HITL gate available.",
                                     decision.description
-                                ));
+                                ).into());
                                 continue;
                             }
                         }
@@ -287,14 +287,14 @@ async fn execute_tools_serial_inner(
             }
         }
 
-        let mut result = if call.args_parse_error {
+        let mut result: common::ToolOutput = if call.args_parse_error {
             format!(
                 "工具参数 JSON 解析失败: {}",
                 call.arguments
                     .get("_parse_error")
                     .and_then(|v| v.as_str())
                     .unwrap_or("invalid json")
-            )
+            ).into()
         } else {
             let mut agent = session.lock().await;
             let memory_dir = agent.memory_dir().to_path_buf();
@@ -310,17 +310,17 @@ async fn execute_tools_serial_inner(
                         .with_tool(call.name.clone())
                         .with_session(session_id),
                     );
-                    format!("工具错误: {e}")
+                    format!("工具错误: {e}").into()
                 })
         };
 
         // confirm/clarify：astro_hitl → 同回合 park
-        if let Some(hitl) = parse_astro_hitl(&result) {
+        if let Some(hitl) = parse_astro_hitl(result.text()) {
             if let Some(gate) = hitl_gate {
-                result = park_astro_hitl(gate, tx, run_id, &call.id, hitl).await?;
+                result = park_astro_hitl(gate, tx, run_id, &call.id, hitl).await?.into();
             } else {
                 // 无 HitlGate（单测或未注入闸门）：无法 park，返回说明文案
-                result = "HITL gate unavailable; confirmation/clarification could not be shown to the user.".to_string();
+                result = "HITL gate unavailable; confirmation/clarification could not be shown to the user.".into();
             }
         }
 
@@ -337,7 +337,7 @@ pub(crate) async fn execute_tools_concurrent(
     session: &Arc<Mutex<AgentLoop>>,
     calls: &[tools::ParsedToolCall],
     pause: &Arc<PauseControl>,
-) -> Option<Vec<String>> {
+) -> Option<Vec<common::ToolOutput>> {
     if pause.is_cancelled() || !pause.wait_if_paused().await {
         return None;
     }
@@ -367,14 +367,14 @@ pub(crate) async fn execute_tools_concurrent(
     for (idx, call) in calls.iter().cloned().enumerate() {
         let snap = snap.clone();
         join_set.spawn_blocking(move || {
-            let result = if call.args_parse_error {
+            let result: common::ToolOutput = if call.args_parse_error {
                 format!(
                     "工具参数 JSON 解析失败: {}",
                     call.arguments
                         .get("_parse_error")
                         .and_then(|v| v.as_str())
                         .unwrap_or("invalid json")
-                )
+                ).into()
             } else {
                 run_tool_on_snapshot(&snap, &call.name, &call.arguments)
             };
@@ -382,7 +382,7 @@ pub(crate) async fn execute_tools_concurrent(
         });
     }
 
-    let mut slots: Vec<Option<String>> = (0..calls.len()).map(|_| None).collect();
+    let mut slots: Vec<Option<common::ToolOutput>> = (0..calls.len()).map(|_| None).collect();
     while let Some(joined) = join_set.join_next().await {
         match joined {
             Ok((idx, result)) => {
@@ -392,7 +392,7 @@ pub(crate) async fn execute_tools_concurrent(
             }
             Err(e) => {
                 // 标记失败占位
-                let msg = format!("工具错误: join failed: {e}");
+                let msg: common::ToolOutput = format!("工具错误: join failed: {e}").into();
                 if let Some(empty_idx) = slots.iter().position(|s| s.is_none()) {
                     slots[empty_idx] = Some(msg);
                 }
@@ -426,7 +426,7 @@ struct ToolExecSnapshot {
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
-fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::Value) -> String {
+fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::Value) -> common::ToolOutput {
     // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
     // 即便路由判定漏了（见 terminal_needs_approval），也不会执行不可恢复操作。
     if name == "terminal" {
@@ -434,7 +434,7 @@ fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::
             if let Some(desc) = tools::is_hardline_blocked(cmd) {
                 return format!(
                     "Command denied by policy (dangerous: {desc}). Do not retry without changing the command."
-                );
+                ).into();
             }
         }
     }
@@ -443,18 +443,18 @@ fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::
         .build()
     {
         Ok(rt) => rt,
-        Err(e) => return format!("工具错误: runtime: {e}"),
+        Err(e) => return format!("工具错误: runtime: {e}").into(),
     };
     rt.block_on(async {
         let mut memory =
             match memory::MemoryManager::for_agent(snap.memory_dir.clone(), &snap.agent_id) {
                 Ok(m) => m,
-                Err(e) => return format!("工具错误: memory: {e}"),
+                Err(e) => return format!("工具错误: memory: {e}").into(),
             };
         let sessions =
             match session::SessionStore::open_sessions_dir(&snap.memory_dir.join("sessions")) {
                 Ok(s) => s,
-                Err(e) => return format!("工具错误: sessions: {e}"),
+                Err(e) => return format!("工具错误: sessions: {e}").into(),
             };
         let mut ctx = tools::ToolContext {
             memory: &mut memory,
@@ -483,7 +483,7 @@ fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::
                         .with_tool(name.to_string())
                         .with_session(snap.session_id.clone()),
                 );
-                format!("工具错误: {e}")
+                format!("工具错误: {e}").into()
             })
     })
 }

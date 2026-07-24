@@ -54,19 +54,18 @@ crate::submit_builtin_tool! {
     register: register,
     names: ["web_search"],
     async_ctx: dispatch,
+    args: WebSearchArgs,
 }
 
 /// 执行网页搜索并返回格式化的结果文本。
 ///
 /// `query` 不能为空；`max_results` 会被 clamp 到 1–10。
-pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: WebSearchArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("web_search 参数无效: {e}"))?;
-    let query = parsed.query.trim();
+pub async fn dispatch(_ctx: &ToolContext<'_>, args: &WebSearchArgs) -> anyhow::Result<String> {
+    let query = args.query.trim();
     if query.is_empty() {
         anyhow::bail!("web_search 需要 query");
     }
-    let max = parsed.max_results.unwrap_or(5).clamp(1, 10) as usize;
+    let max = args.max_results.unwrap_or(5).clamp(1, 10) as usize;
 
     if let Ok(key) = std::env::var("BRAVE_API_KEY") {
         if !key.trim().is_empty() {

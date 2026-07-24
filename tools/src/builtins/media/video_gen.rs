@@ -95,7 +95,7 @@ crate::submit_builtin_tool! {
 }
 
 /// 调用 Google 视频接口并落盘。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
     let parsed: VideoGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("video_gen 参数无效: {e}"))?;
     let prompt = parsed.prompt.trim();
@@ -283,7 +283,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     lines.push(format!(
         "next_shot_hint: video_gen(prompt=\"…\", extend_video=\"{rel}\", duration_seconds=8, aspect_ratio=…)"
     ));
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         lines.join("\n"),
         common::MediaKind::Video,
         &rel,
@@ -399,7 +399,7 @@ async fn dispatch_minimax_video(
     ctx: &ToolContext<'_>,
     parsed: &VideoGenArgs,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     let model = if creds.video_model.trim().is_empty() {
         providers::minimax::defaults::DEFAULT_VIDEO_MODEL.to_string()
     } else {
@@ -516,7 +516,7 @@ async fn dispatch_minimax_video(
                     .strip_prefix(&ctx.workspace_dir)
                     .map(|p| p.to_string_lossy().replace('\\', "/"))
                     .unwrap_or_else(|_| path.display().to_string());
-                return Ok(super::media_out::with_generated_media(
+                return Ok(super::media_out::media_output(
                     format!(
                         "视频已生成：{rel}\nprovider=minimax\nmodel={model}\ntask_id={task_id}"
                     ),

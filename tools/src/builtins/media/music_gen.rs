@@ -128,7 +128,7 @@ crate::submit_builtin_tool! {
     async_ctx: dispatch,
 }
 
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
     let parsed: MusicGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("music_gen 参数无效: {e}"))?;
     if let Some(creds) = ctx.image_gen_targets.minimax() {
@@ -193,7 +193,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         out.push_str("\nlyrics:\n");
         out.push_str(&lyrics);
     }
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         out,
         common::MediaKind::Audio,
         &rel,
@@ -257,7 +257,7 @@ async fn dispatch_minimax_music(
     ctx: &ToolContext<'_>,
     parsed: &MusicGenArgs,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     let model = if creds.music_model.trim().is_empty() {
         providers::minimax::defaults::DEFAULT_MUSIC_MODEL.to_string()
     } else {
@@ -310,7 +310,7 @@ async fn dispatch_minimax_music(
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
 
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         format!(
             "音乐已生成：{rel}\nprovider=minimax\nmodel={model}\nduration_ms={}",
             result.duration_ms

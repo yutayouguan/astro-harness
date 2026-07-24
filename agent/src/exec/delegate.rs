@@ -507,9 +507,10 @@ async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, U
             let mut result = tokio::task::block_in_place(|| {
                 a.agent.handle_tool_call(&call.name, &call.arguments)
             })
-            .unwrap_or_else(|e| format!("工具错误: {e}"));
-            if let Some(hitl) = crate::streaming::parse_astro_hitl(&result) {
-                result = match crate::streaming::try_park_parent_hitl(
+            .unwrap_or_else(|e| format!("工具错误: {e}").into());
+            let result_text = result.text().to_string();
+            if let Some(hitl) = crate::streaming::parse_astro_hitl(&result_text) {
+                let resolved = match crate::streaming::try_park_parent_hitl(
                     &call.id,
                     hitl,
                     Some(a.parent_session_id),
@@ -522,11 +523,13 @@ async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, U
                             .into()
                     }
                 };
+                result = common::ToolOutput::from(resolved);
             }
+            let result_text = result.text().to_string();
             a.agent.record_tool_result_with_id(
                 Some(&call.id),
                 Some(&call.name),
-                &format!("tool={} result={}", call.name, result),
+                &format!("tool={} result={}", call.name, result_text),
             )?;
         }
 
@@ -765,7 +768,7 @@ mod subagent_lifecycle_tests {
             AgentLoop::new(AgentConfig::with_defaults(mem_dir.path().to_path_buf())).unwrap();
         agent.set_hook_bus(Arc::clone(&bus));
         let _ = agent
-            .finalize_tool_call_result("subagent", &serde_json::json!({}), raw_result)
+            .finalize_tool_call_result("subagent", &serde_json::json!({}), common::ToolOutput::from(raw_result))
             .await;
 
         let entries = log.lock().unwrap().clone();

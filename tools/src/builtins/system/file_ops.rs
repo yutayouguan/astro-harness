@@ -130,25 +130,22 @@ fn register_workspace_artifact(ctx: &ToolContext<'_>, rel: &str) {
     }
 }
 
-/// 写入 HTML 文件时附加 media sidecar，使前端活动卡渲染可预览的 HTML 卡片。
+/// 写入 HTML 文件时构造 `ToolOutput::Media`，使前端活动卡渲染可预览的 HTML 卡片。
 ///
 /// 前端 `commands.rs` 已把 `file` 类且扩展名为 html/htm 的 sidecar 映射为 html 预览。
-fn maybe_html_sidecar(text: String, rel: &str) -> String {
+fn maybe_html_sidecar(text: String, rel: &str) -> common::ToolOutput {
     let is_html = rel
         .rsplit('.')
         .next()
         .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "html" | "htm"));
     if is_html {
-        common::append_media_sidecar(
-            &text,
-            &[common::MediaAsset::workspace(
-                common::MediaKind::File,
-                rel,
-                "text/html",
-            )],
-        )
+        let asset = common::MediaAsset::workspace(common::MediaKind::File, rel, "text/html");
+        common::ToolOutput::Media {
+            text,
+            assets: vec![asset],
+        }
     } else {
-        text
+        text.into()
     }
 }
 
@@ -156,7 +153,7 @@ fn maybe_html_sidecar(text: String, rel: &str) -> String {
 ///
 /// 路径经 `resolve_safe` 解析；`write`/`append`/`mkdir`/`move`/`copy` 会自动创建父目录。
 /// `read` / `list` / `search` 有字节或条目上限。
-pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
     let parsed: FileOpsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("file_ops 参数无效: {e}"))?;
     let op = parsed.operation.trim().to_lowercase();
@@ -168,8 +165,10 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
         "read" => {
             if parsed.start_line.is_some() || parsed.end_line.is_some() {
                 read_lines_range(&full, &rel, parsed.start_line, parsed.end_line)
+                    .map(Into::into)
             } else {
                 read_file_capped(&full, parsed.offset.unwrap_or(0), parsed.limit)
+                    .map(Into::into)
             }
         }
         "write" => {
@@ -207,7 +206,8 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             root,
             parsed.recursive.unwrap_or(false),
             ext_filter(&parsed.ext),
-        ),
+        )
+        .map(Into::into),
         "search" => {
             let query = parsed
                 .query
@@ -229,6 +229,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 max_hits,
                 ext_filter(&parsed.ext),
             )
+            .map(Into::into)
         }
         "patch" => {
             let old = parsed
@@ -251,7 +252,7 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("move 需要 dest 参数"))?;
             let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
-            move_path(&full, &dest_full, root)
+            move_path(&full, &dest_full, root).map(Into::into)
         }
         "copy" | "cp" => {
             let dest_rel = parsed
@@ -261,12 +262,13 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("copy 需要 dest 参数"))?;
             let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
-            copy_path(&full, &dest_full, root)
+            copy_path(&full, &dest_full, root).map(Into::into)
         }
-        "delete" => delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false)),
+        "delete" => delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false))
+            .map(Into::into),
         "mkdir" => {
             std::fs::create_dir_all(&full)?;
-            Ok(format!("已创建目录 {rel}"))
+            Ok(format!("已创建目录 {rel}").into())
         }
         other => anyhow::bail!("未知 operation: {other}"),
     }
