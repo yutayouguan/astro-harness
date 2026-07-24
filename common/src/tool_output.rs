@@ -48,7 +48,21 @@ impl ToolOutput {
         match self {
             Self::Text(s) => s.len(),
             Self::Media { text, assets } => {
-                text.len() + assets.iter().map(|a| a.mime_type.len() + 128).sum::<usize>()
+                text.len()
+                    + assets
+                        .iter()
+                        .map(|a| {
+                            let ref_len = match &a.reference {
+                                crate::media::MediaRef::WorkspacePath(p) => p.len(),
+                                crate::media::MediaRef::DataUrl(u) => u.len(),
+                                crate::media::MediaRef::RemoteUri(u) => u.len(),
+                            };
+                            a.mime_type.len()
+                                + ref_len
+                                + a.label.as_ref().map_or(0, |l| l.len())
+                                + 64 // JSON 结构开销
+                        })
+                        .sum::<usize>()
             }
         }
     }

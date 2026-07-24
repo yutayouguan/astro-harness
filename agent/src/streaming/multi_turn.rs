@@ -933,9 +933,11 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     Some(&call.name),
                     &result_for_history,
                 );
+                // media 已从 ToolOutput 结构化取出，直接注入 session message，
+                // 跳过 record_tool_result_with_id 内部的 extract_tool_media 冗余解析。
                 if !tool_media.is_empty() {
                     if let Some(last) = agent.session_messages.last_mut() {
-                        if last.role == common::message::Role::Tool {
+                        if last.role == common::message::Role::Tool && last.media.is_empty() {
                             last.media = tool_media;
                         }
                     }
