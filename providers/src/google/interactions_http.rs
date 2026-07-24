@@ -580,7 +580,7 @@ pub async fn google_interactions_image(
 }
 
 /// 视觉模式（定义在共享层，此处再导出以保持 `interactions_http::VisionMode` 路径稳定）。
-pub use crate::protocol::vision::VisionMode;
+pub use crate::shared::vision::VisionMode;
 
 #[derive(Debug, Clone)]
 pub enum VisionImagePart {

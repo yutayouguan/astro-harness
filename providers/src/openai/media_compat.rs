@@ -1,6 +1,6 @@
 //! OpenAI 兼容媒体：Whisper 转写、Chat 音频描述、视觉 completions。
 //!
-//! 视觉模式见 [`crate::protocol::vision::VisionMode`]；
+//! 视觉模式见 [`crate::shared::vision::VisionMode`]；
 //! Google 原生视觉请用 [`crate::google::interactions_http`]。
 
 use anyhow::{anyhow, Context, Result};
@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 
 use super::defaults::{DEFAULT_API_BASE, DEFAULT_VISION_MODEL};
 use crate::compat::openai_compatible_base;
-use crate::protocol::vision::VisionMode;
+use crate::shared::vision::VisionMode;
 use crate::trait_::ProviderConfig;
 
 /// 默认 Whisper 转写模型。
