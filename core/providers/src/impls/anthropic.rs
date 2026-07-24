@@ -2,8 +2,6 @@
 //!
 //! 消息格式、SSE 事件、认证方式均与 OpenAI 不同，不走 compat 层。
 
-use std::sync::Arc;
-
 use anyhow::{anyhow, Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client as HttpClient;
@@ -158,7 +156,7 @@ impl CompletionModel for AnthropicCompletionModel {
             .await
             .with_context(|| format!("连接 Anthropic 失败: {url}"))?;
 
-        crate::shared::sse::sse_stream(response, Arc::new(extract_anthropic_delta)).await
+        crate::shared::sse::sse_stream(response, crate::shared::sse::wrap_single_extract(extract_anthropic_delta)).await
     }
 }
 

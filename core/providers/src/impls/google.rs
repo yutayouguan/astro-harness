@@ -1,6 +1,6 @@
 //! Google Gemini Interactions API — 原生 CompletionModel 实现。
 
-use std::sync::Arc;
+
 
 use anyhow::{Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -190,7 +190,7 @@ impl CompletionModel for InteractionsCompletionModel {
             .await
             .with_context(|| format!("连接 Google Interactions 失败: {url}"))?;
 
-        crate::shared::sse::sse_stream(response, Arc::new(extract_interactions_delta)).await
+        crate::shared::sse::sse_stream(response, crate::shared::sse::wrap_single_extract(extract_interactions_delta)).await
     }
 }
 
@@ -316,15 +316,12 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
         return Some(StreamChunk::Done { finish_reason: reason.to_string() });
     }
 
-    // step deltas
-    let step_type = v.pointer("/step/type").or_else(|| v.get("type")).and_then(|t| t.as_str()).unwrap_or("");
+    // step events — route on event_type, not step/type
     let delta = v.get("delta");
 
-    match step_type {
-        "step.delta" | "step.start" => {
-            let dt = delta.and_then(|d| d.get("type")).and_then(|t| t.as_str())
-                .or_else(|| v.pointer("/step/type").and_then(|t| t.as_str()))
-                .unwrap_or("");
+    match event_type {
+        "step.delta" => {
+            let dt = delta.and_then(|d| d.get("type")).and_then(|t| t.as_str()).unwrap_or("");
             match dt {
                 "text" | "text_delta" => {
                     let text = delta.and_then(|d| d.get("text")).and_then(|t| t.as_str())
@@ -333,7 +330,10 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
                 }
                 "thought" | "thought_summary" => {
                     let text = delta.and_then(|d| d.get("text").or(d.get("summary")))
-                        .and_then(|t| t.as_str()).filter(|s| !s.is_empty()).map(str::to_string)?;
+                        .and_then(|t| t.as_str())
+                        .or_else(|| delta.and_then(|d| d.pointer("/content/text")).and_then(|t| t.as_str()))
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)?;
                     Some(StreamChunk::Thinking(text))
                 }
                 "thought_signature" => {
@@ -348,6 +348,19 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
                 }
                 "function_call" => {
                     let step = v.get("step").unwrap_or(&v);
+                    let id = step.get("id").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                    let name = step.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                    let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+                    Some(StreamChunk::ToolCallStart { index, id, name })
+                }
+                _ => None,
+            }
+        }
+        "step.start" => {
+            let step = v.get("step")?;
+            let step_kind = step.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            match step_kind {
+                "function_call" => {
                     let id = step.get("id").and_then(|s| s.as_str()).unwrap_or("").to_string();
                     let name = step.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
@@ -423,5 +436,26 @@ mod tests {
         assert_eq!(sys.as_deref(), Some("Be helpful"));
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0]["type"], "user_input");
+    }
+
+    #[test]
+    fn extract_text_delta() {
+        let data = r#"{"index":1,"delta":{"text":"Hello","type":"text"},"event_type":"step.delta"}"#;
+        let chunk = extract_interactions_delta(data);
+        assert!(matches!(chunk, Some(crate::types::StreamChunk::Text(ref t)) if t == "Hello"));
+    }
+
+    #[test]
+    fn extract_thought_signature() {
+        let data = r#"{"index":0,"delta":{"signature":"abc123","type":"thought_signature"},"event_type":"step.delta"}"#;
+        let chunk = extract_interactions_delta(data);
+        assert!(matches!(chunk, Some(crate::types::StreamChunk::ThoughtSignature(ref s)) if s == "abc123"));
+    }
+
+    #[test]
+    fn extract_completed_usage() {
+        let data = r#"{"interaction":{"id":"v1_test","status":"completed","usage":{"total_input_tokens":10,"total_output_tokens":5}},"event_type":"interaction.completed"}"#;
+        let chunk = extract_interactions_delta(data);
+        assert!(matches!(chunk, Some(crate::types::StreamChunk::InteractionId(ref id)) if id == "v1_test"));
     }
 }

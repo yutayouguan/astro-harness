@@ -2,8 +2,6 @@
 //!
 //! POST `{base}/responses` + SSE → [`CompletionStream`]。
 
-use std::sync::Arc;
-
 use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -441,7 +439,7 @@ pub async fn responses_chat_stream(
         .await
         .map_err(|e| anyhow!("连接 Responses API 失败: {url}: {e}"))?;
 
-    crate::shared::sse::sse_stream(response, Arc::new(extract_responses_delta)).await
+    crate::shared::sse::sse_stream(response, crate::shared::sse::wrap_single_extract(extract_responses_delta)).await
 }
 
 // ---------------------------------------------------------------------------

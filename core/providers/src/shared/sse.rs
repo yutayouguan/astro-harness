@@ -1,5 +1,6 @@
 //! SSE 流解析基础设施（所有厂商共用）。
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -7,7 +8,15 @@ use futures::StreamExt;
 
 use crate::types::stream::{CompletionStream, StreamChunk};
 
-type ChunkExtract = Arc<dyn Fn(&str) -> Option<StreamChunk> + Send + Sync>;
+/// SSE 事件提取器：解析 `data:` 负载为零或多个 [`StreamChunk`]。
+pub type ChunkExtract = Arc<dyn Fn(&str) -> Vec<StreamChunk> + Send + Sync>;
+
+/// 将旧式 `Option<StreamChunk>` 提取器包装为 `ChunkExtract`。
+pub fn wrap_single_extract(
+    f: impl Fn(&str) -> Option<StreamChunk> + Send + Sync + 'static,
+) -> ChunkExtract {
+    Arc::new(move |data: &str| f(data).into_iter().collect())
+}
 
 /// 将 HTTP 响应转为 `CompletionStream`，通过 `extract` 闭包解析 SSE 事件。
 pub async fn sse_stream(
@@ -30,8 +39,13 @@ pub async fn sse_stream(
 
     let byte_stream = response.bytes_stream();
     let stream = futures::stream::unfold(
-        (byte_stream, String::new(), false, extract),
-        |(mut byte_stream, mut buf, done, extract)| async move {
+        (byte_stream, String::new(), false, extract, VecDeque::<StreamChunk>::new()),
+        |(mut byte_stream, mut buf, done, extract, mut pending)| async move {
+            // 先排空 pending 队列（一个 SSE 事件可产出多个 chunk）
+            if let Some(chunk) = pending.pop_front() {
+                return Some((Ok(chunk), (byte_stream, buf, done, extract, pending)));
+            }
+
             if done {
                 return None;
             }
@@ -48,19 +62,26 @@ pub async fn sse_stream(
                         if data == "[DONE]" {
                             return None;
                         }
-                        if let Some(chunk) = extract(data) {
-                            if matches!(&chunk, StreamChunk::Error(_)) {
-                                let msg = match chunk {
-                                    StreamChunk::Error(m) => m,
-                                    _ => unreachable!(),
-                                };
-                                return Some((
-                                    Err(anyhow!(msg)),
-                                    (byte_stream, buf, true, extract),
-                                ));
-                            }
-                            return Some((Ok(chunk), (byte_stream, buf, false, extract)));
+                        let mut chunks = extract(data);
+                        if chunks.is_empty() {
+                            continue;
                         }
+                        // 第一个 chunk 检查是否为 Error
+                        if matches!(&chunks[0], StreamChunk::Error(_)) {
+                            let msg = match chunks.remove(0) {
+                                StreamChunk::Error(m) => m,
+                                _ => unreachable!(),
+                            };
+                            return Some((
+                                Err(anyhow!(msg)),
+                                (byte_stream, buf, true, extract, pending),
+                            ));
+                        }
+                        let first = chunks.remove(0);
+                        for rest in chunks {
+                            pending.push_back(rest);
+                        }
+                        return Some((Ok(first), (byte_stream, buf, false, extract, pending)));
                     }
                     continue;
                 }
@@ -70,7 +91,7 @@ pub async fn sse_stream(
                         buf.push_str(&String::from_utf8_lossy(&bytes));
                     }
                     Some(Err(err)) => {
-                        return Some((Err(err.into()), (byte_stream, buf, true, extract)));
+                        return Some((Err(err.into()), (byte_stream, buf, true, extract, pending)));
                     }
                     None => {
                         if !buf.trim().is_empty() {
@@ -79,10 +100,25 @@ pub async fn sse_stream(
                             if let Some(data) = line.strip_prefix("data:") {
                                 let data = data.trim();
                                 if data != "[DONE]" {
-                                    if let Some(chunk) = extract(data) {
+                                    let mut chunks = extract(data);
+                                    if let Some(first) = chunks.first() {
+                                        if matches!(first, StreamChunk::Error(_)) {
+                                            let msg = match chunks.remove(0) {
+                                                StreamChunk::Error(m) => m,
+                                                _ => unreachable!(),
+                                            };
+                                            return Some((
+                                                Err(anyhow!(msg)),
+                                                (byte_stream, buf, true, extract, pending),
+                                            ));
+                                        }
+                                        let first = chunks.remove(0);
+                                        for rest in chunks {
+                                            pending.push_back(rest);
+                                        }
                                         return Some((
-                                            Ok(chunk),
-                                            (byte_stream, buf, true, extract),
+                                            Ok(first),
+                                            (byte_stream, buf, true, extract, pending),
                                         ));
                                     }
                                 }

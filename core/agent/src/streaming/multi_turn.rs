@@ -532,7 +532,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             };
 
             match next {
-                None => break, // 正常结束或 abort
+                None => break,
                 Some(Ok(StreamedAssistantContent::Text(text))) => {
                     full_response.push_str(&text);
                     if !emit(

@@ -4,16 +4,22 @@ use serde_json::Value;
 
 use crate::types::stream::{StreamChunk, Usage};
 
-/// 解析 OpenAI SSE `data:` 负载为 [`StreamChunk`]。
-pub fn extract_openai_delta(data: &str) -> Option<StreamChunk> {
-    let v: Value = serde_json::from_str(data).ok()?;
+/// 解析 OpenAI SSE `data:` 负载为一组 [`StreamChunk`]。
+///
+/// MiniMax interleaved thinking 场景下，一个 SSE 事件可能同时包含
+/// `reasoning_details` + `tool_calls` + `content` + `finish_reason`，
+/// 必须全部提取而非只返回优先级最高的。
+pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
+    let Some(v) = serde_json::from_str::<Value>(data).ok() else {
+        return Vec::new();
+    };
 
     if let Some(err) = v.get("error") {
         let msg = err
             .get("message")
             .and_then(|m| m.as_str())
             .unwrap_or("API error");
-        return Some(StreamChunk::Error(msg.to_string()));
+        return vec![StreamChunk::Error(msg.to_string())];
     }
 
     let usage = parse_usage(&v);
@@ -23,24 +29,12 @@ pub fn extract_openai_delta(data: &str) -> Option<StreamChunk> {
         .and_then(|a| a.first());
 
     let Some(choice) = choice else {
-        return usage.map(StreamChunk::Usage);
+        return usage.map_or_else(Vec::new, |u| vec![StreamChunk::Usage(u)]);
     };
 
-    let finish = choice
-        .get("finish_reason")
-        .and_then(|f| f.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| StreamChunk::Done {
-            finish_reason: s.to_string(),
-        });
+    let mut chunks = Vec::with_capacity(4);
 
-    let token = choice
-        .pointer("/delta/content")
-        .or_else(|| choice.pointer("/message/content"))
-        .and_then(|c| c.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| StreamChunk::Text(s.to_string()));
-
+    // reasoning（优先 reasoning_content 字符串，后备 reasoning_details 数组）
     let reasoning = choice
         .pointer("/delta/reasoning_content")
         .or_else(|| choice.pointer("/message/reasoning_content"))
@@ -48,7 +42,6 @@ pub fn extract_openai_delta(data: &str) -> Option<StreamChunk> {
         .filter(|s| !s.is_empty())
         .map(|s| StreamChunk::Thinking(s.to_string()))
         .or_else(|| {
-            // MiniMax reasoning_details: [{type:"reasoning.text", text:"..."}]
             let arr = choice
                 .pointer("/delta/reasoning_details")
                 .or_else(|| choice.pointer("/message/reasoning_details"))
@@ -64,34 +57,53 @@ pub fn extract_openai_delta(data: &str) -> Option<StreamChunk> {
                 Some(StreamChunk::Thinking(text))
             }
         });
+    if let Some(r) = reasoning {
+        chunks.push(r);
+    }
 
-    let tool_deltas = parse_tool_deltas(choice);
-
-    // MiniMax interleaved thinking: 一个 delta 可能同时含 content="\n" 和 tool_calls。
-    // 纯空白 text 不应遮蔽 tool_calls / reasoning。
-    let meaningful_text = token
-        .as_ref()
-        .map_or(false, |t| matches!(t, StreamChunk::Text(s) if !s.trim().is_empty()));
+    // text content
+    let content_str = choice
+        .pointer("/delta/content")
+        .or_else(|| choice.pointer("/message/content"))
+        .and_then(|c| c.as_str())
+        .filter(|s| !s.is_empty());
+    let meaningful_text = content_str.map_or(false, |s| !s.trim().is_empty());
 
     if meaningful_text {
-        return token;
+        chunks.push(StreamChunk::Text(content_str.unwrap().to_string()));
     }
-    if let Some(r) = reasoning {
-        return Some(r);
+
+    // tool_calls
+    if let Some(td) = parse_tool_deltas(choice) {
+        chunks.push(td);
     }
-    if let Some(td) = tool_deltas {
-        return Some(td);
+
+    // 纯空白 text 兜底（仅在无其他内容时保留，避免遮蔽 tool_calls）
+    if !meaningful_text {
+        if let Some(s) = content_str {
+            if chunks.is_empty() {
+                chunks.push(StreamChunk::Text(s.to_string()));
+            }
+        }
     }
-    if let Some(t) = token {
-        return Some(t);
+
+    // finish_reason
+    if let Some(f) = choice
+        .get("finish_reason")
+        .and_then(|f| f.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        chunks.push(StreamChunk::Done {
+            finish_reason: f.to_string(),
+        });
     }
-    if let Some(f) = finish {
-        return Some(f);
-    }
+
+    // usage
     if let Some(u) = usage {
-        return Some(StreamChunk::Usage(u));
+        chunks.push(StreamChunk::Usage(u));
     }
-    None
+
+    chunks
 }
 
 fn parse_tool_deltas(choice: &Value) -> Option<StreamChunk> {
@@ -120,7 +132,10 @@ fn parse_tool_deltas(choice: &Value) -> Option<StreamChunk> {
             name: name.unwrap_or_default(),
         })
     } else {
-        arguments.map(|args| StreamChunk::ToolCallDelta { index, arguments: args })
+        arguments.map(|args| StreamChunk::ToolCallDelta {
+            index,
+            arguments: args,
+        })
     }
 }
 
@@ -176,74 +191,76 @@ mod tests {
     #[test]
     fn text_delta() {
         let data = r#"{"choices":[{"delta":{"content":"Hello"}}]}"#;
-        match extract_openai_delta(data) {
-            Some(StreamChunk::Text(t)) => assert_eq!(t, "Hello"),
-            other => panic!("expected Text, got {other:?}"),
-        }
+        let chunks = extract_openai_delta(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "Hello"));
     }
 
     #[test]
     fn usage_only() {
         let data = r#"{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}"#;
-        match extract_openai_delta(data) {
-            Some(StreamChunk::Usage(u)) => {
-                assert_eq!(u.input_tokens, 10);
-                assert_eq!(u.output_tokens, 5);
-            }
-            other => panic!("expected Usage, got {other:?}"),
-        }
+        let chunks = extract_openai_delta(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Usage(u) if u.input_tokens == 10 && u.output_tokens == 5));
     }
 
     #[test]
     fn tool_call_start() {
         let data = r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":""}}]}}]}"#;
-        match extract_openai_delta(data) {
-            Some(StreamChunk::ToolCallStart { id, name, .. }) => {
-                assert_eq!(id, "call_1");
-                assert_eq!(name, "read");
-            }
-            other => panic!("expected ToolCallStart, got {other:?}"),
-        }
+        let chunks = extract_openai_delta(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::ToolCallStart { id, name, .. } if id == "call_1" && name == "read"));
     }
 
     #[test]
     fn error_event() {
         let data = r#"{"error":{"message":"Rate limited"}}"#;
-        match extract_openai_delta(data) {
-            Some(StreamChunk::Error(msg)) => assert_eq!(msg, "Rate limited"),
-            other => panic!("expected Error, got {other:?}"),
-        }
+        let chunks = extract_openai_delta(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Error(msg) if msg == "Rate limited"));
     }
 
     #[test]
-    fn whitespace_content_with_tool_call_yields_tool() {
-        // MiniMax interleaved thinking: content="\n" + tool_calls 同时出现
-        let data = r#"{"choices":[{"delta":{"content":"\n","tool_calls":[{"index":0,"id":"call_1","function":{"name":"get_weather","arguments":""}}]}}]}"#;
-        match extract_openai_delta(data) {
-            Some(StreamChunk::ToolCallStart { id, name, .. }) => {
-                assert_eq!(id, "call_1");
-                assert_eq!(name, "get_weather");
-            }
-            other => panic!("expected ToolCallStart (not whitespace Text), got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn meaningful_content_still_wins_over_tool_call() {
-        let data = r#"{"choices":[{"delta":{"content":"hello","tool_calls":[{"index":0,"id":"call_1","function":{"name":"f","arguments":""}}]}}]}"#;
-        match extract_openai_delta(data) {
-            Some(StreamChunk::Text(t)) => assert_eq!(t, "hello"),
-            other => panic!("expected Text, got {other:?}"),
-        }
+    fn minimax_full_delta_all_fields() {
+        // MiniMax interleaved thinking: reasoning + content="\n" + tool_calls + finish 同一事件
+        let data = r#"{"choices":[{"finish_reason":"tool_calls","message":{"content":"\n","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"location\":\"SF\"}"}}],"reasoning_details":[{"type":"reasoning.text","text":"thinking..."}]}}]}"#;
+        let chunks = extract_openai_delta(data);
+        let types: Vec<&str> = chunks
+            .iter()
+            .map(|c| match c {
+                StreamChunk::Thinking(_) => "Thinking",
+                StreamChunk::Text(_) => "Text",
+                StreamChunk::ToolCallStart { .. } => "ToolCallStart",
+                StreamChunk::Done { .. } => "Done",
+                StreamChunk::Usage(_) => "Usage",
+                _ => "Other",
+            })
+            .collect();
+        assert_eq!(types, vec!["Thinking", "ToolCallStart", "Done"],
+            "should extract Thinking + ToolCallStart + Done, got {types:?}");
     }
 
     #[test]
     fn reasoning_details_array_format() {
-        // MiniMax reasoning_details 是数组格式
         let data = r#"{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"thinking..."}]}}]}"#;
-        match extract_openai_delta(data) {
-            Some(StreamChunk::Thinking(t)) => assert_eq!(t, "thinking..."),
-            other => panic!("expected Thinking, got {other:?}"),
-        }
+        let chunks = extract_openai_delta(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "thinking..."));
+    }
+
+    #[test]
+    fn whitespace_only_content_alone_still_emitted() {
+        let data = r#"{"choices":[{"delta":{"content":"\n"}}]}"#;
+        let chunks = extract_openai_delta(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "\n"));
+    }
+
+    #[test]
+    fn meaningful_content_emitted() {
+        let data = r#"{"choices":[{"delta":{"content":"hello"}}]}"#;
+        let chunks = extract_openai_delta(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "hello"));
     }
 }
