@@ -187,23 +187,23 @@ async fn execute_inner_with_depth(
                         ctx.set_node_output(node_id, output.clone());
                         if node.node_type == NodeType::Output { final_output = Some(output.clone()); }
                         let out_str = serde_json::to_string(&output).ok();
-                        log_db_err!(run_db.finish_step_log(&step_id, "success", &step_finished, out_str.as_deref(), None));
+                        log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, out_str.as_deref(), None));
                     }
                     Ok(NodeResult::Branch(active_handles)) => {
                         ctx.set_node_output(node_id, serde_json::json!({ "active_branches": &active_handles }));
                         mark_inactive_downstream(node_id, &active_handles, &workflow.edges, &mut skipped);
-                        log_db_err!(run_db.finish_step_log(&step_id, "success", &step_finished, Some(&format!("branches: {:?}", active_handles)), None));
+                        log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, Some(&format!("branches: {:?}", active_handles)), None));
                     }
                     Ok(NodeResult::Filtered) => {
                         mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
-                        log_db_err!(run_db.finish_step_log(&step_id, "skipped", &step_finished, Some("filtered"), None));
+                        log_db_err!(run_db.finish_step_log(step_id, "skipped", &step_finished, Some("filtered"), None));
                     }
                     Ok(NodeResult::Approved) => {
                         ctx.set_node_output(node_id, serde_json::json!({ "approved": true }));
-                        log_db_err!(run_db.finish_step_log(&step_id, "success", &step_finished, Some("approved"), None));
+                        log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, Some("approved"), None));
                     }
                     Ok(NodeResult::PendingApproval { prompt }) => {
-                        log_db_err!(run_db.finish_step_log(&step_id, "pending_approval", &step_finished,
+                        log_db_err!(run_db.finish_step_log(step_id, "pending_approval", &step_finished,
                             Some(&serde_json::json!({"prompt": prompt, "node_id": node_id}).to_string()), None));
                         return Ok(WorkflowRunResult {
                             run_id: run_id.to_string(), status: "pending_approval".to_string(),
@@ -216,16 +216,16 @@ async fn execute_inner_with_depth(
                         match on_error {
                             "skip" => {
                                 mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
-                                log_db_err!(run_db.finish_step_log(&step_id, "skipped", &step_finished, None, Some(&err_msg)));
+                                log_db_err!(run_db.finish_step_log(step_id, "skipped", &step_finished, None, Some(&err_msg)));
                             }
                             "fallback" => {
                                 let fb = fallback_value.unwrap_or(serde_json::json!(null));
                                 ctx.set_node_output(node_id, fb.clone());
                                 let fb_str = serde_json::to_string(&fb).ok();
-                                log_db_err!(run_db.finish_step_log(&step_id, "fallback", &step_finished, fb_str.as_deref(), Some(&err_msg)));
+                                log_db_err!(run_db.finish_step_log(step_id, "fallback", &step_finished, fb_str.as_deref(), Some(&err_msg)));
                             }
                             _ => {
-                                log_db_err!(run_db.finish_step_log(&step_id, "failure", &step_finished, None, Some(&err_msg)));
+                                log_db_err!(run_db.finish_step_log(step_id, "failure", &step_finished, None, Some(&err_msg)));
                                 bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
                             }
                         }
@@ -250,7 +250,7 @@ async fn execute_inner_with_depth(
                 Ok(NodeResult::Success(output)) => {
                     if node.node_type == NodeType::Loop {
                         let iter_steps = execute_loop_body(
-                            node, &workflow.edges, &node_map, &executors,
+                            node, &workflow.edges, &node_map, executors,
                             &mut ctx, &mut skipped, run_id, run_db,
                         ).await?;
                         steps_executed += iter_steps;
@@ -384,13 +384,13 @@ async fn execute_loop_body(
                 Ok(NodeResult::Success(output)) => {
                     ctx.set_node_output(body_id, output.clone());
                     let out_str = serde_json::to_string(&output).ok();
-                    log_db_err!(run_db.finish_step_log(&step_id, "success", &step_finished, out_str.as_deref(), None));
+                    log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, out_str.as_deref(), None));
                 }
                 Ok(other) => {
-                    log_db_err!(run_db.finish_step_log(&step_id, "success", &step_finished, Some(&format!("{:?}", other)), None));
+                    log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, Some(&format!("{:?}", other)), None));
                 }
                 Err(e) => {
-                    log_db_err!(run_db.finish_step_log(&step_id, "failure", &step_finished, None, Some(&e.to_string())));
+                    log_db_err!(run_db.finish_step_log(step_id, "failure", &step_finished, None, Some(&e.to_string())));
                     bail!("循环体节点 {} 执行失败: {}", body_node.label, e);
                 }
             }

@@ -1430,6 +1430,8 @@ compression:
                 cooldown_secs: 7200,
                 min_new_decisions: 5,
                 max_runs_per_day: 2,
+                min_skill_failure_signals: 3,
+                signal_window_days: 7,
             },
         )
         .unwrap();

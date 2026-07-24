@@ -94,10 +94,8 @@ fn parse_tool_deltas(choice: &Value) -> Option<StreamChunk> {
             id,
             name: name.unwrap_or_default(),
         })
-    } else if let Some(args) = arguments {
-        Some(StreamChunk::ToolCallDelta { index, arguments: args })
     } else {
-        None
+        arguments.map(|args| StreamChunk::ToolCallDelta { index, arguments: args })
     }
 }
 
