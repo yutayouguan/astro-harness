@@ -169,8 +169,8 @@ pub async fn run_headless_multi_turn(
             let result = agent
                 .handle_tool_call_async(&call.name, &call.arguments)
                 .await
-                .unwrap_or_else(|e| format!("工具错误: {e}"));
-            agent.record_tool_result_with_id(Some(&call.id), Some(&call.name), &result)?;
+                .unwrap_or_else(|e| format!("工具错误: {e}").into());
+            agent.record_tool_result_with_id(Some(&call.id), Some(&call.name), result.text())?;
         }
 
         // 工具执行后维护上下文，与 streaming 路径对齐

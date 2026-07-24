@@ -73,15 +73,13 @@ crate::submit_builtin_tool! {
     register: register,
     names: ["todo"],
     sync_ctx: dispatch,
+    args: TodoArgs,
 }
 
-pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: TodoArgs =
-        serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("todo 参数无效: {e}"))?;
-
-    match parsed.action {
-        TodoAction::Create => dispatch_create(ctx, &parsed),
-        TodoAction::Update => dispatch_update(ctx, &parsed),
+pub fn dispatch(ctx: &ToolContext<'_>, args: &TodoArgs) -> anyhow::Result<String> {
+    match args.action {
+        TodoAction::Create => dispatch_create(ctx, args),
+        TodoAction::Update => dispatch_update(ctx, args),
     }
 }
 

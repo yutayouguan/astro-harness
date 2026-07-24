@@ -852,14 +852,15 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 return;
             }
 
-            let (_, tool_media) = common::extract_tool_media(&result);
+            let tool_media = result.media().to_vec();
+            let result_text = result.text().to_string();
             if !emit(
                 &tx,
                 MultiTurnStreamItem::ToolResult {
                     id: call.id.clone(),
                     name: call.name.clone(),
                     arguments_json: call.arguments.to_string(),
-                    result: result.clone(),
+                    result: result_text.clone(),
                     media: tool_media.clone(),
                 },
             )
@@ -869,12 +870,12 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             }
 
             if matches!(call.name.as_str(), "memory")
-                && !result.starts_with("工具错误")
-                && !result.starts_with("工具已禁用")
-                && !result.starts_with("工具参数 JSON 解析失败")
+                && !result_text.starts_with("工具错误")
+                && !result_text.starts_with("工具已禁用")
+                && !result_text.starts_with("工具参数 JSON 解析失败")
             {
                 let preview = {
-                    let s = result.trim();
+                    let s = result_text.trim();
                     if s.chars().count() > 240 {
                         format!("{}…", s.chars().take(240).collect::<String>())
                     } else {
@@ -894,14 +895,14 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 }
             }
 
-            let info_ui = parse_astro_ui(&result);
+            let info_ui = parse_astro_ui(&result_text);
             let result_for_history = if let Some(ref ui) = info_ui {
                 format!("Presented info card: {}", ui.summary)
-            } else if parse_astro_hitl(&result).is_some() {
+            } else if parse_astro_hitl(&result_text).is_some() {
                 // 串行路径已把 HITL park 结果写成非 astro_hitl；若仍是标记则兜底
-                result.clone()
+                result_text.clone()
             } else {
-                result.clone()
+                result_text.clone()
             };
 
             if let Some(ref ui) = info_ui {

@@ -12,6 +12,7 @@ pub mod sqlite;
 pub mod text;
 pub mod title;
 pub mod tool;
+pub mod tool_output;
 pub mod tool_spill;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
@@ -37,3 +38,4 @@ pub use tool_spill::{
 };
 
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
+pub use tool_output::ToolOutput;
