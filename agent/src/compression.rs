@@ -368,11 +368,19 @@ pub struct CompressTarget {
     pub tail_chars: usize,
 }
 
+/// 单条需要裁剪为 stub 的工具消息。
+#[derive(Debug, Clone)]
+pub struct PruneTarget {
+    pub message_id: i64,
+    pub tool_name: Option<String>,
+    pub spill_rel: Option<String>,
+}
+
 /// 压缩计划：由 [`CompressionPolicy::plan`] 返回。
 #[derive(Debug, Default)]
 pub struct CompressionPlan {
-    /// 需要裁剪为 stub 的 `(message_id, tool_name, spill_rel)` 列表。
-    pub prune: Vec<(i64, Option<String>, Option<String>)>,
+    /// 需要裁剪为 stub 的消息列表。
+    pub prune: Vec<PruneTarget>,
     /// 需要压缩的消息及目标参数。
     pub compress: Vec<CompressTarget>,
     /// 本次计划对应的阶段占用比例。
@@ -488,11 +496,11 @@ impl CompressionPolicy for StagedCompressionPolicy {
                 {
                     continue;
                 }
-                plan.prune.push((
-                    stored_msg.id,
-                    stored_msg.tool_name.clone(),
+                plan.prune.push(PruneTarget {
+                    message_id: stored_msg.id,
+                    tool_name: stored_msg.tool_name.clone(),
                     spill_rel,
-                ));
+                });
                 continue;
             }
 

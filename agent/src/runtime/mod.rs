@@ -335,6 +335,10 @@ impl AgentLoop {
         self.turn.turn_wrote_disk = false;
         let compression = memory::load_compression_config(&self.memory.base_dir);
         self.compression.guard = CompressionThrashingGuard::from_config(&compression);
+        self.compression_policy = Box::new(
+            crate::compression::StagedCompressionPolicy::from_config(&compression)
+                .with_context_window(self.context_window()),
+        );
         self.compression.mid_run_handoff = None;
         self.compression.mid_run_summary_done = false;
         self.compression.pending_recommend_compact = false;
@@ -827,11 +831,10 @@ impl AgentLoop {
         result.stage_ratio = plan.stage_ratio;
         result.occupancy_before = plan.occupancy_before;
 
-        // ── Prune 阶段 ──
-        for (msg_id, tool_name, spill_rel) in &plan.prune {
-            let view = prune_tool_view(tool_name.as_deref(), spill_rel.as_deref());
-            let stored_again = self.sessions.get_messages(&self.session_id)?;
-            let Some(stored_msg) = stored_again.iter().find(|m| m.id == *msg_id) else {
+        // ── Prune 阶段（不含 await，复用已有 stored 快照） ──
+        for target in &plan.prune {
+            let view = prune_tool_view(target.tool_name.as_deref(), target.spill_rel.as_deref());
+            let Some(stored_msg) = stored.iter().find(|m| m.id == target.message_id) else {
                 continue;
             };
             let content = stored_msg.content.as_deref().unwrap_or_default();

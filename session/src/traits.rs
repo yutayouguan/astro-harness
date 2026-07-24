@@ -10,8 +10,7 @@ use crate::{BillingDelta, NewMessage, ScrolledMessage, SearchHit, StoredMessage}
 /// [`crate::SessionStore`]（SQLite WAL）是默认实现。实现此 trait 可替换为
 /// Postgres、远程 API 或纯内存 mock。
 ///
-/// 不要求 `Send + Sync`——[`AgentLoop`] 在 `current_thread` runtime 上运行，
-/// 本身就是 non-Send（rusqlite `RefCell`）。
+/// 要求 `Send`（`AgentLoop` 通过 `tokio::spawn` 跨线程移交），不要求 `Sync`。
 pub trait ConversationStore: Send {
     // ── 消息 CRUD ──
 
