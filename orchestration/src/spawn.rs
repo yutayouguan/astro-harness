@@ -1,6 +1,4 @@
-//! 编排 spawn 请求类型与 spawner 类型别名。
-
-use std::sync::Arc;
+//! 编排 spawn 请求类型。
 
 use common::ChatTarget;
 
@@ -21,5 +19,3 @@ pub struct OrchestrationSpawnRequest {
     pub allow_reclaim: bool,
 }
 
-#[deprecated(note = "use tools::ExecutionDispatch trait instead")]
-pub type OrchestrationSpawner = Arc<dyn Fn(OrchestrationSpawnRequest) + Send + Sync + 'static>;

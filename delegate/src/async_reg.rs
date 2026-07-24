@@ -230,9 +230,6 @@ pub fn list_persisted_running() -> Vec<(String, DelegateRunRequest)> {
     out
 }
 
-/// 异步 spawn：`(task_id, DelegateRunRequest)`。
-#[deprecated(note = "use tools::ExecutionDispatch trait instead")]
-pub type DelegateAsyncSpawner = Arc<dyn Fn(String, DelegateRunRequest) + Send + Sync + 'static>;
 
 /// 创建 running 记录并触发后台执行；立即返回 `task_id`。
 pub fn start_delegate_async(
@@ -329,7 +326,7 @@ mod tests {
     fn persist_request_and_list_running() {
         let dir = tempfile::tempdir().unwrap();
         let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
-        let spawner: DelegateAsyncSpawner = Arc::new(|_id, _req| {});
+        let spawner = |_id: String, _req: DelegateRunRequest| {};
         let req = DelegateRunRequest {
             parent_agent_id: "a".into(),
             parent_session_id: "s".into(),
@@ -345,7 +342,7 @@ mod tests {
             project_root: None,
             hook_bus: None,
         };
-        let id = start_delegate_async(req, &spawner).unwrap();
+        let id = start_delegate_async(req, spawner).unwrap();
         let listed = list_persisted_running();
         assert!(
             listed

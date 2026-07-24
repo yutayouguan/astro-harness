@@ -18,7 +18,7 @@ pub use db::{
     orchestration_db_path, NewOrchestration, NewOrchestrationStep, OrchestrationDb,
     OrchestrationRow, OrchestrationStatus, StepRow, StepStatus,
 };
-pub use spawn::{OrchestrationSpawnRequest, OrchestrationSpawner};
+pub use spawn::OrchestrationSpawnRequest;
 pub use team::{
     ensure_teams_dir, list_teams, load_team, save_team, team_path, teams_dir, TeamDefinition,
     TeamMember, TeamMode,
