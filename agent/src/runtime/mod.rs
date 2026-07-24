@@ -15,7 +15,10 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use ::session::{build_conversation_context, format_recalled_context, NewMessage, SessionStore};
+use ::session::{
+    build_conversation_context, format_recalled_context, ConversationStore, NewMessage,
+    SessionStore,
+};
 use common::message::{Message, Role};
 use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
@@ -114,7 +117,8 @@ pub struct AgentLoop {
 
     // ── 不可拆（非 Send 或强耦合） ──────────────────────────
     memory: MemoryManager,
-    sessions: SessionStore,
+    sessions: Box<dyn ConversationStore>,
+    compression_policy: Box<dyn crate::compression::CompressionPolicy>,
     tool_registry: ToolRegistry,
     mcp_hub: McpHub,
 
@@ -169,8 +173,10 @@ impl AgentLoop {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
-        let sessions = SessionStore::open_sessions_dir(&config.memory_dir.join("sessions"))?;
-        let session_messages = hydrate_session_messages(&sessions, &session_id)?;
+        let sessions: Box<dyn ConversationStore> = Box::new(
+            SessionStore::open_sessions_dir(&config.memory_dir.join("sessions"))?,
+        );
+        let session_messages = hydrate_session_messages(&*sessions, &session_id)?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -199,6 +205,11 @@ impl AgentLoop {
             }
         });
 
+        let compression_cfg = memory::load_compression_config(&config.memory_dir);
+        let compression_policy: Box<dyn crate::compression::CompressionPolicy> = Box::new(
+            crate::compression::StagedCompressionPolicy::from_config(&compression_cfg),
+        );
+
         Ok(AgentLoop {
             config,
             session_id,
@@ -208,6 +219,7 @@ impl AgentLoop {
             turn: turn_budget::TurnState::default(),
             memory,
             sessions,
+            compression_policy,
             tool_registry,
             mcp_hub,
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
@@ -641,8 +653,8 @@ impl AgentLoop {
     }
 
     /// 与本 Agent 消息落盘共用的会话库。
-    pub fn sessions(&self) -> &SessionStore {
-        &self.sessions
+    pub fn sessions(&self) -> &dyn ConversationStore {
+        &*self.sessions
     }
 
     /// 当前 Agent 工作区路径。
@@ -782,13 +794,14 @@ impl AgentLoop {
         }
     }
 
-    /// Run 内 tool 上下文工业级维护：prune → Agno 式 LLM 摘要（失败回退 head/tail）→ thrashing。
+    /// Run 内 tool 上下文维护：委托 [`CompressionPolicy`] 生成计划，执行 prune/LLM 摘要/head-tail。
     ///
     /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
     pub async fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
+        use crate::compression::{CompressionPolicy, CompressTarget};
+
         let mut result = ContextMaintenanceResult::default();
-        let cfg = self.compression_config();
-        if !cfg.enabled {
+        if !self.compression_config().enabled {
             return Ok(result);
         }
         if !self.compression.guard.allow_run() {
@@ -796,104 +809,47 @@ impl AgentLoop {
             return Ok(result);
         }
 
-        let manager =
-            ToolCompressionManager::from_config(&cfg).with_context_window(self.context_window());
-        let Some(stage) = manager.stage_for_compress(&self.session_messages) else {
-            return Ok(result);
-        };
-
-        result.stage_ratio = Some(stage.min_ratio);
-        result.occupancy_before = manager.occupancy_ratio(&self.session_messages);
-
         let stored = self.sessions.get_messages(&self.session_id)?;
-        let protect_start = protect_tail_start_index(stored.len(), cfg.protect_last_n.max(1));
+        let protect_last_n = self.compression_config().protect_last_n.max(1);
 
-        #[derive(Clone)]
-        struct CompressCandidate {
-            msg_id: i64,
-            tool_name: Option<String>,
-            content: String,
+        let plan = self.compression_policy.plan(
+            &stored,
+            &self.session_messages,
+            self.memory_dir(),
+            &self.session_id,
+            protect_last_n,
+        );
+
+        if plan.prune.is_empty() && plan.compress.is_empty() {
+            return Ok(result);
         }
 
-        let mut compress_jobs: Vec<CompressCandidate> = Vec::new();
+        result.stage_ratio = plan.stage_ratio;
+        result.occupancy_before = plan.occupancy_before;
 
-        for (idx, stored_msg) in stored.iter().enumerate() {
-            if stored_msg.role != "tool" {
-                continue;
-            }
-            let Some(content) = stored_msg.content.as_deref() else {
+        // ── Prune 阶段 ──
+        for (msg_id, tool_name, spill_rel) in &plan.prune {
+            let view = prune_tool_view(tool_name.as_deref(), spill_rel.as_deref());
+            let stored_again = self.sessions.get_messages(&self.session_id)?;
+            let Some(stored_msg) = stored_again.iter().find(|m| m.id == *msg_id) else {
                 continue;
             };
-            if content.trim().is_empty() {
-                continue;
-            }
-
-            let spill_path = common::tool_spill::spill_file_path(
-                self.memory_dir(),
-                &self.session_id,
-                stored_msg.id,
-            );
-            let spill_rel = spill_path
-                .exists()
-                .then(|| common::spill_path_for_prompt(self.memory_dir(), &spill_path));
-
-            if idx < protect_start
-                && should_prune_tool_at_stage(
-                    stage,
-                    content.chars().count(),
-                    manager.soft_ratio,
-                    manager.hard_ratio,
-                )
-            {
-                let current = stored_msg.compressed_content.as_deref().unwrap_or(content);
-                if common::is_externalized_view(current)
-                    && current.chars().count() <= stage.max_compressed_chars
-                {
-                    continue;
-                }
-                let view = prune_tool_view(stored_msg.tool_name.as_deref(), spill_rel.as_deref());
-                self.apply_tool_compressed_view(stored_msg, content, &view)?;
-                result.pruned += 1;
-                continue;
-            }
-
-            let needs_compress = match stored_msg.compressed_content.as_deref() {
-                None => true,
-                Some(c) => {
-                    !common::is_externalized_view(c)
-                        && c.chars().count() > stage.max_compressed_chars
-                }
-            };
-            if !needs_compress {
-                continue;
-            }
-            // 已短于预算：只标记压缩，避免反复扫描（与启发式一致）。
-            if content.chars().count() <= stage.max_compressed_chars {
-                let Some(view) =
-                    manager.compress_content(stored_msg.tool_name.as_deref(), content, stage)
-                else {
-                    continue;
-                };
-                self.apply_tool_compressed_view(stored_msg, content, &view)?;
-                result.compressed += 1;
-                continue;
-            }
-            compress_jobs.push(CompressCandidate {
-                msg_id: stored_msg.id,
-                tool_name: stored_msg.tool_name.clone(),
-                content: content.to_string(),
-            });
+            let content = stored_msg.content.as_deref().unwrap_or_default();
+            self.apply_tool_compressed_view(stored_msg, content, &view)?;
+            result.pruned += 1;
         }
 
+        // ── Compress 阶段：先尝试 LLM 摘要，失败回退 head/tail ──
         let targets = self.auxiliary_targets(common::AuxiliaryTask::Compaction);
         let llm_budget = crate::exec::tool_llm_compress::MAX_LLM_TOOL_COMPRESS_PER_PASS;
-        for (i, job) in compress_jobs.into_iter().enumerate() {
+
+        for (i, job) in plan.compress.iter().enumerate() {
             let view = if i < llm_budget && !targets.is_empty() {
                 match crate::exec::tool_llm_compress::summarize_tool_result(
                     &targets,
                     job.tool_name.as_deref(),
                     &job.content,
-                    stage.max_compressed_chars,
+                    job.max_chars,
                 )
                 .await
                 {
@@ -907,30 +863,35 @@ impl AgentLoop {
                             tool = ?job.tool_name,
                             "tool LLM compress failed; falling back to head/tail"
                         );
-                        manager
-                            .compress_content(job.tool_name.as_deref(), &job.content, stage)
+                        self.compression_policy
+                            .compress_fallback(job.tool_name.as_deref(), &job.content, job)
                             .unwrap_or_else(|| job.content.clone())
                     }
                 }
             } else {
-                manager
-                    .compress_content(job.tool_name.as_deref(), &job.content, stage)
+                self.compression_policy
+                    .compress_fallback(job.tool_name.as_deref(), &job.content, job)
                     .unwrap_or_else(|| job.content.clone())
             };
 
             let stored_again = self.sessions.get_messages(&self.session_id)?;
-            let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.msg_id) else {
+            let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.message_id) else {
                 continue;
             };
             self.apply_tool_compressed_view(stored_msg, &job.content, &view)?;
             result.compressed += 1;
         }
 
-        result.occupancy_after = manager.occupancy_ratio(&self.session_messages);
-        self.compression.guard
+        // ── 防抖 + compact 建议 ──
+        let mgr = ToolCompressionManager::from_config(&self.compression_config())
+            .with_context_window(self.context_window());
+        result.occupancy_after = mgr.occupancy_ratio(&self.session_messages);
+        self.compression
+            .guard
             .record_outcome(result.occupancy_before, result.occupancy_after);
         result.thrashing_disabled = self.compression.guard.disabled;
-        result.recommend_session_compact = result.occupancy_after >= cfg.recommend_compact_ratio;
+        result.recommend_session_compact =
+            self.compression_policy.should_recommend_compact(result.occupancy_after);
         if result.recommend_session_compact {
             self.compression.pending_recommend_compact = true;
         }
@@ -1204,7 +1165,7 @@ impl AgentLoop {
         let chat_model = self.model_ctx.chat_model.clone();
         let chat_targets = self.model_ctx.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
-        let sessions = &self.sessions;
+        let sessions: &dyn ConversationStore = &*self.sessions;
         let execution = Some(self.execution());
         let hook_bus = Some(self.hook_bus());
         let mut ctx = ToolContext {
@@ -1693,7 +1654,7 @@ impl AgentLoop {
             None
         };
         let recalled = build_conversation_context(
-            &self.sessions,
+            &*self.sessions,
             &self.session_id,
             self.config.recent_turns,
             fts_keywords,

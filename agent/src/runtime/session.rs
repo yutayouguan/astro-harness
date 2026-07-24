@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
-use ::session::SessionStore;
+use ::session::ConversationStore;
 use common::message::Message;
 
-/// 从 `SessionStore` 冷启动重建 `session_messages`（权威以 DB 为准）。
+/// 从会话存储冷启动重建 `session_messages`（权威以 DB 为准）。
 pub fn hydrate_session_messages(
-    sessions: &SessionStore,
+    sessions: &dyn ConversationStore,
     session_id: &str,
 ) -> anyhow::Result<Vec<Message>> {
     let stored = sessions.get_messages(session_id)?;

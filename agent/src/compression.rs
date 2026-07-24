@@ -355,6 +355,203 @@ pub fn prune_tool_view(tool_name: Option<&str>, spill_rel: Option<&str>) -> Stri
     common::make_prune_view(tool_name, spill_rel)
 }
 
+// ── CompressionPolicy trait ────────────────────────────────────────────
+
+/// 单条需要压缩的工具消息描述。
+#[derive(Debug, Clone)]
+pub struct CompressTarget {
+    pub message_id: i64,
+    pub tool_name: Option<String>,
+    pub content: String,
+    pub max_chars: usize,
+    pub head_chars: usize,
+    pub tail_chars: usize,
+}
+
+/// 压缩计划：由 [`CompressionPolicy::plan`] 返回。
+#[derive(Debug, Default)]
+pub struct CompressionPlan {
+    /// 需要裁剪为 stub 的 `(message_id, tool_name, spill_rel)` 列表。
+    pub prune: Vec<(i64, Option<String>, Option<String>)>,
+    /// 需要压缩的消息及目标参数。
+    pub compress: Vec<CompressTarget>,
+    /// 本次计划对应的阶段占用比例。
+    pub stage_ratio: Option<f32>,
+    /// 计划前的窗口占用比例。
+    pub occupancy_before: f32,
+}
+
+/// 工具结果压缩策略接口。
+///
+/// [`StagedCompressionPolicy`]（三阶段渐进）是默认实现。
+/// 实现此 trait 可自定义压缩策略（如语义感知、优先级排序等）。
+pub trait CompressionPolicy: Send {
+    /// 分析当前消息状态，生成压缩计划。
+    ///
+    /// `stored_messages` 为 DB 中的完整消息列表；
+    /// `session_messages` 为内存镜像（含 `compressed_content`，用于占用率估算）；
+    /// `protect_last_n` 为尾部保护消息数。
+    fn plan(
+        &self,
+        stored_messages: &[::session::StoredMessage],
+        session_messages: &[Message],
+        memory_dir: &std::path::Path,
+        session_id: &str,
+        protect_last_n: usize,
+    ) -> CompressionPlan;
+
+    /// 非 LLM 降级压缩（head/tail 截断）。
+    fn compress_fallback(
+        &self,
+        tool_name: Option<&str>,
+        content: &str,
+        target: &CompressTarget,
+    ) -> Option<String>;
+
+    /// 压缩后占用仍高，是否建议用户 `/compact`。
+    fn should_recommend_compact(&self, occupancy_after: f32) -> bool;
+}
+
+/// 默认三阶段渐进压缩策略（Soft / Medium / Hard）。
+pub struct StagedCompressionPolicy {
+    manager: ToolCompressionManager,
+    recommend_compact_ratio: f32,
+}
+
+impl StagedCompressionPolicy {
+    pub fn from_config(cfg: &CompressionConfig) -> Self {
+        Self {
+            manager: ToolCompressionManager::from_config(cfg),
+            recommend_compact_ratio: cfg.recommend_compact_ratio,
+        }
+    }
+
+    pub fn with_context_window(mut self, window: u32) -> Self {
+        self.manager = self.manager.with_context_window(window);
+        self
+    }
+}
+
+impl CompressionPolicy for StagedCompressionPolicy {
+    fn plan(
+        &self,
+        stored_messages: &[::session::StoredMessage],
+        session_messages: &[Message],
+        memory_dir: &std::path::Path,
+        session_id: &str,
+        protect_last_n: usize,
+    ) -> CompressionPlan {
+        let mut plan = CompressionPlan::default();
+        if !self.manager.enabled {
+            return plan;
+        }
+        let Some(stage) = self.manager.stage_for_compress(session_messages) else {
+            return plan;
+        };
+
+        plan.stage_ratio = Some(stage.min_ratio);
+        plan.occupancy_before = self.manager.occupancy_ratio(session_messages);
+
+        let protect_start =
+            protect_tail_start_index(stored_messages.len(), protect_last_n.max(1));
+
+        for (idx, stored_msg) in stored_messages.iter().enumerate() {
+            if stored_msg.role != "tool" {
+                continue;
+            }
+            let Some(content) = stored_msg.content.as_deref() else {
+                continue;
+            };
+            if content.trim().is_empty() {
+                continue;
+            }
+
+            let spill_path = common::tool_spill::spill_file_path(memory_dir, session_id, stored_msg.id);
+            let spill_rel = spill_path
+                .exists()
+                .then(|| common::spill_path_for_prompt(memory_dir, &spill_path));
+
+            if idx < protect_start
+                && should_prune_tool_at_stage(
+                    stage,
+                    content.chars().count(),
+                    self.manager.soft_ratio,
+                    self.manager.hard_ratio,
+                )
+            {
+                let current = stored_msg
+                    .compressed_content
+                    .as_deref()
+                    .unwrap_or(content);
+                if common::is_externalized_view(current)
+                    && current.chars().count() <= stage.max_compressed_chars
+                {
+                    continue;
+                }
+                plan.prune.push((
+                    stored_msg.id,
+                    stored_msg.tool_name.clone(),
+                    spill_rel,
+                ));
+                continue;
+            }
+
+            let needs_compress = match stored_msg.compressed_content.as_deref() {
+                None => true,
+                Some(c) => {
+                    !common::is_externalized_view(c)
+                        && c.chars().count() > stage.max_compressed_chars
+                }
+            };
+            if !needs_compress {
+                continue;
+            }
+
+            if content.chars().count() <= stage.max_compressed_chars {
+                plan.compress.push(CompressTarget {
+                    message_id: stored_msg.id,
+                    tool_name: stored_msg.tool_name.clone(),
+                    content: content.to_string(),
+                    max_chars: stage.max_compressed_chars,
+                    head_chars: stage.head_chars,
+                    tail_chars: stage.tail_chars,
+                });
+                continue;
+            }
+
+            plan.compress.push(CompressTarget {
+                message_id: stored_msg.id,
+                tool_name: stored_msg.tool_name.clone(),
+                content: content.to_string(),
+                max_chars: stage.max_compressed_chars,
+                head_chars: stage.head_chars,
+                tail_chars: stage.tail_chars,
+            });
+        }
+
+        plan
+    }
+
+    fn compress_fallback(
+        &self,
+        tool_name: Option<&str>,
+        content: &str,
+        target: &CompressTarget,
+    ) -> Option<String> {
+        let stage = CompressionStage {
+            min_ratio: 0.0,
+            max_compressed_chars: target.max_chars,
+            head_chars: target.head_chars,
+            tail_chars: target.tail_chars,
+        };
+        self.manager.compress_content(tool_name, content, stage)
+    }
+
+    fn should_recommend_compact(&self, occupancy_after: f32) -> bool {
+        occupancy_after >= self.recommend_compact_ratio
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

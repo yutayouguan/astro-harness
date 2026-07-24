@@ -7,6 +7,7 @@ pub mod format;
 pub mod message_db;
 pub mod store;
 pub mod tools;
+pub mod traits;
 
 pub use format::format_recalled_context;
 pub use message_db::{build_conversation_context, ScrolledMessage};
@@ -16,3 +17,4 @@ pub use store::{
     SCHEMA_VERSION,
 };
 pub use tools::{dispatch_session_tool, record_message};
+pub use traits::ConversationStore;

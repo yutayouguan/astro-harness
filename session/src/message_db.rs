@@ -1,6 +1,6 @@
 //! 会话召回类型与上下文构建。
 
-use crate::store::SessionStore;
+use crate::traits::ConversationStore;
 
 /// 对话上下文中的单条消息，可标记为 FTS 召回的锚点。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,7 +19,7 @@ pub struct ScrolledMessage {
 ///
 /// 合并后按 `id` 排序并去重。`fts_keywords` 为 `None` 时仅返回最近消息。
 pub fn build_conversation_context(
-    store: &SessionStore,
+    store: &dyn ConversationStore,
     session_id: &str,
     recent_turns: usize,
     fts_keywords: Option<&str>,

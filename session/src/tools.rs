@@ -2,10 +2,10 @@ use anyhow::anyhow;
 use serde_json::Value;
 
 use crate::format::format_session_search_hits;
-use crate::{NewMessage, SessionStore};
+use crate::{ConversationStore, NewMessage};
 
 pub fn record_message(
-    store: &SessionStore,
+    store: &dyn ConversationStore,
     session_id: &str,
     role: &str,
     content: &str,
@@ -18,7 +18,7 @@ pub fn record_message(
 }
 
 pub fn dispatch_session_tool(
-    store: &SessionStore,
+    store: &dyn ConversationStore,
     name: &str,
     args: &Value,
 ) -> anyhow::Result<String> {
