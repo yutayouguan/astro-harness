@@ -135,9 +135,8 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
 }
 
 /// 进程启动后：对 DB 中未完成编排重新 spawn（允许 reclaim）。
-#[allow(deprecated)]
 pub async fn resume_incomplete_orchestrations(
-    spawner: &orchestration::OrchestrationSpawner,
+    execution: &dyn tools::ExecutionDispatch,
 ) -> anyhow::Result<()> {
     let db = OrchestrationDb::open_default()?;
     let ids = db.list_incomplete_ids()?;
@@ -149,7 +148,7 @@ pub async fn resume_incomplete_orchestrations(
             tracing::warn!(id = %id, "skip orchestration resume: empty api_key");
             continue;
         }
-        spawner(OrchestrationSpawnRequest {
+        execution.spawn_orchestration(OrchestrationSpawnRequest {
             orchestration_id: id,
             parent_agent_id: row.parent_agent_id,
             provider: row.provider,

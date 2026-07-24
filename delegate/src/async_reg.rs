@@ -237,7 +237,7 @@ pub type DelegateAsyncSpawner = Arc<dyn Fn(String, DelegateRunRequest) + Send + 
 /// 创建 running 记录并触发后台执行；立即返回 `task_id`。
 pub fn start_delegate_async(
     req: DelegateRunRequest,
-    spawner: &DelegateAsyncSpawner,
+    spawner: impl Fn(String, DelegateRunRequest),
 ) -> anyhow::Result<String> {
     let reg = AsyncDelegateRegistry::global();
     let task_id = reg.insert_running(&req.parent_session_id, &req.parent_agent_id);
@@ -247,7 +247,7 @@ pub fn start_delegate_async(
 }
 
 /// 重启后续跑：装入 running 记录并再次交给 spawner。
-pub fn resume_incomplete_async_delegates(spawner: &DelegateAsyncSpawner) {
+pub fn resume_incomplete_async_delegates(spawner: impl Fn(String, DelegateRunRequest)) {
     let reg = AsyncDelegateRegistry::global();
     for (task_id, req) in list_persisted_running() {
         if reg.get(&task_id).is_none() {
