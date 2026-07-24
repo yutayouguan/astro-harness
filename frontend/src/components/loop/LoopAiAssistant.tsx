@@ -11,7 +11,6 @@ import {
   AlertCircle,
   Wand2,
 } from "lucide-react";
-import type { NodeType } from "./loopTypes";
 import { NODE_REGISTRY } from "./loopTypes";
 
 interface AiGenNode {

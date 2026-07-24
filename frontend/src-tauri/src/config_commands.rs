@@ -135,6 +135,7 @@ fn config_from_dto(d: McpServerDto) -> mcp::McpServerConfig {
         url: d.url,
         headers: d.headers,
         enabled: d.enabled,
+        tool_timeout_secs: None,
         tools: d.tools,
         discovered: d
             .discovered

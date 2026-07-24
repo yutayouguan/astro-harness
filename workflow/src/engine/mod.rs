@@ -142,7 +142,7 @@ async fn execute_inner_with_depth(
             let step_id = uuid::Uuid::new_v4().to_string();
             let step_started = Local::now().to_rfc3339();
             log_db_err!(run_db.insert_step_log(
-                step_id, run_id, node_id,
+                &step_id, run_id, node_id,
                 &format!("{:?}", node.node_type), &node.label, &step_started,
             ));
             if matches!(node.node_type, NodeType::RunLoop | NodeType::CustomLoop | NodeType::Loop) {
@@ -374,7 +374,7 @@ async fn execute_loop_body(
 
             let step_id = uuid::Uuid::new_v4().to_string();
             let step_started = Local::now().to_rfc3339();
-            log_db_err!(run_db.insert_step_log(step_id, run_id, body_id, &format!("{:?}", body_node.node_type), &body_node.label, &step_started));
+            log_db_err!(run_db.insert_step_log(&step_id, run_id, body_id, &format!("{:?}", body_node.node_type), &body_node.label, &step_started));
 
             let result = executor.execute(body_node, ctx).await;
             let step_finished = Local::now().to_rfc3339();
@@ -384,13 +384,13 @@ async fn execute_loop_body(
                 Ok(NodeResult::Success(output)) => {
                     ctx.set_node_output(body_id, output.clone());
                     let out_str = serde_json::to_string(&output).ok();
-                    log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, out_str.as_deref(), None));
+                    log_db_err!(run_db.finish_step_log(&step_id, "success", &step_finished, out_str.as_deref(), None));
                 }
                 Ok(other) => {
-                    log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, Some(&format!("{:?}", other)), None));
+                    log_db_err!(run_db.finish_step_log(&step_id, "success", &step_finished, Some(&format!("{:?}", other)), None));
                 }
                 Err(e) => {
-                    log_db_err!(run_db.finish_step_log(step_id, "failure", &step_finished, None, Some(&e.to_string())));
+                    log_db_err!(run_db.finish_step_log(&step_id, "failure", &step_finished, None, Some(&e.to_string())));
                     bail!("循环体节点 {} 执行失败: {}", body_node.label, e);
                 }
             }

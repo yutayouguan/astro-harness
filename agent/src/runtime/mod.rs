@@ -28,7 +28,7 @@ use serde_json::Value;
 use tools::{dispatch_tool, register_all, DynToolHandler, ToolContext, ToolEntry, ToolRegistry};
 
 use crate::compression::{
-    protect_tail_start_index, prune_tool_view, should_prune_tool_at_stage,
+    prune_tool_view,
     CompressionThrashingGuard, ContextMaintenanceResult, ToolCompressionManager,
 };
 use crate::prompt::context::{DynamicContext, StaticContext};
@@ -808,8 +808,6 @@ impl AgentLoop {
     ///
     /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
     pub async fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
-        use crate::compression::{CompressionPolicy, CompressTarget};
-
         let mut result = ContextMaintenanceResult::default();
         if !self.compression_config().enabled {
             return Ok(result);

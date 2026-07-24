@@ -8,7 +8,6 @@ use std::process::Stdio;
 use anyhow::{anyhow, Context};
 use http::{HeaderName, HeaderValue};
 use rmcp::model::{CallToolRequestParams, ContentBlock, Tool as RmcpTool};
-use rmcp::service::RunningService;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{Peer, RoleClient, ServiceExt};
