@@ -1189,7 +1189,7 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
                 continue;
             }
             let created = info.created.unwrap_or(0);
-            if best.as_ref().map_or(true, |(c, _)| created > *c) {
+            if best.as_ref().is_none_or(|(c, _)| created > *c) {
                 best = Some((created, info.id.clone()));
             }
         }
@@ -1300,7 +1300,7 @@ fn validate_http_endpoint(endpoint: &str) -> Result<(), String> {
     }
     let parsed =
         url::Url::parse(trimmed).map_err(|e| format!("Endpoint 格式无效: {e}"))?;
-    if parsed.host_str().map_or(true, |h| h.is_empty()) {
+    if parsed.host_str().is_none_or(|h| h.is_empty()) {
         return Err("Endpoint 缺少主机名".to_string());
     }
     Ok(())

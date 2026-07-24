@@ -1383,7 +1383,7 @@ pub async fn approve_evolution_proposal(id: String) -> Result<String, String> {
     let (skill_id, kind, score) = proposal_meta(&base, &id);
 
     // [P1] 批准前保存当前版本快照，便于一键回滚
-    if let Some(loaded) = skills::load_skill_by_name(&skill_id).ok() {
+    if let Ok(loaded) = skills::load_skill_by_name(&skill_id) {
         if let Some(parent) = std::path::Path::new(&loaded.path).parent() {
             let _ = skills::save_snapshot(parent); // 失败不阻塞审批
         }

@@ -1,7 +1,7 @@
 //! Tauri IPC 薄封装 → `skills` 领域层
 
 use serde::Serialize;
-use chrono;
+
 use skills::models::SkillOriginRecord;
 use skills::origins::load_origins;
 use skills::{
@@ -364,6 +364,6 @@ pub async fn get_skill_signal_summary() -> Result<Vec<SkillSignalDto>, String> {
         .filter(|(_, n)| *n > 0)
         .map(|(skill_id, failure_signals)| SkillSignalDto { skill_id, failure_signals })
         .collect();
-    result.sort_by(|a, b| b.failure_signals.cmp(&a.failure_signals));
+    result.sort_by_key(|a| std::cmp::Reverse(a.failure_signals));
     Ok(result)
 }

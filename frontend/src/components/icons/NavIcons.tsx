@@ -232,13 +232,15 @@ export function IconInsights(props: IconProps) {
   );
 }
 
-/** 自主进化 — DNA 双螺旋剪影，选中整块填实 */
+/** 自主进化 — DNA 双螺旋，两条链交织 */
 export function IconEvolution(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <path d="M7 4h10M7 20h10M8 4c0 4 8 4 8 8s-8 4-8 8M16 4c0 4-8 4-8 8s8 4 8 8" />
-      <circle className="nav-icon-cutout" cx="7" cy="12" r="1" />
-      <circle className="nav-icon-cutout" cx="17" cy="12" r="1" />
+      <path d="M9 3c0 3.5 6 5 6 9s-6 5.5-6 9" />
+      <path d="M15 3c0 3.5-6 5-6 9s6 5.5 6 9" />
+      <path className="nav-icon-cutout" d="M8 6h8M8 18h8" />
+      <circle className="nav-icon-cutout" cx="7.5" cy="12" r="1" />
+      <circle className="nav-icon-cutout" cx="16.5" cy="12" r="1" />
     </NavIconBase>
   );
 }
