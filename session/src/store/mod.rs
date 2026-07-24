@@ -281,6 +281,76 @@ impl SessionStore {
     }
 }
 
+impl crate::ConversationStore for SessionStore {
+    fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
+        SessionStore::append_message(self, msg)
+    }
+
+    fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
+        SessionStore::get_messages(self, session_id)
+    }
+
+    fn update_message_compressed_content(
+        &self,
+        message_id: i64,
+        compressed: Option<&str>,
+    ) -> Result<()> {
+        SessionStore::update_message_compressed_content(self, message_id, compressed)
+    }
+
+    fn patch_last_assistant_reasoning_details(
+        &self,
+        session_id: &str,
+        details: &Value,
+    ) -> Result<()> {
+        SessionStore::patch_last_assistant_reasoning_details(self, session_id, details)
+    }
+
+    fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
+        SessionStore::ensure_session(self, id, source)
+    }
+
+    fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
+        SessionStore::update_session_billing(self, id, d)
+    }
+
+    fn recent_messages(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<crate::ScrolledMessage>> {
+        SessionStore::recent_messages(self, session_id, limit)
+    }
+
+    fn recall_message_ids(
+        &self,
+        session_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<i64>> {
+        SessionStore::recall_message_ids(self, session_id, query, limit)
+    }
+
+    fn scroll_context_window(
+        &self,
+        session_id: &str,
+        around_message_id: i64,
+        window_size: i64,
+    ) -> Result<Vec<crate::ScrolledMessage>> {
+        SessionStore::scroll_context_window(self, session_id, around_message_id, window_size)
+    }
+
+    fn search_messages(
+        &self,
+        query: &str,
+        source_filter: Option<&str>,
+        role_filter: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<SearchHit>> {
+        SessionStore::search_messages(self, query, source_filter, role_filter, limit)
+    }
+}
+
 impl SqliteStore for SessionStore {
     fn path(&self) -> &Path {
         &self.path

@@ -443,7 +443,7 @@ async fn execute_job_with_roots_local(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),
             ),
-            sessions.as_ref(),
+            sessions.as_ref().map(|s| s as &dyn ::session::ConversationStore),
         );
     }
 
@@ -662,7 +662,7 @@ async fn complete_job_local(
                 serde_json::json!({ "source": "cron", "job_id": job.id, "trigger": trigger })
                     .to_string(),
             ),
-            sessions.as_ref(),
+            sessions.as_ref().map(|s| s as &dyn ::session::ConversationStore),
         );
     }
 
