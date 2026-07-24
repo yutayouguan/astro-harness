@@ -83,5 +83,6 @@ pub struct DelegateRunRequest {
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
+#[deprecated(note = "use tools::ExecutionDispatch trait instead")]
 pub type DelegateRunner =
     Arc<dyn Fn(DelegateRunRequest) -> anyhow::Result<String> + Send + Sync + 'static>;

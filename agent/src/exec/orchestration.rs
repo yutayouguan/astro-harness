@@ -135,6 +135,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
 }
 
 /// 进程启动后：对 DB 中未完成编排重新 spawn（允许 reclaim）。
+#[allow(deprecated)]
 pub async fn resume_incomplete_orchestrations(
     spawner: &orchestration::OrchestrationSpawner,
 ) -> anyhow::Result<()> {

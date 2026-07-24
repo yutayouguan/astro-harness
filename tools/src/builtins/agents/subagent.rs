@@ -134,6 +134,7 @@ pub fn dispatch_async(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .execution
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no execution dispatch configured"))?;
+    #[allow(deprecated)]
     let spawner: delegate::DelegateAsyncSpawner = {
         let exec = std::sync::Arc::clone(exec);
         std::sync::Arc::new(move |task_id, req| exec.spawn_async(task_id, req))

@@ -21,4 +21,5 @@ pub struct OrchestrationSpawnRequest {
     pub allow_reclaim: bool,
 }
 
+#[deprecated(note = "use tools::ExecutionDispatch trait instead")]
 pub type OrchestrationSpawner = Arc<dyn Fn(OrchestrationSpawnRequest) + Send + Sync + 'static>;

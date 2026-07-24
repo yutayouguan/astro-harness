@@ -231,6 +231,7 @@ pub fn list_persisted_running() -> Vec<(String, DelegateRunRequest)> {
 }
 
 /// 异步 spawn：`(task_id, DelegateRunRequest)`。
+#[deprecated(note = "use tools::ExecutionDispatch trait instead")]
 pub type DelegateAsyncSpawner = Arc<dyn Fn(String, DelegateRunRequest) + Send + Sync + 'static>;
 
 /// 创建 running 记录并触发后台执行；立即返回 `task_id`。

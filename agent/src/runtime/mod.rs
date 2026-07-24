@@ -183,11 +183,13 @@ impl AgentLoop {
         static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
         let exec_resume = Arc::clone(&execution);
         RESUME_ONCE.call_once(move || {
+            #[allow(deprecated)]
             let spawner: delegate::DelegateAsyncSpawner = {
                 let exec = Arc::clone(&exec_resume);
                 Arc::new(move |task_id, req| exec.spawn_async(task_id, req))
             };
             delegate::resume_incomplete_async_delegates(&spawner);
+            #[allow(deprecated)]
             let orch_spawner: orchestration::OrchestrationSpawner = {
                 let exec = Arc::clone(&exec_resume);
                 Arc::new(move |req| exec.spawn_orchestration(req))
