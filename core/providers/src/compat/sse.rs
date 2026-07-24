@@ -275,4 +275,39 @@ mod tests {
         assert_eq!(chunks.len(), 1);
         assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "hello"));
     }
+
+    #[test]
+    fn minimax_native_format_think_tags_in_content() {
+        // 原生格式 (reasoning_split=False): <think>...</think> 嵌在 content 中 + tool_calls
+        let data = r#"{"choices":[{"finish_reason":"tool_calls","message":{"content":"<think>\nI should call get_weather.\n</think>\n\n\n","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"location\":\"SF\"}"}}]}}]}"#;
+        let chunks = extract_openai_delta(data);
+        let types: Vec<&str> = chunks
+            .iter()
+            .map(|c| match c {
+                StreamChunk::Text(_) => "Text",
+                StreamChunk::ToolCallStart { .. } => "ToolCallStart",
+                StreamChunk::ToolCallDelta { .. } => "ToolCallDelta",
+                StreamChunk::Done { .. } => "Done",
+                _ => "Other",
+            })
+            .collect();
+        // content 含 <think> 标签 → Text（非空白）+ ToolCallStart + ToolCallDelta + Done
+        assert_eq!(types, vec!["Text", "ToolCallStart", "ToolCallDelta", "Done"],
+            "native format: got {types:?}");
+    }
+
+    #[test]
+    fn reasoning_content_string_with_tool_calls() {
+        // DeepSeek 风格：reasoning_content 字符串 + tool_calls
+        let data = r#"{"choices":[{"finish_reason":"tool_calls","delta":{"reasoning_content":"let me think","tool_calls":[{"index":0,"id":"c1","function":{"name":"f","arguments":"{}"}}]}}]}"#;
+        let chunks = extract_openai_delta(data);
+        let types: Vec<&str> = chunks.iter().map(|c| match c {
+            StreamChunk::Thinking(_) => "Thinking",
+            StreamChunk::ToolCallStart { .. } => "ToolCallStart",
+            StreamChunk::ToolCallDelta { .. } => "ToolCallDelta",
+            StreamChunk::Done { .. } => "Done",
+            _ => "Other",
+        }).collect();
+        assert_eq!(types, vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"]);
+    }
 }
