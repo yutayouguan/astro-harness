@@ -1194,12 +1194,13 @@ export function useChatSession({
       }
       if (userIdx < 0) return;
       const userMsg = messages[userIdx];
-      pendingKeepChatBubblesRef.current = countChatBubbles(messages.slice(0, userIdx + 1));
+      // 截断到 user 消息之前，让后端正常追加（避免重复）
+      pendingKeepChatBubblesRef.current = countChatBubbles(messages.slice(0, userIdx));
       void send({
         text: userMsg.content,
         attachments: userMsg.attachments ?? [],
-        truncateTo: userIdx + 1,
-        skipUserAppend: true,
+        truncateTo: userIdx,
+        skipUserAppend: false,
         reuseUserId: userMsg.id,
       });
     },
