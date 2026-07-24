@@ -1,6 +1,6 @@
-//! 生成类工具结果：附加 `astro_media_v1` sidecar；统一落盘文件名。
+//! 生成类工具结果：统一落盘文件名与结构化 `ToolOutput::Media` 构建。
 
-use common::{append_media_sidecar, MediaAsset, MediaKind};
+use common::{append_media_sidecar, MediaAsset, MediaKind, ToolOutput};
 
 /// 在人类可读工具结果后附加结构化媒体 sidecar。
 pub fn with_generated_media(
@@ -12,6 +12,21 @@ pub fn with_generated_media(
 ) -> String {
     let asset = MediaAsset::workspace(kind, path, mime_type).with_label(label);
     append_media_sidecar(text.as_ref(), &[asset])
+}
+
+/// 构造 `ToolOutput::Media`，替代 sidecar 拼接。
+pub fn media_output(
+    text: impl Into<String>,
+    kind: MediaKind,
+    path: &str,
+    mime_type: &str,
+    label: &str,
+) -> ToolOutput {
+    let asset = MediaAsset::workspace(kind, path, mime_type).with_label(label);
+    ToolOutput::Media {
+        text: text.into(),
+        assets: vec![asset],
+    }
 }
 
 /// 生成可读文件名：`{标题}-{时间戳}-{短uuid}.{ext}`。

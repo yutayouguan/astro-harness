@@ -183,7 +183,7 @@ crate::submit_builtin_tool! {
 ///
 /// # 错误
 /// 无可用 Provider、全部尝试失败，或缺少 `prompt`。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
     let mut parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
     normalize_image_gen_args(&mut parsed);
@@ -204,7 +204,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     .flatten()
     {
         match generate_one(ctx, &parsed, creds).await {
-            Ok(msg) => return Ok(msg),
+            Ok(output) => return Ok(output),
             Err(err) => {
                 errors.push(format!("{} ({}): {err}", creds.provider, creds.model));
             }
@@ -219,7 +219,7 @@ async fn generate_one(
     ctx: &ToolContext<'_>,
     args: &ImageGenArgs,
     creds: &ImageGenCreds,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     if creds.provider == "google" {
         return generate_one_google(ctx, args, creds).await;
     }
@@ -230,7 +230,7 @@ async fn generate_one_google(
     ctx: &ToolContext<'_>,
     args: &ImageGenArgs,
     creds: &ImageGenCreds,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     let prompt = args.prompt.trim();
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
@@ -298,7 +298,7 @@ async fn generate_one_google(
         "\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）；多轮编辑可传 previous_interaction_id=\"{}\"",
         result.interaction_id
     ));
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         out,
         common::MediaKind::Image,
         &rel,
@@ -311,7 +311,7 @@ async fn generate_one_openai_compat(
     ctx: &ToolContext<'_>,
     args: &ImageGenArgs,
     creds: &ImageGenCreds,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     let provider = ctx
         .providers
         .get(&creds.provider)
@@ -345,7 +345,7 @@ async fn generate_one_openai_compat(
             "\nnote: OpenAI 路径忽略 Interactions 高级参数（image_size/reference_images/…）",
         );
     }
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         out,
         common::MediaKind::Image,
         &rel,

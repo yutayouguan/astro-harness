@@ -73,7 +73,7 @@ crate::submit_builtin_tool! {
 }
 
 /// 请求 TTS，将音频保存到工作区并返回路径。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
     let parsed: TtsArgs =
         serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("tts 参数无效: {e}"))?;
     let text = parsed.text.trim();
@@ -114,13 +114,19 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("alloy");
-    let msg = synthesize_openai(ctx, text, voice, parsed.title.as_deref()).await?;
+    let output = synthesize_openai(ctx, text, voice, parsed.title.as_deref()).await?;
     if advanced {
-        Ok(format!(
-            "{msg}\nnote: speakers/style/stream 仅 Google Interactions TTS 生效"
-        ))
+        // Append note to the text portion of the ToolOutput
+        let output = match output {
+            common::ToolOutput::Media { text, assets } => common::ToolOutput::Media {
+                text: format!("{text}\nnote: speakers/style/stream 仅 Google Interactions TTS 生效"),
+                assets,
+            },
+            other => other,
+        };
+        Ok(output)
     } else {
-        Ok(msg)
+        Ok(output)
     }
 }
 
@@ -131,7 +137,7 @@ async fn synthesize_google(
     style: Option<&str>,
     stream: bool,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     let model = if creds.tts_model.trim().is_empty() {
         default_tts_model().to_string()
     } else {
@@ -171,7 +177,7 @@ async fn synthesize_google(
         .strip_prefix(&ctx.workspace_dir)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         format!(
             "语音已生成：{rel}\nprovider=google\nmodel={model}\ninteraction_id={}\nstream={}",
             result.interaction_id, stream
@@ -188,7 +194,7 @@ async fn synthesize_minimax(
     text: &str,
     parsed: &TtsArgs,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     let model = if creds.tts_model.trim().is_empty() {
         providers::minimax::defaults::DEFAULT_TTS_MODEL.to_string()
     } else {
@@ -238,7 +244,7 @@ async fn synthesize_minimax(
         .strip_prefix(&ctx.workspace_dir)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         format!(
             "语音已生成：{rel}\nprovider=minimax\nmodel={model}\nduration_ms={}",
             result.duration_ms
@@ -293,7 +299,7 @@ async fn synthesize_openai(
     text: &str,
     voice: &str,
     title: Option<&str>,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<common::ToolOutput> {
     let (api_key, base) = resolve_openai_tts(ctx)?;
     let url = format!("{base}/audio/speech");
     let body = serde_json::json!({
@@ -325,7 +331,7 @@ async fn synthesize_openai(
         .strip_prefix(&ctx.workspace_dir)
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| path.display().to_string());
-    Ok(super::media_out::with_generated_media(
+    Ok(super::media_out::media_output(
         format!("语音已生成：{rel}\nprovider=openai\nmodel=gpt-4o-mini-tts"),
         common::MediaKind::Audio,
         &rel,
