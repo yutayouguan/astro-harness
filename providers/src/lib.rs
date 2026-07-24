@@ -7,7 +7,7 @@
 //! - [`new_registry`]：基于 trait 的动态注册表
 //! - [`new_dispatch`]：新管线聊天分发
 //! - [`shared`]：跨厂商共享基础设施（HTTP / SSE / 探测 / 抽取器 / 媒体 / 视觉）
-//! - [`api`]：旧 trait（`AiProvider` / `ChatProvider`）+ 旧类型（`ChatMessage`）
+//! - [`api`]：旧 trait（`AiProvider` / `ChatProvider`）+ 旧兼容类型（`ChatMessage` 等）
 //! - [`profile`]：静态配置表（`ProviderProfile` / `ApiMode`）
 
 pub mod anthropic;
@@ -26,7 +26,7 @@ pub mod types;
 
 // ── 顶层路径稳定性 ──
 pub use api::{registry, streaming, trait_};
-pub use google::{files_http, interactions_chat, interactions_http, robotics_http};
+pub use google::{files_http, interactions_http, robotics_http};
 pub use profile::{read_env_api_key, env_api_key_names};
 pub use openai::{embeddings_http, image_http, responses, tts_http};
 pub use shared::{extractor, media as media_http, verify, vision};
@@ -49,6 +49,6 @@ pub use google::tools::openai_tools_to_gemini_native;
 
 pub use trait_::{
     AiProvider, AuthKind, ChatChunk, ChatMessage, ChatProvider, ChatStream, ChatToolCall,
-    GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenProvider,
+    GeneratedAudio, GeneratedImage, GeneratedVideo,
     ToolCallDeltaChunk, VerifyProvider, VerifyResult,
 };

@@ -1,7 +1,8 @@
 //! 供应商核心 trait 与共享数据类型。
 //!
 //! 规范消息类型为 [`crate::types::Message`]、[`crate::types::StreamChunk`]。
-//! 本模块保留 trait 定义（`ChatProvider`、`AiProvider` 等）及活跃辅助类型。
+//! 本模块保留 trait 定义（`ChatProvider`、`AiProvider` 等）及旧兼容类型
+//! （`ChatMessage`、`ChatChunk`、`ChatStream` 等仍被 registry / new_dispatch / agent 使用）。
 
 use async_trait::async_trait;
 
@@ -12,7 +13,7 @@ pub use crate::types::message::{
 pub use crate::types::request::ProviderConfig;
 pub use crate::types::stream::{CompletionStream, PauseControl, StreamChunk, Usage};
 
-// ── 旧类型保留（interactions_chat / responses 等活跃代码仍使用） ──
+// ── 旧类型保留（registry / new_dispatch / agent 层仍使用） ──
 
 /// 原生 function calling 的一次工具调用（OpenAI 风格语义）。
 #[derive(Debug, Clone)]
@@ -88,7 +89,7 @@ pub struct ToolCallDeltaChunk {
     pub signature: Option<String>,
 }
 
-/// 流式聊天响应分片（旧格式，interactions_chat / responses 仍使用）。
+/// 流式聊天响应分片（旧格式，registry / new_dispatch / agent 层仍使用）。
 #[derive(Debug, Clone, Default)]
 pub struct ChatChunk {
     pub token: Option<String>,
@@ -167,16 +168,6 @@ pub trait ChatProvider: Send + Sync {
         tools: Vec<serde_json::Value>,
         config: &ProviderConfig,
     ) -> anyhow::Result<ChatStream>;
-}
-
-/// 图片生成能力。
-#[async_trait]
-pub trait ImageGenProvider: Send + Sync {
-    async fn generate_image(
-        &self,
-        prompt: &str,
-        config: &ProviderConfig,
-    ) -> anyhow::Result<Vec<GeneratedImage>>;
 }
 
 /// 连通性探测能力。

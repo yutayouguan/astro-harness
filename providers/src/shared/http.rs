@@ -3,9 +3,7 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 
-use crate::trait_::{ChatChunk, ChatStream, ProviderConfig};
-use futures::StreamExt;
-use std::sync::Arc;
+use crate::trait_::ProviderConfig;
 
 /// 将 `additional_params` 浅合并进请求体（对象字段覆盖同名键；非对象则忽略）
 pub fn merge_additional_params(body: &mut Value, params: &Value) {
@@ -81,85 +79,3 @@ pub async fn check_response_status(
     Err(anyhow!("上游 HTTP {status}: {msg}"))
 }
 
-type ChatChunkExtract = Arc<dyn Fn(&str) -> Option<ChatChunk> + Send + Sync>;
-
-/// 将 reqwest 字节流解析为 SSE `data:` 行，并用 `extract` 转为 [`ChatChunk`]。
-pub async fn sse_chat_stream(
-    response: reqwest::Response,
-    extract: ChatChunkExtract,
-) -> Result<ChatStream> {
-    let response = check_response_status(response).await?;
-    let byte_stream = response.bytes_stream();
-    let stream = futures::stream::unfold(
-        (byte_stream, String::new(), false, extract),
-        |(mut byte_stream, mut buf, done, extract)| async move {
-            if done {
-                return None;
-            }
-            loop {
-                if let Some(nl) = buf.find('\n') {
-                    let line = buf[..nl].trim_end_matches('\r').to_string();
-                    buf = buf[nl + 1..].to_string();
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() || trimmed.starts_with(':') {
-                        continue;
-                    }
-                    if let Some(data) = trimmed.strip_prefix("data:") {
-                        let data = data.trim();
-                        if data == "[DONE]" {
-                            return None;
-                        }
-                        if let Some(chunk) = extract(data) {
-                            if chunk
-                                .finish_reason
-                                .as_deref()
-                                .is_some_and(|f| f.starts_with("error:"))
-                            {
-                                let msg = chunk
-                                    .finish_reason
-                                    .unwrap()
-                                    .trim_start_matches("error:")
-                                    .to_string();
-                                return Some((
-                                    Err(anyhow!(msg)),
-                                    (byte_stream, buf, true, extract),
-                                ));
-                            }
-                            return Some((Ok(chunk), (byte_stream, buf, false, extract)));
-                        }
-                    }
-                    continue;
-                }
-
-                match byte_stream.next().await {
-                    Some(Ok(bytes)) => {
-                        buf.push_str(&String::from_utf8_lossy(&bytes));
-                    }
-                    Some(Err(err)) => {
-                        return Some((Err(err.into()), (byte_stream, buf, true, extract)));
-                    }
-                    None => {
-                        if !buf.trim().is_empty() {
-                            let line = buf.trim().to_string();
-                            buf.clear();
-                            if let Some(data) = line.strip_prefix("data:") {
-                                let data = data.trim();
-                                if data != "[DONE]" {
-                                    if let Some(chunk) = extract(data) {
-                                        return Some((
-                                            Ok(chunk),
-                                            (byte_stream, buf, true, extract),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                        return None;
-                    }
-                }
-            }
-        },
-    );
-
-    Ok(Box::pin(stream))
-}

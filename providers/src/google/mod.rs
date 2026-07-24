@@ -3,7 +3,7 @@
 //! 本模块是 **协议实现包**（Interactions / Veo / Files / Robotics），
 //! 请避免 `use providers::google::*` 的 glob 导入，以免一次引入大量 HTTP 符号。
 //!
-//! - [`interactions_chat`] / [`interactions_http`]：Interactions API
+//! - [`interactions_http`]：Interactions API（媒体）
 //! - [`veo_http`]：Veo 原生视频与 API 根路径
 //! - [`files_http`]：Files API
 //! - [`robotics_http`]：Robotics-ER `generateContent`（例外保留）
@@ -11,7 +11,6 @@
 
 pub mod defaults;
 pub mod files_http;
-pub mod interactions_chat;
 pub mod interactions_http;
 pub mod robotics_http;
 pub mod tools;
