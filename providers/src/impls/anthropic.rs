@@ -88,7 +88,10 @@ impl CompletionModel for AnthropicCompletionModel {
         if self.api_key.is_empty() {
             return Err(anyhow!("缺少 Anthropic API Key"));
         }
-        let base = self.base_url.trim_end_matches('/');
+        let base = self
+            .base_url
+            .trim_end_matches('/')
+            .trim_end_matches("/v1");
         let url = format!("{base}/v1/messages");
 
         let (system, api_messages) = to_anthropic_messages(&request.messages);

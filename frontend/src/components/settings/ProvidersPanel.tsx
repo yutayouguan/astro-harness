@@ -100,6 +100,34 @@ function normalizeFallback(
   });
 }
 
+function trimSlash(s: string): string {
+  return s.replace(/\/+$/, "");
+}
+
+function resolveEndpointPreview(kind: string, endpoint: string): string {
+  const base = trimSlash(endpoint.trim());
+  if (!base) return "";
+  switch (kind) {
+    case "anthropic":
+      return `${base.replace(/\/v1$/, "")}/v1/messages`;
+    case "google":
+      return `${base.replace(/\/v1beta\/openai$/, "").replace(/\/openai$/, "")}/v1beta/interactions`;
+    case "azure":
+      return `${base.replace(/\/openai$/, "").replace(/\/v1$/, "")}/openai/…`;
+    case "ollama":
+      return `${base.replace(/\/v1$/, "")}/v1/chat/completions`;
+    default: {
+      const norm =
+        /\/(v1|v3|v4|openai)$/.test(base) ||
+        base.includes("/paas/v4") ||
+        base.includes("/v1beta/openai")
+          ? base
+          : `${base}/v1`;
+      return `${norm}/chat/completions`;
+    }
+  }
+}
+
 /** 列表状态点：未启动灰 / 健康绿 / 不健康红 */
 type HealthStatus = "ok" | "fail" | "checking";
 
@@ -1754,6 +1782,11 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
                     }
                   />
                 </label>
+                {draft.endpoint.trim() && (
+                  <p className="providers-field-hint">
+                    → {resolveEndpointPreview(selected.kind, draft.endpoint)}
+                  </p>
+                )}
 
                 {selected.supports_responses_api && (
                   <label className="providers-field providers-field-span">

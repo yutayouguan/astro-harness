@@ -1287,7 +1287,8 @@ fn extract_api_error(body: &serde_json::Value) -> &str {
         .unwrap_or("未知错误")
 }
 
-/// 仅允许 http(s) Endpoint，拒绝 file:// 等危险 scheme（防 SSRF）。
+/// 仅允许 http(s) Endpoint，拒绝 file:// 等危险 scheme（防 SSRF），
+/// 并校验 URL 语法和主机名存在性。
 fn validate_http_endpoint(endpoint: &str) -> Result<(), String> {
     let trimmed = endpoint.trim();
     if trimmed.is_empty() {
@@ -1296,6 +1297,11 @@ fn validate_http_endpoint(endpoint: &str) -> Result<(), String> {
     let lower = trimmed.to_ascii_lowercase();
     if !(lower.starts_with("http://") || lower.starts_with("https://")) {
         return Err("Endpoint 仅支持 http:// 或 https://".to_string());
+    }
+    let parsed =
+        url::Url::parse(trimmed).map_err(|e| format!("Endpoint 格式无效: {e}"))?;
+    if parsed.host_str().map_or(true, |h| h.is_empty()) {
+        return Err("Endpoint 缺少主机名".to_string());
     }
     Ok(())
 }
@@ -1329,6 +1335,13 @@ fn google_native_endpoint(endpoint: &str) -> String {
 }
 
 const AZURE_API_VERSION: &str = "2024-06-01";
+
+/// 规范化 Anthropic endpoint：剥离用户误加的 `/v1` 后缀，避免拼出 `/v1/v1/messages`。
+fn anthropic_base(endpoint: &str) -> String {
+    trim_slash(endpoint)
+        .trim_end_matches("/v1")
+        .to_string()
+}
 
 /// 规范化 Azure OpenAI endpoint 根路径。
 fn azure_base(endpoint: &str) -> String {
@@ -1403,7 +1416,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             (models, "ollama:/api/tags".to_string())
         }
         ProviderKind::Anthropic => {
-            let url = format!("{}/v1/models", trim_slash(&provider.endpoint));
+            let url = format!("{}/v1/models", anthropic_base(&provider.endpoint));
             let resp = client
                 .get(&url)
                 .header("x-api-key", &api_key)
@@ -1903,6 +1916,29 @@ mod tests {
         assert!(validate_http_endpoint("file:///etc/passwd").is_err());
         assert!(validate_http_endpoint("").is_err());
         assert!(validate_http_endpoint("ftp://x").is_err());
+        // 仅有 scheme 无主机名
+        assert!(validate_http_endpoint("https://").is_err());
+        assert!(validate_http_endpoint("http://").is_err());
+    }
+
+    #[test]
+    fn anthropic_base_strips_v1() {
+        assert_eq!(
+            anthropic_base("https://api.anthropic.com/v1"),
+            "https://api.anthropic.com"
+        );
+        assert_eq!(
+            anthropic_base("https://api.anthropic.com/v1/"),
+            "https://api.anthropic.com"
+        );
+        assert_eq!(
+            anthropic_base("https://my-proxy.com"),
+            "https://my-proxy.com"
+        );
+        assert_eq!(
+            anthropic_base("https://my-proxy.com/"),
+            "https://my-proxy.com"
+        );
     }
 
     #[test]
