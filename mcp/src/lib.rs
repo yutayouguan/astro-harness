@@ -12,7 +12,10 @@ pub use config::{
     load_for_active_agent, load_mcp_servers, merge_discovered, persist_discovered,
     save_mcp_servers, DiscoveredTool, McpServerConfig, McpTransportType,
 };
-pub use hub::{filter_enabled_tool_names, toolset_name, McpHub, ServerStatus, ToolEntrySpec};
+pub use hub::{
+    call_tool_with_peer, filter_enabled_tool_names, toolset_name, McpHub, ServerStatus,
+    ToolEntrySpec,
+};
 pub use names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_PREFIX,
     MCP_TOOLSET,

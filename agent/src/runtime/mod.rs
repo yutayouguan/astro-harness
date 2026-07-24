@@ -13,6 +13,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
 use ::session::{
@@ -20,11 +21,11 @@ use ::session::{
     SessionStore,
 };
 use common::message::{Message, Role};
-use mcp::{is_mcp_tool_name, McpHub, MCP_TOOLSET};
+use mcp::{call_tool_with_peer, is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use providers::registry::ProviderRegistry;
 use serde_json::Value;
-use tools::{dispatch_tool, register_all, ToolContext, ToolEntry, ToolRegistry};
+use tools::{dispatch_tool, register_all, DynToolHandler, ToolContext, ToolEntry, ToolRegistry};
 
 use crate::compression::{
     protect_tail_start_index, prune_tool_view, should_prune_tool_at_stage,
@@ -120,7 +121,7 @@ pub struct AgentLoop {
     sessions: Box<dyn ConversationStore>,
     compression_policy: Box<dyn crate::compression::CompressionPolicy>,
     tool_registry: ToolRegistry,
-    mcp_hub: McpHub,
+    mcp_hub: Arc<TokioMutex<McpHub>>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 进程内插件钩子总线（Block / Modify / Inject）。
@@ -180,8 +181,9 @@ impl AgentLoop {
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
-        let mut mcp_hub = McpHub::new();
-        mcp_hub.set_agent_id(Some(agent_id));
+        let mut mcp_hub_inner = McpHub::new();
+        mcp_hub_inner.set_agent_id(Some(agent_id));
+        let mcp_hub = Arc::new(TokioMutex::new(mcp_hub_inner));
 
         let execution: Arc<dyn tools::ExecutionDispatch> =
             Arc::new(crate::exec::dispatch::DefaultExecutionDispatch);
@@ -701,9 +703,9 @@ impl AgentLoop {
         &mut self.tool_registry
     }
 
-    /// MCP Hub 只读引用，用于外部查询或调试。
-    pub fn mcp_hub(&self) -> &McpHub {
-        &self.mcp_hub
+    /// MCP Hub 共享句柄，用于外部查询或调试。
+    pub fn mcp_hub(&self) -> Arc<TokioMutex<McpHub>> {
+        Arc::clone(&self.mcp_hub)
     }
 
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
@@ -717,10 +719,13 @@ impl AgentLoop {
     /// 失败时仅记录 warn 日志，不中断调用方；成功后 MCP 工具以 `MCP_TOOLSET` 注册。
     pub async fn reload_mcp(&mut self) {
         let agent_id = self.memory.agent_id.clone();
-        if let Err(e) = self.mcp_hub.reload_from_disk(Some(&agent_id)).await {
-            tracing::warn!(error = %e, "reload MCP failed");
+        {
+            let mut hub = self.mcp_hub.lock().await;
+            if let Err(e) = hub.reload_from_disk(Some(&agent_id)).await {
+                tracing::warn!(error = %e, "reload MCP failed");
+            }
         }
-        self.attach_mcp_tools();
+        self.attach_mcp_tools().await;
     }
 
     /// 同时重载工具 gate 与 MCP 配置，通常在每轮用户输入开始时调用。
@@ -732,9 +737,10 @@ impl AgentLoop {
     /// 将 MCP Hub 中已启用的工具条目同步到 [`ToolRegistry`]。
     ///
     /// 先卸载旧 `MCP_TOOLSET` 再逐条注册，保证与磁盘 enablement 一致。
-    fn attach_mcp_tools(&mut self) {
+    async fn attach_mcp_tools(&mut self) {
+        let entries = self.mcp_hub.lock().await.enabled_tool_entries();
         self.tool_registry.unregister_toolset(MCP_TOOLSET);
-        for spec in self.mcp_hub.enabled_tool_entries() {
+        for spec in entries {
             self.tool_registry.register(ToolEntry {
                 name: spec.qualified_name,
                 toolset: MCP_TOOLSET.to_string(),
@@ -1107,6 +1113,8 @@ impl AgentLoop {
     /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
     ///
     /// 调用前刷新 gate 与 MCP 注册；未启用或不存在的工具直接 bail。
+    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler，
+    /// 避免 `&self.mcp_hub` 与 `&mut self.memory` 的借用冲突。
     async fn dispatch_named_tool(
         &mut self,
         name: &str,
@@ -1115,27 +1123,36 @@ impl AgentLoop {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
 
-        // MCP 工具：同步 enablement + 构建动态 handler
+        // MCP 工具：同步 enablement + 刷新注册
         if is_mcp_tool_name(name) {
-            let _ = self.mcp_hub.sync_enablement_from_disk();
-            self.attach_mcp_tools();
+            let _ = self.mcp_hub.lock().await.sync_enablement_from_disk();
+            self.attach_mcp_tools().await;
         }
 
         let allowed = self.tool_registry.is_tool_allowed(name);
-        // MCP 工具：通过 mcp_hub 直接调用（在 ctx 构造前完成，避免 borrow 冲突）
-        if is_mcp_tool_name(name) {
-            if !allowed {
-                anyhow::bail!("MCP 工具未启用或不存在: {name}");
-            }
-            let agent_id = self.memory.agent_id.clone();
-            let _ = home::record_tool_call(&agent_id, name, args);
-            let _ = ::usage::record_tool_call(
-                &agent_id, name, args,
-                Some(self.session_id.as_str()),
-                self.turn.current_turn_id.as_deref(),
-            );
-            return self.mcp_hub.call_tool(name, args).await;
-        }
+
+        // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
+        // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
+        let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
+            let (peer, native, timeout_secs) = self
+                .mcp_hub
+                .lock()
+                .await
+                .resolve_tool_peer(name)?;
+            let qname = name.to_string();
+            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
+                let peer = peer.clone();
+                let qname = qname.clone();
+                let native = native.clone();
+                let a = args.clone();
+                Box::pin(async move {
+                    call_tool_with_peer(&peer, &qname, &native, &a, timeout_secs).await
+                }) as std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<common::ToolOutput>> + Send>>
+            }))
+        } else {
+            None
+        };
+
         let workspace_dir = self.resolve_workspace_dir();
         std::env::set_var("ASTRO_WORKSPACE", &workspace_dir);
         let image_gen_targets = self.model_ctx.image_gen_targets.clone();
@@ -1168,7 +1185,7 @@ impl AgentLoop {
             execution,
             hook_bus,
         };
-        dispatch_tool(|_| allowed, &mut ctx, name, args, None).await
+        dispatch_tool(|_| allowed, &mut ctx, name, args, mcp_handler.as_ref()).await
     }
 
     /// 同步执行工具调用：在无 tokio runtime 时自建 current_thread runtime。

@@ -370,8 +370,14 @@ impl McpHub {
         &self.configs
     }
 
-    /// 调用已连接 MCP 工具（按服务器与工具名）。
-    pub async fn call_tool(&self, qualified_name: &str, args: &Value) -> anyhow::Result<common::ToolOutput> {
+    /// 校验工具调用权限并返回 peer 克隆 + 超时配置，供 lock 外异步调用。
+    ///
+    /// 成功时返回 `(peer, native_tool_name, timeout_secs)`；调用方在释放
+    /// `MutexGuard` 后再执行 `call_tool_with_peer`。
+    pub fn resolve_tool_peer(
+        &self,
+        qualified_name: &str,
+    ) -> anyhow::Result<(Peer<RoleClient>, String, u64)> {
         if !is_mcp_tool_name(qualified_name) {
             anyhow::bail!("不是 MCP 工具: {qualified_name}");
         }
@@ -390,38 +396,14 @@ impl McpHub {
             anyhow::bail!("MCP 工具已禁用: {qualified_name}");
         }
 
-        let arguments = mcp_tool_arguments(args)?;
-
-        let mut params = CallToolRequestParams::new(native.to_string());
-        if let Some(args_map) = arguments {
-            params = params.with_arguments(args_map);
-        }
-
-        // per-tool 超时（默认 300s）
         let timeout_secs = rs.config.tool_timeout_secs.unwrap_or(300);
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(timeout_secs),
-            rs.peer.call_tool(params),
-        )
-        .await
-        .map_err(|_| anyhow!("MCP tool 调用超时 ({timeout_secs}s): {qualified_name}"))?
-        .with_context(|| format!("call_tool {qualified_name}"))?;
+        Ok((rs.peer.clone(), native.to_string(), timeout_secs))
+    }
 
-        if result.is_error == Some(true) {
-            let msg = format_content(&result.content);
-            anyhow::bail!(
-                "MCP tool error: {}",
-                common::truncate_tool_result(&msg, common::MAX_TOOL_RESULT_BYTES)
-            );
-        }
-
-        if let Some(structured) = result.structured_content {
-            return Ok(common::ToolOutput::Text(common::truncate_tool_result(
-                &structured.to_string(),
-                common::MAX_TOOL_RESULT_BYTES,
-            )));
-        }
-        Ok(content_to_tool_output(&result.content))
+    /// 调用已连接 MCP 工具（按服务器与工具名）。
+    pub async fn call_tool(&self, qualified_name: &str, args: &Value) -> anyhow::Result<common::ToolOutput> {
+        let (peer, native, timeout_secs) = self.resolve_tool_peer(qualified_name)?;
+        call_tool_with_peer(&peer, qualified_name, &native, args, timeout_secs).await
     }
 
     /// 短连刷新某 server 的 discovered（供 UI refresh_mcp_tools）
@@ -533,12 +515,61 @@ fn format_content(blocks: &[ContentBlock]) -> String {
     content_to_tool_output(blocks).into_text()
 }
 
+/// 使用已解析的 `Peer` 执行 MCP 工具调用（lock-free，供 `Arc<Mutex<McpHub>>` 场景使用）。
+///
+/// `qualified_name` 仅用于错误消息；`native` 是原生工具名（不含 `mcp__` 前缀）。
+pub async fn call_tool_with_peer(
+    peer: &Peer<RoleClient>,
+    qualified_name: &str,
+    native: &str,
+    args: &Value,
+    timeout_secs: u64,
+) -> anyhow::Result<common::ToolOutput> {
+    let arguments = mcp_tool_arguments(args)?;
+
+    let mut params = CallToolRequestParams::new(native.to_string());
+    if let Some(args_map) = arguments {
+        params = params.with_arguments(args_map);
+    }
+
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        peer.call_tool(params),
+    )
+    .await
+    .map_err(|_| anyhow!("MCP tool 调用超时 ({timeout_secs}s): {qualified_name}"))?
+    .with_context(|| format!("call_tool {qualified_name}"))?;
+
+    if result.is_error == Some(true) {
+        let msg = format_content(&result.content);
+        anyhow::bail!(
+            "MCP tool error: {}",
+            common::truncate_tool_result(&msg, common::MAX_TOOL_RESULT_BYTES)
+        );
+    }
+
+    if let Some(structured) = result.structured_content {
+        return Ok(common::ToolOutput::Text(common::truncate_tool_result(
+            &structured.to_string(),
+            common::MAX_TOOL_RESULT_BYTES,
+        )));
+    }
+    Ok(content_to_tool_output(&result.content))
+}
+
 /// 按配置建立 MCP 连接并拉取工具列表。
+///
+/// 使用 [`ToolChangeHandler`] 作为客户端 handler，自动处理
+/// `tools/list_changed` 通知，实时同步工具列表。
 async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> {
     let sid = sanitize_server_id(&cfg.id);
     let fingerprint = cfg.connection_fingerprint();
 
     let shared_tools: Arc<TokioMutex<Vec<RmcpTool>>> = Arc::new(TokioMutex::new(Vec::new()));
+    let handler = ToolChangeHandler {
+        tools: Arc::clone(&shared_tools),
+        server_id: sid.clone(),
+    };
 
     let service = match cfg.r#type {
         McpTransportType::Stdio => {
@@ -552,7 +583,7 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
                 cmd.env(k, v);
             }
             let transport = TokioChildProcess::new(cmd)?;
-            ().serve(transport).await.context("stdio serve")?
+            handler.serve(transport).await.context("stdio serve")?
         }
         McpTransportType::Sse | McpTransportType::StreamableHttp => {
             if cfg.url.trim().is_empty() {
@@ -572,7 +603,7 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
                 config = config.custom_headers(map);
             }
             let transport = StreamableHttpClientTransport::from_config(config);
-            ().serve(transport).await.context("http serve")?
+            handler.serve(transport).await.context("http serve")?
         }
     };
 

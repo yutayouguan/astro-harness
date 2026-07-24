@@ -1335,11 +1335,12 @@ impl AstroService for AstroServiceImpl {
         let sessions = self.sessions.read().await;
         for handle in sessions.values() {
             let agent = handle.lock().await;
-            if agent.mcp_hub().agent_id() != Some(active.as_str()) {
+            let hub = agent.mcp_hub();
+            let hub_guard = hub.lock().await;
+            if hub_guard.agent_id() != Some(active.as_str()) {
                 continue;
             }
-            let servers = agent
-                .mcp_hub()
+            let servers = hub_guard
                 .server_status()
                 .into_iter()
                 .map(|s| {
