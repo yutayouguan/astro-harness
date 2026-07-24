@@ -6,6 +6,23 @@ use tokio::sync::Mutex;
 
 use tools::{ToolContext, ToolRegistry};
 
+/// 测试用 mock：仅实现 `spawn_async`，其余 panic。
+struct MockExecution<F: Fn(String, delegate::DelegateRunRequest) + Send + Sync>(F);
+
+impl<F: Fn(String, delegate::DelegateRunRequest) + Send + Sync> tools::ExecutionDispatch
+    for MockExecution<F>
+{
+    fn run_sync(&self, _req: delegate::DelegateRunRequest) -> anyhow::Result<String> {
+        unimplemented!("not used in async tests")
+    }
+    fn spawn_async(&self, task_id: String, req: delegate::DelegateRunRequest) {
+        (self.0)(task_id, req);
+    }
+    fn spawn_orchestration(&self, _req: orchestration::OrchestrationSpawnRequest) {
+        unimplemented!("not used in async tests")
+    }
+}
+
 static ASYNC_TEST_LOCK: Mutex<()> = Mutex::const_new(());
 
 fn make_ctx<'a>(
@@ -30,9 +47,7 @@ fn make_ctx<'a>(
         chat_provider: "openai".into(),
         chat_model: "test".into(),
         chat_targets: vec![],
-        delegate_runner: None,
-        async_spawner: None,
-        orchestration_spawner: None,
+        execution: None,
         hook_bus: None,
     }
 }
@@ -80,16 +95,17 @@ async fn delegate_goal_hits_runner_or_key() {
 #[tokio::test]
 async fn delegate_async_status_collect_cancel_flow() {
     let _guard = ASYNC_TEST_LOCK.lock().await;
-    let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
-        let tid = task_id.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            delegate::AsyncDelegateRegistry::global().finish_ok(
-                &tid,
-                serde_json::json!({"ok": true, "summary": "done"}).to_string(),
-            );
-        });
-    });
+    let exec: Arc<dyn tools::ExecutionDispatch> =
+        Arc::new(MockExecution(|task_id: String, _req| {
+            let tid = task_id.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                delegate::AsyncDelegateRegistry::global().finish_ok(
+                    &tid,
+                    serde_json::json!({"ok": true, "summary": "done"}).to_string(),
+                );
+            });
+        }));
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
@@ -98,7 +114,7 @@ async fn delegate_async_status_collect_cancel_flow() {
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
-    ctx.async_spawner = Some(spawner);
+    ctx.execution = Some(exec);
 
     let started = tools::dispatch_tool(
         |_| true,
@@ -142,13 +158,15 @@ async fn delegate_async_status_collect_cancel_flow() {
 #[tokio::test]
 async fn delegate_async_cancel_marks_cancelled() {
     let _guard = ASYNC_TEST_LOCK.lock().await;
-    let spawner: delegate::DelegateAsyncSpawner = Arc::new(|task_id, _req| {
-        let tid = task_id.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            delegate::AsyncDelegateRegistry::global().finish_ok(&tid, r#"{"late":true}"#.into());
-        });
-    });
+    let exec: Arc<dyn tools::ExecutionDispatch> =
+        Arc::new(MockExecution(|task_id: String, _req| {
+            let tid = task_id.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                delegate::AsyncDelegateRegistry::global()
+                    .finish_ok(&tid, r#"{"late":true}"#.into());
+            });
+        }));
 
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
@@ -157,7 +175,7 @@ async fn delegate_async_cancel_marks_cancelled() {
     let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
-    ctx.async_spawner = Some(spawner);
+    ctx.execution = Some(exec);
 
     let started = tools::dispatch_tool(
         |_| true,
