@@ -74,9 +74,7 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
     }
 
     // tool_calls
-    if let Some(td) = parse_tool_deltas(choice) {
-        chunks.push(td);
-    }
+    parse_tool_deltas(choice, &mut chunks);
 
     // 纯空白 text 兜底（仅在无其他内容时保留，避免遮蔽 tool_calls）
     if !meaningful_text {
@@ -106,13 +104,16 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
     chunks
 }
 
-fn parse_tool_deltas(choice: &Value) -> Option<StreamChunk> {
-    let arr = choice
+fn parse_tool_deltas(choice: &Value, chunks: &mut Vec<StreamChunk>) {
+    let Some(arr) = choice
         .pointer("/delta/tool_calls")
         .or_else(|| choice.pointer("/message/tool_calls"))
-        .and_then(|v| v.as_array())?;
+        .and_then(|v| v.as_array())
+    else {
+        return;
+    };
 
-    let tc = arr.first()?;
+    let Some(tc) = arr.first() else { return };
     let index = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
     let id = tc.get("id").and_then(|s| s.as_str()).map(str::to_string);
     let name = tc
@@ -123,19 +124,21 @@ fn parse_tool_deltas(choice: &Value) -> Option<StreamChunk> {
     let arguments = tc
         .pointer("/function/arguments")
         .and_then(|s| s.as_str())
+        .filter(|s| !s.is_empty())
         .map(str::to_string);
 
     if let Some(id) = id {
-        Some(StreamChunk::ToolCallStart {
+        chunks.push(StreamChunk::ToolCallStart {
             index,
             id,
             name: name.unwrap_or_default(),
-        })
-    } else {
-        arguments.map(|args| StreamChunk::ToolCallDelta {
-            index,
-            arguments: args,
-        })
+        });
+        // MiniMax：id 和 arguments 在同一对象，不能丢 arguments
+        if let Some(args) = arguments {
+            chunks.push(StreamChunk::ToolCallDelta { index, arguments: args });
+        }
+    } else if let Some(args) = arguments {
+        chunks.push(StreamChunk::ToolCallDelta { index, arguments: args });
     }
 }
 
@@ -222,7 +225,7 @@ mod tests {
 
     #[test]
     fn minimax_full_delta_all_fields() {
-        // MiniMax interleaved thinking: reasoning + content="\n" + tool_calls + finish 同一事件
+        // MiniMax interleaved thinking: reasoning + content="\n" + tool_calls(含arguments) + finish
         let data = r#"{"choices":[{"finish_reason":"tool_calls","message":{"content":"\n","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"location\":\"SF\"}"}}],"reasoning_details":[{"type":"reasoning.text","text":"thinking..."}]}}]}"#;
         let chunks = extract_openai_delta(data);
         let types: Vec<&str> = chunks
@@ -231,13 +234,22 @@ mod tests {
                 StreamChunk::Thinking(_) => "Thinking",
                 StreamChunk::Text(_) => "Text",
                 StreamChunk::ToolCallStart { .. } => "ToolCallStart",
+                StreamChunk::ToolCallDelta { .. } => "ToolCallDelta",
                 StreamChunk::Done { .. } => "Done",
                 StreamChunk::Usage(_) => "Usage",
                 _ => "Other",
             })
             .collect();
-        assert_eq!(types, vec!["Thinking", "ToolCallStart", "Done"],
-            "should extract Thinking + ToolCallStart + Done, got {types:?}");
+        // Thinking + ToolCallStart + ToolCallDelta(arguments) + Done
+        assert_eq!(types, vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"],
+            "should extract all fields, got {types:?}");
+
+        // 验证 arguments 正确
+        if let StreamChunk::ToolCallDelta { arguments, .. } = &chunks[2] {
+            assert_eq!(arguments, r#"{"location":"SF"}"#);
+        } else {
+            panic!("expected ToolCallDelta at index 2");
+        }
     }
 
     #[test]
