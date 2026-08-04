@@ -32,7 +32,7 @@ use evolution::{
 use home::default_memory_dir;
 use memory::DecisionKind;
 use providers::registry::ProviderRegistry;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -37,7 +37,7 @@ async fn tts_inner(
     _voice: Option<&str>,
 ) -> Result<TtsResult, String> {
     use providers::registry::ProviderRegistry;
-    use providers::trait_::ProviderConfig;
+    use providers::ProviderConfig;
 
     let pid = provider_id.unwrap_or_else(|| {
         let state = crate::providers_commands::get_providers_state();
@@ -123,7 +123,7 @@ async fn stt_inner(
     provider_id: Option<&str>,
     model: Option<&str>,
 ) -> Result<String, String> {
-    use providers::trait_::ProviderConfig;
+    use providers::ProviderConfig;
 
     let audio_bytes = base64_decode(audio_base64).map_err(|e| format!("base64 解码失败: {e}"))?;
     if audio_bytes.is_empty() {

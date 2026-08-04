@@ -12,7 +12,7 @@ use memory::dreaming::{
 };
 use memory::{list_pending, load_memory_config};
 use providers::registry::ProviderRegistry;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 

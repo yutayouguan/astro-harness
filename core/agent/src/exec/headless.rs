@@ -14,8 +14,8 @@
 use common::ChatTarget;
 use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::streaming::Usage;
-use providers::trait_::ProviderConfig;
+use providers::Usage;
+use providers::ProviderConfig;
 
 use crate::prompt::messages::to_provider_messages;
 use crate::runtime::budget::{should_refund_tool_round, IterationBudget, DEFAULT_MAX_ITERATIONS};

@@ -17,7 +17,7 @@ use common::ChatTarget;
 use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
-use providers::streaming::Usage;
+use providers::Usage;
 use session::{SessionStore, StoredMessage};
 use uuid::Uuid;
 

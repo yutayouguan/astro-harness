@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_API_BASE;
 use crate::compat::openai_compatible_base;
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 /// 默认 TTS 模型。
 pub fn default_tts_model() -> &'static str {

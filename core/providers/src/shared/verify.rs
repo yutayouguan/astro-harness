@@ -3,7 +3,16 @@
 use reqwest::Client;
 
 use crate::profile::{self, ApiMode};
-use crate::trait_::{ProviderConfig, VerifyResult};
+use crate::types::request::ProviderConfig;
+
+/// 连通性探测结果。
+#[derive(Debug, Clone)]
+pub struct VerifyResult {
+    pub ok: bool,
+    pub latency_ms: u64,
+    pub model: String,
+    pub message: String,
+}
 
 /// 优先使用配置中的 `base_url`，否则使用给定 fallback。
 fn resolve_endpoint(config: &ProviderConfig, fallback: &str) -> String {

@@ -1,7 +1,5 @@
 //! Hermes 风格 `ProviderProfile` 表：id → ApiMode / 默认 base / 认证 / 媒体能力。
 
-use crate::trait_::AuthKind;
-
 /// 底层协议适配器种类（对齐 Hermes 三协议 + Gemini Interactions + Gemini Native）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApiMode {
@@ -82,6 +80,24 @@ impl ProviderProfile {
     }
     pub fn supports_music(&self) -> bool {
         !self.default_music_model.is_empty()
+    }
+}
+
+/// 提供商认证方式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthKind {
+    Bearer,
+    AnthropicKey,
+    GoogleApiKey,
+    AzureHeader,
+    None,
+}
+
+impl AuthKind {
+    pub fn for_provider(provider_id: &str) -> Self {
+        resolve(provider_id)
+            .map(|p| p.auth)
+            .unwrap_or(Self::Bearer)
     }
 }
 

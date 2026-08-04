@@ -10,7 +10,7 @@ use providers::minimax::video_http::{
     minimax_create_video, minimax_download_video, minimax_query_video, MiniMaxVideoRequest,
     VideoSubjectRef, VideoTaskStatus,
 };
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

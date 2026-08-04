@@ -22,7 +22,7 @@ use proto::{
     SkillEvent, SkillInfo, SkillList, SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::registry::ProviderRegistry;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use providers::PauseControl;
 use tokio::sync::{Mutex, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
@@ -1470,10 +1470,10 @@ impl AstroService for AstroServiceImpl {
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
-        let config = providers::trait_::ProviderConfig {
+        let config = providers::ProviderConfig {
             api_key,
             model: if req.model.is_empty() { "claude-opus-4-8".into() } else { req.model },
-            ..providers::trait_::ProviderConfig::default()
+            ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
         let count = providers::anthropic::token_count::anthropic_count_tokens(
@@ -1497,9 +1497,9 @@ impl AstroService for AstroServiceImpl {
         }
         let requests: Vec<serde_json::Value> = serde_json::from_str(&req.requests_json)
             .map_err(|e| Status::invalid_argument(format!("requests_json: {e}")))?;
-        let config = providers::trait_::ProviderConfig {
+        let config = providers::ProviderConfig {
             api_key,
-            ..providers::trait_::ProviderConfig::default()
+            ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
         let result = providers::anthropic::batch::anthropic_create_batch(
@@ -1521,9 +1521,9 @@ impl AstroService for AstroServiceImpl {
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
-        let config = providers::trait_::ProviderConfig {
+        let config = providers::ProviderConfig {
             api_key,
-            ..providers::trait_::ProviderConfig::default()
+            ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
         let result = providers::anthropic::batch::anthropic_get_batch(
@@ -1545,9 +1545,9 @@ impl AstroService for AstroServiceImpl {
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
-        let config = providers::trait_::ProviderConfig {
+        let config = providers::ProviderConfig {
             api_key,
-            ..providers::trait_::ProviderConfig::default()
+            ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
         let result = providers::anthropic::batch::anthropic_list_batches(&client, &config)
@@ -1567,9 +1567,9 @@ impl AstroService for AstroServiceImpl {
         if api_key.is_empty() {
             return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
         }
-        let config = providers::trait_::ProviderConfig {
+        let config = providers::ProviderConfig {
             api_key,
-            ..providers::trait_::ProviderConfig::default()
+            ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
         let result = providers::anthropic::batch::anthropic_batch_results(

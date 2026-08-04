@@ -1,47 +1,13 @@
-//! 供应商核心 trait 与共享数据类型。
-//!
-//! 规范消息类型为 [`crate::types::Message`]、[`crate::types::StreamChunk`]。
+//! 供应商门面 trait — 动态分发接口。
 
 use async_trait::async_trait;
 
-// ── 新类型 re-exports ──
-pub use crate::types::message::{
-    AssistantContent, Message, Role, ToolCall, ToolDefinition, UserContent,
-};
-pub use crate::types::request::ProviderConfig;
-pub use crate::types::stream::{CompletionStream, PauseControl, StreamChunk, Usage};
-
-// ── 媒体生成结果类型（统一使用 types::media） ──
-pub use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
-
-/// 提供商认证方式（运行时，非编译期泛型）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AuthKind {
-    Bearer,
-    AnthropicKey,
-    GoogleApiKey,
-    AzureHeader,
-    None,
-}
-
-impl AuthKind {
-    pub fn for_provider(provider_id: &str) -> Self {
-        crate::profile::resolve(provider_id)
-            .map(|p| p.auth)
-            .unwrap_or(Self::Bearer)
-    }
-}
-
-/// 连通性探测结果。
-#[derive(Debug, Clone)]
-pub struct VerifyResult {
-    pub ok: bool,
-    pub latency_ms: u64,
-    pub model: String,
-    pub message: String,
-}
-
-// ── Trait 定义 ──
+use crate::profile::AuthKind;
+use crate::shared::verify::VerifyResult;
+use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
+use crate::types::message::Message;
+use crate::types::request::ProviderConfig;
+use crate::types::stream::CompletionStream;
 
 /// 流式聊天能力。
 #[async_trait]

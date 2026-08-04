@@ -5,7 +5,7 @@
 
 use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use tracing::warn;

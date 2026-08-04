@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use tokio::time::sleep;
 
 use super::veo_http::google_native_base;
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 /// Gemini 官方建议：请求总大小超过约 20MB 时应改走 Files API，而非内嵌 base64。
 pub const INLINE_MAX_BYTES: u64 = 20 * 1024 * 1024;

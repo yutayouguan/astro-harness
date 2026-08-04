@@ -12,7 +12,7 @@ use providers::media_http::{
     default_vision_model, default_whisper_model, openai_audio_describe,
     openai_audio_transcriptions, whisper_text_to_transcribe_json,
 };
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

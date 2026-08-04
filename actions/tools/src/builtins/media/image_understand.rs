@@ -8,7 +8,7 @@ use providers::interactions_http::{
     default_vision_prompt, google_interactions_vision, VisionImagePart, VisionMode,
 };
 use providers::media_http::{default_vision_model, openai_vision_completions};
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

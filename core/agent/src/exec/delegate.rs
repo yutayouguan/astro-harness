@@ -13,8 +13,8 @@ use delegate::{
 use futures::StreamExt;
 use home::default_memory_dir;
 use providers::registry::ProviderRegistry;
-use providers::streaming::Usage;
-use providers::trait_::ProviderConfig;
+use providers::Usage;
+use providers::ProviderConfig;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 

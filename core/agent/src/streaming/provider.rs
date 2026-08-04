@@ -7,7 +7,7 @@ use common::message::Message;
 use common::ChatTarget;
 use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::trait_::{AiProvider, ProviderConfig};
+use providers::{AiProvider, ProviderConfig};
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
 

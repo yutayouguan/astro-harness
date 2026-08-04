@@ -10,7 +10,7 @@ use home::{generated_dir, GeneratedKind};
 use providers::interactions_http::{
     google_interactions_image, InteractionImagePart, InteractionImageRequest, InteractionVideoInput,
 };
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use providers::types::media::GeneratedImage;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

@@ -12,7 +12,7 @@ use providers::interactions_http::{
     build_tts_input, google_interactions_tts, InteractionSpeechConfig, InteractionTtsRequest,
 };
 use providers::media_http::default_tts_model;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

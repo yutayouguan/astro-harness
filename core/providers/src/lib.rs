@@ -4,28 +4,27 @@
 //! - [`traits`]：能力 trait 系统（`CompletionModel` + `Capable<M>/Nothing` 编译期检查）
 //! - [`compat`]：OpenAI 兼容层（`OpenAICompatible` trait — 一行接厂商）
 //! - [`impls`]：19 个厂商实现（5 种协议管线）
-//! - [`pipeline`]：协议管线注册表（trait-based `Registry`）
+//! - [`registry`]：协议管线注册表（trait-based `Registry` + `ProviderRegistry`）
 //! - [`dispatch`]：管线分发入口
 //! - [`shared`]：跨厂商共享基础设施（HTTP / SSE / 探测 / 抽取器 / 媒体 / 视觉）
-//! - [`api`]：旧 trait（`AiProvider` / `ChatProvider`）+ 旧兼容类型（`ChatMessage` 等）
+//! - [`facade`]：门面 trait（`AiProvider` / `ChatProvider` / `VerifyProvider`）
 //! - [`profile`]：静态配置表（`ProviderProfile` / `ApiMode`）
 
 pub mod anthropic;
-pub mod api;
 pub mod compat;
-pub mod impls;
 pub mod dispatch;
-pub mod pipeline;
+pub mod facade;
 pub mod google;
+pub mod impls;
 pub mod minimax;
 pub mod openai;
 pub mod profile;
+pub mod registry;
 pub mod shared;
 pub mod traits;
 pub mod types;
 
 // ── 顶层路径稳定性 ──
-pub use api::{registry, streaming, trait_};
 pub use google::{files_http, interactions_http, robotics_http};
 pub use profile::{read_env_api_key, env_api_key_names};
 pub use openai::{embeddings_http, image_http, responses, tts_http};
@@ -33,9 +32,25 @@ pub use shared::{extractor, media as media_http, verify, vision};
 pub use shared::http as http_stream;
 pub use types::image_gen;
 
-// ── 核心类型 re-exports ──
+// ── Facade traits & types ──
+pub use facade::{AiProvider, ChatProvider, VerifyProvider};
+pub use profile::AuthKind;
+pub use shared::verify::VerifyResult;
+
+// ── Registry ──
+pub use registry::ProviderRegistry;
+
+// ── Stream types ──
+pub use types::stream::{PauseControl, Usage, CompletionStream, StreamChunk};
+
+// ── Media types ──
+pub use types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
+
+// ── Message types ──
+pub use types::message::Message;
+
+// ── Config ──
 pub use types::ProviderConfig;
-pub use streaming::{PauseControl, Usage};
 
 pub use compat::openai_compatible_base;
 pub use extractor::{
@@ -46,9 +61,3 @@ pub use http_stream::merge_additional_params;
 pub use profile::{ApiMode, ProviderProfile, PROFILES};
 pub use anthropic::tools::openai_tools_to_anthropic;
 pub use google::tools::openai_tools_to_gemini_native;
-
-pub use trait_::{
-    AiProvider, AuthKind, ChatProvider, CompletionStream,
-    GeneratedAudio, GeneratedImage, GeneratedVideo,
-    Message, VerifyProvider, VerifyResult,
-};

@@ -5,7 +5,7 @@ use providers::robotics_http::{
     default_robotics_model, default_robotics_prompt, google_robotics_generate, strip_json_fence,
     RoboticsImage, RoboticsMode,
 };
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

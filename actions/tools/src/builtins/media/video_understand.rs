@@ -9,7 +9,7 @@ use providers::interactions_http::{
     VideoInputPart, VideoUnderstandMode,
 };
 use providers::media_http::default_vision_model;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

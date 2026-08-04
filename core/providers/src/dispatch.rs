@@ -16,7 +16,7 @@ pub async fn chat_stream_direct(
     config: &ProviderConfig,
 ) -> Result<CompletionStream> {
     let provider = normalize_provider_id(provider);
-    let mut reg = crate::pipeline::Registry::new();
+    let mut reg = crate::registry::Registry::new();
     register_provider(&mut reg, provider, config);
 
     let dyn_model = reg
@@ -36,7 +36,7 @@ fn normalize_provider_id(id: &str) -> &str {
 
 /// 根据 provider id 注册到注册表。
 fn register_provider(
-    reg: &mut crate::pipeline::Registry,
+    reg: &mut crate::registry::Registry,
     provider: &str,
     config: &ProviderConfig,
 ) {
@@ -68,7 +68,7 @@ fn register_provider(
 }
 
 fn register_compat<Ext>(
-    reg: &mut crate::pipeline::Registry,
+    reg: &mut crate::registry::Registry,
     api_key: &str,
     base_url: Option<&str>,
     model: &str,
@@ -98,7 +98,7 @@ mod tests {
             "mimo", "gemini-native", "openai-responses", "minimax-responses",
         ];
         for id in providers {
-            let mut reg = crate::pipeline::Registry::new();
+            let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
                 reg.completion_model(id).is_some(),
@@ -112,7 +112,7 @@ mod tests {
         let config = ProviderConfig::default();
         for id in ["minimax-anthropic", "minmax", "minmax-anthropic"] {
             let normalized = normalize_provider_id(id);
-            let mut reg = crate::pipeline::Registry::new();
+            let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, normalized, &config);
             assert!(
                 reg.completion_model(normalized).is_some(),
@@ -125,7 +125,7 @@ mod tests {
     fn responses_providers_resolve() {
         let config = ProviderConfig::default();
         for id in ["openai-responses", "minimax-responses"] {
-            let mut reg = crate::pipeline::Registry::new();
+            let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
                 reg.completion_model(id).is_some(),

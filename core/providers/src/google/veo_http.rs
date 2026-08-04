@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use tokio::time::sleep;
 
 use super::defaults::DEFAULT_API_HOST;
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 /// 去掉 endpoint 末尾斜杠。
 fn trim_slash(endpoint: &str) -> String {

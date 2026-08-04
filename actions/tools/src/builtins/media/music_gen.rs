@@ -12,7 +12,7 @@ use providers::interactions_http::{
     MusicAudioFormat, MusicImagePart,
 };
 use providers::minimax::music_http::{minimax_generate_music, MiniMaxMusicRequest};
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

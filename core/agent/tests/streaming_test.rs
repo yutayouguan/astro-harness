@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use providers::streaming::{PauseControl, Usage};
-use providers::trait_::{
+use providers::{PauseControl, Usage};
+use providers::{
     AiProvider, ChatProvider, CompletionStream, ProviderConfig, VerifyProvider, VerifyResult,
 };
 use providers::types::message::Message as ProviderMessage;

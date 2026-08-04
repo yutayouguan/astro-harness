@@ -30,7 +30,7 @@ pub fn openai_compatible_base(endpoint: &str) -> String {
 /// 从 OpenAI 风格 JSON 解析 usage（返回旧 `streaming::Usage` 类型）。
 ///
 /// 供旧代码路径（responses.rs、media 模块）使用。
-pub fn parse_openai_usage(v: &serde_json::Value) -> Option<crate::streaming::Usage> {
+pub fn parse_openai_usage(v: &serde_json::Value) -> Option<crate::types::stream::Usage> {
     let u = v.get("usage")?;
     if u.is_null() {
         return None;
@@ -78,7 +78,7 @@ pub fn parse_openai_usage(v: &serde_json::Value) -> Option<crate::streaming::Usa
     if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 && reasoning == 0 {
         return None;
     }
-    Some(crate::streaming::Usage {
+    Some(crate::types::stream::Usage {
         input_tokens: input,
         output_tokens: output,
         cache_read_tokens: cache_read,

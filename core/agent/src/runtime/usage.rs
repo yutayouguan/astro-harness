@@ -2,7 +2,7 @@
 
 use ::session::{BillingDelta, ConversationStore};
 use ::usage::{estimate_usage_cost, CostStatus, NewUsageEvent, UsageDb, UsageTokens};
-use providers::streaming::Usage;
+use providers::Usage;
 
 /// 一次 LLM 用量写入所需的上下文（身份 + 端点 + usage）。
 pub(crate) struct LlmUsageWrite<'a> {

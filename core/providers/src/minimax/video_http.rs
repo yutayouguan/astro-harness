@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_API_BASE;
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 // ---------------------------------------------------------------------------
 // 类型

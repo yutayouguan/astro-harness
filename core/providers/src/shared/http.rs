@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 /// 将 `additional_params` 浅合并进请求体（对象字段覆盖同名键；非对象则忽略）
 pub fn merge_additional_params(body: &mut Value, params: &Value) {

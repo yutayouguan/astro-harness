@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 
 use super::defaults;
 use crate::http_stream::{resolve_base, trim_slash};
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 fn batch_url(config: &ProviderConfig) -> String {
     let base = trim_slash(&resolve_base(config, "claude"));

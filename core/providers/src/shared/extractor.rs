@@ -13,8 +13,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use crate::api::registry::ProviderRegistry;
-use crate::trait_::ProviderConfig;
+use crate::registry::ProviderRegistry;
+use crate::types::request::ProviderConfig;
 use crate::types::message::Message;
 use crate::types::stream::StreamChunk;
 
@@ -217,8 +217,8 @@ pub fn extractor_from_env<T>(
 where
     T: DeserializeOwned + Serialize + JsonSchema + Send + Sync,
 {
-    let auth = crate::trait_::AuthKind::for_provider(provider_id);
-    let api_key = if auth == crate::trait_::AuthKind::None {
+    let auth = crate::profile::AuthKind::for_provider(provider_id);
+    let api_key = if auth == crate::profile::AuthKind::None {
         String::new()
     } else {
         crate::profile::read_env_api_key(provider_id).ok_or_else(|| {

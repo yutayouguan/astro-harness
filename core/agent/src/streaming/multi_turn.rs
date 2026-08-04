@@ -14,8 +14,8 @@ use common::ChatTarget;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::registry::ProviderRegistry;
-use providers::streaming::{PauseControl, Usage};
-use providers::trait_::{AiProvider, ProviderConfig};
+use providers::{PauseControl, Usage};
+use providers::{AiProvider, ProviderConfig};
 use tokio::sync::{mpsc, Mutex};
 
 use super::run_state::{RunPhase, RunState};

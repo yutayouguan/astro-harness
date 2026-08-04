@@ -5,7 +5,7 @@ use futures::{stream, StreamExt};
 use providers::registry::ProviderRegistry;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 
 /// 实际命中目标的可观测元数据（写入 usage 等，不改会话默认模型）。
 #[derive(Debug, Clone, PartialEq, Eq)]

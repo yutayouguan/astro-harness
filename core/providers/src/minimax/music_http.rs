@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_API_BASE;
 use super::tts_http::hex_to_bytes;
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 // ── 类型 ──────────────────────────────────────────────
 

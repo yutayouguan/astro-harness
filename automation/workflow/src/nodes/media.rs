@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 
 use providers::registry::ProviderRegistry;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
@@ -11,8 +11,8 @@ use crate::model::WorkflowNode;
 fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
     let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("openai");
     let model = node.config.get("model").and_then(|v| v.as_str()).unwrap_or("");
-    let auth = providers::trait_::AuthKind::for_provider(provider_id);
-    let api_key = if auth == providers::trait_::AuthKind::None {
+    let auth = providers::AuthKind::for_provider(provider_id);
+    let api_key = if auth == providers::AuthKind::None {
         String::new()
     } else {
         providers::profile::read_env_api_key(provider_id).ok_or_else(|| {

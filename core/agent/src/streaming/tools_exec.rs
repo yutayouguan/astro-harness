@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use providers::streaming::PauseControl;
+use providers::PauseControl;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinSet;
 

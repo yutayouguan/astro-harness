@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use super::veo_http::google_native_base;
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 fn trim_slash(endpoint: &str) -> String {
     endpoint.trim_end_matches('/').to_string()

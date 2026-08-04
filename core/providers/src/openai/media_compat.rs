@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use super::defaults::{DEFAULT_API_BASE, DEFAULT_VISION_MODEL};
 use crate::compat::openai_compatible_base;
 use crate::shared::vision::VisionMode;
-use crate::trait_::ProviderConfig;
+use crate::types::request::ProviderConfig;
 
 /// 默认 Whisper 转写模型。
 pub fn default_whisper_model() -> &'static str {

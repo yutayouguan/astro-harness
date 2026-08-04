@@ -390,7 +390,7 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
 pub async fn probe_interactions(
     client: &HttpClient,
     model: &str,
-    config: &crate::trait_::ProviderConfig,
+    config: &crate::types::request::ProviderConfig,
 ) -> Result<String, String> {
     if config.api_key.trim().is_empty() {
         return Err("Google API Key 为空".into());

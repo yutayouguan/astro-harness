@@ -380,7 +380,7 @@ pub async fn probe_anthropic(
     client: &HttpClient,
     model: &str,
     endpoint: &str,
-    config: &crate::trait_::ProviderConfig,
+    config: &crate::types::request::ProviderConfig,
 ) -> Result<String, String> {
     let url = format!("{}/v1/messages", endpoint.trim_end_matches('/'));
     let body = serde_json::json!({

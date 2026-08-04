@@ -19,8 +19,8 @@ use orchestration::{
     OrchestrationDb, OrchestrationRow, OrchestrationSpawnRequest, OrchestrationStatus, StepRow,
 };
 use providers::registry::ProviderRegistry;
-use providers::streaming::Usage;
-use providers::trait_::ProviderConfig;
+use providers::Usage;
+use providers::ProviderConfig;
 use usage::{NewUsageEvent, UsageDb};
 use uuid::Uuid;
 

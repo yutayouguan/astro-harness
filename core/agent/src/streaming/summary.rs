@@ -5,7 +5,7 @@ use std::sync::Arc;
 use common::message::Message;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
-use providers::streaming::{PauseControl, Usage};
+use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
 
 use crate::runtime::AgentLoop;

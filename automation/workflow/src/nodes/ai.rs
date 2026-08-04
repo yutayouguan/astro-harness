@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 
 use providers::registry::ProviderRegistry;
-use providers::trait_::ProviderConfig;
+use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 
@@ -17,8 +17,8 @@ fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)
     let temperature = node.config.get("temperature").and_then(|v| v.as_f64()).unwrap_or(0.7) as f32;
     let max_tokens = node.config.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(4096) as u32;
 
-    let auth = providers::trait_::AuthKind::for_provider(provider_id);
-    let api_key = if auth == providers::trait_::AuthKind::None {
+    let auth = providers::AuthKind::for_provider(provider_id);
+    let api_key = if auth == providers::AuthKind::None {
         String::new()
     } else {
         providers::profile::read_env_api_key(provider_id).ok_or_else(|| {

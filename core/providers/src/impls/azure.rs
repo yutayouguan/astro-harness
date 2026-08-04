@@ -63,7 +63,7 @@ pub fn azure_deployment_url(endpoint: &str, deployment: &str) -> String {
 pub async fn probe_azure(
     client: &Client,
     model: &str,
-    config: &crate::trait_::ProviderConfig,
+    config: &crate::types::request::ProviderConfig,
 ) -> Result<String, String> {
     let endpoint = config
         .base_url

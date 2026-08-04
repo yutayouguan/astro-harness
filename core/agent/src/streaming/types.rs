@@ -6,7 +6,7 @@ use std::pin::Pin;
 
 use futures::Stream;
 use futures::StreamExt;
-use providers::streaming::Usage;
+use providers::Usage;
 use providers::types::stream::StreamChunk;
 use tools::ToolCallDelta;
 
