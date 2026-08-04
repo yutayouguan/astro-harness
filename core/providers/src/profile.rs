@@ -154,12 +154,12 @@ pub static PROFILES: &[ProviderProfile] = &[
         auth: AuthKind::GoogleApiKey,
         env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
         azure_deployment_style: false,
-        default_model: "gemini-3.1-ultra",
+        default_model: "gemini-3.6-flash",
         supports_image_gen: true,
         supports_embedding: true,
         image_mode: Some(ImageGenMode::GoogleInteractions),
-        default_image_model: "nanobanana-v2",
-        default_vision_model: "gemini-3.1-ultra",
+        default_image_model: "gemini-3.6-flash",
+        default_vision_model: "gemini-3.6-flash",
         supports_stream_usage: false,
         default_tts_model: "gemini-3.1-flash-tts",
         default_video_model: "veo-3.1",
@@ -454,7 +454,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         auth: AuthKind::GoogleApiKey,
         env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
         azure_deployment_style: false,
-        default_model: "gemini-3.5-flash",
+        default_model: "gemini-3.6-flash",
         supports_image_gen: false,
         supports_embedding: false,
         image_mode: None,
@@ -537,6 +537,155 @@ pub fn read_env_api_key(provider_id: &str) -> Option<String> {
         }
     }
     None
+}
+
+// ─── 动态模型默认值（OpenRouter 驱动）────────────────────
+
+// ─── 动态模型默认值（OpenRouter 驱动）────────────────────
+
+mod model_defaults {
+    use std::collections::HashMap;
+    use std::fs;
+    use std::sync::OnceLock;
+    use std::path::PathBuf;
+    use std::time::{Duration, SystemTime};
+
+    use serde::{Deserialize, Serialize};
+
+    const CACHE_MAX_AGE: Duration = Duration::from_secs(72 * 3600);
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct ModelDefaultsCache {
+        fetched_at_epoch: u64,
+        defaults: HashMap<String, String>,
+    }
+
+    static CACHE: OnceLock<Option<HashMap<String, String>>> = OnceLock::new();
+
+    /// 缓存路径。调用方可通过 `set_cache_dir` 覆盖。
+    /// 默认 `~/.astro/model-defaults.json`。
+    fn cache_path() -> PathBuf {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
+        let dir = PathBuf::from(home).join(".astro");
+        dir.join("model-defaults.json")
+    }
+
+    fn now_epoch() -> u64 {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    }
+
+    fn load_cache() -> Option<HashMap<String, String>> {
+        let content = fs::read_to_string(cache_path()).ok()?;
+        let cache: ModelDefaultsCache = serde_json::from_str(&content).ok()?;
+        let age = now_epoch().saturating_sub(cache.fetched_at_epoch);
+        if age > CACHE_MAX_AGE.as_secs() {
+            return None;
+        }
+        Some(cache.defaults)
+    }
+
+    fn get_cache() -> &'static Option<HashMap<String, String>> {
+        CACHE.get_or_init(|| load_cache())
+    }
+
+    pub fn resolve_default_model(provider_id: &str) -> Option<&'static str> {
+        let cache = get_cache().as_ref()?;
+        cache.get(provider_id).map(|s| s.as_str())
+    }
+
+    /// 厂商前缀映射：`(profile_id, openrouter_prefix)`。
+    const VENDOR_MAP: &[(&str, &str)] = &[
+        ("google", "google/gemini"),
+        ("openai", "openai/gpt"),
+        ("claude", "anthropic/claude"),
+        ("deepseek", "deepseek/"),
+        ("minimax", "minimax/"),
+    ];
+
+    const SKIP_SUFFIXES: &[&str] = &[
+        "-preview", "-free", "-extended", ":free", ":extended", "-online",
+        "-nitro", "-floor", "-exp",
+    ];
+
+    pub fn refresh_from_openrouter(api_key: &str) -> Result<(), String> {
+        let url = "https://openrouter.ai/api/v1/models";
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let resp = client
+            .get(url)
+            .header("Authorization", format!("Bearer {api_key}"))
+            .send()
+            .map_err(|e| format!("获取 OpenRouter 模型列表失败: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("OpenRouter HTTP {}", resp.status()));
+        }
+        let json: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
+        let data = json.get("data").and_then(|d| d.as_array())
+            .ok_or("OpenRouter 响应缺少 data 数组")?;
+
+        let mut defaults = HashMap::new();
+        for &(provider_id, prefix) in VENDOR_MAP {
+            let mut best: Option<(&str, i64)> = None;
+            for item in data {
+                let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                if !id.starts_with(prefix) {
+                    continue;
+                }
+                if SKIP_SUFFIXES.iter().any(|s| id.ends_with(s)) {
+                    continue;
+                }
+                let created = item.get("created").and_then(|v| v.as_i64()).unwrap_or(0);
+                if best.map_or(true, |(_, c)| created > c) {
+                    best = Some((id, created));
+                }
+            }
+            if let Some((model_id, _)) = best {
+                let short = model_id.split_once('/').map(|(_, m)| m).unwrap_or(model_id);
+                defaults.insert(provider_id.to_string(), short.to_string());
+            }
+        }
+
+        if defaults.is_empty() {
+            return Err("OpenRouter 未返回可用模型".to_string());
+        }
+
+        let cache = ModelDefaultsCache {
+            fetched_at_epoch: now_epoch(),
+            defaults,
+        };
+        let path = cache_path();
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let json = serde_json::to_string_pretty(&cache).map_err(|e| e.to_string())?;
+        fs::write(&path, json).map_err(|e| format!("写入 model-defaults.json 失败: {e}"))?;
+
+        Ok(())
+    }
+}
+
+/// 获取 provider 的默认聊天模型 — 优先从 OpenRouter 缓存读取，回退到 profile 静态值。
+pub fn default_chat_model(provider_id: &str) -> &str {
+    if let Some(m) = model_defaults::resolve_default_model(provider_id) {
+        return m;
+    }
+    resolve(provider_id)
+        .map(|p| p.default_model)
+        .unwrap_or("gpt-4o")
+}
+
+/// 从 OpenRouter 刷新各厂商最新默认模型并写入 `~/.astro/model-defaults.json`。
+///
+/// 需要 OpenRouter API Key。建议应用启动后在后台线程调用。
+pub fn refresh_model_defaults(openrouter_api_key: &str) -> Result<(), String> {
+    model_defaults::refresh_from_openrouter(openrouter_api_key)
 }
 
 #[cfg(test)]

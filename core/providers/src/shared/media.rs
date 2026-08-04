@@ -22,7 +22,7 @@ mod tests {
 
     #[test]
     fn default_vision_models() {
-        assert_eq!(default_vision_model("google"), "gemini-3.5-flash");
+        assert_eq!(default_vision_model("google"), "gemini-3.6-flash");
         assert_eq!(default_vision_model("openai"), "gpt-4o");
     }
 }

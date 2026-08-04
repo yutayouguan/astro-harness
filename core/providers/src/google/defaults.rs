@@ -1,7 +1,7 @@
 //! Google Gemini 默认模型与基址常量（单点维护，避免各处硬编码漂移）。
 
 /// 聊天 / 视觉 / 音频理解等通用默认模型。
-pub const DEFAULT_MODEL: &str = "gemini-3.5-flash";
+pub const DEFAULT_MODEL: &str = "gemini-3.6-flash";
 
 /// 视觉（图片理解）默认模型。
 pub const DEFAULT_VISION_MODEL: &str = DEFAULT_MODEL;
