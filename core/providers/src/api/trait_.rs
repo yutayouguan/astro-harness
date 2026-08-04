@@ -11,31 +11,8 @@ pub use crate::types::message::{
 pub use crate::types::request::ProviderConfig;
 pub use crate::types::stream::{CompletionStream, PauseControl, StreamChunk, Usage};
 
-// ── 媒体生成结果类型（trait 方法签名使用） ──
-
-/// 生成的图片二进制与 MIME 类型。
-#[derive(Debug, Clone)]
-pub struct GeneratedImage {
-    pub data: Vec<u8>,
-    pub mime_type: String,
-}
-
-/// 生成的音频（TTS / 音乐共用）。
-#[derive(Debug, Clone)]
-pub struct GeneratedAudio {
-    pub data: Vec<u8>,
-    pub mime_type: String,
-    pub duration_ms: Option<u64>,
-}
-
-/// 生成的视频。
-#[derive(Debug, Clone)]
-pub struct GeneratedVideo {
-    pub url: Option<String>,
-    pub task_id: Option<String>,
-    pub data: Option<Vec<u8>>,
-    pub mime_type: String,
-}
+// ── 媒体生成结果类型（统一使用 types::media） ──
+pub use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
 
 /// 提供商认证方式（运行时，非编译期泛型）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

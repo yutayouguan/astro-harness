@@ -9,7 +9,7 @@ use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
 
 const API_VERSION: &str = "2024-06-01";
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Azure;
 
 impl ProviderExt for Azure {

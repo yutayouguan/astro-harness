@@ -7,7 +7,7 @@ use crate::compat::OpenAICompatible;
 use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
 use crate::compat::OpenAICompletionModel;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DeepSeek;
 
 impl ProviderExt for DeepSeek {

@@ -7,7 +7,8 @@ use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_API_BASE;
 use crate::compat::openai_compatible_base;
-use crate::trait_::{GeneratedImage, ProviderConfig};
+use crate::types::media::GeneratedImage;
+use crate::types::ProviderConfig;
 
 /// 解析 OpenAI 兼容 API 基址。
 fn openai_base(config: &ProviderConfig) -> String {

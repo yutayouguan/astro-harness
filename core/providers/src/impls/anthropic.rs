@@ -17,7 +17,7 @@ const THINKING_BUDGET_MAX: u32 = 32_768;
 
 // ─── Provider Extension ─────────────────────────────────
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Anthropic;
 
 impl ProviderExt for Anthropic {

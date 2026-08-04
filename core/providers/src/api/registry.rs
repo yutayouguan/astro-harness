@@ -235,7 +235,7 @@ impl AiProvider for RegistryProvider {
                 Ok(GeneratedAudio {
                     data: result.audio_bytes,
                     mime_type: result.mime_type,
-                    duration_ms: Some(result.duration_ms),
+                    duration_ms: result.duration_ms,
                 })
             }
             _ => {
@@ -250,7 +250,7 @@ impl AiProvider for RegistryProvider {
                 Ok(GeneratedAudio {
                     data: result.audio_bytes,
                     mime_type: result.mime_type,
-                    duration_ms: None,
+                    duration_ms: 0,
                 })
             }
         }
@@ -281,12 +281,33 @@ impl AiProvider for RegistryProvider {
                     &req,
                 )
                 .await?;
-                Ok(GeneratedVideo {
-                    url: None,
-                    task_id: Some(task_id),
-                    data: None,
-                    mime_type: "video/mp4".to_string(),
-                })
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10 * 60);
+                loop {
+                    if std::time::Instant::now() > deadline {
+                        anyhow::bail!("MiniMax 视频生成超时（task_id={task_id}）");
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    let status = crate::minimax::video_http::minimax_query_video(
+                        &self.client, &cfg, &task_id,
+                    ).await?;
+                    if status.status == crate::minimax::video_http::VideoTaskStatus::Success {
+                        if let Some(file_id) = status.file_id {
+                            let result = crate::minimax::video_http::minimax_download_video(
+                                &self.client, &cfg, &file_id,
+                            ).await?;
+                            break Ok(GeneratedVideo {
+                                data: result.data,
+                                mime_type: result.mime_type,
+                                width: status.video_width.unwrap_or(0),
+                                height: status.video_height.unwrap_or(0),
+                            });
+                        }
+                        anyhow::bail!("MiniMax 视频生成成功但无 file_id");
+                    }
+                    if !status.status.is_pending() {
+                        anyhow::bail!("MiniMax 视频生成失败: {:?}", status.status);
+                    }
+                }
             }
             _ => {
                 anyhow::bail!(
@@ -324,7 +345,7 @@ impl AiProvider for RegistryProvider {
                 Ok(GeneratedAudio {
                     data: result.audio_bytes,
                     mime_type: result.mime_type,
-                    duration_ms: Some(result.duration_ms),
+                    duration_ms: result.duration_ms,
                 })
             }
             _ => {

@@ -1,20 +1,19 @@
 //! MiniMax — OpenAI 兼容聊天 + 多媒体能力。
 
 use reqwest::header::HeaderMap;
-use reqwest::Client;
 use serde_json::Value;
 
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
 use crate::traits::{
-    Capable, Capabilities, EmbeddingModel, FromClient, ImageGenModel, MusicGenModel, Nothing,
-    ProviderClient, ProviderExt, TTSModel, VideoGenModel,
+    Capable, Capabilities, EmbeddingModel, FromClient, ImageGenModel, ModelBase, MusicGenModel,
+    Nothing, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
 };
 use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
     TTSConfig, VideoGenConfig,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct MiniMaxNew;
 
 impl ProviderExt for MiniMaxNew {
@@ -55,35 +54,20 @@ impl Capabilities for MiniMaxNew {
 // ─── Embedding Model ────────────────────────────────────
 
 #[derive(Clone)]
-pub struct MiniMaxEmbeddingModel {
-    http: Client,
-    base_url: String,
-    api_key: String,
-    model: String,
-}
+pub struct MiniMaxEmbeddingModel(ModelBase);
 
 impl FromClient<MiniMaxNew> for MiniMaxEmbeddingModel {
     fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
-        Self {
-            http: client.http().clone(),
-            base_url: client.base_url().to_string(),
-            api_key: client.api_key().to_string(),
-            model: model.to_string(),
-        }
+        Self(ModelBase::from_client(client, model))
     }
 }
 
 #[async_trait::async_trait]
 impl EmbeddingModel for MiniMaxEmbeddingModel {
     async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
-        let config = crate::types::ProviderConfig {
-            api_key: self.api_key.clone(),
-            base_url: Some(self.base_url.clone()),
-            model: self.model.clone(),
-            ..Default::default()
-        };
+        let config = self.0.to_provider_config();
         let vectors =
-            crate::openai::embeddings_http::openai_batch_embed(&self.http, texts, &self.model, &config)
+            crate::openai::embeddings_http::openai_batch_embed(self.0.http(), texts, self.0.model(), &config)
                 .await?;
         Ok(vectors.into_iter().map(|v| Embedding { values: v }).collect())
     }
@@ -92,21 +76,11 @@ impl EmbeddingModel for MiniMaxEmbeddingModel {
 // ─── Image Generation Model ────────────────────────────
 
 #[derive(Clone)]
-pub struct MiniMaxImageModel {
-    http: Client,
-    base_url: String,
-    api_key: String,
-    model: String,
-}
+pub struct MiniMaxImageModel(ModelBase);
 
 impl FromClient<MiniMaxNew> for MiniMaxImageModel {
     fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
-        Self {
-            http: client.http().clone(),
-            base_url: client.base_url().to_string(),
-            api_key: client.api_key().to_string(),
-            model: model.to_string(),
-        }
+        Self(ModelBase::from_client(client, model))
     }
 }
 
@@ -117,14 +91,9 @@ impl ImageGenModel for MiniMaxImageModel {
         prompt: &str,
         config: &ImageGenConfig,
     ) -> anyhow::Result<Vec<GeneratedImage>> {
-        let provider_config = crate::types::ProviderConfig {
-            api_key: self.api_key.clone(),
-            base_url: Some(self.base_url.clone()),
-            model: self.model.clone(),
-            ..Default::default()
-        };
+        let provider_config = self.0.to_provider_config();
         let req = crate::minimax::image_http::MiniMaxImageRequest {
-            model: self.model.clone(),
+            model: self.0.model().to_string(),
             prompt: prompt.to_string(),
             aspect_ratio: config.aspect_ratio.clone().unwrap_or_else(|| "1:1".to_string()),
             width: config.width,
@@ -132,36 +101,18 @@ impl ImageGenModel for MiniMaxImageModel {
             n: if config.n > 0 { config.n } else { 1 },
             ..Default::default()
         };
-        let old_images =
-            crate::minimax::image_http::minimax_generate_image(&self.http, &provider_config, &req).await?;
-        Ok(old_images
-            .into_iter()
-            .map(|img| GeneratedImage {
-                data: img.data,
-                mime_type: img.mime_type,
-            })
-            .collect())
+        crate::minimax::image_http::minimax_generate_image(self.0.http(), &provider_config, &req).await
     }
 }
 
 // ─── Video Generation Model ────────────────────────────
 
 #[derive(Clone)]
-pub struct MiniMaxVideoModel {
-    http: Client,
-    base_url: String,
-    api_key: String,
-    model: String,
-}
+pub struct MiniMaxVideoModel(ModelBase);
 
 impl FromClient<MiniMaxNew> for MiniMaxVideoModel {
     fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
-        Self {
-            http: client.http().clone(),
-            base_url: client.base_url().to_string(),
-            api_key: client.api_key().to_string(),
-            model: model.to_string(),
-        }
+        Self(ModelBase::from_client(client, model))
     }
 }
 
@@ -172,14 +123,9 @@ impl VideoGenModel for MiniMaxVideoModel {
         prompt: &str,
         config: &VideoGenConfig,
     ) -> anyhow::Result<GeneratedVideo> {
-        let provider_config = crate::types::ProviderConfig {
-            api_key: self.api_key.clone(),
-            base_url: Some(self.base_url.clone()),
-            model: self.model.clone(),
-            ..Default::default()
-        };
+        let provider_config = self.0.to_provider_config();
         let req = crate::minimax::video_http::MiniMaxVideoRequest {
-            model: self.model.clone(),
+            model: self.0.model().to_string(),
             prompt: prompt.to_string(),
             first_frame_image: config.first_frame_image.clone(),
             last_frame_image: config.last_frame_image.clone(),
@@ -192,7 +138,7 @@ impl VideoGenModel for MiniMaxVideoModel {
             ..Default::default()
         };
         let task_id =
-            crate::minimax::video_http::minimax_create_video(&self.http, &provider_config, &req).await?;
+            crate::minimax::video_http::minimax_create_video(self.0.http(), &provider_config, &req).await?;
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10 * 60);
         loop {
@@ -202,12 +148,12 @@ impl VideoGenModel for MiniMaxVideoModel {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
             let status =
-                crate::minimax::video_http::minimax_query_video(&self.http, &provider_config, &task_id)
+                crate::minimax::video_http::minimax_query_video(self.0.http(), &provider_config, &task_id)
                     .await?;
             if status.status == crate::minimax::video_http::VideoTaskStatus::Success {
                 if let Some(file_id) = status.file_id {
                     let result = crate::minimax::video_http::minimax_download_video(
-                        &self.http,
+                        self.0.http(),
                         &provider_config,
                         &file_id,
                     )
@@ -231,21 +177,11 @@ impl VideoGenModel for MiniMaxVideoModel {
 // ─── TTS Model ──────────────────────────────────────────
 
 #[derive(Clone)]
-pub struct MiniMaxTTSModel {
-    http: Client,
-    base_url: String,
-    api_key: String,
-    model: String,
-}
+pub struct MiniMaxTTSModel(ModelBase);
 
 impl FromClient<MiniMaxNew> for MiniMaxTTSModel {
     fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
-        Self {
-            http: client.http().clone(),
-            base_url: client.base_url().to_string(),
-            api_key: client.api_key().to_string(),
-            model: model.to_string(),
-        }
+        Self(ModelBase::from_client(client, model))
     }
 }
 
@@ -256,12 +192,7 @@ impl TTSModel for MiniMaxTTSModel {
         text: &str,
         tts_config: &TTSConfig,
     ) -> anyhow::Result<GeneratedAudio> {
-        let provider_config = crate::types::ProviderConfig {
-            api_key: self.api_key.clone(),
-            base_url: Some(self.base_url.clone()),
-            model: self.model.clone(),
-            ..Default::default()
-        };
+        let provider_config = self.0.to_provider_config();
         let mut voice_setting = crate::minimax::tts_http::VoiceSetting::default();
         if !tts_config.voice_id.is_empty() {
             voice_setting.voice_id = tts_config.voice_id.clone();
@@ -270,14 +201,14 @@ impl TTSModel for MiniMaxTTSModel {
             voice_setting.speed = tts_config.speed;
         }
         let req = crate::minimax::tts_http::MiniMaxTtsRequest {
-            model: self.model.clone(),
+            model: self.0.model().to_string(),
             text: text.to_string(),
             voice_setting,
             output_format: "hex".to_string(),
             ..Default::default()
         };
         let result =
-            crate::minimax::tts_http::minimax_tts(&self.http, &provider_config, &req).await?;
+            crate::minimax::tts_http::minimax_tts(self.0.http(), &provider_config, &req).await?;
         Ok(GeneratedAudio {
             data: result.audio_bytes,
             mime_type: result.mime_type,
@@ -289,21 +220,11 @@ impl TTSModel for MiniMaxTTSModel {
 // ─── Music Generation Model ────────────────────────────
 
 #[derive(Clone)]
-pub struct MiniMaxMusicModel {
-    http: Client,
-    base_url: String,
-    api_key: String,
-    model: String,
-}
+pub struct MiniMaxMusicModel(ModelBase);
 
 impl FromClient<MiniMaxNew> for MiniMaxMusicModel {
     fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
-        Self {
-            http: client.http().clone(),
-            base_url: client.base_url().to_string(),
-            api_key: client.api_key().to_string(),
-            model: model.to_string(),
-        }
+        Self(ModelBase::from_client(client, model))
     }
 }
 
@@ -314,14 +235,9 @@ impl MusicGenModel for MiniMaxMusicModel {
         prompt: &str,
         config: &MusicGenConfig,
     ) -> anyhow::Result<GeneratedAudio> {
-        let provider_config = crate::types::ProviderConfig {
-            api_key: self.api_key.clone(),
-            base_url: Some(self.base_url.clone()),
-            model: self.model.clone(),
-            ..Default::default()
-        };
+        let provider_config = self.0.to_provider_config();
         let req = crate::minimax::music_http::MiniMaxMusicRequest {
-            model: self.model.clone(),
+            model: self.0.model().to_string(),
             prompt: prompt.to_string(),
             lyrics: config.lyrics.clone().unwrap_or_default(),
             is_instrumental: config.is_instrumental,
@@ -329,7 +245,7 @@ impl MusicGenModel for MiniMaxMusicModel {
             ..Default::default()
         };
         let result =
-            crate::minimax::music_http::minimax_generate_music(&self.http, &provider_config, &req)
+            crate::minimax::music_http::minimax_generate_music(self.0.http(), &provider_config, &req)
                 .await?;
         Ok(GeneratedAudio {
             data: result.audio_bytes,

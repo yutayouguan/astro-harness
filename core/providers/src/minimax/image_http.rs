@@ -6,7 +6,8 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_API_BASE;
-use crate::trait_::{GeneratedImage, ProviderConfig};
+use crate::types::media::GeneratedImage;
+use crate::types::ProviderConfig;
 
 // ---------------------------------------------------------------------------
 // Types

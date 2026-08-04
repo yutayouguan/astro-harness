@@ -10,17 +10,23 @@
 
 use std::marker::PhantomData;
 
-/// 能力标记 trait（密封）。
-pub trait Capability: Send + Sync + 'static {}
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// 能力标记 trait（密封，仅 `Capable<M>` 和 `Nothing` 可实现）。
+pub trait Capability: sealed::Sealed + Send + Sync + 'static {}
 
 /// 表示"具备此能力"，`M` 为该能力的具体模型实现。
 pub struct Capable<M>(PhantomData<M>);
 
+impl<M: Send + Sync + 'static> sealed::Sealed for Capable<M> {}
 impl<M: Send + Sync + 'static> Capability for Capable<M> {}
 
 /// 表示"不具备此能力"。
 pub struct Nothing;
 
+impl sealed::Sealed for Nothing {}
 impl Capability for Nothing {}
 
 /// 厂商能力声明。

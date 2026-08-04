@@ -4,7 +4,7 @@ use reqwest::header::HeaderMap;
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
 use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct OpenRouter;
 
 impl ProviderExt for OpenRouter {

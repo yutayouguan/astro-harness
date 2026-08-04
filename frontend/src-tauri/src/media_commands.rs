@@ -6,7 +6,7 @@ use serde::Serialize;
 pub struct TtsResult {
     pub path: String,
     pub mime_type: String,
-    pub duration_ms: Option<u64>,
+    pub duration_ms: u64,
 }
 
 /// 合成语音：调用当前活跃供应商的 TTS API，保存音频到 artifacts 并返回路径。

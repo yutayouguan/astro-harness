@@ -98,9 +98,10 @@ impl NodeExecutor for VideoGenExec {
         let result = provider.generate_video(&prompt, &config).await?;
 
         Ok(NodeResult::Success(serde_json::json!({
-            "task_id": result.task_id,
-            "url": result.url,
             "mime_type": result.mime_type,
+            "width": result.width,
+            "height": result.height,
+            "size_bytes": result.data.len(),
             "provider": provider_id,
         })))
     }

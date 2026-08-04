@@ -47,7 +47,7 @@ fn register_provider(
     match provider {
         "anthropic" | "claude" => reg.register_anthropic(key, base, model),
         "google" => reg.register_google(key, base, model),
-        "openai" => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
+        "openai" => reg.register_openai(key, base, model),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
         "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
         "zhipu" => register_compat::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
@@ -57,7 +57,7 @@ fn register_provider(
         "bailian" => register_compat::<crate::impls::bailian::Bailian>(reg, key, base, model),
         "volcengine" => register_compat::<crate::impls::volcengine::Volcengine>(reg, key, base, model),
         "openrouter" => register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model),
-        "minimax" | "minmax" => register_compat::<crate::impls::minimax_new::MiniMaxNew>(reg, key, base, model),
+        "minimax" | "minmax" => reg.register_minimax(key, base, model),
         "hunyuan" => register_compat::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         _ => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
     }
@@ -73,6 +73,7 @@ where
     Ext: crate::compat::OpenAICompatible
         + crate::traits::ProviderExt
         + crate::traits::Capabilities<Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>>
+        + Default
         + Copy
         + 'static,
 {

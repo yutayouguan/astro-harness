@@ -177,3 +177,56 @@ where
 pub trait FromClient<Ext: ProviderExt>: Sized {
     fn from_client(client: &ProviderClient<Ext>, model: &str) -> Self;
 }
+
+// ─── 通用模型基座 ───────────────────────────────────────
+
+/// 多模态模型共用的 HTTP 连接字段。
+///
+/// 所有非 Chat 模型（Embedding / ImageGen / TTS / VideoGen / MusicGen）
+/// 结构完全相同：`(http, base_url, api_key, model)`。
+/// 用 `ModelBase` 消除重复字段定义和 `FromClient` 实现。
+#[derive(Clone)]
+pub struct ModelBase {
+    http: HttpClient,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl ModelBase {
+    pub fn http(&self) -> &HttpClient {
+        &self.http
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    pub fn api_key(&self) -> &str {
+        &self.api_key
+    }
+
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub fn to_provider_config(&self) -> crate::types::ProviderConfig {
+        crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        }
+    }
+}
+
+impl<Ext: ProviderExt> FromClient<Ext> for ModelBase {
+    fn from_client(client: &ProviderClient<Ext>, model: &str) -> Self {
+        Self {
+            http: client.http.clone(),
+            base_url: client.base_url.clone(),
+            api_key: client.api_key.clone(),
+            model: model.to_string(),
+        }
+    }
+}

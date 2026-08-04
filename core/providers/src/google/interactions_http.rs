@@ -12,7 +12,8 @@ use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_MODEL;
 use super::veo_http::{google_native_base, pcm_to_wav};
-use crate::trait_::{GeneratedImage, ProviderConfig};
+use crate::types::media::GeneratedImage;
+use crate::types::ProviderConfig;
 
 const API_REVISION: &str = "2026-05-20";
 const DEFAULT_SAMPLE_RATE: u32 = 24_000;
