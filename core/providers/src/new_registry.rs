@@ -104,6 +104,29 @@ impl NewRegistry {
         self.providers.insert("minimax".to_string(), provider);
     }
 
+    /// 注册 Responses API provider（OpenAI / MiniMax Responses）。
+    pub fn register_responses(
+        &mut self,
+        id: &'static str,
+        api_key: &str,
+        base_url: Option<&str>,
+        model: &str,
+    ) {
+        let resolved_base = base_url
+            .unwrap_or(crate::profile::default_base_for(id))
+            .to_string();
+        let http = reqwest::Client::new();
+        let completion = crate::impls::openai_responses::ResponsesCompletionModel::new(
+            http,
+            resolved_base,
+            api_key.to_string(),
+            model.to_string(),
+            id,
+        );
+        let provider = DynProvider::new(id, id).with_completion(completion);
+        self.providers.insert(id.to_string(), provider);
+    }
+
     /// 注册 Gemini Native provider（仅 Chat — streamGenerateContent）。
     pub fn register_gemini_native(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::gemini_native::GeminiNative;
@@ -119,7 +142,7 @@ impl NewRegistry {
     /// 按 id 查找 provider。
     pub fn get(&self, id: &str) -> Option<&DynProvider> {
         let normalized = match id {
-            "minimax-responses" | "minimax-anthropic" | "minmax" | "minmax-anthropic" => "minimax",
+            "minimax-anthropic" | "minmax" | "minmax-anthropic" => "minimax",
             "claude" | "anthropic" => "anthropic",
             other => other,
         };

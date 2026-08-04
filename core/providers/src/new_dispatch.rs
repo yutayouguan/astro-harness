@@ -28,7 +28,7 @@ pub async fn chat_stream_direct(
 
 fn normalize_provider_id(id: &str) -> &str {
     match id {
-        "minimax-responses" | "minimax-anthropic" | "minmax" | "minmax-anthropic" => "minimax",
+        "minimax-anthropic" | "minmax" | "minmax-anthropic" => "minimax",
         "anthropic" => "claude",
         other => other,
     }
@@ -61,6 +61,8 @@ fn register_provider(
         "hunyuan" => register_compat::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
+        "openai-responses" => reg.register_responses("openai-responses", key, base, model),
+        "minimax-responses" => reg.register_responses("minimax-responses", key, base, model),
         _ => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
     }
 }
@@ -93,7 +95,7 @@ mod tests {
             "openai", "anthropic", "claude", "deepseek", "google",
             "azure", "zhipu", "moonshot", "ollama", "nvidia",
             "bailian", "volcengine", "openrouter", "minimax", "hunyuan",
-            "mimo", "gemini-native",
+            "mimo", "gemini-native", "openai-responses", "minimax-responses",
         ];
         for id in providers {
             let mut reg = crate::new_registry::NewRegistry::new();
@@ -108,13 +110,26 @@ mod tests {
     #[test]
     fn minimax_variant_ids_resolve() {
         let config = ProviderConfig::default();
-        for id in ["minimax-responses", "minimax-anthropic", "minmax", "minmax-anthropic"] {
+        for id in ["minimax-anthropic", "minmax", "minmax-anthropic"] {
             let normalized = normalize_provider_id(id);
             let mut reg = crate::new_registry::NewRegistry::new();
             register_provider(&mut reg, normalized, &config);
             assert!(
                 reg.completion_model(normalized).is_some(),
                 "provider alias {id} (normalized to {normalized}) should resolve"
+            );
+        }
+    }
+
+    #[test]
+    fn responses_providers_resolve() {
+        let config = ProviderConfig::default();
+        for id in ["openai-responses", "minimax-responses"] {
+            let mut reg = crate::new_registry::NewRegistry::new();
+            register_provider(&mut reg, id, &config);
+            assert!(
+                reg.completion_model(id).is_some(),
+                "responses provider {id} should resolve"
             );
         }
     }
