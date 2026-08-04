@@ -59,6 +59,8 @@ fn register_provider(
         "openrouter" => register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model),
         "minimax" | "minmax" => reg.register_minimax(key, base, model),
         "hunyuan" => register_compat::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
+        "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
+        "gemini-native" => reg.register_gemini_native(key, base, model),
         _ => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
     }
 }
@@ -91,6 +93,7 @@ mod tests {
             "openai", "anthropic", "claude", "deepseek", "google",
             "azure", "zhipu", "moonshot", "ollama", "nvidia",
             "bailian", "volcengine", "openrouter", "minimax", "hunyuan",
+            "mimo", "gemini-native",
         ];
         for id in providers {
             let mut reg = crate::new_registry::NewRegistry::new();

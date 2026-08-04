@@ -104,6 +104,18 @@ impl NewRegistry {
         self.providers.insert("minimax".to_string(), provider);
     }
 
+    /// 注册 Gemini Native provider（仅 Chat — streamGenerateContent）。
+    pub fn register_gemini_native(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
+        use crate::impls::gemini_native::GeminiNative;
+        let mut client = ProviderClient::new(api_key, GeminiNative);
+        if let Some(url) = base_url {
+            client = client.with_base_url(url);
+        }
+        let provider = DynProvider::new("gemini-native", "gemini-native")
+            .with_completion(client.completion_model(model));
+        self.providers.insert("gemini-native".to_string(), provider);
+    }
+
     /// 按 id 查找 provider。
     pub fn get(&self, id: &str) -> Option<&DynProvider> {
         let normalized = match id {

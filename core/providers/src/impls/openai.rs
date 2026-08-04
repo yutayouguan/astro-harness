@@ -35,6 +35,25 @@ impl ProviderExt for OpenAI {
 
 impl OpenAICompatible for OpenAI {
     const STREAM_USAGE: bool = true;
+
+    fn finalize_body(&self, body: &mut Value) {
+        if let Some(tc) = body.get("thinking_config").cloned() {
+            body.as_object_mut().unwrap().remove("thinking_config");
+            let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+            if enabled {
+                let effort = tc
+                    .get("effort")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("high");
+                let mapped = match effort {
+                    "max" | "xhigh" => "high",
+                    "" => "high",
+                    other => other,
+                };
+                body["reasoning_effort"] = serde_json::json!(mapped);
+            }
+        }
+    }
 }
 
 impl Capabilities for OpenAI {
