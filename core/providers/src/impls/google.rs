@@ -7,7 +7,14 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
-use crate::traits::{Capable, Capabilities, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt};
+use crate::traits::{
+    Capable, Capabilities, CompletionModel, EmbeddingModel, FromClient, ImageGenModel,
+    MusicGenModel, Nothing, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
+};
+use crate::types::media::{
+    Embedding, GeneratedAudio, GeneratedImage as NewGeneratedImage, GeneratedVideo as NewGeneratedVideo,
+    ImageGenConfig, MusicGenConfig, TTSConfig, VideoGenConfig,
+};
 use crate::types::{CompletionRequest, CompletionStream};
 
 const API_REVISION: &str = "2026-05-20";
@@ -35,11 +42,11 @@ impl ProviderExt for Google {
 
 impl Capabilities for Google {
     type Chat = Capable<InteractionsCompletionModel>;
-    type Embedding = Nothing; // TODO: Capable<GeminiEmbeddingModel>
-    type ImageGen = Nothing;  // TODO: Capable<InteractionsImageModel>
-    type VideoGen = Nothing;  // TODO: Capable<VeoVideoModel>
-    type TTS = Nothing;       // TODO: Capable<GeminiTTSModel>
-    type MusicGen = Nothing;  // TODO: Capable<LyriaMusicModel>
+    type Embedding = Capable<GeminiEmbeddingModel>;
+    type ImageGen = Capable<InteractionsImageModel>;
+    type VideoGen = Capable<VeoVideoModel>;
+    type TTS = Capable<GeminiTTSModel>;
+    type MusicGen = Capable<LyriaMusicModel>;
     type ASR = Nothing;
 }
 
@@ -413,6 +420,265 @@ pub async fn probe_interactions(
         return Err(format!("失败 ({status}): {msg}"));
     }
     Ok("调用成功".to_string())
+}
+
+// ─── Embedding Model ────────────────────────────────────
+
+#[derive(Clone)]
+pub struct GeminiEmbeddingModel {
+    http: HttpClient,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<Google> for GeminiEmbeddingModel {
+    fn from_client(client: &ProviderClient<Google>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl EmbeddingModel for GeminiEmbeddingModel {
+    async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
+        let config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let vectors =
+            crate::google::interactions_http::google_batch_embed(&self.http, texts, &self.model, &config)
+                .await?;
+        Ok(vectors.into_iter().map(|v| Embedding { values: v }).collect())
+    }
+}
+
+// ─── Image Generation Model ────────────────────────────
+
+#[derive(Clone)]
+pub struct InteractionsImageModel {
+    http: HttpClient,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<Google> for InteractionsImageModel {
+    fn from_client(client: &ProviderClient<Google>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ImageGenModel for InteractionsImageModel {
+    async fn generate(
+        &self,
+        prompt: &str,
+        config: &ImageGenConfig,
+    ) -> anyhow::Result<Vec<NewGeneratedImage>> {
+        let provider_config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let req = crate::google::interactions_http::InteractionImageRequest {
+            prompt: prompt.to_string(),
+            aspect_ratio: config.aspect_ratio.clone(),
+            ..Default::default()
+        };
+        let result =
+            crate::google::interactions_http::google_interactions_image(&self.http, &provider_config, &req)
+                .await?;
+        Ok(vec![NewGeneratedImage {
+            data: result.image.data,
+            mime_type: result.image.mime_type,
+        }])
+    }
+}
+
+// ─── Video Generation Model ────────────────────────────
+
+#[derive(Clone)]
+pub struct VeoVideoModel {
+    http: HttpClient,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<Google> for VeoVideoModel {
+    fn from_client(client: &ProviderClient<Google>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl VideoGenModel for VeoVideoModel {
+    async fn generate(
+        &self,
+        prompt: &str,
+        config: &VideoGenConfig,
+    ) -> anyhow::Result<NewGeneratedVideo> {
+        let provider_config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let mut extras = crate::google::veo_http::VideoGenExtras::default();
+        if let Some(ar) = config.additional_params.get("aspect_ratio").and_then(|v| v.as_str()) {
+            extras.aspect_ratio = Some(ar.to_string());
+        }
+        if config.duration_seconds > 0 {
+            extras.duration_seconds = Some(config.duration_seconds);
+        }
+        if !config.resolution.is_empty() {
+            extras.resolution = Some(config.resolution.clone());
+        }
+        let result = crate::google::veo_http::google_native_generate_video(
+            &self.http,
+            prompt,
+            &provider_config,
+            &extras,
+            None,
+        )
+        .await?;
+        Ok(NewGeneratedVideo {
+            data: result.data,
+            mime_type: result.mime_type,
+            width: 0,
+            height: 0,
+        })
+    }
+}
+
+// ─── TTS Model ──────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct GeminiTTSModel {
+    http: HttpClient,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<Google> for GeminiTTSModel {
+    fn from_client(client: &ProviderClient<Google>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TTSModel for GeminiTTSModel {
+    async fn synthesize(
+        &self,
+        text: &str,
+        tts_config: &TTSConfig,
+    ) -> anyhow::Result<GeneratedAudio> {
+        let provider_config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let voice = if tts_config.voice_id.is_empty() {
+            "Kore".to_string()
+        } else {
+            tts_config.voice_id.clone()
+        };
+        let req = crate::google::interactions_http::InteractionTtsRequest {
+            model: self.model.clone(),
+            input: text.to_string(),
+            speech_config: vec![crate::google::interactions_http::InteractionSpeechConfig {
+                speaker: None,
+                voice,
+            }],
+            stream: false,
+        };
+        let result =
+            crate::google::interactions_http::google_interactions_tts(&self.http, &provider_config, &req)
+                .await?;
+        Ok(GeneratedAudio {
+            data: result.wav_bytes,
+            mime_type: "audio/wav".to_string(),
+            duration_ms: 0,
+        })
+    }
+}
+
+// ─── Music Generation Model ────────────────────────────
+
+#[derive(Clone)]
+pub struct LyriaMusicModel {
+    http: HttpClient,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<Google> for LyriaMusicModel {
+    fn from_client(client: &ProviderClient<Google>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl MusicGenModel for LyriaMusicModel {
+    async fn generate(
+        &self,
+        prompt: &str,
+        _config: &MusicGenConfig,
+    ) -> anyhow::Result<GeneratedAudio> {
+        let provider_config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let model_id = crate::google::interactions_http::resolve_lyria_model_id(&self.model)
+            .unwrap_or_else(|_| self.model.clone());
+        let req = crate::google::interactions_http::InteractionMusicRequest {
+            model: model_id,
+            prompt: prompt.to_string(),
+            images: vec![],
+            format: crate::google::interactions_http::MusicAudioFormat::Mp3,
+        };
+        let result =
+            crate::google::interactions_http::google_interactions_music(&self.http, &provider_config, &req)
+                .await?;
+        Ok(GeneratedAudio {
+            data: result.audio_bytes,
+            mime_type: result.mime_type,
+            duration_ms: 0,
+        })
+    }
 }
 
 #[cfg(test)]

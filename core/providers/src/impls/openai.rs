@@ -5,7 +5,13 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
-use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
+use crate::traits::{
+    Capable, Capabilities, EmbeddingModel, FromClient, ImageGenModel, Nothing, ProviderClient,
+    ProviderExt, TTSModel,
+};
+use crate::types::media::{
+    Embedding, GeneratedAudio, GeneratedImage, ImageGenConfig, TTSConfig,
+};
 
 /// Bearer token 认证 header（OpenAI 及大多数兼容厂商共用）。
 pub fn bearer_headers(api_key: &str) -> HeaderMap {
@@ -35,12 +41,149 @@ impl OpenAICompatible for OpenAI {
 
 impl Capabilities for OpenAI {
     type Chat = Capable<OpenAICompletionModel<Self>>;
-    type Embedding = Nothing; // TODO: Phase 3 — Capable<OpenAIEmbeddingModel>
-    type ImageGen = Nothing;  // TODO: Phase 3 — Capable<OpenAIImageModel>
+    type Embedding = Capable<OpenAIEmbeddingModel>;
+    type ImageGen = Capable<OpenAIImageModel>;
     type VideoGen = Nothing;
-    type TTS = Nothing;       // TODO: Phase 3 — Capable<OpenAITTSModel>
+    type TTS = Capable<OpenAITTSModel>;
     type MusicGen = Nothing;
     type ASR = Nothing;
+}
+
+// ─── Embedding Model ────────────────────────────────────
+
+#[derive(Clone)]
+pub struct OpenAIEmbeddingModel {
+    http: Client,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<OpenAI> for OpenAIEmbeddingModel {
+    fn from_client(client: &ProviderClient<OpenAI>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl EmbeddingModel for OpenAIEmbeddingModel {
+    async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
+        let config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let vectors =
+            crate::openai::embeddings_http::openai_batch_embed(&self.http, texts, &self.model, &config)
+                .await?;
+        Ok(vectors.into_iter().map(|v| Embedding { values: v }).collect())
+    }
+}
+
+// ─── Image Generation Model ────────────────────────────
+
+#[derive(Clone)]
+pub struct OpenAIImageModel {
+    http: Client,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<OpenAI> for OpenAIImageModel {
+    fn from_client(client: &ProviderClient<OpenAI>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ImageGenModel for OpenAIImageModel {
+    async fn generate(
+        &self,
+        prompt: &str,
+        _config: &ImageGenConfig,
+    ) -> anyhow::Result<Vec<GeneratedImage>> {
+        let config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let old_images = crate::openai::image_http::openai_generate_image(&self.http, prompt, &config).await?;
+        Ok(old_images
+            .into_iter()
+            .map(|img| GeneratedImage {
+                data: img.data,
+                mime_type: img.mime_type,
+            })
+            .collect())
+    }
+}
+
+// ─── TTS Model ──────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct OpenAITTSModel {
+    http: Client,
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+impl FromClient<OpenAI> for OpenAITTSModel {
+    fn from_client(client: &ProviderClient<OpenAI>, model: &str) -> Self {
+        Self {
+            http: client.http().clone(),
+            base_url: client.base_url().to_string(),
+            api_key: client.api_key().to_string(),
+            model: model.to_string(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TTSModel for OpenAITTSModel {
+    async fn synthesize(
+        &self,
+        text: &str,
+        tts_config: &TTSConfig,
+    ) -> anyhow::Result<GeneratedAudio> {
+        let provider_config = crate::types::ProviderConfig {
+            api_key: self.api_key.clone(),
+            base_url: Some(self.base_url.clone()),
+            model: self.model.clone(),
+            ..Default::default()
+        };
+        let voice = if tts_config.voice_id.is_empty() {
+            "alloy".to_string()
+        } else {
+            tts_config.voice_id.clone()
+        };
+        let req = crate::openai::tts_http::OpenAiTtsRequest {
+            model: self.model.clone(),
+            input: text.to_string(),
+            voice,
+            speed: if tts_config.speed > 0.0 { tts_config.speed } else { 1.0 },
+            ..Default::default()
+        };
+        let result = crate::openai::tts_http::openai_tts(&self.http, &provider_config, &req).await?;
+        Ok(GeneratedAudio {
+            data: result.audio_bytes,
+            mime_type: result.mime_type,
+            duration_ms: 0,
+        })
+    }
 }
 
 // ─── 连通性探测 ─────────────────────────────────────────

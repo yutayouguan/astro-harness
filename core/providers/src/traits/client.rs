@@ -139,6 +139,40 @@ where
     }
 }
 
+/// 拥有视频生成能力的客户端。
+pub trait VideoGenClient {
+    type Model: VideoGenModel;
+    fn video_model(&self, model: &str) -> Self::Model;
+}
+
+impl<Ext, M> VideoGenClient for ProviderClient<Ext>
+where
+    Ext: ProviderExt + Capabilities<VideoGen = Capable<M>>,
+    M: VideoGenModel + FromClient<Ext>,
+{
+    type Model = M;
+    fn video_model(&self, model: &str) -> M {
+        M::from_client(self, model)
+    }
+}
+
+/// 拥有音乐生成能力的客户端。
+pub trait MusicGenClient {
+    type Model: MusicGenModel;
+    fn music_model(&self, model: &str) -> Self::Model;
+}
+
+impl<Ext, M> MusicGenClient for ProviderClient<Ext>
+where
+    Ext: ProviderExt + Capabilities<MusicGen = Capable<M>>,
+    M: MusicGenModel + FromClient<Ext>,
+{
+    type Model = M;
+    fn music_model(&self, model: &str) -> M {
+        M::from_client(self, model)
+    }
+}
+
 /// 从 `ProviderClient<Ext>` 构造模型实例。
 pub trait FromClient<Ext: ProviderExt>: Sized {
     fn from_client(client: &ProviderClient<Ext>, model: &str) -> Self;

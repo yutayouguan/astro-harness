@@ -249,7 +249,7 @@ pub async fn google_native_generate_video(
     prompt: &str,
     config: &ProviderConfig,
     extras: &VideoGenExtras,
-    mut on_progress: Option<&mut dyn FnMut(&str)>,
+    mut on_progress: Option<&mut (dyn FnMut(&str) + Send)>,
 ) -> Result<GeneratedVideo> {
     if config.api_key.trim().is_empty() {
         anyhow::bail!("Google API Key 为空");
@@ -283,7 +283,7 @@ pub async fn google_native_generate_video(
     let predict_url = google_veo_predict_url(config, model);
     let body = build_veo_predict_body(prompt, &body_extras);
 
-    let emit = |cb: &mut Option<&mut dyn FnMut(&str)>, msg: &str| {
+    let emit = |cb: &mut Option<&mut (dyn FnMut(&str) + Send)>, msg: &str| {
         if let Some(f) = cb.as_mut() {
             f(msg);
         }
