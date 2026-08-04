@@ -75,7 +75,7 @@ impl Default for ProviderRegistry {
 
 /// 由静态 [`ProviderProfile`] 驱动的供应商实现（取代旧 `ProfileBackedProvider`）。
 ///
-/// Chat 通过新 trait 管线分发（[`crate::new_dispatch`]），
+/// Chat 通过 trait 管线分发（[`crate::dispatch`]），
 /// Verify 通过 `impls/` 模块探测，
 /// 媒体能力（Image / TTS / Video / Music / Embed）通过 profile 路由到专用 HTTP 模块。
 struct RegistryProvider {
@@ -138,7 +138,7 @@ impl ChatProvider for RegistryProvider {
             previous_interaction_id: config.previous_interaction_id.clone(),
         };
 
-        crate::new_dispatch::chat_stream_direct(self.profile.id, request, config).await
+        crate::dispatch::chat_stream_direct(self.profile.id, request, config).await
     }
 }
 

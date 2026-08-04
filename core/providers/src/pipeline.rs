@@ -1,17 +1,17 @@
-//! 新注册表 — 按 provider id 动态查找，内部使用 trait-based 实现。
+//! 协议管线注册表 — 按 provider id 构造并缓存 trait-based 模型实例。
 
 use std::collections::HashMap;
 
 use crate::traits::client::{ChatClient, EmbedClient, ImageGenClient, TTSClient, VideoGenClient, MusicGenClient, ProviderClient};
 use crate::traits::dyn_provider::DynProvider;
 
-/// 新 ProviderRegistry — 基于 trait 系统。
+/// Provider 注册表 — 基于 trait 系统。
 #[derive(Clone)]
-pub struct NewRegistry {
+pub struct Registry {
     providers: HashMap<String, DynProvider>,
 }
 
-impl NewRegistry {
+impl Registry {
     pub fn new() -> Self {
         Self {
             providers: HashMap::new(),
@@ -158,7 +158,7 @@ impl NewRegistry {
     }
 }
 
-impl Default for NewRegistry {
+impl Default for Registry {
     fn default() -> Self {
         Self::new()
     }
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn register_and_lookup() {
-        let mut reg = NewRegistry::new();
+        let mut reg = Registry::new();
         reg.register_anthropic("test-key", None, "claude-opus-4-8");
         assert!(reg.get("anthropic").is_some());
         assert!(reg.get("claude").is_some());
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn completion_model_lookup() {
-        let mut reg = NewRegistry::new();
+        let mut reg = Registry::new();
         reg.register_anthropic("test-key", None, "claude-opus-4-8");
         assert!(reg.completion_model("anthropic").is_some());
         assert!(reg.completion_model("openai").is_none());
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn openai_has_all_media_capabilities() {
-        let mut reg = NewRegistry::new();
+        let mut reg = Registry::new();
         reg.register_openai("test-key", None, "gpt-4o");
         let p = reg.get("openai").unwrap();
         assert!(p.completion_model().is_some());
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn google_has_all_capabilities() {
-        let mut reg = NewRegistry::new();
+        let mut reg = Registry::new();
         reg.register_google("test-key", None, "gemini-3.5-flash");
         let p = reg.get("google").unwrap();
         assert!(p.completion_model().is_some());
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn minimax_has_all_capabilities() {
-        let mut reg = NewRegistry::new();
+        let mut reg = Registry::new();
         reg.register_minimax("test-key", None, "MiniMax-M2.5");
         let p = reg.get("minimax").unwrap();
         assert!(p.completion_model().is_some());

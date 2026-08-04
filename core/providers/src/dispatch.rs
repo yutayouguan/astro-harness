@@ -1,22 +1,22 @@
-//! 新分发入口 — 基于 trait 系统的 `chat_stream_direct` 统一入口。
+//! 协议管线分发 — `chat_stream_direct` 统一入口。
 //!
-//! 直接接受新 `Message` 和 `CompletionRequest`，返回 `CompletionStream`。
+//! 接受 `CompletionRequest`，按 provider id 路由到 5 条协议管线之一。
 
 use anyhow::Result;
 
 use crate::types::request::{CompletionRequest, ProviderConfig};
 use crate::types::stream::CompletionStream;
 
-/// 新管线分发（新类型签名）。
+/// 协议管线分发。
 ///
-/// 直接接受 `CompletionRequest`，返回新 `CompletionStream`。
+/// 接受 `CompletionRequest`，返回 `CompletionStream`。
 pub async fn chat_stream_direct(
     provider: &str,
     request: CompletionRequest,
     config: &ProviderConfig,
 ) -> Result<CompletionStream> {
     let provider = normalize_provider_id(provider);
-    let mut reg = crate::new_registry::NewRegistry::new();
+    let mut reg = crate::pipeline::Registry::new();
     register_provider(&mut reg, provider, config);
 
     let dyn_model = reg
@@ -34,9 +34,9 @@ fn normalize_provider_id(id: &str) -> &str {
     }
 }
 
-/// 根据 provider id 注册到新注册表。
+/// 根据 provider id 注册到注册表。
 fn register_provider(
-    reg: &mut crate::new_registry::NewRegistry,
+    reg: &mut crate::pipeline::Registry,
     provider: &str,
     config: &ProviderConfig,
 ) {
@@ -68,7 +68,7 @@ fn register_provider(
 }
 
 fn register_compat<Ext>(
-    reg: &mut crate::new_registry::NewRegistry,
+    reg: &mut crate::pipeline::Registry,
     api_key: &str,
     base_url: Option<&str>,
     model: &str,
@@ -98,7 +98,7 @@ mod tests {
             "mimo", "gemini-native", "openai-responses", "minimax-responses",
         ];
         for id in providers {
-            let mut reg = crate::new_registry::NewRegistry::new();
+            let mut reg = crate::pipeline::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
                 reg.completion_model(id).is_some(),
@@ -112,7 +112,7 @@ mod tests {
         let config = ProviderConfig::default();
         for id in ["minimax-anthropic", "minmax", "minmax-anthropic"] {
             let normalized = normalize_provider_id(id);
-            let mut reg = crate::new_registry::NewRegistry::new();
+            let mut reg = crate::pipeline::Registry::new();
             register_provider(&mut reg, normalized, &config);
             assert!(
                 reg.completion_model(normalized).is_some(),
@@ -125,7 +125,7 @@ mod tests {
     fn responses_providers_resolve() {
         let config = ProviderConfig::default();
         for id in ["openai-responses", "minimax-responses"] {
-            let mut reg = crate::new_registry::NewRegistry::new();
+            let mut reg = crate::pipeline::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
                 reg.completion_model(id).is_some(),

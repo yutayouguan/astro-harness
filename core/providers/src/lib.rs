@@ -3,9 +3,9 @@
 //! - [`types`]：统一消息模型（`Message` enum + `StreamChunk` + `Usage` + `ProviderConfig`）
 //! - [`traits`]：能力 trait 系统（`CompletionModel` + `Capable<M>/Nothing` 编译期检查）
 //! - [`compat`]：OpenAI 兼容层（`OpenAICompatible` trait — 一行接厂商）
-//! - [`impls`]：14 个厂商实现（Anthropic / Google 原生 + 11 个 OpenAI 兼容）
-//! - [`new_registry`]：基于 trait 的动态注册表
-//! - [`new_dispatch`]：新管线聊天分发
+//! - [`impls`]：19 个厂商实现（5 种协议管线）
+//! - [`pipeline`]：协议管线注册表（trait-based `Registry`）
+//! - [`dispatch`]：管线分发入口
 //! - [`shared`]：跨厂商共享基础设施（HTTP / SSE / 探测 / 抽取器 / 媒体 / 视觉）
 //! - [`api`]：旧 trait（`AiProvider` / `ChatProvider`）+ 旧兼容类型（`ChatMessage` 等）
 //! - [`profile`]：静态配置表（`ProviderProfile` / `ApiMode`）
@@ -14,8 +14,8 @@ pub mod anthropic;
 pub mod api;
 pub mod compat;
 pub mod impls;
-pub mod new_dispatch;
-pub mod new_registry;
+pub mod dispatch;
+pub mod pipeline;
 pub mod google;
 pub mod minimax;
 pub mod openai;

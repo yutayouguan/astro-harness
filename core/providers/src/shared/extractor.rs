@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use crate::registry::ProviderRegistry;
+use crate::api::registry::ProviderRegistry;
 use crate::trait_::ProviderConfig;
 use crate::types::message::Message;
 use crate::types::stream::StreamChunk;
