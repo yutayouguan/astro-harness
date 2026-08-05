@@ -15,7 +15,6 @@ use memory::{
     apply_review_suggestions, build_review_digest, load_auxiliary_config, parse_review_llm_output,
     MemoryManager, REVIEW_SYSTEM_PROMPT,
 };
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -226,10 +225,6 @@ async fn complete_review_chat(
     system: &str,
     user: &str,
 ) -> anyhow::Result<String> {
-    let registry = ProviderRegistry::default();
-    let provider = registry
-        .get(backend_id)
-        .ok_or_else(|| anyhow::anyhow!("不支持的 review 提供商后端: {backend_id}"))?;
     let config = ProviderConfig {
         api_key: api_key.to_string(),
         base_url: if base_url.trim().is_empty() {
@@ -249,7 +244,7 @@ async fn complete_review_chat(
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
-    let mut stream = provider.chat_stream(messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::chat_stream(backend_id, messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

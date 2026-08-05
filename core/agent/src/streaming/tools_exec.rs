@@ -202,12 +202,10 @@ async fn execute_tools_serial_inner(
                                     .iter()
                                     .map(crate::control::smart_approval::ApprovalTarget::from)
                                     .collect();
-                                let providers = agent.providers_arc();
                                 drop(agent);
                                 crate::control::smart_approval::maybe_smart_downgrade_ask(
                                     &cmd,
                                     decision.description,
-                                    providers.as_ref(),
                                     &targets,
                                 )
                                 .await
@@ -357,7 +355,6 @@ pub(crate) async fn execute_tools_concurrent(
             chat_model: agent.chat_model().to_string(),
             chat_targets: agent.chat_targets().to_vec(),
             image_gen_targets: agent.image_gen_targets().clone(),
-            providers: agent.providers_arc(),
             execution: agent.execution(),
             hook_bus: Some(agent.hook_bus()),
         }
@@ -421,7 +418,6 @@ struct ToolExecSnapshot {
     chat_model: String,
     chat_targets: Vec<common::ChatTarget>,
     image_gen_targets: tools::ImageGenTargets,
-    providers: Arc<providers::registry::ProviderRegistry>,
     execution: Arc<dyn tools::ExecutionDispatch>,
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
@@ -463,7 +459,6 @@ fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::
             workspace_dir: snap.workspace_dir.clone(),
             project_root: snap.project_root.clone(),
             image_gen_targets: &snap.image_gen_targets,
-            providers: snap.providers.as_ref(),
             session_id: snap.session_id.clone(),
             turn_id: snap.turn_id.clone(),
             chat_api_key: snap.chat_api_key.clone(),

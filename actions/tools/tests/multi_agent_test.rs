@@ -10,7 +10,6 @@ async fn pipeline_queues_orchestration() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = ToolContext {
         memory: &mut memory,
@@ -19,7 +18,6 @@ async fn pipeline_queues_orchestration() {
         workspace_dir: dir.path().to_path_buf(),
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
         session_id: "s".into(),
         turn_id: None,
         chat_api_key: "k".into(),
@@ -66,7 +64,6 @@ async fn pipeline_rejects_empty_agents() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let mut ctx = ToolContext {
         memory: &mut memory,
@@ -75,7 +72,6 @@ async fn pipeline_rejects_empty_agents() {
         workspace_dir: dir.path().to_path_buf(),
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
         session_id: "s".into(),
         turn_id: None,
         chat_api_key: "k".into(),

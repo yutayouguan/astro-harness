@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
@@ -48,11 +47,7 @@ impl NodeExecutor for ImageGenExec {
         }
 
         let (provider_id, config) = build_media_config(node)?;
-        let registry = ProviderRegistry::new();
-        let provider = registry.get(&provider_id)
-            .ok_or_else(|| anyhow::anyhow!("未找到 provider: {}", provider_id))?;
-
-        let images = provider.generate_image(&prompt, &config).await?;
+        let images = providers::dispatch::generate_image(&provider_id, &prompt, &config).await?;
         if images.is_empty() {
             bail!("图片生成未返回结果");
         }
@@ -91,11 +86,7 @@ impl NodeExecutor for VideoGenExec {
         }
 
         let (provider_id, config) = build_media_config(node)?;
-        let registry = ProviderRegistry::new();
-        let provider = registry.get(&provider_id)
-            .ok_or_else(|| anyhow::anyhow!("未找到 provider: {}", provider_id))?;
-
-        let result = provider.generate_video(&prompt, &config).await?;
+        let result = providers::dispatch::generate_video(&provider_id, &prompt, &config).await?;
 
         Ok(NodeResult::Success(serde_json::json!({
             "mime_type": result.mime_type,
@@ -121,11 +112,7 @@ impl NodeExecutor for MusicGenExec {
         }
 
         let (provider_id, config) = build_media_config(node)?;
-        let registry = ProviderRegistry::new();
-        let provider = registry.get(&provider_id)
-            .ok_or_else(|| anyhow::anyhow!("未找到 provider: {}", provider_id))?;
-
-        let result = provider.generate_music(&prompt, &config).await?;
+        let result = providers::dispatch::generate_music(&provider_id, &prompt, &config).await?;
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
         std::fs::create_dir_all(&artifacts_dir)?;
@@ -157,11 +144,7 @@ impl NodeExecutor for TtsExec {
         }
 
         let (provider_id, config) = build_media_config(node)?;
-        let registry = ProviderRegistry::new();
-        let provider = registry.get(&provider_id)
-            .ok_or_else(|| anyhow::anyhow!("未找到 provider: {}", provider_id))?;
-
-        let result = provider.text_to_speech(&text, &config).await?;
+        let result = providers::dispatch::text_to_speech(&provider_id, &text, &config).await?;
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
         std::fs::create_dir_all(&artifacts_dir)?;

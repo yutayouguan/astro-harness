@@ -29,7 +29,6 @@ fn make_ctx<'a>(
     memory: &'a mut memory::MemoryManager,
     sessions: &'a session::SessionStore,
     dir: &std::path::Path,
-    providers: &'a providers::registry::ProviderRegistry,
     targets: &'a tools::ImageGenTargets,
 ) -> ToolContext<'a> {
     ToolContext {
@@ -39,7 +38,6 @@ fn make_ctx<'a>(
         workspace_dir: dir.to_path_buf(),
         project_root: None,
         image_gen_targets: targets,
-        providers,
         session_id: "s".into(),
         turn_id: None,
         chat_api_key: "k".into(),
@@ -59,9 +57,8 @@ async fn delegate_requires_goal() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
     let args = serde_json::json!({});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args, None)
         .await
@@ -79,9 +76,8 @@ async fn delegate_goal_hits_runner_or_key() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
     let args = serde_json::json!({"goal": "do thing"});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args, None)
         .await
@@ -111,9 +107,8 @@ async fn delegate_async_status_collect_cancel_flow() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
     ctx.execution = Some(exec);
 
     let started = tools::dispatch_tool(
@@ -175,9 +170,8 @@ async fn delegate_async_cancel_marks_cancelled() {
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
     ctx.execution = Some(exec);
 
     let started = tools::dispatch_tool(
@@ -212,11 +206,10 @@ async fn delegate_blocked_at_max_spawn_depth() {
     let _guard = ASYNC_TEST_LOCK.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &providers, &targets);
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
 
     let ctx_depth = home::SpawnDepthCtx {
         depth: 1,

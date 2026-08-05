@@ -21,7 +21,6 @@ use proto::{
     McpServerList, MemoryQuery, MemoryResult, SessionEvent, SessionSnippet as ProtoSessionSnippet,
     SkillEvent, SkillInfo, SkillList, SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
 };
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::PauseControl;
 use tokio::sync::{Mutex, RwLock};
@@ -206,8 +205,6 @@ pub struct AstroServiceImpl {
     pause_controls: Arc<RwLock<HashMap<String, Arc<PauseControl>>>>,
     /// session_id → 活 HITL 闸门。
     hitl_registry: HitlRegistry,
-    /// 模型供应商注册表。
-    providers: Arc<ProviderRegistry>,
     /// 记忆根目录。
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
@@ -240,7 +237,6 @@ impl AstroServiceImpl {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             pause_controls: Arc::new(RwLock::new(HashMap::new())),
             hitl_registry: HitlRegistry::new(),
-            providers: Arc::new(ProviderRegistry::new()),
             memory_dir,
             hook_runtime,
             session_events: SessionEventHub::new(64),
@@ -811,8 +807,6 @@ impl AstroService for AstroServiceImpl {
             agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }
-        let providers = self.providers.clone();
-
         // 有活 HITL 时拒绝新 chat（须在 register_pause 之前，避免取消进行中的流）
         if let Some(gate) = self.hitl_registry.get(&session_id).await {
             if gate.is_waiting().await {
@@ -959,21 +953,6 @@ impl AstroService for AstroServiceImpl {
                 }
             };
 
-            let provider = match providers.get(&provider_name) {
-                Some(provider) => provider,
-                None => {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Error(format!(
-                                "未知 Provider: {provider_name}"
-                            ))),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-            };
-
             let (temperature, additional_params) = {
                 let agent = session.lock().await;
                 (agent.temperature(), agent.additional_params().clone())
@@ -981,7 +960,7 @@ impl AstroService for AstroServiceImpl {
 
             let config = ProviderConfig {
                 model: if model.is_empty() {
-                    provider.default_model().to_string()
+                    providers::dispatch::default_model(&provider_name)
                 } else {
                     model.clone()
                 },
@@ -1049,7 +1028,6 @@ impl AstroService for AstroServiceImpl {
             let mut stream = stream_multi_turn_with_hitl(
                 session,
                 chat_targets,
-                providers,
                 config,
                 system_prompt,
                 pause,
@@ -1151,7 +1129,6 @@ impl AstroService for AstroServiceImpl {
         let model = req.model;
         let api_key = req.api_key;
         let base_url = req.base_url;
-        let providers = self.providers.clone();
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ImageEvent, Status>>(8);
 
@@ -1164,21 +1141,7 @@ impl AstroService for AstroServiceImpl {
                 }))
                 .await;
 
-            let provider = match providers.get(&provider_name) {
-                Some(p) => p,
-                None => {
-                    let _ = tx
-                        .send(Ok(ImageEvent {
-                            payload: Some(proto::image_event::Payload::Error(format!(
-                                "未知 Provider: {provider_name}"
-                            ))),
-                        }))
-                        .await;
-                    return;
-                }
-            };
-
-            if !provider.supports_image_gen() {
+            if !providers::dispatch::supports_image_gen(&provider_name) {
                 let _ = tx
                     .send(Ok(ImageEvent {
                         payload: Some(proto::image_event::Payload::Error(format!(
@@ -1215,7 +1178,7 @@ impl AstroService for AstroServiceImpl {
                 ..ProviderConfig::default()
             };
 
-            match provider.generate_image(&prompt, &config).await {
+            match providers::dispatch::generate_image(&provider_name, &prompt, &config).await {
                 Ok(images) => {
                     for img in images {
                         let _ = tx

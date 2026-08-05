@@ -219,7 +219,6 @@ mod tests {
         dir: &'a tempfile::TempDir,
         memory: &'a mut memory::MemoryManager,
         sessions: &'a session::SessionStore,
-        providers: &'a providers::registry::ProviderRegistry,
         targets: &'a ImageGenTargets,
     ) -> ToolContext<'a> {
         let ws = dir.path().join("ws");
@@ -231,7 +230,6 @@ mod tests {
             workspace_dir: ws,
             project_root: None,
             image_gen_targets: targets,
-            providers,
             session_id: "test".into(),
             turn_id: None,
             chat_api_key: String::new(),
@@ -275,9 +273,8 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
         let err = dispatch(&ctx, &serde_json::json!({"code": "1", "language": "ruby"}))
             .await
             .unwrap_err()
@@ -291,9 +288,8 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
         let n = common::MAX_TOOL_RESULT_BYTES + 4096;
         let out = dispatch(
             &ctx,
@@ -313,9 +309,8 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
         // 两个并发的同语言调用共享同一个 .code_exec 目录；
         // sleep 制造重叠窗口——若临时文件名固定会相互覆盖。
         let a = serde_json::json!({"language": "python", "code": "import time; time.sleep(0.3); print('MARKER_AAA')"});
@@ -334,9 +329,8 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
         let out = dispatch(
             &ctx,
             &serde_json::json!({
@@ -359,9 +353,8 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
         // 正常成功路径后确认目录可清理；超时清理由 TempScript Drop 保证。
         let _ = dispatch(
             &ctx,
@@ -392,9 +385,8 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &providers, &targets);
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
         let err = dispatch(&ctx, &serde_json::json!({"language": "shell", "code": "echo hi"}))
             .await
             .unwrap_err();

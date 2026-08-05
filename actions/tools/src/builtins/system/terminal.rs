@@ -202,7 +202,6 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let ctx = ToolContext {
             memory: &mut memory,
@@ -211,7 +210,6 @@ mod tests {
             workspace_dir: ws,
             project_root: None,
             image_gen_targets: &targets,
-            providers: &providers,
             session_id: "test".into(),
             turn_id: None,
             chat_api_key: String::new(),
@@ -240,7 +238,6 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = providers::registry::ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let bus = std::sync::Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::TRANSFORM_TERMINAL_OUTPUT, |_payload| {
@@ -253,7 +250,6 @@ mod tests {
             workspace_dir: ws,
             project_root: None,
             image_gen_targets: &targets,
-            providers: &providers,
             session_id: "test".into(),
             turn_id: None,
             chat_api_key: String::new(),

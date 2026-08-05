@@ -1,45 +1,33 @@
-//! Provider 注册表与图片生成相关测试。
+//! Provider dispatch 与 profile 相关测试。
 
 use providers::{
     image_gen::*,
-    profile::env_api_key_names,
-    registry::ProviderRegistry,
-    AuthKind, ChatProvider, VerifyProvider,
+    profile::{env_api_key_names, resolve},
+    AuthKind,
 };
 
 #[test]
-fn test_registry_has_all_providers() {
-    let registry = ProviderRegistry::default();
-    assert!(registry.get("google").is_some());
-    assert!(registry.get("openai").is_some());
-    assert!(registry.get("claude").is_some());
-    assert!(registry.get("deepseek").is_some());
-    assert!(registry.get("minimax").is_some());
-    assert!(registry.get("minmax").is_some()); // 旧名别名
-    assert!(registry.get("anthropic").is_some()); // → claude
-    assert!(registry.get("zhipu").is_some());
-    assert!(registry.get("mimo").is_some());
-    assert!(registry.get("ollama").is_some());
-    assert!(registry.get("openrouter").is_some());
-    assert!(registry.get("bailian").is_some());
-    assert!(registry.get("nvidia").is_some());
-    assert!(registry.get("moonshot").is_some());
-    assert!(registry.get("volcengine").is_some());
-    assert!(registry.get("azure").is_some());
+fn test_profile_has_all_providers() {
+    let ids = [
+        "google", "openai", "claude", "deepseek", "minimax",
+        "zhipu", "mimo", "ollama", "openrouter", "bailian",
+        "nvidia", "moonshot", "volcengine", "azure", "hunyuan",
+    ];
+    for id in ids {
+        assert!(resolve(id).is_some(), "profile missing for {id}");
+    }
+    assert!(resolve("anthropic").is_some());
+    assert!(resolve("minmax").is_some());
 }
 
 #[test]
 fn test_google_supports_image_gen() {
-    let registry = ProviderRegistry::default();
-    let google = registry.get("google").unwrap();
-    assert!(google.supports_image_gen());
+    assert!(providers::dispatch::supports_image_gen("google"));
 }
 
 #[test]
 fn test_claude_no_image_gen() {
-    let registry = ProviderRegistry::default();
-    let claude = registry.get("claude").unwrap();
-    assert!(!claude.supports_image_gen());
+    assert!(!providers::dispatch::supports_image_gen("claude"));
 }
 
 #[test]
@@ -78,14 +66,6 @@ fn test_auth_kind_for_providers() {
 }
 
 #[test]
-fn test_read_env_api_key_ollama() {
-    // ollama env_keys is empty → read_env_api_key returns None but that's OK
-    // (ollama doesn't need a key)
-    let auth = AuthKind::for_provider("ollama");
-    assert_eq!(auth, AuthKind::None);
-}
-
-#[test]
 fn test_env_api_key_names() {
     assert!(env_api_key_names("openai").contains(&"OPENAI_API_KEY"));
     assert!(env_api_key_names("claude").contains(&"ANTHROPIC_API_KEY"));
@@ -94,12 +74,7 @@ fn test_env_api_key_names() {
 }
 
 #[test]
-fn test_providers_expose_chat_and_verify_traits() {
-    let registry = ProviderRegistry::default();
-    let openai = registry.get("openai").unwrap();
-    // dyn AiProvider 同时是 ChatProvider + VerifyProvider
-    let _: &dyn ChatProvider = openai.as_ref();
-    let _: &dyn VerifyProvider = openai.as_ref();
-    assert_eq!(openai.name(), "openai");
-    assert_eq!(openai.auth_kind(), AuthKind::Bearer);
+fn test_default_model_lookup() {
+    let model = providers::dispatch::default_model("openai");
+    assert!(!model.is_empty());
 }

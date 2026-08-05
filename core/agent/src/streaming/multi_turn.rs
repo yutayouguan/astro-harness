@@ -13,9 +13,8 @@ use std::sync::Arc;
 use common::ChatTarget;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
-use providers::registry::ProviderRegistry;
 use providers::{PauseControl, Usage};
-use providers::{AiProvider, ProviderConfig};
+use providers::ProviderConfig;
 use tokio::sync::{mpsc, Mutex};
 
 use super::run_state::{RunPhase, RunState};
@@ -26,7 +25,7 @@ use crate::runtime::AgentLoop;
 use super::hitl_bridge::{
     parse_astro_hitl, register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx,
 };
-use super::provider::{targets_and_registry_from_primary, ProviderStreamer};
+use super::provider::ProviderStreamer;
 use super::summary::{run_max_iterations_summary, SummaryOutcome};
 use super::tools_exec::{execute_tools_concurrent, execute_tools_serial, terminal_needs_approval};
 use super::traits::StreamingChat;
@@ -156,12 +155,13 @@ pub(crate) async fn finish_usage_and_done(
 pub struct MultiTurnStreamArgs {
     pub session: Arc<Mutex<AgentLoop>>,
     pub targets: Vec<ChatTarget>,
-    pub registry: Arc<ProviderRegistry>,
     pub base_config: ProviderConfig,
     pub system_prompt: String,
     pub pause: Arc<PauseControl>,
     pub hitl_gate: Option<Arc<HitlGate>>,
     pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
+    pub chat_override: Option<super::provider::ChatOverride>,
 }
 
 /// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
@@ -173,12 +173,12 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
     let MultiTurnStreamArgs {
         session,
         targets,
-        registry,
         base_config,
         system_prompt,
         pause,
         hitl_gate,
         tx,
+        chat_override,
     } = args;
     let session_id = {
         let agent = session.lock().await;
@@ -205,7 +205,6 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
     run_multi_turn_stream_inner(MultiTurnStreamInnerArgs {
         session: session.clone(),
         targets,
-        registry,
         base_config,
         system_prompt,
         pause,
@@ -213,6 +212,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         tx,
         thread_id: session_id.clone(),
         run_id: run_id.clone(),
+        chat_override,
     })
     .await;
     {
@@ -223,26 +223,35 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
     unregister_live_parent_hitl(&session_id).await;
 }
 
-/// 旧签名兼容：单 Provider + config → 单元素链后走 fallback 路径。
-pub async fn run_multi_turn_stream_from_provider(
+/// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
+///
+/// 用于集成测试注入脚本化 Provider 回复，替代已移除的 `run_multi_turn_stream_from_provider`。
+pub async fn run_multi_turn_stream_with_chat_fn(
     session: Arc<Mutex<AgentLoop>>,
-    provider: Arc<dyn AiProvider>,
+    chat_fn: super::provider::ChatOverride,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
 ) {
-    let (targets, registry) = targets_and_registry_from_primary(provider, &config);
+    let target = ChatTarget {
+        provider_id: "scripted".into(),
+        backend_id: "scripted".into(),
+        model: config.model.clone(),
+        api_key: config.api_key.clone(),
+        base_url: config.base_url.clone().unwrap_or_default(),
+    };
+    let targets = vec![target];
     run_multi_turn_stream(MultiTurnStreamArgs {
         session,
         targets,
-        registry,
         base_config: config,
         system_prompt,
         pause,
         hitl_gate,
         tx,
+        chat_override: Some(chat_fn),
     })
     .await;
 }
@@ -250,7 +259,6 @@ pub async fn run_multi_turn_stream_from_provider(
 struct MultiTurnStreamInnerArgs {
     session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
-    registry: Arc<ProviderRegistry>,
     base_config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
@@ -258,13 +266,13 @@ struct MultiTurnStreamInnerArgs {
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     thread_id: String,
     run_id: String,
+    chat_override: Option<super::provider::ChatOverride>,
 }
 
 async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
     let MultiTurnStreamInnerArgs {
         session,
         targets,
-        registry,
         base_config,
         system_prompt,
         pause,
@@ -272,8 +280,12 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         tx,
         thread_id,
         run_id,
+        chat_override,
     } = args;
-    let streamer = ProviderStreamer::new(registry, targets, base_config);
+    let streamer = match chat_override {
+        Some(f) => ProviderStreamer::with_chat_override(targets, base_config, f),
+        None => ProviderStreamer::new(targets, base_config),
+    };
     let mut total_usage = Usage::default();
     let mut saw_usage = false;
 
@@ -1077,7 +1089,6 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
 pub fn stream_multi_turn(
     session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
-    registry: Arc<ProviderRegistry>,
     base_config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
@@ -1085,7 +1096,6 @@ pub fn stream_multi_turn(
     stream_multi_turn_with_hitl(
         session,
         targets,
-        registry,
         base_config,
         system_prompt,
         pause,
@@ -1097,7 +1107,6 @@ pub fn stream_multi_turn(
 pub fn stream_multi_turn_with_hitl(
     session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
-    registry: Arc<ProviderRegistry>,
     base_config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
@@ -1108,30 +1117,18 @@ pub fn stream_multi_turn_with_hitl(
         run_multi_turn_stream(MultiTurnStreamArgs {
             session,
             targets,
-            registry,
             base_config,
             system_prompt,
             pause,
             hitl_gate,
             tx,
+            chat_override: None,
         })
         .await;
     });
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))
-}
-
-/// 旧签名兼容：单 Provider + config → 单元素链。
-pub fn stream_multi_turn_from_provider(
-    session: Arc<Mutex<AgentLoop>>,
-    provider: Arc<dyn AiProvider>,
-    config: ProviderConfig,
-    system_prompt: String,
-    pause: Arc<PauseControl>,
-) -> MultiTurnStream {
-    let (targets, registry) = targets_and_registry_from_primary(provider, &config);
-    stream_multi_turn(session, targets, registry, config, system_prompt, pause)
 }
 
 struct AstroUiPayload {

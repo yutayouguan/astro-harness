@@ -313,11 +313,6 @@ async fn generate_one_openai_compat(
     args: &ImageGenArgs,
     creds: &ImageGenCreds,
 ) -> anyhow::Result<common::ToolOutput> {
-    let provider = ctx
-        .providers
-        .get(&creds.provider)
-        .ok_or_else(|| anyhow::anyhow!("未知 Provider: {}", creds.provider))?;
-
     let prompt = args.prompt.trim();
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
@@ -330,7 +325,7 @@ async fn generate_one_openai_compat(
         ..ProviderConfig::default()
     };
 
-    let images = provider.generate_image(prompt, &config).await?;
+    let images = providers::dispatch::generate_image(&creds.provider, prompt, &config).await?;
     let img = images
         .into_iter()
         .next()
@@ -674,7 +669,6 @@ mod path_tests {
     use crate::context::{ImageGenTargets, ToolContext};
     use home::{generated_dir, GeneratedKind};
     use memory::MemoryManager;
-    use providers::registry::ProviderRegistry;
     use std::path::Path;
     use tempfile::TempDir;
 
@@ -697,7 +691,6 @@ mod path_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
             sessions: &sessions,
@@ -705,7 +698,6 @@ mod path_tests {
             workspace_dir: ws,
             project_root: None,
             image_gen_targets: &targets,
-            providers: &providers,
             session_id: "test".into(),
             turn_id: None,
             chat_api_key: String::new(),
@@ -732,7 +724,6 @@ mod path_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
             sessions: &sessions,
@@ -740,7 +731,6 @@ mod path_tests {
             workspace_dir: ws.clone(),
             project_root: None,
             image_gen_targets: &targets,
-            providers: &providers,
             session_id: "test".into(),
             turn_id: None,
             chat_api_key: String::new(),

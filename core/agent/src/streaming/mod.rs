@@ -36,12 +36,10 @@ mod types;
 /// 供 `exec::delegate` 使用（子 Agent park 到父会话 HITL）。
 pub(crate) use hitl_bridge::{parse_astro_hitl, try_park_parent_hitl};
 pub use multi_turn::{
-    run_multi_turn_stream, run_multi_turn_stream_from_provider, stream_multi_turn,
-    stream_multi_turn_from_provider, stream_multi_turn_with_hitl, MultiTurnStreamArgs,
+    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn,
+    stream_multi_turn, stream_multi_turn_with_hitl, MultiTurnStreamArgs,
 };
-pub use provider::{
-    chat_target_from_provider_config, targets_and_registry_from_primary, ProviderStreamer,
-};
+pub use provider::{ChatOverride, ProviderStreamer};
 pub use run_state::{RunPhase, RunRequirements, RunState};
 pub use traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
 pub use types::{

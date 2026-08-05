@@ -2,7 +2,6 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -42,16 +41,12 @@ fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)
 }
 
 async fn one_shot_llm(provider_id: &str, config: &ProviderConfig, system: &str, user: &str) -> Result<String> {
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(provider_id)
-        .ok_or_else(|| anyhow::anyhow!("未找到 provider: {}", provider_id))?;
-
     let messages = vec![
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
 
-    let mut stream = provider.chat_stream(messages, vec![], config).await?;
+    let mut stream = providers::dispatch::chat_stream(provider_id, messages, vec![], config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

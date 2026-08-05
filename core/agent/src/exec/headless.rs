@@ -13,7 +13,6 @@
 
 use common::ChatTarget;
 use futures::StreamExt;
-use providers::registry::ProviderRegistry;
 use providers::Usage;
 use providers::ProviderConfig;
 
@@ -45,7 +44,6 @@ pub async fn run_headless_multi_turn(
     targets: Vec<ChatTarget>,
     system_prompt: String,
 ) -> anyhow::Result<(String, Usage)> {
-    let providers = ProviderRegistry::new();
     let base_config = ProviderConfig {
         temperature: agent.temperature(),
         additional_params: agent.additional_params().clone(),
@@ -89,7 +87,6 @@ pub async fn run_headless_multi_turn(
 
         let (mut stream, _meta) = try_stream_completion_with_fallback(
             &targets,
-            &providers,
             messages,
             tools_schema,
             &base_config,

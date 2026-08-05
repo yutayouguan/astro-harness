@@ -6,7 +6,6 @@
 use std::time::Duration;
 
 use futures::StreamExt;
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -107,7 +106,6 @@ where
 pub async fn maybe_smart_downgrade_ask(
     command: &str,
     description: &str,
-    providers: &ProviderRegistry,
     targets: &[ApprovalTarget],
 ) -> ApprovalAction {
     if !smart_approval_enabled() {
@@ -118,13 +116,11 @@ pub async fn maybe_smart_downgrade_ask(
     }
 
     let prompt = build_prompt(command, description);
-    let providers = providers.clone();
     match tokio::time::timeout(SMART_TIMEOUT, async {
         evaluate_smart_approval_with_completion(targets, |target| {
-            let providers = providers.clone();
             let prompt = prompt.clone();
             let target = target.clone();
-            async move { ask_model(&providers, &target, &prompt).await }
+            async move { ask_model(&target, &prompt).await }
         })
         .await
     })
@@ -143,16 +139,12 @@ pub async fn maybe_smart_downgrade_ask(
 }
 
 async fn ask_model(
-    providers: &ProviderRegistry,
     target: &ApprovalTarget,
     prompt: &str,
 ) -> Result<String, String> {
-    let provider = providers
-        .get(&target.backend_id)
-        .ok_or_else(|| format!("unknown provider: {}", target.backend_id))?;
     let config = ProviderConfig {
         model: if target.model.trim().is_empty() {
-            provider.default_model().to_string()
+            providers::default_model(&target.backend_id)
         } else {
             target.model.clone()
         },
@@ -165,10 +157,14 @@ async fn ask_model(
         ..ProviderConfig::default()
     };
     let messages = vec![ProviderMessage::user_text(prompt)];
-    let mut stream = provider
-        .chat_stream(messages, vec![], &config)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut stream = providers::dispatch::chat_stream(
+        &target.backend_id,
+        messages,
+        vec![],
+        &config,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     let mut full = String::new();
     while let Some(chunk) = stream.next().await {

@@ -1677,8 +1677,7 @@ async fn probe_one_model(
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
     };
-    let result = providers::registry::ProviderRegistry::default()
-        .verify(probe_id, &model, &config)
+    let result = providers::dispatch::verify(probe_id, &model, &config)
         .await;
     ProviderTestResult {
         ok: result.ok,

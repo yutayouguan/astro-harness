@@ -8,7 +8,6 @@ fn make_ctx(
 ) -> (
     memory::MemoryManager,
     session::SessionStore,
-    providers::registry::ProviderRegistry,
     tools::ImageGenTargets,
     std::path::PathBuf,
 ) {
@@ -17,15 +16,14 @@ fn make_ctx(
     let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let providers = providers::registry::ProviderRegistry::new();
     let targets = tools::ImageGenTargets::default();
-    (memory, sessions, providers, targets, workspace)
+    (memory, sessions, targets, workspace)
 }
 
 #[tokio::test]
 async fn confirm_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -33,7 +31,6 @@ async fn confirm_emits_valid_a2ui_hitl() {
         workspace_dir: workspace,
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
         session_id: "test".into(),
         turn_id: None,
         chat_api_key: String::new(),
@@ -69,7 +66,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -77,7 +74,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         workspace_dir: workspace,
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
+
         session_id: "test".into(),
         turn_id: None,
         chat_api_key: String::new(),
@@ -128,7 +125,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_free_text_step_allows_empty_options() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -136,7 +133,7 @@ async fn clarify_free_text_step_allows_empty_options() {
         workspace_dir: workspace,
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
+
         session_id: "test".into(),
         turn_id: None,
         chat_api_key: String::new(),
@@ -193,7 +190,7 @@ async fn clarify_free_text_step_allows_empty_options() {
 #[tokio::test]
 async fn clarify_multi_emits_wizard_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -201,7 +198,7 @@ async fn clarify_multi_emits_wizard_hitl() {
         workspace_dir: workspace,
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
+
         session_id: "test".into(),
         turn_id: None,
         chat_api_key: String::new(),
@@ -263,7 +260,7 @@ async fn clarify_multi_emits_wizard_hitl() {
 #[tokio::test]
 async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -271,7 +268,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         workspace_dir: workspace,
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
+
         session_id: "test".into(),
         turn_id: None,
         chat_api_key: String::new(),
@@ -306,7 +303,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn present_emits_valid_astro_ui() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -314,7 +311,7 @@ async fn present_emits_valid_astro_ui() {
         workspace_dir: workspace,
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
+
         session_id: "test".into(),
         turn_id: None,
         chat_api_key: String::new(),
@@ -351,7 +348,7 @@ async fn present_emits_valid_astro_ui() {
 #[tokio::test]
 async fn ask_user_rejects_mixed_questions_and_body() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, providers, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -359,7 +356,7 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         workspace_dir: workspace,
         project_root: None,
         image_gen_targets: &targets,
-        providers: &providers,
+
         session_id: "test".into(),
         turn_id: None,
         chat_api_key: String::new(),

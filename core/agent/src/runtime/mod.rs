@@ -23,7 +23,6 @@ use ::session::{
 use common::message::{Message, Role};
 use mcp::{call_tool_with_peer, is_mcp_tool_name, McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
-use providers::registry::ProviderRegistry;
 use serde_json::Value;
 use tools::{dispatch_tool, register_all, DynToolHandler, ToolContext, ToolEntry, ToolRegistry};
 
@@ -688,11 +687,6 @@ impl AgentLoop {
         &self.model_ctx.image_gen_targets
     }
 
-    /// Provider 注册表的共享副本（并发工具快照用）。
-    pub fn providers_arc(&self) -> Arc<ProviderRegistry> {
-        self.model_ctx.providers_arc()
-    }
-
     /// 内置与 MCP 工具的注册表只读引用。
     pub fn tool_registry(&self) -> &ToolRegistry {
         &self.tool_registry
@@ -1174,7 +1168,6 @@ impl AgentLoop {
             workspace_dir,
             project_root: self.project_root.clone(),
             image_gen_targets: &image_gen_targets,
-            providers: &self.model_ctx.providers,
             session_id,
             turn_id,
             chat_api_key,

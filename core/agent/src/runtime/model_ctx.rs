@@ -3,15 +3,12 @@
 //! 从 `AgentLoop` 提取的数据分组，减少主结构体的认知负荷。
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use common::{AuxiliaryTask, ChatTarget, ModelSpec};
-use providers::registry::ProviderRegistry;
 use tools::ImageGenTargets;
 
 /// LLM 模型配置、凭证与 fallback 链。
 pub struct ModelContext {
-    pub(crate) providers: ProviderRegistry,
     pub(crate) chat_api_key: String,
     pub(crate) chat_base_url: String,
     pub(crate) chat_provider: String,
@@ -26,7 +23,6 @@ pub struct ModelContext {
 impl Default for ModelContext {
     fn default() -> Self {
         Self {
-            providers: ProviderRegistry::new(),
             chat_api_key: String::new(),
             chat_base_url: String::new(),
             chat_provider: String::new(),
@@ -41,10 +37,6 @@ impl Default for ModelContext {
 }
 
 impl ModelContext {
-    pub fn providers_arc(&self) -> Arc<ProviderRegistry> {
-        Arc::new(self.providers.clone())
-    }
-
     pub fn primary_chat_target(&self) -> ChatTarget {
         self.chat_targets
             .first()

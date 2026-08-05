@@ -3,70 +3,47 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
 use providers::{PauseControl, Usage};
-use providers::{
-    AiProvider, ChatProvider, CompletionStream, ProviderConfig, VerifyProvider, VerifyResult,
-};
-use providers::types::message::Message as ProviderMessage;
+use providers::{CompletionStream, ProviderConfig};
 use providers::types::stream::StreamChunk;
 use tokio::sync::Mutex;
 
-
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
-    run_multi_turn_stream_from_provider, MultiTurnStreamItem, StreamedAssistantContent,
+    run_multi_turn_stream_with_chat_fn, ChatOverride, MultiTurnStreamItem, StreamedAssistantContent,
 };
 
-struct ScriptedProvider {
-    rounds: Mutex<Vec<Vec<StreamChunk>>>,
+/// 从脚本化轮次列表构造 [`ChatOverride`]。
+///
+/// 每次调用消费一轮 chunks；轮次用尽后返回默认 "done" 回复。
+fn scripted_chat(rounds: Vec<Vec<StreamChunk>>) -> ChatOverride {
+    let rounds = Arc::new(tokio::sync::Mutex::new(rounds));
+    Arc::new(move |_msgs, _tools, _cfg| {
+        let rounds = rounds.clone();
+        Box::pin(async move {
+            let mut r = rounds.lock().await;
+            let chunks = if r.is_empty() {
+                vec![
+                    StreamChunk::Text("done".into()),
+                    StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    },
+                ]
+            } else {
+                r.remove(0)
+            };
+            Ok(Box::pin(futures::stream::iter(
+                chunks.into_iter().map(Ok::<_, anyhow::Error>),
+            )) as CompletionStream)
+        })
+    })
 }
 
-#[async_trait]
-impl ChatProvider for ScriptedProvider {
-    async fn chat_stream(
-        &self,
-        _messages: Vec<ProviderMessage>,
-        _tools: Vec<serde_json::Value>,
-        _config: &ProviderConfig,
-    ) -> anyhow::Result<CompletionStream> {
-        let mut rounds = self.rounds.lock().await;
-        let chunks = if rounds.is_empty() {
-            vec![
-                StreamChunk::Text("done".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ]
-        } else {
-            rounds.remove(0)
-        };
-        Ok(Box::pin(futures::stream::iter(
-            chunks.into_iter().map(Ok::<_, anyhow::Error>),
-        )))
-    }
-}
-
-#[async_trait]
-impl VerifyProvider for ScriptedProvider {
-    async fn verify(&self, model: &str, _config: &ProviderConfig) -> VerifyResult {
-        VerifyResult {
-            ok: true,
-            latency_ms: 0,
-            model: model.to_string(),
-            message: "ok".into(),
-        }
-    }
-}
-
-#[async_trait]
-impl AiProvider for ScriptedProvider {
-    fn name(&self) -> &str {
-        "scripted"
-    }
-    fn default_model(&self) -> &str {
-        "test"
-    }
+/// Boom 型 chat override：每次调用均返回错误。
+fn boom_chat() -> ChatOverride {
+    Arc::new(move |_msgs, _tools, _cfg| {
+        Box::pin(async move { Err(anyhow::anyhow!("boom")) })
+    })
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -81,36 +58,32 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
             .push(common::message::Message::user("call a tool"));
     }
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            vec![
-                StreamChunk::Text("thinking…".into()),
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "call_1".into(),
-                    name: "echo".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: r#"{"text":"hi"}"#.into(),
-                },
-                StreamChunk::Usage(Usage::from_parts(10, 5)),
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            vec![
-                StreamChunk::Text("ok".into()),
-                StreamChunk::Usage(Usage::from_parts(12, 3)),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::Text("thinking…".into()),
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_1".into(),
+                name: "echo".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"text":"hi"}"#.into(),
+            },
+            StreamChunk::Usage(Usage::from_parts(10, 5)),
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("ok".into()),
+            StreamChunk::Usage(Usage::from_parts(12, 3)),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
-    // 确保 echo 工具存在：若没有，resolve 可能仍从 XML/空走；这里用原生 FC
-    // Scripted 第二轮在工具结果后返回 ok；若 echo 不存在会得到工具错误字符串仍继续
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     let cfg = ProviderConfig {
@@ -119,9 +92,9 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -173,7 +146,6 @@ fn cold_start_hydrates_session_messages_from_db() {
         )
         .unwrap();
         agent.ensure_session("test").unwrap();
-        // 经公开 API 写入：user 落盘 + assistant 镜像
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -204,35 +176,33 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
             .push(common::message::Message::user("call a tool"));
     }
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            vec![
-                StreamChunk::Thinking("deep ".into()),
-                StreamChunk::Thinking("thought".into()),
-                StreamChunk::Text("calling…".into()),
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "call_persist".into(),
-                    name: "echo".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: r#"{"text":"hi"}"#.into(),
-                },
-                StreamChunk::Usage(Usage::from_parts(10, 5)),
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            vec![
-                StreamChunk::Text("ok".into()),
-                StreamChunk::Usage(Usage::from_parts(4, 2)),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::Thinking("deep ".into()),
+            StreamChunk::Thinking("thought".into()),
+            StreamChunk::Text("calling…".into()),
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_persist".into(),
+                name: "echo".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"text":"hi"}"#.into(),
+            },
+            StreamChunk::Usage(Usage::from_parts(10, 5)),
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("ok".into()),
+            StreamChunk::Usage(Usage::from_parts(4, 2)),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
@@ -242,9 +212,9 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -293,15 +263,13 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
         .push(common::message::Message::user("say hi"));
     let session = Arc::new(Mutex::new(agent));
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![vec![
-            StreamChunk::Text("hello".into()),
-            StreamChunk::Usage(Usage::from_parts(3, 2)),
-            StreamChunk::Done {
-                finish_reason: "stop".into(),
-            },
-        ]]),
-    });
+    let chat_fn = scripted_chat(vec![vec![
+        StreamChunk::Text("hello".into()),
+        StreamChunk::Usage(Usage::from_parts(3, 2)),
+        StreamChunk::Done {
+            finish_reason: "stop".into(),
+        },
+    ]]);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
@@ -311,9 +279,9 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -352,15 +320,13 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     let session = Arc::new(Mutex::new(agent));
     let session_for_check = Arc::clone(&session);
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![vec![
-            StreamChunk::Text("hello world".into()),
-            StreamChunk::Usage(Usage::from_parts(3, 2)),
-            StreamChunk::Done {
-                finish_reason: "stop".into(),
-            },
-        ]]),
-    });
+    let chat_fn = scripted_chat(vec![vec![
+        StreamChunk::Text("hello world".into()),
+        StreamChunk::Usage(Usage::from_parts(3, 2)),
+        StreamChunk::Done {
+            finish_reason: "stop".into(),
+        },
+    ]]);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
@@ -370,9 +336,9 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -387,7 +353,6 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     }
 
     let events = log.lock().unwrap().clone();
-    // 原始 "hello world" 11 字符触发 transform_llm_output；替换为 "REPLACED"（8 字符）后 post_llm_call 应观察到新长度。
     let transform_idx = events.iter().position(|e| e == "transform_llm_output:11");
     let post_idx = events.iter().position(|e| e == "post_llm_call:8");
     assert!(
@@ -418,14 +383,12 @@ async fn pre_verify_never_fires_without_disk_write() {
         .push(common::message::Message::user("just say hi, no tools"));
     let session = Arc::new(Mutex::new(agent));
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![vec![
-            StreamChunk::Text("hi there".into()),
-            StreamChunk::Done {
-                finish_reason: "stop".into(),
-            },
-        ]]),
-    });
+    let chat_fn = scripted_chat(vec![vec![
+        StreamChunk::Text("hi there".into()),
+        StreamChunk::Done {
+            finish_reason: "stop".into(),
+        },
+    ]]);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
@@ -435,9 +398,9 @@ async fn pre_verify_never_fires_without_disk_write() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -480,46 +443,44 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     let session = Arc::new(Mutex::new(agent));
     let session_for_check = Arc::clone(&session);
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            // round 1: 写盘工具调用，置位 turn_wrote_disk
-            vec![
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "call_write".into(),
-                    name: "file_ops".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
-                },
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            // round 2: 无工具终态草稿一 -> pre_verify attempt 1 -> KeepGoing
-            vec![
-                StreamChunk::Text("draft one".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-            // round 3: 无工具终态草稿二 -> pre_verify attempt 2 -> KeepGoing
-            vec![
-                StreamChunk::Text("draft two".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-            // round 4: 尝试次数已达上限，直接收尾
-            vec![
-                StreamChunk::Text("final answer".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        // round 1: 写盘工具调用，置位 turn_wrote_disk
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_write".into(),
+                name: "file_ops".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        // round 2: 无工具终态草稿一 -> pre_verify attempt 1 -> KeepGoing
+        vec![
+            StreamChunk::Text("draft one".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        // round 3: 无工具终态草稿二 -> pre_verify attempt 2 -> KeepGoing
+        vec![
+            StreamChunk::Text("draft two".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        // round 4: 尝试次数已达上限，直接收尾
+        vec![
+            StreamChunk::Text("final answer".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
@@ -529,9 +490,9 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -579,9 +540,6 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 
-    // 回归：KeepGoing 桥接 user 消息必须持久化到 session_messages（而非只走
-    // `pending_inject_context` 的临时注入），否则第二次 KeepGoing 时相邻两条都是
-    // assistant，下一轮 API 历史会出现连续同角色，触发 Anthropic/Gemini 400。
     let agent = session_for_check.lock().await;
     assert!(
         agent::runtime::validate_message_order(&agent.session_messages),
@@ -619,7 +577,6 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         );
     }
 
-    // hydrate/reload 场景：转换为 Provider 消息后，相邻 user/assistant 仍不得连续同角色
     let provider_messages =
         agent::prompt::messages::to_provider_messages("sys", &agent.session_messages);
     for window in provider_messages.windows(2) {
@@ -661,23 +618,21 @@ async fn cumulative_usage_chunks_use_last_per_round() {
         a.session_messages
             .push(common::message::Message::user("hi"));
     }
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![vec![
-            StreamChunk::Text("a".into()),
-            StreamChunk::Usage(Usage::from_parts(1, 1)),
-            StreamChunk::Text("b".into()),
-            StreamChunk::Usage(Usage::from_parts(10, 5)),
-            StreamChunk::Done {
-                finish_reason: "stop".into(),
-            },
-        ]]),
-    });
+    let chat_fn = scripted_chat(vec![vec![
+        StreamChunk::Text("a".into()),
+        StreamChunk::Usage(Usage::from_parts(1, 1)),
+        StreamChunk::Text("b".into()),
+        StreamChunk::Usage(Usage::from_parts(10, 5)),
+        StreamChunk::Done {
+            finish_reason: "stop".into(),
+        },
+    ]]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -711,45 +666,13 @@ async fn error_is_followed_by_done() {
         let mut a = session.lock().await;
         a.session_messages.push(common::message::Message::user("x"));
     }
-    struct Boom;
-    #[async_trait]
-    impl ChatProvider for Boom {
-        async fn chat_stream(
-            &self,
-            _messages: Vec<ProviderMessage>,
-            _tools: Vec<serde_json::Value>,
-            _config: &ProviderConfig,
-        ) -> anyhow::Result<CompletionStream> {
-            Err(anyhow::anyhow!("boom"))
-        }
-    }
-    #[async_trait]
-    impl VerifyProvider for Boom {
-        async fn verify(&self, model: &str, _config: &ProviderConfig) -> VerifyResult {
-            VerifyResult {
-                ok: false,
-                latency_ms: 0,
-                model: model.to_string(),
-                message: "boom".into(),
-            }
-        }
-    }
-    #[async_trait]
-    impl AiProvider for Boom {
-        fn name(&self) -> &str {
-            "boom"
-        }
-        fn default_model(&self) -> &str {
-            "x"
-        }
-    }
-    let provider: Arc<dyn AiProvider> = Arc::new(Boom);
+    let chat_fn = boom_chat();
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -787,41 +710,39 @@ async fn tool_call_delta_and_memory_path() {
             .push(common::message::Message::user("remember this"));
     }
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            vec![
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "c1".into(),
-                    name: "memory".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: r#"{"action":"add","content":""#.into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: r#"hello from test","target":"memory"}"#.into(),
-                },
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            vec![
-                StreamChunk::Text("saved".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "c1".into(),
+                name: "memory".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"action":"add","content":""#.into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"hello from test","target":"memory"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("saved".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -876,31 +797,29 @@ async fn hitl_waiting_parks_then_continues_same_run() {
             .push(common::message::Message::user("please confirm"));
     }
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            vec![
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "call_confirm".into(),
-                    name: "ask_user".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
-                        .into(),
-                },
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            vec![
-                StreamChunk::Text("confirmed".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_confirm".into(),
+                name: "ask_user".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
+                    .into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("confirmed".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
     let gate = HitlGate::new("hitl-session");
     let gate_resolve = gate.clone();
@@ -908,9 +827,9 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -1013,30 +932,28 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-allow";
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            vec![
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "call_term_allow".into(),
-                    name: "terminal".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: format!(r#"{{"command":"{cmd}"}}"#),
-                },
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            vec![
-                StreamChunk::Text("done".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_term_allow".into(),
+                name: "terminal".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: format!(r#"{{"command":"{cmd}"}}"#),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("done".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
     let gate = HitlGate::new("approval-allow-session");
     let gate_resolve = gate.clone();
@@ -1044,9 +961,9 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -1169,30 +1086,28 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-deny";
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            vec![
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "call_term_deny".into(),
-                    name: "terminal".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: format!(r#"{{"command":"{cmd}"}}"#),
-                },
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            vec![
-                StreamChunk::Text("acknowledged".into()),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_term_deny".into(),
+                name: "terminal".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: format!(r#"{{"command":"{cmd}"}}"#),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("acknowledged".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
     let gate = HitlGate::new("approval-deny-session");
     let gate_resolve = gate.clone();
@@ -1200,9 +1115,9 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -1293,40 +1208,38 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
             .push(common::message::Message::user("keep using tools"));
     }
 
-    let provider: Arc<dyn AiProvider> = Arc::new(ScriptedProvider {
-        rounds: Mutex::new(vec![
-            vec![
-                StreamChunk::ToolCallStart {
-                    index: 0,
-                    id: "call_b".into(),
-                    name: "echo".into(),
-                },
-                StreamChunk::ToolCallDelta {
-                    index: 0,
-                    arguments: r#"{"text":"x"}"#.into(),
-                },
-                StreamChunk::Usage(Usage::from_parts(5, 2)),
-                StreamChunk::Done {
-                    finish_reason: "tool_calls".into(),
-                },
-            ],
-            // 预算耗尽后的无工具总结轮
-            vec![
-                StreamChunk::Text("summary-after-budget".into()),
-                StreamChunk::Usage(Usage::from_parts(6, 4)),
-                StreamChunk::Done {
-                    finish_reason: "stop".into(),
-                },
-            ],
-        ]),
-    });
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_b".into(),
+                name: "echo".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"text":"x"}"#.into(),
+            },
+            StreamChunk::Usage(Usage::from_parts(5, 2)),
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        // 预算耗尽后的无工具总结轮
+        vec![
+            StreamChunk::Text("summary-after-budget".into()),
+            StreamChunk::Usage(Usage::from_parts(6, 4)),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_from_provider(
+        run_multi_turn_stream_with_chat_fn(
             session,
-            provider,
+            chat_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()

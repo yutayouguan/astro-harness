@@ -12,7 +12,6 @@ use delegate::{
 };
 use futures::StreamExt;
 use home::default_memory_dir;
-use providers::registry::ProviderRegistry;
 use providers::Usage;
 use providers::ProviderConfig;
 use tokio::task::JoinSet;
@@ -155,7 +154,6 @@ fn effective_role(
 /// 有效聊天目标：优先 `chat_targets`，否则由四字段合成。
 fn effective_chat_targets(
     creds: &DelegateRunRequest,
-    registry: &ProviderRegistry,
 ) -> Vec<common::ChatTarget> {
     if !creds.chat_targets.is_empty() {
         return creds.chat_targets.clone();
@@ -166,10 +164,7 @@ fn effective_chat_targets(
         creds.provider.clone()
     };
     let model = if creds.model.trim().is_empty() {
-        registry
-            .get(&backend)
-            .map(|p| p.default_model().to_string())
-            .unwrap_or_default()
+        providers::dispatch::default_model(&backend)
     } else {
         creds.model.clone()
     };
@@ -241,8 +236,7 @@ async fn run_one_child_inner(
         &creds.api_key,
         &creds.base_url,
     );
-    let registry = ProviderRegistry::new();
-    let mut targets = effective_chat_targets(&creds, &registry);
+    let mut targets = effective_chat_targets(&creds);
     let mut member_temp: Option<f32> = None;
     if let Some(spec_str) = task
         .model
@@ -422,8 +416,7 @@ struct ProviderLoopArgs<'a> {
 }
 
 async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, Usage)> {
-    let providers = ProviderRegistry::new();
-    let targets = effective_chat_targets(a.creds, &providers);
+    let targets = effective_chat_targets(a.creds);
     let base_config = ProviderConfig::default();
 
     let mut system_prompt = a.initial_system_prompt.to_string();
@@ -440,7 +433,6 @@ async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, U
 
         let (mut stream, _meta) = try_stream_completion_with_fallback(
             &targets,
-            &providers,
             messages,
             tools,
             &base_config,

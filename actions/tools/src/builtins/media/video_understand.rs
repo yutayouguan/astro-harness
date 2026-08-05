@@ -456,7 +456,6 @@ mod path_tests {
     use super::*;
     use crate::context::{ImageGenTargets, ToolContext};
     use memory::MemoryManager;
-    use providers::registry::ProviderRegistry;
     use tempfile::TempDir;
 
     #[test]
@@ -472,7 +471,6 @@ mod path_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = ToolContext {
             memory: &mut memory,
             sessions: &sessions,
@@ -480,7 +478,6 @@ mod path_tests {
             workspace_dir: ws,
             project_root: None,
             image_gen_targets: &targets,
-            providers: &providers,
             session_id: "test".into(),
             turn_id: None,
             chat_api_key: String::new(),

@@ -4,7 +4,6 @@
 //! 生成结构化交接摘要，注入 [`AgentLoop`] 供后续 Provider 历史折叠。
 
 use futures::StreamExt;
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -103,10 +102,6 @@ async fn complete_summary_chat(
     target: &common::ChatTarget,
     prompt: &str,
 ) -> anyhow::Result<String> {
-    let registry = ProviderRegistry::default();
-    let provider = registry
-        .get(&target.backend_id)
-        .ok_or_else(|| anyhow::anyhow!("unsupported compaction backend: {}", target.backend_id))?;
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {
@@ -128,7 +123,7 @@ async fn complete_summary_chat(
         ),
         ProviderMessage::user_text(prompt),
     ];
-    let mut stream = provider.chat_stream(messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

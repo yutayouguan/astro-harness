@@ -4,16 +4,14 @@
 //! - [`traits`]：能力 trait 系统（`CompletionModel` + `Capable<M>/Nothing` 编译期检查）
 //! - [`compat`]：OpenAI 兼容层（`OpenAICompatible` trait — 一行接厂商）
 //! - [`impls`]：19 个厂商实现（5 种协议管线）
-//! - [`registry`]：协议管线注册表（trait-based `Registry` + `ProviderRegistry`）
-//! - [`dispatch`]：管线分发入口
+//! - [`registry`]：协议管线注册表（trait-based `Registry`）
+//! - [`dispatch`]：管线分发入口（外部唯一入口）
 //! - [`shared`]：跨厂商共享基础设施（HTTP / SSE / 探测 / 抽取器 / 媒体 / 视觉）
-//! - [`facade`]：门面 trait（`AiProvider` / `ChatProvider` / `VerifyProvider`）
 //! - [`profile`]：静态配置表（`ProviderProfile` / `ApiMode`）
 
 pub mod anthropic;
 pub mod compat;
 pub mod dispatch;
-pub mod facade;
 pub mod google;
 pub mod impls;
 pub mod minimax;
@@ -32,13 +30,10 @@ pub use shared::{extractor, media as media_http, verify, vision};
 pub use shared::http as http_stream;
 pub use types::image_gen;
 
-// ── Facade traits & types ──
-pub use facade::{AiProvider, ChatProvider, VerifyProvider};
+// ── Dispatch (唯一公开入口) ──
+pub use dispatch::{chat_stream, chat_stream_direct, generate_image, text_to_speech, generate_video, generate_music, embed, verify, default_model, supports_image_gen};
 pub use profile::AuthKind;
 pub use shared::verify::VerifyResult;
-
-// ── Registry ──
-pub use registry::ProviderRegistry;
 
 // ── Stream types ──
 pub use types::stream::{PauseControl, Usage, CompletionStream, StreamChunk};

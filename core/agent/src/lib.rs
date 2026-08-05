@@ -40,8 +40,8 @@ pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, Resume
 pub use runtime::{AgentConfig, AgentLoop, MaxDepthError, TurnResult};
 /// 流式 API re-export。
 pub use streaming::{
-    run_multi_turn_stream, run_multi_turn_stream_from_provider, stream_multi_turn,
-    stream_multi_turn_from_provider, stream_multi_turn_with_hitl, MultiTurnStreamItem,
+    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn, stream_multi_turn,
+    stream_multi_turn_with_hitl, ChatOverride, MultiTurnStreamItem,
     ProviderStreamer, StreamedAssistantContent, StreamingChat, StreamingCompletion,
     StreamingPrompt,
 };

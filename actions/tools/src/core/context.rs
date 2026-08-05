@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use memory::MemoryManager;
-use providers::registry::ProviderRegistry;
 use session::ConversationStore;
 
 /// 单个媒体生成 Provider 的调用凭证。
@@ -152,8 +151,6 @@ pub struct ToolContext<'a> {
     pub project_root: Option<PathBuf>,
     /// 媒体生成主备凭证，由前端 Provider 面板注入。
     pub image_gen_targets: &'a ImageGenTargets,
-    /// 已注册的 LLM Provider 列表，供 `image_gen` 查找实现。
-    pub providers: &'a ProviderRegistry,
     /// 当前会话 id；`delegate`、`todo`、编排落盘时写入关联字段。
     pub session_id: String,
     /// 当前流式 run 的 turn_id（与 agent `run_id` 相同）；未在 run 内为 `None`。
@@ -193,9 +190,6 @@ impl<'a> ToolContext<'a> {
         Ok(root)
     }
 }
-
-/// 便于测试的轻量 Provider 注册表持有类型（`Arc` 共享）。
-pub type SharedProviders = Arc<ProviderRegistry>;
 
 #[cfg(test)]
 mod tests {

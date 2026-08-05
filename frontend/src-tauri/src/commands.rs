@@ -1661,7 +1661,6 @@ pub async fn regenerate_session_title(
     session_id: String,
 ) -> Result<String, String> {
     use futures::StreamExt;
-    use providers::registry::ProviderRegistry;
     use providers::ProviderConfig;
     use providers::types::message::Message as ProviderMessage;
     use providers::types::stream::StreamChunk;
@@ -1704,10 +1703,6 @@ pub async fn regenerate_session_title(
     );
 
     async fn complete_one(target: &ResolvedTarget, prompt: &str) -> Result<String, String> {
-        let registry = ProviderRegistry::default();
-        let provider = registry
-            .get(&target.backend_id)
-            .ok_or_else(|| format!("不支持的提供商后端: {}", target.backend_id))?;
         let config = ProviderConfig {
             api_key: target.api_key.clone(),
             base_url: if target.provider.endpoint.trim().is_empty() {
@@ -1724,8 +1719,7 @@ pub async fn regenerate_session_title(
             previous_interaction_id: None,
         };
         let messages = vec![ProviderMessage::user_text(prompt)];
-        let mut stream = provider
-            .chat_stream(messages, vec![], &config)
+        let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
             .await
             .map_err(|e| e.to_string())?;
         let mut out = String::new();

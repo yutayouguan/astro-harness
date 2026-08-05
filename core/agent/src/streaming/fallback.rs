@@ -2,7 +2,6 @@
 
 use common::ChatTarget;
 use futures::{stream, StreamExt};
-use providers::registry::ProviderRegistry;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
 use providers::ProviderConfig;
@@ -115,7 +114,6 @@ pub async fn probe_or_wrap_pre_content(
 /// 按 `targets` 链尝试 `chat_stream`；仅首包前可切；耗尽返回聚合错误。
 pub async fn try_stream_completion_with_fallback(
     targets: &[ChatTarget],
-    registry: &ProviderRegistry,
     messages: Vec<ProviderMessage>,
     tools: Vec<serde_json::Value>,
     base_config: &ProviderConfig,
@@ -127,9 +125,6 @@ pub async fn try_stream_completion_with_fallback(
 
     let mut errors = Vec::new();
     for (i, target) in targets.iter().enumerate() {
-        let provider = registry
-            .get(&target.backend_id)
-            .ok_or_else(|| anyhow::anyhow!("未知 Provider: {}", target.backend_id))?;
         let is_google = target.backend_id == "google" || target.provider_id == "google";
         let config = ProviderConfig {
             api_key: target.api_key.clone(),
@@ -149,9 +144,12 @@ pub async fn try_stream_completion_with_fallback(
         };
 
         let attempt = async {
-            let stream = provider
-                .chat_stream(messages.clone(), tools.clone(), &config)
-                .await?;
+            let stream = providers::dispatch::chat_stream(
+                &target.backend_id,
+                messages.clone(),
+                tools.clone(),
+                &config,
+            ).await?;
             probe_or_wrap_pre_content(stream).await
         }
         .await;
@@ -266,10 +264,8 @@ mod tests {
 
     #[tokio::test]
     async fn try_stream_rejects_empty_targets() {
-        let registry = ProviderRegistry::new();
         let err = match try_stream_completion_with_fallback(
             &[],
-            &registry,
             vec![],
             vec![],
             &ProviderConfig::default(),

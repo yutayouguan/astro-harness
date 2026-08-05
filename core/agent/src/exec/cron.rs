@@ -16,7 +16,6 @@ use chrono::Utc;
 use common::ChatTarget;
 use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
-use providers::registry::ProviderRegistry;
 use providers::Usage;
 use session::{SessionStore, StoredMessage};
 use uuid::Uuid;
@@ -197,7 +196,7 @@ pub struct CronExecCredentials {
 
 impl CronExecCredentials {
     /// 有效聊天目标：优先 `targets`，否则由四字段合成单元素链。
-    fn effective_targets(&self, registry: &ProviderRegistry) -> Vec<ChatTarget> {
+    fn effective_targets(&self) -> Vec<ChatTarget> {
         if !self.targets.is_empty() {
             return self.targets.clone();
         }
@@ -207,10 +206,7 @@ impl CronExecCredentials {
             self.provider.clone()
         };
         let model = if self.model.trim().is_empty() {
-            registry
-                .get(&backend)
-                .map(|p| p.default_model().to_string())
-                .unwrap_or_default()
+            providers::dispatch::default_model(&backend)
         } else {
             self.model.clone()
         };
@@ -699,8 +695,7 @@ async fn run_agent_job(
         &creds.api_key,
         &creds.base_url,
     );
-    let registry = ProviderRegistry::new();
-    let targets = creds.effective_targets(&registry);
+    let targets = creds.effective_targets();
     agent.set_chat_targets(targets.clone());
 
     let system_prompt = match agent.run_turn(&job.task, "cron").await? {

@@ -92,7 +92,6 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
 mod tests {
     use super::*;
     use crate::context::{ImageGenTargets, ToolContext};
-    use providers::registry::ProviderRegistry;
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -103,7 +102,6 @@ mod tests {
         let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-        let providers = ProviderRegistry::new();
         let targets = ImageGenTargets::default();
         let ctx = ToolContext {
             memory: &mut memory,
@@ -112,7 +110,6 @@ mod tests {
             workspace_dir: workspace,
             project_root: None,
             image_gen_targets: &targets,
-            providers: &providers,
             session_id: "t".into(),
             turn_id: None,
             chat_api_key: String::new(),

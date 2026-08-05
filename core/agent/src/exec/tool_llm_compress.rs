@@ -4,7 +4,6 @@
 //! 辅模型：`AuxiliaryTask::Compaction`；失败或无目标时回退 head/tail。
 
 use futures::StreamExt;
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -61,10 +60,6 @@ async fn complete_compaction_chat(
     prompt: &str,
     max_tokens: u32,
 ) -> anyhow::Result<String> {
-    let registry = ProviderRegistry::default();
-    let provider = registry
-        .get(&target.backend_id)
-        .ok_or_else(|| anyhow::anyhow!("unsupported compaction backend: {}", target.backend_id))?;
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {
@@ -86,7 +81,7 @@ async fn complete_compaction_chat(
         ),
         ProviderMessage::user_text(prompt),
     ];
-    let mut stream = provider.chat_stream(messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

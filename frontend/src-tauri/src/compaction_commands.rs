@@ -4,7 +4,6 @@ use futures::StreamExt;
 use serde::Serialize;
 use uuid::Uuid;
 
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -77,13 +76,6 @@ async fn summarize_with_target(
     target: &ResolvedTarget,
     transcript: &str,
 ) -> Result<String, String> {
-    let registry = ProviderRegistry::default();
-    let provider = registry.get(&target.backend_id).ok_or_else(|| {
-        format!(
-            "不支持的提供商后端: {}（请换用 OpenAI / DeepSeek / Google / Claude 等）",
-            target.backend_id
-        )
-    })?;
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.provider.endpoint.trim().is_empty() {
@@ -107,8 +99,7 @@ Reply in the same language as the transcript. No preamble.";
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
-    let mut stream = provider
-        .chat_stream(messages, vec![], &config)
+    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
         .await
         .map_err(|e| format!("压实调用模型失败: {e}"))?;
     let mut out = String::new();

@@ -1,4 +1,4 @@
-//! [`ProviderStreamer`]：包装 [`ProviderRegistry`] + fallback 链，实现三层 Streaming trait。
+//! [`ProviderStreamer`]：包装 fallback 链，实现三层 Streaming trait。
 
 use std::sync::{Arc, Mutex as StdMutex};
 
@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use common::message::Message;
 use common::ChatTarget;
 use futures::StreamExt;
-use providers::registry::ProviderRegistry;
-use providers::{AiProvider, ProviderConfig};
+use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
 
@@ -17,10 +16,15 @@ use super::fallback::{try_stream_completion_with_fallback, ActiveTargetMeta};
 use super::traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
 use super::types::{map_new_provider_stream, AssistantContentStream};
 
-/// 包装 [`ProviderRegistry`] + fallback 链，实现三层 Streaming trait。
+/// 测试用 chat 函数覆盖：跳过 dispatch，直接返回脚本化的 CompletionStream。
+pub type ChatOverride = Arc<
+    dyn Fn(Vec<ProviderMessage>, Vec<serde_json::Value>, ProviderConfig)
+        -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<CompletionStream>> + Send>>
+    + Send + Sync
+>;
+
+/// 包装 fallback 链，实现三层 Streaming trait。
 pub struct ProviderStreamer {
-    /// 按 `backend_id` 解析具体 [`AiProvider`]。
-    pub registry: Arc<ProviderRegistry>,
     /// 含 primary 的聊天目标链（失败切模仅用此列表，不改会话默认凭据）。
     pub targets: Vec<ChatTarget>,
     /// temperature / thinking 等；model/key/url 由每跳 target 覆盖。
@@ -29,20 +33,36 @@ pub struct ProviderStreamer {
     last_hit: StdMutex<Option<ActiveTargetMeta>>,
     /// Google Interactions：上一轮 `interaction.id`，供工具多轮 `previous_interaction_id`。
     previous_interaction_id: Arc<StdMutex<Option<String>>>,
+    /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
+    chat_override: Option<ChatOverride>,
 }
 
 impl ProviderStreamer {
     pub fn new(
-        registry: Arc<ProviderRegistry>,
         targets: Vec<ChatTarget>,
         base_config: ProviderConfig,
     ) -> Self {
         Self {
-            registry,
             targets,
             base_config,
             last_hit: StdMutex::new(None),
             previous_interaction_id: Arc::new(StdMutex::new(None)),
+            chat_override: None,
+        }
+    }
+
+    /// 构造带测试覆盖的 ProviderStreamer（供集成测试注入脚本化回复）。
+    pub fn with_chat_override(
+        targets: Vec<ChatTarget>,
+        base_config: ProviderConfig,
+        chat_override: ChatOverride,
+    ) -> Self {
+        Self {
+            targets,
+            base_config,
+            last_hit: StdMutex::new(None),
+            previous_interaction_id: Arc::new(StdMutex::new(None)),
+            chat_override: Some(chat_override),
         }
     }
 
@@ -71,32 +91,6 @@ impl ProviderStreamer {
     }
 }
 
-/// 从单 Provider + config 构造单元素 fallback 链（旧调用方兼容）。
-pub fn chat_target_from_provider_config(
-    provider: &dyn AiProvider,
-    config: &ProviderConfig,
-) -> ChatTarget {
-    let backend_id = provider.name().to_string();
-    ChatTarget {
-        provider_id: backend_id.clone(),
-        backend_id,
-        model: config.model.clone(),
-        api_key: config.api_key.clone(),
-        base_url: config.base_url.clone().unwrap_or_default(),
-    }
-}
-
-/// 将自定义/测试 Provider 注入注册表，并返回单元素 `targets`。
-pub fn targets_and_registry_from_primary(
-    provider: Arc<dyn AiProvider>,
-    config: &ProviderConfig,
-) -> (Vec<ChatTarget>, Arc<ProviderRegistry>) {
-    let target = chat_target_from_provider_config(provider.as_ref(), config);
-    let mut registry = ProviderRegistry::new();
-    registry.insert(target.backend_id.clone(), provider);
-    (vec![target], Arc::new(registry))
-}
-
 #[async_trait]
 impl StreamingCompletion for ProviderStreamer {
     /// 经 [`try_stream_completion_with_fallback`] 再 [`map_new_provider_stream`] 归一化。
@@ -115,24 +109,35 @@ impl StreamingCompletion for ProviderStreamer {
             .ok()
             .and_then(|g| g.clone());
 
-        let (stream, meta) = try_stream_completion_with_fallback(
-            &self.targets,
-            self.registry.as_ref(),
-            messages,
-            tools,
-            &config,
-            |from, to, err| {
-                tracing::warn!(
-                    from_backend = %from.backend_id,
-                    from_model = %from.model,
-                    to_backend = %to.backend_id,
-                    to_model = %to.model,
-                    error = %err,
-                    "chat failover: switching target before first content"
-                );
-            },
-        )
-        .await?;
+        let (stream, meta) = if let Some(ref chat_fn) = self.chat_override {
+            // 测试覆盖路径：直接调用自定义函数
+            let stream = chat_fn(messages, tools, config.clone()).await?;
+            let meta = ActiveTargetMeta {
+                provider_id: self.targets.first().map(|t| t.provider_id.clone()).unwrap_or_default(),
+                backend_id: self.targets.first().map(|t| t.backend_id.clone()).unwrap_or_default(),
+                model: self.targets.first().map(|t| t.model.clone()).unwrap_or_default(),
+                base_url: self.targets.first().map(|t| t.base_url.clone()).unwrap_or_default(),
+            };
+            (stream, meta)
+        } else {
+            try_stream_completion_with_fallback(
+                &self.targets,
+                messages,
+                tools,
+                &config,
+                |from, to, err| {
+                    tracing::warn!(
+                        from_backend = %from.backend_id,
+                        from_model = %from.model,
+                        to_backend = %to.backend_id,
+                        to_model = %to.model,
+                        error = %err,
+                        "chat failover: switching target before first content"
+                    );
+                },
+            )
+            .await?
+        };
 
         let is_google = meta.backend_id == "google" || meta.provider_id == "google";
         if !is_google {

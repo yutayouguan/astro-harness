@@ -36,7 +36,6 @@ async fn tts_inner(
     model: Option<&str>,
     _voice: Option<&str>,
 ) -> Result<TtsResult, String> {
-    use providers::registry::ProviderRegistry;
     use providers::ProviderConfig;
 
     let pid = provider_id.unwrap_or_else(|| {
@@ -75,11 +74,7 @@ async fn tts_inner(
         previous_interaction_id: None,
     };
 
-    let registry = ProviderRegistry::new();
-    let provider = registry.get(pid)
-        .ok_or_else(|| format!("未找到供应商: {}", pid))?;
-
-    let result = provider.text_to_speech(text, &config).await.map_err(|e| e.to_string())?;
+    let result = providers::dispatch::text_to_speech(pid, text, &config).await.map_err(|e| e.to_string())?;
 
     // 保存到 artifacts
     let artifacts_dir = home::default_memory_dir().join("artifacts").join("tts");

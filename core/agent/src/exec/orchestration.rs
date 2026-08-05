@@ -18,7 +18,6 @@ use home::{default_memory_dir, AgentRuntimeConfig};
 use orchestration::{
     OrchestrationDb, OrchestrationRow, OrchestrationSpawnRequest, OrchestrationStatus, StepRow,
 };
-use providers::registry::ProviderRegistry;
 use providers::Usage;
 use providers::ProviderConfig;
 use usage::{NewUsageEvent, UsageDb};
@@ -224,8 +223,7 @@ async fn run_step(
         depth_ctx,
     );
     agent.set_chat_credentials(&provider, &model, &api_key, &base_url);
-    let registry = ProviderRegistry::new();
-    let targets = effective_chat_targets(req, &provider, &model, &api_key, &base_url, &registry);
+    let targets = effective_chat_targets(req, &provider, &model, &api_key, &base_url);
     agent.set_chat_targets(targets);
 
     let result = home::scope_spawn_depth(depth_ctx, async {
@@ -278,7 +276,6 @@ fn effective_chat_targets(
     model: &str,
     api_key: &str,
     base_url: &str,
-    registry: &ProviderRegistry,
 ) -> Vec<ChatTarget> {
     if !req.chat_targets.is_empty() {
         return req.chat_targets.clone();
@@ -289,10 +286,7 @@ fn effective_chat_targets(
         provider.to_string()
     };
     let model = if model.trim().is_empty() {
-        registry
-            .get(&backend)
-            .map(|p| p.default_model().to_string())
-            .unwrap_or_default()
+        providers::dispatch::default_model(&backend)
     } else {
         model.to_string()
     };
@@ -310,7 +304,6 @@ async fn run_provider_loop(
     initial_system_prompt: &str,
     depth_ctx: home::SpawnDepthCtx,
 ) -> anyhow::Result<(String, Usage)> {
-    let providers = ProviderRegistry::new();
     let targets = agent.chat_targets().to_vec();
     let base_config = ProviderConfig::default();
 
@@ -330,7 +323,6 @@ async fn run_provider_loop(
 
         let (mut stream, _meta) = try_stream_completion_with_fallback(
             &targets,
-            &providers,
             messages,
             tools,
             &base_config,

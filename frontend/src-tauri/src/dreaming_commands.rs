@@ -11,7 +11,6 @@ use memory::dreaming::{
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
 use memory::{list_pending, load_memory_config};
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -69,10 +68,6 @@ async fn complete_chat(
     system: &str,
     user: &str,
 ) -> Result<String, String> {
-    let registry = ProviderRegistry::default();
-    let provider = registry.get(backend_id).ok_or_else(|| {
-        format!("不支持的提供商后端: {backend_id}（请换用 OpenAI / DeepSeek / Google / Claude 等）")
-    })?;
     let config = ProviderConfig {
         api_key: api_key.to_string(),
         base_url: if base_url.trim().is_empty() {
@@ -92,8 +87,7 @@ async fn complete_chat(
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
-    let mut stream = provider
-        .chat_stream(messages, vec![], &config)
+    let mut stream = providers::dispatch::chat_stream(backend_id, messages, vec![], &config)
         .await
         .map_err(|e| format!("入梦调用模型失败: {e}"))?;
     let mut out = String::new();

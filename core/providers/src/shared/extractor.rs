@@ -13,7 +13,6 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use crate::registry::ProviderRegistry;
 use crate::types::request::ProviderConfig;
 use crate::types::message::Message;
 use crate::types::stream::StreamChunk;
@@ -299,14 +298,8 @@ where
 
     /// 调用模型并反序列化为 `T`。
     pub async fn extract(&self, text: &str) -> Result<T, ExtractionError> {
-        let registry = ProviderRegistry::default();
-        let provider = registry.get(&self.provider).ok_or_else(|| {
-            ExtractionError::PromptError(format!("不支持的提供商: {}", self.provider))
-        })?;
-
         let messages = self.build_messages(text);
-        let mut stream = provider
-            .chat_stream(messages, vec![], &self.config)
+        let mut stream = crate::dispatch::chat_stream(&self.provider, messages, vec![], &self.config)
             .await
             .map_err(|e| ExtractionError::PromptError(e.to_string()))?;
 

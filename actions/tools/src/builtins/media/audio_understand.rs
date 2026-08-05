@@ -598,7 +598,6 @@ mod path_escape_tests {
     use super::*;
     use crate::context::{ImageGenTargets, ToolContext};
     use memory::MemoryManager;
-    use providers::registry::ProviderRegistry;
     use tempfile::TempDir;
 
     fn build_ctx<'a>(
@@ -607,7 +606,6 @@ mod path_escape_tests {
         memory_dir: std::path::PathBuf,
         workspace_dir: std::path::PathBuf,
         targets: &'a ImageGenTargets,
-        providers: &'a ProviderRegistry,
     ) -> ToolContext<'a> {
         ToolContext {
             memory,
@@ -616,7 +614,6 @@ mod path_escape_tests {
             workspace_dir,
             project_root: None,
             image_gen_targets: targets,
-            providers,
             session_id: "test".into(),
             turn_id: None,
             chat_api_key: String::new(),
@@ -643,14 +640,12 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
-            &providers,
         );
 
         let err = load_audio_bytes(&ctx, "../outside/secret.mp3")
@@ -674,14 +669,12 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
-            &providers,
         );
 
         let (bytes, mime, filename) = load_audio_bytes(&ctx, "ok.wav").await.unwrap();
@@ -704,14 +697,12 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
-            &providers,
         );
 
         let err = resolve_google_media(&ctx, "../outside/secret.mp3", false)
@@ -737,14 +728,12 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
-            &providers,
         );
 
         let media = resolve_google_media(&ctx, "clip.wav", false).await.unwrap();
@@ -778,14 +767,12 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let providers = ProviderRegistry::new();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
-            &providers,
         );
 
         let media = resolve_google_media(&ctx, "https://youtu.be/abc", true)

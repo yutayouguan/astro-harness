@@ -31,7 +31,6 @@ use evolution::{
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
-use providers::registry::ProviderRegistry;
 use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
@@ -142,10 +141,6 @@ async fn complete_chat(
     system: &str,
     user: &str,
 ) -> Result<String, String> {
-    let registry = ProviderRegistry::default();
-    let provider = registry
-        .get(&target.backend_id)
-        .ok_or_else(|| format!("不支持的提供商后端: {}", target.backend_id))?;
     let base_url = target.provider.endpoint.trim();
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
@@ -166,8 +161,7 @@ async fn complete_chat(
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
-    let mut stream = provider
-        .chat_stream(messages, vec![], &config)
+    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
         .await
         .map_err(|e| format!("进化调用模型失败: {e}"))?;
     let mut out = String::new();
