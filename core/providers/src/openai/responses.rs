@@ -21,7 +21,7 @@ use crate::types::stream::{CompletionStream, StreamChunk};
 /// - tool 角色 → `{ type: "function_call_output", call_id, output }`
 /// - assistant + tool_calls → 展开为 `{ type: "function_call", id, name, arguments }` 项
 /// - 其余走 `{ role, content }` 不变
-fn to_responses_input(messages: &[Message]) -> Vec<Value> {
+pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
     let mut input = Vec::with_capacity(messages.len());
     for m in messages {
         match m {
@@ -92,7 +92,7 @@ fn to_responses_input(messages: &[Message]) -> Vec<Value> {
     input
 }
 
-fn build_content_from_user(parts: &[UserContent]) -> Value {
+pub fn build_content_from_user(parts: &[UserContent]) -> Value {
     if parts.len() == 1 {
         if let UserContent::Text { text } = &parts[0] {
             return json!(text);
@@ -172,7 +172,7 @@ fn to_responses_tools(tools: &[Value]) -> Vec<Value> {
 // ---------------------------------------------------------------------------
 
 /// 解析 Responses API SSE `data:` 负载为一组 [`StreamChunk`]。
-fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
+pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
     let Some(v) = serde_json::from_str::<Value>(data).ok() else {
         return Vec::new();
     };

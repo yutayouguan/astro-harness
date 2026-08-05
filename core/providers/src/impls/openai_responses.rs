@@ -1,11 +1,11 @@
-//! OpenAI Responses API — CompletionModel 封装。
+//! OpenAI Responses API — 原生 CompletionModel 实现。
 //!
-//! 复用 `openai/responses.rs` 中的消息转换、工具转换和 SSE 解析，
-//! 将 `CompletionRequest` 适配为 `responses_chat_stream` 调用。
+//! 直接从 `CompletionRequest` 构建 Responses API 请求体，
+//! 复用 `openai/responses.rs` 中的消息转换和 SSE 解析。
 
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use reqwest::Client as HttpClient;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::traits::{Capable, Capabilities, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt};
 use crate::types::{CompletionRequest, CompletionStream};
@@ -82,44 +82,97 @@ impl FromClient<OpenAIResponses> for ResponsesCompletionModel {
 #[async_trait::async_trait]
 impl CompletionModel for ResponsesCompletionModel {
     async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
-        let tools_json: Vec<serde_json::Value> = request
-            .tools
-            .iter()
-            .map(|t| {
+        if self.api_key.trim().is_empty() {
+            return Err(anyhow!("Responses API Key 为空"));
+        }
+
+        let base = crate::compat::openai_compatible_base(&self.base_url);
+        let url = format!("{base}/responses");
+        let is_openai = self.provider_id.starts_with("openai");
+        let model = if request.model.is_empty() { &self.model } else { &request.model };
+
+        let input = crate::openai::responses::to_responses_input(&request.messages);
+
+        let instructions = request.messages.iter().find_map(|m| match m {
+            crate::types::message::Message::System { content } => Some(content.clone()),
+            _ => None,
+        });
+
+        let mut body = json!({
+            "model": model,
+            "input": input,
+            "stream": true,
+        });
+        if is_openai {
+            body["store"] = json!(false);
+        }
+        if let Some(inst) = instructions {
+            if !inst.is_empty() {
+                body["instructions"] = json!(inst);
+            }
+        }
+        if let Some(temp) = request.temperature {
+            body["temperature"] = json!(temp);
+        }
+        if let Some(max) = request.max_tokens {
+            if max > 0 {
+                body["max_output_tokens"] = json!(max);
+            }
+        }
+
+        // Tools — 直接从 ToolDefinition 构建 Responses 格式
+        if !request.tools.is_empty() {
+            let tools: Vec<Value> = request.tools.iter().map(|t| {
                 json!({
                     "type": "function",
-                    "function": {
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": t.parameters,
-                    }
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.parameters,
                 })
-            })
-            .collect();
+            }).collect();
+            body["tools"] = Value::Array(tools);
+            body["tool_choice"] = json!("auto");
+            if is_openai {
+                body["parallel_tool_calls"] = json!(true);
+            }
+        }
 
-        let thinking = request.thinking.as_ref();
-        let config = crate::types::request::ProviderConfig {
-            api_key: self.api_key.clone(),
-            base_url: Some(self.base_url.clone()),
-            model: if request.model.is_empty() {
-                self.model.clone()
-            } else {
-                request.model.clone()
-            },
-            temperature: request.temperature.unwrap_or(-1.0),
-            max_tokens: request.max_tokens.unwrap_or(0),
-            thinking_enabled: thinking.map_or(false, |t| t.enabled),
-            reasoning_effort: thinking.map_or_else(String::new, |t| t.effort.clone()),
-            additional_params: request.additional_params.clone(),
-            previous_interaction_id: None,
-        };
+        // Reasoning / Thinking
+        if let Some(ref tc) = request.thinking {
+            if tc.enabled {
+                let effort = match tc.effort.trim() {
+                    "" | "high" => "high",
+                    other => other,
+                };
+                if is_openai {
+                    body["reasoning"] = json!({"effort": effort, "summary": "auto"});
+                } else {
+                    body["reasoning"] = json!({"effort": effort});
+                }
+            }
+        }
 
-        crate::openai::responses::responses_chat_stream(
-            &self.http,
-            self.provider_id,
-            request.messages,
-            tools_json,
-            &config,
+        // additional_params
+        if let Some(extra) = request.additional_params.as_object() {
+            if let Some(obj) = body.as_object_mut() {
+                for (k, v) in extra {
+                    obj.insert(k.clone(), v.clone());
+                }
+            }
+        }
+
+        let response = self.http
+            .post(&url)
+            .bearer_auth(self.api_key.trim())
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .with_context(|| format!("连接 Responses API 失败: {url}"))?;
+
+        crate::shared::sse::sse_stream(
+            response,
+            std::sync::Arc::new(crate::openai::responses::extract_responses_chunks),
         )
         .await
     }
