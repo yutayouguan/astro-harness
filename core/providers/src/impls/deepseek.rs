@@ -33,10 +33,9 @@ impl OpenAICompatible for DeepSeek {
                     .get("effort")
                     .and_then(|v| v.as_str())
                     .unwrap_or("high");
+                // DeepSeek API 有效值：high / max（低于 high 的级别会被服务端映射为 high）
                 let mapped = match effort {
-                    "max" | "xhigh" => "xhigh",
-                    "high" => "high",
-                    other if !other.is_empty() => other,
+                    "max" | "xhigh" => "max",
                     _ => "high",
                 };
                 body["reasoning_effort"] = serde_json::json!(mapped);

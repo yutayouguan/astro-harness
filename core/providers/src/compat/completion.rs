@@ -94,6 +94,22 @@ where
             body["max_tokens"] = json!(max);
         }
 
+        // thinking 模式下 max_tokens 同时覆盖推理和正文，默认值(8192)容易被推理
+        // 耗尽导致正文为空。此处统一保底到 16384，finalize_body 可再按需调整。
+        if request
+            .thinking
+            .as_ref()
+            .map_or(false, |tc| tc.enabled)
+        {
+            let current = body
+                .get("max_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if current < 16384 {
+                body["max_tokens"] = json!(16384);
+            }
+        }
+
         if Ext::STREAM_USAGE {
             body["stream_options"] = json!({"include_usage": true});
         }

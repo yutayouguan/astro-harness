@@ -51,6 +51,12 @@ impl OpenAICompatible for OpenAI {
                     other => other,
                 };
                 body["reasoning_effort"] = serde_json::json!(mapped);
+                // o 系列模型启用 reasoning 时要求 max_completion_tokens 替代 max_tokens
+                if let Some(obj) = body.as_object_mut() {
+                    if let Some(max) = obj.remove("max_tokens") {
+                        obj.insert("max_completion_tokens".to_string(), max);
+                    }
+                }
             }
         }
     }

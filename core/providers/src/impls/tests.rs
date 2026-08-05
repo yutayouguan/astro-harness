@@ -51,7 +51,7 @@ mod finalize_body {
         });
         ds.finalize_body(&mut body);
         assert_eq!(body["thinking"]["type"], "enabled");
-        assert_eq!(body["reasoning_effort"], "xhigh");
+        assert_eq!(body["reasoning_effort"], "max");
         assert!(body.get("thinking_config").is_none());
     }
 
