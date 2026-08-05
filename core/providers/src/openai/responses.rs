@@ -171,188 +171,107 @@ fn to_responses_tools(tools: &[Value]) -> Vec<Value> {
 // SSE 事件解析
 // ---------------------------------------------------------------------------
 
-/// 解析 Responses API SSE `data:` 负载为 [`StreamChunk`]。
-fn extract_responses_delta(data: &str) -> Option<StreamChunk> {
-    let v: Value = serde_json::from_str(data).ok()?;
+/// 解析 Responses API SSE `data:` 负载为一组 [`StreamChunk`]。
+fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
+    let Some(v) = serde_json::from_str::<Value>(data).ok() else {
+        return Vec::new();
+    };
 
     let event_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
 
+    macro_rules! one {
+        ($chunk:expr) => { return vec![$chunk] };
+    }
+
     match event_type {
-        // ── 文本 ──
         "response.output_text.delta" => {
-            let delta = v.get("delta").and_then(|d| d.as_str())?;
-            if delta.is_empty() {
-                return None;
+            if let Some(delta) = v.get("delta").and_then(|d| d.as_str()).filter(|s| !s.is_empty()) {
+                one!(StreamChunk::Text(delta.to_string()));
             }
-            Some(StreamChunk::Text(delta.to_string()))
         }
 
-        // ── reasoning ──
         "response.reasoning_summary_text.delta" => {
-            let delta = v.get("delta").and_then(|d| d.as_str())?;
-            if delta.is_empty() {
-                return None;
+            if let Some(delta) = v.get("delta").and_then(|d| d.as_str()).filter(|s| !s.is_empty()) {
+                one!(StreamChunk::Thinking(delta.to_string()));
             }
-            Some(StreamChunk::Thinking(delta.to_string()))
         }
 
-        // ── refusal（模型拒绝回答，作为文本下发） ──
         "response.refusal.delta" => {
-            let delta = v.get("delta").and_then(|d| d.as_str())?;
-            if delta.is_empty() {
-                return None;
+            if let Some(delta) = v.get("delta").and_then(|d| d.as_str()).filter(|s| !s.is_empty()) {
+                one!(StreamChunk::Text(delta.to_string()));
             }
-            Some(StreamChunk::Text(delta.to_string()))
         }
 
-        // ── 新建 function_call 输出项 ──
         "response.output_item.added" => {
-            let item = v.get("item")?;
-            if item.get("type").and_then(|t| t.as_str()) != Some("function_call") {
-                return None;
+            if let Some(item) = v.get("item") {
+                if item.get("type").and_then(|t| t.as_str()) == Some("function_call") {
+                    let id = item.get("call_id").or_else(|| item.get("id"))
+                        .and_then(|s| s.as_str()).unwrap_or("").to_string();
+                    let name = item.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                    let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+                    one!(StreamChunk::ToolCallStart { index, id, name });
+                }
             }
-            let id = item
-                .get("call_id")
-                .or_else(|| item.get("id"))
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string();
-            let name = item
-                .get("name")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string();
-            let index = v
-                .get("output_index")
-                .and_then(|i| i.as_u64())
-                .unwrap_or(0) as u32;
-            Some(StreamChunk::ToolCallStart { index, id, name })
         }
 
-        // ── function_call 完成（兜底：即使 delta 丢包也能恢复完整调用） ──
         "response.output_item.done" => {
-            let item = v.get("item")?;
-            if item.get("type").and_then(|t| t.as_str()) != Some("function_call") {
-                return None;
+            if let Some(item) = v.get("item") {
+                if item.get("type").and_then(|t| t.as_str()) == Some("function_call") {
+                    let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+                    if let Some(args) = item.get("arguments").and_then(|a| a.as_str()).filter(|s| !s.is_empty()) {
+                        one!(StreamChunk::ToolCallDelta { index, arguments: args.to_string() });
+                    }
+                }
             }
-            let index = v
-                .get("output_index")
-                .and_then(|i| i.as_u64())
-                .unwrap_or(0) as u32;
-            // 发送 ToolCallDelta 携带完整 arguments（兜底恢复）
-            let arguments = item
-                .get("arguments")
-                .and_then(|a| a.as_str())
-                .unwrap_or("")
-                .to_string();
-            if arguments.is_empty() {
-                return None;
-            }
-            Some(StreamChunk::ToolCallDelta { index, arguments })
         }
 
-        // ── function call 参数 delta ──
         "response.function_call_arguments.delta" => {
-            let delta = v.get("delta").and_then(|d| d.as_str())?;
-            let index = v
-                .get("output_index")
-                .and_then(|i| i.as_u64())
-                .unwrap_or(0) as u32;
-            Some(StreamChunk::ToolCallDelta {
-                index,
-                arguments: delta.to_string(),
-            })
+            if let Some(delta) = v.get("delta").and_then(|d| d.as_str()) {
+                let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+                one!(StreamChunk::ToolCallDelta { index, arguments: delta.to_string() });
+            }
         }
 
-        // ── function call 参数完成 ──
-        "response.function_call_arguments.done" => None,
+        "response.function_call_arguments.done" => {}
 
-        // ── 响应完成 ──
         "response.completed" => {
             let resp = v.get("response");
             let usage = resp.and_then(parse_openai_usage);
             let has_tool_calls = resp
                 .and_then(|r| r.get("output"))
                 .and_then(|o| o.as_array())
-                .map(|arr| {
-                    arr.iter().any(|item| {
-                        item.get("type").and_then(|t| t.as_str()) == Some("function_call")
-                    })
-                })
+                .map(|arr| arr.iter().any(|item| item.get("type").and_then(|t| t.as_str()) == Some("function_call")))
                 .unwrap_or(false);
-            let finish = if has_tool_calls {
-                "tool_calls"
-            } else {
-                "stop"
-            };
-            // 先发 Usage（如有），再发 Done
-            // 但 SSE 解析是逐事件的，只能返回一个 chunk，
-            // 所以把 usage 和 done 合到一起：Done 先发，Usage 嵌入 Done 之前的事件
-            // 实际上 sse_stream 只能返回一个 Option，
-            // 我们返回 Done 并依赖外部 usage 事件。
-            // 但 Responses API 没有单独的 usage 事件，所以这里需要先发 Usage 再 Done。
-            // 解决方案：返回 Usage chunk；Done 通过流结束隐式触发。
-            // 然而其他 provider 都在这里返回 Done。
-            // 最佳做法：如果有 usage 就返回 Usage，否则返回 Done。
-            // Done 在流结束时自然触发（SSE [DONE] 或 EOF）。
+            let finish = if has_tool_calls { "tool_calls" } else { "stop" };
+            let mut chunks = Vec::with_capacity(2);
             if let Some(u) = usage {
-                // 返回一个带 finish_reason 信息的 Usage chunk，
-                // 然后流结束。但 StreamChunk 没有同时携带两者的能力。
-                // 简化：返回 Done。Usage 通过单独的 StreamChunk 处理。
-                // 但 SSE 提取一次只能返回一个 chunk...
-                // 按照其他 provider 的模式，返回 Done + 在外层处理 Usage。
-                // 实际上看 anthropic.rs 和 google.rs，它们各自处理 usage 和 done 为独立事件。
-                // Responses API 的 completed 事件同时包含两者。
-                // 解决：返回 Usage，让流结束自然生成 Done。
-                // 但是 sse_stream 不会自动发 Done...
-                // 折中：仍然返回 Done，把 usage 信息丢掉？不行。
-                // 最好的方式是改为返回两个 chunk，但 extract 只能返回一个。
-                // 看看 compat/completion.rs 怎么处理的。
-                let _ = finish; // suppress unused
-                Some(StreamChunk::Usage(u))
-            } else {
-                Some(StreamChunk::Done {
-                    finish_reason: finish.to_string(),
-                })
+                chunks.push(StreamChunk::Usage(u));
             }
+            chunks.push(StreamChunk::Done { finish_reason: finish.to_string() });
+            return chunks;
         }
 
-        // ── 错误 / 失败 ──
         "response.failed" => {
-            let msg = v
-                .pointer("/response/status_details/error/message")
+            let msg = v.pointer("/response/status_details/error/message")
                 .or_else(|| v.pointer("/response/error/message"))
                 .and_then(|m| m.as_str())
                 .unwrap_or("Responses API 请求失败");
-            Some(StreamChunk::Error(msg.to_string()))
+            one!(StreamChunk::Error(msg.to_string()));
         }
 
-        "response.incomplete" => Some(StreamChunk::Done {
-            finish_reason: "stop".to_string(),
-        }),
+        "response.incomplete" => {
+            one!(StreamChunk::Done { finish_reason: "stop".to_string() });
+        }
 
         "error" => {
-            let msg = v
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("未知错误");
-            Some(StreamChunk::Error(msg.to_string()))
+            let msg = v.get("message").and_then(|m| m.as_str()).unwrap_or("未知错误");
+            one!(StreamChunk::Error(msg.to_string()));
         }
 
-        // 生命周期 / 边界事件 — 不需要转为 StreamChunk
-        "response.created"
-        | "response.in_progress"
-        | "response.queued"
-        | "response.output_text.done"
-        | "response.content_part.added"
-        | "response.content_part.done"
-        | "response.reasoning_summary_part.added"
-        | "response.reasoning_summary_part.done"
-        | "response.reasoning_summary_text.done"
-        | "response.refusal.done" => None,
-
-        _ => None,
+        _ => {}
     }
+
+    Vec::new()
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +358,7 @@ pub async fn responses_chat_stream(
         .await
         .map_err(|e| anyhow!("连接 Responses API 失败: {url}: {e}"))?;
 
-    crate::shared::sse::sse_stream(response, crate::shared::sse::wrap_single_extract(extract_responses_delta)).await
+    crate::shared::sse::sse_stream(response, std::sync::Arc::new(extract_responses_chunks)).await
 }
 
 // ---------------------------------------------------------------------------
@@ -619,24 +538,25 @@ mod tests {
     #[test]
     fn extract_text_delta() {
         let data = r#"{"type":"response.output_text.delta","delta":"Hello"}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(matches!(chunk, StreamChunk::Text(ref t) if t == "Hello"));
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "Hello"));
     }
 
     // ── reasoning delta ──
 
     #[test]
     fn extract_reasoning_delta() {
-        let data =
-            r#"{"type":"response.reasoning_summary_text.delta","delta":"Let me think..."}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(matches!(chunk, StreamChunk::Thinking(ref t) if t == "Let me think..."));
+        let data = r#"{"type":"response.reasoning_summary_text.delta","delta":"Let me think..."}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));
     }
 
     #[test]
-    fn extract_reasoning_empty_delta_returns_none() {
+    fn extract_reasoning_empty_delta_returns_empty() {
         let data = r#"{"type":"response.reasoning_summary_text.delta","delta":""}"#;
-        assert!(extract_responses_delta(data).is_none());
+        assert!(extract_responses_chunks(data).is_empty());
     }
 
     // ── refusal delta ──
@@ -644,10 +564,9 @@ mod tests {
     #[test]
     fn extract_refusal_delta() {
         let data = r#"{"type":"response.refusal.delta","delta":"I cannot help with that."}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(
-            matches!(chunk, StreamChunk::Text(ref t) if t == "I cannot help with that.")
-        );
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "I cannot help with that."));
     }
 
     // ── function call ──
@@ -655,101 +574,87 @@ mod tests {
     #[test]
     fn extract_function_call_added() {
         let data = r#"{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"search"}}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(matches!(
-            chunk,
-            StreamChunk::ToolCallStart {
-                index: 0,
-                ref id,
-                ref name,
-            } if id == "call_1" && name == "search"
-        ));
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::ToolCallStart { index: 0, ref id, ref name } if id == "call_1" && name == "search"));
     }
 
     #[test]
     fn extract_function_call_args_delta() {
         let data = r#"{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"q\":"}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(matches!(
-            chunk,
-            StreamChunk::ToolCallDelta {
-                index: 0,
-                ref arguments,
-            } if arguments == "{\"q\":"
-        ));
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::ToolCallDelta { index: 0, ref arguments } if arguments == "{\"q\":"));
     }
 
     #[test]
-    fn extract_function_call_args_done_returns_none() {
+    fn extract_function_call_args_done_returns_empty() {
         let data = r#"{"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"q\":\"rust\"}"}"#;
-        assert!(extract_responses_delta(data).is_none());
+        assert!(extract_responses_chunks(data).is_empty());
     }
 
     #[test]
     fn extract_output_item_done_function_call() {
         let data = r#"{"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_2","name":"read_file","arguments":"{\"path\":\"src/main.rs\"}","status":"completed"}}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(matches!(
-            chunk,
-            StreamChunk::ToolCallDelta {
-                index: 1,
-                ref arguments,
-            } if arguments == r#"{"path":"src/main.rs"}"#
-        ));
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::ToolCallDelta { index: 1, ref arguments } if arguments == r#"{"path":"src/main.rs"}"#));
     }
 
     #[test]
-    fn extract_output_item_done_message_returns_none() {
+    fn extract_output_item_done_message_returns_empty() {
         let data = r#"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}}"#;
-        assert!(extract_responses_delta(data).is_none());
+        assert!(extract_responses_chunks(data).is_empty());
     }
 
     // ── 完成 / 错误 ──
 
     #[test]
-    fn extract_completed_text_only() {
+    fn extract_completed_returns_usage_and_done() {
         let data = r#"{"type":"response.completed","response":{"output":[{"type":"message"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        // 有 usage 时返回 Usage chunk
-        assert!(matches!(chunk, StreamChunk::Usage(_)));
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 2);
+        assert!(matches!(&chunks[0], StreamChunk::Usage(_)));
+        assert!(matches!(&chunks[1], StreamChunk::Done { ref finish_reason } if finish_reason == "stop"));
     }
 
     #[test]
-    fn extract_completed_with_tool_calls() {
+    fn extract_completed_with_tool_calls_returns_usage_and_done() {
         let data = r#"{"type":"response.completed","response":{"output":[{"type":"function_call","call_id":"c1","name":"f","arguments":"{}"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        // 有 usage 时返回 Usage chunk
-        assert!(matches!(chunk, StreamChunk::Usage(_)));
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 2);
+        assert!(matches!(&chunks[0], StreamChunk::Usage(_)));
+        assert!(matches!(&chunks[1], StreamChunk::Done { ref finish_reason } if finish_reason == "tool_calls"));
     }
 
     #[test]
-    fn extract_completed_no_usage_returns_done() {
+    fn extract_completed_no_usage_returns_done_only() {
         let data = r#"{"type":"response.completed","response":{"output":[{"type":"message"}]}}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(matches!(chunk, StreamChunk::Done { ref finish_reason } if finish_reason == "stop"));
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Done { ref finish_reason } if finish_reason == "stop"));
     }
 
     #[test]
     fn extract_failed() {
-        let data =
-            r#"{"type":"response.failed","response":{"status_details":{"error":{"message":"rate limit"}}}}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(matches!(chunk, StreamChunk::Error(ref msg) if msg == "rate limit"));
+        let data = r#"{"type":"response.failed","response":{"status_details":{"error":{"message":"rate limit"}}}}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Error(ref msg) if msg == "rate limit"));
     }
 
     #[test]
     fn extract_error_event() {
         let data = r#"{"type":"error","message":"invalid request"}"#;
-        let chunk = extract_responses_delta(data).unwrap();
-        assert!(
-            matches!(chunk, StreamChunk::Error(ref msg) if msg == "invalid request")
-        );
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Error(ref msg) if msg == "invalid request"));
     }
 
     // ── 忽略的事件 ──
 
     #[test]
-    fn extract_lifecycle_events_return_none() {
+    fn extract_lifecycle_events_return_empty() {
         for event in [
             r#"{"type":"response.created","response":{}}"#,
             r#"{"type":"response.in_progress","response":{}}"#,
@@ -761,16 +666,13 @@ mod tests {
             r#"{"type":"response.reasoning_summary_text.done","text":"ok"}"#,
             r#"{"type":"response.refusal.done","refusal":"no"}"#,
         ] {
-            assert!(
-                extract_responses_delta(event).is_none(),
-                "expected None for {event}"
-            );
+            assert!(extract_responses_chunks(event).is_empty(), "expected empty for {event}");
         }
     }
 
     #[test]
-    fn extract_unknown_event_returns_none() {
+    fn extract_unknown_event_returns_empty() {
         let data = r#"{"type":"response.some_future_event","data":"x"}"#;
-        assert!(extract_responses_delta(data).is_none());
+        assert!(extract_responses_chunks(data).is_empty());
     }
 }

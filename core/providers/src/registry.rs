@@ -16,17 +16,47 @@ use crate::types::request::ProviderConfig;
 use crate::types::stream::CompletionStream;
 use crate::verify;
 
+fn shared_http_client() -> reqwest::Client {
+    use std::sync::OnceLock;
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .pool_max_idle_per_host(8)
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new())
+        })
+        .clone()
+}
+
 /// Provider 注册表 — 基于 trait 系统。
+///
+/// 内部持有共享的 `reqwest::Client`，所有 provider 复用同一连接池。
 #[derive(Clone)]
 pub struct Registry {
+    http: reqwest::Client,
     providers: HashMap<String, DynProvider>,
 }
 
 impl Registry {
     pub fn new() -> Self {
         Self {
+            http: shared_http_client(),
             providers: HashMap::new(),
         }
+    }
+
+    fn make_client<Ext: crate::traits::ProviderExt>(
+        &self,
+        api_key: &str,
+        base_url: Option<&str>,
+        ext: Ext,
+    ) -> ProviderClient<Ext> {
+        let mut client = ProviderClient::new(api_key, ext).with_http_client(self.http.clone());
+        if let Some(url) = base_url {
+            client = client.with_base_url(url);
+        }
+        client
     }
 
     /// 注册 OpenAI 兼容 provider（仅 Chat）。
@@ -43,13 +73,9 @@ impl Registry {
             + Copy
             + 'static,
     {
-        let mut client = ProviderClient::new(api_key, Ext::default());
-        if let Some(url) = base_url {
-            client = client.with_base_url(url);
-        }
-        let completion_model = client.completion_model(model);
+        let client = self.make_client(api_key, base_url, Ext::default());
         let provider = DynProvider::new(Ext::NAME, Ext::NAME)
-            .with_completion(completion_model);
+            .with_completion(client.completion_model(model));
         self.providers.insert(Ext::NAME.to_string(), provider);
     }
 
@@ -74,10 +100,7 @@ impl Registry {
             + Copy
             + 'static,
     {
-        let mut client = ProviderClient::new(api_key, Ext::default());
-        if let Some(url) = base_url {
-            client = client.with_base_url(url);
-        }
+        let client = self.make_client(api_key, base_url, Ext::default());
         let provider = DynProvider::new(Ext::NAME, Ext::NAME)
             .with_completion(client.completion_model(model))
             .with_embedding(client.embedding_model(model))
@@ -89,10 +112,7 @@ impl Registry {
     /// 注册 OpenAI provider（Chat + Embedding + ImageGen + TTS）。
     pub fn register_openai(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::openai::OpenAI;
-        let mut client = ProviderClient::new(api_key, OpenAI);
-        if let Some(url) = base_url {
-            client = client.with_base_url(url);
-        }
+        let client = self.make_client(api_key, base_url, OpenAI);
         let provider = DynProvider::new("openai", "openai")
             .with_completion(client.completion_model(model))
             .with_embedding(client.embedding_model(model))
@@ -104,10 +124,7 @@ impl Registry {
     /// 注册 Anthropic provider（仅 Chat）。
     pub fn register_anthropic(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::anthropic::Anthropic;
-        let mut client = ProviderClient::new(api_key, Anthropic);
-        if let Some(url) = base_url {
-            client = client.with_base_url(url);
-        }
+        let client = self.make_client(api_key, base_url, Anthropic);
         let provider = DynProvider::new("anthropic", "anthropic")
             .with_completion(client.completion_model(model));
         self.providers.insert("claude".to_string(), provider.clone());
@@ -117,10 +134,7 @@ impl Registry {
     /// 注册 Google provider（全能力）。
     pub fn register_google(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::google::Google;
-        let mut client = ProviderClient::new(api_key, Google);
-        if let Some(url) = base_url {
-            client = client.with_base_url(url);
-        }
+        let client = self.make_client(api_key, base_url, Google);
         let provider = DynProvider::new("google", "google")
             .with_completion(client.completion_model(model))
             .with_embedding(client.embedding_model(model))
@@ -134,10 +148,7 @@ impl Registry {
     /// 注册 MiniMax provider（全能力）。
     pub fn register_minimax(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::minimax_chat::MiniMax;
-        let mut client = ProviderClient::new(api_key, MiniMax);
-        if let Some(url) = base_url {
-            client = client.with_base_url(url);
-        }
+        let client = self.make_client(api_key, base_url, MiniMax);
         let provider = DynProvider::new("minimax", "minimax")
             .with_completion(client.completion_model(model))
             .with_embedding(client.embedding_model(model))
@@ -159,9 +170,8 @@ impl Registry {
         let resolved_base = base_url
             .unwrap_or(crate::profile::default_base_for(id))
             .to_string();
-        let http = reqwest::Client::new();
         let completion = crate::impls::openai_responses::ResponsesCompletionModel::new(
-            http,
+            self.http.clone(),
             resolved_base,
             api_key.to_string(),
             model.to_string(),
@@ -174,10 +184,7 @@ impl Registry {
     /// 注册 Gemini Native provider（仅 Chat — streamGenerateContent）。
     pub fn register_gemini_native(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::gemini_native::GeminiNative;
-        let mut client = ProviderClient::new(api_key, GeminiNative);
-        if let Some(url) = base_url {
-            client = client.with_base_url(url);
-        }
+        let client = self.make_client(api_key, base_url, GeminiNative);
         let provider = DynProvider::new("gemini-native", "gemini-native")
             .with_completion(client.completion_model(model));
         self.providers.insert("gemini-native".to_string(), provider);

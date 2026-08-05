@@ -143,48 +143,7 @@ fn parse_tool_deltas(choice: &Value, chunks: &mut Vec<StreamChunk>) {
 }
 
 fn parse_usage(v: &Value) -> Option<Usage> {
-    let u = v.get("usage")?;
-    if u.is_null() {
-        return None;
-    }
-    let prompt_total = u
-        .get("prompt_tokens")
-        .or_else(|| u.get("input_tokens"))
-        .and_then(|x| x.as_u64())
-        .unwrap_or(0) as u32;
-    let output = u
-        .get("completion_tokens")
-        .or_else(|| u.get("output_tokens"))
-        .and_then(|x| x.as_u64())
-        .unwrap_or(0) as u32;
-    let details = u.get("prompt_tokens_details");
-    let cache_read = details
-        .and_then(|d| d.get("cached_tokens"))
-        .and_then(|x| x.as_u64())
-        .unwrap_or(0) as u32;
-    let cache_write = details
-        .and_then(|d| d.get("cache_write_tokens"))
-        .and_then(|x| x.as_u64())
-        .unwrap_or(0) as u32;
-    let input = prompt_total
-        .saturating_sub(cache_read)
-        .saturating_sub(cache_write);
-    let reasoning = u
-        .get("completion_tokens_details")
-        .and_then(|d| d.get("reasoning_tokens"))
-        .and_then(|x| x.as_u64())
-        .unwrap_or(0) as u32;
-    if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 && reasoning == 0 {
-        return None;
-    }
-    Some(Usage {
-        input_tokens: input,
-        output_tokens: output,
-        cache_read_tokens: cache_read,
-        cache_write_tokens: cache_write,
-        reasoning_tokens: reasoning,
-        request_count: 1,
-    })
+    super::parse_openai_usage(v)
 }
 
 #[cfg(test)]
