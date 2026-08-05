@@ -27,9 +27,9 @@ pub async fn chat_stream_direct(
 }
 
 fn normalize_provider_id(id: &str) -> &str {
+    let id = crate::profile::normalize_provider_id(id);
     match id {
-        "minimax-anthropic" | "minmax" | "minmax-anthropic" => "minimax",
-        "anthropic" => "claude",
+        "minimax-anthropic" => "minimax",
         other => other,
     }
 }

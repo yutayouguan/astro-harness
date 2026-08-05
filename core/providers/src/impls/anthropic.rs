@@ -276,13 +276,7 @@ fn anthropic_user_content(content: &[crate::types::UserContent]) -> Value {
     Value::Array(blocks)
 }
 
-fn parse_data_url(url: &str) -> Option<(String, String)> {
-    let rest = url.strip_prefix("data:")?;
-    let (meta, data) = rest.split_once(";base64,")?;
-    let media_type = meta.trim();
-    if media_type.is_empty() || data.is_empty() { return None; }
-    Some((media_type.to_string(), data.to_string()))
-}
+use crate::shared::http::parse_data_url;
 
 // ─── SSE Parsing ─────────────────────────────────────────
 

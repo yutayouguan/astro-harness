@@ -20,11 +20,6 @@ pub fn trim_slash(endpoint: &str) -> String {
     endpoint.trim_end_matches('/').to_string()
 }
 
-/// 返回各内置供应商的默认 API 基址（表驱动）。
-pub fn default_base_for(provider: &str) -> &'static str {
-    crate::profile::default_base_for(provider)
-}
-
 /// 优先使用配置中的 `base_url`，否则回退到供应商默认值。
 pub fn resolve_base(config: &ProviderConfig, provider: &str) -> String {
     config
@@ -32,7 +27,7 @@ pub fn resolve_base(config: &ProviderConfig, provider: &str) -> String {
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| default_base_for(provider))
+        .unwrap_or_else(|| crate::profile::default_base_for(provider))
         .to_string()
 }
 

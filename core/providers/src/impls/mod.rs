@@ -11,7 +11,7 @@ pub mod gemini_native;
 pub mod google;
 pub mod hunyuan;
 pub mod mimo;
-pub mod minimax_new;
+pub mod minimax_chat;
 pub mod moonshot;
 pub mod nvidia;
 pub mod ollama;

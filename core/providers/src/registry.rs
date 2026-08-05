@@ -100,8 +100,8 @@ impl Registry {
 
     /// 注册 MiniMax provider（全能力）。
     pub fn register_minimax(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
-        use crate::impls::minimax_new::MiniMaxNew;
-        let mut client = ProviderClient::new(api_key, MiniMaxNew);
+        use crate::impls::minimax_chat::MiniMax;
+        let mut client = ProviderClient::new(api_key, MiniMax);
         if let Some(url) = base_url {
             client = client.with_base_url(url);
         }
@@ -152,9 +152,9 @@ impl Registry {
 
     /// 按 id 查找 provider。
     pub fn get(&self, id: &str) -> Option<&DynProvider> {
+        let id = crate::profile::normalize_provider_id(id);
         let normalized = match id {
-            "minimax-anthropic" | "minmax" | "minmax-anthropic" => "minimax",
-            "claude" | "anthropic" => "anthropic",
+            "minimax-anthropic" => "minimax",
             other => other,
         };
         self.providers.get(normalized)
@@ -239,7 +239,7 @@ impl Default for ProviderRegistry {
 
 // ─── 内部 Provider 实现 ─────────────────────────────────────
 
-/// 由静态 [`ProviderProfile`] 驱动的供应商实现（取代旧 `ProfileBackedProvider`）。
+/// 由静态 [`ProviderProfile`] 驱动的供应商实现。
 ///
 /// Chat 通过 trait 管线分发（[`crate::dispatch`]），
 /// Verify 通过 `impls/` 模块探测，

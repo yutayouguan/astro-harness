@@ -1,7 +1,6 @@
-//! OpenAI 旧兼容模块（媒体 / Responses / Defaults）。
+//! OpenAI 协议模块（Embeddings / Image Gen / TTS / Responses API / Defaults）。
 //!
-//! 聊天流式已迁移到 [`crate::impls::openai`] 和 [`crate::impls::azure`]。
-//! 探测已迁移到 [`crate::impls::openai`] 和 [`crate::impls::azure`]。
+//! 聊天流式在 [`crate::impls::openai`]，本模块提供非聊天 HTTP 端点。
 
 pub mod defaults;
 pub mod embeddings_http;

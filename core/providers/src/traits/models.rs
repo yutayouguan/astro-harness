@@ -59,12 +59,3 @@ pub trait MusicGenModel: Send + Sync {
         config: &MusicGenConfig,
     ) -> Result<GeneratedAudio>;
 }
-
-/// 连通性探测结果。
-#[derive(Debug, Clone)]
-pub struct VerifyResult {
-    pub ok: bool,
-    pub latency_ms: u64,
-    pub model: String,
-    pub message: String,
-}

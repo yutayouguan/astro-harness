@@ -14,9 +14,9 @@ use crate::types::media::{
 };
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct MiniMaxNew;
+pub struct MiniMax;
 
-impl ProviderExt for MiniMaxNew {
+impl ProviderExt for MiniMax {
     const NAME: &'static str = "minimax";
     const BASE_URL: &'static str = "https://api.minimaxi.com/v1";
     fn auth_headers(&self, key: &str) -> HeaderMap {
@@ -24,7 +24,7 @@ impl ProviderExt for MiniMaxNew {
     }
 }
 
-impl OpenAICompatible for MiniMaxNew {
+impl OpenAICompatible for MiniMax {
     const STREAM_USAGE: bool = true;
 
     fn finalize_body(&self, body: &mut Value) {
@@ -41,7 +41,7 @@ impl OpenAICompatible for MiniMaxNew {
     }
 }
 
-impl Capabilities for MiniMaxNew {
+impl Capabilities for MiniMax {
     type Chat = Capable<OpenAICompletionModel<Self>>;
     type Embedding = Capable<MiniMaxEmbeddingModel>;
     type ImageGen = Capable<MiniMaxImageModel>;
@@ -56,8 +56,8 @@ impl Capabilities for MiniMaxNew {
 #[derive(Clone)]
 pub struct MiniMaxEmbeddingModel(ModelBase);
 
-impl FromClient<MiniMaxNew> for MiniMaxEmbeddingModel {
-    fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
+impl FromClient<MiniMax> for MiniMaxEmbeddingModel {
+    fn from_client(client: &ProviderClient<MiniMax>, model: &str) -> Self {
         Self(ModelBase::from_client(client, model))
     }
 }
@@ -78,8 +78,8 @@ impl EmbeddingModel for MiniMaxEmbeddingModel {
 #[derive(Clone)]
 pub struct MiniMaxImageModel(ModelBase);
 
-impl FromClient<MiniMaxNew> for MiniMaxImageModel {
-    fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
+impl FromClient<MiniMax> for MiniMaxImageModel {
+    fn from_client(client: &ProviderClient<MiniMax>, model: &str) -> Self {
         Self(ModelBase::from_client(client, model))
     }
 }
@@ -110,8 +110,8 @@ impl ImageGenModel for MiniMaxImageModel {
 #[derive(Clone)]
 pub struct MiniMaxVideoModel(ModelBase);
 
-impl FromClient<MiniMaxNew> for MiniMaxVideoModel {
-    fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
+impl FromClient<MiniMax> for MiniMaxVideoModel {
+    fn from_client(client: &ProviderClient<MiniMax>, model: &str) -> Self {
         Self(ModelBase::from_client(client, model))
     }
 }
@@ -179,8 +179,8 @@ impl VideoGenModel for MiniMaxVideoModel {
 #[derive(Clone)]
 pub struct MiniMaxTTSModel(ModelBase);
 
-impl FromClient<MiniMaxNew> for MiniMaxTTSModel {
-    fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
+impl FromClient<MiniMax> for MiniMaxTTSModel {
+    fn from_client(client: &ProviderClient<MiniMax>, model: &str) -> Self {
         Self(ModelBase::from_client(client, model))
     }
 }
@@ -222,8 +222,8 @@ impl TTSModel for MiniMaxTTSModel {
 #[derive(Clone)]
 pub struct MiniMaxMusicModel(ModelBase);
 
-impl FromClient<MiniMaxNew> for MiniMaxMusicModel {
-    fn from_client(client: &ProviderClient<MiniMaxNew>, model: &str) -> Self {
+impl FromClient<MiniMax> for MiniMaxMusicModel {
+    fn from_client(client: &ProviderClient<MiniMax>, model: &str) -> Self {
         Self(ModelBase::from_client(client, model))
     }
 }
