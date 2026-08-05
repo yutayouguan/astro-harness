@@ -52,5 +52,4 @@ impl Capabilities for DeepSeek {
     type VideoGen = Nothing;
     type TTS = Nothing;
     type MusicGen = Nothing;
-    type ASR = Nothing;
 }

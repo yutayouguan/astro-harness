@@ -38,7 +38,6 @@ impl Capabilities for GeminiNative {
     type VideoGen = Nothing;
     type TTS = Nothing;
     type MusicGen = Nothing;
-    type ASR = Nothing;
 }
 
 // ─── Completion Model ────────────────────────────────────

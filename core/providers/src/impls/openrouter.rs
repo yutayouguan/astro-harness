@@ -26,5 +26,4 @@ impl Capabilities for OpenRouter {
     type VideoGen = Nothing;
     type TTS = Nothing;
     type MusicGen = Nothing;
-    type ASR = Nothing;
 }

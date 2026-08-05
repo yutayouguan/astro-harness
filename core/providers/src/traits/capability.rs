@@ -46,6 +46,4 @@ pub trait Capabilities: Send + Sync + 'static {
     type TTS: Capability;
     /// 音乐生成。
     type MusicGen: Capability;
-    /// 语音识别。
-    type ASR: Capability;
 }

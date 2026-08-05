@@ -27,11 +27,7 @@ pub async fn chat_stream_direct(
 }
 
 fn normalize_provider_id(id: &str) -> &str {
-    let id = crate::profile::normalize_provider_id(id);
-    match id {
-        "minimax-anthropic" => "minimax",
-        other => other,
-    }
+    crate::profile::normalize_provider_id(id)
 }
 
 /// 根据 provider id 注册到注册表。
@@ -50,15 +46,15 @@ fn register_provider(
         "openai" => reg.register_openai(key, base, model),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
         "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
-        "zhipu" => register_compat::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
+        "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
         "moonshot" => register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model),
         "ollama" => register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model),
         "nvidia" => register_compat::<crate::impls::nvidia::Nvidia>(reg, key, base, model),
-        "bailian" => register_compat::<crate::impls::bailian::Bailian>(reg, key, base, model),
-        "volcengine" => register_compat::<crate::impls::volcengine::Volcengine>(reg, key, base, model),
+        "bailian" => register_media::<crate::impls::bailian::Bailian>(reg, key, base, model),
+        "volcengine" => register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model),
         "openrouter" => register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model),
         "minimax" | "minmax" => reg.register_minimax(key, base, model),
-        "hunyuan" => register_compat::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
+        "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
         "openai-responses" => reg.register_responses("openai-responses", key, base, model),
@@ -82,6 +78,28 @@ where
         + 'static,
 {
     reg.register_openai_compat::<Ext>(api_key, base_url, model);
+}
+
+fn register_media<Ext>(
+    reg: &mut crate::registry::Registry,
+    api_key: &str,
+    base_url: Option<&str>,
+    model: &str,
+)
+where
+    Ext: crate::compat::OpenAICompatible
+        + crate::traits::ProviderExt
+        + crate::traits::Capabilities<
+            Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>,
+            Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
+            ImageGen = crate::traits::Capable<crate::compat::media::CompatImageGenModel>,
+            TTS = crate::traits::Capable<crate::compat::media::CompatTTSModel>,
+        >
+        + Default
+        + Copy
+        + 'static,
+{
+    reg.register_compat_with_media::<Ext>(api_key, base_url, model);
 }
 
 #[cfg(test)]

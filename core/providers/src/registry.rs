@@ -53,6 +53,39 @@ impl Registry {
         self.providers.insert(Ext::NAME.to_string(), provider);
     }
 
+    /// 注册 OpenAI 兼容 provider（Chat + Embedding + ImageGen + TTS）。
+    ///
+    /// 适用于使用 OpenAI 兼容 API 的国产厂商（智谱、百炼、火山、混元等）。
+    pub fn register_compat_with_media<Ext>(
+        &mut self,
+        api_key: &str,
+        base_url: Option<&str>,
+        model: &str,
+    ) where
+        Ext: crate::compat::OpenAICompatible
+            + crate::traits::ProviderExt
+            + crate::traits::Capabilities<
+                Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>,
+                Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
+                ImageGen = crate::traits::Capable<crate::compat::media::CompatImageGenModel>,
+                TTS = crate::traits::Capable<crate::compat::media::CompatTTSModel>,
+            >
+            + Default
+            + Copy
+            + 'static,
+    {
+        let mut client = ProviderClient::new(api_key, Ext::default());
+        if let Some(url) = base_url {
+            client = client.with_base_url(url);
+        }
+        let provider = DynProvider::new(Ext::NAME, Ext::NAME)
+            .with_completion(client.completion_model(model))
+            .with_embedding(client.embedding_model(model))
+            .with_image_gen(client.image_model(model))
+            .with_tts(client.tts_model(model));
+        self.providers.insert(Ext::NAME.to_string(), provider);
+    }
+
     /// 注册 OpenAI provider（Chat + Embedding + ImageGen + TTS）。
     pub fn register_openai(&mut self, api_key: &str, base_url: Option<&str>, model: &str) {
         use crate::impls::openai::OpenAI;
@@ -152,11 +185,7 @@ impl Registry {
 
     /// 按 id 查找 provider。
     pub fn get(&self, id: &str) -> Option<&DynProvider> {
-        let id = crate::profile::normalize_provider_id(id);
-        let normalized = match id {
-            "minimax-anthropic" => "minimax",
-            other => other,
-        };
+        let normalized = crate::profile::normalize_provider_id(id);
         self.providers.get(normalized)
     }
 

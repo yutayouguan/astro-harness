@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
 use crate::traits::{
     Capable, Capabilities, EmbeddingModel, FromClient, ImageGenModel, ModelBase, MusicGenModel,
-    Nothing, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
+    ProviderClient, ProviderExt, TTSModel, VideoGenModel,
 };
 use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
@@ -48,7 +48,6 @@ impl Capabilities for MiniMax {
     type VideoGen = Capable<MiniMaxVideoModel>;
     type TTS = Capable<MiniMaxTTSModel>;
     type MusicGen = Capable<MiniMaxMusicModel>;
-    type ASR = Nothing;
 }
 
 // ─── Embedding Model ────────────────────────────────────

@@ -2,6 +2,7 @@
 
 use reqwest::header::HeaderMap;
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
+use crate::compat::media::{CompatEmbeddingModel, CompatImageGenModel, CompatTTSModel};
 use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -21,10 +22,9 @@ impl OpenAICompatible for Hunyuan {
 
 impl Capabilities for Hunyuan {
     type Chat = Capable<OpenAICompletionModel<Self>>;
-    type Embedding = Nothing;
-    type ImageGen = Nothing;
+    type Embedding = Capable<CompatEmbeddingModel>;
+    type ImageGen = Capable<CompatImageGenModel>;
     type VideoGen = Nothing;
-    type TTS = Nothing;
+    type TTS = Capable<CompatTTSModel>;
     type MusicGen = Nothing;
-    type ASR = Nothing;
 }

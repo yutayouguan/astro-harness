@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use crate::traits::{
     Capable, Capabilities, CompletionModel, EmbeddingModel, FromClient, ImageGenModel,
-    ModelBase, MusicGenModel, Nothing, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
+    ModelBase, MusicGenModel, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
 };
 use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo,
@@ -47,7 +47,6 @@ impl Capabilities for Google {
     type VideoGen = Capable<VeoVideoModel>;
     type TTS = Capable<GeminiTTSModel>;
     type MusicGen = Capable<LyriaMusicModel>;
-    type ASR = Nothing;
 }
 
 // ─── Completion Model ────────────────────────────────────

@@ -41,7 +41,6 @@ impl Capabilities for Azure {
     type VideoGen = Nothing;
     type TTS = Nothing;
     type MusicGen = Nothing;
-    type ASR = Nothing;
 }
 
 /// 从 Azure endpoint 提取资源根路径。

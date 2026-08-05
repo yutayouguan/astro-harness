@@ -31,7 +31,6 @@ impl Capabilities for OpenAIResponses {
     type VideoGen = Nothing;
     type TTS = Nothing;
     type MusicGen = Nothing;
-    type ASR = Nothing;
 }
 
 // ─── Completion Model ────────────────────────────────────

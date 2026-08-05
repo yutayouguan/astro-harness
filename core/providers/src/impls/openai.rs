@@ -63,7 +63,6 @@ impl Capabilities for OpenAI {
     type VideoGen = Nothing;
     type TTS = Capable<OpenAITTSModel>;
     type MusicGen = Nothing;
-    type ASR = Nothing;
 }
 
 // ─── Embedding Model ────────────────────────────────────

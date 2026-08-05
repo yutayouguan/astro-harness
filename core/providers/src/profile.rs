@@ -384,26 +384,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_embedding_model: "hunyuan-embedding-v3",
     },
     ProviderProfile {
-        id: "minimax-anthropic",
-        api_mode: ApiMode::AnthropicMessages,
-        default_base_url: "https://api.minimaxi.com/anthropic",
-        auth: AuthKind::Bearer,
-        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
-        azure_deployment_style: false,
-        default_model: "MiniMax-M2.5",
-        supports_image_gen: false,
-        supports_embedding: false,
-        image_mode: None,
-        default_image_model: "",
-        default_vision_model: "",
-        supports_stream_usage: false,
-        default_tts_model: "",
-        default_video_model: "",
-        default_music_model: "",
-        default_asr_model: "",
-        default_embedding_model: "",
-    },
-    ProviderProfile {
         id: "openai-responses",
         api_mode: ApiMode::Responses,
         default_base_url: "https://api.openai.com/v1",
@@ -521,8 +501,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
 /// 将常见别名规范化为表内 id。
 pub fn normalize_provider_id(provider_id: &str) -> &str {
     match provider_id {
-        "minmax" => "minimax",
-        "minmax-anthropic" => "minimax-anthropic",
+        "minmax" | "minmax-anthropic" | "minimax-anthropic" => "minimax",
         "anthropic" => "claude",
         other => other,
     }
