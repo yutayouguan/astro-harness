@@ -50,8 +50,11 @@ pub async fn run_headless_multi_turn(
         ..ProviderConfig::default()
     };
 
+    const MAX_THINKING_ONLY_RETRIES: usize = 1;
+
     let mut total_usage = Usage::default();
     let mut last_text = String::new();
+    let mut thinking_only_retries: usize = 0;
 
     let max_rounds = {
         let n = agent.multi_turn();
@@ -102,6 +105,7 @@ pub async fn run_headless_multi_turn(
         .await?;
 
         let mut full_text = String::new();
+        let mut full_reasoning = String::new();
         let mut tool_acc = ToolCallAccumulator::new();
         // 同轮内覆盖式取最后一次 usage（兼容 Google 累计式 usageMetadata）
         let mut round_usage: Option<Usage> = None;
@@ -111,6 +115,9 @@ pub async fn run_headless_multi_turn(
             match chunk {
                 providers::types::stream::StreamChunk::Text(token) => {
                     full_text.push_str(&token);
+                }
+                providers::types::stream::StreamChunk::Thinking(r) => {
+                    full_reasoning.push_str(&r);
                 }
                 providers::types::stream::StreamChunk::ToolCallStart { index, id, name } => {
                     tool_acc.push(&ToolCallDelta {
@@ -145,6 +152,26 @@ pub async fn run_headless_multi_turn(
         let calls = tools::resolve_tool_calls(native_calls, &full_text);
 
         if full_text.is_empty() && calls.is_empty() {
+            if !full_reasoning.is_empty()
+                && thinking_only_retries < MAX_THINKING_ONLY_RETRIES
+            {
+                thinking_only_retries += 1;
+                tracing::warn!(
+                    reasoning_len = full_reasoning.len(),
+                    attempt = thinking_only_retries,
+                    "headless: model returned reasoning only with no text; injecting retry prompt"
+                );
+                agent.record_assistant_message_with_tools(
+                    &full_text,
+                    None,
+                    Some(full_reasoning.as_str()),
+                    None,
+                )?;
+                agent.record_user_message(
+                    "[astro:system]\n你的思考过程已记录，但没有生成回复内容。请直接给出你的回答。",
+                )?;
+                continue;
+            }
             break;
         }
 

@@ -36,6 +36,9 @@ use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantConten
 /// 对齐设计文档：仅本轮写盘且无工具终态时才计入；超过后不再 fire，直接收尾。
 const MAX_VERIFY_ATTEMPTS: usize = 2;
 
+/// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
+const MAX_THINKING_ONLY_RETRIES: usize = 1;
+
 /// 向 mpsc 发送单个成功事件；接收方关闭时返回 `false`。
 pub(crate) async fn emit(
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -320,6 +323,8 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
     let mut raw_rounds: usize = 0;
     // `pre_verify` 已消耗的验证尝试次数（每个 run 独立，跨 KeepGoing 轮次累加）。
     let mut verify_attempt: usize = 0;
+    // 模型只返回推理内容而没有文本回复时的已重试次数。
+    let mut thinking_only_retries: usize = 0;
 
     // 整次 run 累积时间线，供每轮 assistant 落盘写入 reasoning_details
     let mut timeline = crate::timeline::TimelineBuilder::new();
@@ -642,6 +647,54 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         let calls = tools::resolve_tool_calls(native_calls, &full_response);
 
         if full_response.is_empty() && calls.is_empty() {
+            if !full_reasoning.is_empty()
+                && thinking_only_retries < MAX_THINKING_ONLY_RETRIES
+            {
+                thinking_only_retries += 1;
+                tracing::warn!(
+                    reasoning_len = full_reasoning.len(),
+                    attempt = thinking_only_retries,
+                    "model returned reasoning only with no text; injecting retry prompt"
+                );
+                let mut agent = session.lock().await;
+                let details = common::message::merge_google_thought_signature(
+                    Some(timeline.reasoning_details_snapshot()),
+                    thought_signature.as_deref(),
+                );
+                if let Err(err) = agent.record_assistant_message_with_tools(
+                    &full_response,
+                    None,
+                    Some(full_reasoning.as_str()),
+                    details,
+                ) {
+                    drop(agent);
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        err.to_string(),
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
+                    return;
+                }
+                if let Err(err) = agent.record_user_message(
+                    "[astro:system]\n你的思考过程已记录，但没有生成回复内容。请直接给出你的回答。",
+                ) {
+                    drop(agent);
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        err.to_string(),
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
+                    return;
+                }
+                drop(agent);
+                continue;
+            }
             finish_error(
                 &session,
                 &streamer,
