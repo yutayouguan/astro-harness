@@ -144,9 +144,13 @@ impl ThinkTagExtractor {
 fn split_at_partial_prefix<'a>(text: &'a str, tag: &str) -> (&'a str, &'a str) {
     let max_check = (tag.len() - 1).min(text.len());
     for suffix_len in (1..=max_check).rev() {
-        let tail = &text[text.len() - suffix_len..];
+        let split = text.len() - suffix_len;
+        if !text.is_char_boundary(split) {
+            continue;
+        }
+        let tail = &text[split..];
         if tag.starts_with(tail) {
-            return (&text[..text.len() - suffix_len], tail);
+            return (&text[..split], tail);
         }
     }
     (text, "")
@@ -256,5 +260,19 @@ mod tests {
             split_at_partial_prefix("abc<other", "<think>"),
             ("abc<other", "")
         );
+    }
+
+    #[test]
+    fn partial_prefix_multibyte_no_panic() {
+        // 中文字符是 3 字节 UTF-8，按字节切会 panic（旧 bug）
+        assert_eq!(split_at_partial_prefix("我", "<think>"), ("我", ""));
+        assert_eq!(split_at_partial_prefix("你好", "<think>"), ("你好", ""));
+        assert_eq!(split_at_partial_prefix("说<", "<think>"), ("说", "<"));
+        assert_eq!(
+            split_at_partial_prefix("我<thi", "<think>"),
+            ("我", "<thi")
+        );
+        // emoji (4 字节)
+        assert_eq!(split_at_partial_prefix("😊", "<think>"), ("😊", ""));
     }
 }
