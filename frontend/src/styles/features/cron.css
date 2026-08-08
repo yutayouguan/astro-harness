@@ -234,12 +234,20 @@ html[data-theme="dark"] .cron-pane {
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   overflow: hidden;
-  animation: rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
     box-shadow 0.18s ease;
 }
+
+.cron-card:nth-child(2) { animation-delay: 30ms; }
+.cron-card:nth-child(3) { animation-delay: 60ms; }
+.cron-card:nth-child(4) { animation-delay: 90ms; }
+.cron-card:nth-child(5) { animation-delay: 120ms; }
+.cron-card:nth-child(6) { animation-delay: 150ms; }
+.cron-card:nth-child(7) { animation-delay: 180ms; }
+.cron-card:nth-child(n+8) { animation-delay: 210ms; }
 
 .cron-card::before {
   content: "";

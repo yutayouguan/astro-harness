@@ -1,5 +1,5 @@
 /** 聊天右侧栏（会话 / 上下文等 Tab）。 */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Bot,
   Eye,
@@ -92,15 +92,29 @@ export default function ChatRightPanel({
   const { t } = useI18n();
   const tabs: ChatRightTab[] = ["sessions", "context", "preview", "agent"];
   const tabsRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+
+  const closeWithAnim = useCallback(() => {
+    const el = panelRef.current;
+    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onClose();
+      return;
+    }
+    el.classList.add("is-closing");
+    let done = false;
+    const finish = () => { if (done) return; done = true; onClose(); };
+    el.addEventListener("animationend", finish, { once: true });
+    setTimeout(finish, 160);
+  }, [onClose]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") closeWithAnim();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [closeWithAnim]);
 
   useLayoutEffect(() => {
     const root = tabsRef.current;
@@ -133,9 +147,9 @@ export default function ChatRightPanel({
         type="button"
         className="chat-right-backdrop"
         aria-label={t("chat.rightPanel.close")}
-        onClick={onClose}
+        onClick={closeWithAnim}
       />
-      <aside className="chat-right-panel" aria-label={t("chat.rightPanel.title")}>
+      <aside ref={panelRef} className="chat-right-panel" aria-label={t("chat.rightPanel.title")}>
         <div className="chat-right-header">
           <h2 className="chat-right-title">
             <PanelRight size={17} strokeWidth={1.75} aria-hidden />
@@ -144,7 +158,7 @@ export default function ChatRightPanel({
           <button
             type="button"
             className="chat-right-close"
-            onClick={onClose}
+            onClick={closeWithAnim}
             title={t("chat.rightPanel.close")}
             aria-label={t("chat.rightPanel.close")}
           >

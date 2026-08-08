@@ -1332,8 +1332,20 @@ html[data-theme="dark"] .chat-agent-preview {
   }
 }
 
+@keyframes chat-right-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.chat-right-panel.is-closing {
+  animation: chat-right-slide-out 0.14s ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .chat-right-panel {
+  .chat-right-panel,
+  .chat-right-panel.is-closing {
     animation: none;
   }
 
