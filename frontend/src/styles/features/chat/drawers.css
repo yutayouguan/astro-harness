@@ -148,3 +148,9 @@ html[data-theme="dark"] .agent-icon-drawer-foot {
   border-top-color: color-mix(in srgb, var(--tone) 10%, rgba(255, 255, 255, 0.08));
   background: color-mix(in srgb, var(--tone-soft) 10%, rgba(8, 10, 20, 0.32));
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-icon-drawer {
+    animation: none;
+  }
+}

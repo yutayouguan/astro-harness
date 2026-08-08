@@ -487,3 +487,9 @@ html[data-theme="dark"] .skills-preview-meta {
     width: min(100vw, 100%);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .skills-preview {
+    animation: none;
+  }
+}

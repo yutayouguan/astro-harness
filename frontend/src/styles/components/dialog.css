@@ -241,6 +241,10 @@ html[data-theme="dark"] .app-dialog-input {
     color-mix(in srgb, var(--dialog-danger, var(--danger)) 24%, transparent);
 }
 
+.app-dialog-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 .app-dialog-btn.is-confirm:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -273,7 +277,10 @@ html[data-theme="dark"] .app-dialog-input {
     animation: none;
   }
 
-  .app-dialog-btn.is-confirm:hover:not(:disabled) {
+  .app-dialog-btn.is-confirm:hover:not(:disabled),
+  .app-dialog-btn:active:not(:disabled),
+  .about-dialog-ok:hover,
+  .about-dialog-ok:active {
     transform: none;
   }
 }
@@ -494,6 +501,10 @@ html[data-theme="dark"] .about-dialog-title {
     linear-gradient(165deg, rgba(255, 255, 255, 0.4), transparent),
     color-mix(in srgb, var(--tone, #3b82f6) 30%, transparent);
   transform: translateY(-0.5px);
+}
+
+.about-dialog-ok:active {
+  transform: scale(0.97);
 }
 
 html[data-theme="dark"] .about-dialog-ok {

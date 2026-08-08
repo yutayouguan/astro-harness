@@ -575,7 +575,7 @@ html[data-theme="dark"] .evo-seg-item.is-active {
 }
 
 .evo-card {
-  animation: evo-card-in 0.22s ease both;
+  animation: evo-card-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .evo-card-title {

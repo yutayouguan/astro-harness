@@ -1621,7 +1621,8 @@ a.providers-meta-chip.is-link:hover {
   width: 10px;
   height: 10px;
   transform: scale(0);
-  transition: transform 0.12s ease-out;
+  opacity: 0;
+  transition: transform 0.12s ease-out, opacity 0.08s ease-out;
   background-color: #fff;
   /* 选中打钩 */
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
@@ -1636,6 +1637,7 @@ a.providers-meta-chip.is-link:hover {
 
 .providers-model-radio:checked::before {
   transform: scale(1);
+  opacity: 1;
 }
 
 .providers-model-radio:focus-visible {
@@ -2026,5 +2028,23 @@ html[data-theme="dark"] .providers-add-row {
 
   .providers-form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .providers-status-dot.checking {
+    animation: none;
+  }
+
+  .providers-icon-btn.is-busy {
+    animation: none;
+  }
+
+  .providers-icon-btn .is-spin {
+    animation: none;
+  }
+
+  .providers-model-detail {
+    animation: none;
   }
 }

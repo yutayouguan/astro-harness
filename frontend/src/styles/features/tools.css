@@ -2187,3 +2187,13 @@ html[data-theme="dark"] .agent-tool-param-type {
     width: 100%;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .mcp-refresh-btn .is-spin {
+    animation: none;
+  }
+
+  .mcp-add-drawer {
+    animation: none;
+  }
+}

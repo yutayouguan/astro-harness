@@ -618,3 +618,9 @@ html[data-theme="dark"] .skills-icon-btn.is-active {
   gap: 14px;
   align-content: start;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .skills-icon-btn .is-spin {
+    animation: none;
+  }
+}

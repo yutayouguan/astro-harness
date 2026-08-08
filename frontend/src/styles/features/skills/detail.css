@@ -1512,7 +1512,7 @@ html[data-theme="dark"] .skills-header-search-input:focus {
   min-height: min(320px, 50vh);
   padding: 28px 16px;
   color: var(--ink-mute);
-  animation: skills-loading-fade 0.22s ease;
+  animation: skills-loading-fade 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .skills-loading-block .msg-stream-loader {
@@ -1922,5 +1922,11 @@ html[data-theme="dark"] .skills-action-btn.primary {
   .skills-gallery.is-list .skill-card-actions.is-store {
     margin-left: 0;
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skills-loading-block {
+    animation: none;
   }
 }

@@ -45,7 +45,7 @@
 }
 
 .anim-switch.is-exit {
-  animation: anim-switch-exit var(--anim-exit-ms) ease-in both;
+  animation: anim-switch-exit var(--anim-exit-ms) ease-out both;
   pointer-events: none;
 }
 
