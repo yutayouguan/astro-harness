@@ -9,12 +9,14 @@
   gap: 8px;
   padding: 20px 16px;
   color: var(--tone, var(--tone-cyan, #06b6d4));
+  animation: astro-empty-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .astro-empty-art {
   width: 160px;
   max-width: 72%;
   line-height: 0;
+  animation: astro-empty-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) 50ms both;
 }
 
 .astro-empty--sm .astro-empty-art {
@@ -202,4 +204,22 @@ html[data-theme="dark"] .astro-cover-swatch {
 .chat-session-empty.astro-empty {
   --tone: var(--tone-blue, #2563eb);
   margin: 16px auto 0;
+}
+
+@keyframes astro-empty-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .astro-empty,
+  .astro-empty-art {
+    animation: none;
+  }
 }

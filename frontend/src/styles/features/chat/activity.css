@@ -1180,6 +1180,7 @@ html[data-theme="dark"] .msg-activity-detail {
   max-height: 140px;
   overflow: auto;
   color: var(--ink-soft);
+  animation: msg-activity-fade-in 0.12s ease-out both;
 }
 
 .msg-activity.is-running .msg-activity-title::after {
@@ -1425,6 +1426,20 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   .msg-reasoning.is-active .msg-reasoning-icon,
   .msg-activity.is-running .msg-activity-kind-icon {
     filter: none;
+    opacity: 1;
+  }
+
+  .msg-activity-detail,
+  .msg-activity-media {
+    animation: none;
+  }
+}
+
+@keyframes msg-activity-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
     opacity: 1;
   }
 }

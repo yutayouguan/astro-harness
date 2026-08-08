@@ -164,6 +164,8 @@
   padding: 6px;
   list-style: none;
   border-radius: 16px;
+  transform-origin: top center;
+  animation: agent-picker-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
   border: 1px solid color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
   /* 更透的磨砂：靠 blur 保证可读 */
   background:
@@ -508,4 +510,21 @@ html[data-theme="dark"] .expandable-search-btn:hover {
 html[data-theme="dark"] .expandable-search-close:hover {
   background: var(--tone-soft, rgba(255, 255, 255, 0.1));
     color: var(--tone, var(--ink));
+}
+
+@keyframes agent-picker-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-picker-menu {
+    animation: none;
+  }
 }

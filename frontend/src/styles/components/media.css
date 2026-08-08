@@ -990,6 +990,7 @@ html[data-theme="dark"] .html-preview-bar {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  animation: msg-activity-fade-in 0.12s ease-out both;
 }
 
 /* ── 生成媒体精美卡片 ── */
