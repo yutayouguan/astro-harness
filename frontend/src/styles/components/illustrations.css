@@ -190,19 +190,9 @@ html[data-theme="dark"] .astro-cover-swatch {
 
 .mem-empty .astro-empty {
   padding: 8px 12px 4px;
-  --tone: var(--tone-green, #10b981);
-}
-
-.cron-empty.astro-empty {
-  --tone: var(--tone-orange, #ea580c);
-}
-
-.loop-empty-illust.astro-empty {
-  --tone: var(--tone, #ec4899);
 }
 
 .chat-session-empty.astro-empty {
-  --tone: var(--tone-blue, #2563eb);
   margin: 16px auto 0;
 }
 
