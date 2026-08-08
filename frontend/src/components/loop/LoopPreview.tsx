@@ -61,12 +61,12 @@ function LoopPreviewInner({ workflow }: Props) {
   const rfRef = useRef<ReactFlowInstance | null>(null);
 
   useEffect(() => {
-    requestAnimationFrame(() => fitView({ padding: 0.35, maxZoom: 1, duration: 300 }));
+    requestAnimationFrame(() => fitView({ padding: 0.12, maxZoom: 1, duration: 300 }));
   }, [workflow.id, fitView]);
 
   const onInit = useCallback((instance: ReactFlowInstance) => {
     rfRef.current = instance;
-    instance.fitView({ padding: 0.35, maxZoom: 1 });
+    instance.fitView({ padding: 0.12, maxZoom: 1 });
   }, []);
 
   const sourceHandleMap = useMemo(() => {
@@ -119,7 +119,8 @@ function LoopPreviewInner({ workflow }: Props) {
       nodeTypes={previewNodeTypes}
       onInit={onInit}
       fitView
-      fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
+      fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
+      minZoom={0.1}
       nodesDraggable={false}
       nodesConnectable={false}
       nodesFocusable={false}
