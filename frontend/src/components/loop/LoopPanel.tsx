@@ -14,6 +14,7 @@ import type { LoopDto } from "./loopTypes";
 import { parseLoopIcon } from "./loopTypes";
 import LoopIcon from "./LoopIcon";
 import LoopEditor from "./LoopEditor";
+import LoopPreview from "./LoopPreview";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import { useI18n } from "../../i18n/LocaleContext";
 import { EmptyIllustration } from "../../illustrations";
@@ -423,6 +424,9 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                 <span>{t("loop.aiCallable")}</span>
               </label>
             </div>
+            {selectedDetail.nodes.length > 0 && (
+              <LoopPreview workflow={selectedDetail} />
+            )}
           </>
         ) : (
           <div className="loop-detail-panel-empty">

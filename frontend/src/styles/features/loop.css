@@ -1260,6 +1260,63 @@
   height: 24px;
 }
 
+/* ── Workflow preview (详情面板) ──────────────────────────────── */
+
+.loop-preview-container {
+  margin-top: 16px;
+  height: 260px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg1, #f9fafb);
+  overflow: hidden;
+}
+.loop-preview-container .react-flow__renderer {
+  cursor: default;
+}
+
+.loop-preview-node {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
+  background: var(--bg0, #fff);
+  font-size: 10px;
+  color: var(--ink);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.loop-preview-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--node-color, #888) 12%, transparent);
+  color: var(--node-color, #888);
+  flex-shrink: 0;
+}
+
+.loop-preview-node-label {
+  font-weight: 600;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loop-preview-handle {
+  width: 4px !important;
+  height: 4px !important;
+  border-radius: 50% !important;
+  background: var(--node-color, #888) !important;
+  border: 1px solid var(--bg0, #fff) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
 /* ── Config panel (右侧) ──────────────────────────────────────── */
 
 .loop-config-panel {
