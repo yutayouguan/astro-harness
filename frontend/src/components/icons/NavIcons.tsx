@@ -232,13 +232,21 @@ export function IconInsights(props: IconProps) {
   );
 }
 
-/** 自主进化 — 🧬 基因螺旋，双链 + 碱基对横档 */
+/** 自主进化 — 🧬 基因螺旋（与离线进化页 lucide Dna 统一） */
 export function IconEvolution(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <path d="M9 2c0 4 6 5 6 10s-6 6-6 10" />
-      <path d="M15 2c0 4-6 5-6 10s6 6 6 10" />
-      <path className="nav-icon-cutout" d="M9.5 5h5M8 8.5h8M8 15.5h8M9.5 19h5" />
+      <path d="m10 16 1.5 1.5" />
+      <path d="M14 8l-1.5-1.5" />
+      <path d="M15 2c-1.798 1.998-2.518 3.995-2.807 5.993" />
+      <path d="m16.5 10.5 1 1" />
+      <path d="m17 6-2.891-2.891" />
+      <path d="M2 15c6.667-6 13.333 0 20-6" />
+      <path d="m20 9 .891.891" />
+      <path d="M3.109 14.109 4 15" />
+      <path d="m6.5 12.5 1 1" />
+      <path d="m7 18 2.891 2.891" />
+      <path d="M9 22c1.798-1.998 2.518-3.995 2.807-5.993" />
     </NavIconBase>
   );
 }
