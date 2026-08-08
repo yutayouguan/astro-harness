@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   Background,
   BackgroundVariant,
   Handle,
@@ -9,6 +10,7 @@ import {
   type Node as RFNode,
   type Edge as RFEdge,
   type NodeTypes,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -55,6 +57,18 @@ interface Props {
 }
 
 function LoopPreviewInner({ workflow }: Props) {
+  const { fitView } = useReactFlow();
+  const rfRef = useRef<ReactFlowInstance | null>(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => fitView({ padding: 0.35, maxZoom: 1, duration: 300 }));
+  }, [workflow.id, fitView]);
+
+  const onInit = useCallback((instance: ReactFlowInstance) => {
+    rfRef.current = instance;
+    instance.fitView({ padding: 0.35, maxZoom: 1 });
+  }, []);
+
   const sourceHandleMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const e of workflow.edges) {
@@ -103,6 +117,7 @@ function LoopPreviewInner({ workflow }: Props) {
       nodes={nodes}
       edges={edges}
       nodeTypes={previewNodeTypes}
+      onInit={onInit}
       fitView
       fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
       nodesDraggable={false}
