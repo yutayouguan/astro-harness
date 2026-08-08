@@ -1216,26 +1216,12 @@
   min-height: 60px;
 }
 
-.loop-rf-branch-handles {
+.loop-rf-branch-labels {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: 6px;
-  position: relative;
-}
-
-.loop-rf-branch-row {
-  display: flex;
-  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
-  padding-right: 4px;
-  position: relative;
-  min-height: 22px;
-}
-.loop-rf-handle--branch {
-  top: 50% !important;
-  transform: translate(50%, -50%) !important;
 }
 
 .loop-rf-branch-label {

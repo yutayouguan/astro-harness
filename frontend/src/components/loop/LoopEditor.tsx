@@ -162,19 +162,20 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
           <span className="loop-rf-node-type-tag">{data.meta.labelEn}</span>
         </div>
       </div>
-      <div className="loop-rf-branch-handles">
+      <div className="loop-rf-branch-labels">
         {branches.map((b) => (
-          <div key={b.id} className="loop-rf-branch-row">
-            <span className="loop-rf-branch-label">{b.label || b.id}</span>
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={b.id}
-              className="loop-rf-handle loop-rf-handle--branch"
-            />
-          </div>
+          <span key={b.id} className="loop-rf-branch-label">{b.label || b.id}</span>
         ))}
       </div>
+      {branches.map((b) => (
+        <Handle
+          key={b.id}
+          type="source"
+          position={Position.Right}
+          id={b.id}
+          className="loop-rf-handle"
+        />
+      ))}
     </div>
   );
 }
