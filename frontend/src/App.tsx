@@ -330,9 +330,19 @@ export default function App() {
     }
     return null;
   }, [colorStyle, gradient, dynamicSeed, nav, resolved]);
+  // ── Tone crossfade overlay ─────────────────────────────────────────────
+  const prevToneRef = useRef(shellTone);
+  const [toneFadeBg, setToneFadeBg] = useState<string | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+
   // layout：在绘制前写 CSS 变量，并刷新玻璃层（避免 backdrop-filter 缓存旧色）
   useLayoutEffect(() => {
     const root = document.documentElement;
+    if (prevToneRef.current !== shellTone && colorStyle === "colorful" && shellRef.current) {
+      const bg = getComputedStyle(shellRef.current).background;
+      if (bg) setToneFadeBg(bg);
+    }
+    prevToneRef.current = shellTone;
     root.setAttribute("data-tone", shellTone);
     root.setAttribute("data-color-style", colorStyle);
     if (activeShellGradient) {
@@ -605,10 +615,19 @@ export default function App() {
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
     <div
+      ref={shellRef}
       className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
     >
+      {toneFadeBg && (
+        <div
+          className="shell-tone-crossfade"
+          style={{ background: toneFadeBg }}
+          onAnimationEnd={() => setToneFadeBg(null)}
+          aria-hidden
+        />
+      )}
       <div
         className="native-drag-region"
         onMouseDown={(e) => void winChrome.onTitleMouseDown(e)}

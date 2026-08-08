@@ -66,6 +66,26 @@
    */
 }
 
+.shell-tone-crossfade {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  animation: shell-tone-fade-out 0.28s ease-out forwards;
+}
+
+@keyframes shell-tone-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-tone-crossfade {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Tab 主题色驱动背景渐变（暗色） */
 html[data-theme="dark"] .app-shell[data-tone="blue"] {
   --shell-bg:
@@ -374,10 +394,11 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   transform: translateX(calc(-1 * 100% + var(--sidebar-collapsed)));
   opacity: 0;
   pointer-events: none;
+  will-change: transform, opacity;
   transition:
-    width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.18s ease;
+    width 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.14s ease;
   box-shadow:
     8px 0 32px rgba(15, 23, 42, 0.08),
     inset -1px 0 0 rgba(255, 255, 255, 0.35);
@@ -578,6 +599,10 @@ html[data-tone="twilight"] {
   transform: translateX(0);
   opacity: 1;
   pointer-events: auto;
+  transition:
+    width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
 }
 
 /* 浮层模式（非固定）时必须盖住 content-header / header-actions(45) / model-picker(50) */

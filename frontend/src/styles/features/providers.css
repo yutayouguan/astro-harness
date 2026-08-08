@@ -197,6 +197,17 @@ html[data-theme="dark"] .providers-page-tab.is-active {
   opacity: 0.28;
 }
 
+.providers-list.is-settled .providers-list-item {
+  animation: providers-settle 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes providers-settle {
+  from {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+}
+
 .providers-drop-indicator {
   position: absolute;
   left: 8px;

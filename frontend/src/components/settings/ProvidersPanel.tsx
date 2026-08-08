@@ -888,10 +888,15 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
       setDrag(null);
       if (!cur) return;
       let to = cur.insertIndex;
-      // 先移除再插入时，若向下拖，目标下标需左移一位
       if (cur.fromIndex < to) to -= 1;
       if (to !== cur.fromIndex) {
         void reorderProviders(cur.fromIndex, to);
+        const el = listRef.current;
+        if (el) {
+          el.classList.add("is-settled");
+          const onEnd = () => { el.classList.remove("is-settled"); el.removeEventListener("animationend", onEnd); };
+          el.addEventListener("animationend", onEnd);
+        }
       }
     };
     window.addEventListener("pointermove", onMove, { passive: false });
