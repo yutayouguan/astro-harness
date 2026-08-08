@@ -53,6 +53,7 @@ import { SelectMenu } from "../ui/SelectMenu";
 
 type Props = {
   active: boolean;
+  tone?: string;
 };
 
 type EvoSection = "setup" | "run" | "history" | "lab";
@@ -113,7 +114,7 @@ function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {
       ];
 }
 
-export default function EvolutionModelsPanel({ active }: Props) {
+export default function EvolutionModelsPanel({ active, tone }: Props) {
   const { t } = useI18n();
   const {
     loading,
@@ -541,7 +542,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
   const adoptionPct = history ? Math.round(history.summary.adoptionRate * 100) : null;
 
   return (
-    <div className="evo-page aux-page" data-tone="amber">
+    <div className="evo-page aux-page" data-tone={tone ?? "amber"}>
       <header className="evo-toolbar">
         <div className="evo-toolbar-main">
           <div className="evo-brand">

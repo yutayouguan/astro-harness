@@ -137,6 +137,7 @@ type Props = {
   active: boolean;
   /** 配置变更后回传完整状态（供 App 同步 ModelPicker 等） */
   onStateChange?: (state: ProvidersStateDto) => void;
+  tone?: string;
 };
 
 const ADD_KINDS: ProviderKindId[] = [
@@ -380,7 +381,7 @@ function IconLayers(props: SVGProps<SVGSVGElement>) {
   return <Layers size={14} strokeWidth={2} aria-hidden {...props} />;
 }
 
-export default function ProvidersPanel({ active, onStateChange }: Props) {
+export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const addKindOptions = useMemo(
@@ -1401,7 +1402,7 @@ export default function ProvidersPanel({ active, onStateChange }: Props) {
   }, [active, fallbackProviderIds, state?.providers]);
 
   return (
-    <div className="providers-page" data-tone="blue">
+    <div className="providers-page" data-tone={tone ?? "cyan"}>
       <div className="providers-page-tabs" role="tablist" aria-label={t("providers.pageTabs")}>
         <button
           type="button"

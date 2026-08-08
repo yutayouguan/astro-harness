@@ -136,6 +136,7 @@ type Props = {
   active: boolean;
   /** 跳转对话并用 Agent 安装（填入安装 Prompt） */
   onInstallWithAgent?: (prompt: string) => void;
+  tone?: string;
 };
 
 /** 顶栏 Tab：已安装 / 本机 / 更新 / 商店 */
@@ -368,7 +369,7 @@ type SkillUpdateConfirmState =
       dirtyCount: number;
     };
 
-export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
+export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props) {
   const { t, locale } = useI18n();
   const { showToast, toastHost } = useTransientToast();
   const [tab, setTab] = useState<SkillsTab>("installed");
@@ -2644,7 +2645,7 @@ export default function SkillsPanel({ active, onInstallWithAgent }: Props) {
   );
 
   return (
-    <div className="skills-page" data-tone="indigo">
+    <div className="skills-page" data-tone={tone ?? "indigo"}>
       <div className="skills-toolbar">
       <div
         className="skills-main-tabs"

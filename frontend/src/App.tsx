@@ -973,6 +973,7 @@ export default function App() {
                     setInput(prompt);
                     setNav("chat");
                   }}
+                  tone={shellTone}
                 />
               )}
               {nav === "settings" && (
@@ -1003,7 +1004,7 @@ export default function App() {
                 />
               )}
               {nav === "evolution" && (
-                <EvolutionModelsPanel active={nav === "evolution"} />
+                <EvolutionModelsPanel active={nav === "evolution"} tone={shellTone} />
               )}
               {nav === "insights" && (
                 <InsightsPanel active={nav === "insights"} />
@@ -1031,12 +1032,14 @@ export default function App() {
                     kind: p.kind,
                   }))}
                   activeProviderId={activeProviderId}
+                  tone={shellTone}
                 />
               )}
               {nav === "providers" && (
                 <ProvidersPanel
                   active={nav === "providers"}
                   onStateChange={syncProvidersFromState}
+                  tone={shellTone}
                 />
               )}
             </AnimatedSwitch>

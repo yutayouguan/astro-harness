@@ -94,6 +94,7 @@ type Props = {
   /** 可选供应商（创建任务时选模型） */
   providers: ProviderOpt[];
   activeProviderId: string | null;
+  tone?: string;
 };
 
 /** 是否运行在 Tauri 壳内 */
@@ -370,6 +371,7 @@ export default function CronPanel({
   active,
   providers,
   activeProviderId,
+  tone,
 }: Props) {
   const { t, locale } = useI18n();
   const confirm = useConfirm();
@@ -1201,7 +1203,7 @@ export default function CronPanel({
   };
 
   return (
-    <div className="cron-page" data-tone="teal" ref={pageRef}>
+    <div className="cron-page" data-tone={tone ?? "teal"} ref={pageRef}>
       <section className="cron-pane">
         <div className="cron-toolbar">
           <nav className="cron-tabs" aria-label={t("page.cron.title")}>
