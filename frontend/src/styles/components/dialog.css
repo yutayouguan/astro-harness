@@ -251,6 +251,17 @@ html[data-theme="dark"] .app-dialog-input {
   transform: none;
 }
 
+body:has(.app-dialog-backdrop:not(.is-closing)) .app-shell {
+  transform: scale(0.97);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body:not(:has(.app-dialog-backdrop)) .app-shell,
+body:has(.app-dialog-backdrop.is-closing) .app-shell {
+  transform: scale(1);
+  transition: transform 0.12s ease-out;
+}
+
 @keyframes app-dialog-fade-in {
   from {
     opacity: 0;
@@ -310,6 +321,11 @@ html[data-theme="dark"] .app-dialog-input {
   .app-dialog-backdrop.is-closing .app-dialog,
   .app-dialog-backdrop.is-closing .about-dialog {
     animation: none;
+  }
+
+  body:has(.app-dialog-backdrop) .app-shell {
+    transform: none !important;
+    transition: none !important;
   }
 }
 

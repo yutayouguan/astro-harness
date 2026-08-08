@@ -275,3 +275,67 @@ html[data-theme="light"] {
       inset 0 1px 0 rgba(255, 255, 255, 0.9),
       inset 0 -2px 4px rgba(15, 23, 42, 0.04);
 }
+
+/* 减少透明度偏好：提高玻璃不透明度，关闭 blur，确保可读性 */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="dark"] {
+    --glass: rgba(18, 14, 30, 0.92);
+    --glass-strong: rgba(18, 14, 30, 0.95);
+    --glass-panel: rgba(12, 10, 22, 0.95);
+    --sidebar-bg: rgba(8, 6, 18, 0.95);
+    --sidebar-pinned-bg: rgba(6, 4, 14, 0.95);
+    --menu-glass-bg: rgba(14, 12, 26, 0.96);
+    --header-chip-bg: rgba(18, 14, 30, 0.92);
+    --composer-bg: rgba(12, 10, 24, 0.92);
+    --backdrop-glass: none;
+    --menu-glass-blur: none;
+  }
+
+  html[data-theme="light"] {
+    --glass: rgba(255, 255, 255, 0.92);
+    --glass-strong: rgba(255, 255, 255, 0.95);
+    --glass-panel: rgba(255, 255, 255, 0.92);
+    --sidebar-bg: rgba(245, 245, 250, 0.95);
+    --sidebar-pinned-bg: rgba(240, 240, 248, 0.95);
+    --menu-glass-bg: rgba(255, 255, 255, 0.96);
+    --header-chip-bg: rgba(255, 255, 255, 0.92);
+    --composer-bg: rgba(255, 255, 255, 0.92);
+    --backdrop-glass: none;
+    --menu-glass-blur: none;
+  }
+
+  .sidebar,
+  .chat-header-tools,
+  .select-menu-list,
+  .select-menu-trigger,
+  .agent-picker-menu,
+  .agent-picker-chip,
+  .app-dialog-backdrop,
+  .app-dialog,
+  .astro-toast,
+  .glass-menu {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* 增强对比度偏好：加重边框、提高背景实度 */
+@media (prefers-contrast: more) {
+  html[data-theme="dark"] {
+    --glass-edge: rgba(255, 255, 255, 0.28);
+    --border: rgba(255, 255, 255, 0.28);
+    --chip-border: rgba(255, 255, 255, 0.22);
+    --menu-glass-border: rgba(255, 255, 255, 0.3);
+    --header-chip-border: rgba(255, 255, 255, 0.25);
+    --ink-mute: rgba(196, 190, 220, 0.78);
+  }
+
+  html[data-theme="light"] {
+    --glass-edge: rgba(15, 23, 42, 0.2);
+    --border: rgba(15, 23, 42, 0.2);
+    --chip-border: rgba(15, 23, 42, 0.18);
+    --menu-glass-border: rgba(15, 23, 42, 0.22);
+    --header-chip-border: rgba(15, 23, 42, 0.18);
+    --ink-mute: rgba(71, 85, 105, 0.88);
+  }
+}

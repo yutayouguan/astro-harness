@@ -713,6 +713,7 @@ html[data-theme="dark"] .page-title-icon {
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.2;
+  font-optical-sizing: auto;
 }
 
 .content-title-main {
