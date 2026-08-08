@@ -3,9 +3,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  --tone: var(--tone-blue);
-  --tone-soft: var(--tone-blue-soft);
-  --tone-glow: var(--tone-blue-glow);
 }
 
 .providers-page > .aux-page,

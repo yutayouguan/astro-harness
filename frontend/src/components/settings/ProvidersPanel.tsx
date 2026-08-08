@@ -1427,7 +1427,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
       </div>
 
       {pageTab === "auxiliary" ? (
-        <AuxiliaryModelsPanel active={active} embedded />
+        <AuxiliaryModelsPanel active={active} embedded tone={tone} />
       ) : (
       <div className="providers-layout">
         <aside className="providers-pane providers-pane-list">

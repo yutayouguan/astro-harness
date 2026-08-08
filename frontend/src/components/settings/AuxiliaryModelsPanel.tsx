@@ -29,6 +29,7 @@ type Props = {
   active: boolean;
   /** 嵌在模型服务页 Tab 内时隐藏顶部 hero，操作并入列表头 */
   embedded?: boolean;
+  tone?: string;
 };
 
 const TASKS: {
@@ -94,7 +95,7 @@ function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {
       ];
 }
 
-export default function AuxiliaryModelsPanel({ active, embedded = false }: Props) {
+export default function AuxiliaryModelsPanel({ active, embedded = false, tone }: Props) {
   const { t } = useI18n();
   const {
     loading,
@@ -297,7 +298,7 @@ export default function AuxiliaryModelsPanel({ active, embedded = false }: Props
   return (
     <div
       className={`aux-page${embedded ? " aux-page-embedded" : ""}`}
-      data-tone={embedded ? "blue" : "purple"}
+      data-tone={tone ?? (embedded ? "blue" : "purple")}
     >
       {!embedded && (
         <section className="prefs-card aux-hero">
