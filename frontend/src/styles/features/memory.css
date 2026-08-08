@@ -144,7 +144,7 @@
   box-shadow: 0 0 10px color-mix(in srgb, var(--tone-green) 55%, transparent);
   animation: mem-flow-pulse var(--pulse-dur) cubic-bezier(0.4, 0, 0.2, 1) infinite;
   opacity: 0;
-  will-change: left, top, transform, opacity;
+  will-change: transform, opacity;
 }
 
 .mem-view-flow-pulse--0 {
@@ -957,7 +957,7 @@ html[data-theme="dark"] .evo-stat {
   border-radius: inherit;
   background: linear-gradient(90deg, var(--tone), color-mix(in srgb, var(--tone) 70%, #f59e0b));
   transform-origin: left center;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease-out;
 }
 
 .evo-progress-chart {

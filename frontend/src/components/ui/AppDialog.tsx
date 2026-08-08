@@ -54,12 +54,16 @@ export default function AppDialog({
         return;
       }
       setClosing(true);
-      const onEnd = () => {
-        bd.removeEventListener("animationend", onEnd);
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        bd.removeEventListener("animationend", finish);
         setClosing(false);
         action();
       };
-      bd.addEventListener("animationend", onEnd);
+      bd.addEventListener("animationend", finish);
+      setTimeout(finish, 150);
     },
     [],
   );

@@ -2058,4 +2058,8 @@ html[data-theme="dark"] .providers-add-row {
   .providers-model-detail {
     animation: none;
   }
+
+  .providers-list.is-settled .providers-list-item {
+    animation: none;
+  }
 }
