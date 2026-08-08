@@ -43,10 +43,16 @@ export function resolveTheme(mode: ThemeMode): ResolvedTheme {
 
 function applyResolved(next: ResolvedTheme) {
   const root = document.documentElement;
+  const prev = root.getAttribute("data-theme");
   root.dataset.theme = next;
   root.style.colorScheme = next;
-  // 显式锁定，避免被其它脚本/扩展改掉 data-theme
   root.setAttribute("data-theme", next);
+
+  if (prev && prev !== next && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    root.classList.add("theme-transitioning");
+    const tid = setTimeout(() => root.classList.remove("theme-transitioning"), 350);
+    root.dataset.themeTimer = String(tid);
+  }
 }
 
 /** 同步 Tauri 原生窗主题，避免 WKWebView 在换 underlay 时跟着系统外观跳变 */

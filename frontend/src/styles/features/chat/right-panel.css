@@ -206,6 +206,20 @@ html[data-theme="dark"] .chat-right-panel {
   overflow: auto;
   padding: 14px 12px 16px;
   min-height: 0;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 10px,
+    black calc(100% - 10px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 10px,
+    black calc(100% - 10px),
+    transparent 100%
+  );
 }
 
 .chat-session-list {
