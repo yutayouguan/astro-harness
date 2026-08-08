@@ -206,6 +206,10 @@ html[data-theme="light"] .ui-tip {
     0 2px 6px rgba(15, 23, 42, 0.05);
 }
 
+.ui-tip[data-instant] {
+  transition-duration: 0ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ui-tip {
     transition: none;

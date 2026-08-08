@@ -13,6 +13,7 @@ const EDGE = 12;
 const ARROW_INSET = 14;
 
 let showRaf = 0;
+let lastCloseTime = 0;
 
 function getTipHost(): HTMLElement {
   let host = document.getElementById(HOST_ID);
@@ -106,6 +107,10 @@ function placeTip(el: HTMLElement, text: string) {
   tipEl.style.transform = "";
   tipEl.style.transition = "";
   tipEl.dataset.pos = placed.side;
+  const isInstant = Date.now() - lastCloseTime < 200;
+  if (isInstant) tipEl.dataset.instant = "";
+  else delete tipEl.dataset.instant;
+
   // 下一帧再显示，让最终坐标生效后再播入场动画
   showRaf = requestAnimationFrame(() => {
     showRaf = 0;
@@ -118,10 +123,12 @@ function hideTip() {
     cancelAnimationFrame(showRaf);
     showRaf = 0;
   }
+  lastCloseTime = Date.now();
   const tipEl = document.getElementById(HOST_ID)?.querySelector<HTMLElement>(".ui-tip");
   if (!tipEl) return;
   tipEl.dataset.show = "0";
   delete tipEl.dataset.pos;
+  delete tipEl.dataset.instant;
   tipEl.style.removeProperty("--tip-arrow-x");
   tipEl.style.removeProperty("--tip-arrow-y");
 }

@@ -1247,7 +1247,7 @@ export default function EvolutionModelsPanel({ active }: Props) {
 
                 {ev.budgetLimit > 0 && (
                   <div className="evo-budget-bar">
-                    <span style={{ width: `${budgetPct * 100}%` }} />
+                    <span style={{ transform: `scaleX(${budgetPct})` }} />
                   </div>
                 )}
 

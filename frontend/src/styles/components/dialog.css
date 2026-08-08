@@ -271,6 +271,28 @@ html[data-theme="dark"] .app-dialog-input {
   }
 }
 
+@keyframes app-dialog-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes app-dialog-rise-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+.app-dialog-backdrop.is-closing {
+  animation: app-dialog-fade-out 0.12s ease-out forwards;
+}
+
+.app-dialog-backdrop.is-closing .app-dialog,
+.app-dialog-backdrop.is-closing .about-dialog {
+  animation: app-dialog-rise-out 0.12s ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-dialog-backdrop,
   .app-dialog {
@@ -282,6 +304,12 @@ html[data-theme="dark"] .app-dialog-input {
   .about-dialog-ok:hover,
   .about-dialog-ok:active {
     transform: none;
+  }
+
+  .app-dialog-backdrop.is-closing,
+  .app-dialog-backdrop.is-closing .app-dialog,
+  .app-dialog-backdrop.is-closing .about-dialog {
+    animation: none;
   }
 }
 

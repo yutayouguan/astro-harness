@@ -254,7 +254,7 @@ export default function ClarifyWizard({
                 <span
                   className="a2ui-clarify-progress-fill"
                   style={{
-                    width: `${((safeIndex + 1) / steps.length) * 100}%`,
+                    transform: `scaleX(${(safeIndex + 1) / steps.length})`,
                   }}
                 />
               </span>

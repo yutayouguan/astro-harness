@@ -1,5 +1,5 @@
 /** 应用内确认 / 输入对话框（Portal 到 body，避免被侧栏裁切）。 */
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Info, Pencil } from "lucide-react";
 
@@ -38,6 +38,31 @@ export default function AppDialog({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
+  const [closing, setClosing] = useState(false);
+
+  const startClose = useCallback(
+    (action: () => void) => {
+      const bd = backdropRef.current;
+      if (!bd) {
+        action();
+        return;
+      }
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (prefersReduced) {
+        action();
+        return;
+      }
+      setClosing(true);
+      const onEnd = () => {
+        bd.removeEventListener("animationend", onEnd);
+        setClosing(false);
+        action();
+      };
+      bd.addEventListener("animationend", onEnd);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -64,7 +89,7 @@ export default function AppDialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onCancel();
+        startClose(onCancel);
         return;
       }
       if (event.key === "Enter" && !event.isComposing) {
@@ -72,12 +97,12 @@ export default function AppDialog({
         if (target?.tagName === "TEXTAREA") return;
         if (confirmDisabled) return;
         event.preventDefault();
-        onConfirm();
+        startClose(onConfirm);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onCancel, onConfirm, confirmDisabled]);
+  }, [open, onCancel, onConfirm, confirmDisabled, startClose]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -90,10 +115,11 @@ export default function AppDialog({
 
   return createPortal(
     <div
-      className="app-dialog-backdrop"
+      ref={backdropRef}
+      className={`app-dialog-backdrop${closing ? " is-closing" : ""}`}
       role="presentation"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+        if (e.target === e.currentTarget) startClose(onCancel);
       }}
     >
       <div
@@ -132,7 +158,7 @@ export default function AppDialog({
           <button
             type="button"
             className="app-dialog-btn is-cancel"
-            onClick={onCancel}
+            onClick={() => startClose(onCancel)}
           >
             {cancelLabel}
           </button>
@@ -143,7 +169,7 @@ export default function AppDialog({
               variant === "danger" ? "is-danger" : ""
             }`}
             disabled={confirmDisabled}
-            onClick={onConfirm}
+            onClick={() => startClose(onConfirm)}
           >
             {confirmLabel}
           </button>
