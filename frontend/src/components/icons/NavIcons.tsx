@@ -232,15 +232,13 @@ export function IconInsights(props: IconProps) {
   );
 }
 
-/** 自主进化 — DNA 双螺旋，两条链交织 */
+/** 自主进化 — 🧬 基因螺旋，双链 + 碱基对横档 */
 export function IconEvolution(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <path d="M9 3c0 3.5 6 5 6 9s-6 5.5-6 9" />
-      <path d="M15 3c0 3.5-6 5-6 9s6 5.5 6 9" />
-      <path className="nav-icon-cutout" d="M8 6h8M8 18h8" />
-      <circle className="nav-icon-cutout" cx="7.5" cy="12" r="1" />
-      <circle className="nav-icon-cutout" cx="16.5" cy="12" r="1" />
+      <path d="M9 2c0 4 6 5 6 10s-6 6-6 10" />
+      <path d="M15 2c0 4-6 5-6 10s6 6 6 10" />
+      <path className="nav-icon-cutout" d="M9.5 5h5M8 8.5h8M8 15.5h8M9.5 19h5" />
     </NavIconBase>
   );
 }
