@@ -1231,6 +1231,11 @@
   gap: 6px;
   padding-right: 4px;
   position: relative;
+  min-height: 22px;
+}
+.loop-rf-handle--branch {
+  top: 50% !important;
+  transform: translate(50%, -50%) !important;
 }
 
 .loop-rf-branch-label {

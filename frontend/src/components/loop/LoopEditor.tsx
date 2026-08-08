@@ -163,15 +163,14 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
         </div>
       </div>
       <div className="loop-rf-branch-handles">
-        {branches.map((b, i) => (
+        {branches.map((b) => (
           <div key={b.id} className="loop-rf-branch-row">
             <span className="loop-rf-branch-label">{b.label || b.id}</span>
             <Handle
               type="source"
               position={Position.Right}
               id={b.id}
-              className="loop-rf-handle"
-              style={{ top: `${30 + (i + 1) * (40 / (branches.length + 1))}px` }}
+              className="loop-rf-handle loop-rf-handle--branch"
             />
           </div>
         ))}
