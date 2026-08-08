@@ -256,9 +256,8 @@ body:has(.app-dialog-backdrop:not(.is-closing)) .app-shell {
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-body:not(:has(.app-dialog-backdrop)) .app-shell,
 body:has(.app-dialog-backdrop.is-closing) .app-shell {
-  transform: scale(1);
+  transform: none;
   transition: transform 0.12s ease-out;
 }
 
