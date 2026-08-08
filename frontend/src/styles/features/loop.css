@@ -471,6 +471,11 @@
 .loop-detail-panel {
   padding: 0 24px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.loop-detail-panel-top {
+  flex-shrink: 0;
 }
 
 .loop-detail-panel-empty {
@@ -1263,56 +1268,80 @@
 /* ── Workflow preview (详情面板) ──────────────────────────────── */
 
 .loop-preview-container {
-  margin-top: 16px;
-  height: 260px;
-  border-radius: 12px;
+  flex: 1;
+  min-height: 200px;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--bg1, #f9fafb);
   overflow: hidden;
+  position: relative;
 }
-.loop-preview-container .react-flow__renderer {
-  cursor: default;
+
+.loop-preview-container .react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--ink-tertiary, #a1a1aa) 50%, transparent);
+  stroke-dasharray: 5 3;
+}
+.loop-preview-container .react-flow__edge.animated .react-flow__edge-path {
+  animation: loop-preview-dash 0.6s linear infinite;
+}
+@keyframes loop-preview-dash {
+  to { stroke-dashoffset: -8; }
 }
 
 .loop-preview-node {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
   background: var(--bg0, #fff);
-  font-size: 10px;
   color: var(--ink);
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .loop-preview-node-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
   background: color-mix(in srgb, var(--node-color, #888) 12%, transparent);
   color: var(--node-color, #888);
   flex-shrink: 0;
 }
 
+.loop-preview-node-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
 .loop-preview-node-label {
+  font-size: 11px;
   font-weight: 600;
-  max-width: 80px;
+  color: var(--ink);
+  max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.loop-preview-node-type {
+  font-size: 9px;
+  color: var(--ink-tertiary);
+}
+
 .loop-preview-handle {
-  width: 4px !important;
-  height: 4px !important;
+  width: 5px !important;
+  height: 5px !important;
   border-radius: 50% !important;
   background: var(--node-color, #888) !important;
-  border: 1px solid var(--bg0, #fff) !important;
+  border: 1.5px solid var(--bg0, #fff) !important;
   min-width: 0 !important;
   min-height: 0 !important;
 }

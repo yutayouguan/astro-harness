@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
+  Background,
+  BackgroundVariant,
   Handle,
   Position,
   type Node as RFNode,
@@ -28,9 +30,12 @@ function PreviewNode({ data }: { data: PreviewNodeData }) {
     >
       <Handle type="target" position={Position.Left} className="loop-preview-handle" />
       <span className="loop-preview-node-icon">
-        {IconComp && <IconComp size={10} />}
+        {IconComp && <IconComp size={11} />}
       </span>
-      <span className="loop-preview-node-label">{data.label}</span>
+      <div className="loop-preview-node-text">
+        <span className="loop-preview-node-label">{data.label}</span>
+        <span className="loop-preview-node-type">{data.meta.labelEn}</span>
+      </div>
       {data.sourceHandleIds.length > 0
         ? data.sourceHandleIds.map((hid) => (
             <Handle key={hid} type="source" position={Position.Right} id={hid} className="loop-preview-handle" />
@@ -99,19 +104,21 @@ function LoopPreviewInner({ workflow }: Props) {
       edges={edges}
       nodeTypes={previewNodeTypes}
       fitView
-      fitViewOptions={{ padding: 0.3 }}
+      fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
       nodesDraggable={false}
       nodesConnectable={false}
       nodesFocusable={false}
       edgesFocusable={false}
       elementsSelectable={false}
-      panOnDrag={false}
+      panOnDrag
       zoomOnScroll={false}
       zoomOnPinch={false}
       zoomOnDoubleClick={false}
       preventScrolling={false}
       proOptions={{ hideAttribution: true }}
-    />
+    >
+      <Background variant={BackgroundVariant.Dots} gap={16} size={0.8} color="var(--ink-faint, #d4d4d8)" />
+    </ReactFlow>
   );
 }
 

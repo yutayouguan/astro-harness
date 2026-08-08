@@ -374,55 +374,57 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       <div className="loop-detail-panel">
         {selectedDetail ? (
           <>
-            <div className="loop-detail-panel-header">
-              <div className="loop-detail-panel-icon">
-                <LoopIcon icon={parseLoopIcon(selectedDetail.icon)} size={22} />
+            <div className="loop-detail-panel-top">
+              <div className="loop-detail-panel-header">
+                <div className="loop-detail-panel-icon">
+                  <LoopIcon icon={parseLoopIcon(selectedDetail.icon)} size={22} />
+                </div>
+                <div>
+                  <h3 className="loop-detail-panel-title">{selectedDetail.name}</h3>
+                  <span className={`loop-detail-panel-badge${lastRuns[selectedDetail.id]?.status === "running" ? " is-running" : ""}`}>
+                    {lastRuns[selectedDetail.id]?.status === "running" ? t("loop.statusRunning") : t("loop.statusIdle")}
+                  </span>
+                </div>
+                {renderCardActions(selectedDetail)}
               </div>
-              <div>
-                <h3 className="loop-detail-panel-title">{selectedDetail.name}</h3>
-                <span className={`loop-detail-panel-badge${lastRuns[selectedDetail.id]?.status === "running" ? " is-running" : ""}`}>
-                  {lastRuns[selectedDetail.id]?.status === "running" ? t("loop.statusRunning") : t("loop.statusIdle")}
-                </span>
+              <div className="loop-detail-panel-grid">
+                <div className="loop-detail-panel-cell">
+                  <span className="loop-detail-panel-cell-label">{t("loop.nodes")}</span>
+                  <span className="loop-detail-panel-cell-value">{selectedDetail.nodes.length}</span>
+                </div>
+                <div className="loop-detail-panel-cell">
+                  <span className="loop-detail-panel-cell-label">{t("loop.lastRun")}</span>
+                  <span className="loop-detail-panel-cell-value">{lastRuns[selectedDetail.id]?.time ?? t("loop.lastRunNever")}</span>
+                </div>
+                <div className="loop-detail-panel-cell">
+                  <span className="loop-detail-panel-cell-label">{t("loop.enabled")}</span>
+                  <span className="loop-detail-panel-cell-value">{selectedDetail.enabled ? t("loop.enabledYes") : t("loop.enabledNo")}</span>
+                </div>
+                <div className="loop-detail-panel-cell">
+                  <span className="loop-detail-panel-cell-label">{t("loop.aiCallable")}</span>
+                  <span className="loop-detail-panel-cell-value">{selectedDetail.ai_callable ? t("loop.yes") : t("loop.no")}</span>
+                </div>
               </div>
-              {renderCardActions(selectedDetail)}
-            </div>
-            <div className="loop-detail-panel-grid">
-              <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">{t("loop.nodes")}</span>
-                <span className="loop-detail-panel-cell-value">{selectedDetail.nodes.length}</span>
+              <div className="loop-detail-panel-toggles">
+                <label className="loop-toggle">
+                  <input
+                    type="checkbox"
+                    checked={selectedDetail.enabled}
+                    onChange={(e) => void handleToggleEnabled(selectedDetail.id, e.target.checked)}
+                  />
+                  <Power size={12} />
+                  <span>{t("loop.enabled")}</span>
+                </label>
+                <label className="loop-toggle">
+                  <input
+                    type="checkbox"
+                    checked={selectedDetail.ai_callable}
+                    onChange={(e) => void handleToggleAiCallable(selectedDetail.id, e.target.checked)}
+                  />
+                  <Bot size={12} />
+                  <span>{t("loop.aiCallable")}</span>
+                </label>
               </div>
-              <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">{t("loop.lastRun")}</span>
-                <span className="loop-detail-panel-cell-value">{lastRuns[selectedDetail.id]?.time ?? t("loop.lastRunNever")}</span>
-              </div>
-              <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">{t("loop.enabled")}</span>
-                <span className="loop-detail-panel-cell-value">{selectedDetail.enabled ? t("loop.enabledYes") : t("loop.enabledNo")}</span>
-              </div>
-              <div className="loop-detail-panel-cell">
-                <span className="loop-detail-panel-cell-label">{t("loop.aiCallable")}</span>
-                <span className="loop-detail-panel-cell-value">{selectedDetail.ai_callable ? t("loop.yes") : t("loop.no")}</span>
-              </div>
-            </div>
-            <div className="loop-detail-panel-toggles">
-              <label className="loop-toggle">
-                <input
-                  type="checkbox"
-                  checked={selectedDetail.enabled}
-                  onChange={(e) => void handleToggleEnabled(selectedDetail.id, e.target.checked)}
-                />
-                <Power size={12} />
-                <span>{t("loop.enabled")}</span>
-              </label>
-              <label className="loop-toggle">
-                <input
-                  type="checkbox"
-                  checked={selectedDetail.ai_callable}
-                  onChange={(e) => void handleToggleAiCallable(selectedDetail.id, e.target.checked)}
-                />
-                <Bot size={12} />
-                <span>{t("loop.aiCallable")}</span>
-              </label>
             </div>
             {selectedDetail.nodes.length > 0 && (
               <LoopPreview workflow={selectedDetail} />
