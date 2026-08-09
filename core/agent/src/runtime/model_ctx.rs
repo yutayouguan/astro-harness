@@ -7,14 +7,12 @@
 use std::collections::HashMap;
 
 use common::{AuxiliaryTask, ChatTarget, ModelSpec, MAX_CHAT_FALLBACKS};
-use tools::ImageGenTargets;
+use tools::{ImageGenTargets, ModelCredentials};
 
 /// LLM 模型配置、凭证与 fallback 链。
 pub struct ModelContext {
-    pub(crate) chat_api_key: String,
-    pub(crate) chat_base_url: String,
-    pub(crate) chat_provider: String,
-    pub(crate) chat_model: String,
+    /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
+    pub(crate) credentials: ModelCredentials,
     pub(crate) context_window: u32,
     pub(crate) chat_targets: Vec<ChatTarget>,
     pub(crate) model_spec: Option<ModelSpec>,
@@ -25,10 +23,7 @@ pub struct ModelContext {
 impl Default for ModelContext {
     fn default() -> Self {
         Self {
-            chat_api_key: String::new(),
-            chat_base_url: String::new(),
-            chat_provider: String::new(),
-            chat_model: String::new(),
+            credentials: ModelCredentials::default(),
             context_window: crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW,
             chat_targets: Vec::new(),
             model_spec: None,
@@ -46,11 +41,11 @@ impl ModelContext {
             .first()
             .cloned()
             .unwrap_or_else(|| ChatTarget {
-                provider_id: self.chat_provider.clone(),
-                backend_id: self.chat_provider.clone(),
-                model: self.chat_model.clone(),
-                api_key: self.chat_api_key.clone(),
-                base_url: self.chat_base_url.clone(),
+                provider_id: self.credentials.provider.clone(),
+                backend_id: self.credentials.provider.clone(),
+                model: self.credentials.model.clone(),
+                api_key: self.credentials.api_key.clone(),
+                base_url: self.credentials.base_url.clone(),
             })
     }
 
@@ -63,29 +58,29 @@ impl ModelContext {
         api_key: &str,
         base_url: &str,
     ) {
-        self.chat_provider = provider.to_string();
-        self.chat_model = model.to_string();
-        self.chat_api_key = api_key.to_string();
-        self.chat_base_url = base_url.to_string();
+        self.credentials.provider = provider.to_string();
+        self.credentials.model = model.to_string();
+        self.credentials.api_key = api_key.to_string();
+        self.credentials.base_url = base_url.to_string();
         if !provider.trim().is_empty() || !model.trim().is_empty() {
             self.model_spec = Some(ModelSpec::new(provider, model));
         }
     }
 
     pub fn chat_api_key(&self) -> &str {
-        &self.chat_api_key
+        &self.credentials.api_key
     }
 
     pub fn chat_base_url(&self) -> &str {
-        &self.chat_base_url
+        &self.credentials.base_url
     }
 
     pub fn chat_provider(&self) -> &str {
-        &self.chat_provider
+        &self.credentials.provider
     }
 
     pub fn chat_model(&self) -> &str {
-        &self.chat_model
+        &self.credentials.model
     }
 
     // ── 聊天目标链 ─────────────────────────────────────────
@@ -93,10 +88,10 @@ impl ModelContext {
     /// 设置含 primary 的聊天 fallback 链。
     pub fn set_chat_targets(&mut self, targets: Vec<ChatTarget>) {
         if let Some(primary) = targets.first() {
-            self.chat_provider = primary.backend_id.clone();
-            self.chat_model = primary.model.clone();
-            self.chat_api_key = primary.api_key.clone();
-            self.chat_base_url = primary.base_url.clone();
+            self.credentials.provider = primary.backend_id.clone();
+            self.credentials.model = primary.model.clone();
+            self.credentials.api_key = primary.api_key.clone();
+            self.credentials.base_url = primary.base_url.clone();
             self.model_spec = Some(ModelSpec::new(&primary.backend_id, &primary.model));
         }
         self.chat_targets = targets;
@@ -145,10 +140,10 @@ impl ModelContext {
             Some(primary) => vec![primary.clone()],
             None => vec![ChatTarget {
                 provider_id: String::new(),
-                backend_id: self.chat_provider.clone(),
-                model: self.chat_model.clone(),
-                api_key: self.chat_api_key.clone(),
-                base_url: self.chat_base_url.clone(),
+                backend_id: self.credentials.provider.clone(),
+                model: self.credentials.model.clone(),
+                api_key: self.credentials.api_key.clone(),
+                base_url: self.credentials.base_url.clone(),
             }],
         }
     }

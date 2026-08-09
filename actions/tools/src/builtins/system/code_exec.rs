@@ -220,6 +220,7 @@ mod tests {
         memory: &'a mut memory::MemoryManager,
         sessions: &'a session::SessionStore,
         targets: &'a ImageGenTargets,
+        creds: &'a crate::context::ModelCredentials,
     ) -> ToolContext<'a> {
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
@@ -232,11 +233,8 @@ mod tests {
             image_gen_targets: targets,
             session_id: "test".into(),
             turn_id: None,
-            chat_api_key: String::new(),
-            chat_base_url: String::new(),
-            chat_provider: String::new(),
-            chat_model: String::new(),
-            chat_targets: vec![],
+            credentials: creds,
+            chat_targets: &[],
             execution: None,
             hook_bus: None,
         }
@@ -274,7 +272,8 @@ mod tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
         let err = dispatch(&ctx, &serde_json::json!({"code": "1", "language": "ruby"}))
             .await
             .unwrap_err()
@@ -289,7 +288,8 @@ mod tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
         let n = common::MAX_TOOL_RESULT_BYTES + 4096;
         let out = dispatch(
             &ctx,
@@ -310,7 +310,8 @@ mod tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
         // 两个并发的同语言调用共享同一个 .code_exec 目录；
         // sleep 制造重叠窗口——若临时文件名固定会相互覆盖。
         let a = serde_json::json!({"language": "python", "code": "import time; time.sleep(0.3); print('MARKER_AAA')"});
@@ -330,7 +331,8 @@ mod tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
         let out = dispatch(
             &ctx,
             &serde_json::json!({
@@ -354,7 +356,8 @@ mod tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
         // 正常成功路径后确认目录可清理；超时清理由 TempScript Drop 保证。
         let _ = dispatch(
             &ctx,
@@ -386,7 +389,8 @@ mod tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets);
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
         let err = dispatch(&ctx, &serde_json::json!({"language": "shell", "code": "echo hi"}))
             .await
             .unwrap_err();

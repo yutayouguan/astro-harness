@@ -30,6 +30,7 @@ fn make_ctx<'a>(
     sessions: &'a session::SessionStore,
     dir: &std::path::Path,
     targets: &'a tools::ImageGenTargets,
+    creds: &'a tools::ModelCredentials,
 ) -> ToolContext<'a> {
     ToolContext {
         memory,
@@ -40,11 +41,8 @@ fn make_ctx<'a>(
         image_gen_targets: targets,
         session_id: "s".into(),
         turn_id: None,
-        chat_api_key: "k".into(),
-        chat_base_url: String::new(),
-        chat_provider: "openai".into(),
-        chat_model: "test".into(),
-        chat_targets: vec![],
+        credentials: creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     }
@@ -58,7 +56,8 @@ async fn delegate_requires_goal() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
+    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     let args = serde_json::json!({});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args, None)
         .await
@@ -77,7 +76,8 @@ async fn delegate_goal_hits_runner_or_key() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
+    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     let args = serde_json::json!({"goal": "do thing"});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args, None)
         .await
@@ -108,7 +108,8 @@ async fn delegate_async_status_collect_cancel_flow() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
+    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     ctx.execution = Some(exec);
 
     let started = tools::dispatch_tool(
@@ -171,7 +172,8 @@ async fn delegate_async_cancel_marks_cancelled() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
+    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     ctx.execution = Some(exec);
 
     let started = tools::dispatch_tool(
@@ -209,7 +211,8 @@ async fn delegate_blocked_at_max_spawn_depth() {
     let targets = tools::ImageGenTargets::default();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets);
+    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
 
     let ctx_depth = home::SpawnDepthCtx {
         depth: 1,

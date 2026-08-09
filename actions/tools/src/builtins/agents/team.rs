@@ -208,11 +208,11 @@ pub fn dispatch_run(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     let req = delegate::DelegateRunRequest {
         parent_agent_id: ctx.memory.agent_id.clone(),
         parent_session_id: ctx.session_id.clone(),
-        provider: ctx.chat_provider.clone(),
-        model: ctx.chat_model.clone(),
-        api_key: ctx.chat_api_key.clone(),
-        base_url: ctx.chat_base_url.clone(),
-        chat_targets: ctx.chat_targets.clone(),
+        provider: ctx.credentials.provider.clone(),
+        model: ctx.credentials.model.clone(),
+        api_key: ctx.credentials.api_key.clone(),
+        base_url: ctx.credentials.base_url.clone(),
+        chat_targets: ctx.chat_targets.to_vec(),
         max_concurrent: if mode == orchestration::TeamMode::Broadcast {
             members.len().clamp(1, 8)
         } else {
@@ -283,11 +283,11 @@ fn run_tasks_mode(
         let req = delegate::DelegateRunRequest {
             parent_agent_id: ctx.memory.agent_id.clone(),
             parent_session_id: ctx.session_id.clone(),
-            provider: ctx.chat_provider.clone(),
-            model: ctx.chat_model.clone(),
-            api_key: ctx.chat_api_key.clone(),
-            base_url: ctx.chat_base_url.clone(),
-            chat_targets: ctx.chat_targets.clone(),
+            provider: ctx.credentials.provider.clone(),
+            model: ctx.credentials.model.clone(),
+            api_key: ctx.credentials.api_key.clone(),
+            base_url: ctx.credentials.base_url.clone(),
+            chat_targets: ctx.chat_targets.to_vec(),
             max_concurrent: 1,
             tasks: vec![delegate::DelegateTaskSpec {
                 goal: format!(

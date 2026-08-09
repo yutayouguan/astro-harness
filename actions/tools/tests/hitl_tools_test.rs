@@ -10,6 +10,7 @@ fn make_ctx(
     session::SessionStore,
     tools::ImageGenTargets,
     std::path::PathBuf,
+    tools::ModelCredentials,
 ) {
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
@@ -17,13 +18,14 @@ fn make_ctx(
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    (memory, sessions, targets, workspace)
+    let creds = tools::ModelCredentials::default();
+    (memory, sessions, targets, workspace, creds)
 }
 
 #[tokio::test]
 async fn confirm_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -33,11 +35,8 @@ async fn confirm_emits_valid_a2ui_hitl() {
         image_gen_targets: &targets,
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
@@ -66,7 +65,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -77,11 +76,8 @@ async fn clarify_emits_valid_a2ui_hitl() {
 
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
@@ -125,7 +121,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_free_text_step_allows_empty_options() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -136,11 +132,8 @@ async fn clarify_free_text_step_allows_empty_options() {
 
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
@@ -190,7 +183,7 @@ async fn clarify_free_text_step_allows_empty_options() {
 #[tokio::test]
 async fn clarify_multi_emits_wizard_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -201,11 +194,8 @@ async fn clarify_multi_emits_wizard_hitl() {
 
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
@@ -260,7 +250,7 @@ async fn clarify_multi_emits_wizard_hitl() {
 #[tokio::test]
 async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -271,11 +261,8 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
 
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
@@ -303,7 +290,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn present_emits_valid_astro_ui() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -314,11 +301,8 @@ async fn present_emits_valid_astro_ui() {
 
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
@@ -348,7 +332,7 @@ async fn present_emits_valid_astro_ui() {
 #[tokio::test]
 async fn ask_user_rejects_mixed_questions_and_body() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace) = make_ctx(&dir);
+    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -359,11 +343,8 @@ async fn ask_user_rejects_mixed_questions_and_body() {
 
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };

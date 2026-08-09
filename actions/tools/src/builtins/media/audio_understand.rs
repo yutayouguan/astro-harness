@@ -389,20 +389,20 @@ fn resolve_openai_describe_config(
             model,
         ));
     }
-    if !ctx.chat_api_key.is_empty() && ctx.chat_provider == "openai" {
-        let model = if ctx.chat_model.trim().is_empty() {
+    if !ctx.credentials.api_key.is_empty() && ctx.credentials.provider == "openai" {
+        let model = if ctx.credentials.model.trim().is_empty() {
             default_vision_model("openai").to_string()
         } else {
-            ctx.chat_model.trim().to_string()
+            ctx.credentials.model.trim().to_string()
         };
-        let base = if ctx.chat_base_url.trim().is_empty() {
+        let base = if ctx.credentials.base_url.trim().is_empty() {
             Some("https://api.openai.com/v1".into())
         } else {
-            Some(openai_compatible_base(&ctx.chat_base_url))
+            Some(openai_compatible_base(&ctx.credentials.base_url))
         };
         return Ok((
             ProviderConfig {
-                api_key: ctx.chat_api_key.clone(),
+                api_key: ctx.credentials.api_key.clone(),
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
@@ -446,15 +446,15 @@ fn resolve_openai_whisper_config(
             model,
         ));
     }
-    if !ctx.chat_api_key.is_empty() && ctx.chat_provider == "openai" {
-        let base = if ctx.chat_base_url.trim().is_empty() {
+    if !ctx.credentials.api_key.is_empty() && ctx.credentials.provider == "openai" {
+        let base = if ctx.credentials.base_url.trim().is_empty() {
             Some("https://api.openai.com/v1".into())
         } else {
-            Some(openai_compatible_base(&ctx.chat_base_url))
+            Some(openai_compatible_base(&ctx.credentials.base_url))
         };
         return Ok((
             ProviderConfig {
-                api_key: ctx.chat_api_key.clone(),
+                api_key: ctx.credentials.api_key.clone(),
                 base_url: base,
                 model: model.clone(),
                 ..ProviderConfig::default()
@@ -606,6 +606,7 @@ mod path_escape_tests {
         memory_dir: std::path::PathBuf,
         workspace_dir: std::path::PathBuf,
         targets: &'a ImageGenTargets,
+        creds: &'a crate::context::ModelCredentials,
     ) -> ToolContext<'a> {
         ToolContext {
             memory,
@@ -616,11 +617,8 @@ mod path_escape_tests {
             image_gen_targets: targets,
             session_id: "test".into(),
             turn_id: None,
-            chat_api_key: String::new(),
-            chat_base_url: String::new(),
-            chat_provider: String::new(),
-            chat_model: String::new(),
-            chat_targets: vec![],
+            credentials: creds,
+            chat_targets: &[],
             execution: None,
             hook_bus: None,
         }
@@ -640,12 +638,14 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
+            &creds,
         );
 
         let err = load_audio_bytes(&ctx, "../outside/secret.mp3")
@@ -669,12 +669,14 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
+            &creds,
         );
 
         let (bytes, mime, filename) = load_audio_bytes(&ctx, "ok.wav").await.unwrap();
@@ -697,12 +699,14 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
+            &creds,
         );
 
         let err = resolve_google_media(&ctx, "../outside/secret.mp3", false)
@@ -728,12 +732,14 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
+            &creds,
         );
 
         let media = resolve_google_media(&ctx, "clip.wav", false).await.unwrap();
@@ -767,12 +773,14 @@ mod path_escape_tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
             &mut memory,
             &sessions,
             dir.path().to_path_buf(),
             ws,
             &targets,
+            &creds,
         );
 
         let media = resolve_google_media(&ctx, "https://youtu.be/abc", true)

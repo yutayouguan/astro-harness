@@ -349,13 +349,13 @@ fn resolve_openai_tts(ctx: &ToolContext<'_>) -> anyhow::Result<(String, String)>
         };
         return Ok((creds.api_key.clone(), base));
     }
-    if !ctx.chat_api_key.is_empty() && ctx.chat_provider == "openai" {
-        let base = if ctx.chat_base_url.trim().is_empty() {
+    if !ctx.credentials.api_key.is_empty() && ctx.credentials.provider == "openai" {
+        let base = if ctx.credentials.base_url.trim().is_empty() {
             "https://api.openai.com/v1".to_string()
         } else {
-            openai_compatible_base(&ctx.chat_base_url)
+            openai_compatible_base(&ctx.credentials.base_url)
         };
-        return Ok((ctx.chat_api_key.clone(), base));
+        return Ok((ctx.credentials.api_key.clone(), base));
     }
     let env_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
     if env_key.is_empty() {

@@ -458,20 +458,20 @@ impl AgentLoop {
     /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
     pub fn set_model(&mut self, spec: common::ModelSpec) {
         if !spec.provider_id.trim().is_empty() {
-            self.model_ctx.chat_provider = spec.provider_id.trim().to_string();
+            self.model_ctx.credentials.provider = spec.provider_id.trim().to_string();
         }
         if !spec.model_id.trim().is_empty() {
-            self.model_ctx.chat_model = spec.model_id.trim().to_string();
+            self.model_ctx.credentials.model = spec.model_id.trim().to_string();
         }
         if let Some(t) = spec.temperature {
             self.config.temperature = t;
         }
         if let Some(primary) = self.model_ctx.chat_targets.first_mut() {
             *primary = spec.apply_to(primary);
-            self.model_ctx.chat_api_key = primary.api_key.clone();
-            self.model_ctx.chat_base_url = primary.base_url.clone();
-        } else if !self.model_ctx.chat_api_key.is_empty() || !self.model_ctx.chat_base_url.is_empty() {
-            let target = spec.to_chat_target(&self.model_ctx.chat_api_key, &self.model_ctx.chat_base_url);
+            self.model_ctx.credentials.api_key = primary.api_key.clone();
+            self.model_ctx.credentials.base_url = primary.base_url.clone();
+        } else if !self.model_ctx.credentials.api_key.is_empty() || !self.model_ctx.credentials.base_url.is_empty() {
+            let target = spec.to_chat_target(&self.model_ctx.credentials.api_key, &self.model_ctx.credentials.base_url);
             self.model_ctx.chat_targets = vec![target];
         }
         self.model_ctx.model_spec = Some(spec);
@@ -1128,14 +1128,8 @@ impl AgentLoop {
 
         let workspace_dir = self.resolve_workspace_dir();
         skills::set_workspace_override(&workspace_dir);
-        let image_gen_targets = self.model_ctx.image_gen_targets.clone();
         let session_id = self.session_id.clone();
         let turn_id = self.turn.current_turn_id.clone();
-        let chat_api_key = self.model_ctx.chat_api_key.clone();
-        let chat_base_url = self.model_ctx.chat_base_url.clone();
-        let chat_provider = self.model_ctx.chat_provider.clone();
-        let chat_model = self.model_ctx.chat_model.clone();
-        let chat_targets = self.model_ctx.chat_targets.clone();
         let memory_dir = self.config.memory_dir.clone();
         let sessions: &dyn ConversationStore = &*self.sessions;
         let execution = Some(self.execution());
@@ -1146,14 +1140,11 @@ impl AgentLoop {
             memory_dir,
             workspace_dir,
             project_root: self.project_root.clone(),
-            image_gen_targets: &image_gen_targets,
+            image_gen_targets: &self.model_ctx.image_gen_targets,
             session_id,
             turn_id,
-            chat_api_key,
-            chat_base_url,
-            chat_provider,
-            chat_model,
-            chat_targets,
+            credentials: &self.model_ctx.credentials,
+            chat_targets: &self.model_ctx.chat_targets,
             execution,
             hook_bus,
         };

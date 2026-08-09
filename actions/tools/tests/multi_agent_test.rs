@@ -11,6 +11,7 @@ async fn pipeline_queues_orchestration() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
+    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -20,11 +21,8 @@ async fn pipeline_queues_orchestration() {
         image_gen_targets: &targets,
         session_id: "s".into(),
         turn_id: None,
-        chat_api_key: "k".into(),
-        chat_base_url: String::new(),
-        chat_provider: "openai".into(),
-        chat_model: "test".into(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
@@ -65,6 +63,7 @@ async fn pipeline_rejects_empty_agents() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
+    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -74,11 +73,8 @@ async fn pipeline_rejects_empty_agents() {
         image_gen_targets: &targets,
         session_id: "s".into(),
         turn_id: None,
-        chat_api_key: "k".into(),
-        chat_base_url: String::new(),
-        chat_provider: "openai".into(),
-        chat_model: "test".into(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };

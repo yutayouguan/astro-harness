@@ -69,6 +69,7 @@ async fn file_ops_write_and_read() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
+    let creds = tools::ModelCredentials::default();
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -78,11 +79,8 @@ async fn file_ops_write_and_read() {
         image_gen_targets: &targets,
         session_id: "test".into(),
         turn_id: None,
-        chat_api_key: String::new(),
-        chat_base_url: String::new(),
-        chat_provider: String::new(),
-        chat_model: String::new(),
-        chat_targets: vec![],
+        credentials: &creds,
+        chat_targets: &[],
         execution: None,
         hook_bus: None,
     };
