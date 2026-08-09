@@ -72,6 +72,19 @@ interface Props {
   onExpandSidebar?: () => void;
 }
 
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  const diff = Math.max(0, Date.now() - ms);
+  const m = 60_000, h = 60 * m, d = 24 * h;
+  if (diff < m) return "刚刚";
+  if (diff < h) return `${Math.floor(diff / m)} 分钟前`;
+  if (diff < d) return `${Math.floor(diff / h)} 小时前`;
+  if (diff < 7 * d) return `${Math.floor(diff / d)} 天前`;
+  return new Date(ms).toLocaleDateString();
+}
+
 export default function LoopPanel({ active, providers, onCollapseSidebar, onExpandSidebar }: Props) {
   const { t } = useI18n();
   const { showToast, toastHost } = useTransientToast();
@@ -390,7 +403,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
           <div className="loop-card-meta">
             <span>{t("loop.nodeCount").replace("{count}", String(lp.nodes.length))}</span>
             <span>·</span>
-            <span>{t("loop.lastRun")}: {lastRuns[lp.id]?.time ?? t("loop.lastRunNever")}</span>
+            <span>{t("loop.lastRun")}: {formatRelativeTime(lastRuns[lp.id]?.time) === "—" ? t("loop.lastRunNever") : formatRelativeTime(lastRuns[lp.id]?.time)}</span>
           </div>
           {lp.nodes.length > 0 && (
             <div className="loop-card-preview">
@@ -433,7 +446,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
           <div className="loop-list-row-body">
             <span className="loop-list-row-name">{lp.name}</span>
             <span className="loop-list-row-meta">
-              {t("loop.nodeCount").replace("{count}", String(lp.nodes.length))} · {t("loop.lastRun")}: {lastRuns[lp.id]?.time ?? t("loop.lastRunNever")}
+              {t("loop.nodeCount").replace("{count}", String(lp.nodes.length))} · {t("loop.lastRun")}: {formatRelativeTime(lastRuns[lp.id]?.time) === "—" ? t("loop.lastRunNever") : formatRelativeTime(lastRuns[lp.id]?.time)}
             </span>
           </div>
           <div className="loop-list-row-toggles">
@@ -507,7 +520,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                 </div>
                 <div className="loop-detail-panel-cell">
                   <span className="loop-detail-panel-cell-label">{t("loop.lastRun")}</span>
-                  <span className="loop-detail-panel-cell-value">{lastRuns[selectedDetail.id]?.time ?? t("loop.lastRunNever")}</span>
+                  <span className="loop-detail-panel-cell-value">{formatRelativeTime(lastRuns[selectedDetail.id]?.time) === "—" ? t("loop.lastRunNever") : formatRelativeTime(lastRuns[selectedDetail.id]?.time)}</span>
                 </div>
                 <div className="loop-detail-panel-cell">
                   <span className="loop-detail-panel-cell-label">{t("loop.enabled")}</span>
