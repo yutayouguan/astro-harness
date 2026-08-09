@@ -1,8 +1,10 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const EVENT_OPTIONS = [
@@ -12,14 +14,16 @@ const EVENT_OPTIONS = [
   { value: "any", label: "任何变化" },
 ];
 
-export default function FileWatchConfig({ config, onChange }: ConfigProps) {
+export default function FileWatchConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
-      <TextField
+      <FilePathField
         label="监控目录"
         value={cfgStr(config, "watch_path")}
         onChange={(v) => onChange({ ...config, watch_path: v })}
         placeholder="/path/to/watch"
+        upstream={up}
       />
       <SelectField
         label="触发事件"

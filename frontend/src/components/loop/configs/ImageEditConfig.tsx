@@ -1,4 +1,4 @@
-import { TextField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
+import { AiAssistField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -6,6 +6,8 @@ interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
   upstreamOutputs?: UpstreamOutput[];
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const OPERATION_OPTIONS = [
@@ -20,7 +22,7 @@ const OPERATION_OPTIONS = [
   { value: "restore", label: "修复/增强" },
 ];
 
-export default function ImageEditConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function ImageEditConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
   const op = cfgStr(config, "operation", "inpaint");
   const up = upstreamOutputs ?? [];
   return (
@@ -48,13 +50,15 @@ export default function ImageEditConfig({ config, onChange, upstreamOutputs }: C
           hint="可选"
         />
       )}
-      <TextField
+      <AiAssistField
         label="编辑提示词"
         value={cfgStr(config, "prompt_template")}
         onChange={(v) => onChange({ ...config, prompt_template: v })}
         placeholder="描述要编辑的效果…"
-        multiline
         hint="支持 {{var}} 引用上游变量"
+        task="图片编辑提示词"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
       {(op === "style_transfer" || op === "face_swap" || op === "variation") && (
         <FileArrayField

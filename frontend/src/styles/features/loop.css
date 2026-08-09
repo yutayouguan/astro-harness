@@ -1624,6 +1624,72 @@
   cursor: not-allowed;
 }
 
+/* label row (label + ai button) */
+.loop-config-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* AI assist button */
+.loop-config-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--tone, #6366f1) 30%, var(--border));
+  background: color-mix(in srgb, var(--tone, #6366f1) 6%, transparent);
+  color: var(--tone, #6366f1);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.loop-config-ai-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone, #6366f1) 14%, transparent);
+  border-color: var(--tone, #6366f1);
+}
+.loop-config-ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.loop-config-ai-btn.is-loading {
+  pointer-events: none;
+}
+@keyframes loop-spin {
+  to { transform: rotate(360deg); }
+}
+.loop-spin {
+  animation: loop-spin 0.8s linear infinite;
+}
+
+/* ai model intro */
+.loop-config-ai-model-intro {
+  font-size: 13px;
+  color: var(--ink-secondary);
+  line-height: 1.6;
+  margin-bottom: 18px;
+  padding: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone, #6366f1) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, #6366f1) 15%, var(--border));
+}
+.loop-config-ai-btn-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+  color: var(--tone, #6366f1);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
 /* hint text */
 .loop-config-hint {
   font-size: 12px;

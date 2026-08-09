@@ -359,6 +359,7 @@ pub fn run() {
             loop_commands::export_loop,
             loop_commands::import_loop,
             loop_commands::ai_generate_workflow,
+            loop_commands::loop_ai_polish,
             media_commands::tts_synthesize,
             media_commands::speech_to_text,
             config_commands::get_tools_enabled,

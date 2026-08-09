@@ -1,4 +1,4 @@
-import { TextField, NumberField, SelectField, ToggleField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgBool, cfgStrArray } from "./ConfigField";
+import { AiAssistField, NumberField, SelectField, ToggleField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgBool, cfgStrArray } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -6,6 +6,8 @@ interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
   upstreamOutputs?: UpstreamOutput[];
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const MODE_OPTIONS = [
@@ -31,7 +33,7 @@ const RESOLUTION_OPTIONS = [
   { value: "1080P", label: "1080P (旧版)" },
 ];
 
-export default function VideoGenConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function VideoGenConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
   const mode = cfgStr(config, "mode", "text_to_video");
   const isReference = mode === "reference";
   const isImageToVideo = mode === "image_to_video";
@@ -46,13 +48,15 @@ export default function VideoGenConfig({ config, onChange, upstreamOutputs }: Co
         onChange={(v) => onChange({ ...config, mode: v })}
         options={MODE_OPTIONS}
       />
-      <TextField
+      <AiAssistField
         label="生成提示词"
         value={cfgStr(config, "prompt_template")}
         onChange={(v) => onChange({ ...config, prompt_template: v })}
         placeholder="描述你要生成的视频…"
-        multiline
         hint="支持 {{var}} 引用上游变量。可使用 [运镜] 标记控制镜头运动"
+        task="视频生成提示词"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}
@@ -138,6 +142,7 @@ export default function VideoGenConfig({ config, onChange, upstreamOutputs }: Co
         min={4}
         max={15}
         placeholder="6"
+        hint="H3: 4-15 秒"
       />
       <SelectField
         label="画面比例"

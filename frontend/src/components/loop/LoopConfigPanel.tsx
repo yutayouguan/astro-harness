@@ -107,6 +107,10 @@ export interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
   upstreamOutputs?: UpstreamOutput[];
+  /** 辅助模型 provider ID */
+  aiProviderId?: string;
+  /** 辅助模型名称 */
+  aiModel?: string;
 }
 
 interface Props {
@@ -117,6 +121,10 @@ interface Props {
   disabled: boolean;
   workflowId: string | null;
   upstreamOutputs?: UpstreamOutput[];
+  /** 辅助模型 provider + model（workflow 级别） */
+  aiProviderId?: string;
+  aiModel?: string;
+  onAiProviderChange?: (providerId: string, model: string) => void;
   onLabelChange: (label: string) => void;
   onConfigChange: (config: Record<string, unknown>) => void;
   onDisabledChange: (disabled: boolean) => void;
@@ -204,13 +212,16 @@ export default function LoopConfigPanel({
   disabled,
   workflowId,
   upstreamOutputs,
+  aiProviderId,
+  aiModel,
+  onAiProviderChange,
   onLabelChange,
   onConfigChange,
   onDisabledChange,
   onDelete,
 }: Props) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"config" | "logs">("config");
+  const [tab, setTab] = useState<"config" | "logs" | "ai_model">("config");
   const [showJson, setShowJson] = useState(false);
   const confirm = useConfirm();
   const meta = getNodeMeta(nodeType);
@@ -233,6 +244,12 @@ export default function LoopConfigPanel({
           onClick={() => setTab("logs")}
         >
           {t("loop.logsTab")}
+        </button>
+        <button
+          className={`loop-config-tab${tab === "ai_model" ? " is-active" : ""}`}
+          onClick={() => setTab("ai_model")}
+        >
+          辅助模型
         </button>
       </div>
 
@@ -287,7 +304,15 @@ export default function LoopConfigPanel({
 
             {/* ── Node-specific config form ── */}
             <Suspense fallback={<div className="loop-config-placeholder">{t("loop.loading")}</div>}>
-              {ConfigForm && <ConfigForm config={config} onChange={onConfigChange} upstreamOutputs={upstreamOutputs} />}
+              {ConfigForm && (
+                <ConfigForm
+                  config={config}
+                  onChange={onConfigChange}
+                  upstreamOutputs={upstreamOutputs}
+                  aiProviderId={aiProviderId}
+                  aiModel={aiModel}
+                />
+              )}
             </Suspense>
 
             <div className="loop-config-divider" />
@@ -318,6 +343,45 @@ export default function LoopConfigPanel({
       {tab === "logs" && (
         <NodeStepLogs nodeId={nodeId} workflowId={workflowId} />
       )}
+
+      {tab === "ai_model" && (
+        <div className="loop-config-panel-scroll">
+          <div className="loop-config-panel-body">
+            <div className="loop-config-ai-model-intro">
+              配置面板中带 <span className="loop-config-ai-btn-inline">✨ AI 生成</span> 按钮的字段，
+              将使用此处选择的模型来润色或生成内容。
+            </div>
+            <Suspense fallback={null}>
+              <AiModelPicker
+                providerId={aiProviderId ?? ""}
+                model={aiModel ?? ""}
+                onChange={(pid, m) => onAiProviderChange?.(pid, m)}
+              />
+            </Suspense>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+const ProviderModelSelectLazy = lazy(() => import("./configs/ProviderModelSelect"));
+
+function AiModelPicker({
+  providerId,
+  model,
+  onChange,
+}: {
+  providerId: string;
+  model: string;
+  onChange: (providerId: string, model: string) => void;
+}) {
+  return (
+    <ProviderModelSelectLazy
+      providerId={providerId}
+      model={model}
+      onProviderChange={(pid) => onChange(pid, model)}
+      onModelChange={(m) => onChange(providerId, m)}
+    />
   );
 }

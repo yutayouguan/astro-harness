@@ -1,8 +1,10 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, AiAssistField, cfgStr } from "./ConfigField";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const CHANNEL_OPTIONS = [
@@ -11,12 +13,13 @@ const CHANNEL_OPTIONS = [
   { value: "webhook", label: "Webhook" },
 ];
 
-export default function SendNotificationConfig({ config, onChange }: ConfigProps) {
+export default function SendNotificationConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
+  const channel = cfgStr(config, "channel", "system");
   return (
     <>
       <SelectField
         label="通知渠道"
-        value={cfgStr(config, "channel", "system")}
+        value={channel}
         onChange={(v) => onChange({ ...config, channel: v })}
         options={CHANNEL_OPTIONS}
       />
@@ -27,21 +30,25 @@ export default function SendNotificationConfig({ config, onChange }: ConfigProps
         placeholder="通知标题"
         hint="支持 {{var}} 引用"
       />
-      <TextField
+      <AiAssistField
         label="内容"
         value={cfgStr(config, "body_template")}
         onChange={(v) => onChange({ ...config, body_template: v })}
         placeholder="通知正文…"
         multiline
         hint="支持 {{var}} 引用上游变量"
+        task="通知内容"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
-      <TextField
-        label="接收地址"
-        value={cfgStr(config, "recipient")}
-        onChange={(v) => onChange({ ...config, recipient: v })}
-        placeholder="邮箱、Webhook URL 等"
-        hint="系统通知可留空"
-      />
+      {channel !== "system" && (
+        <TextField
+          label="接收地址"
+          value={cfgStr(config, "recipient")}
+          onChange={(v) => onChange({ ...config, recipient: v })}
+          placeholder="邮箱、Webhook URL 等"
+        />
+      )}
     </>
   );
 }

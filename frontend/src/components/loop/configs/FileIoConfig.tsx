@@ -1,8 +1,10 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const OPERATION_OPTIONS = [
@@ -15,36 +17,44 @@ const OPERATION_OPTIONS = [
   { value: "list", label: "列出目录" },
 ];
 
-export default function FileIoConfig({ config, onChange }: ConfigProps) {
+export default function FileIoConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
+  const operation = cfgStr(config, "operation", "read");
   return (
     <>
       <SelectField
         label="操作类型"
-        value={cfgStr(config, "operation", "read")}
+        value={operation}
         onChange={(v) => onChange({ ...config, operation: v })}
         options={OPERATION_OPTIONS}
       />
-      <TextField
+      <FilePathField
         label="路径"
         value={cfgStr(config, "path")}
         onChange={(v) => onChange({ ...config, path: v })}
         placeholder="文件或目录路径"
         hint="支持 {{var}} 引用"
+        upstream={up}
       />
-      <TextField
-        label="目标路径"
-        value={cfgStr(config, "dest_path")}
-        onChange={(v) => onChange({ ...config, dest_path: v })}
-        placeholder="用于复制/移动的目标路径"
-      />
-      <TextField
-        label="写入内容"
-        value={cfgStr(config, "content_template")}
-        onChange={(v) => onChange({ ...config, content_template: v })}
-        placeholder="写入/追加的内容"
-        multiline
-        hint="支持 {{var}} 引用上游变量"
-      />
+      {(operation === "copy" || operation === "move") && (
+        <FilePathField
+          label="目标路径"
+          value={cfgStr(config, "dest_path")}
+          onChange={(v) => onChange({ ...config, dest_path: v })}
+          placeholder="用于复制/移动的目标路径"
+          upstream={up}
+        />
+      )}
+      {(operation === "write" || operation === "append") && (
+        <TextField
+          label="写入内容"
+          value={cfgStr(config, "content_template")}
+          onChange={(v) => onChange({ ...config, content_template: v })}
+          placeholder="写入/追加的内容"
+          multiline
+          hint="支持 {{var}} 引用上游变量"
+        />
+      )}
     </>
   );
 }

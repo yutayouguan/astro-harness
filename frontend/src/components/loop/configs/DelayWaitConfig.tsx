@@ -15,6 +15,7 @@ export default function DelayWaitConfig({ config, onChange }: ConfigProps) {
         min={1}
         max={86400}
         placeholder="5"
+        hint="1 - 86400"
       />
     </>
   );

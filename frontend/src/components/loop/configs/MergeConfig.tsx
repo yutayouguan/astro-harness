@@ -16,6 +16,7 @@ export default function MergeConfig({ config, onChange }: ConfigProps) {
           { value: "wait_all", label: "等待全部 (Wait All)" },
           { value: "wait_any", label: "任一到达 (Wait Any)" },
         ]}
+        hint="Wait All: 等待所有上游完成；Wait Any: 任一完成即触发"
       />
     </>
   );

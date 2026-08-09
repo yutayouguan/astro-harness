@@ -1,8 +1,10 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { SelectField, AiAssistField, cfgStr } from "./ConfigField";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const LANGUAGE_OPTIONS = [
@@ -10,7 +12,7 @@ const LANGUAGE_OPTIONS = [
   { value: "python", label: "Python" },
 ];
 
-export default function CodeConfig({ config, onChange }: ConfigProps) {
+export default function CodeConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
   return (
     <>
       <SelectField
@@ -19,13 +21,16 @@ export default function CodeConfig({ config, onChange }: ConfigProps) {
         onChange={(v) => onChange({ ...config, language: v })}
         options={LANGUAGE_OPTIONS}
       />
-      <TextField
+      <AiAssistField
         label="代码"
         value={cfgStr(config, "source")}
         onChange={(v) => onChange({ ...config, source: v })}
         multiline
         placeholder={"// 接收 input 对象，返回 output\nconst output = { result: input.value * 2 };\nreturn output;"}
         hint="入参为 input 对象，需返回 output 对象"
+        task="代码编写"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
     </>
   );

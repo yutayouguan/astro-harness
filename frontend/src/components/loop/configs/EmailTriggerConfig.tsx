@@ -1,4 +1,4 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, PasswordField, cfgStr } from "./ConfigField";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -24,14 +24,16 @@ export default function EmailTriggerConfig({ config, onChange }: ConfigProps) {
         value={cfgStr(config, "host")}
         onChange={(v) => onChange({ ...config, host: v })}
         placeholder="imap.example.com"
+        hint="如 imap.gmail.com"
       />
       <TextField
         label="用户名"
         value={cfgStr(config, "username")}
         onChange={(v) => onChange({ ...config, username: v })}
         placeholder="your@email.com"
+        hint="完整邮箱地址"
       />
-      <TextField
+      <PasswordField
         label="密码 / 授权码"
         value={cfgStr(config, "password")}
         onChange={(v) => onChange({ ...config, password: v })}

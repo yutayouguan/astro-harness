@@ -1,20 +1,38 @@
-import { TextField, NumberField, ToggleField, cfgStr, cfgNum, cfgBool } from "./ConfigField";
+import { AiAssistField, NumberField, SelectField, ToggleField, cfgStr, cfgNum, cfgBool } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
-export default function MusicGenConfig({ config, onChange }: ConfigProps) {
+const GENRE_OPTIONS = [
+  { value: "pop", label: "Pop" },
+  { value: "jazz", label: "Jazz" },
+  { value: "electronic", label: "Electronic" },
+  { value: "classical", label: "Classical" },
+  { value: "rock", label: "Rock" },
+  { value: "ambient", label: "Ambient" },
+  { value: "hiphop", label: "Hip-Hop" },
+  { value: "custom", label: "自定义" },
+];
+
+export default function MusicGenConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
   return (
     <>
-      <TextField
+      <AiAssistField
         label="音乐描述"
         value={cfgStr(config, "prompt_template")}
         onChange={(v) => onChange({ ...config, prompt_template: v })}
         placeholder="轻快的电子乐，适合产品宣传…"
-        multiline
+        hint="描述你想要的音乐风格、情绪和用途"
+        task="音乐描述"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}
@@ -30,17 +48,18 @@ export default function MusicGenConfig({ config, onChange }: ConfigProps) {
         min={5}
         max={300}
         placeholder="30"
+        hint="秒"
       />
       <ToggleField
         label="纯器乐（无人声）"
         value={cfgBool(config, "instrumental")}
         onChange={(v) => onChange({ ...config, instrumental: v })}
       />
-      <TextField
+      <SelectField
         label="曲风 (可选)"
         value={cfgStr(config, "genre")}
         onChange={(v) => onChange({ ...config, genre: v })}
-        placeholder="pop / jazz / electronic"
+        options={GENRE_OPTIONS}
       />
     </>
   );

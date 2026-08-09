@@ -1,9 +1,13 @@
 import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const VOICE_OPTIONS = [
@@ -54,6 +58,7 @@ export default function TtsConfig({ config, onChange }: ConfigProps) {
         max={4.0}
         step={0.25}
         placeholder="1.0"
+        hint="0.25 - 4.0"
       />
       <SelectField
         label="输出格式"

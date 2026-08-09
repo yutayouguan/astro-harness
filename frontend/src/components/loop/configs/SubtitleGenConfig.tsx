@@ -1,4 +1,4 @@
-import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
+import { SelectField, FilePathField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -6,12 +6,30 @@ interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
   upstreamOutputs?: UpstreamOutput[];
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const OUTPUT_FORMAT_OPTIONS = [
   { value: "srt", label: "srt" },
   { value: "vtt", label: "vtt" },
   { value: "json", label: "json" },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: "", label: "自动检测" },
+  { value: "zh", label: "中文" },
+  { value: "en", label: "English" },
+  { value: "ja", label: "日本語" },
+  { value: "ko", label: "한국어" },
+];
+
+const TRANSLATE_LANGUAGE_OPTIONS = [
+  { value: "", label: "不翻译" },
+  { value: "zh", label: "中文" },
+  { value: "en", label: "English" },
+  { value: "ja", label: "日本語" },
+  { value: "ko", label: "한국어" },
 ];
 
 export default function SubtitleGenConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
@@ -33,12 +51,11 @@ export default function SubtitleGenConfig({ config, onChange, upstreamOutputs }:
         onModelChange={(v) => onChange({ ...config, model: v })}
         mediaType="subtitle"
       />
-      <TextField
+      <SelectField
         label="语言 (可选)"
         value={cfgStr(config, "language")}
         onChange={(v) => onChange({ ...config, language: v })}
-        placeholder="留空自动检测"
-        hint="如 zh, en, ja"
+        options={LANGUAGE_OPTIONS}
       />
       <SelectField
         label="字幕格式"
@@ -46,12 +63,11 @@ export default function SubtitleGenConfig({ config, onChange, upstreamOutputs }:
         onChange={(v) => onChange({ ...config, output_format: v })}
         options={OUTPUT_FORMAT_OPTIONS}
       />
-      <TextField
+      <SelectField
         label="翻译目标语言 (可选)"
         value={cfgStr(config, "translate_to")}
         onChange={(v) => onChange({ ...config, translate_to: v })}
-        placeholder="en"
-        hint="留空不翻译"
+        options={TRANSLATE_LANGUAGE_OPTIONS}
       />
     </>
   );

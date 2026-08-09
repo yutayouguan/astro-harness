@@ -1,4 +1,4 @@
-import { TextField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
+import { AiAssistField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -6,6 +6,8 @@ interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
   upstreamOutputs?: UpstreamOutput[];
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const MODE_OPTIONS = [
@@ -32,7 +34,7 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "jpg", label: "JPG" },
 ];
 
-export default function ImageGenConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function ImageGenConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
   const mode = cfgStr(config, "mode", "text_to_image");
   const up = upstreamOutputs ?? [];
   return (
@@ -43,13 +45,15 @@ export default function ImageGenConfig({ config, onChange, upstreamOutputs }: Co
         onChange={(v) => onChange({ ...config, mode: v })}
         options={MODE_OPTIONS}
       />
-      <TextField
+      <AiAssistField
         label="生成提示词"
         value={cfgStr(config, "prompt_template")}
         onChange={(v) => onChange({ ...config, prompt_template: v })}
         placeholder="描述你要生成的图片…"
-        multiline
         hint="支持 {{var}} 引用上游变量"
+        task="图片生成提示词"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}

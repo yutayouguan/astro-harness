@@ -1,4 +1,4 @@
-import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, FilePathField, AiAssistField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -6,6 +6,8 @@ interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
   upstreamOutputs?: UpstreamOutput[];
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
 const TASK_OPTIONS = [
@@ -22,7 +24,7 @@ const INPUT_TYPE_OPTIONS = [
   { value: "url", label: "网页 URL" },
 ];
 
-export default function DocumentUnderstandingConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function DocumentUnderstandingConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
   const up = upstreamOutputs ?? [];
   const inputType = cfgStr(config, "input_type", "image");
   return (
@@ -61,13 +63,16 @@ export default function DocumentUnderstandingConfig({ config, onChange, upstream
         onProviderChange={(v) => onChange({ ...config, provider_id: v })}
         onModelChange={(v) => onChange({ ...config, model: v })}
       />
-      <TextField
+      <AiAssistField
         label="提取指令"
         value={cfgStr(config, "prompt_template")}
         onChange={(v) => onChange({ ...config, prompt_template: v })}
         multiline
         placeholder="描述要提取的内容或问题…"
         hint="用于 QA 或自定义提取"
+        task="文档提取指令"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
     </>
   );

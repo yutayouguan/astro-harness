@@ -373,3 +373,93 @@ pub async fn ai_generate_workflow(
 
     Ok(result)
 }
+
+// ── AI 辅助润色 ─────────────────────────────────────────────────────
+
+/// 工作流配置面板 AI 辅助：润色 / 生成文本。
+///
+/// `task` 描述字段用途（如 "视频生成提示词"），`text` 为当前文本（可空）。
+/// 空文本时生成，有文本时润色。
+#[tauri::command]
+pub async fn loop_ai_polish(
+    text: String,
+    task: String,
+    provider_id: Option<String>,
+    model: Option<String>,
+) -> Result<String, String> {
+    use crate::providers_commands::{find_provider, resolve_api_key};
+
+    let provider_cfg = if let Some(id) = provider_id.as_deref().filter(|s| !s.is_empty()) {
+        find_provider(id)?
+    } else {
+        let state = crate::providers_commands::get_providers_state()?;
+        let id = state
+            .active_provider_id
+            .or_else(|| state.providers.first().map(|p| p.id.clone()))
+            .ok_or_else(|| "请先在「模型服务」中配置至少一个供应商".to_string())?;
+        find_provider(&id)?
+    };
+
+    let (has, _, _, key) = resolve_api_key(&provider_cfg);
+    if provider_cfg.kind.requires_api_key() && !has {
+        return Err(format!(
+            "未配置 API Key。请在「模型服务」中为 {} 保存密钥。",
+            provider_cfg.display_name
+        ));
+    }
+    let api_key = key.unwrap_or_default();
+    let model_name = model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(provider_cfg.model.as_str())
+        .to_string();
+
+    let base_url = if provider_cfg.endpoint.trim().is_empty() {
+        None
+    } else {
+        Some(provider_cfg.endpoint.trim_end_matches('/').to_string())
+    };
+
+    let config = providers::ProviderConfig {
+        api_key,
+        base_url,
+        model: model_name.clone(),
+        temperature: 0.7,
+        max_tokens: 2048,
+        thinking_enabled: false,
+        reasoning_effort: String::new(),
+        additional_params: serde_json::json!(null),
+        previous_interaction_id: None,
+    };
+
+    let system = if text.trim().is_empty() {
+        format!(
+            "你是一位专业的 AI 工作流配置助手。用户正在配置「{}」字段。\n\
+             请直接生成一段高质量的内容，不要解释。\n\
+             要求：专业、具体、直接可用。只输出内容本身。",
+            task
+        )
+    } else {
+        format!(
+            "你是一位专业的 AI 工作流配置助手。用户正在配置「{}」字段。\n\
+             请润色和改进用户提供的文本，使其更专业、更具体。\n\
+             保持原意，提升质量。只输出改进后的文本，不要解释。",
+            task
+        )
+    };
+    let user_msg = if text.trim().is_empty() {
+        format!("请为「{}」生成一段优质内容。", task)
+    } else {
+        text
+    };
+
+    workflow::nodes::ai::one_shot_llm(
+        provider_cfg.kind.backend_id(),
+        &config,
+        &system,
+        &user_msg,
+    )
+    .await
+    .map_err(|e| format!("AI 润色失败: {e}"))
+}

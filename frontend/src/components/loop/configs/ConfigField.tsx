@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
-import { FolderOpen, Variable, X, Plus } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { FolderOpen, Variable, X, Sparkles, Eye, EyeOff, Loader2 } from "lucide-react";
 import type { UpstreamOutput, MediaType } from "./upstreamOutputs";
 import { varRef } from "./upstreamOutputs";
 
@@ -157,6 +158,125 @@ export function cfgStrArray(config: Record<string, unknown>, key: string): strin
     try { const arr = JSON.parse(v); if (Array.isArray(arr)) return arr; } catch { /* ignore */ }
   }
   return [];
+}
+
+// ---------------------------------------------------------------------------
+// AI 辅助文本字段 — 润色 / 生成
+// ---------------------------------------------------------------------------
+
+interface AiAssistFieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+  /** 描述字段用途（如"视频生成提示词"），用于 AI 生成上下文 */
+  task: string;
+  /** 辅助模型 provider_id（可选，缺省用全局默认） */
+  aiProviderId?: string;
+  /** 辅助模型名称（可选） */
+  aiModel?: string;
+  multiline?: boolean;
+}
+
+/** 带 AI 润色/生成按钮的文本输入 */
+export function AiAssistField({
+  label, value, onChange, placeholder, hint, task,
+  aiProviderId, aiModel, multiline = true,
+}: AiAssistFieldProps) {
+  const [loading, setLoading] = useState(false);
+
+  const handleAi = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await invoke<string>("loop_ai_polish", {
+        text: value,
+        task,
+        providerId: aiProviderId || null,
+        model: aiModel || null,
+      });
+      if (result && result.trim()) onChange(result.trim());
+    } catch (e) {
+      console.error("AI assist error:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [value, task, aiProviderId, aiModel, onChange]);
+
+  return (
+    <div className="loop-config-field">
+      <div className="loop-config-label-row">
+        <span className="loop-config-label">{label}</span>
+        <button
+          className={`loop-config-ai-btn${loading ? " is-loading" : ""}`}
+          onClick={handleAi}
+          disabled={loading}
+          title={value.trim() ? "AI 润色" : "AI 生成"}
+          type="button"
+        >
+          {loading ? <Loader2 size={13} className="loop-spin" /> : <Sparkles size={13} />}
+          <span>{value.trim() ? "润色" : "AI 生成"}</span>
+        </button>
+      </div>
+      {multiline ? (
+        <textarea
+          className="loop-config-textarea"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={4}
+        />
+      ) : (
+        <input
+          className="loop-config-input"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+        />
+      )}
+      {hint && <span className="loop-config-hint">{hint}</span>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 密码字段
+// ---------------------------------------------------------------------------
+
+interface PasswordFieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+}
+
+export function PasswordField({ label, value, onChange, placeholder, hint }: PasswordFieldProps) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="loop-config-field">
+      <span className="loop-config-label">{label}</span>
+      <div className="loop-config-file-row">
+        <input
+          className="loop-config-input loop-config-file-input"
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete="off"
+        />
+        <button
+          className="loop-config-file-btn"
+          onClick={() => setVisible((v) => !v)}
+          title={visible ? "隐藏" : "显示"}
+          type="button"
+        >
+          {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+      {hint && <span className="loop-config-hint">{hint}</span>}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

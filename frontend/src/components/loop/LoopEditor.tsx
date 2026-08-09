@@ -1042,6 +1042,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             disabled={!!((selectedNode.data as Record<string, unknown>).disabled)}
             workflowId={workflowId}
             upstreamOutputs={selectedUpstreamOutputs}
+            aiProviderId={(variables.__ai_provider_id as string) ?? ""}
+            aiModel={(variables.__ai_model as string) ?? ""}
+            onAiProviderChange={(pid, m) => {
+              setVariables((v) => ({ ...v, __ai_provider_id: pid, __ai_model: m }));
+              setDirty(true);
+            }}
             onLabelChange={(label) => {
               setNodes((nds) =>
                 nds.map((n) =>

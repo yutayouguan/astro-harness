@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
-import { TextField, cfgStr } from "./ConfigField";
+import { AiAssistField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import ReasoningLevelSelect from "./ReasoningLevelSelect";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  aiProviderId?: string;
+  aiModel?: string;
 }
 
-export default function AiAgentTaskConfig({ config, onChange }: ConfigProps) {
+export default function AiAgentTaskConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
   const [upstreamOpen, setUpstreamOpen] = useState(false);
 
   return (
@@ -38,13 +40,16 @@ export default function AiAgentTaskConfig({ config, onChange }: ConfigProps) {
       </div>
 
       {/* 指令 */}
-      <TextField
+      <AiAssistField
         label="指令"
         value={cfgStr(config, "prompt_template")}
         onChange={(v) => onChange({ ...config, prompt_template: v })}
         multiline
         placeholder="描述你希望智能体执行的操作。用 {{text}} 引用上一步的输出。"
         hint="不写 {{}} 时，上游的输出会自动接到指令末尾；想控制位置就用 {{}}（例如 {{text}}）。"
+        task="AI 智能体指令"
+        aiProviderId={aiProviderId}
+        aiModel={aiModel}
       />
 
       {/* 供应商 + 模型 */}
