@@ -3210,6 +3210,33 @@
   }
 }
 
+/* ── Canvas search ───────────────────────────────────────────── */
+
+.loop-canvas-search {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--bg0, #fff);
+  border: 1px solid var(--tone, #6366f1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 50;
+  color: var(--ink-tertiary);
+}
+.loop-canvas-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: var(--ink);
+  width: 200px;
+}
+
 /* ── Context menu ────────────────────────────────────────────── */
 
 .loop-context-menu {

@@ -45,6 +45,7 @@ import LoopIcon from "./LoopIcon";
 import LoopAiAssistant from "./LoopAiAssistant";
 import { layoutNodes } from "./loopLayout";
 import { useLoopHistory } from "./useLoopHistory";
+import { isValidConnection } from "./loopConnectionRules";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -374,6 +375,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteSearch, setPaletteSearch] = useState("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
+  const [canvasSearch, setCanvasSearch] = useState("");
+  const [showCanvasSearch, setShowCanvasSearch] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
@@ -453,6 +456,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       } else if (e.key === "s") {
         e.preventDefault();
         saveRef.current?.();
+      } else if (e.key === "f") {
+        e.preventDefault();
+        setShowCanvasSearch(true);
       }
     };
     window.addEventListener("keydown", handler);
@@ -1188,6 +1194,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             nodeTypes={nodeTypes}
             defaultEdgeOptions={{ type: "smoothstep", animated: true }}
             connectionLineType={ConnectionLineType.SmoothStep}
+            isValidConnection={(conn) => isValidConnection(conn as Connection, nodes)}
             snapToGrid
             snapGrid={[20, 20]}
             fitView
@@ -1223,6 +1230,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   ["⌘C", t("loop.shortcutCopy")],
                   ["⌘V", t("loop.shortcutPaste")],
                   ["⌘S", t("loop.save")],
+                  ["⌘F", t("loop.shortcutFind")],
                   ["Delete", t("loop.delete")],
                 ].map(([key, label]) => (
                   <div key={key} className="loop-shortcuts-row">
@@ -1231,6 +1239,39 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+          {showCanvasSearch && (
+            <div className="loop-canvas-search">
+              <LucideIcons.Search size={14} />
+              <input
+                autoFocus
+                placeholder={t("loop.searchNodes")}
+                value={canvasSearch}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  setCanvasSearch(q);
+                  if (q.trim()) {
+                    const ql = q.toLowerCase();
+                    const found = nodes.find((n) => {
+                      const d = n.data as Record<string, unknown>;
+                      const label = (d.label as string) ?? "";
+                      return label.toLowerCase().includes(ql);
+                    });
+                    if (found) {
+                      setSelectedNodeId(found.id);
+                      reactFlowInstance.fitView({ nodes: [found], padding: 0.5, duration: 300 });
+                    }
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { setShowCanvasSearch(false); setCanvasSearch(""); }
+                  if (e.key === "Enter") { setShowCanvasSearch(false); }
+                }}
+              />
+              <button className="loop-icon-btn" onClick={() => { setShowCanvasSearch(false); setCanvasSearch(""); }}>
+                <LucideIcons.X size={12} />
+              </button>
             </div>
           )}
           {contextMenu && (
