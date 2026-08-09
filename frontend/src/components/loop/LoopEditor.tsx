@@ -40,6 +40,7 @@ import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
 import LoopAiAssistant from "./LoopAiAssistant";
+import { layoutNodes } from "./loopLayout";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -370,6 +371,35 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
+
+  const handleAutoLayout = useCallback(() => {
+    const curNodes = reactFlowInstance.getNodes();
+    const curEdges = reactFlowInstance.getEdges();
+    const dtoNodes = curNodes.map((n) => ({
+      id: n.id,
+      node_type: (n.data as Record<string, unknown>).nodeType as NodeType,
+      label: (n.data as Record<string, unknown>).label as string,
+      position: n.position,
+      config: {} as Record<string, unknown>,
+      disabled: false,
+    }));
+    const dtoEdges = curEdges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      source_handle: e.sourceHandle ?? null,
+      target: e.target,
+      target_handle: e.targetHandle ?? null,
+    }));
+    const positions = layoutNodes(dtoNodes, dtoEdges);
+    setNodes((nds) =>
+      nds.map((n) => {
+        const pos = positions.get(n.id);
+        return pos ? { ...n, position: pos } : n;
+      }),
+    );
+    setDirty(true);
+    setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 50);
+  }, [reactFlowInstance, setNodes]);
 
   // node action callbacks (injected into node data for toolbar buttons)
   const deleteNode = useCallback((nodeId: string) => {
@@ -777,6 +807,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onClick={() => setShowVarsPanel((v) => !v)}
           >
             <LucideIcons.Variable size={16} />
+          </button>
+          <button
+            className="loop-icon-btn"
+            title={t("loop.autoLayout")}
+            onClick={handleAutoLayout}
+          >
+            <LucideIcons.LayoutGrid size={16} />
           </button>
           <button
             className={`loop-icon-btn${fullscreen ? " is-active" : ""}`}
