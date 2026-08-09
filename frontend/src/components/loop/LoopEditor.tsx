@@ -738,6 +738,15 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   saveRef.current = () => void handleSave();
 
+  // 自动保存：dirty 30 秒后自动触发
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const timer = setTimeout(() => {
+      void handleSave();
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [dirty, saving]);
+
   // custom mouse-based drag (bypasses Tauri WKWebView HTML5 DnD issues)
   useEffect(() => {
     if (!draggingType) return;

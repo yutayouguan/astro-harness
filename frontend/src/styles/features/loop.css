@@ -1211,6 +1211,27 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── React Flow Edge styling ──────────────────────────────────── */
+
+.loop-canvas-container .react-flow__edge-path {
+  stroke-width: 1.5;
+  transition: stroke 0.15s, stroke-width 0.15s;
+}
+.loop-canvas-container .react-flow__edge-interaction {
+  stroke-width: 20;
+}
+.loop-canvas-container .react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 2.5;
+  stroke: var(--tone, #6366f1);
+}
+.loop-canvas-container .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 2.5;
+  stroke: var(--tone, #6366f1);
+}
+.loop-canvas-container .react-flow__edgelabel-renderer {
+  pointer-events: none;
+}
+
 /* ── React Flow Node ──────────────────────────────────────────── */
 
 .loop-rf-node {

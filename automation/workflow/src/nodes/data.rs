@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
@@ -74,12 +74,71 @@ impl NodeExecutor for JsonExec {
 
 pub struct CodeExec;
 
+const MAX_CODE_OUTPUT: usize = 512_000;
+
 #[async_trait]
 impl NodeExecutor for CodeExec {
-    async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
         let lang = node.config.get("language").and_then(|v| v.as_str()).unwrap_or("javascript");
-        let _source = node.config.get("source").and_then(|v| v.as_str()).unwrap_or("");
-        anyhow::bail!("代码执行引擎正在开发中 — {} 运行时待集成 (boa/RustPython)", lang)
+        let source = node.config.get("source").and_then(|v| v.as_str()).unwrap_or("");
+        let source = ctx.interpolate(source);
+
+        if source.trim().is_empty() {
+            bail!("代码节点的 source 为空");
+        }
+
+        let (cmd, args, ext) = match lang {
+            "javascript" | "js" => ("node", vec!["-e".to_string()], "js"),
+            "python" | "py" => ("python3", vec!["-c".to_string()], "py"),
+            "bash" | "sh" => ("bash", vec!["-c".to_string()], "sh"),
+            _ => bail!("不支持的语言: {}，支持 javascript/python/bash", lang),
+        };
+
+        // 注入上游变量为环境变量 LOOP_*
+        let vars = ctx.snapshot_outputs();
+        let mut env_vars: Vec<(String, String)> = Vec::new();
+        if let serde_json::Value::Object(map) = &vars {
+            for (k, v) in map {
+                let val = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    _ => serde_json::to_string(v).unwrap_or_default(),
+                };
+                env_vars.push((format!("LOOP_{}", k.to_uppercase()), val));
+            }
+        }
+
+        let output = tokio::task::spawn_blocking(move || {
+            let mut child = std::process::Command::new(cmd);
+            child.args(&args).arg(&source);
+            for (k, v) in &env_vars {
+                child.env(k, v);
+            }
+            let result = child.output();
+            result
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("代码执行任务失败: {}", e))?
+        .map_err(|e| anyhow::anyhow!("启动 {} 失败（是否已安装？）: {}", cmd, e))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        if stdout.len() > MAX_CODE_OUTPUT {
+            bail!("代码输出过大（{} bytes），上限 {} bytes", stdout.len(), MAX_CODE_OUTPUT);
+        }
+
+        if !output.status.success() {
+            bail!("代码执行失败（exit {}）:\n{}", output.status.code().unwrap_or(-1), stderr);
+        }
+
+        let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
+            .unwrap_or(serde_json::Value::String(stdout.trim().to_string()));
+
+        Ok(NodeResult::Success(serde_json::json!({
+            "output": parsed,
+            "language": lang,
+            "stderr": if stderr.is_empty() { None } else { Some(stderr.to_string()) },
+        })))
     }
 }
 
