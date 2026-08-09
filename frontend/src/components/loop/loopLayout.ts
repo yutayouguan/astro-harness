@@ -1,7 +1,7 @@
 import type { LoopNodeDto, LoopEdgeDto } from "./loopTypes";
 
-const LAYER_GAP_X = 200;
-const NODE_GAP_Y = 70;
+const LAYER_GAP_X = 280;
+const NODE_GAP_Y = 120;
 
 export function layoutNodes(
   nodes: LoopNodeDto[],

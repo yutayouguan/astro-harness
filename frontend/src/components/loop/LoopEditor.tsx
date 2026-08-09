@@ -1163,18 +1163,30 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               config: ((n.data as Record<string, unknown>).config as Record<string, unknown>) ?? {},
             }))}
             onApply={(genNodes, genEdges) => {
-              // 自动布局：水平分层
-              const layoutX = 200;
-              const layoutY = 100;
-              const gapX = 250;
-              const gapY = 120;
+              const dtoNodes = genNodes.map((n) => ({
+                id: n.id,
+                node_type: n.node_type as NodeType,
+                label: n.label,
+                config: n.config,
+                position: { x: 0, y: 0 },
+                disabled: false,
+              }));
+              const dtoEdges = genEdges.map((e) => ({
+                id: `${e.source}-${e.target}`,
+                source: e.source,
+                source_handle: e.source_handle ?? null,
+                target: e.target,
+                target_handle: null,
+              }));
+              const positions = layoutNodes(dtoNodes, dtoEdges);
 
-              const newRfNodes = genNodes.map((n, i) => {
+              const newRfNodes = genNodes.map((n) => {
                 const meta = NODE_REGISTRY.find((m) => m.type === n.node_type) ?? NODE_REGISTRY[0];
+                const pos = positions.get(n.id) ?? { x: 0, y: 0 };
                 return {
                   id: n.id,
-                  type: "loopNode" as const,
-                  position: { x: layoutX + (i % 4) * gapX, y: layoutY + Math.floor(i / 4) * gapY },
+                  type: rfNodeType(n.node_type),
+                  position: pos,
                   data: {
                     label: n.label,
                     meta,
@@ -1190,6 +1202,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 source: e.source,
                 sourceHandle: e.source_handle ?? undefined,
                 target: e.target,
+                targetHandle: undefined,
                 animated: true,
               }));
 
@@ -1197,6 +1210,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               setEdges(newRfEdges);
               setDirty(true);
               setShowAiAssistant(false);
+              setTimeout(() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 }), 100);
             }}
             onClose={() => setShowAiAssistant(false)}
           />
