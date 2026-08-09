@@ -127,8 +127,8 @@ function LoopPreviewInner({ workflow }: Props) {
       edgesFocusable={false}
       elementsSelectable={false}
       panOnDrag
-      zoomOnScroll={false}
-      zoomOnPinch={false}
+      zoomOnScroll
+      zoomOnPinch
       zoomOnDoubleClick={false}
       preventScrolling={false}
       proOptions={{ hideAttribution: true }}
