@@ -34,6 +34,8 @@ pub struct WorkflowRunResult {
     pub steps_executed: usize,
 }
 
+const WORKFLOW_TIMEOUT_SECS: u64 = 30 * 60; // 30 分钟
+
 /// 执行一条工作流
 pub async fn execute_workflow(
     workflow: &Workflow,
@@ -52,7 +54,20 @@ pub async fn execute_workflow(
         &started_at,
     )?;
 
-    let result = execute_inner(workflow, trigger_input, &run_id, run_db).await;
+    let timeout_secs = workflow.variables.get("timeout_seconds")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(WORKFLOW_TIMEOUT_SECS);
+
+    let result = match tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        execute_inner(workflow, trigger_input, &run_id, run_db),
+    ).await {
+        Ok(r) => r,
+        Err(_) => Err(anyhow::anyhow!(
+            "工作流执行超时（{}秒），可在工作流变量中设置 timeout_seconds 调整",
+            timeout_secs,
+        )),
+    };
 
     let finished_at = Local::now().to_rfc3339();
     match &result {
@@ -265,8 +280,23 @@ async fn execute_inner_with_depth(
                 }
                 Err(e) => {
                     let err_msg = e.to_string();
-                    log_db_err!(run_db.finish_step_log(step_id, "failure", &step_finished, None, Some(&err_msg)));
-                    bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
+                    let on_error = node.config.get("on_error").and_then(|v| v.as_str()).unwrap_or("abort");
+                    match on_error {
+                        "skip" => {
+                            mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
+                            log_db_err!(run_db.finish_step_log(step_id, "skipped", &step_finished, None, Some(&err_msg)));
+                        }
+                        "fallback" => {
+                            let fb = node.config.get("fallback_value").cloned().unwrap_or(serde_json::json!(null));
+                            ctx.set_node_output(node_id, fb.clone());
+                            let fb_str = serde_json::to_string(&fb).ok();
+                            log_db_err!(run_db.finish_step_log(step_id, "fallback", &step_finished, fb_str.as_deref(), Some(&err_msg)));
+                        }
+                        _ => {
+                            log_db_err!(run_db.finish_step_log(step_id, "failure", &step_finished, None, Some(&err_msg)));
+                            bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
+                        }
+                    }
                 }
                 other => {
                     log_db_err!(run_db.finish_step_log(step_id, "success", &step_finished, Some(&format!("{:?}", other)), None));

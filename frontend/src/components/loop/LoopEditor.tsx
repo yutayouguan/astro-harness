@@ -42,6 +42,7 @@ import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
 import LoopAiAssistant from "./LoopAiAssistant";
 import { layoutNodes } from "./loopLayout";
+import { useLoopHistory } from "./useLoopHistory";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -365,6 +366,64 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
+  const { pushSnapshot, undo, redo } = useLoopHistory(
+    setNodes, setEdges,
+    () => reactFlowInstance.getNodes(),
+    () => reactFlowInstance.getEdges(),
+  );
+
+  const clipboardRef = useRef<{ nodes: RFNode[]; edges: RFEdge[] } | null>(null);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((e.key === "z" && e.shiftKey) || e.key === "y") {
+        e.preventDefault();
+        redo();
+      } else if (e.key === "c") {
+        const selected = reactFlowInstance.getNodes().filter((n) => n.selected);
+        if (selected.length === 0) return;
+        const selectedIds = new Set(selected.map((n) => n.id));
+        const relatedEdges = reactFlowInstance.getEdges().filter(
+          (e) => selectedIds.has(e.source) && selectedIds.has(e.target),
+        );
+        clipboardRef.current = { nodes: selected, edges: relatedEdges };
+      } else if (e.key === "v" && clipboardRef.current) {
+        e.preventDefault();
+        const { nodes: clipNodes, edges: clipEdges } = clipboardRef.current;
+        const idMap = new Map<string, string>();
+        clipNodes.forEach((n) => idMap.set(n.id, `${n.id}_copy_${Date.now()}`));
+        const newNodes = clipNodes.map((n) => ({
+          ...n,
+          id: idMap.get(n.id)!,
+          position: { x: n.position.x + 40, y: n.position.y + 40 },
+          selected: false,
+        }));
+        const newEdges = clipEdges
+          .filter((e) => idMap.has(e.source) && idMap.has(e.target))
+          .map((e) => ({
+            ...e,
+            id: `${e.id}_copy_${Date.now()}`,
+            source: idMap.get(e.source)!,
+            target: idMap.get(e.target)!,
+          }));
+        pushSnapshot();
+        setNodes((nds) => [...nds, ...newNodes]);
+        setEdges((eds) => [...eds, ...newEdges]);
+        setDirty(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo, redo, reactFlowInstance, setNodes, setEdges, pushSnapshot]);
+
   const selectedUpstreamOutputs = useMemo(() => {
     if (!selectedNodeId) return [];
     const allNodes = nodes.map((n) => {
@@ -384,6 +443,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [showAiAssistant, setShowAiAssistant] = useState(false);
 
   const handleAutoLayout = useCallback(() => {
+    pushSnapshot();
     const curNodes = reactFlowInstance.getNodes();
     const curEdges = reactFlowInstance.getEdges();
     const dtoNodes = curNodes.map((n) => ({
@@ -414,6 +474,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   // node action callbacks (injected into node data for toolbar buttons)
   const deleteNode = useCallback((nodeId: string) => {
+    pushSnapshot();
     setNodes((nds) => nds.filter((n) => n.id !== nodeId));
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
     setSelectedNodeId(null);
@@ -512,10 +573,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   const onConnect: OnConnect = useCallback(
     (conn: Connection) => {
+      pushSnapshot();
       setEdges((eds) => addEdge({ ...conn, animated: true }, eds));
       setDirty(true);
     },
-    [setEdges],
+    [setEdges, pushSnapshot],
   );
 
   // ── Connection-drop node picker ──────────────────────────────────
@@ -800,6 +862,21 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         />
         <div className="loop-editor-toolbar-right">
           <button
+            className="loop-icon-btn"
+            title={`${t("loop.undo")} (⌘Z)`}
+            onClick={undo}
+          >
+            <LucideIcons.Undo2 size={16} />
+          </button>
+          <button
+            className="loop-icon-btn"
+            title={`${t("loop.redo")} (⌘⇧Z)`}
+            onClick={redo}
+          >
+            <LucideIcons.Redo2 size={16} />
+          </button>
+          <span className="loop-editor-toolbar-sep" />
+          <button
             className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
             title={t("loop.aiAssistant")}
             onClick={() => {
@@ -993,13 +1070,18 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             nodes={nodesWithCallbacks}
             edges={edges}
             onNodesChange={(changes) => {
+              const hasStructural = changes.some((c) => c.type === "remove" || c.type === "add");
+              if (hasStructural) pushSnapshot();
               onNodesChange(changes);
               setDirty(true);
             }}
             onEdgesChange={(changes) => {
+              const hasStructural = changes.some((c) => c.type === "remove" || c.type === "add");
+              if (hasStructural) pushSnapshot();
               onEdgesChange(changes);
               setDirty(true);
             }}
+            onNodeDragStart={() => pushSnapshot()}
             onConnect={onConnect}
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}

@@ -723,6 +723,12 @@
   gap: 6px;
   margin-left: auto;
 }
+.loop-editor-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+}
 
 .loop-editor-body {
   position: relative;
