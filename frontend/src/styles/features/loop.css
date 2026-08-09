@@ -272,6 +272,7 @@
   border: 1px solid var(--border);
   backdrop-filter: blur(20px);
   transition: border-color 0.15s, transform 0.15s;
+  overflow: hidden;
 }
 .loop-card:hover {
   border-color: var(--tone, #ec4899);
@@ -322,10 +323,13 @@
 
 .loop-card-meta {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   margin-top: 8px;
   font-size: 12px;
   color: var(--ink-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .loop-card-preview {
