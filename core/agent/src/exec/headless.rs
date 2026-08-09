@@ -109,10 +109,14 @@ pub async fn run_headless_multi_turn(
         let stop_after = agent.tool_registry().any_stop_after(&names);
 
         for call in &response.calls {
-            let result = agent
+            let result = match agent
                 .handle_tool_call_async(&call.name, &call.arguments)
                 .await
-                .unwrap_or_else(|e| format!("工具错误: {e}").into());
+            {
+                Ok(output) => output,
+                Err(crate::runtime::ToolCallError::Cancelled) => break,
+                Err(e) => format!("工具错误: {e}").into(),
+            };
             agent.record_tool_result_with_id(Some(&call.id), Some(&call.name), result.text())?;
         }
 

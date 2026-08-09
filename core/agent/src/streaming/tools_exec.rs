@@ -297,8 +297,12 @@ async fn execute_tools_serial_inner(
             let mut agent = session.lock().await;
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
-            tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
-                .unwrap_or_else(|e| {
+            match tokio::task::block_in_place(|| {
+                agent.handle_tool_call(&call.name, &call.arguments)
+            }) {
+                Ok(output) => output,
+                Err(crate::runtime::ToolCallError::Cancelled) => return None,
+                Err(e) => {
                     memory::try_append_decision(
                         &memory_dir,
                         memory::DecisionEntry::new(
@@ -309,7 +313,8 @@ async fn execute_tools_serial_inner(
                         .with_session(session_id),
                     );
                     format!("工具错误: {e}").into()
-                })
+                }
+            }
         };
 
         // confirm/clarify：astro_hitl → 同回合 park

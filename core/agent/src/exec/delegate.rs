@@ -496,10 +496,13 @@ async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, U
         }
 
         for call in calls {
-            let mut result = tokio::task::block_in_place(|| {
+            let mut result = match tokio::task::block_in_place(|| {
                 a.agent.handle_tool_call(&call.name, &call.arguments)
-            })
-            .unwrap_or_else(|e| format!("工具错误: {e}").into());
+            }) {
+                Ok(output) => output,
+                Err(crate::runtime::ToolCallError::Cancelled) => break,
+                Err(e) => format!("工具错误: {e}").into(),
+            };
             let result_text = result.text().to_string();
             if let Some(hitl) = crate::streaming::parse_astro_hitl(&result_text) {
                 let resolved = match crate::streaming::try_park_parent_hitl(

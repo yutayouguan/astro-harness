@@ -40,6 +40,7 @@ mod turn_lifecycle;
 pub(crate) mod usage;
 mod validate;
 
+pub use tool_dispatch::ToolCallError;
 pub use turn_budget::MaxDepthError;
 pub use validate::validate_message_order;
 

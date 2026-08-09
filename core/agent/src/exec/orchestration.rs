@@ -385,9 +385,13 @@ async fn run_provider_loop(
         }
 
         for call in calls {
-            let result =
-                tokio::task::block_in_place(|| agent.handle_tool_call(&call.name, &call.arguments))
-                    .unwrap_or_else(|e| format!("工具错误: {e}").into());
+            let result = match tokio::task::block_in_place(|| {
+                agent.handle_tool_call(&call.name, &call.arguments)
+            }) {
+                Ok(output) => output,
+                Err(crate::runtime::ToolCallError::Cancelled) => break,
+                Err(e) => format!("工具错误: {e}").into(),
+            };
 
             let result_text = result.text().to_string();
 

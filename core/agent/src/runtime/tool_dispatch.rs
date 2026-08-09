@@ -6,6 +6,49 @@ use tools::{dispatch_tool, DynToolHandler, ToolContext};
 
 use super::AgentLoop;
 
+/// 工具调用错误：区分取消、深度耗尽与执行异常，避免将取消误记为 ToolFailure。
+#[derive(Debug)]
+pub enum ToolCallError {
+    /// 用户或上层触发了取消。
+    Cancelled,
+    /// 工具深度耗尽。
+    DepthExhausted(super::turn_budget::MaxDepthError),
+    /// 工具执行或分发错误。
+    Execution(anyhow::Error),
+}
+
+impl std::fmt::Display for ToolCallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cancelled => write!(f, "prompt cancelled"),
+            Self::DepthExhausted(e) => write!(f, "{e}"),
+            Self::Execution(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for ToolCallError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Execution(e) => Some(e.as_ref()),
+            Self::DepthExhausted(e) => Some(e),
+            Self::Cancelled => None,
+        }
+    }
+}
+
+impl From<anyhow::Error> for ToolCallError {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Execution(e)
+    }
+}
+
+impl From<super::turn_budget::MaxDepthError> for ToolCallError {
+    fn from(e: super::turn_budget::MaxDepthError) -> Self {
+        Self::DepthExhausted(e)
+    }
+}
+
 impl AgentLoop {
     /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
     ///
@@ -82,17 +125,17 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> anyhow::Result<common::ToolOutput> {
+    ) -> Result<common::ToolOutput, ToolCallError> {
         let fut = self.handle_tool_call_async(name, args);
         match tokio::runtime::Handle::try_current() {
             Ok(handle) => {
-                // 在 blocking 线程上安全执行异步任务（避免在 async 上下文中 block_on panic）
                 tokio::task::block_in_place(|| handle.block_on(fut))
             }
             Err(_) => {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
-                    .build()?;
+                    .build()
+                    .map_err(|e| ToolCallError::Execution(e.into()))?;
                 rt.block_on(fut)
             }
         }
@@ -100,14 +143,15 @@ impl AgentLoop {
 
     /// 异步执行单次工具调用：检查取消 → 递增深度 → hooks → 分发 → hooks。
     ///
-    /// 取消或深度耗尽时返回错误；成功时返回 `ToolOutput`。
+    /// 返回 [`ToolCallError`] 区分取消（`Cancelled`）、深度耗尽（`DepthExhausted`）
+    /// 和执行异常（`Execution`），避免将取消误记为工具失败。
     pub async fn handle_tool_call_async(
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> anyhow::Result<common::ToolOutput> {
+    ) -> Result<common::ToolOutput, ToolCallError> {
         if self.cancel.is_cancelled() {
-            anyhow::bail!("prompt cancelled");
+            return Err(ToolCallError::Cancelled);
         }
         self.increment_tool_round()?;
         // 可拦截：PluginHookBus 优先
@@ -133,7 +177,7 @@ impl AgentLoop {
             _ => {}
         }
         if self.cancel.is_cancelled() {
-            anyhow::bail!("prompt cancelled");
+            return Err(ToolCallError::Cancelled);
         }
         // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
         let (exec_name, exec_args) = if !is_mcp_tool_name(name)
