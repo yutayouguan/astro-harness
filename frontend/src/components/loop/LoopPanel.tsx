@@ -99,8 +99,15 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         ),
       );
       const runs: Record<string, { status: string; time: string } | null> = {};
-      for (const [id, run] of results) runs[id] = run;
+      let failCount = 0;
+      for (const [id, run] of results) {
+        runs[id] = run;
+        if (run === null) failCount++;
+      }
       setLastRuns(runs);
+      if (failCount > 0 && failCount === list.length && list.length > 0) {
+        showToast(t("loop.runQueryFailed"), { tone: "error" });
+      }
     } catch (e) {
       showToast(String(e), { tone: "error" });
     } finally {

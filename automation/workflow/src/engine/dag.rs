@@ -129,16 +129,64 @@ pub fn detect_cycle(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Option<Ve
                     }
                 }
             }
-            let cycle_nodes: Vec<String> = enabled
+            let remaining: HashSet<&str> = enabled
                 .iter()
                 .filter(|id| !removed.contains(*id))
-                .map(|id| id.to_string())
+                .copied()
                 .collect();
-            if cycle_nodes.is_empty() {
-                None
-            } else {
-                Some(cycle_nodes)
+            if remaining.is_empty() {
+                return None;
             }
+            // DFS 找一条具体环路
+            let adj: HashMap<&str, Vec<&str>> = {
+                let mut m: HashMap<&str, Vec<&str>> = HashMap::new();
+                for e in edges {
+                    if remaining.contains(e.source.as_str()) && remaining.contains(e.target.as_str()) {
+                        m.entry(e.source.as_str()).or_default().push(e.target.as_str());
+                    }
+                }
+                m
+            };
+            let mut visited = HashSet::new();
+            let mut path = Vec::new();
+            let mut on_stack = HashSet::new();
+            fn dfs<'a>(
+                node: &'a str,
+                adj: &HashMap<&'a str, Vec<&'a str>>,
+                visited: &mut HashSet<&'a str>,
+                on_stack: &mut HashSet<&'a str>,
+                path: &mut Vec<&'a str>,
+            ) -> Option<Vec<String>> {
+                visited.insert(node);
+                on_stack.insert(node);
+                path.push(node);
+                if let Some(neighbors) = adj.get(node) {
+                    for &next in neighbors {
+                        if on_stack.contains(next) {
+                            let start = path.iter().position(|&n| n == next).unwrap();
+                            let mut cycle: Vec<String> = path[start..].iter().map(|s| s.to_string()).collect();
+                            cycle.push(next.to_string());
+                            return Some(cycle);
+                        }
+                        if !visited.contains(next) {
+                            if let Some(c) = dfs(next, adj, visited, on_stack, path) {
+                                return Some(c);
+                            }
+                        }
+                    }
+                }
+                path.pop();
+                on_stack.remove(node);
+                None
+            }
+            for &start in &remaining {
+                if !visited.contains(start) {
+                    if let Some(cycle) = dfs(start, &adj, &mut visited, &mut on_stack, &mut path) {
+                        return Some(cycle);
+                    }
+                }
+            }
+            Some(remaining.iter().map(|s| s.to_string()).collect())
         }
     }
 }

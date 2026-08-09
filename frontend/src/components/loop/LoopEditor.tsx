@@ -354,6 +354,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
 
   const { pushSnapshot, undo, redo } = useLoopHistory(
     setNodes, setEdges,
@@ -918,20 +919,24 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           </button>
           <button
             className="loop-btn loop-btn--primary"
+            disabled={running}
             onClick={async () => {
-              if (!workflow) return;
+              if (!workflow || running) return;
               await handleSave();
+              setRunning(true);
               try {
                 const result = await invoke<{ run_id: string; status: string; steps_executed: number }>("run_loop", { id: workflow.id });
                 showToast(t("loop.runComplete").replace("{count}", String(result.steps_executed)), { tone: "success" });
                 setShowHistory(true);
               } catch (e) {
                 showToast(String(e), { tone: "error" });
+              } finally {
+                setRunning(false);
               }
             }}
           >
-            <Play size={14} />
-            <span>{t("loop.run")}</span>
+            {running ? <LucideIcons.Loader2 size={14} className="loop-spin" /> : <Play size={14} />}
+            <span>{running ? t("loop.running") : t("loop.run")}</span>
           </button>
         </div>
       </div>

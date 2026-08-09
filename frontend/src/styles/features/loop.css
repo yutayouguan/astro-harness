@@ -290,7 +290,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--bg0, #fff);
   transition: transform 0.2s;
 }
 .loop-toggle--compact input[type="checkbox"]::after {
@@ -2128,7 +2128,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--bg0, #fff);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   transition: transform 0.2s;
 }
