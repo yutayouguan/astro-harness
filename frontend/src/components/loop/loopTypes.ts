@@ -27,16 +27,26 @@ export type NodeType =
   | "manual_trigger"
   | "scheduled_trigger"
   | "webhook_trigger"
+  | "email_trigger"
+  | "file_watch_trigger"
   // AI
   | "ai_agent_task"
   | "parameter_extraction"
   | "question_classification"
+  | "knowledge_retrieval"
+  | "summarization"
+  | "sentiment_analysis"
+  | "document_understanding"
   // 多媒体生成
   | "image_generation"
   | "video_generation"
   | "music_generation"
   | "text_to_speech"
   | "subtitle_generation"
+  | "voice_clone"
+  | "speech_to_text"
+  | "image_edit"
+  | "translation"
   // 流程控制
   | "conditional"
   | "multi_branch"
@@ -58,6 +68,8 @@ export type NodeType =
   | "delay_wait"
   | "output"
   | "audio_processing"
+  | "send_notification"
+  | "file_io"
   // 自定义（引用已保存的工作流）
   | "custom_loop";
 
@@ -163,16 +175,26 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: "manual_trigger", category: "trigger", label: "手动触发", labelEn: "Manual Trigger", icon: "Hand", color: "#60a5fa" },
   { type: "scheduled_trigger", category: "trigger", label: "定时触发", labelEn: "Scheduled Trigger", icon: "Clock", color: "#60a5fa" },
   { type: "webhook_trigger", category: "trigger", label: "Webhook 触发", labelEn: "Webhook Trigger", icon: "Webhook", color: "#60a5fa" },
+  { type: "email_trigger", category: "trigger", label: "邮件触发", labelEn: "Email Trigger", icon: "Mail", color: "#60a5fa" },
+  { type: "file_watch_trigger", category: "trigger", label: "文件监控", labelEn: "File Watch", icon: "FolderSearch", color: "#60a5fa" },
   // AI
   { type: "ai_agent_task", category: "ai", label: "AI 智能体任务", labelEn: "AI Agent Task", icon: "Brain", color: "#a78bfa" },
   { type: "parameter_extraction", category: "ai", label: "参数提取", labelEn: "Parameter Extraction", icon: "FileSearch", color: "#a78bfa" },
   { type: "question_classification", category: "ai", label: "问题分类", labelEn: "Question Classification", icon: "Tag", color: "#a78bfa" },
+  { type: "knowledge_retrieval", category: "ai", label: "知识检索", labelEn: "Knowledge Retrieval", icon: "BookOpen", color: "#a78bfa" },
+  { type: "summarization", category: "ai", label: "文本摘要", labelEn: "Summarization", icon: "FileText", color: "#a78bfa" },
+  { type: "sentiment_analysis", category: "ai", label: "情感分析", labelEn: "Sentiment Analysis", icon: "Heart", color: "#a78bfa" },
+  { type: "document_understanding", category: "ai", label: "文档理解", labelEn: "Document Understanding", icon: "ScanText", color: "#a78bfa" },
   // 多媒体生成
   { type: "image_generation", category: "media", label: "生成图片", labelEn: "Image Generation", icon: "Image", color: "#f472b6" },
   { type: "video_generation", category: "media", label: "生成视频", labelEn: "Video Generation", icon: "Video", color: "#f472b6" },
   { type: "music_generation", category: "media", label: "生成音乐", labelEn: "Music Generation", icon: "Music", color: "#f472b6" },
   { type: "text_to_speech", category: "media", label: "文字转语音", labelEn: "Text to Speech", icon: "AudioLines", color: "#f472b6" },
   { type: "subtitle_generation", category: "media", label: "字幕生成", labelEn: "Subtitle Generation", icon: "Captions", color: "#f472b6" },
+  { type: "voice_clone", category: "media", label: "声音克隆", labelEn: "Voice Clone", icon: "Mic", color: "#f472b6" },
+  { type: "speech_to_text", category: "media", label: "语音识别", labelEn: "Speech to Text", icon: "AudioLines", color: "#f472b6" },
+  { type: "image_edit", category: "media", label: "图片编辑", labelEn: "Image Edit", icon: "ImagePlus", color: "#f472b6" },
+  { type: "translation", category: "media", label: "翻译", labelEn: "Translation", icon: "Languages", color: "#f472b6" },
   // 流程控制
   { type: "conditional", category: "flow_control", label: "条件判断", labelEn: "Conditional", icon: "GitBranch", color: "#34d399" },
   { type: "multi_branch", category: "flow_control", label: "多路分支", labelEn: "Multi Branch", icon: "GitFork", color: "#34d399" },
@@ -194,6 +216,8 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: "delay_wait", category: "action", label: "延时等待", labelEn: "Delay / Wait", icon: "Timer", color: "#fb923c" },
   { type: "output", category: "action", label: "输出", labelEn: "Output", icon: "ArrowRightFromLine", color: "#fb923c" },
   { type: "audio_processing", category: "action", label: "音频处理", labelEn: "Audio Processing", icon: "AudioWaveform", color: "#fb923c" },
+  { type: "send_notification", category: "action", label: "发送通知", labelEn: "Send Notification", icon: "Bell", color: "#fb923c" },
+  { type: "file_io", category: "action", label: "文件读写", labelEn: "File I/O", icon: "FileInput", color: "#fb923c" },
   // 自定义
   { type: "custom_loop", category: "custom", label: "自定义 Loop", labelEn: "Custom Loop", icon: "Puzzle", color: "#8b5cf6" },
 ];

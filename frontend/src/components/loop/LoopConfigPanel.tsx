@@ -15,14 +15,24 @@ import ErrorHandlingConfig from "./configs/ErrorHandlingConfig";
 const ManualTriggerConfig = lazy(() => import("./configs/ManualTriggerConfig"));
 const ScheduledTriggerConfig = lazy(() => import("./configs/ScheduledTriggerConfig"));
 const WebhookTriggerConfig = lazy(() => import("./configs/WebhookTriggerConfig"));
+const EmailTriggerConfig = lazy(() => import("./configs/EmailTriggerConfig"));
+const FileWatchConfig = lazy(() => import("./configs/FileWatchConfig"));
 const AiAgentTaskConfig = lazy(() => import("./configs/AiAgentTaskConfig"));
 const ParameterExtractionConfig = lazy(() => import("./configs/ParameterExtractionConfig"));
 const QuestionClassificationConfig = lazy(() => import("./configs/QuestionClassificationConfig"));
+const KnowledgeRetrievalConfig = lazy(() => import("./configs/KnowledgeRetrievalConfig"));
+const SummarizationConfig = lazy(() => import("./configs/SummarizationConfig"));
+const SentimentAnalysisConfig = lazy(() => import("./configs/SentimentAnalysisConfig"));
+const DocumentUnderstandingConfig = lazy(() => import("./configs/DocumentUnderstandingConfig"));
 const ImageGenConfig = lazy(() => import("./configs/ImageGenConfig"));
 const VideoGenConfig = lazy(() => import("./configs/VideoGenConfig"));
 const MusicGenConfig = lazy(() => import("./configs/MusicGenConfig"));
 const TtsConfig = lazy(() => import("./configs/TtsConfig"));
 const SubtitleGenConfig = lazy(() => import("./configs/SubtitleGenConfig"));
+const VoiceCloneConfig = lazy(() => import("./configs/VoiceCloneConfig"));
+const SpeechToTextConfig = lazy(() => import("./configs/SpeechToTextConfig"));
+const ImageEditConfig = lazy(() => import("./configs/ImageEditConfig"));
+const TranslationConfig = lazy(() => import("./configs/TranslationConfig"));
 const ConditionalConfig = lazy(() => import("./configs/ConditionalConfig"));
 const MultiBranchConfig = lazy(() => import("./configs/MultiBranchConfig"));
 const FilterConfig = lazy(() => import("./configs/FilterConfig"));
@@ -41,6 +51,8 @@ const RunLoopConfig = lazy(() => import("./configs/RunLoopConfig"));
 const DelayWaitConfig = lazy(() => import("./configs/DelayWaitConfig"));
 const OutputConfig = lazy(() => import("./configs/OutputConfig"));
 const AudioProcessingConfig = lazy(() => import("./configs/AudioProcessingConfig"));
+const SendNotificationConfig = lazy(() => import("./configs/SendNotificationConfig"));
+const FileIoConfig = lazy(() => import("./configs/FileIoConfig"));
 const CustomLoopConfig = lazy(() => import("./configs/CustomLoopConfig"));
 
 // ── Config form registry ──
@@ -49,14 +61,24 @@ const CONFIG_MAP: Record<NodeType, React.LazyExoticComponent<React.ComponentType
   manual_trigger: ManualTriggerConfig,
   scheduled_trigger: ScheduledTriggerConfig,
   webhook_trigger: WebhookTriggerConfig,
+  email_trigger: EmailTriggerConfig,
+  file_watch_trigger: FileWatchConfig,
   ai_agent_task: AiAgentTaskConfig,
   parameter_extraction: ParameterExtractionConfig,
   question_classification: QuestionClassificationConfig,
+  knowledge_retrieval: KnowledgeRetrievalConfig,
+  summarization: SummarizationConfig,
+  sentiment_analysis: SentimentAnalysisConfig,
+  document_understanding: DocumentUnderstandingConfig,
   image_generation: ImageGenConfig,
   video_generation: VideoGenConfig,
   music_generation: MusicGenConfig,
   text_to_speech: TtsConfig,
   subtitle_generation: SubtitleGenConfig,
+  voice_clone: VoiceCloneConfig,
+  speech_to_text: SpeechToTextConfig,
+  image_edit: ImageEditConfig,
+  translation: TranslationConfig,
   conditional: ConditionalConfig,
   multi_branch: MultiBranchConfig,
   filter: FilterConfig,
@@ -75,6 +97,8 @@ const CONFIG_MAP: Record<NodeType, React.LazyExoticComponent<React.ComponentType
   delay_wait: DelayWaitConfig,
   output: OutputConfig,
   audio_processing: AudioProcessingConfig,
+  send_notification: SendNotificationConfig,
+  file_io: FileIoConfig,
   custom_loop: CustomLoopConfig,
 };
 

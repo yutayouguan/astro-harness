@@ -57,24 +57,34 @@ pub struct Position {
     pub y: f64,
 }
 
-/// 29 种节点类型
+/// 41 种节点类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeType {
-    // 触发器 (3)
+    // 触发器 (5)
     ManualTrigger,
     ScheduledTrigger,
     WebhookTrigger,
-    // AI (3)
+    EmailTrigger,
+    FileWatchTrigger,
+    // AI (7)
     AiAgentTask,
     ParameterExtraction,
     QuestionClassification,
-    // 多媒体生成 (5)
+    KnowledgeRetrieval,
+    Summarization,
+    SentimentAnalysis,
+    DocumentUnderstanding,
+    // 多媒体生成 (9)
     ImageGeneration,
     VideoGeneration,
     MusicGeneration,
     TextToSpeech,
     SubtitleGeneration,
+    VoiceClone,
+    SpeechToText,
+    ImageEdit,
+    Translation,
     // 流程控制 (6)
     Conditional,
     MultiBranch,
@@ -90,12 +100,14 @@ pub enum NodeType {
     Sort,
     Slice,
     Aggregate,
-    // 动作 (5)
+    // 动作 (7)
     HttpRequest,
     RunLoop,
     DelayWait,
     Output,
     AudioProcessing,
+    SendNotification,
+    FileIo,
     // 自定义（引用已保存的工作流）
     CustomLoop,
 }
@@ -103,36 +115,21 @@ pub enum NodeType {
 impl NodeType {
     pub fn category(&self) -> NodeCategory {
         match self {
-            Self::ManualTrigger | Self::ScheduledTrigger | Self::WebhookTrigger => {
-                NodeCategory::Trigger
-            }
-            Self::AiAgentTask | Self::ParameterExtraction | Self::QuestionClassification => {
-                NodeCategory::Ai
-            }
-            Self::ImageGeneration
-            | Self::VideoGeneration
-            | Self::MusicGeneration
-            | Self::TextToSpeech
-            | Self::SubtitleGeneration => NodeCategory::Media,
-            Self::Conditional
-            | Self::MultiBranch
-            | Self::Filter
-            | Self::Merge
-            | Self::Loop
-            | Self::HumanApproval => NodeCategory::FlowControl,
-            Self::SetFields
-            | Self::FormatText
-            | Self::Json
-            | Self::Code
-            | Self::Sort
-            | Self::Slice
-            | Self::Aggregate => NodeCategory::DataProcessing,
-            Self::HttpRequest
-            | Self::RunLoop
-            | Self::DelayWait
-            | Self::Output
-            | Self::AudioProcessing => NodeCategory::Action,
-            Self::CustomLoop => NodeCategory::Action,
+            Self::ManualTrigger | Self::ScheduledTrigger | Self::WebhookTrigger
+            | Self::EmailTrigger | Self::FileWatchTrigger => NodeCategory::Trigger,
+            Self::AiAgentTask | Self::ParameterExtraction | Self::QuestionClassification
+            | Self::KnowledgeRetrieval | Self::Summarization | Self::SentimentAnalysis
+            | Self::DocumentUnderstanding => NodeCategory::Ai,
+            Self::ImageGeneration | Self::VideoGeneration | Self::MusicGeneration
+            | Self::TextToSpeech | Self::SubtitleGeneration | Self::VoiceClone
+            | Self::SpeechToText | Self::ImageEdit | Self::Translation => NodeCategory::Media,
+            Self::Conditional | Self::MultiBranch | Self::Filter | Self::Merge
+            | Self::Loop | Self::HumanApproval => NodeCategory::FlowControl,
+            Self::SetFields | Self::FormatText | Self::Json | Self::Code
+            | Self::Sort | Self::Slice | Self::Aggregate => NodeCategory::DataProcessing,
+            Self::HttpRequest | Self::RunLoop | Self::DelayWait | Self::Output
+            | Self::AudioProcessing | Self::SendNotification | Self::FileIo
+            | Self::CustomLoop => NodeCategory::Action,
         }
     }
 
@@ -141,14 +138,24 @@ impl NodeType {
             Self::ManualTrigger => "手动触发",
             Self::ScheduledTrigger => "定时触发",
             Self::WebhookTrigger => "Webhook 触发",
+            Self::EmailTrigger => "邮件触发",
+            Self::FileWatchTrigger => "文件监控",
             Self::AiAgentTask => "AI 智能体任务",
             Self::ParameterExtraction => "参数提取",
             Self::QuestionClassification => "问题分类",
+            Self::KnowledgeRetrieval => "知识检索",
+            Self::Summarization => "文本摘要",
+            Self::SentimentAnalysis => "情感分析",
+            Self::DocumentUnderstanding => "文档理解",
             Self::ImageGeneration => "生成图片",
             Self::VideoGeneration => "生成视频",
             Self::MusicGeneration => "生成音乐",
             Self::TextToSpeech => "文字转语音",
             Self::SubtitleGeneration => "字幕生成",
+            Self::VoiceClone => "声音克隆",
+            Self::SpeechToText => "语音识别",
+            Self::ImageEdit => "图片编辑",
+            Self::Translation => "翻译",
             Self::Conditional => "条件判断",
             Self::MultiBranch => "多路分支",
             Self::Filter => "过滤",
@@ -167,6 +174,8 @@ impl NodeType {
             Self::DelayWait => "延时等待",
             Self::Output => "输出",
             Self::AudioProcessing => "音频处理",
+            Self::SendNotification => "发送通知",
+            Self::FileIo => "文件读写",
             Self::CustomLoop => "自定义 Loop",
         }
     }
