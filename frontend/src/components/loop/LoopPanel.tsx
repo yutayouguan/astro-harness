@@ -625,12 +625,37 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       <div className="loop-content">
         {loading && <div className="loop-empty">{t("loop.loading")}</div>}
         {!loading && filtered.length === 0 && (
-          <EmptyIllustration
-            scene="loop"
-            className="loop-empty-illust"
-            title={search.trim() ? t("loop.emptySearch") : t("loop.emptyTitle")}
-            hint={search.trim() ? undefined : t("loop.emptyHint")}
-          />
+          <div className="loop-empty-with-templates">
+            <EmptyIllustration
+              scene="loop"
+              className="loop-empty-illust"
+              title={search.trim() ? t("loop.emptySearch") : t("loop.emptyTitle")}
+              hint={search.trim() ? undefined : t("loop.emptyHint")}
+            />
+            {!search.trim() && (
+              <div className="loop-empty-templates">
+                <div className="loop-empty-templates-title">{t("loop.templateQuickStart")}</div>
+                <div className="loop-template-grid">
+                  {LOOP_TEMPLATES.slice(0, 3).map((tpl) => {
+                    const Icon = (LucideIcons as unknown as Record<string, LucideIcons.LucideIcon>)[tpl.icon];
+                    return (
+                      <button
+                        key={tpl.id}
+                        className="loop-template-card"
+                        onClick={() => void handleCreateFromTemplate(tpl)}
+                      >
+                        <span className="loop-template-card-icon">
+                          {Icon && <Icon size={20} />}
+                        </span>
+                        <span className="loop-template-card-name">{tpl.name}</span>
+                        <span className="loop-template-card-desc">{tpl.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         )}
         {!loading && filtered.length > 0 && viewMode === "gallery" && renderGallery()}
         {!loading && filtered.length > 0 && viewMode === "list" && renderList()}

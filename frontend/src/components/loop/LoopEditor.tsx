@@ -373,6 +373,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [fullscreen, setFullscreen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteSearch, setPaletteSearch] = useState("");
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
@@ -1179,9 +1180,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onConnect={onConnect}
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}
-            onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+            onNodeClick={(_, node) => { setSelectedNodeId(node.id); setContextMenu(null); }}
             onNodeDoubleClick={(_, node) => setSelectedNodeId(node.id)}
-            onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); }}
+            onNodeContextMenu={(e, node) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }); }}
+            onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); setContextMenu(null); }}
+            onPaneContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
             nodeTypes={nodeTypes}
             defaultEdgeOptions={{ type: "smoothstep", animated: true }}
             connectionLineType={ConnectionLineType.SmoothStep}
@@ -1228,6 +1231,46 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+          {contextMenu && (
+            <div
+              className="loop-context-menu"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              onClick={() => setContextMenu(null)}
+            >
+              {contextMenu.nodeId ? (
+                <>
+                  <button onClick={() => { setSelectedNodeId(contextMenu.nodeId!); setContextMenu(null); }}>
+                    <LucideIcons.Settings2 size={13} /> {t("loop.configTab")}
+                  </button>
+                  <button onClick={() => {
+                    const n = reactFlowInstance.getNode(contextMenu.nodeId!);
+                    if (n) {
+                      clipboardRef.current = { nodes: [n], edges: [] };
+                      showToast(t("loop.shortcutCopy"), { tone: "success" });
+                    }
+                    setContextMenu(null);
+                  }}>
+                    <LucideIcons.Copy size={13} /> {t("loop.shortcutCopy")}
+                  </button>
+                  <button onClick={() => { pushSnapshot(); deleteNode(contextMenu.nodeId!); setContextMenu(null); }}>
+                    <LucideIcons.Trash2 size={13} /> {t("loop.delete")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => { handleAutoLayout(); setContextMenu(null); }}>
+                    <LucideIcons.LayoutGrid size={13} /> {t("loop.autoLayout")}
+                  </button>
+                  <button onClick={() => { reactFlowInstance.fitView({ padding: 0.15, duration: 300 }); setContextMenu(null); }}>
+                    <LucideIcons.Maximize size={13} /> {t("loop.fitView")}
+                  </button>
+                  <button onClick={() => { setNodes((nds) => nds.map((n) => ({ ...n, selected: true }))); setContextMenu(null); }}>
+                    <LucideIcons.CheckSquare size={13} /> {t("loop.shortcutSelectAll")}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
