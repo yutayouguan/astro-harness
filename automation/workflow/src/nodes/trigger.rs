@@ -55,12 +55,13 @@ impl NodeExecutor for EmailTriggerExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
         let host = node.config.get("host").and_then(|v| v.as_str()).unwrap_or("");
         let filter = node.config.get("filter").and_then(|v| v.as_str()).unwrap_or("");
+        tracing::warn!(host = %host, filter = %filter, "邮件触发节点尚未接入 IMAP/POP3，以手动模式执行");
         Ok(NodeResult::Success(serde_json::json!({
             "trigger_type": "email",
             "host": host,
             "filter": filter,
             "triggered_at": chrono::Local::now().to_rfc3339(),
-            "note": "邮件触发待接入 IMAP/POP3 轮询"
+            "warning": "邮件触发尚未实现真实监听，当前以手动触发模式运行"
         })))
     }
 }
@@ -72,12 +73,13 @@ impl NodeExecutor for FileWatchTriggerExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
         let path = node.config.get("watch_path").and_then(|v| v.as_str()).unwrap_or("");
         let event = node.config.get("event_type").and_then(|v| v.as_str()).unwrap_or("any");
+        tracing::warn!(path = %path, event = %event, "文件监控节点尚未接入 notify，以手动模式执行");
         Ok(NodeResult::Success(serde_json::json!({
             "trigger_type": "file_watch",
             "watch_path": path,
             "event_type": event,
             "triggered_at": chrono::Local::now().to_rfc3339(),
-            "note": "文件监控待接入 notify crate"
+            "warning": "文件监控尚未实现真实监听，当前以手动触发模式运行"
         })))
     }
 }

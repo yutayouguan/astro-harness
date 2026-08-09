@@ -3049,9 +3049,6 @@
   border-bottom-left-radius: 4px;
 }
 
-@keyframes loop-spin {
-  to { transform: rotate(360deg); }
-}
 .loop-ai-spinner {
   animation: loop-spin 1s linear infinite;
 }

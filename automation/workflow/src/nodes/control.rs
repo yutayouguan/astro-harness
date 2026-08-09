@@ -47,7 +47,8 @@ impl NodeExecutor for MultiBranchExec {
         let mut active_handles = Vec::new();
 
         if let Some(branches) = branches {
-            let mut any_matched = false;
+            // 两轮评估：先评估条件分支，再决定默认分支
+            let mut default_ids = Vec::new();
             for branch in branches {
                 let id = branch.get("id").and_then(|v| v.as_str()).unwrap_or_default();
                 let cond = branch.get("condition").and_then(|v| v.as_str());
@@ -55,16 +56,16 @@ impl NodeExecutor for MultiBranchExec {
                     Some(expr) if !expr.is_empty() => {
                         if ctx.evaluate_condition(expr)? {
                             active_handles.push(id.to_string());
-                            any_matched = true;
                         }
                     }
                     _ => {
-                        // 默认分支：所有具名条件都不匹配时激活
-                        if !any_matched {
-                            active_handles.push(id.to_string());
-                        }
+                        default_ids.push(id.to_string());
                     }
                 }
+            }
+            // 无条件分支命中时激活所有默认分支
+            if active_handles.is_empty() {
+                active_handles = default_ids;
             }
         }
 

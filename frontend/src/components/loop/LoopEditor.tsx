@@ -101,7 +101,7 @@ function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }
         </div>
       )}
       {warnings.length > 0 && (
-        <span className="loop-rf-node-warn" title={warnings.join("、") + " 未配置"}>
+        <span className="loop-rf-node-warn" title={warnings.join("、") + " " + t("loop.notConfigured")}>
           <LucideIcons.AlertTriangle size={10} />
         </span>
       )}
@@ -163,7 +163,7 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
         </div>
       )}
       {warnings.length > 0 && (
-        <span className="loop-rf-node-warn" title={warnings.join("、") + " 未配置"}>
+        <span className="loop-rf-node-warn" title={warnings.join("、") + " " + t("loop.notConfigured")}>
           <LucideIcons.AlertTriangle size={10} />
         </span>
       )}
@@ -745,11 +745,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
 
   saveRef.current = () => void handleSave();
 
-  // 自动保存：dirty 30 秒后自动触发
+  // 自动保存：dirty 30 秒后自动触发（通过 saveRef 避免 stale closure）
   useEffect(() => {
     if (!dirty || saving) return;
     const timer = setTimeout(() => {
-      void handleSave();
+      saveRef.current?.();
     }, 30_000);
     return () => clearTimeout(timer);
   }, [dirty, saving]);
@@ -1202,15 +1202,16 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               const hasStructural = changes.some((c) => c.type === "remove" || c.type === "add");
               if (hasStructural) pushSnapshot();
               onNodesChange(changes);
-              setDirty(true);
+              if (hasStructural) setDirty(true);
             }}
             onEdgesChange={(changes) => {
               const hasStructural = changes.some((c) => c.type === "remove" || c.type === "add");
               if (hasStructural) pushSnapshot();
               onEdgesChange(changes);
-              setDirty(true);
+              if (hasStructural) setDirty(true);
             }}
             onNodeDragStart={() => pushSnapshot()}
+            onNodeDragStop={() => setDirty(true)}
             onConnect={onConnect}
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}
