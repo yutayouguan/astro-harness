@@ -1,6 +1,6 @@
 /** 供应商 + 模型选择器 —— 按媒体能力过滤，自动选配默认模型 */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ProviderDto {
@@ -81,9 +81,12 @@ export default function ProviderModelSelect({
   const [models, setModels] = useState<string[]>([]);
   const [initialized, setInitialized] = useState(false);
 
-  // 按能力过滤的可用供应商
   const providers = allProviders.filter((p) => supportsMedia(p, mediaType));
 
+  // 标记供应商刚被用户（或初始化）切换，下一轮 model effect 应强制重选模型
+  const providerJustChanged = useRef(false);
+
+  // ── 初始化：加载供应商列表，若当前 provider 无效则自动选最佳 ──
   useEffect(() => {
     (async () => {
       try {
@@ -98,12 +101,11 @@ export default function ProviderModelSelect({
         const matchesCurrent = capable.find((p) => p.id === providerId);
 
         if (!providerId || !matchesCurrent) {
-          // providerId 为空或不在可用列表中 → 自动选最佳供应商
           const best = capable.find((p) => p.id === state.active_provider_id) ?? capable[0];
           if (best) {
+            providerJustChanged.current = true;
             onProviderChange(best.id);
-            const defaultModel = getMediaModel(best, mediaType);
-            if (defaultModel && (!model || !matchesCurrent)) onModelChange(defaultModel);
+            // 不在这里调 onModelChange —— 由 effectiveProvider useEffect 在下一轮渲染处理
           }
         }
         setInitialized(true);
@@ -114,12 +116,16 @@ export default function ProviderModelSelect({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── provider 变化时：加载模型列表并自动选配默认模型 ──
   const effectiveProvider = providerId || "";
   useEffect(() => {
     if (!effectiveProvider) {
       setModels([]);
       return;
     }
+    const shouldForceModel = providerJustChanged.current;
+    providerJustChanged.current = false;
+
     (async () => {
       try {
         const cached = await invoke<string[]>("get_cached_provider_models", {
@@ -127,17 +133,23 @@ export default function ProviderModelSelect({
         });
         const list = cached ?? [];
         setModels(list);
-        // 模型不属于该供应商 → 自动切换到供应商默认模型
-        if (model && list.length > 0 && !list.includes(model)) {
+
+        // 需要重选模型的条件：供应商刚切换 / model 为空 / model 不在新供应商的列表中
+        if (shouldForceModel || !model || (list.length > 0 && !list.includes(model))) {
           const provider = allProviders.find((p) => p.id === effectiveProvider);
           const def = provider ? getMediaModel(provider, mediaType) : list[0];
-          onModelChange(def || list[0]);
+          onModelChange(def || list[0] || "");
         }
       } catch {
         const provider = allProviders.find((p) => p.id === effectiveProvider);
         if (provider) {
           const m = getMediaModel(provider, mediaType);
-          if (m) setModels([m]);
+          if (m) {
+            setModels([m]);
+            if (shouldForceModel || !model) {
+              onModelChange(m);
+            }
+          }
         }
       }
     })();
@@ -156,10 +168,9 @@ export default function ProviderModelSelect({
           className="loop-config-select"
           value={providerId}
           onChange={(e) => {
-            const newId = e.target.value;
-            onProviderChange(newId);
-            const p = providers.find((pp) => pp.id === newId);
-            onModelChange(p ? getMediaModel(p, mediaType) : "");
+            providerJustChanged.current = true;
+            onProviderChange(e.target.value);
+            // 不调 onModelChange —— useEffect 在下一轮渲染中自动处理
           }}
         >
           {providers.length === 0 && <option value="">无可用供应商</option>}
