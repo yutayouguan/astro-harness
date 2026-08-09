@@ -94,16 +94,16 @@ export default function ProviderModelSelect({
         setAllProviders(available);
         setActiveId(state.active_provider_id ?? null);
 
-        // 自动选中第一个有能力的供应商 + 其默认模型
-        if (!providerId) {
-          const capable = available.filter((p) => supportsMedia(p, mediaType));
+        const capable = available.filter((p) => supportsMedia(p, mediaType));
+        const matchesCurrent = capable.find((p) => p.id === providerId);
+
+        if (!providerId || !matchesCurrent) {
+          // providerId 为空或不在可用列表中 → 自动选最佳供应商
           const best = capable.find((p) => p.id === state.active_provider_id) ?? capable[0];
           if (best) {
             onProviderChange(best.id);
-            if (!model) {
-              const defaultModel = getMediaModel(best, mediaType);
-              if (defaultModel) onModelChange(defaultModel);
-            }
+            const defaultModel = getMediaModel(best, mediaType);
+            if (defaultModel && (!model || !matchesCurrent)) onModelChange(defaultModel);
           }
         }
         setInitialized(true);
@@ -125,7 +125,14 @@ export default function ProviderModelSelect({
         const cached = await invoke<string[]>("get_cached_provider_models", {
           providerId: effectiveProvider,
         });
-        setModels(cached ?? []);
+        const list = cached ?? [];
+        setModels(list);
+        // 模型不属于该供应商 → 自动切换到供应商默认模型
+        if (model && list.length > 0 && !list.includes(model)) {
+          const provider = allProviders.find((p) => p.id === effectiveProvider);
+          const def = provider ? getMediaModel(provider, mediaType) : list[0];
+          onModelChange(def || list[0]);
+        }
       } catch {
         const provider = allProviders.find((p) => p.id === effectiveProvider);
         if (provider) {
@@ -134,6 +141,7 @@ export default function ProviderModelSelect({
         }
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveProvider, allProviders, mediaType]);
 
   const selectedProvider = providers.find((p) => p.id === providerId);
