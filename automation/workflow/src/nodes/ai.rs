@@ -40,7 +40,7 @@ fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)
     }))
 }
 
-async fn one_shot_llm(provider_id: &str, config: &ProviderConfig, system: &str, user: &str) -> Result<String> {
+pub async fn one_shot_llm(provider_id: &str, config: &ProviderConfig, system: &str, user: &str) -> Result<String> {
     let messages = vec![
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
@@ -174,5 +174,133 @@ impl NodeExecutor for QuestionClassificationExec {
         };
 
         Ok(NodeResult::Branch(vec![matched_id]))
+    }
+}
+
+// ── Knowledge Retrieval ────────────────────────────────────────────
+
+pub struct KnowledgeRetrievalExec;
+
+#[async_trait]
+impl NodeExecutor for KnowledgeRetrievalExec {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+        let query_tpl = node.config.get("query_template").and_then(|v| v.as_str()).unwrap_or("");
+        let query = ctx.interpolate(query_tpl);
+        let knowledge_path = node.config.get("knowledge_path").and_then(|v| v.as_str()).unwrap_or("");
+        let top_k = node.config.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5);
+
+        if query.trim().is_empty() {
+            bail!("知识检索节点的查询(query_template)为空");
+        }
+
+        // 暂用 LLM 模拟检索——后续接入 embedding + 向量数据库
+        let system = format!(
+            "你是一个知识检索助手。用户给出查询，请根据你的知识给出最相关的 {} 条结果。\
+             知识来源参考: {}。以 JSON 数组返回，每条包含 content 和 relevance 字段。只输出 JSON。",
+            top_k, knowledge_path,
+        );
+        let (provider_id, config) = build_provider_config(node)?;
+        let response = one_shot_llm(&provider_id, &config, &system, &query).await?;
+
+        let parsed: serde_json::Value = serde_json::from_str(response.trim())
+            .unwrap_or(serde_json::json!({ "results": response }));
+        Ok(NodeResult::Success(parsed))
+    }
+}
+
+// ── Summarization ──────────────────────────────────────────────────
+
+pub struct SummarizationExec;
+
+#[async_trait]
+impl NodeExecutor for SummarizationExec {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+        let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
+        let text = ctx.interpolate(text_tpl);
+        let style = node.config.get("style").and_then(|v| v.as_str()).unwrap_or("concise");
+        let max_len = node.config.get("max_length").and_then(|v| v.as_u64()).unwrap_or(200);
+
+        if text.trim().is_empty() {
+            bail!("文本摘要节点的输入文本为空");
+        }
+
+        let system = format!(
+            "你是一个文本摘要助手。请用「{}」风格对用户输入进行摘要，控制在 {} 字以内。只输出摘要文本。",
+            style, max_len,
+        );
+        let (provider_id, config) = build_provider_config(node)?;
+        let response = one_shot_llm(&provider_id, &config, &system, &text).await?;
+
+        Ok(NodeResult::Success(serde_json::json!({
+            "summary": response.trim(),
+            "style": style,
+        })))
+    }
+}
+
+// ── Sentiment Analysis ─────────────────────────────────────────────
+
+pub struct SentimentAnalysisExec;
+
+#[async_trait]
+impl NodeExecutor for SentimentAnalysisExec {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+        let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
+        let text = ctx.interpolate(text_tpl);
+        let custom_labels = node.config.get("custom_labels").and_then(|v| v.as_str()).unwrap_or("");
+
+        if text.trim().is_empty() {
+            bail!("情感分析节点的输入文本为空");
+        }
+
+        let labels = if custom_labels.is_empty() {
+            r#"["positive", "negative", "neutral"]"#.to_string()
+        } else {
+            custom_labels.to_string()
+        };
+
+        let system = format!(
+            "你是一个情感分析助手。分析用户输入的情感倾向，从以下标签中选择最匹配的。\
+             可选标签: {}。以 JSON 返回 {{\"label\": \"...\", \"confidence\": 0.0~1.0}}。只输出 JSON。",
+            labels,
+        );
+        let (provider_id, config) = build_provider_config(node)?;
+        let response = one_shot_llm(&provider_id, &config, &system, &text).await?;
+
+        let parsed: serde_json::Value = serde_json::from_str(response.trim())
+            .unwrap_or(serde_json::json!({ "label": response.trim(), "confidence": 1.0 }));
+        Ok(NodeResult::Success(parsed))
+    }
+}
+
+// ── Document Understanding ─────────────────────────────────────────
+
+pub struct DocumentUnderstandingExec;
+
+#[async_trait]
+impl NodeExecutor for DocumentUnderstandingExec {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+        let task = node.config.get("task").and_then(|v| v.as_str()).unwrap_or("ocr");
+        let input_path = node.config.get("input_path").and_then(|v| v.as_str()).unwrap_or("");
+        let input_path = ctx.interpolate(input_path);
+        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt = ctx.interpolate(prompt_tpl);
+
+        let system = format!(
+            "你是一个文档理解助手。任务类型: {}。用户将提供文档路径或内容，请完成相应的提取/分析任务。以 JSON 格式返回结果。",
+            task,
+        );
+        let user_msg = if prompt.is_empty() {
+            format!("请处理文档: {}", input_path)
+        } else {
+            format!("文档: {}\n\n指令: {}", input_path, prompt)
+        };
+
+        let (provider_id, config) = build_provider_config(node)?;
+        let response = one_shot_llm(&provider_id, &config, &system, &user_msg).await?;
+
+        let parsed: serde_json::Value = serde_json::from_str(response.trim())
+            .unwrap_or(serde_json::json!({ "result": response.trim() }));
+        Ok(NodeResult::Success(parsed))
     }
 }

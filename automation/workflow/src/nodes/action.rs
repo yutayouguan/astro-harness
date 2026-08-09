@@ -180,3 +180,110 @@ impl NodeExecutor for AudioProcessingExec {
         bail!("音频处理功能正在开发中 — 待接入 ffmpeg/rodio 引擎。操作: {}", op)
     }
 }
+
+// ── Send Notification ───────────────────────────────────────────────
+
+pub struct SendNotificationExec;
+
+#[async_trait]
+impl NodeExecutor for SendNotificationExec {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+        let channel = node.config.get("channel").and_then(|v| v.as_str()).unwrap_or("system");
+        let title_tpl = node.config.get("title_template").and_then(|v| v.as_str()).unwrap_or("");
+        let body_tpl = node.config.get("body_template").and_then(|v| v.as_str()).unwrap_or("");
+        let title = ctx.interpolate(title_tpl);
+        let body = ctx.interpolate(body_tpl);
+        let recipient = node.config.get("recipient").and_then(|v| v.as_str()).unwrap_or("");
+
+        Ok(NodeResult::Success(serde_json::json!({
+            "type": "send_notification",
+            "channel": channel,
+            "title": title,
+            "body": body,
+            "recipient": recipient,
+            "note": "通知发送待接入系统通知/邮件/Webhook 推送"
+        })))
+    }
+}
+
+// ── File I/O ────────────────────────────────────────────────────────
+
+pub struct FileIoExec;
+
+#[async_trait]
+impl NodeExecutor for FileIoExec {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+        let op = node.config.get("operation").and_then(|v| v.as_str()).unwrap_or("read");
+        let path = node.config.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let path = ctx.interpolate(path);
+
+        if path.trim().is_empty() {
+            bail!("文件读写节点的路径为空");
+        }
+
+        match op {
+            "read" => {
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| anyhow::anyhow!("读取文件失败 {}: {}", path, e))?;
+                Ok(NodeResult::Success(serde_json::json!({
+                    "operation": "read",
+                    "path": path,
+                    "content": content,
+                })))
+            }
+            "write" | "append" => {
+                let content_tpl = node.config.get("content_template").and_then(|v| v.as_str()).unwrap_or("");
+                let content = ctx.interpolate(content_tpl);
+                if op == "append" {
+                    use std::io::Write;
+                    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path)
+                        .map_err(|e| anyhow::anyhow!("打开文件失败 {}: {}", path, e))?;
+                    f.write_all(content.as_bytes())?;
+                } else {
+                    std::fs::write(&path, &content)
+                        .map_err(|e| anyhow::anyhow!("写入文件失败 {}: {}", path, e))?;
+                }
+                Ok(NodeResult::Success(serde_json::json!({
+                    "operation": op,
+                    "path": path,
+                    "bytes_written": content.len(),
+                })))
+            }
+            "copy" => {
+                let dest = node.config.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
+                let dest = ctx.interpolate(dest);
+                std::fs::copy(&path, &dest)
+                    .map_err(|e| anyhow::anyhow!("复制失败 {} → {}: {}", path, dest, e))?;
+                Ok(NodeResult::Success(serde_json::json!({
+                    "operation": "copy", "source": path, "dest": dest,
+                })))
+            }
+            "move" => {
+                let dest = node.config.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
+                let dest = ctx.interpolate(dest);
+                std::fs::rename(&path, &dest)
+                    .map_err(|e| anyhow::anyhow!("移动失败 {} → {}: {}", path, dest, e))?;
+                Ok(NodeResult::Success(serde_json::json!({
+                    "operation": "move", "source": path, "dest": dest,
+                })))
+            }
+            "delete" => {
+                std::fs::remove_file(&path)
+                    .map_err(|e| anyhow::anyhow!("删除失败 {}: {}", path, e))?;
+                Ok(NodeResult::Success(serde_json::json!({
+                    "operation": "delete", "path": path,
+                })))
+            }
+            "list" => {
+                let entries: Vec<String> = std::fs::read_dir(&path)
+                    .map_err(|e| anyhow::anyhow!("读取目录失败 {}: {}", path, e))?
+                    .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().to_string()))
+                    .collect();
+                Ok(NodeResult::Success(serde_json::json!({
+                    "operation": "list", "path": path, "entries": entries,
+                })))
+            }
+            _ => bail!("未知文件操作: {}", op),
+        }
+    }
+}

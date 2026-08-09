@@ -47,3 +47,37 @@ impl NodeExecutor for WebhookTriggerExec {
         })))
     }
 }
+
+pub struct EmailTriggerExec;
+
+#[async_trait]
+impl NodeExecutor for EmailTriggerExec {
+    async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
+        let host = node.config.get("host").and_then(|v| v.as_str()).unwrap_or("");
+        let filter = node.config.get("filter").and_then(|v| v.as_str()).unwrap_or("");
+        Ok(NodeResult::Success(serde_json::json!({
+            "trigger_type": "email",
+            "host": host,
+            "filter": filter,
+            "triggered_at": chrono::Local::now().to_rfc3339(),
+            "note": "邮件触发待接入 IMAP/POP3 轮询"
+        })))
+    }
+}
+
+pub struct FileWatchTriggerExec;
+
+#[async_trait]
+impl NodeExecutor for FileWatchTriggerExec {
+    async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
+        let path = node.config.get("watch_path").and_then(|v| v.as_str()).unwrap_or("");
+        let event = node.config.get("event_type").and_then(|v| v.as_str()).unwrap_or("any");
+        Ok(NodeResult::Success(serde_json::json!({
+            "trigger_type": "file_watch",
+            "watch_path": path,
+            "event_type": event,
+            "triggered_at": chrono::Local::now().to_rfc3339(),
+            "note": "文件监控待接入 notify crate"
+        })))
+    }
+}

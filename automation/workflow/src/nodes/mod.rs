@@ -27,18 +27,28 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::ManualTrigger, Box::new(trigger::ManualTriggerExec));
     m.insert(NodeType::ScheduledTrigger, Box::new(trigger::ScheduledTriggerExec));
     m.insert(NodeType::WebhookTrigger, Box::new(trigger::WebhookTriggerExec));
+    m.insert(NodeType::EmailTrigger, Box::new(trigger::EmailTriggerExec));
+    m.insert(NodeType::FileWatchTrigger, Box::new(trigger::FileWatchTriggerExec));
 
     // AI — 接入 providers crate 调用 LLM
     m.insert(NodeType::AiAgentTask, Box::new(ai::AiAgentTaskExec));
     m.insert(NodeType::ParameterExtraction, Box::new(ai::ParameterExtractionExec));
     m.insert(NodeType::QuestionClassification, Box::new(ai::QuestionClassificationExec));
+    m.insert(NodeType::KnowledgeRetrieval, Box::new(ai::KnowledgeRetrievalExec));
+    m.insert(NodeType::Summarization, Box::new(ai::SummarizationExec));
+    m.insert(NodeType::SentimentAnalysis, Box::new(ai::SentimentAnalysisExec));
+    m.insert(NodeType::DocumentUnderstanding, Box::new(ai::DocumentUnderstandingExec));
 
-    // 多媒体 — 图片生成已接入，其余待开发
+    // 多媒体
     m.insert(NodeType::ImageGeneration, Box::new(media::ImageGenExec));
     m.insert(NodeType::VideoGeneration, Box::new(media::VideoGenExec));
     m.insert(NodeType::MusicGeneration, Box::new(media::MusicGenExec));
     m.insert(NodeType::TextToSpeech, Box::new(media::TtsExec));
     m.insert(NodeType::SubtitleGeneration, Box::new(media::SubtitleGenExec));
+    m.insert(NodeType::VoiceClone, Box::new(media::VoiceCloneExec));
+    m.insert(NodeType::SpeechToText, Box::new(media::SpeechToTextExec));
+    m.insert(NodeType::ImageEdit, Box::new(media::ImageEditExec));
+    m.insert(NodeType::Translation, Box::new(media::TranslationExec));
 
     // 流程控制
     m.insert(NodeType::Conditional, Box::new(control::ConditionalExec));
@@ -63,6 +73,8 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::DelayWait, Box::new(action::DelayWaitExec));
     m.insert(NodeType::Output, Box::new(action::OutputExec));
     m.insert(NodeType::AudioProcessing, Box::new(action::AudioProcessingExec));
+    m.insert(NodeType::SendNotification, Box::new(action::SendNotificationExec));
+    m.insert(NodeType::FileIo, Box::new(action::FileIoExec));
     m.insert(NodeType::CustomLoop, Box::new(action::RunLoopExec));
 
     m
