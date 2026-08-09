@@ -2,10 +2,12 @@ import { useMemo } from "react";
 import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import { getVoiceOptions } from "./minimaxVoices";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const OUTPUT_FORMAT_OPTIONS = [
@@ -15,7 +17,8 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "flac", label: "FLAC" },
 ];
 
-export default function TtsConfig({ config, onChange }: ConfigProps) {
+export default function TtsConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   const providerId = cfgStr(config, "provider_id");
   const voices = useMemo(() => getVoiceOptions(providerId), [providerId]);
   const currentVoice = cfgStr(config, "voice");
@@ -30,6 +33,7 @@ export default function TtsConfig({ config, onChange }: ConfigProps) {
         placeholder="输入要转语音的文字…"
         multiline
         hint="支持 {{var}} 引用上游变量"
+        upstream={up}
       />
       <ProviderModelSelect
         providerId={providerId}

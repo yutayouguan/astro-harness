@@ -1,8 +1,10 @@
 import { TextField, SelectField, AiAssistField, cfgStr } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
   aiProviderId?: string;
   aiModel?: string;
 }
@@ -13,7 +15,8 @@ const CHANNEL_OPTIONS = [
   { value: "webhook", label: "Webhook" },
 ];
 
-export default function SendNotificationConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
+export default function SendNotificationConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   const channel = cfgStr(config, "channel", "system");
   return (
     <>
@@ -29,6 +32,7 @@ export default function SendNotificationConfig({ config, onChange, aiProviderId,
         onChange={(v) => onChange({ ...config, title_template: v })}
         placeholder="通知标题"
         hint="支持 {{var}} 引用"
+        upstream={up}
       />
       <AiAssistField
         label="内容"
@@ -40,6 +44,7 @@ export default function SendNotificationConfig({ config, onChange, aiProviderId,
         task="通知内容"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
       {channel !== "system" && (
         <TextField

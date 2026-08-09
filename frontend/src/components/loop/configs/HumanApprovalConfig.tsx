@@ -1,13 +1,16 @@
 import { NumberField, AiAssistField, cfgStr, cfgNum } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
   aiProviderId?: string;
   aiModel?: string;
 }
 
-export default function HumanApprovalConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
+export default function HumanApprovalConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <AiAssistField
@@ -20,6 +23,7 @@ export default function HumanApprovalConfig({ config, onChange, aiProviderId, ai
         task="审批提示信息"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
       <NumberField
         label="超时时间 (秒)"

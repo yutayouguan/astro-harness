@@ -1,13 +1,16 @@
 import { TextField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import { TagInput, jsonToStringArray } from "./StructuredEditors";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
-export default function SentimentAnalysisConfig({ config, onChange }: ConfigProps) {
+export default function SentimentAnalysisConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <TextField
@@ -17,6 +20,7 @@ export default function SentimentAnalysisConfig({ config, onChange }: ConfigProp
         placeholder="输入要分析的文本…"
         multiline
         hint="支持 {{var}} 引用上游变量"
+        upstream={up}
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}

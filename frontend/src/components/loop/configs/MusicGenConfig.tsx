@@ -21,7 +21,8 @@ const GENRE_OPTIONS = [
   { value: "custom", label: "自定义" },
 ];
 
-export default function MusicGenConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
+export default function MusicGenConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <AiAssistField
@@ -33,6 +34,7 @@ export default function MusicGenConfig({ config, onChange, aiProviderId, aiModel
         task="音乐描述"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}

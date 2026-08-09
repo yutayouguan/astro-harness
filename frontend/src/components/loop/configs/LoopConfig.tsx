@@ -1,11 +1,14 @@
 import { TextField, NumberField, cfgStr, cfgNum } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
-export default function LoopConfig({ config, onChange }: ConfigProps) {
+export default function LoopConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <NumberField
@@ -22,6 +25,7 @@ export default function LoopConfig({ config, onChange }: ConfigProps) {
         onChange={(v) => onChange({ ...config, break_condition: v })}
         placeholder="{{count}} >= 5"
         hint="每轮迭代检查，满足则退出循环"
+        upstream={up}
       />
       <TextField
         label="遍历数组变量 (可选)"
@@ -29,6 +33,7 @@ export default function LoopConfig({ config, onChange }: ConfigProps) {
         onChange={(v) => onChange({ ...config, collection_var: v })}
         placeholder="{{items}}"
         hint="设置后按数组元素逐一迭代 (for-each)"
+        upstream={up}
       />
     </>
   );

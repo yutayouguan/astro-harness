@@ -1,10 +1,12 @@
 import { TextField, SelectField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import { KeyValueEditor, KvEntry, jsonToKvEntries, kvEntriesToObj } from "./StructuredEditors";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const LANGUAGE_OPTIONS = [
@@ -20,7 +22,8 @@ const LANGUAGE_OPTIONS = [
   { value: "ar", label: "العربية" },
 ];
 
-export default function TranslationConfig({ config, onChange }: ConfigProps) {
+export default function TranslationConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <TextField
@@ -30,6 +33,7 @@ export default function TranslationConfig({ config, onChange }: ConfigProps) {
         placeholder="输入要翻译的文本…"
         multiline
         hint="支持 {{var}} 引用上游变量"
+        upstream={up}
       />
       <SelectField
         label="源语言"

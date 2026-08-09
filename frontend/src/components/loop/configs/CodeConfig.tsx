@@ -1,8 +1,10 @@
 import { SelectField, AiAssistField, cfgStr } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
   aiProviderId?: string;
   aiModel?: string;
 }
@@ -12,7 +14,8 @@ const LANGUAGE_OPTIONS = [
   { value: "python", label: "Python" },
 ];
 
-export default function CodeConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
+export default function CodeConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <SelectField
@@ -31,6 +34,7 @@ export default function CodeConfig({ config, onChange, aiProviderId, aiModel }: 
         task="代码编写"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
     </>
   );

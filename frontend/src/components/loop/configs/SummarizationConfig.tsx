@@ -1,9 +1,11 @@
 import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const STYLE_OPTIONS = [
@@ -13,7 +15,8 @@ const STYLE_OPTIONS = [
   { value: "headline", label: "一句话标题" },
 ];
 
-export default function SummarizationConfig({ config, onChange }: ConfigProps) {
+export default function SummarizationConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <TextField
@@ -23,6 +26,7 @@ export default function SummarizationConfig({ config, onChange }: ConfigProps) {
         placeholder="输入要摘要的文本…"
         multiline
         hint="支持 {{var}} 引用上游变量"
+        upstream={up}
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}

@@ -9,7 +9,7 @@ import * as LucideIcons from "lucide-react";
 import type { NodeType } from "./loopTypes";
 import { getNodeMeta } from "./loopTypes";
 import type { UpstreamOutput } from "./configs/upstreamOutputs";
-import { validateNodeConfig } from "./configs/nodeValidation";
+import { validateNodeConfig } from "./loopValidation";
 import ErrorHandlingConfig from "./configs/ErrorHandlingConfig";
 
 // ── Lazy imports for all 29 config forms ──
@@ -273,7 +273,7 @@ export default function LoopConfigPanel({
               <span className="loop-config-node-type">{meta.label}</span>
             </div>
             {validationErrors.length > 0 && (
-              <span className="loop-config-validation-badge" title={validationErrors.map((e) => e.message).join("\n")}>
+              <span className="loop-config-validation-badge" title={validationErrors.join("、") + " 未填写"}>
                 <AlertCircle size={13} />
                 {validationErrors.length}
               </span>

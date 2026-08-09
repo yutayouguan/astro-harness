@@ -1,13 +1,16 @@
 import { AiAssistField, cfgStr } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
   aiProviderId?: string;
   aiModel?: string;
 }
 
-export default function FormatTextConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
+export default function FormatTextConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <AiAssistField
@@ -20,6 +23,7 @@ export default function FormatTextConfig({ config, onChange, aiProviderId, aiMod
         task="格式化文本模板"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
     </>
   );

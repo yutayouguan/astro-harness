@@ -1,15 +1,18 @@
 import { AiAssistField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import { RowListEditor, jsonToRowList } from "./StructuredEditors";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
   aiProviderId?: string;
   aiModel?: string;
 }
 
-export default function ParameterExtractionConfig({ config, onChange, aiProviderId, aiModel }: ConfigProps) {
+export default function ParameterExtractionConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <AiAssistField
@@ -22,6 +25,7 @@ export default function ParameterExtractionConfig({ config, onChange, aiProvider
         hint="描述需要从文本中提取的参数"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
       <RowListEditor
         label="输出 Schema"
