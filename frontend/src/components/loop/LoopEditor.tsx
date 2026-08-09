@@ -363,6 +363,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [fullscreen, setFullscreen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteSearch, setPaletteSearch] = useState("");
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
@@ -907,6 +908,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             <LucideIcons.LayoutGrid size={16} />
           </button>
           <button
+            className="loop-icon-btn"
+            title={t("loop.shortcuts")}
+            onClick={() => setShowShortcuts((v) => !v)}
+          >
+            <LucideIcons.Keyboard size={16} />
+          </button>
+          <button
             className={`loop-icon-btn${fullscreen ? " is-active" : ""}`}
             title={fullscreen ? t("loop.exitFullscreen") : t("loop.fullscreen")}
             onClick={() => setFullscreen((v) => !v)}
@@ -1120,6 +1128,26 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               }
             />
           </ReactFlow>
+          {showShortcuts && (
+            <div className="loop-shortcuts-overlay" onClick={() => setShowShortcuts(false)}>
+              <div className="loop-shortcuts-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="loop-shortcuts-title">{t("loop.shortcuts")}</div>
+                {[
+                  ["⌘Z", t("loop.undo")],
+                  ["⌘⇧Z", t("loop.redo")],
+                  ["⌘C", t("loop.shortcutCopy")],
+                  ["⌘V", t("loop.shortcutPaste")],
+                  ["Delete", t("loop.delete")],
+                  ["⌘S", t("loop.save")],
+                ].map(([key, label]) => (
+                  <div key={key} className="loop-shortcuts-row">
+                    <kbd>{key}</kbd>
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Right: Config panel toggle ── */}

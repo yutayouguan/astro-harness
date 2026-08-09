@@ -3109,6 +3109,52 @@
   }
 }
 
+/* ── Shortcuts overlay ───────────────────────────────────────── */
+
+.loop-shortcuts-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  backdrop-filter: blur(2px);
+}
+.loop-shortcuts-panel {
+  background: var(--bg0, #fff);
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  min-width: 220px;
+}
+.loop-shortcuts-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.loop-shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.loop-shortcuts-row kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--glass-panel);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--ink);
+  min-width: 32px;
+  text-align: center;
+}
+
 /* ── Node toolbar clip fix ───────────────────────────────────── */
 
 .loop-canvas-container .react-flow__node {
