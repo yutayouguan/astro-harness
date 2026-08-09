@@ -389,6 +389,7 @@ fn register_provider(
         "volcengine" => register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model),
         "openrouter" => register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model),
         "minimax" | "minmax" => reg.register_minimax(key, base, model),
+        "minimax-anthropic" => reg.register_anthropic(key, base, model),
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
