@@ -258,7 +258,7 @@ impl NodeExecutor for SubtitleGenExec {
     }
 }
 
-// ── Voice Clone ────────────────────────────────────────────────────
+// ── Voice Clone (MiniMax) ──────────────────────────────────────────
 
 pub struct VoiceCloneExec;
 
@@ -269,20 +269,87 @@ impl NodeExecutor for VoiceCloneExec {
         let ref_audio = ctx.interpolate(ref_audio);
         let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
         let text = ctx.interpolate(text_tpl);
-        let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("");
-        let model = node.config.get("model").and_then(|v| v.as_str()).unwrap_or("");
+        let speaker_id = node.config.get("speaker_id").and_then(|v| v.as_str()).unwrap_or("");
+        let speaker_id = ctx.interpolate(speaker_id);
 
-        if ref_audio.trim().is_empty() {
-            bail!("声音克隆节点的参考音频为空");
+        if ref_audio.trim().is_empty() && speaker_id.trim().is_empty() {
+            bail!("声音克隆节点的参考音频和说话人 ID 均为空，至少提供一个");
         }
 
+        let (provider_id, config) = build_media_config(node)?;
+        if provider_id != "minimax" {
+            bail!("声音克隆目前仅支持 MiniMax 供应商，当前: {}", provider_id);
+        }
+
+        let client = reqwest::Client::new();
+        let voice_id = if !speaker_id.trim().is_empty() {
+            speaker_id.trim().to_string()
+        } else {
+            // 1) 上传参考音频
+            let audio_data = std::fs::read(&ref_audio)
+                .map_err(|e| anyhow::anyhow!("读取参考音频失败 {}: {}", ref_audio, e))?;
+            let filename = std::path::Path::new(&ref_audio)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "voice_ref.wav".to_string());
+
+            let file_info = providers::minimax::files_http::minimax_upload_file(
+                &client, &config, audio_data, &filename,
+                providers::minimax::files_http::FileUploadPurpose::VoiceClone,
+            ).await?;
+
+            // 2) 克隆音色
+            let clone_voice_id = format!("clone_{}", file_info.file_id);
+            let clone_req = providers::minimax::voice_clone_http::VoiceCloneRequest {
+                file_id: file_info.file_id,
+                voice_id: clone_voice_id.clone(),
+                text: if text.trim().is_empty() { None } else { Some(text.clone()) },
+                model: Some(config.model.clone()).filter(|s| !s.is_empty()),
+                need_noise_reduction: true,
+                need_volume_normalization: true,
+                ..Default::default()
+            };
+            providers::minimax::voice_clone_http::minimax_voice_clone(
+                &client, &config, &clone_req,
+            ).await?;
+
+            clone_voice_id
+        };
+
+        // 3) 用克隆的音色合成语音
+        if text.trim().is_empty() {
+            return Ok(NodeResult::Success(serde_json::json!({
+                "voice_id": voice_id,
+                "provider": provider_id,
+                "note": "音色已克隆，未提供合成文本",
+            })));
+        }
+
+        let tts_req = providers::minimax::tts_http::MiniMaxTtsRequest {
+            model: if config.model.is_empty() { "speech-2.8-hd".to_string() } else { config.model.clone() },
+            text: text.clone(),
+            voice_setting: providers::minimax::tts_http::VoiceSetting {
+                voice_id: voice_id.clone(),
+                ..Default::default()
+            },
+            output_format: "hex".to_string(),
+            ..Default::default()
+        };
+        let tts_result = providers::minimax::tts_http::minimax_tts(
+            &client, &config, &tts_req,
+        ).await?;
+
+        let artifacts_dir = home::default_memory_dir().join("artifacts");
+        std::fs::create_dir_all(&artifacts_dir)?;
+        let filename = format!("voice_clone_{}.mp3", chrono::Local::now().format("%Y%m%d_%H%M%S"));
+        let path = artifacts_dir.join(&filename);
+        std::fs::write(&path, &tts_result.audio_bytes)?;
+
         Ok(NodeResult::Success(serde_json::json!({
-            "type": "voice_clone",
-            "reference_audio": ref_audio,
-            "text": text,
-            "provider_id": provider_id,
-            "model": model,
-            "note": "声音克隆待接入 TTS Clone API（CosyVoice/GPT-SoVITS 等）"
+            "path": path.to_string_lossy(),
+            "voice_id": voice_id,
+            "duration_ms": tts_result.duration_ms,
+            "provider": provider_id,
         })))
     }
 }
