@@ -38,13 +38,13 @@ import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseL
 import { clampPopover, pointAnchor, measurePopoverSize } from "../../lib/ui/clampPopover";
 import LoopConfigPanel from "./LoopConfigPanel";
 import { computeUpstreamOutputs } from "./configs/upstreamOutputs";
+import { validateNodeConfig } from "./loopValidation";
 import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
 import LoopAiAssistant from "./LoopAiAssistant";
 import { layoutNodes } from "./loopLayout";
 import { useLoopHistory } from "./useLoopHistory";
-import { validateNodeConfig } from "./loopValidation";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -377,13 +377,27 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   );
 
   const clipboardRef = useRef<{ nodes: RFNode[]; edges: RFEdge[] } | null>(null);
+  const saveRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) {
+        if (e.key === "Delete" || e.key === "Backspace") {
+          const selected = reactFlowInstance.getNodes().filter((n) => n.selected);
+          if (selected.length > 0) {
+            pushSnapshot();
+            const ids = new Set(selected.map((n) => n.id));
+            setNodes((nds) => nds.filter((n) => !ids.has(n.id)));
+            setEdges((eds) => eds.filter((ed) => !ids.has(ed.source) && !ids.has(ed.target)));
+            setSelectedNodeId(null);
+            setDirty(true);
+          }
+        }
+        return;
+      }
 
       if (e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -422,11 +436,14 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         setNodes((nds) => [...nds, ...newNodes]);
         setEdges((eds) => [...eds, ...newEdges]);
         setDirty(true);
+      } else if (e.key === "s") {
+        e.preventDefault();
+        saveRef.current?.();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo, redo, reactFlowInstance, setNodes, setEdges, pushSnapshot]);
+  }, [undo, redo, reactFlowInstance, setNodes, setEdges, pushSnapshot, setSelectedNodeId]);
 
   const selectedUpstreamOutputs = useMemo(() => {
     if (!selectedNodeId) return [];
@@ -496,20 +513,26 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
     setDirty(true);
   }, [setNodes]);
 
-  // inject callbacks into nodes so the toolbar buttons work
+  // inject callbacks + validation state into nodes
   const nodesWithCallbacks = useMemo(
     () =>
-      nodes.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          onToggleDisable: () => toggleNodeDisabled(n.id),
-          onDeleteNode: async () => {
-            const ok = await confirm({ title: t("loop.deleteNode"), message: t("loop.deleteNodeConfirm").replace("{name}", String((n.data as Record<string, unknown>).label)), confirmLabel: t("loop.delete"), variant: "danger" });
-            if (ok) deleteNode(n.id);
+      nodes.map((n) => {
+        const d = n.data as Record<string, unknown>;
+        const nodeType = d.nodeType as NodeType;
+        const cfg = (d.config as Record<string, unknown>) ?? {};
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            hasErrors: validateNodeConfig(nodeType, cfg).length > 0,
+            onToggleDisable: () => toggleNodeDisabled(n.id),
+            onDeleteNode: async () => {
+              const ok = await confirm({ title: t("loop.deleteNode"), message: t("loop.deleteNodeConfirm").replace("{name}", String(d.label)), confirmLabel: t("loop.delete"), variant: "danger" });
+              if (ok) deleteNode(n.id);
+            },
           },
-        },
-      })),
+        };
+      }),
     [nodes, deleteNode, toggleNodeDisabled],
   );
 
@@ -699,6 +722,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       setSaving(false);
     }
   };
+
+  saveRef.current = () => void handleSave();
 
   // custom mouse-based drag (bypasses Tauri WKWebView HTML5 DnD issues)
   useEffect(() => {
@@ -909,6 +934,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           </button>
           <button
             className="loop-icon-btn"
+            title={t("loop.fitView")}
+            onClick={() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 })}
+          >
+            <LucideIcons.Maximize size={16} />
+          </button>
+          <button
+            className="loop-icon-btn"
             title={t("loop.shortcuts")}
             onClick={() => setShowShortcuts((v) => !v)}
           >
@@ -944,6 +976,21 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             disabled={running}
             onClick={async () => {
               if (!workflow || running) return;
+              // 运行前校验所有节点
+              const allErrors: string[] = [];
+              for (const n of nodes) {
+                const d = n.data as Record<string, unknown>;
+                const nt = d.nodeType as NodeType;
+                const cfg = (d.config as Record<string, unknown>) ?? {};
+                const errs = validateNodeConfig(nt, cfg);
+                if (errs.length > 0) {
+                  allErrors.push(`${d.label}: ${errs.join("、")}`);
+                }
+              }
+              if (allErrors.length > 0) {
+                showToast(`${allErrors.length} 个节点有未填写的必填字段:\n${allErrors.join("\n")}`, { tone: "error" });
+                return;
+              }
               await handleSave();
               setRunning(true);
               try {
