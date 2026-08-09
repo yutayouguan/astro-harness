@@ -7,7 +7,7 @@
 use crate::ChatTarget;
 use serde::{Deserialize, Serialize};
 
-/// 辅助任务类型：标题生成 / 压缩 / 智能审批 / 入梦 / 回合后自我改进 review。
+/// 辅助任务类型：标题生成 / 压缩 / 智能审批 / 入梦 / 回合后自我改进 review / 工作流 AI 辅助。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuxiliaryTask {
@@ -16,15 +16,18 @@ pub enum AuxiliaryTask {
     SmartApproval,
     Dreaming,
     BackgroundReview,
+    /// 工作流配置面板 ✨ AI 润色/生成按钮使用的模型。
+    WorkflowAiPolish,
 }
 
 impl AuxiliaryTask {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::TitleGeneration,
         Self::Compaction,
         Self::SmartApproval,
         Self::Dreaming,
         Self::BackgroundReview,
+        Self::WorkflowAiPolish,
     ];
 
     /// 稳定字符串 id（对齐 `memory::AuxiliaryKind::config_key`），用于跨进程透传与配置读写。
@@ -35,6 +38,7 @@ impl AuxiliaryTask {
             Self::SmartApproval => "smart_approval",
             Self::Dreaming => "dreaming",
             Self::BackgroundReview => "background_review",
+            Self::WorkflowAiPolish => "workflow_ai_polish",
         }
     }
 
@@ -46,6 +50,7 @@ impl AuxiliaryTask {
             "smart_approval" => Some(Self::SmartApproval),
             "dreaming" => Some(Self::Dreaming),
             "background_review" => Some(Self::BackgroundReview),
+            "workflow_ai_polish" => Some(Self::WorkflowAiPolish),
             _ => None,
         }
     }

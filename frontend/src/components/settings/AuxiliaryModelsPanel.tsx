@@ -68,6 +68,12 @@ const TASKS: {
     descKey: "aux.backgroundReviewDesc",
     Icon: Sparkles,
   },
+  {
+    id: "workflow_ai_polish",
+    labelKey: "aux.workflowAiPolish",
+    descKey: "aux.workflowAiPolishDesc",
+    Icon: WandSparkles,
+  },
 ];
 
 function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {

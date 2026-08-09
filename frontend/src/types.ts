@@ -247,7 +247,8 @@ export type AuxiliaryTaskId =
   | "compaction"
   | "smart_approval"
   | "dreaming"
-  | "background_review";
+  | "background_review"
+  | "workflow_ai_polish";
 
 /** 单个辅助任务在设置面的展示态（Tauri `get_auxiliary_settings`） */
 export type AuxiliaryTaskDto = {

@@ -257,6 +257,7 @@ fn to_common_task(kind: AuxiliaryKind) -> common::AuxiliaryTask {
         AuxiliaryKind::SmartApproval => common::AuxiliaryTask::SmartApproval,
         AuxiliaryKind::Dreaming => common::AuxiliaryTask::Dreaming,
         AuxiliaryKind::BackgroundReview => common::AuxiliaryTask::BackgroundReview,
+        AuxiliaryKind::WorkflowAiPolish => common::AuxiliaryTask::WorkflowAiPolish,
     }
 }
 

@@ -259,6 +259,8 @@ export const zh = {
   "aux.dreamingDesc": "后台整理日记、提炼长期记忆。",
   "aux.backgroundReview": "记忆审查",
   "aux.backgroundReviewDesc": "回合后审查并建议写入 MEMORY/USER。",
+  "aux.workflowAiPolish": "工作流 AI 辅助",
+  "aux.workflowAiPolishDesc": "智能流程配置面板中 ✨ AI 生成/润色按钮使用的模型。",
 
   "evo.title": "离线进化",
   "evo.subtitle": "为技能/提示的离线遗传优化选择反思与评测模型（与在线辅助模型分开）。",
@@ -2051,6 +2053,8 @@ export const en: Record<MessageKey, string> = {
   "aux.dreamingDesc": "Organize diaries and distill long-term memories in the background.",
   "aux.backgroundReview": "Memory review",
   "aux.backgroundReviewDesc": "Review each turn and suggest MEMORY/USER updates.",
+  "aux.workflowAiPolish": "Workflow AI assist",
+  "aux.workflowAiPolishDesc": "Model used by the ✨ AI generate/polish buttons in workflow config panels.",
 
   "evo.title": "Offline evolution",
   "evo.subtitle": "Pick reflection and judge models for offline genetic optimization of skills/prompts (separate from online auxiliary models).",

@@ -300,6 +300,8 @@ pub struct AuxiliaryConfig {
     pub background_review: AuxiliaryRoute,
     #[serde(default)]
     pub dreaming: AuxiliaryRoute,
+    #[serde(default)]
+    pub workflow_ai_polish: AuxiliaryRoute,
 }
 
 /// 辅助路由用途。
@@ -315,15 +317,18 @@ pub enum AuxiliaryKind {
     BackgroundReview,
     /// 入梦提炼。
     Dreaming,
+    /// 工作流 AI 辅助（✨ 润色/生成）。
+    WorkflowAiPolish,
 }
 
 impl AuxiliaryKind {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::TitleGeneration,
         Self::Compaction,
         Self::SmartApproval,
         Self::Dreaming,
         Self::BackgroundReview,
+        Self::WorkflowAiPolish,
     ];
 
     pub const fn config_key(self) -> &'static str {
@@ -333,6 +338,7 @@ impl AuxiliaryKind {
             Self::SmartApproval => "smart_approval",
             Self::Dreaming => "dreaming",
             Self::BackgroundReview => "background_review",
+            Self::WorkflowAiPolish => "workflow_ai_polish",
         }
     }
 }
@@ -345,6 +351,7 @@ impl AuxiliaryConfig {
             AuxiliaryKind::SmartApproval => &self.smart_approval,
             AuxiliaryKind::Dreaming => &self.dreaming,
             AuxiliaryKind::BackgroundReview => &self.background_review,
+            AuxiliaryKind::WorkflowAiPolish => &self.workflow_ai_polish,
         }
     }
 }

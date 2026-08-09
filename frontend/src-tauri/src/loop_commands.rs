@@ -380,6 +380,8 @@ pub async fn ai_generate_workflow(
 ///
 /// `task` 描述字段用途（如 "视频生成提示词"），`text` 为当前文本（可空）。
 /// 空文本时生成，有文本时润色。
+///
+/// 模型优先级：per-workflow 参数 > 辅助模型全局配置（模型服务 → 辅助模型 → 工作流 AI 辅助）> 活跃供应商。
 #[tauri::command]
 pub async fn loop_ai_polish(
     text: String,
@@ -389,7 +391,30 @@ pub async fn loop_ai_polish(
 ) -> Result<String, String> {
     use crate::providers_commands::{find_provider, resolve_api_key};
 
-    let provider_cfg = if let Some(id) = provider_id.as_deref().filter(|s| !s.is_empty()) {
+    // 优先级：per-workflow 参数 > 辅助模型全局配置 > 活跃供应商
+    let (resolved_pid, resolved_mdl) = {
+        let pid = provider_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let mdl = model.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        if pid.is_some() {
+            (pid.map(str::to_string), mdl.map(str::to_string))
+        } else {
+            let aux = memory::load_auxiliary_config(&home::default_memory_dir());
+            let route = &aux.workflow_ai_polish;
+            let rp = if route.provider != "auto" && !route.provider.is_empty() {
+                Some(route.provider.clone())
+            } else {
+                None
+            };
+            let rm = if route.model != "auto" && !route.model.is_empty() {
+                Some(route.model.clone())
+            } else {
+                None
+            };
+            (rp, rm)
+        }
+    };
+
+    let provider_cfg = if let Some(ref id) = resolved_pid {
         find_provider(id)?
     } else {
         let state = crate::providers_commands::get_providers_state()?;
@@ -408,12 +433,8 @@ pub async fn loop_ai_polish(
         ));
     }
     let api_key = key.unwrap_or_default();
-    let model_name = model
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(provider_cfg.model.as_str())
-        .to_string();
+    let model_name = resolved_mdl
+        .unwrap_or_else(|| provider_cfg.model.clone());
 
     let base_url = if provider_cfg.endpoint.trim().is_empty() {
         None
