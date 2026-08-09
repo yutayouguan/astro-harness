@@ -970,6 +970,34 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           </button>
           <button
             className="loop-icon-btn"
+            title={t("loop.exportImage")}
+            onClick={() => {
+              const container = document.querySelector<HTMLElement>(".loop-canvas-container .react-flow__viewport");
+              if (!container) return;
+              const svgEdges = container.closest(".react-flow")?.querySelector<SVGElement>("svg.react-flow__edges");
+              if (!svgEdges) return;
+              // 导出 SVG：序列化边+节点为独立 SVG
+              const bbox = container.getBoundingClientRect();
+              const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+              svg.setAttribute("width", String(bbox.width));
+              svg.setAttribute("height", String(bbox.height));
+              svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
+              const clone = svgEdges.cloneNode(true) as SVGElement;
+              svg.appendChild(clone);
+              const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `workflow-${name || "export"}.svg`;
+              a.click();
+              URL.revokeObjectURL(url);
+              showToast(t("loop.exported"), { tone: "success" });
+            }}
+          >
+            <LucideIcons.Camera size={16} />
+          </button>
+          <button
+            className="loop-icon-btn"
             title={t("loop.shortcuts")}
             onClick={() => setShowShortcuts((v) => !v)}
           >
