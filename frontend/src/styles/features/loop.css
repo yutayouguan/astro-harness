@@ -588,8 +588,8 @@
 .loop-detail-panel-header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .loop-detail-panel-icon {
@@ -604,11 +604,22 @@
   flex-shrink: 0;
 }
 
+.loop-detail-panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
 .loop-detail-panel-title {
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--ink);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .loop-detail-panel-badge {
@@ -617,39 +628,26 @@
   border-radius: 10px;
   background: color-mix(in srgb, var(--tone, #ec4899) 12%, transparent);
   color: var(--tone, #ec4899);
-  margin-left: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.loop-detail-panel-header .loop-card-actions {
-  margin-left: auto;
+.loop-detail-panel-top > .loop-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
 }
 
-.loop-detail-panel-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.loop-detail-panel-cell {
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--glass-panel);
-  border: 1px solid var(--border);
-}
-
-.loop-detail-panel-cell-label {
-  display: block;
-  font-size: 11px;
+.loop-detail-panel-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   color: var(--ink-tertiary);
-  margin-bottom: 4px;
+  margin-bottom: 16px;
 }
-
-.loop-detail-panel-cell-value {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
+.loop-detail-panel-stats-sep {
+  opacity: 0.4;
 }
 
 .loop-detail-panel-toggles {

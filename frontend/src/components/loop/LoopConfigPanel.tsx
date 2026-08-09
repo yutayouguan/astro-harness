@@ -217,7 +217,6 @@ export default function LoopConfigPanel({
   upstreamOutputs,
   aiProviderId,
   aiModel,
-  onAiProviderChange,
   onLabelChange,
   onConfigChange,
   onDisabledChange,
@@ -251,12 +250,6 @@ export default function LoopConfigPanel({
           onClick={() => setTab("logs")}
         >
           {t("loop.logsTab")}
-        </button>
-        <button
-          className={`loop-config-tab${tab === "ai_model" ? " is-active" : ""}`}
-          onClick={() => setTab("ai_model")}
-        >
-          {t("loop.aiModelTab")}
         </button>
       </div>
 
@@ -357,105 +350,7 @@ export default function LoopConfigPanel({
         <NodeStepLogs nodeId={nodeId} workflowId={workflowId} />
       )}
 
-      {tab === "ai_model" && (
-        <div className="loop-config-panel-scroll">
-          <div className="loop-config-panel-body">
-            <div className="loop-config-ai-model-intro">
-              {t("loop.aiModelIntro")}
-            </div>
-            <Suspense fallback={null}>
-              <AiModelPanel
-                providerId={aiProviderId ?? ""}
-                model={aiModel ?? ""}
-                onChange={(pid, m) => onAiProviderChange?.(pid, m)}
-              />
-            </Suspense>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-const ProviderModelSelectLazy = lazy(() => import("./configs/ProviderModelSelect"));
-
-interface ActiveProviderInfo {
-  id: string;
-  display_name: string;
-  model: string;
-}
-
-function AiModelPanel({
-  providerId,
-  model,
-  onChange,
-}: {
-  providerId: string;
-  model: string;
-  onChange: (providerId: string, model: string) => void;
-}) {
-  const { t } = useI18n();
-  const [fallback, setFallback] = useState<ActiveProviderInfo | null>(null);
-  const [allProviders, setAllProviders] = useState<ActiveProviderInfo[]>([]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const state = await invoke<{
-          providers: { id: string; display_name: string; model: string; enabled: boolean; has_api_key: boolean }[];
-          active_provider_id: string | null;
-        }>("get_providers_state");
-        const available = (state.providers ?? []).filter((p) => p.enabled && p.has_api_key);
-        setAllProviders(available.map((p) => ({ id: p.id, display_name: p.display_name, model: p.model })));
-        const active = available.find((p) => p.id === state.active_provider_id) ?? available[0];
-        if (active) setFallback({ id: active.id, display_name: active.display_name, model: active.model });
-      } catch { /* ignore */ }
-    })();
-  }, []);
-
-  const isConfigured = !!(providerId && providerId.trim());
-  const configuredProvider = allProviders.find((p) => p.id === providerId);
-  const effectiveName = isConfigured
-    ? (configuredProvider?.display_name ?? providerId)
-    : fallback?.display_name ?? "—";
-  const effectiveModel = isConfigured ? (model || t("loop.aiModelDefault")) : fallback?.model ?? "—";
-
-  return (
-    <>
-      {/* 当前状态展示 */}
-      <div className="loop-ai-model-status">
-        <div className="loop-ai-model-status-label">{t("loop.aiModelCurrent")}</div>
-        <div className="loop-ai-model-status-value">
-          <span className="loop-ai-model-provider">{effectiveName}</span>
-          <span className="loop-ai-model-sep">/</span>
-          <span className="loop-ai-model-name">{effectiveModel}</span>
-        </div>
-        {!isConfigured && (
-          <div className="loop-ai-model-status-hint">
-            {t("loop.aiModelFallbackHint")}
-          </div>
-        )}
-        {isConfigured && (
-          <button
-            className="loop-ai-model-reset"
-            onClick={() => onChange("", "")}
-            type="button"
-          >
-            {t("loop.aiModelReset")}
-          </button>
-        )}
-      </div>
-
-      <div className="loop-config-divider" />
-
-      {/* 自定义选择 */}
-      <div className="loop-ai-model-custom-label">{t("loop.aiModelCustom")}</div>
-      <ProviderModelSelectLazy
-        providerId={providerId}
-        model={model}
-        onProviderChange={(pid) => onChange(pid, model)}
-        onModelChange={(m) => onChange(providerId, m)}
-      />
-    </>
-  );
-}

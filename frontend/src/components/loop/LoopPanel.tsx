@@ -505,31 +505,18 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                 <div className="loop-detail-panel-icon">
                   <LoopIcon icon={parseLoopIcon(selectedDetail.icon)} size={22} />
                 </div>
-                <div>
+                <div className="loop-detail-panel-title-group">
                   <h3 className="loop-detail-panel-title">{selectedDetail.name}</h3>
                   <span className={`loop-detail-panel-badge${lastRuns[selectedDetail.id]?.status === "running" ? " is-running" : ""}`}>
                     {lastRuns[selectedDetail.id]?.status === "running" ? t("loop.statusRunning") : t("loop.statusIdle")}
                   </span>
                 </div>
-                {renderCardActions(selectedDetail)}
               </div>
-              <div className="loop-detail-panel-grid">
-                <div className="loop-detail-panel-cell">
-                  <span className="loop-detail-panel-cell-label">{t("loop.nodes")}</span>
-                  <span className="loop-detail-panel-cell-value">{selectedDetail.nodes.length}</span>
-                </div>
-                <div className="loop-detail-panel-cell">
-                  <span className="loop-detail-panel-cell-label">{t("loop.lastRun")}</span>
-                  <span className="loop-detail-panel-cell-value">{formatRelativeTime(lastRuns[selectedDetail.id]?.time) === "—" ? t("loop.lastRunNever") : formatRelativeTime(lastRuns[selectedDetail.id]?.time)}</span>
-                </div>
-                <div className="loop-detail-panel-cell">
-                  <span className="loop-detail-panel-cell-label">{t("loop.enabled")}</span>
-                  <span className="loop-detail-panel-cell-value">{selectedDetail.enabled ? t("loop.enabledYes") : t("loop.enabledNo")}</span>
-                </div>
-                <div className="loop-detail-panel-cell">
-                  <span className="loop-detail-panel-cell-label">{t("loop.aiCallable")}</span>
-                  <span className="loop-detail-panel-cell-value">{selectedDetail.ai_callable ? t("loop.yes") : t("loop.no")}</span>
-                </div>
+              {renderCardActions(selectedDetail)}
+              <div className="loop-detail-panel-stats">
+                <span>{t("loop.nodeCount").replace("{count}", String(selectedDetail.nodes.length))}</span>
+                <span className="loop-detail-panel-stats-sep">·</span>
+                <span>{t("loop.lastRun")}: {formatRelativeTime(lastRuns[selectedDetail.id]?.time) === "—" ? t("loop.lastRunNever") : formatRelativeTime(lastRuns[selectedDetail.id]?.time)}</span>
               </div>
               <div className="loop-detail-panel-toggles">
                 <label className="loop-toggle">
