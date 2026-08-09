@@ -120,7 +120,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     // 若已切换，更新当前 ToolContext 工作区，便于后续 file_ops 写到新空间
     if activate {
         ctx.workspace_dir = std::path::PathBuf::from(&info.path);
-        std::env::set_var("ASTRO_WORKSPACE", &info.path);
+        skills::set_workspace_override(std::path::Path::new(&info.path));
         if let Ok(mgr) = memory::MemoryManager::for_agent(base.clone(), &info.id) {
             *ctx.memory = mgr;
         }

@@ -111,8 +111,7 @@ fn astro_skill_roots(agent_id: Option<&str>) -> Vec<PathBuf> {
         roots.push(ws.join("skills"));
         roots.push(ws.join(".agents/skills"));
         roots.push(ws.join(".cursor/skills"));
-    } else if let Ok(ws) = std::env::var("ASTRO_WORKSPACE") {
-        let ws = PathBuf::from(ws);
+    } else if let Some(ws) = crate::workspace_override() {
         roots.push(ws.join("skills"));
         roots.push(ws.join(".agents/skills"));
         roots.push(ws.join(".cursor/skills"));

@@ -959,11 +959,10 @@ impl AgentLoop {
     /// [`Self::take_inject_context`] → 消息侧 `[astro:hook-context]`（见 `multi_turn`），
     /// 避免与 system 层双重注入。
     ///
-    /// 副作用：设置 `ASTRO_WORKSPACE` 环境变量供工具读取。
+    /// 副作用：设置 workspace 目录覆盖供 skills 发现使用。
     pub fn build_system_prompt(&self) -> String {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
-        // SAFETY: env var set before spawning child processes; single-threaded at this call site
-        unsafe { std::env::set_var("ASTRO_WORKSPACE", &self.memory.workspace_dir) };
+        skills::set_workspace_override(&self.memory.workspace_dir);
         let skill_index: Vec<(&str, &str)> = skill_pairs
             .iter()
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
@@ -1128,8 +1127,7 @@ impl AgentLoop {
         };
 
         let workspace_dir = self.resolve_workspace_dir();
-        // SAFETY: env var set before spawning child processes; single-threaded at this call site
-        unsafe { std::env::set_var("ASTRO_WORKSPACE", &workspace_dir) };
+        skills::set_workspace_override(&workspace_dir);
         let image_gen_targets = self.model_ctx.image_gen_targets.clone();
         let session_id = self.session_id.clone();
         let turn_id = self.turn.current_turn_id.clone();

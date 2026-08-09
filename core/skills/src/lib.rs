@@ -9,6 +9,27 @@
 //! ├── skill / registry   运行时 LoadedSkill
 //! ```
 
+use std::path::{Path, PathBuf};
+use std::sync::RwLock;
+
+/// 线程安全的 workspace 目录覆盖，替代全局 `ASTRO_WORKSPACE` 环境变量。
+///
+/// `agent` 和 `tools` 在需要时调用 [`set_workspace_override`]，
+/// `installed` 在发现 skill 根目录时通过 [`workspace_override`] 读取。
+static WORKSPACE_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
+
+/// 设置当前进程的 workspace 目录覆盖（线程安全）。
+pub fn set_workspace_override(path: &Path) {
+    if let Ok(mut g) = WORKSPACE_OVERRIDE.write() {
+        *g = Some(path.to_path_buf());
+    }
+}
+
+/// 读取当前 workspace 目录覆盖；未设置时返回 `None`。
+pub fn workspace_override() -> Option<PathBuf> {
+    WORKSPACE_OVERRIDE.read().ok().and_then(|g| g.clone())
+}
+
 pub mod backups;
 pub mod check;
 pub mod digest;
