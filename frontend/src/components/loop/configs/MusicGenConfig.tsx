@@ -1,4 +1,4 @@
-import { AiAssistField, NumberField, SelectField, ToggleField, cfgStr, cfgNum, cfgBool } from "./ConfigField";
+import { AiAssistField, TextField, NumberField, SelectField, ToggleField, cfgStr, cfgNum, cfgBool } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -61,6 +61,14 @@ export default function MusicGenConfig({ config, onChange, aiProviderId, aiModel
         onChange={(v) => onChange({ ...config, genre: v })}
         options={GENRE_OPTIONS}
       />
+      {cfgStr(config, "genre") === "custom" && (
+        <TextField
+          label="自定义曲风"
+          value={cfgStr(config, "custom_genre")}
+          onChange={(v) => onChange({ ...config, custom_genre: v })}
+          placeholder="输入曲风名称，如 lo-fi, synthwave…"
+        />
+      )}
     </>
   );
 }

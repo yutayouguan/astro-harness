@@ -12,22 +12,25 @@ const MODE_OPTIONS = [
 ];
 
 export default function JsonConfig({ config, onChange }: ConfigProps) {
+  const mode = cfgStr(config, "mode", "parse");
   return (
     <>
       <SelectField
         label="操作模式"
-        value={cfgStr(config, "mode", "parse")}
+        value={mode}
         onChange={(v) => onChange({ ...config, mode: v })}
         options={MODE_OPTIONS}
       />
-      <TextField
-        label="表达式"
-        value={cfgStr(config, "expression")}
-        onChange={(v) => onChange({ ...config, expression: v })}
-        multiline
-        placeholder={".data[] | {name, age}"}
-        hint="Transform 模式下填写 JQ/JSONPath 表达式"
-      />
+      {mode === "transform" && (
+        <TextField
+          label="表达式"
+          value={cfgStr(config, "expression")}
+          onChange={(v) => onChange({ ...config, expression: v })}
+          multiline
+          placeholder={".data[] | {name, age}"}
+          hint="JQ / JSONPath 表达式"
+        />
+      )}
     </>
   );
 }

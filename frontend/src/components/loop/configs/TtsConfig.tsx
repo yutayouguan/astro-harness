@@ -1,15 +1,11 @@
 import { useMemo } from "react";
 import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
-import { getVoiceOptions, getVoiceGroups } from "./minimaxVoices";
-import type { UpstreamOutput } from "./upstreamOutputs";
+import { getVoiceOptions } from "./minimaxVoices";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
-  upstreamOutputs?: UpstreamOutput[];
-  aiProviderId?: string;
-  aiModel?: string;
 }
 
 const OUTPUT_FORMAT_OPTIONS = [
@@ -22,8 +18,8 @@ const OUTPUT_FORMAT_OPTIONS = [
 export default function TtsConfig({ config, onChange }: ConfigProps) {
   const providerId = cfgStr(config, "provider_id");
   const voices = useMemo(() => getVoiceOptions(providerId), [providerId]);
-  const groups = useMemo(() => getVoiceGroups(voices), [voices]);
   const currentVoice = cfgStr(config, "voice");
+  const hasVoiceList = voices.length > 0;
 
   return (
     <>
@@ -42,40 +38,41 @@ export default function TtsConfig({ config, onChange }: ConfigProps) {
         onModelChange={(v) => onChange({ ...config, model: v })}
         mediaType="tts"
       />
-      <label className="loop-config-field">
-        <span className="loop-config-label">音色</span>
-        <select
-          className="loop-config-select"
+      {hasVoiceList ? (
+        <SelectField
+          label="音色"
           value={currentVoice}
-          onChange={(e) => onChange({ ...config, voice: e.target.value })}
-        >
-          <option value="">选择音色…</option>
-          {groups.map((g) => (
-            <optgroup key={g} label={g}>
-              {voices
-                .filter((v) => v.group === g)
-                .map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.label}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-          {currentVoice && !voices.some((v) => v.value === currentVoice) && (
-            <option value={currentVoice}>{currentVoice}</option>
-          )}
-        </select>
-        <span className="loop-config-hint">
-          也可直接输入自定义 voice_id（如克隆音色）
-        </span>
-        <input
-          className="loop-config-input"
-          value={currentVoice}
-          onChange={(e) => onChange({ ...config, voice: e.target.value })}
-          placeholder="或手动输入 voice_id"
-          style={{ marginTop: 4 }}
+          onChange={(v) => onChange({ ...config, voice: v })}
+          options={[
+            { value: "", label: "选择音色…" },
+            ...voices.map((v) => ({
+              value: v.value,
+              label: v.group ? `${v.group} / ${v.label}` : v.label,
+            })),
+            ...(currentVoice && !voices.some((v) => v.value === currentVoice)
+              ? [{ value: currentVoice, label: `${currentVoice} (自定义)` }]
+              : []),
+          ]}
+          hint="也可在下方手动输入自定义 voice_id（如克隆音色）"
         />
-      </label>
+      ) : (
+        <TextField
+          label="音色 (Voice ID)"
+          value={currentVoice}
+          onChange={(v) => onChange({ ...config, voice: v })}
+          placeholder="输入 voice_id"
+          hint="当前供应商无预置音色列表，请手动输入"
+        />
+      )}
+      {hasVoiceList && (
+        <TextField
+          label="自定义 Voice ID（可选）"
+          value={currentVoice && !voices.some((v) => v.value === currentVoice) ? currentVoice : ""}
+          onChange={(v) => onChange({ ...config, voice: v })}
+          placeholder="手动输入 voice_id（覆盖上方选择）"
+          hint="如已克隆的音色 ID"
+        />
+      )}
       <NumberField
         label="语速"
         value={cfgNum(config, "speed")}

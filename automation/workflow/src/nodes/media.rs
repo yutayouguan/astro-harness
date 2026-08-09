@@ -370,13 +370,10 @@ impl NodeExecutor for SpeechToTextExec {
             bail!("语音识别节点的输入路径为空");
         }
 
-        Ok(NodeResult::Success(serde_json::json!({
-            "type": "speech_to_text",
-            "input_path": input,
-            "language": language,
-            "provider_id": provider_id,
-            "note": "语音识别待接入 Whisper/各厂商 ASR API"
-        })))
+        bail!(
+            "语音识别功能待接入（Whisper / 各厂商 ASR API 暂无统一路由）。输入: {}，语言: {}，供应商: {}",
+            &input[..input.len().min(80)], language, provider_id
+        )
     }
 }
 
@@ -391,21 +388,17 @@ impl NodeExecutor for ImageEditExec {
         let input = node.config.get("input_image").and_then(|v| v.as_str()).unwrap_or("");
         let input = ctx.interpolate(input);
         let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
-        let prompt = ctx.interpolate(prompt_tpl);
+        let _prompt = ctx.interpolate(prompt_tpl);
         let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("");
 
         if input.trim().is_empty() {
             bail!("图片编辑节点的输入图片为空");
         }
 
-        Ok(NodeResult::Success(serde_json::json!({
-            "type": "image_edit",
-            "operation": op,
-            "input_image": input,
-            "prompt": prompt,
-            "provider_id": provider_id,
-            "note": "图片编辑待接入 Image Edit API"
-        })))
+        bail!(
+            "图片编辑功能待接入（Image Edit API 暂无统一路由）。操作: {}，图片: {}，供应商: {}",
+            op, &input[..input.len().min(80)], provider_id
+        )
     }
 }
 
