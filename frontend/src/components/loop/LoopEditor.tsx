@@ -128,7 +128,12 @@ interface BranchCondition {
 function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
   const { t } = useI18n();
   const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
-  const config = (data as unknown as Record<string, unknown>).config as Record<string, unknown> | undefined;
+  const raw = data as unknown as Record<string, unknown>;
+  const config = raw.config as Record<string, unknown> | undefined;
+  const warnings = validateNodeConfig(
+    (raw.nodeType as NodeType) ?? data.meta.type,
+    config ?? {},
+  );
   const conditionsRaw = config?.conditions ?? config?.branches;
   let branches: BranchCondition[] = [];
   if (typeof conditionsRaw === "string") {
@@ -155,6 +160,11 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
             <LucideIcons.Trash2 size={12} />
           </button>
         </div>
+      )}
+      {warnings.length > 0 && (
+        <span className="loop-rf-node-warn" title={warnings.join("、") + " 未配置"}>
+          <LucideIcons.AlertTriangle size={10} />
+        </span>
       )}
       <Handle type="target" position={Position.Left} className="loop-rf-handle" />
       <div className="loop-rf-node-header">
@@ -1173,6 +1183,17 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           >
             <Background />
             <Controls />
+            <div className="loop-statusbar">
+              <span>{nodes.length} {t("loop.statusNodes")}</span>
+              <span className="loop-statusbar-sep">·</span>
+              <span>{edges.length} {t("loop.statusEdges")}</span>
+              {dirty && (
+                <>
+                  <span className="loop-statusbar-sep">·</span>
+                  <span className="loop-statusbar-dirty">{t("loop.statusUnsaved")}</span>
+                </>
+              )}
+            </div>
             <MiniMap
               nodeColor={(n) =>
                 ((n.data as Record<string, unknown>)?.meta as NodeMeta)?.color ?? "#888"

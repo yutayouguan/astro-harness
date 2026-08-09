@@ -3189,6 +3189,34 @@
   }
 }
 
+/* ── Editor statusbar ────────────────────────────────────────── */
+
+.loop-statusbar {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg0, #fff) 85%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  z-index: 5;
+  pointer-events: none;
+}
+.loop-statusbar-sep {
+  opacity: 0.4;
+}
+.loop-statusbar-dirty {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
 /* ── Shortcuts overlay ───────────────────────────────────────── */
 
 .loop-shortcuts-overlay {

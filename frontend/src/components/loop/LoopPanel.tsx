@@ -237,6 +237,28 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
     }
   };
 
+  const handleDuplicate = async (lp: LoopDto) => {
+    try {
+      const created = await invoke<LoopDto>("create_loop", {
+        name: `${lp.name} (${t("loop.copy")})`,
+        description: lp.description,
+      });
+      await invoke("save_loop", {
+        id: created.id,
+        name: created.name,
+        description: lp.description,
+        nodes: lp.nodes,
+        edges: lp.edges,
+        variables: lp.variables,
+        icon: lp.icon ?? null,
+      });
+      showToast(t("loop.duplicated"), { tone: "success" });
+      void refresh();
+    } catch (e) {
+      showToast(String(e), { tone: "error" });
+    }
+  };
+
   const handleImport = async () => {
     const input = document.createElement("input");
     input.type = "file";
@@ -311,6 +333,13 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         }}
       >
         <Pencil size={14} />
+      </button>
+      <button
+        className="loop-icon-btn"
+        title={t("loop.duplicate")}
+        onClick={() => void handleDuplicate(lp)}
+      >
+        <LucideIcons.Copy size={14} />
       </button>
       <button
         className="loop-icon-btn"
