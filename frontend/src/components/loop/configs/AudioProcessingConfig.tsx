@@ -1,8 +1,10 @@
-import { TextField, SelectField, NumberField, cfgStr, cfgNum } from "./ConfigField";
+import { SelectField, NumberField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const OPERATION_OPTIONS = [
@@ -20,7 +22,8 @@ const FORMAT_OPTIONS = [
   { value: "flac", label: "FLAC" },
 ];
 
-export default function AudioProcessingConfig({ config, onChange }: ConfigProps) {
+export default function AudioProcessingConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <SelectField
@@ -29,13 +32,13 @@ export default function AudioProcessingConfig({ config, onChange }: ConfigProps)
         onChange={(v) => onChange({ ...config, operation: v })}
         options={OPERATION_OPTIONS}
       />
-      <TextField
-        label="输入音频路径"
-        value={cfgStr(config, "inputs")}
+      <FileArrayField
+        label="输入音频"
+        value={cfgStrArray(config, "inputs")}
         onChange={(v) => onChange({ ...config, inputs: v })}
-        multiline
-        placeholder={'["{{node1.audio}}", "{{node2.audio}}"]'}
-        hint="JSON 数组，引用上游节点的音频文件路径"
+        accept="audio"
+        upstream={up}
+        hint="拖拽或添加多个音频文件"
       />
       <NumberField
         label="裁切起始 (秒)"

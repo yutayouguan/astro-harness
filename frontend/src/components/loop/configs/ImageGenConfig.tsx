@@ -1,9 +1,11 @@
-import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
+import { TextField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const MODE_OPTIONS = [
@@ -30,8 +32,9 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "jpg", label: "JPG" },
 ];
 
-export default function ImageGenConfig({ config, onChange }: ConfigProps) {
+export default function ImageGenConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
   const mode = cfgStr(config, "mode", "text_to_image");
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <SelectField
@@ -56,21 +59,22 @@ export default function ImageGenConfig({ config, onChange }: ConfigProps) {
         mediaType="image"
       />
       {(mode === "image_to_image" || mode === "face_swap") && (
-        <TextField
+        <FilePathField
           label="源图片"
           value={cfgStr(config, "source_image")}
           onChange={(v) => onChange({ ...config, source_image: v })}
-          placeholder="图片路径或 {{var}}"
+          accept="image"
+          upstream={up}
           hint="要转换/换脸的原始图片"
         />
       )}
-      <TextField
+      <FileArrayField
         label="参考图片"
-        value={cfgStr(config, "reference_images")}
+        value={cfgStrArray(config, "reference_images")}
         onChange={(v) => onChange({ ...config, reference_images: v })}
-        multiline
-        placeholder={'["ref_1.jpg", "{{node.image}}"]'}
-        hint="JSON 数组，风格参考或人脸参考图"
+        accept="image"
+        upstream={up}
+        hint="风格参考或人脸参考图"
       />
       {(mode === "image_to_image" || mode === "face_swap") && (
         <NumberField

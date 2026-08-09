@@ -1,9 +1,11 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const LANGUAGE_OPTIONS = [
@@ -21,14 +23,16 @@ const OUTPUT_OPTIONS = [
   { value: "json", label: "JSON (含时间戳)" },
 ];
 
-export default function SpeechToTextConfig({ config, onChange }: ConfigProps) {
+export default function SpeechToTextConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
-      <TextField
+      <FilePathField
         label="音频/视频源"
         value={cfgStr(config, "input_path")}
         onChange={(v) => onChange({ ...config, input_path: v })}
-        placeholder="文件路径或 {{var}}"
+        accept="audio"
+        upstream={up}
         hint="支持 mp3/wav/mp4 等常见格式"
       />
       <ProviderModelSelect

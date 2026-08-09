@@ -36,6 +36,7 @@ import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
 import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseLoopIcon, serializeLoopIcon } from "./loopTypes";
 import { clampPopover, pointAnchor, measurePopoverSize } from "../../lib/ui/clampPopover";
 import LoopConfigPanel from "./LoopConfigPanel";
+import { computeUpstreamOutputs } from "./configs/upstreamOutputs";
 import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
@@ -363,6 +364,16 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const selectedUpstreamOutputs = useMemo(() => {
+    if (!selectedNodeId) return [];
+    const allNodes = nodes.map((n) => {
+      const d = n.data as Record<string, unknown>;
+      return { id: n.id, nodeType: d.nodeType as NodeType, label: (d.label as string) || n.id };
+    });
+    const simpleEdges = edges.map((e) => ({ source: e.source, target: e.target }));
+    return computeUpstreamOutputs(selectedNodeId, allNodes, simpleEdges);
+  }, [selectedNodeId, nodes, edges]);
 
   // 已保存的工作流列表（自定义分组使用）
   const [savedLoops, setSavedLoops] = useState<LoopDto[]>([]);
@@ -1030,6 +1041,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             config={((selectedNode.data as Record<string, unknown>).config as Record<string, unknown>) ?? {}}
             disabled={!!((selectedNode.data as Record<string, unknown>).disabled)}
             workflowId={workflowId}
+            upstreamOutputs={selectedUpstreamOutputs}
             onLabelChange={(label) => {
               setNodes((nds) =>
                 nds.map((n) =>

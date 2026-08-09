@@ -1,9 +1,11 @@
-import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
+import { TextField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const OPERATION_OPTIONS = [
@@ -18,8 +20,9 @@ const OPERATION_OPTIONS = [
   { value: "restore", label: "修复/增强" },
 ];
 
-export default function ImageEditConfig({ config, onChange }: ConfigProps) {
+export default function ImageEditConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
   const op = cfgStr(config, "operation", "inpaint");
+  const up = upstreamOutputs ?? [];
   return (
     <>
       <SelectField
@@ -28,18 +31,21 @@ export default function ImageEditConfig({ config, onChange }: ConfigProps) {
         onChange={(v) => onChange({ ...config, operation: v })}
         options={OPERATION_OPTIONS}
       />
-      <TextField
+      <FilePathField
         label="输入图片"
         value={cfgStr(config, "input_image")}
         onChange={(v) => onChange({ ...config, input_image: v })}
-        placeholder="图片路径或 {{var}}"
+        accept="image"
+        upstream={up}
       />
       {(op === "inpaint" || op === "outpaint") && (
-        <TextField
+        <FilePathField
           label="蒙版图片"
           value={cfgStr(config, "mask_image")}
           onChange={(v) => onChange({ ...config, mask_image: v })}
-          placeholder="蒙版路径或 {{var}}（可选）"
+          accept="image"
+          upstream={up}
+          hint="可选"
         />
       )}
       <TextField
@@ -51,13 +57,13 @@ export default function ImageEditConfig({ config, onChange }: ConfigProps) {
         hint="支持 {{var}} 引用上游变量"
       />
       {(op === "style_transfer" || op === "face_swap" || op === "variation") && (
-        <TextField
+        <FileArrayField
           label="参考图片"
-          value={cfgStr(config, "reference_images")}
+          value={cfgStrArray(config, "reference_images")}
           onChange={(v) => onChange({ ...config, reference_images: v })}
-          multiline
-          placeholder={'["ref_1.jpg", "{{node.image}}"]'}
-          hint="JSON 数组，风格参考或人脸参考图"
+          accept="image"
+          upstream={up}
+          hint="风格参考或人脸参考图"
         />
       )}
       <ProviderModelSelect

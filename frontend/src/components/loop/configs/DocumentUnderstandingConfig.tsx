@@ -1,9 +1,11 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const TASK_OPTIONS = [
@@ -20,7 +22,9 @@ const INPUT_TYPE_OPTIONS = [
   { value: "url", label: "网页 URL" },
 ];
 
-export default function DocumentUnderstandingConfig({ config, onChange }: ConfigProps) {
+export default function DocumentUnderstandingConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
+  const inputType = cfgStr(config, "input_type", "image");
   return (
     <>
       <SelectField
@@ -31,16 +35,26 @@ export default function DocumentUnderstandingConfig({ config, onChange }: Config
       />
       <SelectField
         label="输入类型"
-        value={cfgStr(config, "input_type", "image")}
+        value={inputType}
         onChange={(v) => onChange({ ...config, input_type: v })}
         options={INPUT_TYPE_OPTIONS}
       />
-      <TextField
-        label="输入路径"
-        value={cfgStr(config, "input_path")}
-        onChange={(v) => onChange({ ...config, input_path: v })}
-        placeholder="文件路径、URL 或 {{var}}"
-      />
+      {inputType === "url" ? (
+        <TextField
+          label="输入路径"
+          value={cfgStr(config, "input_path")}
+          onChange={(v) => onChange({ ...config, input_path: v })}
+          placeholder="https://…"
+        />
+      ) : (
+        <FilePathField
+          label="输入文件"
+          value={cfgStr(config, "input_path")}
+          onChange={(v) => onChange({ ...config, input_path: v })}
+          accept={inputType === "pdf" ? undefined : "image"}
+          upstream={up}
+        />
+      )}
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}
         model={cfgStr(config, "model")}

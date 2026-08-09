@@ -1,9 +1,11 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const OUTPUT_FORMAT_OPTIONS = [
@@ -12,14 +14,16 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "opus", label: "Opus" },
 ];
 
-export default function VoiceCloneConfig({ config, onChange }: ConfigProps) {
+export default function VoiceCloneConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
-      <TextField
+      <FilePathField
         label="参考音频"
         value={cfgStr(config, "reference_audio")}
         onChange={(v) => onChange({ ...config, reference_audio: v })}
-        placeholder="参考音频文件路径或 {{var}}"
+        accept="audio"
+        upstream={up}
         hint="用于克隆的目标音色样本（建议 10-30 秒清晰人声）"
       />
       <TextField

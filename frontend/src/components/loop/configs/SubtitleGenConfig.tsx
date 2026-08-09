@@ -1,9 +1,11 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, SelectField, FilePathField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const OUTPUT_FORMAT_OPTIONS = [
@@ -12,15 +14,17 @@ const OUTPUT_FORMAT_OPTIONS = [
   { value: "json", label: "json" },
 ];
 
-export default function SubtitleGenConfig({ config, onChange }: ConfigProps) {
+export default function SubtitleGenConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+  const up = upstreamOutputs ?? [];
   return (
     <>
-      <TextField
+      <FilePathField
         label="音频/视频来源"
         value={cfgStr(config, "audio_source")}
         onChange={(v) => onChange({ ...config, audio_source: v })}
-        placeholder="{{node_id.audio_path}}"
-        hint="引用上游节点输出的文件路径"
+        accept="audio"
+        upstream={up}
+        hint="选择音频/视频文件或引用上游节点输出"
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}

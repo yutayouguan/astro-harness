@@ -244,6 +244,7 @@ pub fn run() {
             tray::show_main_window(app);
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .on_menu_event(|app, event| {
             if event.id() == MENU_PREFERENCES_ID {

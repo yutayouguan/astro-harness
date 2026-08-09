@@ -1,6 +1,10 @@
 /** 通用配置字段组件 — 所有节点配置表单复用 */
 
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
+import { FolderOpen, Variable, X, Plus } from "lucide-react";
+import type { UpstreamOutput, MediaType } from "./upstreamOutputs";
+import { varRef } from "./upstreamOutputs";
 
 interface TextFieldProps {
   label: string;
@@ -144,4 +148,277 @@ export function cfgNum(config: Record<string, unknown>, key: string): number | u
 export function cfgBool(config: Record<string, unknown>, key: string, fallback = false): boolean {
   const v = config[key];
   return typeof v === "boolean" ? v : fallback;
+}
+
+export function cfgStrArray(config: Record<string, unknown>, key: string): string[] {
+  const v = config[key];
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+  if (typeof v === "string" && v.trim()) {
+    try { const arr = JSON.parse(v); if (Array.isArray(arr)) return arr; } catch { /* ignore */ }
+  }
+  return [];
+}
+
+// ---------------------------------------------------------------------------
+// 文件选择器 — 文件浏览 + 上游变量选择
+// ---------------------------------------------------------------------------
+
+const FILE_FILTERS: Record<string, { name: string; extensions: string[] }[]> = {
+  image: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp"] }],
+  video: [{ name: "视频", extensions: ["mp4", "mov", "webm", "avi", "mkv"] }],
+  audio: [{ name: "音频", extensions: ["mp3", "wav", "aac", "flac", "ogg", "m4a"] }],
+};
+
+async function openFileDialog(accept?: string): Promise<string | null> {
+  try {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const filters = accept ? FILE_FILTERS[accept] : undefined;
+    const result = await open({ multiple: false, filters });
+    if (typeof result === "string") return result;
+    if (result && typeof (result as { path?: string }).path === "string")
+      return (result as { path: string }).path;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function openMultiFileDialog(accept?: string): Promise<string[]> {
+  try {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const filters = accept ? FILE_FILTERS[accept] : undefined;
+    const result = await open({ multiple: true, filters });
+    if (Array.isArray(result)) {
+      return result
+        .map((r) => (typeof r === "string" ? r : (r as { path?: string }).path ?? ""))
+        .filter(Boolean);
+    }
+    if (typeof result === "string") return [result];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/** 上游变量下拉菜单 */
+function VarDropdown({
+  upstream,
+  accept,
+  onSelect,
+  onClose,
+}: {
+  upstream: UpstreamOutput[];
+  accept?: MediaType;
+  onSelect: (ref: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  const filtered = upstream
+    .map((u) => ({
+      ...u,
+      fields: u.fields.filter(
+        (f) => !accept || accept === "any" || f.mediaType === accept || f.mediaType === "any" || f.mediaType === "path",
+      ),
+    }))
+    .filter((u) => u.fields.length > 0);
+
+  if (filtered.length === 0) {
+    return (
+      <div ref={ref} className="loop-var-dropdown">
+        <div className="loop-var-empty">暂无可用的上游输出</div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="loop-var-dropdown">
+      {filtered.map((u) => (
+        <div key={u.nodeId} className="loop-var-group">
+          <div className="loop-var-group-label">{u.nodeLabel}</div>
+          {u.fields.map((f) => (
+            <button
+              key={f.key}
+              className="loop-var-item"
+              onClick={() => {
+                onSelect(varRef(u.nodeLabel, f.key));
+                onClose();
+              }}
+            >
+              <span className="loop-var-item-label">{f.label}</span>
+              <code className="loop-var-item-ref">{`{{${u.nodeLabel}.${f.key}}}`}</code>
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface FilePathFieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+  /** 文件类型过滤：image / video / audio */
+  accept?: string;
+  /** 上游节点输出（用于变量选择） */
+  upstream?: UpstreamOutput[];
+}
+
+/** 文件路径选择器 — 输入框 + 浏览文件 + 引用上游变量 */
+export function FilePathField({ label, value, onChange, placeholder, hint, accept, upstream }: FilePathFieldProps) {
+  const [showVars, setShowVars] = useState(false);
+
+  const handleBrowse = useCallback(async () => {
+    const path = await openFileDialog(accept);
+    if (path) onChange(path);
+  }, [accept, onChange]);
+
+  const handleClose = useCallback(() => setShowVars(false), []);
+
+  return (
+    <div className="loop-config-field">
+      <span className="loop-config-label">{label}</span>
+      <div className="loop-config-file-row">
+        <input
+          className="loop-config-input loop-config-file-input"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder ?? "选择文件或引用上游变量…"}
+          readOnly={false}
+        />
+        <button
+          className="loop-config-file-btn"
+          title="浏览文件"
+          onClick={handleBrowse}
+          type="button"
+        >
+          <FolderOpen size={14} />
+        </button>
+        {upstream && upstream.length > 0 && (
+          <div className="loop-config-file-var-wrap">
+            <button
+              className={`loop-config-file-btn${showVars ? " is-active" : ""}`}
+              title="引用上游变量"
+              onClick={() => setShowVars((v) => !v)}
+              type="button"
+            >
+              <Variable size={14} />
+            </button>
+            {showVars && (
+              <VarDropdown
+                upstream={upstream}
+                accept={accept as MediaType | undefined}
+                onSelect={onChange}
+                onClose={handleClose}
+              />
+            )}
+          </div>
+        )}
+      </div>
+      {hint && <span className="loop-config-hint">{hint}</span>}
+    </div>
+  );
+}
+
+interface FileArrayFieldProps {
+  label: string;
+  value: string[];
+  onChange: (v: string[]) => void;
+  hint?: string;
+  accept?: string;
+  upstream?: UpstreamOutput[];
+  max?: number;
+}
+
+/** 文件数组选择器 — 列表 + 添加/移除 */
+export function FileArrayField({ label, value, onChange, hint, accept, upstream, max }: FileArrayFieldProps) {
+  const [showVars, setShowVars] = useState(false);
+
+  const handleBrowse = useCallback(async () => {
+    const paths = await openMultiFileDialog(accept);
+    if (paths.length > 0) {
+      const next = [...value, ...paths];
+      onChange(max ? next.slice(0, max) : next);
+    }
+  }, [accept, onChange, value, max]);
+
+  const handleRemove = useCallback(
+    (idx: number) => onChange(value.filter((_, i) => i !== idx)),
+    [onChange, value],
+  );
+
+  const handleAddVar = useCallback(
+    (ref: string) => {
+      const next = [...value, ref];
+      onChange(max ? next.slice(0, max) : next);
+    },
+    [onChange, value, max],
+  );
+
+  const handleClose = useCallback(() => setShowVars(false), []);
+
+  return (
+    <div className="loop-config-field">
+      <span className="loop-config-label">
+        {label}
+        {max != null && <span className="loop-config-hint-inline"> (最多 {max} 个)</span>}
+      </span>
+      {value.length > 0 && (
+        <div className="loop-config-file-list">
+          {value.map((item, i) => (
+            <div key={i} className="loop-config-file-item">
+              <span className="loop-config-file-item-text" title={item}>
+                {item.length > 50 ? "…" + item.slice(-48) : item}
+              </span>
+              <button
+                className="loop-config-file-remove"
+                onClick={() => handleRemove(i)}
+                type="button"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="loop-config-file-row">
+        <button className="loop-config-file-add-btn" onClick={handleBrowse} type="button">
+          <FolderOpen size={13} />
+          <span>添加文件</span>
+        </button>
+        {upstream && upstream.length > 0 && (
+          <div className="loop-config-file-var-wrap">
+            <button
+              className={`loop-config-file-add-btn${showVars ? " is-active" : ""}`}
+              onClick={() => setShowVars((v) => !v)}
+              type="button"
+            >
+              <Variable size={13} />
+              <span>引用变量</span>
+            </button>
+            {showVars && (
+              <VarDropdown
+                upstream={upstream}
+                accept={accept as MediaType | undefined}
+                onSelect={handleAddVar}
+                onClose={handleClose}
+              />
+            )}
+          </div>
+        )}
+      </div>
+      {hint && <span className="loop-config-hint">{hint}</span>}
+    </div>
+  );
 }

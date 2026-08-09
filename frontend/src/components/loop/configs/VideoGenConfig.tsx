@@ -1,9 +1,11 @@
-import { TextField, NumberField, SelectField, ToggleField, cfgStr, cfgNum, cfgBool } from "./ConfigField";
+import { TextField, NumberField, SelectField, ToggleField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgBool, cfgStrArray } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 const MODE_OPTIONS = [
@@ -29,11 +31,13 @@ const RESOLUTION_OPTIONS = [
   { value: "1080P", label: "1080P (旧版)" },
 ];
 
-export default function VideoGenConfig({ config, onChange }: ConfigProps) {
+export default function VideoGenConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
   const mode = cfgStr(config, "mode", "text_to_video");
   const isReference = mode === "reference";
   const isImageToVideo = mode === "image_to_video";
   const isVideoToVideo = mode === "video_to_video";
+  const up = upstreamOutputs ?? [];
+
   return (
     <>
       <SelectField
@@ -58,21 +62,23 @@ export default function VideoGenConfig({ config, onChange }: ConfigProps) {
         mediaType="video"
       />
 
-      {/* 图生视频：首帧/末帧 */}
+      {/* 图生视频 / 参考模式：首帧/末帧 */}
       {(isImageToVideo || isReference) && (
         <>
-          <TextField
+          <FilePathField
             label="首帧图片"
             value={cfgStr(config, "first_frame_image")}
             onChange={(v) => onChange({ ...config, first_frame_image: v })}
-            placeholder="图片路径/URL 或 {{var}}"
+            accept="image"
+            upstream={up}
             hint="I2V 起始帧，画面比例将自动适配"
           />
-          <TextField
+          <FilePathField
             label="末帧图片"
             value={cfgStr(config, "last_frame_image")}
             onChange={(v) => onChange({ ...config, last_frame_image: v })}
-            placeholder="图片路径/URL 或 {{var}}"
+            accept="image"
+            upstream={up}
             hint="可选，控制视频结束画面"
           />
         </>
@@ -80,43 +86,47 @@ export default function VideoGenConfig({ config, onChange }: ConfigProps) {
 
       {/* 视频转视频：源视频 */}
       {isVideoToVideo && (
-        <TextField
+        <FilePathField
           label="源视频"
           value={cfgStr(config, "source_video")}
           onChange={(v) => onChange({ ...config, source_video: v })}
-          placeholder="视频文件路径或 {{var}}"
+          accept="video"
+          upstream={up}
           hint="要替换/转换的原始视频"
         />
       )}
 
-      {/* 参考图片（所有模式可用） */}
-      <TextField
+      {/* 参考图片 */}
+      <FileArrayField
         label="参考图片"
-        value={cfgStr(config, "reference_images")}
+        value={cfgStrArray(config, "reference_images")}
         onChange={(v) => onChange({ ...config, reference_images: v })}
-        multiline
-        placeholder={'["ref1.jpg", "ref2.jpg", "{{node.image}}"]'}
-        hint="JSON 数组。H3 多模态参考模式最多 9 张"
+        accept="image"
+        upstream={up}
+        max={isReference ? 9 : 3}
+        hint="用于角色/风格/场景一致性"
       />
 
       {/* H3 多模态参考：参考视频和音频 */}
       {isReference && (
         <>
-          <TextField
+          <FileArrayField
             label="参考视频"
-            value={cfgStr(config, "reference_videos")}
+            value={cfgStrArray(config, "reference_videos")}
             onChange={(v) => onChange({ ...config, reference_videos: v })}
-            multiline
-            placeholder={'["https://video1.mp4", "{{node.video}}"]'}
-            hint="JSON 数组，最多 3 个，每个 2-15s，总时长 ≤15s"
+            accept="video"
+            upstream={up}
+            max={3}
+            hint="每个 2-15s，总时长 ≤15s"
           />
-          <TextField
+          <FileArrayField
             label="参考音频"
-            value={cfgStr(config, "reference_audios")}
+            value={cfgStrArray(config, "reference_audios")}
             onChange={(v) => onChange({ ...config, reference_audios: v })}
-            multiline
-            placeholder={'["https://audio1.mp3", "{{node.audio}}"]'}
-            hint="JSON 数组，最多 3 个，每个 2-15s，总时长 ≤15s"
+            accept="audio"
+            upstream={up}
+            max={3}
+            hint="每个 2-15s，总时长 ≤15s"
           />
         </>
       )}

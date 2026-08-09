@@ -8,6 +8,7 @@ import { useI18n } from "../../i18n/LocaleContext";
 import * as LucideIcons from "lucide-react";
 import type { NodeType } from "./loopTypes";
 import { getNodeMeta } from "./loopTypes";
+import type { UpstreamOutput } from "./configs/upstreamOutputs";
 import ErrorHandlingConfig from "./configs/ErrorHandlingConfig";
 
 // ── Lazy imports for all 29 config forms ──
@@ -105,6 +106,7 @@ const CONFIG_MAP: Record<NodeType, React.LazyExoticComponent<React.ComponentType
 export interface ConfigProps {
   config: Record<string, unknown>;
   onChange: (config: Record<string, unknown>) => void;
+  upstreamOutputs?: UpstreamOutput[];
 }
 
 interface Props {
@@ -114,6 +116,7 @@ interface Props {
   config: Record<string, unknown>;
   disabled: boolean;
   workflowId: string | null;
+  upstreamOutputs?: UpstreamOutput[];
   onLabelChange: (label: string) => void;
   onConfigChange: (config: Record<string, unknown>) => void;
   onDisabledChange: (disabled: boolean) => void;
@@ -200,6 +203,7 @@ export default function LoopConfigPanel({
   config,
   disabled,
   workflowId,
+  upstreamOutputs,
   onLabelChange,
   onConfigChange,
   onDisabledChange,
@@ -283,7 +287,7 @@ export default function LoopConfigPanel({
 
             {/* ── Node-specific config form ── */}
             <Suspense fallback={<div className="loop-config-placeholder">{t("loop.loading")}</div>}>
-              {ConfigForm && <ConfigForm config={config} onChange={onConfigChange} />}
+              {ConfigForm && <ConfigForm config={config} onChange={onConfigChange} upstreamOutputs={upstreamOutputs} />}
             </Suspense>
 
             <div className="loop-config-divider" />
