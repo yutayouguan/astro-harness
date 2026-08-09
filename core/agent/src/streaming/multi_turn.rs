@@ -154,6 +154,125 @@ pub(crate) async fn finish_usage_and_done(
     finish_success(tx, run_id).await;
 }
 
+/// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
+async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
+    {
+        let mut agent = session.lock().await;
+        let recommend_ratio = agent.compression_config().recommend_compact_ratio;
+        if agent.occupancy_ratio() >= recommend_ratio {
+            match agent.maintain_tool_context().await {
+                Ok(report) if report.pruned + report.compressed > 0 => {
+                    tracing::info!(
+                        pruned = report.pruned,
+                        compressed = report.compressed,
+                        llm_summarized = report.llm_summarized,
+                        occupancy_before = report.occupancy_before,
+                        occupancy_after = report.occupancy_after,
+                        recommend_ratio,
+                        "gateway pre-maintain applied"
+                    );
+                }
+                Ok(report) if report.recommend_session_compact => {
+                    tracing::warn!(
+                        occupancy = report.occupancy_after,
+                        "gateway pre-maintain: still critical; recommend /compact"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "gateway pre-maintain failed"),
+            }
+        }
+    }
+    {
+        let mut agent = session.lock().await;
+        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
+            Ok(true) => tracing::info!("mid-run summary applied before LLM round"),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
+        }
+    }
+}
+
+/// 构建并推送上下文占用估算快照。
+async fn emit_context_usage(
+    session: &Arc<Mutex<AgentLoop>>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    history: &[common::message::Message],
+    tools: &[serde_json::Value],
+) {
+    let agent = session.lock().await;
+    let layers = agent.system_prompt_layer_breakdown();
+    let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
+    let snap = crate::prompt::context_usage::build_snapshot(
+        crate::prompt::context_usage::ContextUsageInput {
+            system_chars: layers.system_chars,
+            memory_chars: layers.memory_chars,
+            skills_chars: layers.skills_chars,
+            recall_chars: layers.recall_chars,
+            system_items: &layers.system_items,
+            memory_items: &layers.memory_items,
+            skill_items: &layers.skill_items,
+            tools,
+            messages: history,
+            context_window: agent.context_window(),
+            updated_at_ms: chrono::Utc::now().timestamp_millis(),
+            recommend_compact: agent.should_recommend_compact(),
+            recommend_compact_ratio,
+        },
+    );
+    drop(agent);
+    let _ = emit(tx, MultiTurnStreamItem::ContextUsage(snap)).await;
+}
+
+/// 工具执行后的上下文维护（压缩 + mid-run 摘要）+ stop_after 检查。
+///
+/// 返回 `true` 表示 `stop_after_tool_call` 触发，主循环应跳出。
+/// 预算退还由主循环直接处理（`IterationBudget` 含 `Cell`，不可跨 await）。
+async fn post_tool_maintenance(
+    session: &Arc<Mutex<AgentLoop>>,
+    calls: &[tools::ParsedToolCall],
+) -> bool {
+    {
+        let mut agent = session.lock().await;
+        match agent.maintain_tool_context().await {
+            Ok(report) if report.pruned + report.compressed > 0 => {
+                tracing::info!(
+                    pruned = report.pruned,
+                    compressed = report.compressed,
+                    llm_summarized = report.llm_summarized,
+                    occupancy_before = report.occupancy_before,
+                    occupancy_after = report.occupancy_after,
+                    stage_ratio = ?report.stage_ratio,
+                    "tool context maintenance applied"
+                );
+            }
+            Ok(report) if report.recommend_session_compact => {
+                tracing::warn!(
+                    occupancy = report.occupancy_after,
+                    "context still critical after tool maintenance; recommend /compact"
+                );
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!(error = %e, "tool context maintenance failed"),
+        }
+        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
+            Ok(true) => tracing::info!("mid-run summary applied after tool maintenance"),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
+        }
+    }
+
+    let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+    let stop_after = {
+        let agent = session.lock().await;
+        agent.tool_registry().any_stop_after(&names)
+    };
+    if stop_after {
+        tracing::info!(?names, "stop_after_tool_call: ending run without next LLM round");
+    }
+    stop_after
+}
+
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
     pub session: Arc<Mutex<AgentLoop>>,
@@ -359,44 +478,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             return;
         }
 
-        // Gateway 预压安全网（Hermes Session Hygiene）：进 LLM 前再跑一轮廉价维护。
-        {
-            let mut agent = session.lock().await;
-            let recommend_ratio = agent.compression_config().recommend_compact_ratio;
-            if agent.occupancy_ratio() >= recommend_ratio {
-                match agent.maintain_tool_context().await {
-                    Ok(report) if report.pruned + report.compressed > 0 => {
-                        tracing::info!(
-                            pruned = report.pruned,
-                            compressed = report.compressed,
-                            llm_summarized = report.llm_summarized,
-                            occupancy_before = report.occupancy_before,
-                            occupancy_after = report.occupancy_after,
-                            recommend_ratio,
-                            "gateway pre-maintain applied"
-                        );
-                    }
-                    Ok(report) if report.recommend_session_compact => {
-                        tracing::warn!(
-                            occupancy = report.occupancy_after,
-                            "gateway pre-maintain: still critical; recommend /compact"
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(e) => tracing::warn!(error = %e, "gateway pre-maintain failed"),
-                }
-            }
-        }
-
-        // Hard 阶段 mid-run 辅模型中间摘要（不拆 session）；每用户轮最多一次。
-        {
-            let mut agent = session.lock().await;
-            match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
-                Ok(true) => tracing::info!("mid-run summary applied before LLM round"),
-                Ok(false) => {}
-                Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
-            }
-        }
+        pre_llm_maintenance(&session).await;
 
         let (history, tools) = {
             let mut agent = session.lock().await;
@@ -417,30 +499,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             );
         }
 
-        {
-            let agent = session.lock().await;
-            let layers = agent.system_prompt_layer_breakdown();
-            let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
-            let snap = crate::prompt::context_usage::build_snapshot(
-                crate::prompt::context_usage::ContextUsageInput {
-                    system_chars: layers.system_chars,
-                    memory_chars: layers.memory_chars,
-                    skills_chars: layers.skills_chars,
-                    recall_chars: layers.recall_chars,
-                    system_items: &layers.system_items,
-                    memory_items: &layers.memory_items,
-                    skill_items: &layers.skill_items,
-                    tools: &tools,
-                    messages: &history,
-                    context_window: agent.context_window(),
-                    updated_at_ms: chrono::Utc::now().timestamp_millis(),
-                    recommend_compact: agent.should_recommend_compact(),
-                    recommend_compact_ratio,
-                },
-            );
-            drop(agent);
-            let _ = emit(&tx, MultiTurnStreamItem::ContextUsage(snap)).await;
-        }
+        emit_context_usage(&session, &tx, &history, &tools).await;
 
         let raw_stream = match streamer.stream_chat(&system_prompt, &history, tools).await {
             Ok(s) => {
@@ -996,56 +1055,15 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             }
         }
 
-        {
-            let mut agent = session.lock().await;
-            match agent.maintain_tool_context().await {
-                Ok(report) if report.pruned + report.compressed > 0 => {
-                    tracing::info!(
-                        pruned = report.pruned,
-                        compressed = report.compressed,
-                        llm_summarized = report.llm_summarized,
-                        occupancy_before = report.occupancy_before,
-                        occupancy_after = report.occupancy_after,
-                        stage_ratio = ?report.stage_ratio,
-                        "tool context maintenance applied"
-                    );
-                }
-                Ok(report) if report.recommend_session_compact => {
-                    tracing::warn!(
-                        occupancy = report.occupancy_after,
-                        "context still critical after tool maintenance; recommend /compact"
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => tracing::warn!(error = %e, "tool context maintenance failed"),
-            }
-            match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
-                Ok(true) => tracing::info!("mid-run summary applied after tool maintenance"),
-                Ok(false) => {}
-                Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
-            }
-        }
-
-        // 对齐 Hermes：本轮工具仅 code_exec 时退还本次迭代
-        let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-        if crate::runtime::budget::should_refund_tool_round(&names) {
-            budget.refund();
-        }
-
-        // Agno `stop_after_tool_call`：本轮含标记工具则不再请求下一轮 LLM
-        let stop_after = {
-            let agent = session.lock().await;
-            agent.tool_registry().any_stop_after(&names)
-        };
-        if stop_after {
-            tracing::info!(
-                ?names,
-                "stop_after_tool_call: ending run without next LLM round"
-            );
+        if post_tool_maintenance(&session, &calls).await {
             need_summary = false;
             break;
         }
 
+        let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+        if crate::runtime::budget::should_refund_tool_round(&names) {
+            budget.refund();
+        }
         if budget.remaining() == 0 {
             need_summary = true;
             break;
