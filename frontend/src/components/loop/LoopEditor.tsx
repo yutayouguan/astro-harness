@@ -654,7 +654,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       if (!src) return;
 
       const target = (event as MouseEvent).target as Element | null;
-      if (target?.closest(".react-flow__handle")) return;
+      if (target?.closest(".react-flow__handle") || target?.closest(".react-flow__node")) return;
 
       const clientX = "clientX" in event ? event.clientX : event.changedTouches?.[0]?.clientX ?? 0;
       const clientY = "clientY" in event ? event.clientY : event.changedTouches?.[0]?.clientY ?? 0;
@@ -990,11 +990,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             title={t("loop.exportImage")}
             onClick={async () => {
               try {
-                const { save } = await import("@tauri-apps/plugin-dialog");
                 const container = document.querySelector<HTMLElement>(".loop-canvas-container .react-flow__viewport");
-                if (!container) return;
+                if (!container) { showToast("画布未就绪", { tone: "error" }); return; }
                 const svgEdges = container.closest(".react-flow")?.querySelector<SVGElement>("svg.react-flow__edges");
-                if (!svgEdges) return;
+                if (!svgEdges) { showToast("未找到连线元素", { tone: "error" }); return; }
                 const bbox = container.getBoundingClientRect();
                 const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
                 svg.setAttribute("width", String(bbox.width));
@@ -1002,13 +1001,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
                 svg.appendChild(svgEdges.cloneNode(true));
                 const svgStr = new XMLSerializer().serializeToString(svg);
-                const filePath = await save({
-                  defaultPath: `workflow-${name || "export"}.svg`,
-                  filters: [{ name: "SVG", extensions: ["svg"] }],
-                });
-                if (!filePath) return;
-                await invoke("export_loop_svg", { path: filePath, content: svgStr });
-                showToast(`${t("loop.exported")}: ${filePath}`, { tone: "success" });
+                const fileName = `workflow-${name || "export"}-${Date.now()}.svg`;
+                const savedPath = await invoke<string>("export_loop_svg", { path: fileName, content: svgStr });
+                showToast(`${t("loop.exported")}: ${savedPath}`, { tone: "success" });
               } catch (e) {
                 showToast(String(e), { tone: "error" });
               }

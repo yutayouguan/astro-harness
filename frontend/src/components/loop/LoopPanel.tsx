@@ -244,13 +244,9 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
   const handleExport = async (id: string) => {
     try {
       const json = await invoke<string>("export_loop", { id });
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `loop-${id}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const fileName = `loop-${id}.json`;
+      const savedPath = await invoke<string>("export_loop_svg", { path: fileName, content: json });
+      showToast(`${t("loop.exported")}: ${savedPath}`, { tone: "success" });
     } catch (e) {
       showToast(String(e), { tone: "error" });
     }

@@ -235,11 +235,22 @@ pub async fn export_loop(id: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn export_loop_svg(path: String, content: String) -> Result<String, String> {
-    if let Some(parent) = std::path::Path::new(&path).parent() {
+    let p = std::path::Path::new(&path);
+    let final_path = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        // 非绝对路径 → 保存到桌面
+        let desktop = home::user_home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("Desktop");
+        std::fs::create_dir_all(&desktop).ok();
+        desktop.join(&path)
+    };
+    if let Some(parent) = final_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&path, &content).map_err(|e| e.to_string())?;
-    Ok(path)
+    std::fs::write(&final_path, &content).map_err(|e| e.to_string())?;
+    Ok(final_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
