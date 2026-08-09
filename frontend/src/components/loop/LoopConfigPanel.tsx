@@ -25,6 +25,7 @@ const KnowledgeRetrievalConfig = lazy(() => import("./configs/KnowledgeRetrieval
 const SummarizationConfig = lazy(() => import("./configs/SummarizationConfig"));
 const SentimentAnalysisConfig = lazy(() => import("./configs/SentimentAnalysisConfig"));
 const DocumentUnderstandingConfig = lazy(() => import("./configs/DocumentUnderstandingConfig"));
+const VisionUnderstandingConfig = lazy(() => import("./configs/VisionUnderstandingConfig"));
 const ImageGenConfig = lazy(() => import("./configs/ImageGenConfig"));
 const VideoGenConfig = lazy(() => import("./configs/VideoGenConfig"));
 const MusicGenConfig = lazy(() => import("./configs/MusicGenConfig"));
@@ -71,6 +72,7 @@ const CONFIG_MAP: Record<NodeType, React.LazyExoticComponent<React.ComponentType
   summarization: SummarizationConfig,
   sentiment_analysis: SentimentAnalysisConfig,
   document_understanding: DocumentUnderstandingConfig,
+  vision_understanding: VisionUnderstandingConfig,
   image_generation: ImageGenConfig,
   video_generation: VideoGenConfig,
   music_generation: MusicGenConfig,

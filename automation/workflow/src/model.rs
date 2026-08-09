@@ -75,6 +75,7 @@ pub enum NodeType {
     Summarization,
     SentimentAnalysis,
     DocumentUnderstanding,
+    VisionUnderstanding,
     // 多媒体生成 (9)
     ImageGeneration,
     VideoGeneration,
@@ -119,7 +120,7 @@ impl NodeType {
             | Self::EmailTrigger | Self::FileWatchTrigger => NodeCategory::Trigger,
             Self::AiAgentTask | Self::ParameterExtraction | Self::QuestionClassification
             | Self::KnowledgeRetrieval | Self::Summarization | Self::SentimentAnalysis
-            | Self::DocumentUnderstanding => NodeCategory::Ai,
+            | Self::DocumentUnderstanding | Self::VisionUnderstanding => NodeCategory::Ai,
             Self::ImageGeneration | Self::VideoGeneration | Self::MusicGeneration
             | Self::TextToSpeech | Self::SubtitleGeneration | Self::VoiceClone
             | Self::SpeechToText | Self::ImageEdit | Self::Translation => NodeCategory::Media,
@@ -147,6 +148,7 @@ impl NodeType {
             Self::Summarization => "文本摘要",
             Self::SentimentAnalysis => "情感分析",
             Self::DocumentUnderstanding => "文档理解",
+            Self::VisionUnderstanding => "图片理解",
             Self::ImageGeneration => "生成图片",
             Self::VideoGeneration => "生成视频",
             Self::MusicGeneration => "生成音乐",

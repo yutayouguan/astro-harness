@@ -37,6 +37,7 @@ export type NodeType =
   | "summarization"
   | "sentiment_analysis"
   | "document_understanding"
+  | "vision_understanding"
   // 多媒体生成
   | "image_generation"
   | "video_generation"
@@ -185,6 +186,7 @@ export const NODE_REGISTRY: NodeMeta[] = [
   { type: "summarization", category: "ai", label: "文本摘要", labelEn: "Summarization", icon: "FileText", color: "#a78bfa" },
   { type: "sentiment_analysis", category: "ai", label: "情感分析", labelEn: "Sentiment Analysis", icon: "Heart", color: "#a78bfa" },
   { type: "document_understanding", category: "ai", label: "文档理解", labelEn: "Document Understanding", icon: "ScanText", color: "#a78bfa" },
+  { type: "vision_understanding", category: "ai", label: "图片理解", labelEn: "Vision Understanding", icon: "Eye", color: "#a78bfa" },
   // 多媒体生成
   { type: "image_generation", category: "media", label: "生成图片", labelEn: "Image Generation", icon: "Image", color: "#f472b6" },
   { type: "video_generation", category: "media", label: "生成视频", labelEn: "Video Generation", icon: "Video", color: "#f472b6" },

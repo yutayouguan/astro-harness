@@ -38,6 +38,7 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::Summarization, Box::new(ai::SummarizationExec));
     m.insert(NodeType::SentimentAnalysis, Box::new(ai::SentimentAnalysisExec));
     m.insert(NodeType::DocumentUnderstanding, Box::new(ai::DocumentUnderstandingExec));
+    m.insert(NodeType::VisionUnderstanding, Box::new(ai::VisionUnderstandingExec));
 
     // 多媒体
     m.insert(NodeType::ImageGeneration, Box::new(media::ImageGenExec));

@@ -304,3 +304,59 @@ impl NodeExecutor for DocumentUnderstandingExec {
         Ok(NodeResult::Success(parsed))
     }
 }
+
+// ── Vision Understanding ───────────────────────────────────────────
+
+pub struct VisionUnderstandingExec;
+
+#[async_trait]
+impl NodeExecutor for VisionUnderstandingExec {
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
+        let input_type = node.config.get("input_type").and_then(|v| v.as_str()).unwrap_or("file");
+        let input_path = node.config.get("input_path").and_then(|v| v.as_str()).unwrap_or("");
+        let input_path = ctx.interpolate(input_path);
+        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("描述这张图片");
+        let prompt = ctx.interpolate(prompt_tpl);
+
+        if input_path.trim().is_empty() {
+            bail!("图片理解节点的输入路径为空");
+        }
+
+        let image_url = if input_type == "url" {
+            input_path.clone()
+        } else {
+            let data = std::fs::read(&input_path)
+                .map_err(|e| anyhow::anyhow!("读取图片失败 {}: {}", input_path, e))?;
+            let mime = if input_path.ends_with(".png") { "image/png" }
+                else if input_path.ends_with(".webp") { "image/webp" }
+                else if input_path.ends_with(".gif") { "image/gif" }
+                else { "image/jpeg" };
+            let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+            format!("data:{};base64,{}", mime, b64)
+        };
+
+        let (provider_id, config) = build_provider_config(node)?;
+        let messages = vec![
+            ProviderMessage::system("你是一个视觉理解助手。根据用户提示分析图片内容。"),
+            ProviderMessage::user(vec![
+                providers::types::message::UserContent::Image { url: image_url },
+                providers::types::message::UserContent::Text { text: prompt },
+            ]),
+        ];
+
+        let mut stream = providers::dispatch::chat_stream(&provider_id, messages, vec![], &config).await?;
+        let mut out = String::new();
+        while let Some(item) = stream.next().await {
+            let chunk = item?;
+            if let StreamChunk::Text(token) = chunk {
+                out.push_str(&token);
+            }
+        }
+
+        Ok(NodeResult::Success(serde_json::json!({
+            "description": out.trim(),
+            "input_path": input_path,
+            "provider": provider_id,
+        })))
+    }
+}
