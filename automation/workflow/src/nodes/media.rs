@@ -35,6 +35,30 @@ fn parse_string_array(
     }
 }
 
+async fn asr_transcribe(node: &WorkflowNode, audio_path: &str) -> Result<String> {
+    let audio_bytes = std::fs::read(audio_path)
+        .map_err(|e| anyhow::anyhow!("读取音频文件失败 {}: {}", audio_path, e))?;
+    let filename = std::path::Path::new(audio_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "audio.wav".to_string());
+
+    let (provider_id, config) = build_media_config(node)?;
+    let asr_model = providers::profile::resolve(&provider_id)
+        .map(|p| p.default_asr_model)
+        .unwrap_or("");
+    let config = ProviderConfig {
+        model: if asr_model.is_empty() { config.model } else { asr_model.to_string() },
+        ..config
+    };
+
+    let client = reqwest::Client::new();
+    let text = providers::openai::media_compat::openai_audio_transcriptions(
+        &client, &audio_bytes, &filename, &config,
+    ).await?;
+    Ok(text)
+}
+
 fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
     let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("openai");
     let model = node.config.get("model").and_then(|v| v.as_str()).unwrap_or("");
@@ -254,7 +278,14 @@ impl NodeExecutor for SubtitleGenExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
         let src = node.config.get("audio_source").and_then(|v| v.as_str()).unwrap_or("");
         let resolved = ctx.interpolate(src);
-        bail!("ASR/字幕生成功能待接入 — 各厂商 ASR API 暂无统一路由。音频源: {}", &resolved[..resolved.len().min(100)])
+        if resolved.trim().is_empty() {
+            bail!("字幕生成节点的音频源为空");
+        }
+        let text = asr_transcribe(node, &resolved).await?;
+        Ok(NodeResult::Success(serde_json::json!({
+            "text": text,
+            "source": resolved,
+        })))
     }
 }
 
@@ -363,17 +394,17 @@ impl NodeExecutor for SpeechToTextExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
         let input = node.config.get("input_path").and_then(|v| v.as_str()).unwrap_or("");
         let input = ctx.interpolate(input);
-        let language = node.config.get("language").and_then(|v| v.as_str()).unwrap_or("auto");
-        let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("");
 
         if input.trim().is_empty() {
             bail!("语音识别节点的输入路径为空");
         }
 
-        bail!(
-            "语音识别功能待接入（Whisper / 各厂商 ASR API 暂无统一路由）。输入: {}，语言: {}，供应商: {}",
-            &input[..input.len().min(80)], language, provider_id
-        )
+        let text = asr_transcribe(node, &input).await?;
+
+        Ok(NodeResult::Success(serde_json::json!({
+            "text": text,
+            "input_path": input,
+        })))
     }
 }
 

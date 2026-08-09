@@ -232,14 +232,51 @@ impl NodeExecutor for SendNotificationExec {
         let body = ctx.interpolate(body_tpl);
         let recipient = node.config.get("recipient").and_then(|v| v.as_str()).unwrap_or("");
 
-        Ok(NodeResult::Success(serde_json::json!({
-            "type": "send_notification",
-            "channel": channel,
-            "title": title,
-            "body": body,
-            "recipient": recipient,
-            "note": "通知发送待接入系统通知/邮件/Webhook 推送"
-        })))
+        match channel {
+            "system" => {
+                #[cfg(target_os = "macos")]
+                {
+                    let script = format!(
+                        "display notification \"{}\" with title \"{}\"",
+                        body.replace('\\', "\\\\").replace('"', "\\\""),
+                        title.replace('\\', "\\\\").replace('"', "\\\""),
+                    );
+                    std::process::Command::new("osascript")
+                        .args(["-e", &script])
+                        .output()
+                        .map_err(|e| anyhow::anyhow!("系统通知失败: {}", e))?;
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    tracing::info!(title = %title, body = %body, "系统通知（非 macOS 平台暂不支持）");
+                }
+                Ok(NodeResult::Success(serde_json::json!({
+                    "channel": "system", "title": title, "body": body, "sent": true,
+                })))
+            }
+            "webhook" => {
+                let url = ctx.interpolate(recipient);
+                if url.trim().is_empty() {
+                    bail!("Webhook 通知的接收地址为空");
+                }
+                validate_url(&url)?;
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(30))
+                    .build()?;
+                let resp = client.post(&url)
+                    .json(&serde_json::json!({ "title": title, "body": body }))
+                    .send().await?;
+                Ok(NodeResult::Success(serde_json::json!({
+                    "channel": "webhook", "url": url, "status": resp.status().as_u16(), "sent": true,
+                })))
+            }
+            _ => {
+                Ok(NodeResult::Success(serde_json::json!({
+                    "channel": channel, "title": title, "body": body,
+                    "note": format!("通知渠道 {} 暂未实现", channel),
+                })))
+            }
+        }
     }
 }
 
