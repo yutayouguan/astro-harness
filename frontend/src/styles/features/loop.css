@@ -2944,3 +2944,49 @@
     transform: none;
   }
 }
+
+/* ── Responsive breakpoints ──────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .loop-node-palette {
+    width: 180px;
+  }
+  .loop-config-panel {
+    width: 320px;
+  }
+  .loop-run-history-panel {
+    width: 280px;
+  }
+  .loop-detail {
+    grid-template-columns: 160px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .loop-node-palette {
+    width: 150px;
+  }
+  .loop-config-panel {
+    width: 280px;
+  }
+  .loop-detail {
+    grid-template-columns: 1fr;
+  }
+  .loop-detail-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 8px;
+    max-height: 150px;
+  }
+}
+
+/* ── Node toolbar clip fix ───────────────────────────────────── */
+
+.loop-canvas-container .react-flow__node {
+  overflow: visible;
+}
+.loop-rf-node-toolbar {
+  z-index: 20;
+  pointer-events: auto;
+}

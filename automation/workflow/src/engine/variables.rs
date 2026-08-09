@@ -90,18 +90,45 @@ impl VariableContext {
         result
     }
 
-    /// 评估简单条件表达式，如 `{{status}} == "active"` 或 `{{count}} > 5`
-    ///
-    /// 先在**原始表达式**中定位操作符，再对两侧分别插值，
-    /// 避免变量值中包含操作符时错误分割。
+    /// 评估条件表达式，支持：
+    /// - 比较: `{{status}} == "active"`, `{{count}} > 5`
+    /// - 逻辑组合: `{{a}} == 1 && {{b}} == 2`, `{{x}} > 0 || {{y}} > 0`
+    /// - 取反: `!{{flag}}`
     pub fn evaluate_condition(&self, expr: &str) -> Result<bool> {
         let expr = expr.trim();
         if expr.is_empty() {
             return Ok(true);
         }
 
-        // 在原始表达式（插值前）中查找操作符
-        // 跳过 {{ }} 内部的内容，只在顶层文本中匹配
+        // 先尝试拆分 || （优先级最低）
+        if let Some(pos) = find_operator_outside_braces(expr, "||") {
+            let lhs = &expr[..pos];
+            let rhs = &expr[pos + 2..];
+            return Ok(self.evaluate_condition(lhs)? || self.evaluate_condition(rhs)?);
+        }
+
+        // 再拆分 &&
+        if let Some(pos) = find_operator_outside_braces(expr, "&&") {
+            let lhs = &expr[..pos];
+            let rhs = &expr[pos + 2..];
+            return Ok(self.evaluate_condition(lhs)? && self.evaluate_condition(rhs)?);
+        }
+
+        // 取反 !
+        if expr.starts_with('!') {
+            return Ok(!self.evaluate_condition(&expr[1..])?);
+        }
+
+        self.evaluate_single_condition(expr)
+    }
+
+    fn evaluate_single_condition(&self, expr: &str) -> Result<bool> {
+        let expr = expr.trim();
+        // 去掉外层括号
+        if expr.starts_with('(') && expr.ends_with(')') {
+            return self.evaluate_condition(&expr[1..expr.len() - 1]);
+        }
+
         type CmpOp = (&'static str, fn(&str, &str) -> bool);
         let ops: &[CmpOp] = &[
             ("==", compare_eq),
@@ -124,7 +151,7 @@ impl VariableContext {
             }
         }
 
-        // 无操作符：对整个表达式插值后做 truthy 判断
+        // 无操作符：truthy 判断
         let resolved = self.interpolate(expr);
         let resolved = resolved.trim();
         Ok(!resolved.is_empty()

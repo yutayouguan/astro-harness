@@ -91,13 +91,15 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
     try {
       const list = await invoke<LoopDto[]>("list_loops");
       setLoops(list);
+      const results = await Promise.all(
+        list.map((lp) =>
+          invoke<{ runs: { status: string; started_at: string }[] }>("list_loop_runs", { workflowId: lp.id, limit: 1 })
+            .then((res) => [lp.id, res.runs.length > 0 ? { status: res.runs[0].status, time: res.runs[0].started_at } : null] as const)
+            .catch(() => [lp.id, null] as const)
+        ),
+      );
       const runs: Record<string, { status: string; time: string } | null> = {};
-      for (const lp of list) {
-        try {
-          const res = await invoke<{ runs: { status: string; started_at: string }[] }>("list_loop_runs", { workflowId: lp.id, limit: 1 });
-          runs[lp.id] = res.runs.length > 0 ? { status: res.runs[0].status, time: res.runs[0].started_at } : null;
-        } catch { runs[lp.id] = null; }
-      }
+      for (const [id, run] of results) runs[id] = run;
       setLastRuns(runs);
     } catch (e) {
       showToast(String(e), { tone: "error" });
