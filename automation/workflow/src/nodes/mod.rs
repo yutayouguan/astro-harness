@@ -3,9 +3,7 @@ pub mod data;
 pub mod control;
 pub mod action;
 pub mod ai;
-pub mod ai_stub;
 pub mod media;
-pub mod media_stub;
 
 use std::collections::HashMap;
 use std::sync::OnceLock;

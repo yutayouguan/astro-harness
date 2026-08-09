@@ -17,13 +17,19 @@ fn validate_url(url: &str) -> Result<()> {
     }
     if let Some(host) = parsed.host_str() {
         let h = host.to_lowercase();
+        // 去掉 IPv6 方括号
+        let h = h.trim_start_matches('[').trim_end_matches(']');
         if h == "localhost"
             || h == "127.0.0.1"
             || h == "::1"
             || h == "0.0.0.0"
             || h.starts_with("10.")
             || h.starts_with("192.168.")
-            || h.starts_with("172.16.")
+            || is_172_private(h)
+            || h.starts_with("fc") || h.starts_with("fd")       // IPv6 ULA
+            || h.starts_with("fe80")                              // IPv6 link-local
+            || h.starts_with("::ffff:127.") || h.starts_with("::ffff:10.")
+            || h.starts_with("::ffff:192.168.") || h.starts_with("::ffff:172.")
             || h == "169.254.169.254"
             || h.ends_with(".internal")
             || h.ends_with(".local")
@@ -32,6 +38,37 @@ fn validate_url(url: &str) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn is_172_private(host: &str) -> bool {
+    if let Some(rest) = host.strip_prefix("172.") {
+        if let Some(octet) = rest.split('.').next().and_then(|s| s.parse::<u8>().ok()) {
+            return (16..=31).contains(&octet);
+        }
+    }
+    false
+}
+
+/// 校验文件路径：规范化后必须在用户目录或 ~/.astro 下，禁止 .. 遍历
+fn validate_file_path(path: &str) -> Result<std::path::PathBuf> {
+    let p = std::path::Path::new(path);
+    let canonical = p.canonicalize().or_else(|_| {
+        // 文件不存在时（write/append 场景），检查父目录
+        if let Some(parent) = p.parent() {
+            let cp = parent.canonicalize()?;
+            Ok(cp.join(p.file_name().unwrap_or_default()))
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "路径无效"))
+        }
+    }).map_err(|e| anyhow::anyhow!("路径解析失败 {}: {}", path, e))?;
+
+    let home_dir = home::user_home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
+    let astro_dir = home::default_memory_dir();
+    if canonical.starts_with(&home_dir) || canonical.starts_with(&astro_dir) {
+        Ok(canonical)
+    } else {
+        bail!("路径 {} 不在允许的目录范围内（用户目录或 ~/.astro）", canonical.display())
+    }
 }
 
 // ── HttpRequest ──────────────────────────────────────────────────────
@@ -220,10 +257,11 @@ impl NodeExecutor for FileIoExec {
         if path.trim().is_empty() {
             bail!("文件读写节点的路径为空");
         }
+        let safe_path = validate_file_path(&path)?;
 
         match op {
             "read" => {
-                let content = std::fs::read_to_string(&path)
+                let content = std::fs::read_to_string(&safe_path)
                     .map_err(|e| anyhow::anyhow!("读取文件失败 {}: {}", path, e))?;
                 Ok(NodeResult::Success(serde_json::json!({
                     "operation": "read",
@@ -236,11 +274,11 @@ impl NodeExecutor for FileIoExec {
                 let content = ctx.interpolate(content_tpl);
                 if op == "append" {
                     use std::io::Write;
-                    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path)
+                    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&safe_path)
                         .map_err(|e| anyhow::anyhow!("打开文件失败 {}: {}", path, e))?;
                     f.write_all(content.as_bytes())?;
                 } else {
-                    std::fs::write(&path, &content)
+                    std::fs::write(&safe_path, &content)
                         .map_err(|e| anyhow::anyhow!("写入文件失败 {}: {}", path, e))?;
                 }
                 Ok(NodeResult::Success(serde_json::json!({
@@ -252,7 +290,8 @@ impl NodeExecutor for FileIoExec {
             "copy" => {
                 let dest = node.config.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
                 let dest = ctx.interpolate(dest);
-                std::fs::copy(&path, &dest)
+                let safe_dest = validate_file_path(&dest)?;
+                std::fs::copy(&safe_path, &safe_dest)
                     .map_err(|e| anyhow::anyhow!("复制失败 {} → {}: {}", path, dest, e))?;
                 Ok(NodeResult::Success(serde_json::json!({
                     "operation": "copy", "source": path, "dest": dest,
@@ -261,21 +300,22 @@ impl NodeExecutor for FileIoExec {
             "move" => {
                 let dest = node.config.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
                 let dest = ctx.interpolate(dest);
-                std::fs::rename(&path, &dest)
+                let safe_dest = validate_file_path(&dest)?;
+                std::fs::rename(&safe_path, &safe_dest)
                     .map_err(|e| anyhow::anyhow!("移动失败 {} → {}: {}", path, dest, e))?;
                 Ok(NodeResult::Success(serde_json::json!({
                     "operation": "move", "source": path, "dest": dest,
                 })))
             }
             "delete" => {
-                std::fs::remove_file(&path)
+                std::fs::remove_file(&safe_path)
                     .map_err(|e| anyhow::anyhow!("删除失败 {}: {}", path, e))?;
                 Ok(NodeResult::Success(serde_json::json!({
                     "operation": "delete", "path": path,
                 })))
             }
             "list" => {
-                let entries: Vec<String> = std::fs::read_dir(&path)
+                let entries: Vec<String> = std::fs::read_dir(&safe_path)
                     .map_err(|e| anyhow::anyhow!("读取目录失败 {}: {}", path, e))?
                     .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().to_string()))
                     .collect();

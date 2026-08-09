@@ -82,6 +82,7 @@ pub fn resolve_dag(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Result<Dag
                 && matches!(
                     n.node_type,
                     NodeType::ManualTrigger | NodeType::ScheduledTrigger | NodeType::WebhookTrigger
+                    | NodeType::EmailTrigger | NodeType::FileWatchTrigger
                 )
         })
         .map(|n| n.id.clone());

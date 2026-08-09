@@ -86,6 +86,7 @@ impl WorkflowStore {
     }
 
     pub fn update(&self, updated: Workflow) -> Result<Option<Workflow>> {
+        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         if let Some(pos) = file.workflows.iter().position(|w| w.id == updated.id) {
             let mut wf = updated;
@@ -112,6 +113,7 @@ impl WorkflowStore {
     }
 
     pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<bool> {
+        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         if let Some(wf) = file.workflows.iter_mut().find(|w| w.id == id) {
             wf.enabled = enabled;
@@ -124,6 +126,7 @@ impl WorkflowStore {
     }
 
     pub fn set_ai_callable(&self, id: &str, callable: bool) -> Result<bool> {
+        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         if let Some(wf) = file.workflows.iter_mut().find(|w| w.id == id) {
             wf.ai_callable = callable;

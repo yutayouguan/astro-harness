@@ -1007,7 +1007,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); }}
             nodeTypes={nodeTypes}
             snapToGrid
-            snapGrid={[1, 1]}
+            snapGrid={[20, 20]}
             fitView
             proOptions={{ hideAttribution: true }}
           >
