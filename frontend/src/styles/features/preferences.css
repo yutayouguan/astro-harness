@@ -2,9 +2,6 @@
 
 .prefs-page,
 .preferences-page {
-  --tone: var(--tone-twilight);
-  --tone-soft: var(--tone-twilight-soft);
-  --tone-glow: var(--tone-twilight-glow);
   flex: 1;
   min-height: 0;
   overflow: hidden;

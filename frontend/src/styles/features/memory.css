@@ -1,6 +1,4 @@
 .memory-panel {
-  --tone: var(--tone-green);
-  --tone-soft: var(--tone-green-soft);
   --mem-top-ctrl-h: 42px;
   position: relative;
   flex: 1;

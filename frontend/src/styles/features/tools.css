@@ -6,8 +6,6 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  --tone: var(--tone-orange);
-  --tone-soft: var(--tone-orange-soft);
 }
 
 /* 顶栏一行：左主 Tab，右搜索 / 视图 / 添加 */
