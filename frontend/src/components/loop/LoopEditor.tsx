@@ -44,6 +44,7 @@ import LoopIcon from "./LoopIcon";
 import LoopAiAssistant from "./LoopAiAssistant";
 import { layoutNodes } from "./loopLayout";
 import { useLoopHistory } from "./useLoopHistory";
+import { validateNodeConfig } from "./loopValidation";
 import { LucideIconPicker } from "../agents";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -70,6 +71,11 @@ interface LoopNodeData {
 function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
   const { t } = useI18n();
   const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
+  const raw = data as unknown as Record<string, unknown>;
+  const warnings = validateNodeConfig(
+    (raw.nodeType as NodeType) ?? data.meta.type,
+    (raw.config as Record<string, unknown>) ?? {},
+  );
   return (
     <div
       className={`loop-rf-node${selected ? " is-selected" : ""}${data.disabled ? " is-disabled" : ""}`}
@@ -92,6 +98,11 @@ function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }
             <LucideIcons.Trash2 size={12} />
           </button>
         </div>
+      )}
+      {warnings.length > 0 && (
+        <span className="loop-rf-node-warn" title={warnings.join("、") + " 未配置"}>
+          <LucideIcons.AlertTriangle size={10} />
+        </span>
       )}
       <Handle type="target" position={Position.Left} className="loop-rf-handle" />
       <div className="loop-rf-node-header">
@@ -554,6 +565,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             target: e.target,
             targetHandle: e.target_handle ?? undefined,
             animated: true,
+            ...(e.source_handle ? { label: e.source_handle, labelStyle: { fontSize: 10, fill: "var(--ink-tertiary)" } } : {}),
           })),
         );
       } catch (e) {

@@ -1236,6 +1236,25 @@
   opacity: 0.5;
 }
 
+/* ── Node validation warning badge ────────────────────────────── */
+
+.loop-rf-node-warn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #fff;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  cursor: help;
+}
+
 /* ── Node toolbar (选中时悬浮在上方) ─────────────────────────── */
 
 .loop-rf-node-toolbar {
