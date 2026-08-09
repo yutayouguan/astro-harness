@@ -9,6 +9,22 @@ use std::sync::Arc;
 use memory::MemoryManager;
 use session::ConversationStore;
 
+/// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
+///
+/// 由 AgentLoop 构建并通过 [`ToolContext`] 以引用传给工具层，
+/// 避免每次工具调用克隆四个 `String`。
+#[derive(Debug, Clone, Default)]
+pub struct ModelCredentials {
+    /// Provider id，如 `"openai"`、`"google"`。
+    pub provider: String,
+    /// 当前聊天模型名称。
+    pub model: String,
+    /// API Key。
+    pub api_key: String,
+    /// 自定义 Base URL；为空时使用 Provider 默认值。
+    pub base_url: String,
+}
+
 /// 单个媒体生成 Provider 的调用凭证。
 ///
 /// 由 Tauri 前端从「模型提供商」面板注入，经 [`ImageGenTargets`] 传给
@@ -155,16 +171,10 @@ pub struct ToolContext<'a> {
     pub session_id: String,
     /// 当前流式 run 的 turn_id（与 agent `run_id` 相同）；未在 run 内为 `None`。
     pub turn_id: Option<String>,
-    /// 当前聊天会话的 API Key；`vision`、`tts` 在 Provider 为 OpenAI 时复用。
-    pub chat_api_key: String,
-    /// 当前聊天会话的 Base URL。
-    pub chat_base_url: String,
-    /// 当前聊天 Provider id，如 `"openai"`。
-    pub chat_provider: String,
-    /// 当前聊天模型名称。
-    pub chat_model: String,
+    /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
+    pub credentials: &'a ModelCredentials,
     /// 含 primary 的聊天 fallback 链，供 `delegate` 下传给子 Agent。
-    pub chat_targets: Vec<common::ChatTarget>,
+    pub chat_targets: &'a [common::ChatTarget],
     /// 子 Agent 执行调度器（由 AgentLoop 注入；工具层测试可为 None）。
     pub execution: Option<Arc<dyn crate::ExecutionDispatch>>,
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。

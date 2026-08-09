@@ -261,19 +261,19 @@ async fn call_openai_vision(
         return Ok(format_openai_vision_output(&text, &model, mode));
     }
 
-    if !ctx.chat_api_key.is_empty() && ctx.chat_provider == "openai" {
-        let model = if ctx.chat_model.trim().is_empty() {
+    if !ctx.credentials.api_key.is_empty() && ctx.credentials.provider == "openai" {
+        let model = if ctx.credentials.model.trim().is_empty() {
             default_vision_model("openai").to_string()
         } else {
-            ctx.chat_model.trim().to_string()
+            ctx.credentials.model.trim().to_string()
         };
-        let base = if ctx.chat_base_url.trim().is_empty() {
+        let base = if ctx.credentials.base_url.trim().is_empty() {
             None
         } else {
-            Some(openai_compatible_base(&ctx.chat_base_url))
+            Some(openai_compatible_base(&ctx.credentials.base_url))
         };
         let config = ProviderConfig {
-            api_key: ctx.chat_api_key.clone(),
+            api_key: ctx.credentials.api_key.clone(),
             base_url: base,
             model: model.clone(),
             ..ProviderConfig::default()

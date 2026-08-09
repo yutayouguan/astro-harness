@@ -203,6 +203,7 @@ mod tests {
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
         let ctx = ToolContext {
             memory: &mut memory,
             sessions: &sessions,
@@ -212,11 +213,8 @@ mod tests {
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
-            chat_api_key: String::new(),
-            chat_base_url: String::new(),
-            chat_provider: String::new(),
-            chat_model: String::new(),
-            chat_targets: vec![],
+            credentials: &creds,
+            chat_targets: &[],
             execution: None,
             hook_bus: None,
         };
@@ -243,6 +241,7 @@ mod tests {
         bus.register(hooks::TRANSFORM_TERMINAL_OUTPUT, |_payload| {
             hooks::HookOutcome::ReplaceText("[redacted-terminal-output]".to_string())
         });
+        let creds = crate::context::ModelCredentials::default();
         let ctx = ToolContext {
             memory: &mut memory,
             sessions: &sessions,
@@ -252,11 +251,8 @@ mod tests {
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
-            chat_api_key: String::new(),
-            chat_base_url: String::new(),
-            chat_provider: String::new(),
-            chat_model: String::new(),
-            chat_targets: vec![],
+            credentials: &creds,
+            chat_targets: &[],
             execution: None,
             hook_bus: Some(bus),
         };
