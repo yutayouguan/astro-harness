@@ -23,7 +23,7 @@ use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::AgentLoop;
 
 use super::hitl_bridge::{
-    parse_astro_hitl, register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx,
+    register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx,
 };
 use super::provider::ProviderStreamer;
 use super::summary::{run_max_iterations_summary, SummaryOutcome};
@@ -336,8 +336,6 @@ async fn record_tool_outcomes(
         let info_ui = parse_astro_ui(&result_text);
         let result_for_history = if let Some(ref ui) = info_ui {
             format!("Presented info card: {}", ui.summary)
-        } else if parse_astro_hitl(&result_text).is_some() {
-            result_text.clone()
         } else {
             result_text.clone()
         };
