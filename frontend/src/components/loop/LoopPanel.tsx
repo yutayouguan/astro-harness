@@ -111,18 +111,18 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       const results = await Promise.all(
         list.map((lp) =>
           invoke<{ status: string; started_at: string }[]>("list_loop_runs", { workflowId: lp.id, limit: 1 })
-            .then((runs) => [lp.id, runs.length > 0 ? { status: runs[0].status, time: runs[0].started_at } : null] as const)
-            .catch(() => [lp.id, null] as const)
+            .then((runs) => [lp.id, runs.length > 0 ? { status: runs[0].status, time: runs[0].started_at } : null, false] as const)
+            .catch(() => [lp.id, null, true] as const)
         ),
       );
       const runs: Record<string, { status: string; time: string } | null> = {};
-      let failCount = 0;
-      for (const [id, run] of results) {
+      let errorCount = 0;
+      for (const [id, run, isError] of results) {
         runs[id] = run;
-        if (run === null) failCount++;
+        if (isError) errorCount++;
       }
       setLastRuns(runs);
-      if (failCount > 0 && failCount === list.length && list.length > 0) {
+      if (errorCount > 0 && errorCount === list.length && list.length > 0) {
         showToast(t("loop.runQueryFailed"), { tone: "error" });
       }
     } catch (e) {
