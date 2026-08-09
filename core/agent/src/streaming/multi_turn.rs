@@ -396,6 +396,63 @@ async fn record_tool_outcomes(
     true
 }
 
+/// 触发 PRE/POST_API_REQUEST hook 并发起 LLM 流式请求。
+///
+/// 成功返回 `Ok(stream)`；失败返回 `Err(error_string)` 并已在 hook 中记录。
+async fn stream_chat_with_hooks(
+    session: &Arc<Mutex<AgentLoop>>,
+    streamer: &ProviderStreamer,
+    system_prompt: &str,
+    history: &[common::message::Message],
+    tools: Vec<serde_json::Value>,
+) -> Result<super::types::AssistantContentStream, String> {
+    {
+        let agent = session.lock().await;
+        let sid = agent.session_id().to_string();
+        let turn_id = agent.current_turn_id().map(str::to_string);
+        let _ = agent.fire_hook(
+            ::hooks::PRE_API_REQUEST,
+            ::hooks::HookPayload {
+                session_id: sid,
+                turn_id,
+                ..Default::default()
+            },
+        );
+    }
+    match streamer.stream_chat(system_prompt, history, tools).await {
+        Ok(s) => {
+            let agent = session.lock().await;
+            let sid = agent.session_id().to_string();
+            let turn_id = agent.current_turn_id().map(str::to_string);
+            let _ = agent.fire_hook(
+                ::hooks::POST_API_REQUEST,
+                ::hooks::HookPayload {
+                    session_id: sid,
+                    turn_id,
+                    ..Default::default()
+                },
+            );
+            Ok(s)
+        }
+        Err(err) => {
+            let agent = session.lock().await;
+            let sid = agent.session_id().to_string();
+            let turn_id = agent.current_turn_id().map(str::to_string);
+            let _ = agent.fire_hook(
+                ::hooks::POST_API_REQUEST,
+                ::hooks::HookPayload {
+                    session_id: sid,
+                    turn_id,
+                    error: Some(err.to_string()),
+                    detail: format!("error={err}"),
+                    ..Default::default()
+                },
+            );
+            Err(err.to_string())
+        }
+    }
+}
+
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
     pub session: Arc<Mutex<AgentLoop>>,
@@ -608,64 +665,25 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             agent.prepare_llm_context().await
         };
 
-        {
-            let agent = session.lock().await;
-            let sid = agent.session_id().to_string();
-            let turn_id = agent.current_turn_id().map(str::to_string);
-            let _ = agent.fire_hook(
-                ::hooks::PRE_API_REQUEST,
-                ::hooks::HookPayload {
-                    session_id: sid,
-                    turn_id,
-                    ..Default::default()
-                },
-            );
-        }
-
         emit_context_usage(&session, &tx, &history, &tools).await;
 
-        let raw_stream = match streamer.stream_chat(&system_prompt, &history, tools).await {
-            Ok(s) => {
-                let agent = session.lock().await;
-                let sid = agent.session_id().to_string();
-                let turn_id = agent.current_turn_id().map(str::to_string);
-                let _ = agent.fire_hook(
-                    ::hooks::POST_API_REQUEST,
-                    ::hooks::HookPayload {
-                        session_id: sid,
-                        turn_id,
-                        ..Default::default()
-                    },
-                );
-                drop(agent);
-                s
-            }
-            Err(err) => {
-                let agent = session.lock().await;
-                let sid = agent.session_id().to_string();
-                let turn_id = agent.current_turn_id().map(str::to_string);
-                let _ = agent.fire_hook(
-                    ::hooks::POST_API_REQUEST,
-                    ::hooks::HookPayload {
-                        session_id: sid,
-                        turn_id,
-                        error: Some(err.to_string()),
-                        detail: format!("error={err}"),
-                        ..Default::default()
-                    },
-                );
-                drop(agent);
-                finish_error(
-                    &session,
-                    &streamer,
-                    &tx,
-                    err.to_string(),
-                    saw_usage.then_some(total_usage),
-                )
-                .await;
-                return;
-            }
-        };
+        let raw_stream =
+            match stream_chat_with_hooks(&session, &streamer, &system_prompt, &history, tools)
+                .await
+            {
+                Ok(s) => s,
+                Err(err) => {
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        err,
+                        saw_usage.then_some(total_usage),
+                    )
+                    .await;
+                    return;
+                }
+            };
 
         let (abort_handle, abort_reg) = AbortHandle::new_pair();
         pause.attach_abort(abort_handle);
