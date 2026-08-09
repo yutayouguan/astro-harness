@@ -351,6 +351,11 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             <span>·</span>
             <span>{t("loop.lastRun")}: {lastRuns[lp.id]?.time ?? t("loop.lastRunNever")}</span>
           </div>
+          {lp.nodes.length > 0 && (
+            <div className="loop-card-preview">
+              <LoopPreview workflow={lp} />
+            </div>
+          )}
           <div className="loop-card-toggles">
             <label className="loop-toggle">
               <input

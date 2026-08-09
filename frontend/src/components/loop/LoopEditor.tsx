@@ -16,6 +16,7 @@ import {
   type Edge as RFEdge,
   type NodeTypes,
   type OnConnect,
+  ConnectionLineType,
   Handle,
   Position,
 } from "@xyflow/react";
@@ -350,6 +351,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  const [paletteSearch, setPaletteSearch] = useState("");
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
@@ -955,8 +957,18 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         {paletteOpen && (
         <div className="loop-node-palette">
           <div className="loop-palette-title">{t("loop.paletteTitle")}</div>
+          <input
+            className="loop-palette-search"
+            placeholder={t("loop.searchNodes")}
+            value={paletteSearch}
+            onChange={(e) => setPaletteSearch(e.target.value)}
+          />
           {NODE_CATEGORIES.map((cat) => {
-            const items = getNodesByCategory(cat.key);
+            const pq = paletteSearch.trim().toLowerCase();
+            const items = getNodesByCategory(cat.key).filter(
+              (m) => !pq || m.label.toLowerCase().includes(pq) || m.labelEn.toLowerCase().includes(pq) || m.type.includes(pq),
+            );
+            if (pq && items.length === 0) return null;
             const isCollapsed = !!collapsed[cat.key];
             const CatIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[cat.icon];
             return (
@@ -1081,6 +1093,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onNodeClick={(_, node) => setSelectedNodeId(node.id)}
             onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); }}
             nodeTypes={nodeTypes}
+            defaultEdgeOptions={{ type: "smoothstep", animated: true }}
+            connectionLineType={ConnectionLineType.SmoothStep}
             snapToGrid
             snapGrid={[20, 20]}
             fitView
