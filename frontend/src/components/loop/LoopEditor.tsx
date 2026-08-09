@@ -405,6 +405,9 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       } else if ((e.key === "z" && e.shiftKey) || e.key === "y") {
         e.preventDefault();
         redo();
+      } else if (e.key === "a") {
+        e.preventDefault();
+        setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
       } else if (e.key === "c") {
         const selected = reactFlowInstance.getNodes().filter((n) => n.selected);
         if (selected.length === 0) return;
@@ -1158,6 +1161,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}
             onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+            onNodeDoubleClick={(_, node) => setSelectedNodeId(node.id)}
             onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); }}
             nodeTypes={nodeTypes}
             defaultEdgeOptions={{ type: "smoothstep", animated: true }}
@@ -1182,10 +1186,11 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 {[
                   ["⌘Z", t("loop.undo")],
                   ["⌘⇧Z", t("loop.redo")],
+                  ["⌘A", t("loop.shortcutSelectAll")],
                   ["⌘C", t("loop.shortcutCopy")],
                   ["⌘V", t("loop.shortcutPaste")],
-                  ["Delete", t("loop.delete")],
                   ["⌘S", t("loop.save")],
+                  ["Delete", t("loop.delete")],
                 ].map(([key, label]) => (
                   <div key={key} className="loop-shortcuts-row">
                     <kbd>{key}</kbd>
