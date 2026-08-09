@@ -357,6 +357,7 @@ pub fn run() {
             loop_commands::delete_loop_run,
             loop_commands::list_loop_step_logs,
             loop_commands::export_loop,
+            loop_commands::export_loop_svg,
             loop_commands::import_loop,
             loop_commands::ai_generate_workflow,
             loop_commands::loop_ai_polish,

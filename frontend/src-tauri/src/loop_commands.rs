@@ -234,6 +234,15 @@ pub async fn export_loop(id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn export_loop_svg(path: String, content: String) -> Result<String, String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, &content).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+#[tauri::command]
 pub async fn import_loop(json: String) -> Result<LoopDto, String> {
     let dto: LoopDto = serde_json::from_str(&json).map_err(|e| e.to_string())?;
     let store = WorkflowStore::open_default().map_err(|e| e.to_string())?;

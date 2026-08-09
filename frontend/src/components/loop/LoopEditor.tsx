@@ -973,10 +973,10 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             }}
             title={t("loop.edgeType")}
           >
-            <option value="smoothstep">{t("loop.edgeSmoothStep")}</option>
-            <option value="default">{t("loop.edgeBezier")}</option>
-            <option value="straight">{t("loop.edgeStraight")}</option>
-            <option value="step">{t("loop.edgeStep")}</option>
+            <option value="smoothstep">⌐ {t("loop.edgeSmoothStep")}</option>
+            <option value="default">∿ {t("loop.edgeBezier")}</option>
+            <option value="straight">╱ {t("loop.edgeStraight")}</option>
+            <option value="step">⌐⌐ {t("loop.edgeStep")}</option>
           </select>
           <button
             className="loop-icon-btn"
@@ -988,27 +988,30 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           <button
             className="loop-icon-btn"
             title={t("loop.exportImage")}
-            onClick={() => {
-              const container = document.querySelector<HTMLElement>(".loop-canvas-container .react-flow__viewport");
-              if (!container) return;
-              const svgEdges = container.closest(".react-flow")?.querySelector<SVGElement>("svg.react-flow__edges");
-              if (!svgEdges) return;
-              // 导出 SVG：序列化边+节点为独立 SVG
-              const bbox = container.getBoundingClientRect();
-              const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-              svg.setAttribute("width", String(bbox.width));
-              svg.setAttribute("height", String(bbox.height));
-              svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
-              const clone = svgEdges.cloneNode(true) as SVGElement;
-              svg.appendChild(clone);
-              const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `workflow-${name || "export"}.svg`;
-              a.click();
-              URL.revokeObjectURL(url);
-              showToast(t("loop.exported"), { tone: "success" });
+            onClick={async () => {
+              try {
+                const { save } = await import("@tauri-apps/plugin-dialog");
+                const container = document.querySelector<HTMLElement>(".loop-canvas-container .react-flow__viewport");
+                if (!container) return;
+                const svgEdges = container.closest(".react-flow")?.querySelector<SVGElement>("svg.react-flow__edges");
+                if (!svgEdges) return;
+                const bbox = container.getBoundingClientRect();
+                const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.setAttribute("width", String(bbox.width));
+                svg.setAttribute("height", String(bbox.height));
+                svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
+                svg.appendChild(svgEdges.cloneNode(true));
+                const svgStr = new XMLSerializer().serializeToString(svg);
+                const filePath = await save({
+                  defaultPath: `workflow-${name || "export"}.svg`,
+                  filters: [{ name: "SVG", extensions: ["svg"] }],
+                });
+                if (!filePath) return;
+                await invoke("export_loop_svg", { path: filePath, content: svgStr });
+                showToast(`${t("loop.exported")}: ${filePath}`, { tone: "success" });
+              } catch (e) {
+                showToast(String(e), { tone: "error" });
+              }
             }}
           >
             <LucideIcons.Camera size={16} />
@@ -1043,7 +1046,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             disabled={saving}
           >
             <Save size={14} />
-            <span>{saving ? t("loop.saving") : t("loop.save")}</span>
+            <span className="loop-btn-label">{saving ? t("loop.saving") : t("loop.save")}</span>
           </button>
           <button
             className="loop-btn loop-btn--primary"
@@ -1079,7 +1082,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             }}
           >
             {running ? <LucideIcons.Loader2 size={14} className="loop-spin" /> : <Play size={14} />}
-            <span>{running ? t("loop.running") : t("loop.run")}</span>
+            <span className="loop-btn-label">{running ? t("loop.running") : t("loop.run")}</span>
           </button>
         </div>
       </div>

@@ -3212,6 +3212,15 @@
   .loop-detail {
     grid-template-columns: 160px minmax(0, 1fr);
   }
+  .loop-btn-label {
+    display: none;
+  }
+  .loop-edge-type-select {
+    max-width: 48px;
+  }
+  .loop-editor-desc {
+    display: none;
+  }
 }
 
 @media (max-width: 700px) {
