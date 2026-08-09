@@ -135,7 +135,7 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
     (raw.nodeType as NodeType) ?? data.meta.type,
     config ?? {},
   );
-  const conditionsRaw = config?.conditions ?? config?.branches;
+  const conditionsRaw = config?.conditions ?? config?.branches ?? config?.classes;
   let branches: BranchCondition[] = [];
   if (typeof conditionsRaw === "string") {
     try { branches = JSON.parse(conditionsRaw); } catch { /* ignore */ }
@@ -377,6 +377,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
   const [canvasSearch, setCanvasSearch] = useState("");
   const [showCanvasSearch, setShowCanvasSearch] = useState(false);
+  const [edgeType, setEdgeType] = useState<string>("smoothstep");
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
@@ -961,6 +962,22 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           >
             <LucideIcons.LayoutGrid size={16} />
           </button>
+          <select
+            className="loop-edge-type-select"
+            value={edgeType}
+            onChange={(e) => {
+              const newType = e.target.value;
+              setEdgeType(newType);
+              setEdges((eds) => eds.map((ed) => ({ ...ed, type: newType })));
+              setDirty(true);
+            }}
+            title={t("loop.edgeType")}
+          >
+            <option value="smoothstep">{t("loop.edgeSmoothStep")}</option>
+            <option value="default">{t("loop.edgeBezier")}</option>
+            <option value="straight">{t("loop.edgeStraight")}</option>
+            <option value="step">{t("loop.edgeStep")}</option>
+          </select>
           <button
             className="loop-icon-btn"
             title={t("loop.fitView")}
@@ -1221,8 +1238,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onPaneClick={() => { setSelectedNodeId(null); setConnectDrop(null); setContextMenu(null); }}
             onPaneContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
             nodeTypes={nodeTypes}
-            defaultEdgeOptions={{ type: "smoothstep", animated: true }}
-            connectionLineType={ConnectionLineType.SmoothStep}
+            defaultEdgeOptions={{ type: edgeType, animated: true }}
+            connectionLineType={edgeType === "straight" ? ConnectionLineType.Straight : edgeType === "default" ? ConnectionLineType.Bezier : ConnectionLineType.SmoothStep}
             isValidConnection={(conn) => isValidConnection(conn as Connection, nodes)}
             snapToGrid
             snapGrid={[20, 20]}

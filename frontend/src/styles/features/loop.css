@@ -819,6 +819,20 @@
   gap: 6px;
   margin-left: auto;
 }
+.loop-edge-type-select {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+.loop-edge-type-select:focus {
+  border-color: var(--tone, #6366f1);
+}
+
 .loop-editor-toolbar-sep {
   width: 1px;
   height: 18px;
