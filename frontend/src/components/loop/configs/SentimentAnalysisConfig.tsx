@@ -1,5 +1,6 @@
 import { TextField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import { TagInput, jsonToStringArray } from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -23,12 +24,12 @@ export default function SentimentAnalysisConfig({ config, onChange }: ConfigProp
         onProviderChange={(v) => onChange({ ...config, provider_id: v })}
         onModelChange={(v) => onChange({ ...config, model: v })}
       />
-      <TextField
+      <TagInput
         label="自定义标签"
-        value={cfgStr(config, "custom_labels")}
-        onChange={(v) => onChange({ ...config, custom_labels: v })}
-        placeholder='["积极", "消极", "中性", "愤怒", "喜悦"]'
-        hint="JSON 数组，留空使用默认情感分类"
+        value={jsonToStringArray(config.custom_labels)}
+        onChange={(v: string[]) => onChange({ ...config, custom_labels: v })}
+        placeholder="回车添加标签"
+        hint="留空使用默认情感分类（积极/消极/中性）"
       />
     </>
   );

@@ -1,4 +1,5 @@
 import { TextField, SelectField, NumberField, cfgStr, cfgNum } from "./ConfigField";
+import { KeyValueEditor, KvEntry, jsonToKvEntries, kvEntriesToObj } from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -13,7 +14,25 @@ const METHOD_OPTIONS = [
   { value: "DELETE", label: "DELETE" },
 ];
 
+const AUTH_OPTIONS = [
+  { value: "none", label: "无" },
+  { value: "bearer", label: "Bearer Token" },
+  { value: "basic", label: "Basic Auth" },
+  { value: "api_key", label: "API Key (Header)" },
+];
+
+function authPlaceholder(type: string): string {
+  switch (type) {
+    case "bearer": return "Token";
+    case "basic": return "user:password";
+    case "api_key": return "Key 值";
+    default: return "";
+  }
+}
+
 export default function HttpRequestConfig({ config, onChange }: ConfigProps) {
+  const authType = cfgStr(config, "auth_type", "none");
+
   return (
     <>
       <SelectField
@@ -29,12 +48,27 @@ export default function HttpRequestConfig({ config, onChange }: ConfigProps) {
         placeholder={"https://api.example.com/{{path}}"}
         hint="支持 {{var}} 插值"
       />
-      <TextField
-        label="请求头 (JSON)"
-        value={cfgStr(config, "headers")}
-        onChange={(v) => onChange({ ...config, headers: v })}
-        multiline
-        placeholder={'[["Authorization", "Bearer {{token}}"], ["Content-Type", "application/json"]]'}
+      <SelectField
+        label="认证方式"
+        value={authType}
+        onChange={(v) => onChange({ ...config, auth_type: v })}
+        options={AUTH_OPTIONS}
+      />
+      {authType !== "none" && (
+        <TextField
+          label="认证凭据"
+          value={cfgStr(config, "auth_credential")}
+          onChange={(v) => onChange({ ...config, auth_credential: v })}
+          placeholder={authPlaceholder(authType)}
+        />
+      )}
+      <KeyValueEditor
+        label="请求头"
+        value={jsonToKvEntries(config.headers)}
+        onChange={(v: KvEntry[]) => onChange({ ...config, headers: kvEntriesToObj(v) })}
+        keyPlaceholder="Header 名"
+        valuePlaceholder="值"
+        hint="常用头如 Content-Type, Accept"
       />
       <TextField
         label="请求体 (可选)"

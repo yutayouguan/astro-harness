@@ -1,5 +1,6 @@
 import { TextField, SelectField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import { KeyValueEditor, KvEntry, jsonToKvEntries, kvEntriesToObj } from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -48,13 +49,13 @@ export default function TranslationConfig({ config, onChange }: ConfigProps) {
         onProviderChange={(v) => onChange({ ...config, provider_id: v })}
         onModelChange={(v) => onChange({ ...config, model: v })}
       />
-      <TextField
+      <KeyValueEditor
         label="术语表"
-        value={cfgStr(config, "glossary")}
-        onChange={(v) => onChange({ ...config, glossary: v })}
-        multiline
-        placeholder={'{"API": "API", "Astro Agent": "阿童木"}'}
-        hint="JSON 键值对，指定专有名词翻译"
+        value={jsonToKvEntries(config.glossary)}
+        onChange={(v: KvEntry[]) => onChange({ ...config, glossary: kvEntriesToObj(v) })}
+        keyPlaceholder="原文术语"
+        valuePlaceholder="翻译"
+        hint="指定专有名词的固定翻译"
       />
     </>
   );

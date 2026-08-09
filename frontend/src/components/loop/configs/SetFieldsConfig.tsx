@@ -1,4 +1,5 @@
-import { TextField, cfgStr } from "./ConfigField";
+import { KeyValueEditor, jsonToKvEntries } from "./StructuredEditors";
+import type { KvEntry } from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -8,13 +9,13 @@ interface ConfigProps {
 export default function SetFieldsConfig({ config, onChange }: ConfigProps) {
   return (
     <>
-      <TextField
-        label="字段赋值 (JSON)"
-        value={cfgStr(config, "assignments")}
-        onChange={(v) => onChange({ ...config, assignments: v })}
-        multiline
-        placeholder={'[\n  {"field": "name", "value": "{{input.name}}"},\n  {"field": "count", "value": 42}\n]'}
-        hint="每条赋值设定一个输出字段"
+      <KeyValueEditor
+        label="字段赋值"
+        value={jsonToKvEntries(config.fields)}
+        onChange={(v: KvEntry[]) => onChange({ ...config, fields: v })}
+        keyPlaceholder="字段名"
+        valuePlaceholder="值 (支持 {{var}})"
+        hint="每行设定一个输出字段的值"
       />
     </>
   );

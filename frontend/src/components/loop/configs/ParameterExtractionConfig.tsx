@@ -1,5 +1,6 @@
-import { TextField, AiAssistField, cfgStr } from "./ConfigField";
+import { AiAssistField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import { RowListEditor, jsonToRowList } from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -22,12 +23,15 @@ export default function ParameterExtractionConfig({ config, onChange, aiProvider
         aiProviderId={aiProviderId}
         aiModel={aiModel}
       />
-      <TextField
-        label="输出 Schema (JSON)"
-        value={cfgStr(config, "output_schema")}
+      <RowListEditor
+        label="输出 Schema"
+        columns={[
+          { key: "name", label: "字段名", placeholder: "如 phone" },
+          { key: "type", label: "类型", placeholder: "string" },
+          { key: "desc", label: "描述", placeholder: "手机号码" },
+        ]}
+        value={jsonToRowList(config.output_schema)}
         onChange={(v) => onChange({ ...config, output_schema: v })}
-        placeholder={'[\n  {"name": "姓名", "field_type": "string"},\n  {"name": "电话", "field_type": "string"}\n]'}
-        multiline
         hint="定义需要提取的字段列表"
       />
       <ProviderModelSelect

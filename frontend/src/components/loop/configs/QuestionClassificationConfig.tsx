@@ -1,5 +1,6 @@
-import { TextField, cfgStr } from "./ConfigField";
+import { cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
+import { RowListEditor, jsonToRowList } from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -9,13 +10,17 @@ interface ConfigProps {
 export default function QuestionClassificationConfig({ config, onChange }: ConfigProps) {
   return (
     <>
-      <TextField
-        label="分类列表 (JSON)"
-        value={cfgStr(config, "classes")}
+      <RowListEditor
+        label="分类列表"
+        columns={[
+          { key: "id", label: "ID", placeholder: "billing", flex: 1 },
+          { key: "label", label: "标签", placeholder: "计费问题", flex: 1.5 },
+          { key: "desc", label: "描述", placeholder: "可选", flex: 2 },
+        ]}
+        value={jsonToRowList(config.classes)}
         onChange={(v) => onChange({ ...config, classes: v })}
-        placeholder={'[\n  {"id": "tech", "label": "技术问题", "description": "编程、部署相关"},\n  {"id": "biz", "label": "业务问题", "description": "产品、运营相关"}\n]'}
-        multiline
         hint="每个分类对应一个输出端口"
+        addLabel="添加分类"
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}
