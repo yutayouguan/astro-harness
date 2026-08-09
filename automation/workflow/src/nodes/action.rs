@@ -187,8 +187,7 @@ pub struct OutputExec;
 #[async_trait]
 impl NodeExecutor for OutputExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        // 收集 fields 中定义的输出字段
-        let fields = node.config.get("fields").and_then(|v| v.as_array());
+        let fields = node.config.get("output_fields").or_else(|| node.config.get("fields")).and_then(|v| v.as_array());
         let mut out = serde_json::Map::new();
         if let Some(fields) = fields {
             for f in fields {
@@ -199,10 +198,89 @@ impl NodeExecutor for OutputExec {
             }
         }
         if out.is_empty() {
-            // 无显式字段定义时，返回 output 标记
-            out.insert("completed".into(), serde_json::Value::Bool(true));
+            let all = ctx.snapshot_outputs();
+            if let serde_json::Value::Object(m) = all {
+                out = m;
+            }
+            if out.is_empty() {
+                out.insert("completed".into(), serde_json::Value::Bool(true));
+            }
         }
+
+        let export_mode = node.config.get("export_mode").and_then(|v| v.as_str()).unwrap_or("none");
+        let export_path = node.config.get("export_path").and_then(|v| v.as_str()).unwrap_or("");
+        let export_path = ctx.interpolate(export_path);
+        let export_path = expand_tilde(&export_path);
+
+        let result_value = serde_json::Value::Object(out.clone());
+
+        match export_mode {
+            "json" if !export_path.is_empty() => {
+                let p = std::path::Path::new(&export_path);
+                if let Some(parent) = p.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| anyhow::anyhow!("创建目录失败: {}", e))?;
+                }
+                let json = serde_json::to_string_pretty(&result_value)?;
+                std::fs::write(&export_path, &json)
+                    .map_err(|e| anyhow::anyhow!("写入 JSON 失败 {}: {}", export_path, e))?;
+                out.insert("exported_to".into(), serde_json::Value::String(export_path));
+            }
+            "folder" if !export_path.is_empty() => {
+                std::fs::create_dir_all(&export_path)
+                    .map_err(|e| anyhow::anyhow!("创建输出目录失败: {}", e))?;
+                // 导出 JSON 汇总
+                let json_path = std::path::Path::new(&export_path).join("output.json");
+                let json = serde_json::to_string_pretty(&result_value)?;
+                std::fs::write(&json_path, &json)?;
+                // 复制上游产生的媒体文件到输出目录
+                let mut copied_files = Vec::new();
+                for (_, val) in &out {
+                    collect_and_copy_files(val, &export_path, &mut copied_files);
+                }
+                out.insert("exported_to".into(), serde_json::Value::String(export_path));
+                out.insert("copied_files".into(), serde_json::json!(copied_files));
+            }
+            _ => {}
+        }
+
         Ok(NodeResult::Success(serde_json::Value::Object(out)))
+    }
+}
+
+fn expand_tilde(path: &str) -> String {
+    if path.starts_with("~/") || path == "~" {
+        if let Some(home) = home::user_home_dir() {
+            return path.replacen('~', &home.to_string_lossy(), 1);
+        }
+    }
+    path.to_string()
+}
+
+fn collect_and_copy_files(value: &serde_json::Value, dest_dir: &str, copied: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(s) => {
+            let p = std::path::Path::new(s.as_str());
+            if p.is_file() {
+                if let Some(name) = p.file_name() {
+                    let target = std::path::Path::new(dest_dir).join(name);
+                    if std::fs::copy(p, &target).is_ok() {
+                        copied.push(target.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                collect_and_copy_files(item, dest_dir, copied);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (_, v) in map {
+                collect_and_copy_files(v, dest_dir, copied);
+            }
+        }
+        _ => {}
     }
 }
 
