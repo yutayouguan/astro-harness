@@ -16,32 +16,27 @@ use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
-use ::session::{
-    build_conversation_context, format_recalled_context, ConversationStore, NewMessage,
-    SessionStore,
-};
-use common::message::{Message, Role};
+use ::session::{ConversationStore, SessionStore};
+use common::message::Message;
 use mcp::{McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use serde_json::Value;
 use tools::{register_all, ToolEntry, ToolRegistry};
 
-use crate::compression::{
-    prune_tool_view,
-    ContextMaintenanceResult, ToolCompressionManager,
-};
 use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 
 pub mod budget;
 pub(crate) mod compression_state;
+mod context_maintenance;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;
 mod system_prompt;
 mod tool_dispatch;
 pub(crate) mod turn_budget;
+mod turn_lifecycle;
 pub(crate) mod usage;
 mod validate;
 
@@ -330,47 +325,6 @@ impl AgentLoop {
         self.turn.is_tool_depth_exhausted(self.config.multi_turn)
     }
 
-    /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
-    ///
-    /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
-    pub fn begin_user_turn(&mut self) {
-        let prev_rounds = self.turn.begin_new_turn();
-        let compression = memory::load_compression_config(&self.memory.base_dir);
-        self.compression.reset_for_new_turn(&compression);
-        self.compression_policy = Box::new(
-            crate::compression::StagedCompressionPolicy::from_config(&compression)
-                .with_context_window(self.context_window()),
-        );
-        self.pending_learning_nudge =
-            Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
-    }
-
-    /// 根据上一轮工具次数与 DecisionLog 计算本轮是否注入学习提示。
-    fn compute_learning_nudge(base: &std::path::Path, prev_tool_rounds: usize) -> Option<String> {
-        let cfg = memory::load_learning_config(base);
-        if !cfg.nudge_enabled {
-            return None;
-        }
-        if prev_tool_rounds < cfg.complex_task_tool_threshold {
-            return None;
-        }
-        let mut text = format!(
-            "上一轮使用了 {prev_tool_rounds} 次工具（≥ {}）。若流程可复用：用 `skills` manage create 或 patch 固化；若是长期偏好/事实：用 `memory` 写入。闲置技能可用 action=curate 查看建议（勿自动删除）。",
-            cfg.complex_task_tool_threshold
-        );
-        if let Ok(recent) = memory::list_recent_decisions(base, 8) {
-            if recent
-                .iter()
-                .any(|e| e.kind == memory::DecisionKind::ToolFailure)
-            {
-                text.push_str(
-                    " 近期有工具失败记录：若已找到正确路径，请用 skills manage patch 写回对应 Skill。",
-                );
-            }
-        }
-        Some(text)
-    }
-
     /// 热读 `compression:` 段（与 learning 同类）。
     pub fn compression_config(&self) -> memory::CompressionConfig {
         memory::load_compression_config(self.memory_dir())
@@ -406,26 +360,6 @@ impl AgentLoop {
 
     pub fn take_recommend_compact(&mut self) -> bool {
         self.compression.take_recommend_compact()
-    }
-
-    /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
-    pub fn provider_history(&self) -> Vec<Message> {
-        match self.compression.mid_run_handoff.as_deref() {
-            Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
-                &self.session_messages,
-                handoff,
-                self.config_protect_first_n(),
-                self.config_protect_last_n(),
-            ),
-            None => self.session_messages.clone(),
-        }
-    }
-
-    /// 当前会话占用比例（ceil chars/4 ÷ context_window）。
-    pub fn occupancy_ratio(&self) -> f32 {
-        ToolCompressionManager::from_config(&self.compression_config())
-            .with_context_window(self.context_window())
-            .occupancy_ratio(&self.session_messages)
     }
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
@@ -704,22 +638,6 @@ impl AgentLoop {
         Uuid::new_v4().to_string()
     }
 
-    /// 准备下一轮 LLM 调用所需的上下文：重载工具/MCP、构建历史、注入 hook 上下文。
-    ///
-    /// 返回 `(messages, tool_schemas)`，供 `ProviderStreamer::stream_chat` 或
-    /// `to_provider_messages` 使用。streaming 与 headless 路径共享。
-    pub(crate) async fn prepare_llm_context(
-        &mut self,
-    ) -> (Vec<Message>, Vec<serde_json::Value>) {
-        self.reload_tools_and_mcp().await;
-        let mut messages = self.provider_history();
-        if let Some(ctx) = self.take_inject_context() {
-            messages.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
-        }
-        let tools = self.schemas_for_api();
-        (messages, tools)
-    }
-
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub fn is_budget_exhausted(&self) -> bool {
         self.turn.is_budget_exhausted(self.config.max_turns)
@@ -753,258 +671,26 @@ impl AgentLoop {
         self.model_ctx.context_window()
     }
 
-    /// Run 内 tool 上下文维护：委托 [`CompressionPolicy`] 生成计划，执行 prune/LLM 摘要/head-tail。
-    ///
-    /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
-    pub async fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
-        let mut result = ContextMaintenanceResult::default();
-        if !self.compression_config().enabled {
-            return Ok(result);
-        }
-        if !self.compression.guard.allow_run() {
-            result.thrashing_disabled = true;
-            return Ok(result);
-        }
-
-        let stored = self.sessions.get_messages(&self.session_id)?;
-        let protect_last_n = self.compression_config().protect_last_n.max(1);
-
-        let plan = self.compression_policy.plan(
-            &stored,
-            &self.session_messages,
-            self.memory_dir(),
-            &self.session_id,
-            protect_last_n,
-        );
-
-        if plan.prune.is_empty() && plan.compress.is_empty() {
-            return Ok(result);
-        }
-
-        result.stage_ratio = plan.stage_ratio;
-        result.occupancy_before = plan.occupancy_before;
-
-        // ── Prune 阶段（不含 await，复用已有 stored 快照） ──
-        for target in &plan.prune {
-            let view = prune_tool_view(target.tool_name.as_deref(), target.spill_rel.as_deref());
-            let Some(stored_msg) = stored.iter().find(|m| m.id == target.message_id) else {
-                continue;
-            };
-            let content = stored_msg.content.as_deref().unwrap_or_default();
-            self.apply_tool_compressed_view(stored_msg, content, &view)?;
-            result.pruned += 1;
-        }
-
-        // ── Compress 阶段：先尝试 LLM 摘要，失败回退 head/tail ──
-        let targets = self.auxiliary_targets(common::AuxiliaryTask::Compaction);
-        let llm_budget = crate::exec::tool_llm_compress::MAX_LLM_TOOL_COMPRESS_PER_PASS;
-
-        for (i, job) in plan.compress.iter().enumerate() {
-            let view = if i < llm_budget && !targets.is_empty() {
-                match crate::exec::tool_llm_compress::summarize_tool_result(
-                    &targets,
-                    job.tool_name.as_deref(),
-                    &job.content,
-                    job.max_chars,
-                )
-                .await
-                {
-                    Ok(v) => {
-                        result.llm_summarized += 1;
-                        v
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            error = %e,
-                            tool = ?job.tool_name,
-                            "tool LLM compress failed; falling back to head/tail"
-                        );
-                        self.compression_policy
-                            .compress_fallback(job.tool_name.as_deref(), &job.content, job)
-                            .unwrap_or_else(|| job.content.clone())
-                    }
-                }
-            } else {
-                self.compression_policy
-                    .compress_fallback(job.tool_name.as_deref(), &job.content, job)
-                    .unwrap_or_else(|| job.content.clone())
-            };
-
-            let stored_again = self.sessions.get_messages(&self.session_id)?;
-            let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.message_id) else {
-                continue;
-            };
-            self.apply_tool_compressed_view(stored_msg, &job.content, &view)?;
-            result.compressed += 1;
-        }
-
-        // ── 防抖 + compact 建议 ──
-        let mgr = ToolCompressionManager::from_config(&self.compression_config())
-            .with_context_window(self.context_window());
-        result.occupancy_after = mgr.occupancy_ratio(&self.session_messages);
-        self.compression
-            .guard
-            .record_outcome(result.occupancy_before, result.occupancy_after);
-        result.thrashing_disabled = self.compression.guard.disabled;
-        result.recommend_session_compact =
-            self.compression_policy.should_recommend_compact(result.occupancy_after);
-        if result.recommend_session_compact {
-            self.compression.pending_recommend_compact = true;
-        }
-        Ok(result)
-    }
-
-    fn apply_tool_compressed_view(
-        &mut self,
-        stored_msg: &::session::StoredMessage,
-        content: &str,
-        view: &str,
-    ) -> anyhow::Result<()> {
-        self.sessions
-            .update_message_compressed_content(stored_msg.id, Some(view))?;
-        if let Some(runtime_msg) = self.session_messages.iter_mut().find(|m| {
-            m.role == Role::Tool
-                && match (&m.tool_call_id, &stored_msg.tool_call_id) {
-                    (Some(a), Some(b)) => a == b,
-                    (None, None) => m.content_str() == content,
-                    _ => false,
-                }
-        }) {
-            runtime_msg.compressed_content = Some(view.to_string());
-        }
-        Ok(())
-    }
-
-    /// 压缩本 run 中尚未压缩的 tool 结果（兼容旧调用；委托 [`Self::maintain_tool_context`]）。
-    pub async fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
-        let report = self.maintain_tool_context().await?;
-        Ok(report.pruned + report.compressed)
-    }
-
     /// 解析当前 Agent 工作区目录，供工具上下文注入。
     fn resolve_workspace_dir(&self) -> PathBuf {
         self.memory.workspace_dir.clone()
     }
-
-    /// 处理一轮用户输入：记录消息、召回记忆、构建 system prompt。
-    ///
-    /// 返回 [`TurnResult::Continue`] 供上层发起 LLM 请求；预算耗尽或已取消时提前返回。
-    /// 注意：本方法不直接调用 LLM，仅完成 Agent 侧准备工作。
-    pub async fn run_turn(
-        &mut self,
-        user_message: &str,
-        _task_id: &str,
-    ) -> anyhow::Result<TurnResult> {
-        self.run_turn_with_images(user_message, &[], _task_id).await
-    }
-
-    /// 同 [`Self::run_turn`]，附带本轮图片 data URL（`data:image/...;base64,...`）。
-    ///
-    /// FTS 仍只索引文本；附图写入 `messages.media_json` 并进入内存 `session_messages`。
-    pub async fn run_turn_with_images(
-        &mut self,
-        user_message: &str,
-        image_data_urls: &[String],
-        _task_id: &str,
-    ) -> anyhow::Result<TurnResult> {
-        // 新一轮用户输入：清除上一轮 stop/cancel 遗留的协作取消标记。
-        self.cancel.reset();
-        if self.is_budget_exhausted() {
-            return Ok(TurnResult::BudgetExhausted);
-        }
-
-        self.begin_user_turn();
-        // UserCorrection：上一轮已有回复且本轮像是纠错 → 记一笔供学习闭环。
-        if looks_like_user_correction(user_message)
-            && self
-                .session_messages
-                .iter()
-                .any(|m| matches!(m.role, common::message::Role::Assistant))
-        {
-            memory::try_append_decision(
-                self.memory.base_dir.as_path(),
-                memory::DecisionEntry::new(
-                    memory::DecisionKind::UserCorrection,
-                    user_message.chars().take(200).collect::<String>(),
-                )
-                .with_session(self.session_id.clone()),
-            );
-        }
-        self.reload_tools_and_mcp().await;
-
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        let media_assets: Vec<common::MediaAsset> = image_data_urls
-            .iter()
-            .map(|u| u.trim())
-            .filter(|u| !u.is_empty())
-            .map(|u| {
-                let mime = u
-                    .strip_prefix("data:")
-                    .and_then(|rest| rest.split(';').next())
-                    .unwrap_or("image/*")
-                    .to_string();
-                common::MediaAsset::data_url(common::MediaKind::Image, u, mime)
-            })
-            .collect();
-        let media_owned = if media_assets.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&media_assets)?)
-        };
-        self.sessions.append_message(NewMessage {
-            content: Some(user_message),
-            media_json: media_owned.as_deref(),
-            ..NewMessage::empty(&self.session_id, "user")
-        })?;
-
-        let fts_keywords = if self.turn.current_turn >= self.config.recent_turns {
-            Some(user_message)
-        } else {
-            None
-        };
-        let recalled = build_conversation_context(
-            &*self.sessions,
-            &self.session_id,
-            self.config.recent_turns,
-            fts_keywords,
-        )?;
-        self.compression.last_recalled_context = format_recalled_context(&recalled);
-
-        self.session_messages
-            .push(Message::user_with_images(user_message, image_data_urls));
-        self.increment_turn();
-        let system_prompt = self.build_system_prompt();
-        let _ = self.fire_hook(
-            ::hooks::ON_SESSION_START,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
-                detail: format!("session={}", self.session_id),
-                ..Default::default()
-            },
-        );
-        let inject = self.fire_hook(
-            ::hooks::PRE_LLM_CALL,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
-                system_prompt_chars: Some(system_prompt.len()),
-                detail: format!("system_prompt_chars={}", system_prompt.len()),
-                ..Default::default()
-            },
-        );
-        if let ::hooks::HookOutcome::InjectContext(ctx) = inject {
-            self.pending_inject_context = Some(ctx);
-        }
-        if self.cancel.is_cancelled() {
-            return Ok(TurnResult::Interrupted);
-        }
-        Ok(TurnResult::Continue {
-            turn: self.turn.current_turn,
-            system_prompt,
-        })
-    }
 }
+
+// ── 其余 impl AgentLoop 方法见子模块 ──────────────────────
+// context_maintenance.rs — maintain_tool_context / provider_history / occupancy_ratio
+// turn_lifecycle.rs — begin_user_turn / run_turn / run_turn_with_images / prepare_llm_context
+// recording.rs — record_assistant_* / record_tool_* / register_media_artifacts
+// tool_dispatch.rs — dispatch_named_tool / handle_tool_call_async / finalize_tool_call_result
+// system_prompt.rs — build_system_prompt / system_prompt_layer_*
+
+// ── 以下仍在同文件的辅助 ──────────────────────────────────
+
+/// 判断一次工具调用是否可能写入磁盘（供 `turn_wrote_disk` 标记使用）。
+///
+/// `terminal` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
+/// `operation`（`write`/`append`/`delete`/`mkdir`）时视为写盘，`read`/`list` 不算。
+/// 启发式判断用户消息是否像「纠正上一轮」（中英常见提示语）。
 
 #[cfg(test)]
 mod tests {
