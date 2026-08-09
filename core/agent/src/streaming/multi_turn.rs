@@ -273,6 +273,129 @@ async fn post_tool_maintenance(
     stop_after
 }
 
+/// 处理工具执行结果：推送事件、解析 A2UI、记录到会话历史。
+///
+/// 返回 `false` 表示取消或 channel 关闭，主循环应提前退出。
+async fn record_tool_outcomes(
+    session: &Arc<Mutex<AgentLoop>>,
+    calls: &[tools::ParsedToolCall],
+    outcomes: Vec<common::ToolOutput>,
+    pause: &Arc<providers::PauseControl>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    timeline: &mut crate::timeline::TimelineBuilder,
+    now_ms: impl Fn() -> i64,
+) -> bool {
+    for (call, result) in calls.iter().zip(outcomes) {
+        if pause.is_cancelled() {
+            return false;
+        }
+
+        let tool_media = result.media().to_vec();
+        let result_text = result.text().to_string();
+        if !emit(
+            tx,
+            MultiTurnStreamItem::ToolResult {
+                id: call.id.clone(),
+                name: call.name.clone(),
+                arguments_json: call.arguments.to_string(),
+                result: result_text.clone(),
+                media: tool_media.clone(),
+            },
+        )
+        .await
+        {
+            return false;
+        }
+
+        if matches!(call.name.as_str(), "memory")
+            && !result_text.starts_with("工具错误")
+            && !result_text.starts_with("工具已禁用")
+            && !result_text.starts_with("工具参数 JSON 解析失败")
+        {
+            let preview = {
+                let s = result_text.trim();
+                if s.chars().count() > 240 {
+                    format!("{}…", s.chars().take(240).collect::<String>())
+                } else {
+                    s.to_string()
+                }
+            };
+            if !emit(
+                tx,
+                MultiTurnStreamItem::MemoryUpdate {
+                    op: call.name.clone(),
+                    content: preview,
+                },
+            )
+            .await
+            {
+                return false;
+            }
+        }
+
+        let info_ui = parse_astro_ui(&result_text);
+        let result_for_history = if let Some(ref ui) = info_ui {
+            format!("Presented info card: {}", ui.summary)
+        } else if parse_astro_hitl(&result_text).is_some() {
+            result_text.clone()
+        } else {
+            result_text.clone()
+        };
+
+        if let Some(ref ui) = info_ui {
+            let message_id = format!("a2ui-surface-{}", call.id);
+            let content_json = serde_json::json!({ "operations": ui.operations }).to_string();
+            timeline.upsert_surface(
+                serde_json::json!({
+                    "messageId": message_id,
+                    "activityType": "a2ui-surface",
+                    "operations": ui.operations,
+                    "status": "active",
+                }),
+                now_ms(),
+            );
+            if !emit(
+                tx,
+                MultiTurnStreamItem::Activity {
+                    message_id,
+                    activity_type: "a2ui-surface".into(),
+                    content_json,
+                    replace: true,
+                },
+            )
+            .await
+            {
+                return false;
+            }
+        }
+
+        {
+            let mut agent = session.lock().await;
+            let _ = agent.record_tool_result_with_id(
+                Some(&call.id),
+                Some(&call.name),
+                &result_for_history,
+            );
+            if !tool_media.is_empty() {
+                if let Some(last) = agent.session_messages.last_mut() {
+                    if last.role == common::message::Role::Tool && last.media.is_empty() {
+                        last.media = tool_media;
+                    }
+                }
+            }
+        }
+    }
+
+    // 工具循环后回写 timeline/surfaces，避免历史恢复丢 A2UI 卡片。
+    {
+        let agent = session.lock().await;
+        if let Err(e) = agent.patch_last_assistant_timeline(timeline.reasoning_details_snapshot()) {
+            tracing::warn!(error = %e, "patch assistant timeline after tools failed");
+        }
+    }
+    true
+}
+
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
     pub session: Arc<Mutex<AgentLoop>>,
@@ -933,126 +1056,20 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             return;
         };
 
-        for (call, result) in calls.iter().zip(outcomes) {
-            if pause.is_cancelled() {
-                finish_usage_and_done(
-                    &session,
-                    &streamer,
-                    &tx,
-                    saw_usage.then_some(total_usage),
-                    &run_id,
-                )
-                .await;
-                return;
-            }
-
-            let tool_media = result.media().to_vec();
-            let result_text = result.text().to_string();
-            if !emit(
-                &tx,
-                MultiTurnStreamItem::ToolResult {
-                    id: call.id.clone(),
-                    name: call.name.clone(),
-                    arguments_json: call.arguments.to_string(),
-                    result: result_text.clone(),
-                    media: tool_media.clone(),
-                },
-            )
-            .await
-            {
-                return;
-            }
-
-            if matches!(call.name.as_str(), "memory")
-                && !result_text.starts_with("工具错误")
-                && !result_text.starts_with("工具已禁用")
-                && !result_text.starts_with("工具参数 JSON 解析失败")
-            {
-                let preview = {
-                    let s = result_text.trim();
-                    if s.chars().count() > 240 {
-                        format!("{}…", s.chars().take(240).collect::<String>())
-                    } else {
-                        s.to_string()
-                    }
-                };
-                if !emit(
-                    &tx,
-                    MultiTurnStreamItem::MemoryUpdate {
-                        op: call.name.clone(),
-                        content: preview,
-                    },
-                )
-                .await
-                {
-                    return;
-                }
-            }
-
-            let info_ui = parse_astro_ui(&result_text);
-            let result_for_history = if let Some(ref ui) = info_ui {
-                format!("Presented info card: {}", ui.summary)
-            } else if parse_astro_hitl(&result_text).is_some() {
-                // 串行路径已把 HITL park 结果写成非 astro_hitl；若仍是标记则兜底
-                result_text.clone()
-            } else {
-                result_text.clone()
-            };
-
-            if let Some(ref ui) = info_ui {
-                let message_id = format!("a2ui-surface-{}", call.id);
-                let content_json = serde_json::json!({ "operations": ui.operations }).to_string();
-                timeline.upsert_surface(
-                    serde_json::json!({
-                        "messageId": message_id,
-                        "activityType": "a2ui-surface",
-                        "operations": ui.operations,
-                        "status": "active",
-                    }),
-                    now_ms(),
-                );
-                if !emit(
-                    &tx,
-                    MultiTurnStreamItem::Activity {
-                        message_id,
-                        activity_type: "a2ui-surface".into(),
-                        content_json,
-                        replace: true,
-                    },
-                )
-                .await
-                {
-                    return;
-                }
-            }
-
-            {
-                let mut agent = session.lock().await;
-                let _ = agent.record_tool_result_with_id(
-                    Some(&call.id),
-                    Some(&call.name),
-                    &result_for_history,
-                );
-                // media 已从 ToolOutput 结构化取出，直接注入 session message，
-                // 跳过 record_tool_result_with_id 内部的 extract_tool_media 冗余解析。
-                if !tool_media.is_empty() {
-                    if let Some(last) = agent.session_messages.last_mut() {
-                        if last.role == common::message::Role::Tool && last.media.is_empty() {
-                            last.media = tool_media;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 工具循环后回写 timeline/surfaces，避免历史恢复丢 A2UI 卡片。
+        if !record_tool_outcomes(
+            &session, &calls, outcomes, &pause, &tx, &mut timeline, now_ms,
+        )
+        .await
         {
-            let agent = session.lock().await;
-            if let Err(e) =
-                agent.patch_last_assistant_timeline(timeline.reasoning_details_snapshot())
-            {
-                tracing::warn!(error = %e, "patch assistant timeline after tools failed");
-            }
+            finish_usage_and_done(
+                &session,
+                &streamer,
+                &tx,
+                saw_usage.then_some(total_usage),
+                &run_id,
+            )
+            .await;
+            return;
         }
 
         if post_tool_maintenance(&session, &calls).await {
