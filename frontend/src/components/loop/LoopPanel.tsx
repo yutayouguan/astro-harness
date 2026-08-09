@@ -97,8 +97,8 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       setLoops(list);
       const results = await Promise.all(
         list.map((lp) =>
-          invoke<{ runs: { status: string; started_at: string }[] }>("list_loop_runs", { workflowId: lp.id, limit: 1 })
-            .then((res) => [lp.id, res.runs.length > 0 ? { status: res.runs[0].status, time: res.runs[0].started_at } : null] as const)
+          invoke<{ status: string; started_at: string }[]>("list_loop_runs", { workflowId: lp.id, limit: 1 })
+            .then((runs) => [lp.id, runs.length > 0 ? { status: runs[0].status, time: runs[0].started_at } : null] as const)
             .catch(() => [lp.id, null] as const)
         ),
       );
@@ -173,13 +173,19 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         return { ...n, position: pos };
       });
       await invoke("save_loop", {
-        id: created.id,
-        name: tpl.name,
-        description: tpl.description,
-        nodes,
-        edges: dtoEdges,
-        variables: {},
-        icon: null,
+        data: {
+          id: created.id,
+          name: tpl.name,
+          description: tpl.description,
+          nodes,
+          edges: dtoEdges,
+          variables: {},
+          icon: null,
+          enabled: false,
+          ai_callable: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
       });
       setEditingId(created.id);
       setIsEditing(true);
@@ -244,13 +250,19 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         description: lp.description,
       });
       await invoke("save_loop", {
-        id: created.id,
-        name: created.name,
-        description: lp.description,
-        nodes: lp.nodes,
-        edges: lp.edges,
-        variables: lp.variables,
-        icon: lp.icon ?? null,
+        data: {
+          id: created.id,
+          name: created.name,
+          description: lp.description,
+          nodes: lp.nodes,
+          edges: lp.edges,
+          variables: lp.variables,
+          icon: lp.icon ?? null,
+          enabled: lp.enabled,
+          ai_callable: lp.ai_callable,
+          created_at: lp.created_at,
+          updated_at: new Date().toISOString(),
+        },
       });
       showToast(t("loop.duplicated"), { tone: "success" });
       void refresh();
