@@ -1,4 +1,4 @@
-import { TextField, SelectField, cfgStr } from "./ConfigField";
+import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 
 interface ConfigProps {
@@ -12,15 +12,19 @@ const OPERATION_OPTIONS = [
   { value: "remove_bg", label: "移除背景" },
   { value: "upscale", label: "超分辨率" },
   { value: "style_transfer", label: "风格迁移" },
+  { value: "face_swap", label: "换脸" },
   { value: "variation", label: "生成变体" },
+  { value: "colorize", label: "上色" },
+  { value: "restore", label: "修复/增强" },
 ];
 
 export default function ImageEditConfig({ config, onChange }: ConfigProps) {
+  const op = cfgStr(config, "operation", "inpaint");
   return (
     <>
       <SelectField
         label="操作类型"
-        value={cfgStr(config, "operation", "inpaint")}
+        value={op}
         onChange={(v) => onChange({ ...config, operation: v })}
         options={OPERATION_OPTIONS}
       />
@@ -30,12 +34,14 @@ export default function ImageEditConfig({ config, onChange }: ConfigProps) {
         onChange={(v) => onChange({ ...config, input_image: v })}
         placeholder="图片路径或 {{var}}"
       />
-      <TextField
-        label="蒙版图片"
-        value={cfgStr(config, "mask_image")}
-        onChange={(v) => onChange({ ...config, mask_image: v })}
-        placeholder="用于 inpaint/outpaint 的蒙版（可选）"
-      />
+      {(op === "inpaint" || op === "outpaint") && (
+        <TextField
+          label="蒙版图片"
+          value={cfgStr(config, "mask_image")}
+          onChange={(v) => onChange({ ...config, mask_image: v })}
+          placeholder="蒙版路径或 {{var}}（可选）"
+        />
+      )}
       <TextField
         label="编辑提示词"
         value={cfgStr(config, "prompt_template")}
@@ -44,6 +50,16 @@ export default function ImageEditConfig({ config, onChange }: ConfigProps) {
         multiline
         hint="支持 {{var}} 引用上游变量"
       />
+      {(op === "style_transfer" || op === "face_swap" || op === "variation") && (
+        <TextField
+          label="参考图片"
+          value={cfgStr(config, "reference_images")}
+          onChange={(v) => onChange({ ...config, reference_images: v })}
+          multiline
+          placeholder={'["ref_1.jpg", "{{node.image}}"]'}
+          hint="JSON 数组，风格参考或人脸参考图"
+        />
+      )}
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}
         model={cfgStr(config, "model")}
@@ -51,6 +67,28 @@ export default function ImageEditConfig({ config, onChange }: ConfigProps) {
         onModelChange={(v) => onChange({ ...config, model: v })}
         mediaType="image"
       />
+      {(op === "style_transfer" || op === "face_swap" || op === "inpaint") && (
+        <NumberField
+          label="强度"
+          value={cfgNum(config, "strength")}
+          onChange={(v) => onChange({ ...config, strength: v })}
+          min={0}
+          max={1}
+          step={0.05}
+          placeholder="0.8"
+        />
+      )}
+      {op === "upscale" && (
+        <SelectField
+          label="放大倍数"
+          value={cfgStr(config, "scale", "2")}
+          onChange={(v) => onChange({ ...config, scale: v })}
+          options={[
+            { value: "2", label: "2×" },
+            { value: "4", label: "4×" },
+          ]}
+        />
+      )}
     </>
   );
 }

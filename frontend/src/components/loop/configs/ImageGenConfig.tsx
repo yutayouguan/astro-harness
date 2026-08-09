@@ -6,11 +6,17 @@ interface ConfigProps {
   onChange: (config: Record<string, unknown>) => void;
 }
 
+const MODE_OPTIONS = [
+  { value: "text_to_image", label: "文生图" },
+  { value: "image_to_image", label: "图生图 (风格/变体)" },
+  { value: "face_swap", label: "换脸" },
+];
+
 const SIZE_OPTIONS = [
-  { value: "1024x1024", label: "1024x1024" },
-  { value: "1792x1024", label: "1792x1024" },
-  { value: "1024x1792", label: "1024x1792" },
-  { value: "512x512", label: "512x512" },
+  { value: "1024x1024", label: "1024×1024" },
+  { value: "1792x1024", label: "1792×1024" },
+  { value: "1024x1792", label: "1024×1792" },
+  { value: "512x512", label: "512×512" },
 ];
 
 const STYLE_OPTIONS = [
@@ -19,14 +25,21 @@ const STYLE_OPTIONS = [
 ];
 
 const OUTPUT_FORMAT_OPTIONS = [
-  { value: "png", label: "png" },
-  { value: "webp", label: "webp" },
-  { value: "b64_json", label: "b64_json" },
+  { value: "png", label: "PNG" },
+  { value: "webp", label: "WebP" },
+  { value: "jpg", label: "JPG" },
 ];
 
 export default function ImageGenConfig({ config, onChange }: ConfigProps) {
+  const mode = cfgStr(config, "mode", "text_to_image");
   return (
     <>
+      <SelectField
+        label="生成模式"
+        value={mode}
+        onChange={(v) => onChange({ ...config, mode: v })}
+        options={MODE_OPTIONS}
+      />
       <TextField
         label="生成提示词"
         value={cfgStr(config, "prompt_template")}
@@ -42,6 +55,34 @@ export default function ImageGenConfig({ config, onChange }: ConfigProps) {
         onModelChange={(v) => onChange({ ...config, model: v })}
         mediaType="image"
       />
+      {(mode === "image_to_image" || mode === "face_swap") && (
+        <TextField
+          label="源图片"
+          value={cfgStr(config, "source_image")}
+          onChange={(v) => onChange({ ...config, source_image: v })}
+          placeholder="图片路径或 {{var}}"
+          hint="要转换/换脸的原始图片"
+        />
+      )}
+      <TextField
+        label="参考图片"
+        value={cfgStr(config, "reference_images")}
+        onChange={(v) => onChange({ ...config, reference_images: v })}
+        multiline
+        placeholder={'["ref_1.jpg", "{{node.image}}"]'}
+        hint="JSON 数组，风格参考或人脸参考图"
+      />
+      {(mode === "image_to_image" || mode === "face_swap") && (
+        <NumberField
+          label="相似度强度"
+          value={cfgNum(config, "strength")}
+          onChange={(v) => onChange({ ...config, strength: v })}
+          min={0}
+          max={1}
+          step={0.05}
+          placeholder="0.8"
+        />
+      )}
       <SelectField
         label="尺寸"
         value={cfgStr(config, "size", "1024x1024")}
