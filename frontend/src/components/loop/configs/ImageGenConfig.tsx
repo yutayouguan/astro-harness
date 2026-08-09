@@ -54,6 +54,7 @@ export default function ImageGenConfig({ config, onChange, upstreamOutputs, aiPr
         task="图片生成提示词"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
       <ProviderModelSelect
         providerId={cfgStr(config, "provider_id")}

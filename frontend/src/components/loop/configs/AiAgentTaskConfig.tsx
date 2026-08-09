@@ -124,10 +124,11 @@ export default function AiAgentTaskConfig({ config, onChange, upstreamOutputs, a
         onChange={(v) => onChange({ ...config, prompt_template: v })}
         multiline
         placeholder="描述你希望智能体执行的操作。用 {{text}} 引用上一步的输出。"
-        hint="不写 {{}} 时，上游的输出会自动接到指令末尾；想控制位置就用 {{}}（例如 {{text}}）。"
+        hint="输入 {{ 自动补全上游变量。不写 {{}} 时上游输出自动接到指令末尾。"
         task="AI 智能体指令"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={upstream}
       />
 
       {/* 供应商 + 模型 */}

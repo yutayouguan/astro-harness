@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, Variable, X, Sparkles, Eye, EyeOff, Loader2 } from "lucide-react";
 import type { UpstreamOutput, MediaType } from "./upstreamOutputs";
 import { varRef } from "./upstreamOutputs";
+import AutocompleteTextarea from "./AutocompleteTextarea";
 
 interface TextFieldProps {
   label: string;
@@ -14,13 +15,25 @@ interface TextFieldProps {
   placeholder?: string;
   multiline?: boolean;
   hint?: string;
+  /** 传入上游输出时，输入 {{ 自动弹出变量补全 */
+  upstream?: UpstreamOutput[];
 }
 
-export function TextField({ label, value, onChange, placeholder, multiline, hint }: TextFieldProps) {
+export function TextField({ label, value, onChange, placeholder, multiline, hint, upstream }: TextFieldProps) {
+  const hasUpstream = upstream && upstream.length > 0;
   return (
     <label className="loop-config-field">
       <span className="loop-config-label">{label}</span>
-      {multiline ? (
+      {hasUpstream ? (
+        <AutocompleteTextarea
+          value={value}
+          onChange={onChange}
+          upstream={upstream}
+          placeholder={placeholder}
+          multiline={multiline}
+          rows={multiline ? 4 : undefined}
+        />
+      ) : multiline ? (
         <textarea
           className="loop-config-textarea"
           value={value}
@@ -177,12 +190,14 @@ interface AiAssistFieldProps {
   /** 辅助模型名称（可选） */
   aiModel?: string;
   multiline?: boolean;
+  /** 传入上游输出时，输入 {{ 自动弹出变量补全 */
+  upstream?: UpstreamOutput[];
 }
 
 /** 带 AI 润色/生成按钮的文本输入 */
 export function AiAssistField({
   label, value, onChange, placeholder, hint, task,
-  aiProviderId, aiModel, multiline = true,
+  aiProviderId, aiModel, multiline = true, upstream,
 }: AiAssistFieldProps) {
   const [loading, setLoading] = useState(false);
 
@@ -218,7 +233,16 @@ export function AiAssistField({
           <span>{value.trim() ? "润色" : "AI 生成"}</span>
         </button>
       </div>
-      {multiline ? (
+      {upstream && upstream.length > 0 ? (
+        <AutocompleteTextarea
+          value={value}
+          onChange={onChange}
+          upstream={upstream}
+          placeholder={placeholder}
+          multiline={multiline}
+          rows={multiline ? 4 : undefined}
+        />
+      ) : multiline ? (
         <textarea
           className="loop-config-textarea"
           value={value}

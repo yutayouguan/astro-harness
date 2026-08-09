@@ -59,6 +59,7 @@ export default function ImageEditConfig({ config, onChange, upstreamOutputs, aiP
         task="图片编辑提示词"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
       {(op === "style_transfer" || op === "face_swap" || op === "variation") && (
         <FileArrayField

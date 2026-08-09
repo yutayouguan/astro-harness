@@ -24,6 +24,7 @@ export default function KnowledgeRetrievalConfig({ config, onChange, upstreamOut
         placeholder="输入检索查询…"
         multiline
         hint="支持 {{var}} 引用上游变量"
+        upstream={up}
       />
       <FilePathField
         label="知识库路径"

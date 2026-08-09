@@ -1563,6 +1563,22 @@
   color: var(--ink);
 }
 
+/* 校验 badge */
+.loop-config-validation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent);
+  color: var(--error, #ef4444);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+  cursor: help;
+  flex-shrink: 0;
+}
+
 .loop-config-node-actions {
   display: flex;
   gap: 2px;
@@ -2012,6 +2028,70 @@
 .se-tag-remove:hover {
   opacity: 1;
   background: color-mix(in srgb, var(--tone, #6366f1) 20%, transparent);
+}
+
+/* ── 模板变量自动补全 ── */
+
+.ac-wrap {
+  position: relative;
+}
+.ac-dropdown {
+  position: fixed;
+  z-index: 200;
+  min-width: 280px;
+  max-width: 400px;
+  max-height: 240px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  padding: 4px;
+}
+.ac-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink);
+  transition: background 0.08s;
+}
+.ac-item:hover, .ac-item.is-selected {
+  background: color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+}
+.ac-item-node {
+  font-weight: 600;
+  color: var(--tone, #6366f1);
+  font-size: 12px;
+}
+.ac-item-dot {
+  color: var(--ink-tertiary);
+}
+.ac-item-field {
+  flex: 1;
+  font-size: 12px;
+}
+.ac-item-ref {
+  font-size: 10px;
+  font-family: "SF Mono", "Menlo", monospace;
+  color: var(--ink-tertiary);
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.ac-hint {
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
 }
 
 /* hint text */

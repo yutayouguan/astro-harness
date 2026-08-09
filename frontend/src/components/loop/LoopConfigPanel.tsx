@@ -1,14 +1,15 @@
 /** 右侧节点配置面板 — 配置/运行日志 tabs + 通用底部区域 */
 
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Braces, Trash2 } from "lucide-react";
+import { AlertCircle, Braces, Trash2 } from "lucide-react";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import * as LucideIcons from "lucide-react";
 import type { NodeType } from "./loopTypes";
 import { getNodeMeta } from "./loopTypes";
 import type { UpstreamOutput } from "./configs/upstreamOutputs";
+import { validateNodeConfig } from "./configs/nodeValidation";
 import ErrorHandlingConfig from "./configs/ErrorHandlingConfig";
 
 // ── Lazy imports for all 29 config forms ──
@@ -229,6 +230,10 @@ export default function LoopConfigPanel({
   const meta = getNodeMeta(nodeType);
   const ConfigForm = CONFIG_MAP[nodeType];
   type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
+  const validationErrors = useMemo(
+    () => validateNodeConfig(nodeType, config),
+    [nodeType, config],
+  );
   const NodeIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
 
   return (
@@ -267,6 +272,12 @@ export default function LoopConfigPanel({
               )}
               <span className="loop-config-node-type">{meta.label}</span>
             </div>
+            {validationErrors.length > 0 && (
+              <span className="loop-config-validation-badge" title={validationErrors.map((e) => e.message).join("\n")}>
+                <AlertCircle size={13} />
+                {validationErrors.length}
+              </span>
+            )}
             <div className="loop-config-node-actions">
               <button className={`loop-icon-btn${showJson ? " is-active" : ""}`} title={t("loop.viewJson")} onClick={() => setShowJson((v) => !v)}>
                 <Braces size={14} />

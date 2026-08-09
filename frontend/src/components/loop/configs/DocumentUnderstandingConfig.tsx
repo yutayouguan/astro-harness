@@ -73,6 +73,7 @@ export default function DocumentUnderstandingConfig({ config, onChange, upstream
         task="文档提取指令"
         aiProviderId={aiProviderId}
         aiModel={aiModel}
+        upstream={up}
       />
     </>
   );
