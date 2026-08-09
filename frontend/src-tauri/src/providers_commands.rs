@@ -1111,7 +1111,7 @@ fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
 fn default_video_model_for_kind(kind: &ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Google => "veo-3.1",
-        ProviderKind::Minimax => "MiniMax-Hailuo-2.3",
+        ProviderKind::Minimax => "MiniMax-H3",
         _ => "",
     }
 }

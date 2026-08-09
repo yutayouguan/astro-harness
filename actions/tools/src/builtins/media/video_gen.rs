@@ -6,10 +6,6 @@ use home::{generated_dir, GeneratedKind};
 use providers::media_http::{
     default_video_model, google_native_generate_video, VideoGenExtras, VideoImagePart,
 };
-use providers::minimax::video_http::{
-    minimax_create_video, minimax_download_video, minimax_query_video, MiniMaxVideoRequest,
-    VideoSubjectRef, VideoTaskStatus,
-};
 use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -26,13 +22,13 @@ pub struct VideoGenArgs {
     /// Short title for the filename; default "Video".
     #[serde(default)]
     pub title: Option<String>,
-    /// Aspect ratio, e.g. `16:9` / `9:16`.
+    /// Aspect ratio, e.g. `16:9` / `9:16` / `1:1` / `4:3`.
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// Duration in seconds (forced to 8 for extend/refs/last_frame/1080p/4K).
+    /// Duration in seconds. MiniMax H3: 4-15; legacy: 6 or 10. (forced to 8 for extend/refs/last_frame/1080p/4K on Google Veo).
     #[serde(default)]
     pub duration_seconds: Option<u32>,
-    /// Output resolution: `720p` / `1080p` / `4K`.
+    /// Output resolution: MiniMax H3: `768P` / `2K`; legacy: `720P` / `768P` / `1080P`; Google: `720p` / `1080p` / `4K`.
     #[serde(default)]
     pub resolution: Option<String>,
     /// Negative prompt (optional; ignored by native Veo).
@@ -49,7 +45,7 @@ pub struct VideoGenArgs {
     /// Extend from prior operation id.
     #[serde(default)]
     pub extend_video_id: Option<String>,
-    /// Reference image paths (max 3; incompatible with image/last_frame).
+    /// Reference image paths (Google Veo: max 3; MiniMax H3: max 9).
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
     /// Single reference image path (merged into reference_images).
@@ -66,12 +62,21 @@ pub struct VideoGenArgs {
     pub person_generation: Option<String>,
     #[serde(default)]
     pub seed: Option<i64>,
-    /// Subject reference image path (MiniMax S2V-01: character consistency).
+    /// Subject reference image path (MiniMax legacy S2V: character consistency).
     #[serde(default)]
     pub subject_reference_image: Option<String>,
     /// Disable prompt optimization (MiniMax: more precise control).
     #[serde(default)]
     pub disable_prompt_optimizer: Option<bool>,
+    /// Reference video paths/URLs (MiniMax H3 only, max 3, each 2-15s).
+    #[serde(default)]
+    pub reference_videos: Option<Vec<String>>,
+    /// Reference audio paths/URLs (MiniMax H3 only, max 3, each 2-15s).
+    #[serde(default)]
+    pub reference_audios: Option<Vec<String>>,
+    /// Enable H3 Context-IR prompt enhancement before generation (MiniMax H3 only).
+    #[serde(default)]
+    pub enhance_prompt: Option<bool>,
 }
 
 /// 向注册表登记 `video_gen` 工具。
@@ -400,6 +405,12 @@ async fn dispatch_minimax_video(
     parsed: &VideoGenArgs,
     creds: &crate::context::ImageGenCreds,
 ) -> anyhow::Result<common::ToolOutput> {
+    use providers::minimax::video_http::{
+        is_h3_model, minimax_create_video, minimax_download_video, minimax_download_video_url,
+        minimax_enhance_prompt, minimax_query_video, MiniMaxVideoRequest, VideoSubjectRef,
+        VideoTaskStatus,
+    };
+
     let model = if creds.video_model.trim().is_empty() {
         providers::minimax::defaults::DEFAULT_VIDEO_MODEL.to_string()
     } else {
@@ -431,6 +442,8 @@ async fn dispatch_minimax_video(
         Ok(format!("data:{mime};base64,{b64}"))
     };
 
+    let h3 = is_h3_model(&model);
+
     let first_frame = parsed
         .image
         .as_deref()
@@ -447,21 +460,72 @@ async fn dispatch_minimax_video(
         .map(encode_image)
         .transpose()?;
 
-    let subject_ref = parsed
-        .subject_reference_image
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|p| -> anyhow::Result<Vec<VideoSubjectRef>> {
-            let encoded = encode_image(p)?;
-            Ok(vec![VideoSubjectRef {
-                ref_type: "character".to_string(),
-                images: vec![encoded],
-            }])
-        })
-        .transpose()?;
+    // H3 参考图片（从 reference_images 和 reference_image 合并）
+    let mut ref_images: Vec<String> = Vec::new();
+    if let Some(ref imgs) = parsed.reference_images {
+        for img in imgs {
+            let trimmed = img.trim();
+            if !trimmed.is_empty() {
+                ref_images.push(encode_image(trimmed)?);
+            }
+        }
+    }
+    if let Some(ref img) = parsed.reference_image {
+        let trimmed = img.trim();
+        if !trimmed.is_empty() {
+            ref_images.push(encode_image(trimmed)?);
+        }
+    }
 
-    let duration = parsed.duration_seconds.unwrap_or(6).clamp(6, 10);
+    // H3 参考视频
+    let ref_videos: Vec<String> = parsed
+        .reference_videos
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|v| {
+            let t = v.trim();
+            if t.is_empty() { None } else { Some(t.to_string()) }
+        })
+        .collect();
+
+    // H3 参考音频
+    let ref_audios: Vec<String> = parsed
+        .reference_audios
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|a| {
+            let t = a.trim();
+            if t.is_empty() { None } else { Some(t.to_string()) }
+        })
+        .collect();
+
+    // 旧版 S2V 主体参考（非 H3 时使用）
+    let subject_ref = if !h3 {
+        parsed
+            .subject_reference_image
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|p| -> anyhow::Result<Vec<VideoSubjectRef>> {
+                let encoded = encode_image(p)?;
+                Ok(vec![VideoSubjectRef {
+                    ref_type: "character".to_string(),
+                    images: vec![encoded],
+                }])
+            })
+            .transpose()?
+    } else {
+        None
+    };
+
+    let duration = if h3 {
+        parsed.duration_seconds.unwrap_or(6).clamp(4, 15)
+    } else {
+        parsed.duration_seconds.unwrap_or(6).clamp(6, 10)
+    };
+
     let resolution = parsed
         .resolution
         .as_deref()
@@ -470,17 +534,34 @@ async fn dispatch_minimax_video(
         .unwrap_or("768P")
         .to_string();
 
-    let req = MiniMaxVideoRequest {
+    let ratio = parsed.aspect_ratio.clone();
+
+    let mut req = MiniMaxVideoRequest {
         model: model.clone(),
         prompt: parsed.prompt.clone(),
         first_frame_image: first_frame,
         last_frame_image: last_frame,
+        reference_images: ref_images,
+        reference_videos: ref_videos,
+        reference_audios: ref_audios,
         subject_reference: subject_ref,
         duration,
         resolution,
+        ratio,
         prompt_optimizer: !parsed.disable_prompt_optimizer.unwrap_or(false),
         ..MiniMaxVideoRequest::default()
     };
+
+    // H3 Context-IR 提示词增强
+    if h3 && parsed.enhance_prompt.unwrap_or(false) {
+        eprintln!("[minimax video] H3 Context-IR 提示词增强中…");
+        if let Ok(ir) = minimax_enhance_prompt(&reqwest::Client::new(), &config, &req).await {
+            if !ir.enhanced_prompt.is_empty() {
+                eprintln!("[minimax video] 提示词增强完成");
+                req.prompt = ir.enhanced_prompt;
+            }
+        }
+    }
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(600))
@@ -491,18 +572,21 @@ async fn dispatch_minimax_video(
     eprintln!("[minimax video] 任务已创建: {task_id}，轮询中…");
 
     let mut poll_count = 0u32;
-    let max_polls = 60u32;
+    let max_polls = 90u32; // H3 最长 15s 可能需要更久
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         poll_count += 1;
-        let result = minimax_query_video(&client, &config, &task_id).await?;
+        let result = minimax_query_video(&client, &config, &task_id, &model).await?;
         match result.status {
             VideoTaskStatus::Success => {
-                let file_id = result
-                    .file_id
-                    .ok_or_else(|| anyhow::anyhow!("视频生成成功但缺少 file_id"))?;
                 eprintln!("[minimax video] 视频生成完成，正在下载…");
-                let video = minimax_download_video(&client, &config, &file_id).await?;
+                let video = if let Some(ref url) = result.download_url {
+                    minimax_download_video_url(&client, url).await?
+                } else if let Some(ref file_id) = result.file_id {
+                    minimax_download_video(&client, &config, file_id).await?
+                } else {
+                    anyhow::bail!("视频生成成功但无下载途径");
+                };
 
                 let dir = generated_dir(&ctx.workspace_dir, GeneratedKind::Videos);
                 std::fs::create_dir_all(&dir)?;
@@ -526,8 +610,8 @@ async fn dispatch_minimax_video(
                     "视频已生成",
                 ));
             }
-            VideoTaskStatus::Fail => {
-                anyhow::bail!("MiniMax 视频生成失败 (task_id={task_id})");
+            VideoTaskStatus::Fail | VideoTaskStatus::Cancelled => {
+                anyhow::bail!("MiniMax 视频生成失败 (task_id={task_id}, status={:?})", result.status);
             }
             _ => {
                 if poll_count >= max_polls {

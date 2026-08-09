@@ -145,10 +145,50 @@ pub async fn text_to_speech(
     }
 }
 
-/// 视频生成。
+/// 视频生成扩展选项。
+#[derive(Debug, Clone, Default)]
+pub struct VideoGenOptions {
+    pub prompt: String,
+    /// 首帧图片（data URI 或 URL）。
+    pub first_frame_image: Option<String>,
+    /// 末帧图片（data URI 或 URL）。
+    pub last_frame_image: Option<String>,
+    /// H3 参考图片 URL（最多 9 张）。
+    pub reference_images: Vec<String>,
+    /// H3 参考视频 URL（最多 3 个）。
+    pub reference_videos: Vec<String>,
+    /// H3 参考音频 URL（最多 3 个）。
+    pub reference_audios: Vec<String>,
+    /// 时长（秒）。
+    pub duration: Option<u32>,
+    /// 分辨率：`"768P"` / `"2K"` / `"720P"` / `"1080P"`。
+    pub resolution: Option<String>,
+    /// 画面比例：`"16:9"` / `"9:16"` 等。
+    pub ratio: Option<String>,
+    /// 是否启用提示词优化（默认 true）。
+    pub prompt_optimizer: Option<bool>,
+    /// 是否先做 H3 Context-IR 提示词增强。
+    pub enhance_prompt: bool,
+}
+
+/// 视频生成（简单接口，只传 prompt）。
 pub async fn generate_video(
     provider: &str,
     prompt: &str,
+    config: &ProviderConfig,
+) -> Result<GeneratedVideo> {
+    generate_video_with_options(
+        provider,
+        &VideoGenOptions { prompt: prompt.to_string(), ..Default::default() },
+        config,
+    )
+    .await
+}
+
+/// 视频生成（完整接口，支持 H3 全部特性）。
+pub async fn generate_video_with_options(
+    provider: &str,
+    options: &VideoGenOptions,
     config: &ProviderConfig,
 ) -> Result<GeneratedVideo> {
     let provider = normalize_provider_id(provider);
@@ -163,22 +203,74 @@ pub async fn generate_video(
     let client = shared_http_client();
     match provider {
         "minimax" => {
-            let req = crate::minimax::video_http::MiniMaxVideoRequest {
-                prompt: prompt.to_string(),
-                model: cfg.model.clone(),
+            let model_name = cfg.model.clone();
+            let duration = options.duration.unwrap_or(6);
+            let resolution = options
+                .resolution
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("768P")
+                .to_string();
+
+            let mut req = crate::minimax::video_http::MiniMaxVideoRequest {
+                prompt: options.prompt.clone(),
+                model: model_name.clone(),
+                first_frame_image: options.first_frame_image.clone(),
+                last_frame_image: options.last_frame_image.clone(),
+                reference_images: options.reference_images.clone(),
+                reference_videos: options.reference_videos.clone(),
+                reference_audios: options.reference_audios.clone(),
+                duration,
+                resolution,
+                ratio: options.ratio.clone(),
+                prompt_optimizer: options.prompt_optimizer.unwrap_or(true),
                 ..Default::default()
             };
-            let task_id = crate::minimax::video_http::minimax_create_video(&client, &cfg, &req).await?;
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10 * 60);
+
+            // H3 Context-IR 提示词增强
+            if options.enhance_prompt
+                && crate::minimax::video_http::is_h3_model(&model_name)
+            {
+                if let Ok(ir) =
+                    crate::minimax::video_http::minimax_enhance_prompt(&client, &cfg, &req).await
+                {
+                    if !ir.enhanced_prompt.is_empty() {
+                        req.prompt = ir.enhanced_prompt;
+                    }
+                }
+            }
+
+            let task_id =
+                crate::minimax::video_http::minimax_create_video(&client, &cfg, &req).await?;
+            let deadline =
+                std::time::Instant::now() + std::time::Duration::from_secs(10 * 60);
             loop {
                 if std::time::Instant::now() > deadline {
                     anyhow::bail!("MiniMax 视频生成超时（task_id={task_id}）");
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-                let status = crate::minimax::video_http::minimax_query_video(&client, &cfg, &task_id).await?;
+                let status = crate::minimax::video_http::minimax_query_video(
+                    &client, &cfg, &task_id, &model_name,
+                )
+                .await?;
                 if status.status == crate::minimax::video_http::VideoTaskStatus::Success {
-                    if let Some(file_id) = status.file_id {
-                        let result = crate::minimax::video_http::minimax_download_video(&client, &cfg, &file_id).await?;
+                    if let Some(ref url) = status.download_url {
+                        let result = crate::minimax::video_http::minimax_download_video_url(
+                            &client, url,
+                        )
+                        .await?;
+                        break Ok(GeneratedVideo {
+                            data: result.data,
+                            mime_type: result.mime_type,
+                            width: result.width,
+                            height: result.height,
+                        });
+                    }
+                    if let Some(ref file_id) = status.file_id {
+                        let result = crate::minimax::video_http::minimax_download_video(
+                            &client, &cfg, file_id,
+                        )
+                        .await?;
                         break Ok(GeneratedVideo {
                             data: result.data,
                             mime_type: result.mime_type,
@@ -186,7 +278,7 @@ pub async fn generate_video(
                             height: status.video_height.unwrap_or(0),
                         });
                     }
-                    anyhow::bail!("MiniMax 视频生成成功但无 file_id");
+                    anyhow::bail!("MiniMax 视频生成成功但无下载途径");
                 }
                 if !status.status.is_pending() {
                     anyhow::bail!("MiniMax 视频生成失败: {:?}", status.status);

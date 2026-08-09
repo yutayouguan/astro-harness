@@ -16,7 +16,7 @@ pub const DEFAULT_IMAGE_MODEL: &str = "image-01";
 pub const DEFAULT_TTS_MODEL: &str = "speech-2.8-hd";
 
 /// 默认视频生成模型。
-pub const DEFAULT_VIDEO_MODEL: &str = "MiniMax-Hailuo-2.3";
+pub const DEFAULT_VIDEO_MODEL: &str = "MiniMax-H3";
 
 /// 默认音乐生成模型。
 pub const DEFAULT_MUSIC_MODEL: &str = "music-3.0";

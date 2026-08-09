@@ -136,6 +136,7 @@ impl VideoGenModel for MiniMaxVideoModel {
             },
             ..Default::default()
         };
+        let model_name = self.0.model().to_string();
         let task_id =
             crate::minimax::video_http::minimax_create_video(self.0.http(), &provider_config, &req).await?;
 
@@ -147,14 +148,23 @@ impl VideoGenModel for MiniMaxVideoModel {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
             let status =
-                crate::minimax::video_http::minimax_query_video(self.0.http(), &provider_config, &task_id)
+                crate::minimax::video_http::minimax_query_video(self.0.http(), &provider_config, &task_id, &model_name)
                     .await?;
             if status.status == crate::minimax::video_http::VideoTaskStatus::Success {
-                if let Some(file_id) = status.file_id {
+                if let Some(ref url) = status.download_url {
+                    let result = crate::minimax::video_http::minimax_download_video_url(self.0.http(), url).await?;
+                    return Ok(GeneratedVideo {
+                        data: result.data,
+                        mime_type: result.mime_type,
+                        width: result.width,
+                        height: result.height,
+                    });
+                }
+                if let Some(ref file_id) = status.file_id {
                     let result = crate::minimax::video_http::minimax_download_video(
                         self.0.http(),
                         &provider_config,
-                        &file_id,
+                        file_id,
                     )
                     .await?;
                     return Ok(GeneratedVideo {
@@ -164,7 +174,7 @@ impl VideoGenModel for MiniMaxVideoModel {
                         height: status.video_height.unwrap_or(result.height),
                     });
                 }
-                anyhow::bail!("MiniMax 视频生成成功但无 file_id");
+                anyhow::bail!("MiniMax 视频生成成功但无下载途径");
             }
             if !status.status.is_pending() {
                 anyhow::bail!("MiniMax 视频生成失败: {:?}", status.status);

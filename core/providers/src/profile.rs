@@ -358,7 +358,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_vision_model: "MiniMax-M3",
         supports_stream_usage: true,
         default_tts_model: "speech-2.8-hd",
-        default_video_model: "MiniMax-Hailuo-2.3",
+        default_video_model: "MiniMax-H3",
         default_music_model: "music-3.0",
         default_asr_model: "speech-asr-v2.2",
         default_embedding_model: "minimax-embedding-v3",

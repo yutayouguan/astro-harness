@@ -7,6 +7,34 @@ use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
 use crate::model::WorkflowNode;
 
+/// 从节点 config 中解析字符串数组字段（支持 JSON 数组或逗号分隔字符串）。
+fn parse_string_array(
+    config: &serde_json::Value,
+    key: &str,
+    ctx: &VariableContext,
+) -> Vec<String> {
+    let Some(val) = config.get(key) else { return vec![] };
+    if let Some(arr) = val.as_array() {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| ctx.interpolate(s)))
+            .filter(|s| !s.trim().is_empty())
+            .collect()
+    } else if let Some(s) = val.as_str() {
+        let interpolated = ctx.interpolate(s);
+        if let Ok(arr) = serde_json::from_str::<Vec<String>>(&interpolated) {
+            arr.into_iter().filter(|s| !s.trim().is_empty()).collect()
+        } else {
+            interpolated
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
+    } else {
+        vec![]
+    }
+}
+
 fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
     let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("openai");
     let model = node.config.get("model").and_then(|v| v.as_str()).unwrap_or("");
@@ -86,9 +114,64 @@ impl NodeExecutor for VideoGenExec {
         }
 
         let (provider_id, config) = build_media_config(node)?;
-        let result = providers::dispatch::generate_video(&provider_id, &prompt, &config).await?;
+
+        // 从节点 config 读取所有视频生成参数
+        let first_frame = node.config.get("first_frame_image")
+            .and_then(|v| v.as_str())
+            .map(|s| ctx.interpolate(s))
+            .filter(|s| !s.trim().is_empty());
+        let last_frame = node.config.get("last_frame_image")
+            .and_then(|v| v.as_str())
+            .map(|s| ctx.interpolate(s))
+            .filter(|s| !s.trim().is_empty());
+
+        let ref_images = parse_string_array(&node.config, "reference_images", ctx);
+        let ref_videos = parse_string_array(&node.config, "reference_videos", ctx);
+        let ref_audios = parse_string_array(&node.config, "reference_audios", ctx);
+
+        let duration = node.config.get("duration_seconds")
+            .and_then(|v| v.as_u64())
+            .map(|d| d as u32);
+        let resolution = node.config.get("resolution")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .filter(|s| !s.trim().is_empty());
+        let ratio = node.config.get("aspect_ratio")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .filter(|s| !s.trim().is_empty());
+        let prompt_optimizer = node.config.get("prompt_optimizer")
+            .and_then(|v| v.as_bool());
+        let enhance_prompt = node.config.get("enhance_prompt")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let options = providers::dispatch::VideoGenOptions {
+            prompt,
+            first_frame_image: first_frame,
+            last_frame_image: last_frame,
+            reference_images: ref_images,
+            reference_videos: ref_videos,
+            reference_audios: ref_audios,
+            duration,
+            resolution,
+            ratio,
+            prompt_optimizer,
+            enhance_prompt,
+        };
+
+        let result = providers::dispatch::generate_video_with_options(
+            &provider_id, &options, &config,
+        ).await?;
+
+        let artifacts_dir = home::default_memory_dir().join("artifacts");
+        std::fs::create_dir_all(&artifacts_dir)?;
+        let filename = format!("video_{}.mp4", chrono::Local::now().format("%Y%m%d_%H%M%S"));
+        let path = artifacts_dir.join(&filename);
+        std::fs::write(&path, &result.data)?;
 
         Ok(NodeResult::Success(serde_json::json!({
+            "path": path.to_string_lossy(),
             "mime_type": result.mime_type,
             "width": result.width,
             "height": result.height,

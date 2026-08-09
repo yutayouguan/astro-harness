@@ -208,7 +208,7 @@ const MEDIA_MODEL_DEFAULTS: Record<
   },
   minimax: {
     image: "image-01",
-    video: "MiniMax-Hailuo-2.3",
+    video: "MiniMax-H3",
     tts: "speech-2.8-hd",
     music: "music-3.0",
     vision: "",
