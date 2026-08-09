@@ -10,8 +10,11 @@ import {
   Power,
   Bot,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import type { LoopDto } from "./loopTypes";
 import { parseLoopIcon } from "./loopTypes";
+import { LOOP_TEMPLATES, type LoopTemplate } from "./loopTemplates";
+import { layoutNodes } from "./loopLayout";
 import LoopIcon from "./LoopIcon";
 import LoopEditor from "./LoopEditor";
 import LoopPreview from "./LoopPreview";
@@ -81,6 +84,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<LoopView>(readLoopView);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const changeView = (v: LoopView) => {
     setViewMode(v);
@@ -138,6 +142,48 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       });
       setEditingId(created.id);
       setIsEditing(true);
+      onCollapseSidebar?.();
+      void refresh();
+    } catch (e) {
+      showToast(String(e), { tone: "error" });
+    }
+  };
+
+  const handleCreateFromTemplate = async (tpl: LoopTemplate) => {
+    try {
+      const created = await invoke<LoopDto>("create_loop", {
+        name: tpl.name,
+        description: tpl.description,
+      });
+      const dtoNodes = tpl.nodes.map((n) => ({
+        ...n,
+        position: { x: 0, y: 0 },
+        disabled: false,
+      }));
+      const dtoEdges = tpl.edges.map((e, i) => ({
+        id: `tpl-edge-${i}`,
+        source: e.source,
+        source_handle: e.source_handle ?? null,
+        target: e.target,
+        target_handle: null,
+      }));
+      const positions = layoutNodes(dtoNodes, dtoEdges);
+      const nodes = dtoNodes.map((n) => {
+        const pos = positions.get(n.id) ?? { x: 0, y: 0 };
+        return { ...n, position: pos };
+      });
+      await invoke("save_loop", {
+        id: created.id,
+        name: tpl.name,
+        description: tpl.description,
+        nodes,
+        edges: dtoEdges,
+        variables: {},
+        icon: null,
+      });
+      setEditingId(created.id);
+      setIsEditing(true);
+      setShowTemplates(false);
       onCollapseSidebar?.();
       void refresh();
     } catch (e) {
@@ -495,12 +541,51 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
             <Upload size={14} />
             <span>{t("loop.import")}</span>
           </button>
-          <button className="loop-btn loop-btn--primary" onClick={handleCreate}>
-            <Plus size={14} />
-            <span>{t("loop.create")}</span>
-          </button>
+          <div className="loop-create-group">
+            <button className="loop-btn loop-btn--primary" onClick={handleCreate}>
+              <Plus size={14} />
+              <span>{t("loop.create")}</span>
+            </button>
+            <button
+              className="loop-btn loop-btn--primary loop-btn--template"
+              onClick={() => setShowTemplates((v) => !v)}
+              title={t("loop.templateTitle")}
+            >
+              <LucideIcons.LayoutTemplate size={14} />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* ── Template picker ── */}
+      {showTemplates && (
+        <div className="loop-template-picker">
+          <div className="loop-template-picker-header">
+            <span>{t("loop.templateTitle")}</span>
+            <button className="loop-icon-btn" onClick={() => setShowTemplates(false)}>
+              <LucideIcons.X size={14} />
+            </button>
+          </div>
+          <div className="loop-template-grid">
+            {LOOP_TEMPLATES.map((tpl) => {
+              const Icon = (LucideIcons as unknown as Record<string, LucideIcons.LucideIcon>)[tpl.icon];
+              return (
+                <button
+                  key={tpl.id}
+                  className="loop-template-card"
+                  onClick={() => void handleCreateFromTemplate(tpl)}
+                >
+                  <span className="loop-template-card-icon">
+                    {Icon && <Icon size={20} />}
+                  </span>
+                  <span className="loop-template-card-name">{tpl.name}</span>
+                  <span className="loop-template-card-desc">{tpl.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Content ── */}
       <div className="loop-content">
