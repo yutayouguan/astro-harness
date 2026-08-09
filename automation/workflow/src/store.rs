@@ -46,12 +46,39 @@ impl WorkflowStore {
 
     fn save(&self, file: &WorkflowsFile) -> Result<()> {
         let path = self.file_path();
+        // 自动备份上一版本（保留最近 5 个备份）
+        if path.exists() {
+            self.rotate_backups(&path);
+        }
         let unique = format!("json.tmp.{}", uuid::Uuid::new_v4());
         let tmp = path.with_extension(unique);
         let data = serde_json::to_string_pretty(file)?;
         fs::write(&tmp, &data).context("写入临时文件失败")?;
         fs::rename(&tmp, &path).context("重命名临时文件失败")?;
         Ok(())
+    }
+
+    fn rotate_backups(&self, path: &std::path::Path) {
+        const MAX_BACKUPS: usize = 5;
+        let backup_dir = self.root.join("backups");
+        if fs::create_dir_all(&backup_dir).is_err() { return; }
+        let ts = Local::now().format("%Y%m%d_%H%M%S");
+        let backup_name = format!("workflows_{}.json", ts);
+        let _ = fs::copy(path, backup_dir.join(&backup_name));
+        // 清理超出数量的旧备份
+        if let Ok(entries) = fs::read_dir(&backup_dir) {
+            let mut files: Vec<_> = entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_name().to_string_lossy().starts_with("workflows_"))
+                .collect();
+            files.sort_by_key(|e| e.file_name());
+            while files.len() > MAX_BACKUPS {
+                if let Some(old) = files.first() {
+                    let _ = fs::remove_file(old.path());
+                }
+                files.remove(0);
+            }
+        }
     }
 
     /// 校验工作流结构合法性

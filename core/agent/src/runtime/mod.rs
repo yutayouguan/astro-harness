@@ -28,7 +28,7 @@ use tools::{dispatch_tool, register_all, DynToolHandler, ToolContext, ToolEntry,
 
 use crate::compression::{
     prune_tool_view,
-    CompressionThrashingGuard, ContextMaintenanceResult, ToolCompressionManager,
+    ContextMaintenanceResult, ToolCompressionManager,
 };
 use crate::prompt::context::{DynamicContext, StaticContext};
 use crate::prompt::hooks::CancelSignal;
@@ -43,6 +43,7 @@ pub(crate) mod turn_budget;
 pub(crate) mod usage;
 mod validate;
 
+pub use turn_budget::MaxDepthError;
 pub use validate::validate_message_order;
 
 /// Agent 运行时配置，控制轮次预算、记忆召回与提示组装策略。
@@ -235,17 +236,17 @@ impl AgentLoop {
 
     /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
     pub fn set_current_turn_id(&mut self, turn_id: impl Into<String>) {
-        self.turn.current_turn_id = Some(turn_id.into());
+        self.turn.set_current_turn_id(turn_id);
     }
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
     pub fn clear_current_turn_id(&mut self) {
-        self.turn.current_turn_id = None;
+        self.turn.clear_current_turn_id();
     }
 
     /// 当前绑定的 turn_id（若有）。
     pub fn current_turn_id(&self) -> Option<&str> {
-        self.turn.current_turn_id.as_deref()
+        self.turn.current_turn_id()
     }
 
     /// 子 Agent 执行调度器。
@@ -289,7 +290,7 @@ impl AgentLoop {
 
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub fn session_turn(&self) -> usize {
-        self.turn.current_turn
+        self.turn.current_turn()
     }
 
     /// 返回可克隆的取消信号，供上层 streaming 或 UI 触发中断。
@@ -324,25 +325,20 @@ impl AgentLoop {
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。
     pub fn is_tool_depth_exhausted(&self) -> bool {
-        self.turn.tool_rounds >= self.config.multi_turn
+        self.turn.is_tool_depth_exhausted(self.config.multi_turn)
     }
 
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
     pub fn begin_user_turn(&mut self) {
-        let prev_rounds = self.turn.tool_rounds;
-        self.turn.tool_rounds = 0;
-        self.turn.turn_wrote_disk = false;
+        let prev_rounds = self.turn.begin_new_turn();
         let compression = memory::load_compression_config(&self.memory.base_dir);
-        self.compression.guard = CompressionThrashingGuard::from_config(&compression);
+        self.compression.reset_for_new_turn(&compression);
         self.compression_policy = Box::new(
             crate::compression::StagedCompressionPolicy::from_config(&compression)
                 .with_context_window(self.context_window()),
         );
-        self.compression.mid_run_handoff = None;
-        self.compression.mid_run_summary_done = false;
-        self.compression.pending_recommend_compact = false;
         self.pending_learning_nudge =
             Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
     }
@@ -387,30 +383,27 @@ impl AgentLoop {
     }
 
     pub fn mid_run_summary_done(&self) -> bool {
-        self.compression.mid_run_summary_done
+        self.compression.mid_run_summary_done()
     }
 
     pub fn mid_run_handoff(&self) -> Option<&str> {
-        self.compression.mid_run_handoff.as_deref()
+        self.compression.mid_run_handoff()
     }
 
     pub fn set_mid_run_handoff(&mut self, text: String) {
-        self.compression.mid_run_handoff = Some(text);
-        self.compression.mid_run_summary_done = true;
+        self.compression.set_mid_run_handoff(text);
     }
 
     pub fn mark_mid_run_summary_skipped(&mut self) {
-        self.compression.mid_run_summary_done = true;
+        self.compression.mark_mid_run_summary_skipped();
     }
 
     pub fn should_recommend_compact(&self) -> bool {
-        self.compression.pending_recommend_compact
+        self.compression.should_recommend_compact()
     }
 
     pub fn take_recommend_compact(&mut self) -> bool {
-        let v = self.compression.pending_recommend_compact;
-        self.compression.pending_recommend_compact = false;
-        v
+        self.compression.take_recommend_compact()
     }
 
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
@@ -435,24 +428,17 @@ impl AgentLoop {
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
     pub fn turn_wrote_disk(&self) -> bool {
-        self.turn.turn_wrote_disk
+        self.turn.turn_wrote_disk()
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
     pub fn increment_tool_round(&mut self) -> Result<(), MaxDepthError> {
-        if self.is_tool_depth_exhausted() {
-            return Err(MaxDepthError {
-                limit: self.config.multi_turn,
-                used: self.turn.tool_rounds,
-            });
-        }
-        self.turn.tool_rounds += 1;
-        Ok(())
+        self.turn.increment_tool_round(self.config.multi_turn)
     }
 
     /// 设置图像生成工具的输出目标路径。
     pub fn set_image_gen_targets(&mut self, targets: tools::ImageGenTargets) {
-        self.model_ctx.image_gen_targets = targets;
+        self.model_ctx.set_image_gen_targets(targets);
     }
 
     /// 配置 LLM 对话凭据，供需要调用 Provider 的内置工具使用。
@@ -463,13 +449,7 @@ impl AgentLoop {
         api_key: &str,
         base_url: &str,
     ) {
-        self.model_ctx.chat_provider = provider.to_string();
-        self.model_ctx.chat_model = model.to_string();
-        self.model_ctx.chat_api_key = api_key.to_string();
-        self.model_ctx.chat_base_url = base_url.to_string();
-        if !provider.trim().is_empty() || !model.trim().is_empty() {
-            self.model_ctx.model_spec = Some(common::ModelSpec::new(provider, model));
-        }
+        self.model_ctx.set_credentials(provider, model, api_key, base_url);
     }
 
     /// Agno 风格主模型入口：`Agent(model=…)`。
@@ -516,21 +496,7 @@ impl AgentLoop {
     ///   请改用已解析的 [`Self::set_chat_targets`]）
     /// - 同 `provider_id` 去重（对齐 `expand_chat_targets`）
     pub fn set_fallback_models(&mut self, specs: &[common::ModelSpec]) {
-        let primary = self.primary_chat_target();
-        let mut chain = vec![primary.clone()];
-        let mut seen = std::collections::HashSet::new();
-        seen.insert(primary.provider_id.clone());
-        for spec in specs.iter().take(common::MAX_CHAT_FALLBACKS * 2) {
-            if chain.len() > common::MAX_CHAT_FALLBACKS {
-                break;
-            }
-            let t = spec.apply_to(&primary);
-            if t.provider_id.trim().is_empty() || !seen.insert(t.provider_id.clone()) {
-                continue;
-            }
-            chain.push(t);
-        }
-        self.model_ctx.chat_targets = chain;
+        self.model_ctx.set_fallback_models(specs);
     }
 
     /// 按角色设置 fallback 链（主聊或辅助任务）。
@@ -571,7 +537,7 @@ impl AgentLoop {
 
     /// 当前主模型声明（若有）。
     pub fn model_spec(&self) -> Option<&common::ModelSpec> {
-        self.model_ctx.model_spec.as_ref()
+        self.model_ctx.model_spec()
     }
 
     fn primary_chat_target(&self) -> common::ChatTarget {
@@ -590,19 +556,12 @@ impl AgentLoop {
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / delegate 共用）。
     pub fn set_chat_targets(&mut self, targets: Vec<common::ChatTarget>) {
-        if let Some(primary) = targets.first() {
-            self.model_ctx.chat_provider = primary.backend_id.clone();
-            self.model_ctx.chat_model = primary.model.clone();
-            self.model_ctx.chat_api_key = primary.api_key.clone();
-            self.model_ctx.chat_base_url = primary.base_url.clone();
-            self.model_ctx.model_spec = Some(common::ModelSpec::new(&primary.backend_id, &primary.model));
-        }
-        self.model_ctx.chat_targets = targets;
+        self.model_ctx.set_chat_targets(targets);
     }
 
     /// 当前聊天 fallback 链。
     pub fn chat_targets(&self) -> &[common::ChatTarget] {
-        &self.model_ctx.chat_targets
+        self.model_ctx.chat_targets()
     }
 
     /// 设置五类辅助任务的已解析目标链（每次 `Chat` 请求由 backend 下传后调用）。
@@ -612,7 +571,7 @@ impl AgentLoop {
         &mut self,
         targets: std::collections::HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>>,
     ) {
-        self.model_ctx.auxiliary_targets = targets;
+        self.model_ctx.set_auxiliary_targets(targets);
     }
 
     /// 返回指定辅助任务的目标链（preferred + 可选 fallback）。
@@ -620,21 +579,7 @@ impl AgentLoop {
     /// 未传输该任务目标时回退当前主 `ChatTarget`（`chat_targets` 的首项，缺失时
     /// 由 `set_chat_credentials` 字段现造一条），保持旧客户端兼容。
     pub fn auxiliary_targets(&self, task: common::AuxiliaryTask) -> Vec<common::ChatTarget> {
-        if let Some(targets) = self.model_ctx.auxiliary_targets.get(&task) {
-            if !targets.is_empty() {
-                return targets.clone();
-            }
-        }
-        match self.model_ctx.chat_targets.first() {
-            Some(primary) => vec![primary.clone()],
-            None => vec![common::ChatTarget {
-                provider_id: String::new(),
-                backend_id: self.model_ctx.chat_provider.clone(),
-                model: self.model_ctx.chat_model.clone(),
-                api_key: self.model_ctx.chat_api_key.clone(),
-                base_url: self.model_ctx.chat_base_url.clone(),
-            }],
-        }
+        self.model_ctx.auxiliary_targets(task)
     }
 
     /// 返回 `(project_memory, user_profile)` 原始 prompt 片段。
@@ -668,23 +613,23 @@ impl AgentLoop {
     }
 
     pub fn chat_api_key(&self) -> &str {
-        &self.model_ctx.chat_api_key
+        self.model_ctx.chat_api_key()
     }
 
     pub fn chat_base_url(&self) -> &str {
-        &self.model_ctx.chat_base_url
+        self.model_ctx.chat_base_url()
     }
 
     pub fn chat_provider(&self) -> &str {
-        &self.model_ctx.chat_provider
+        self.model_ctx.chat_provider()
     }
 
     pub fn chat_model(&self) -> &str {
-        &self.model_ctx.chat_model
+        self.model_ctx.chat_model()
     }
 
     pub fn image_gen_targets(&self) -> &tools::ImageGenTargets {
-        &self.model_ctx.image_gen_targets
+        self.model_ctx.image_gen_targets()
     }
 
     /// 内置与 MCP 工具的注册表只读引用。
@@ -749,7 +694,7 @@ impl AgentLoop {
 
     /// 最近一次记忆召回的格式化文本，已注入动态上下文。
     pub fn recalled_context(&self) -> &str {
-        &self.compression.last_recalled_context
+        self.compression.recalled_context()
     }
 
     /// 生成新的任务 UUID，供上层追踪单次 LLM 请求。
@@ -759,21 +704,17 @@ impl AgentLoop {
 
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub fn is_budget_exhausted(&self) -> bool {
-        self.turn.current_turn >= self.config.max_turns
+        self.turn.is_budget_exhausted(self.config.max_turns)
     }
 
     /// 递增会话轮次计数（每处理一条用户消息调用一次）。
     pub fn increment_turn(&mut self) {
-        self.turn.current_turn += 1;
+        self.turn.increment_turn();
     }
 
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
     pub fn set_context_window(&mut self, window: u32) {
-        self.model_ctx.context_window = if window == 0 {
-            crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW
-        } else {
-            window
-        };
+        self.model_ctx.set_context_window(window);
     }
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
@@ -791,11 +732,7 @@ impl AgentLoop {
     }
 
     pub fn context_window(&self) -> u32 {
-        if self.model_ctx.context_window == 0 {
-            crate::prompt::context_usage::DEFAULT_CONTEXT_WINDOW
-        } else {
-            self.model_ctx.context_window
-        }
+        self.model_ctx.context_window()
     }
 
     /// Run 内 tool 上下文维护：委托 [`CompressionPolicy`] 生成计划，执行 prune/LLM 摘要/head-tail。
@@ -1290,7 +1227,7 @@ impl AgentLoop {
             );
         }
         if tool_writes_disk(exec_name, &exec_args) {
-            self.turn.turn_wrote_disk = true;
+            self.turn.mark_wrote_disk();
         }
         Ok(self
             .finalize_tool_call_result(exec_name, &exec_args, raw_result)
@@ -1919,28 +1856,6 @@ fn tool_writes_disk(name: &str, args: &Value) -> bool {
         _ => false,
     }
 }
-
-/// 工具循环超过 `multi_turn` 限制时抛出的错误（对齐 Rig `MaxDepthError`）。
-#[derive(Debug, Clone)]
-pub struct MaxDepthError {
-    /// 配置的上限轮次。
-    pub limit: usize,
-    /// 已消耗的轮次（触发错误时尚未递增）。
-    pub used: usize,
-}
-
-impl std::fmt::Display for MaxDepthError {
-    /// 格式化错误信息：`used / limit`。
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "tool multi_turn exhausted: used {} / limit {}",
-            self.used, self.limit
-        )
-    }
-}
-
-impl std::error::Error for MaxDepthError {}
 
 /// 单轮 `run_turn` 或上层编排的可能结果。
 #[derive(Debug)]

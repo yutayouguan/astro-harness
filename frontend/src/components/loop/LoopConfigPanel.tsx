@@ -251,7 +251,7 @@ export default function LoopConfigPanel({
           className={`loop-config-tab${tab === "ai_model" ? " is-active" : ""}`}
           onClick={() => setTab("ai_model")}
         >
-          辅助模型
+          {t("loop.aiModelTab")}
         </button>
       </div>
 
@@ -350,8 +350,7 @@ export default function LoopConfigPanel({
         <div className="loop-config-panel-scroll">
           <div className="loop-config-panel-body">
             <div className="loop-config-ai-model-intro">
-              配置面板中带 <span className="loop-config-ai-btn-inline">✨ AI 生成</span> 按钮的字段，
-              将使用此处选择的模型来润色或生成内容。
+              {t("loop.aiModelIntro")}
             </div>
             <Suspense fallback={null}>
               <AiModelPanel
@@ -384,6 +383,7 @@ function AiModelPanel({
   model: string;
   onChange: (providerId: string, model: string) => void;
 }) {
+  const { t } = useI18n();
   const [fallback, setFallback] = useState<ActiveProviderInfo | null>(null);
 
   useEffect(() => {
@@ -402,13 +402,13 @@ function AiModelPanel({
 
   const isConfigured = !!(providerId && providerId.trim());
   const effectiveName = isConfigured ? providerId : fallback?.display_name ?? "—";
-  const effectiveModel = isConfigured ? (model || "默认模型") : fallback?.model ?? "—";
+  const effectiveModel = isConfigured ? (model || t("loop.aiModelDefault")) : fallback?.model ?? "—";
 
   return (
     <>
       {/* 当前状态展示 */}
       <div className="loop-ai-model-status">
-        <div className="loop-ai-model-status-label">当前使用</div>
+        <div className="loop-ai-model-status-label">{t("loop.aiModelCurrent")}</div>
         <div className="loop-ai-model-status-value">
           <span className="loop-ai-model-provider">{effectiveName}</span>
           <span className="loop-ai-model-sep">/</span>
@@ -416,7 +416,7 @@ function AiModelPanel({
         </div>
         {!isConfigured && (
           <div className="loop-ai-model-status-hint">
-            未单独配置，使用「模型服务」中的活跃供应商
+            {t("loop.aiModelFallbackHint")}
           </div>
         )}
         {isConfigured && (
@@ -425,7 +425,7 @@ function AiModelPanel({
             onClick={() => onChange("", "")}
             type="button"
           >
-            重置为默认
+            {t("loop.aiModelReset")}
           </button>
         )}
       </div>
@@ -433,7 +433,7 @@ function AiModelPanel({
       <div className="loop-config-divider" />
 
       {/* 自定义选择 */}
-      <div className="loop-ai-model-custom-label">自定义辅助模型</div>
+      <div className="loop-ai-model-custom-label">{t("loop.aiModelCustom")}</div>
       <ProviderModelSelectLazy
         providerId={providerId}
         model={model}
