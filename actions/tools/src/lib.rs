@@ -63,237 +63,85 @@ pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazard
 /// ```
 #[macro_export]
 macro_rules! submit_builtin_tool {
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        async_ctx: $dispatch_fn:ident $(,)?
-    ) => {
+    // ── raw args 变体（dispatch 接收 &Value）──────────────
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], async_ctx: $d:ident $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
+            $d(ctx, args).await.map(::common::ToolOutput::from)
+        });
+    };
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_ctx: $d:ident $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
+            $d(ctx, args).map(::common::ToolOutput::from)
+        });
+    };
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], async_named: $d:ident $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
+            $d(ctx, name, args).await.map(::common::ToolOutput::from)
+        });
+    };
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_named: $d:ident $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
+            $d(ctx, name, args).map(::common::ToolOutput::from)
+        });
+    };
+    // ── typed args 变体（宏自动反序列化）──────────────────
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], async_ctx: $d:ident, args: $t:ty $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
+            let typed: $t = ::serde_json::from_value(args.clone())
+                .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
+            $d(ctx, &typed).await.map(::common::ToolOutput::from)
+        });
+    };
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_ctx: $d:ident, args: $t:ty $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
+            let typed: $t = ::serde_json::from_value(args.clone())
+                .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
+            $d(ctx, &typed).map(::common::ToolOutput::from)
+        });
+    };
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], async_named: $d:ident, args: $t:ty $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
+            let typed: $t = ::serde_json::from_value(args.clone())
+                .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
+            $d(ctx, name, &typed).await.map(::common::ToolOutput::from)
+        });
+    };
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_named: $d:ident, args: $t:ty $(,)?) => {
+        $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
+            let typed: $t = ::serde_json::from_value(args.clone())
+                .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
+            $d(ctx, name, &typed).map(::common::ToolOutput::from)
+        });
+    };
+    // ── custom：handler 已符合 BuiltinToolHandler 签名 ───
+    (register: $r:ident, names: [$($n:literal),+ $(,)?], custom: $h:ident $(,)?) => {
+        ::inventory::submit! {
+            $crate::registry::BuiltinToolRegistrar {
+                register: $r,
+                names: &[$($n),+],
+                handler: $h,
+            }
+        }
+    };
+    // ── 内部实现：统一生成 handler + inventory::submit ────
+    (@impl $register_fn:ident, [$($name:literal),+], $ctx:ident, $nm:ident, $args:ident, $body:block) => {
         fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            _name: &'a str,
-            args: &'a ::serde_json::Value,
+            $ctx: &'a mut $crate::context::ToolContext<'b>,
+            $nm: &'a str,
+            $args: &'a ::serde_json::Value,
         ) -> ::std::pin::Pin<
             ::std::boxed::Box<
                 dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
                     + 'a,
             >,
         > {
-            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, args).await.map(::common::ToolOutput::from) })
+            ::std::boxed::Box::pin(async move $body)
         }
         ::inventory::submit! {
             $crate::registry::BuiltinToolRegistrar {
                 register: $register_fn,
                 names: &[$($name),+],
                 handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        sync_ctx: $dispatch_fn:ident $(,)?
-    ) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            _name: &'a str,
-            args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, args).map(::common::ToolOutput::from) })
-        }
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        sync_named: $dispatch_fn:ident $(,)?
-    ) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            name: &'a str,
-            args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, name, args).map(::common::ToolOutput::from) })
-        }
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        async_named: $dispatch_fn:ident $(,)?
-    ) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            name: &'a str,
-            args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move { $dispatch_fn(ctx, name, args).await.map(::common::ToolOutput::from) })
-        }
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    // ── typed args 变体：宏自动反序列化，dispatch 接收具体类型 ──
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        async_ctx: $dispatch_fn:ident,
-        args: $args_ty:ty $(,)?
-    ) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            _name: &'a str,
-            args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move {
-                let typed: $args_ty = ::serde_json::from_value(args.clone())
-                    .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($args_ty), " 参数无效: {}"), e))?;
-                $dispatch_fn(ctx, &typed).await.map(::common::ToolOutput::from)
-            })
-        }
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        sync_ctx: $dispatch_fn:ident,
-        args: $args_ty:ty $(,)?
-    ) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            _name: &'a str,
-            args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move {
-                let typed: $args_ty = ::serde_json::from_value(args.clone())
-                    .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($args_ty), " 参数无效: {}"), e))?;
-                $dispatch_fn(ctx, &typed).map(::common::ToolOutput::from)
-            })
-        }
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        sync_named: $dispatch_fn:ident,
-        args: $args_ty:ty $(,)?
-    ) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            name: &'a str,
-            args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move {
-                let typed: $args_ty = ::serde_json::from_value(args.clone())
-                    .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($args_ty), " 参数无效: {}"), e))?;
-                $dispatch_fn(ctx, name, &typed).map(::common::ToolOutput::from)
-            })
-        }
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        async_named: $dispatch_fn:ident,
-        args: $args_ty:ty $(,)?
-    ) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            ctx: &'a mut $crate::context::ToolContext<'b>,
-            name: &'a str,
-            args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move {
-                let typed: $args_ty = ::serde_json::from_value(args.clone())
-                    .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($args_ty), " 参数无效: {}"), e))?;
-                $dispatch_fn(ctx, name, &typed).await.map(::common::ToolOutput::from)
-            })
-        }
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
-            }
-        }
-    };
-    (
-        register: $register_fn:ident,
-        names: [$($name:literal),+ $(,)?],
-        custom: $handler_fn:ident $(,)?
-    ) => {
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
-                names: &[$($name),+],
-                handler: $handler_fn,
             }
         }
     };
