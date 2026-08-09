@@ -1690,6 +1690,70 @@
   vertical-align: middle;
 }
 
+/* ── 辅助模型面板 ── */
+
+.loop-ai-model-status {
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--glass-dim);
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.loop-ai-model-status-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.loop-ai-model-status-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.loop-ai-model-provider {
+  color: var(--tone, #6366f1);
+}
+.loop-ai-model-sep {
+  color: var(--ink-tertiary);
+  font-weight: 400;
+}
+.loop-ai-model-name {
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 13px;
+  font-weight: 500;
+}
+.loop-ai-model-status-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-tertiary);
+}
+.loop-ai-model-reset {
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.loop-ai-model-reset:hover {
+  border-color: var(--error, #ef4444);
+  color: var(--error, #ef4444);
+}
+.loop-ai-model-custom-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
 /* hint text */
 .loop-config-hint {
   font-size: 12px;

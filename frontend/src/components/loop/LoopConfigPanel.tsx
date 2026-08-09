@@ -352,7 +352,7 @@ export default function LoopConfigPanel({
               将使用此处选择的模型来润色或生成内容。
             </div>
             <Suspense fallback={null}>
-              <AiModelPicker
+              <AiModelPanel
                 providerId={aiProviderId ?? ""}
                 model={aiModel ?? ""}
                 onChange={(pid, m) => onAiProviderChange?.(pid, m)}
@@ -367,7 +367,13 @@ export default function LoopConfigPanel({
 
 const ProviderModelSelectLazy = lazy(() => import("./configs/ProviderModelSelect"));
 
-function AiModelPicker({
+interface ActiveProviderInfo {
+  id: string;
+  display_name: string;
+  model: string;
+}
+
+function AiModelPanel({
   providerId,
   model,
   onChange,
@@ -376,12 +382,62 @@ function AiModelPicker({
   model: string;
   onChange: (providerId: string, model: string) => void;
 }) {
+  const [fallback, setFallback] = useState<ActiveProviderInfo | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const state = await invoke<{
+          providers: { id: string; display_name: string; model: string; enabled: boolean; has_api_key: boolean }[];
+          active_provider_id: string | null;
+        }>("get_providers_state");
+        const available = (state.providers ?? []).filter((p) => p.enabled && p.has_api_key);
+        const active = available.find((p) => p.id === state.active_provider_id) ?? available[0];
+        if (active) setFallback({ id: active.id, display_name: active.display_name, model: active.model });
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
+  const isConfigured = !!(providerId && providerId.trim());
+  const effectiveName = isConfigured ? providerId : fallback?.display_name ?? "—";
+  const effectiveModel = isConfigured ? (model || "默认模型") : fallback?.model ?? "—";
+
   return (
-    <ProviderModelSelectLazy
-      providerId={providerId}
-      model={model}
-      onProviderChange={(pid) => onChange(pid, model)}
-      onModelChange={(m) => onChange(providerId, m)}
-    />
+    <>
+      {/* 当前状态展示 */}
+      <div className="loop-ai-model-status">
+        <div className="loop-ai-model-status-label">当前使用</div>
+        <div className="loop-ai-model-status-value">
+          <span className="loop-ai-model-provider">{effectiveName}</span>
+          <span className="loop-ai-model-sep">/</span>
+          <span className="loop-ai-model-name">{effectiveModel}</span>
+        </div>
+        {!isConfigured && (
+          <div className="loop-ai-model-status-hint">
+            未单独配置，使用「模型服务」中的活跃供应商
+          </div>
+        )}
+        {isConfigured && (
+          <button
+            className="loop-ai-model-reset"
+            onClick={() => onChange("", "")}
+            type="button"
+          >
+            重置为默认
+          </button>
+        )}
+      </div>
+
+      <div className="loop-config-divider" />
+
+      {/* 自定义选择 */}
+      <div className="loop-ai-model-custom-label">自定义辅助模型</div>
+      <ProviderModelSelectLazy
+        providerId={providerId}
+        model={model}
+        onProviderChange={(pid) => onChange(pid, model)}
+        onModelChange={(m) => onChange(providerId, m)}
+      />
+    </>
   );
 }
