@@ -2059,6 +2059,81 @@
 .loop-config-upstream-body {
   padding: 10px 12px;
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.loop-config-upstream-count {
+  font-size: 10px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--tone, #6366f1);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* 上游字段映射行 */
+.loop-upstream-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.loop-upstream-field-name {
+  width: 80px;
+  flex-shrink: 0;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.loop-upstream-field-eq {
+  color: var(--ink-tertiary);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.loop-upstream-field-ref-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  position: relative;
+}
+.loop-upstream-field-ref {
+  flex: 1;
+  min-width: 0;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.loop-upstream-field-pick {
+  width: 30px;
+}
+.loop-upstream-field-dropdown {
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+}
+
+.loop-config-upstream-add-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  align-self: flex-start;
+}
+.loop-config-upstream-add-row:hover {
+  border-color: var(--tone, #6366f1);
+  color: var(--tone, #6366f1);
 }
 
 /* ── Config row (side-by-side fields) ─────────────────────────── */
