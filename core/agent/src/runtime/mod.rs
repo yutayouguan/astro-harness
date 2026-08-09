@@ -702,6 +702,50 @@ impl AgentLoop {
         Uuid::new_v4().to_string()
     }
 
+    /// 准备下一轮 LLM 调用所需的上下文：重载工具/MCP、构建历史、注入 hook 上下文。
+    ///
+    /// 返回 `(messages, tool_schemas)`，供 `ProviderStreamer::stream_chat` 或
+    /// `to_provider_messages` 使用。streaming 与 headless 路径共享。
+    pub(crate) async fn prepare_llm_context(
+        &mut self,
+    ) -> (Vec<Message>, Vec<serde_json::Value>) {
+        self.reload_tools_and_mcp().await;
+        let mut messages = self.provider_history();
+        if let Some(ctx) = self.take_inject_context() {
+            messages.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
+        }
+        let tools = self.schemas_for_api();
+        (messages, tools)
+    }
+
+    /// 记录 assistant 回复并关联已解析的工具调用。
+    ///
+    /// 封装 `ParsedToolCall → ToolCall` 映射，消除 streaming / headless 的重复代码。
+    pub(crate) fn record_assistant_with_calls(
+        &mut self,
+        text: &str,
+        calls: &[tools::ParsedToolCall],
+        reasoning: Option<&str>,
+        reasoning_details: Option<serde_json::Value>,
+    ) -> anyhow::Result<()> {
+        let tc = if calls.is_empty() {
+            None
+        } else {
+            Some(
+                calls
+                    .iter()
+                    .map(|c| common::message::ToolCall {
+                        id: c.id.clone(),
+                        name: c.name.clone(),
+                        arguments: c.arguments.clone(),
+                        signature: c.signature.clone(),
+                    })
+                    .collect(),
+            )
+        };
+        self.record_assistant_message_with_tools(text, tc, reasoning, reasoning_details)
+    }
+
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub fn is_budget_exhausted(&self) -> bool {
         self.turn.is_budget_exhausted(self.config.max_turns)

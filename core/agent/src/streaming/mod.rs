@@ -14,6 +14,8 @@
 //! - [`tools_exec`]：单轮工具调用执行（串行 HITL 路径 / 并发路径）
 //! - [`multi_turn`]：多轮工具循环编排（本模块的核心）
 
+/// 流式响应累积器（headless 等非推流场景使用）。
+pub(crate) mod accumulate;
 /// 聊天主模型故障切换（首包前 fallback）。
 pub mod fallback;
 /// Astro HITL 桥：`astro_hitl` 解析与父子会话间 park/resume。

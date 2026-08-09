@@ -400,15 +400,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
 
         let (history, tools) = {
             let mut agent = session.lock().await;
-            agent.reload_tools_and_mcp().await;
-            let mut messages = agent.provider_history();
-            if let Some(ctx) = agent.take_inject_context() {
-                messages.push(common::message::Message::user(&format!(
-                    "[astro:hook-context]\n{ctx}"
-                )));
-            }
-            let tools = agent.schemas_for_api();
-            (messages, tools)
+            agent.prepare_llm_context().await
         };
 
         {
@@ -661,9 +653,9 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
-                if let Err(err) = agent.record_assistant_message_with_tools(
+                if let Err(err) = agent.record_assistant_with_calls(
                     &full_response,
-                    None,
+                    &[],
                     Some(full_reasoning.as_str()),
                     details,
                 ) {
@@ -736,9 +728,9 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
-                if let Err(err) = agent.record_assistant_message_with_tools(
+                if let Err(err) = agent.record_assistant_with_calls(
                     &full_response,
-                    None,
+                    &[],
                     (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
                     details,
                 ) {
@@ -822,22 +814,6 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
 
         {
             let mut agent = session.lock().await;
-            // 原生与 XML 回退统一：assistant 带 tool_calls，tool 带 tool_call_id
-            let tc = if calls.is_empty() {
-                None
-            } else {
-                Some(
-                    calls
-                        .iter()
-                        .map(|c| common::message::ToolCall {
-                            id: c.id.clone(),
-                            name: c.name.clone(),
-                            arguments: c.arguments.clone(),
-                            signature: c.signature.clone(),
-                        })
-                        .collect(),
-                )
-            };
             for c in &calls {
                 timeline.upsert_activity(&c.id, now_ms());
             }
@@ -845,9 +821,9 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 Some(timeline.reasoning_details_snapshot()),
                 thought_signature.as_deref(),
             );
-            if let Err(err) = agent.record_assistant_message_with_tools(
+            if let Err(err) = agent.record_assistant_with_calls(
                 &full_response,
-                tc,
+                &calls,
                 (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
                 details,
             ) {
