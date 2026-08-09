@@ -138,7 +138,7 @@ cd ui/frontend && npm run tauri:build:universal    # universal-apple-darwin
 
 ### core/agent 模块组织
 
-`agent` crate 是中央运行时，7 个子模块：
+`agent` crate 是中央运行时，7 个顶层子模块：
 
 - **`builder`** — 声明式 `AgentBuilder` / `BuiltAgentSpec`
 - **`compression`** — tool 结果压缩（原文保留，压缩视图给 provider）
@@ -146,8 +146,24 @@ cd ui/frontend && npm run tauri:build:universal    # universal-apple-darwin
 - **`event_bus`** — agent 事件广播（UI 流式订阅）
 - **`exec`** — 执行域：cron 执行、delegate、dispatch、headless 多轮、记忆 review、mid-run summary、多 agent、编排、标题生成、tool LLM 压缩
 - **`prompt`** — prompt 域：上下文组装（context/context_source/context_usage）、hook 集成、消息变换、prompt builder、sanitization
-- **`runtime`** — 核心运行时：`AgentLoop`、`AgentConfig`、budget 管理、压缩状态、模型上下文、session 管理、turn budget、usage 追踪、校验
-- **`streaming`** — 流式补全：fallback 处理、HITL bridge、多轮 streaming、provider 抽象、run state、summary、tool 执行
+- **`runtime`** — 核心运行时（见下方子模块表）
+- **`streaming`** — 流式补全：fallback、HITL bridge、多轮 streaming、provider 抽象、run state、summary、tool 执行、流式响应累积器（`accumulate`）
+
+#### runtime/ 子模块
+
+`AgentLoop` 的 `impl` 方法按职责分布到 7 个子模块文件中：
+
+| 文件 | 职责 |
+| ---- | ---- |
+| `mod.rs` | `AgentConfig`、`AgentLoop` struct 定义、构造器、委托方法、MCP/tool gate 重载 |
+| `model_ctx.rs` | `ModelContext` — LLM 凭证（`ModelCredentials`）、chat_targets/fallback 链、auxiliary_targets、context_window |
+| `turn_budget.rs` | `TurnState` — turn_id、轮次/深度计数、`MaxDepthError` |
+| `compression_state.rs` | `CompressionState` — mid-run 摘要、compact 建议、召回上下文 |
+| `turn_lifecycle.rs` | 轮次生命周期 — `begin_user_turn`、`run_turn`、`run_turn_with_images`、`prepare_llm_context` |
+| `context_maintenance.rs` | 上下文维护 — `maintain_tool_context`、`provider_history`、`occupancy_ratio` |
+| `recording.rs` | 消息记录 — `record_assistant_*`、`record_tool_result_*`、`register_media_artifacts` |
+| `tool_dispatch.rs` | 工具调度 — `dispatch_named_tool`、`handle_tool_call_async`、`finalize_tool_call_result` |
+| `system_prompt.rs` | system prompt 构建 — `build_system_prompt`、`system_prompt_layer_breakdown` |
 
 ### Provider Fallback 链
 
